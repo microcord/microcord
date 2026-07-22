@@ -122,6 +122,13 @@ Reference paths in this document are relative to
 9. Never log access tokens, refresh tokens, cookies, MFA codes, passwords,
    attachment bodies, or private message content.
 10. Never run destructive live-backend tests without explicit user approval.
+11. Reconstructed stores and first-party data/model classes must include every
+    semantic field present in the reference, even when the current slice does
+    not use that field yet. Preserve field types, nullability, defaults,
+    mutability, serialization names, and persistence behavior.
+12. Reconstruct every first-party custom view and screen properly. A layout-only
+    placeholder, empty fragment, or view that ignores reference state and
+    interaction behavior does not count as parity.
 
 ## Target Architecture
 
@@ -148,6 +155,30 @@ reached.
 - `StoreStream` owns and wires the process-wide store graph.
 - Gateway events hydrate stores; REST commands and pagination update them.
 - User-specific stores clear on logout.
+- Every reconstructed store must include the complete reference state surface:
+  semantic fields, caches, indexes, subjects, snapshots, persistence handles,
+  update sources, loading/error state, and dependencies on other stores.
+- Store fields may be renamed only when the reference name is obfuscated or
+  misleading; record a reference-to-target field mapping while implementing the
+  store so no state is silently omitted.
+- Do not build reduced stores that only satisfy the first screen using them.
+
+### Data and Models
+
+- Every first-party API DTO, Gateway payload, domain model, store state model,
+  and Kotlin data class must contain all semantic fields present in the
+  reference version.
+- Preserve exact wire names, JSON aliases, numeric widths, enum values,
+  nullability, defaults, collection element types, and unknown/optional field
+  behavior.
+- Preserve meaningful Kotlin data-class behavior, including constructor order,
+  `copy`, component order, equality, hash code, and safe string rendering.
+- Sensitive values must be redacted from string rendering even if decompiled
+  generated output appears to print them.
+- Do not replace typed reference fields with `Any`, raw maps, or generic JSON
+  solely to make an incomplete slice compile.
+- Compiler-generated synthetic fields and lambda captures are not parity fields
+  unless JNI, reflection, serialization, or runtime evidence requires them.
 
 ### Networking
 
@@ -175,6 +206,16 @@ reached.
   and message lists.
 - Accessibility labels, focus order, minimum touch targets, RTL behavior, and
   dynamic font scaling are parity requirements.
+- Recreate every first-party custom `View`, `ViewGroup`, fragment, dialog,
+  bottom sheet, adapter row, decoration, and interaction represented by the
+  reference feature.
+- Preserve view hierarchy, style/theme attributes, visibility rules, state
+  restoration, gestures, scrolling, animations, enabled/loading/error states,
+  content descriptions, and lifecycle-aware observation.
+- All recovered layout variants must remain usable with their corresponding
+  target class; inflating successfully without correct behavior is incomplete.
+- Temporary placeholders are allowed only while a phase is `IN PROGRESS`; they
+  must be listed in that phase's notes and removed before it is marked `DONE`.
 
 ### Native Voice and Video
 
@@ -580,6 +621,12 @@ instrumentation work verified when it was merely compiled.
 A slice is done only when:
 
 - Its reference flow and callers were inspected.
+- Every semantic field from each reconstructed store and first-party data/model
+  class is present with matching type, nullability, default, wire name, and
+  persistence/serialization behavior.
+- Every view in the slice is fully connected to reference-equivalent state,
+  interactions, lifecycle, accessibility, and layout variants; no placeholder
+  implementation remains.
 - User-visible happy path and important failure paths are implemented.
 - State mutation, lifecycle, and threading behavior are defined.
 - Secrets and user content are excluded from logs.
@@ -616,6 +663,7 @@ or observable behavior. Small implementation details do not belong here.
 | 2026-07-22 | Keep `com.discord` namespace | Structural fidelity and lower package churn | Application ID and namespace intentionally differ |
 | 2026-07-22 | Reuse assets/layouts and `libdiscord.so` | Required for visual and media parity | Resource and JNI compatibility become explicit workstreams |
 | 2026-07-22 | Install public libraries normally | Avoid rebuilding dependency code | Decompiled dependency sources are reference-only |
+| 2026-07-22 | Require complete store/model fields and complete views | Partial models and placeholder UI cannot provide feature parity | Every slice must inventory and verify its full structural surface |
 
 ## Progress Journal
 

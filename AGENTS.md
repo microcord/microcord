@@ -24,6 +24,9 @@ Never modify the reference project.
 - Install public dependencies normally.
 - Do not copy decompiled public library source.
 - Preserve the original store/dispatcher/fragment architecture until parity.
+- Recreate every semantic field in first-party stores and data/model classes.
+- Recreate every first-party view and screen with complete behavior; do not
+  count placeholders or layout-only implementations as parity.
 - Use the live backend carefully; fixture tests come first.
 
 Do not revisit these choices unless the user explicitly changes them or
@@ -59,6 +62,30 @@ Trust evidence in this order:
 JADX output is not valid source by default. Do not copy synthetic lambda
 classes, bridge methods, generated bindings, obfuscated utility packages, or
 invalid decompiler constructs into the target.
+
+## Structural Parity Rules
+
+- Before implementing a store, inventory all of its semantic fields, caches,
+  indexes, subjects, snapshots, persistence handles, update sources, and store
+  dependencies from the reference.
+- Implement the complete store state surface, not only fields used by the first
+  caller being rebuilt.
+- Before implementing a first-party DTO, Gateway payload, domain model, store
+  state, or Kotlin data class, inventory every reference field.
+- Match field type, generic element type, nullability, default, mutability,
+  constructor order, enum value, wire/JSON name, and serialization behavior.
+- Preserve data-class equality, copy/component order, hash behavior, and safe
+  string rendering. Redact secrets even if the reference generated `toString`
+  did not.
+- Do not use `Any`, raw maps, or untyped JSON as a shortcut for known fields.
+- Synthetic compiler fields are excluded unless JNI, reflection,
+  serialization, or observed runtime behavior depends on them.
+- Recreate every first-party custom view, fragment, dialog, bottom sheet,
+  adapter row, and layout variant used by the feature.
+- Match view state, visibility, interaction, scrolling, animation, lifecycle,
+  restoration, accessibility, loading, empty, and error behavior.
+- A placeholder may exist only during active development and must be recorded
+  in `PLAN.md`; no phase can be marked done while one remains.
 
 ## Dependency Rules
 
