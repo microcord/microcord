@@ -89,6 +89,33 @@
         <attr name="cvv_character_input_type" />
     </declare-styleable>
 
+    <declare-styleable name="ChipsView">
+        <attr name="cv_bg_color" />
+        <attr name="cv_bg_color_clicked" />
+        <attr name="cv_bg_color_error_clicked" />
+        <attr name="cv_chip_bg_res" />
+        <attr name="cv_chip_layout" />
+        <attr name="cv_color" />
+        <attr name="cv_color_clicked" />
+        <attr name="cv_color_error_clicked" />
+        <attr name="cv_dialog_cancel" />
+        <attr name="cv_dialog_confirm" />
+        <attr name="cv_dialog_error_msg" />
+        <attr name="cv_dialog_et_placeholder" />
+        <attr name="cv_dialog_title" />
+        <attr name="cv_height" />
+        <attr name="cv_hint" />
+        <attr name="cv_icon_delete" />
+        <attr name="cv_icon_placeholder" />
+        <attr name="cv_max_height" />
+        <attr name="cv_search_text_color" />
+        <attr name="cv_search_text_size" />
+        <attr name="cv_text_color" />
+        <attr name="cv_text_color_clicked" />
+        <attr name="cv_text_color_error_clicked" />
+        <attr name="cv_vertical_spacing" />
+    </declare-styleable>
+
     <declare-styleable name="CutoutView">
         <attr name="cutout_badgeInset" />
         <attr name="cutout_badgeRadius" />
