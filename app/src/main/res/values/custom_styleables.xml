@@ -206,4 +206,26 @@
         <attr name="pile_roundImage" />
         <attr name="pile_showOverflowItem" />
     </declare-styleable>
+
+    <declare-styleable name="GuildSubscriptionRoleImageUploadView">
+        <attr name="description" />
+        <attr name="image_size" />
+        <attr name="image_style" />
+        <attr name="title" />
+        <attr name="use_center_scale_type" />
+    </declare-styleable>
+
+    <declare-styleable name="GuildRoleSubscriptionBenefitItemView">
+        <attr name="benefit_description" />
+        <attr name="benefit_image" />
+        <attr name="benefit_title" />
+    </declare-styleable>
+
+    <declare-styleable name="AcceptTermsStepCard">
+        <attr name="image_src" />
+        <attr name="step_description" />
+        <attr name="step_number" />
+        <attr name="step_title" />
+        <attr name="terms_url" />
+    </declare-styleable>
 </resources>

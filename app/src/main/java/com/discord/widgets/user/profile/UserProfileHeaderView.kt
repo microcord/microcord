@@ -1,0 +1,161 @@
+package com.discord.widgets.user.profile
+
+import android.content.Context
+import android.graphics.Color
+import android.net.Uri
+import android.util.AttributeSet
+import android.util.TypedValue
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ImageView
+import android.widget.LinearLayout
+import androidx.cardview.widget.CardView
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.discord.R
+import com.discord.api.activity.ActivityType
+import com.discord.models.member.GuildMember
+import com.discord.models.user.User
+import com.discord.utilities.view.text.SimpleDraweeSpanTextView
+import com.discord.views.UsernameView
+import com.discord.views.user.UserAvatarPresenceView
+import com.discord.widgets.channels.UserAkaView
+import com.discord.widgets.user.Badge
+import com.facebook.drawee.view.SimpleDraweeView
+
+class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayout(context, attrs) {
+    private val banner: SimpleDraweeView
+    private val bannerEdit: CardView
+    private val gifTag: ImageView
+    private val avatar: UserAvatarPresenceView
+    private val avatarEdit: CardView
+    private val aka: UserAkaView
+    private val badges: RecyclerView
+    private val customStatus: SimpleDraweeSpanTextView
+    private val primaryName: UsernameView
+    private val secondaryName: SimpleDraweeSpanTextView
+    private val badgeAdapter = BadgeAdapter()
+    private var backgroundColor: Int
+    private var onAvatarEdit: () -> Unit = {}
+    private var onBannerPress: () -> Unit = {}
+    private var onBadgeClick: (Badge) -> Unit = {}
+    private var onAvatarRepresentativeColorUpdated: (Int) -> Unit = {}
+
+    init {
+        LayoutInflater.from(context).inflate(R.layout.user_profile_header_view, this)
+        banner = requireNotNull(findViewById(R.id.banner))
+        bannerEdit = requireNotNull(findViewById(R.id.banner_edit))
+        gifTag = requireNotNull(findViewById(R.id.gif_tag))
+        avatar = requireNotNull(findViewById(R.id.large_avatar))
+        avatarEdit = requireNotNull(findViewById(R.id.avatar_edit))
+        aka = requireNotNull(findViewById(R.id.user_aka))
+        badges = requireNotNull(findViewById(R.id.user_profile_header_badges_recycler))
+        customStatus = requireNotNull(findViewById(R.id.user_profile_header_custom_status))
+        primaryName = requireNotNull(findViewById(R.id.user_profile_header_primary_name))
+        secondaryName = requireNotNull(findViewById(R.id.user_profile_header_secondary_name))
+        backgroundColor = context.obtainStyledAttributes(attrs, intArrayOf(R.attr.user_profile_header_background_color)).run {
+            try {
+                getColor(0, themedColor(R.attr.colorBackgroundTertiary))
+            } finally {
+                recycle()
+            }
+        }
+        badges.layoutManager = GridLayoutManager(context, 3, RecyclerView.VERTICAL, true)
+        badges.adapter = badgeAdapter
+        setBackgroundColor(backgroundColor)
+        avatar.setAvatarBackgroundColor(backgroundColor)
+        banner.setBackgroundColor(backgroundColor)
+    }
+
+    fun setOnAvatarEdit(callback: () -> Unit) { onAvatarEdit = callback }
+    fun setOnBannerPress(callback: () -> Unit) { onBannerPress = callback }
+    fun setOnBadgeClick(callback: (Badge) -> Unit) { onBadgeClick = callback }
+    fun setOnAvatarRepresentativeColorUpdated(callback: (Int) -> Unit) { onAvatarRepresentativeColorUpdated = callback }
+
+    fun updateViewState(state: UserProfileHeaderViewModel.ViewState.Loaded) {
+        avatar.setOnAvatarBitmapLoadedListener { bitmap, _ ->
+            val pixel = bitmap.getPixel(bitmap.width / 2, bitmap.height / 2)
+            onAvatarRepresentativeColorUpdated(pixel)
+        }
+        avatar.setOnClickListener { if (state.editable) onAvatarEdit() }
+        avatarEdit.setOnClickListener { if (state.editable) onAvatarEdit() }
+        configureBanner(state)
+        avatar.configure(UserAvatarPresenceView.ViewState(state.user, state.presence, state.showPresence, state.guildMember))
+        configureNames(state.user, state.guildMember, state)
+        aka.visibility = if (state.showAkas) View.VISIBLE else View.GONE
+        aka.configure(state.guildMembersForAka)
+        badgeAdapter.items = badgesFor(state)
+        val status = state.presence?.activities?.firstOrNull { it.type == ActivityType.CUSTOM_STATUS }
+        customStatus.text = listOfNotNull(status?.emoji?.name?.let { ":$it:" }, status?.state).joinToString(" ")
+        customStatus.visibility = if (status == null) View.GONE else View.VISIBLE
+        avatarEdit.visibility = if (state.editable) View.VISIBLE else View.GONE
+        bannerEdit.visibility = if (state.editable) View.VISIBLE else View.GONE
+    }
+
+    fun updateBannerColor(state: UserProfileHeaderViewModel.ViewState.Loaded) {
+        runCatching { state.bannerColorHex?.let(Color::parseColor) }.getOrNull()?.let(banner::setBackgroundColor)
+    }
+
+    private fun configureBanner(state: UserProfileHeaderViewModel.ViewState.Loaded) {
+        val hash = state.guildMember?.bannerHash ?: state.banner
+        val url = when {
+            hash == null -> null
+            hash.startsWith("data:") -> hash
+            state.guildMember?.hasBanner() == true -> "https://cdn.discordapp.com/guilds/${state.guildMember.guildId}/users/${state.user.id}/banners/$hash.${if (state.shouldAnimateBanner && hash.startsWith("a_")) "gif" else "webp"}?size=1024"
+            else -> "https://cdn.discordapp.com/banners/${state.user.id}/$hash.${if (state.shouldAnimateBanner && hash.startsWith("a_")) "gif" else "webp"}?size=1024"
+        }
+        banner.aspectRatio = if (url == null) 5f else 2.5f
+        banner.setImageURI(url?.let(Uri::parse))
+        updateBannerColor(state)
+        banner.setOnClickListener { onBannerPress() }
+        bannerEdit.setOnClickListener { onBannerPress() }
+        gifTag.visibility = if (state.shouldShowGIFTag) View.VISIBLE else View.GONE
+    }
+
+    private fun configureNames(user: User, member: GuildMember?, state: UserProfileHeaderViewModel.ViewState.Loaded) {
+        val primary = member?.nick?.takeUnless(String::isBlank) ?: user.username
+        val discrim = user.discriminator.toString().padStart(4, '0')
+        primaryName.configureUsername(if (discrim == "0000") primary else "$primary#$discrim")
+        primaryName.configureTag(user.isBot, if (user.isSystemUser) R.string.system_dm_tag_system else R.string.bot_tag_bot, false)
+        val secondary = member?.nick?.let { "${user.username}#$discrim" }
+        secondaryName.text = secondary
+        secondaryName.visibility = if (secondary != null && !state.showAkas) View.VISIBLE else View.GONE
+    }
+
+    private fun badgesFor(state: UserProfileHeaderViewModel.ViewState.Loaded): List<Badge> = buildList {
+        val flags = state.user.publicFlags
+        if (flags and 1 != 0) add(Badge(R.drawable.ic_profile_badge_staff_32dp, context.getString(R.string.staff_badge_tooltip)))
+        if (flags and 2 != 0) add(Badge(R.drawable.ic_profile_badge_partner_32dp, context.getString(R.string.partner_badge_tooltip)))
+        if (flags and 4 != 0) add(Badge(R.drawable.ic_profile_badge_hypesquad_32dp, context.getString(R.string.hypesquad_badge_tooltip)))
+        if (flags and 8 != 0) add(Badge(R.drawable.ic_profile_badge_bughunter_level_1_32dp, context.getString(R.string.bug_hunter_badge_tooltip)))
+        if (flags and 64 != 0) add(Badge(R.drawable.ic_hypesquad_house1_32dp, context.getString(R.string.hypesquad_house_1)))
+        if (flags and 128 != 0) add(Badge(R.drawable.ic_hypesquad_house2_32dp, context.getString(R.string.hypesquad_house_2)))
+        if (flags and 256 != 0) add(Badge(R.drawable.ic_hypesquad_house3_32dp, context.getString(R.string.hypesquad_house_3)))
+        if (flags and 512 != 0) add(Badge(R.drawable.ic_profile_badge_premium_early_supporter_32dp, context.getString(R.string.premium_badge_tooltip)))
+        if (flags and 16384 != 0) add(Badge(R.drawable.ic_profile_badge_bughunter_level_2_32dp, context.getString(R.string.bug_hunter_badge_tooltip)))
+        if (flags and 131072 != 0) add(Badge(R.drawable.ic_profile_badge_verified_developer_32dp, context.getString(R.string.verified_developer_badge_tooltip)))
+        if (flags and 262144 != 0) add(Badge(R.drawable.ic_profile_badge_certified_moderator_32dp, context.getString(R.string.certified_moderator_badge_tooltip)))
+        if (state.userProfile.premiumSince != null) add(Badge(R.drawable.ic_profile_badge_nitro_32dp, context.getString(R.string.premium_badge_tooltip)))
+        if (state.userProfile.premiumGuildSince != null) add(Badge(R.drawable.ic_profile_badge_premium_guild_subscription_lvl1_32dp, context.getString(R.string.premium_badge_tooltip)))
+    }
+
+    private inner class BadgeAdapter : RecyclerView.Adapter<BadgeHolder>() {
+        var items = emptyList<Badge>()
+            set(value) { field = value; notifyDataSetChanged() }
+        override fun getItemCount() = items.size
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = BadgeHolder(
+            LayoutInflater.from(parent.context).inflate(R.layout.user_profile_header_badge, parent, false) as ImageView,
+        )
+        override fun onBindViewHolder(holder: BadgeHolder, position: Int) {
+            val badge = items[position]
+            holder.image.setImageResource(badge.icon)
+            holder.image.contentDescription = badge.text
+            holder.image.setOnClickListener { onBadgeClick(badge) }
+        }
+    }
+
+    private class BadgeHolder(val image: ImageView) : RecyclerView.ViewHolder(image)
+
+    private fun themedColor(attr: Int) = TypedValue().also { context.theme.resolveAttribute(attr, it, true) }.data
+}

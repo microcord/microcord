@@ -24,6 +24,7 @@ dependencyResolutionManagement {
                 includeGroup("com.github.lytefast")
                 includeGroup("com.github.yalantis")
                 includeGroup("com.github.discord")
+                includeGroup("com.github.mmin18")
             }
         }
     }

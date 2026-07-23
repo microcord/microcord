@@ -40,6 +40,8 @@ android {
 }
 
 dependencies {
+    implementation(libs.apng)
+    implementation(libs.billing)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.browser)
     implementation(libs.androidx.cardview)
@@ -65,8 +67,10 @@ dependencies {
     implementation(libs.lottie)
     implementation(libs.material)
     implementation(libs.rxjava)
+    implementation(libs.realtime.blur.view)
     implementation(libs.simpleast)
     implementation(libs.ucrop)
+    implementation(libs.webrtc)
     implementation(libs.zxing.scanner) {
         exclude(group = "com.android.support")
     }
