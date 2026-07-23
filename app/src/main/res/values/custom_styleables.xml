@@ -111,4 +111,29 @@
         <attr name="chi_icon" />
         <attr name="chi_title_text" />
     </declare-styleable>
+
+    <declare-styleable name="AddPermissionOwnerView">
+        <attr name="apov_label_text" />
+    </declare-styleable>
+
+    <declare-styleable name="ChatActionItem">
+        <attr name="action_item_img_src" />
+        <attr name="action_item_text" />
+    </declare-styleable>
+
+    <declare-styleable name="VolumeSliderView">
+        <attr name="vsv_icon_tint" />
+        <attr name="vsv_max_volume" />
+    </declare-styleable>
+
+    <declare-styleable name="GuildRoleSubscriptionPlanFormatRadioButton">
+        <attr name="format_type" />
+    </declare-styleable>
+
+    <declare-styleable name="ShinyButton">
+        <attr name="sb_background_tint" />
+        <attr name="sb_color" />
+        <attr name="sb_drawable_start" />
+        <attr name="sb_text" />
+    </declare-styleable>
 </resources>
