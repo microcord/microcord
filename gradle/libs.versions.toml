@@ -5,9 +5,26 @@ junit = "4.13.2"
 junitVersion = "1.1.5"
 espressoCore = "3.5.1"
 lifecycleRuntimeKtx = "2.6.1"
-activityCompose = "1.8.0"
-kotlin = "2.2.10"
-composeBom = "2026.02.01"
+appcompat = "1.2.0"
+fragment = "1.3.0"
+material = "1.3.0"
+cardview = "1.0.0"
+constraintlayout = "2.0.4"
+exoplayer = "2.16.0"
+flexbox = "3.0.0"
+fresco = "2.6.0"
+lottie = "3.4.0"
+preference = "1.1.1"
+recyclerview = "1.2.1"
+swiperefreshlayout = "1.1.0"
+viewpager2 = "1.0.0"
+browser = "1.3.0"
+cameraview = "2.7.2"
+colorpicker = "1.1.0"
+flexinput = "0.10.9"
+ucrop = "2.2.6"
+zxingScanner = "1.9.8"
+rxjava = "1.3.8"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -15,17 +32,28 @@ junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
-androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
-androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
-androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
-androidx-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
-androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
-androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
-androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
-androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
-androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragment" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+androidx-cardview = { group = "androidx.cardview", name = "cardview", version.ref = "cardview" }
+androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
+androidx-preference-ktx = { group = "androidx.preference", name = "preference-ktx", version.ref = "preference" }
+androidx-recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "recyclerview" }
+androidx-swiperefreshlayout = { group = "androidx.swiperefreshlayout", name = "swiperefreshlayout", version.ref = "swiperefreshlayout" }
+androidx-viewpager2 = { group = "androidx.viewpager2", name = "viewpager2", version.ref = "viewpager2" }
+exoplayer-ui = { group = "com.google.android.exoplayer", name = "exoplayer-ui", version.ref = "exoplayer" }
+flexbox = { group = "com.google.android.flexbox", name = "flexbox", version.ref = "flexbox" }
+fresco = { group = "com.facebook.fresco", name = "fresco", version.ref = "fresco" }
+fresco-drawee-span = { group = "com.facebook.fresco", name = "drawee-span", version.ref = "fresco" }
+lottie = { group = "com.airbnb.android", name = "lottie", version.ref = "lottie" }
+androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
+cameraview = { group = "com.otaliastudios", name = "cameraview", version.ref = "cameraview" }
+colorpicker = { group = "com.jaredrummler", name = "colorpicker", version.ref = "colorpicker" }
+flexinput = { group = "com.github.lytefast", name = "flex-input", version.ref = "flexinput" }
+ucrop = { group = "com.github.yalantis", name = "ucrop", version.ref = "ucrop" }
+zxing-scanner = { group = "me.dm7.barcodescanner", name = "zxing", version.ref = "zxingScanner" }
+rxjava = { group = "io.reactivex", name = "rxjava", version.ref = "rxjava" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 

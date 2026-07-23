@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="MaxHeightRecyclerView">
+        <attr name="max_height" />
+        <attr name="max_height_screen_ratio" />
+    </declare-styleable>
+
+    <declare-styleable name="AppViewFlipper">
+        <attr name="avf_previewed_child_index" />
+    </declare-styleable>
+
+    <declare-styleable name="RoundedRelativeLayout">
+        <attr name="topLeftRadius" />
+        <attr name="topRightRadius" />
+        <attr name="bottomLeftRadius" />
+        <attr name="bottomRightRadius" />
+    </declare-styleable>
+
+    <declare-styleable name="RoundedCoordinatorLayout">
+        <attr name="topLeftRadius" />
+        <attr name="topRightRadius" />
+        <attr name="bottomLeftRadius" />
+        <attr name="bottomRightRadius" />
+    </declare-styleable>
+
+    <declare-styleable name="LoadingButton">
+        <attr name="lb_background_color" />
+        <attr name="lb_disable_elevation" />
+        <attr name="lb_disabled_alpha" />
+        <attr name="lb_icon" />
+        <attr name="lb_icon_gravity" />
+        <attr name="lb_padding_bottom" />
+        <attr name="lb_padding_top" />
+        <attr name="lb_progress_color" />
+        <attr name="lb_text" />
+        <attr name="lb_text_color" />
+        <attr name="lb_text_size" />
+    </declare-styleable>
+
+    <declare-styleable name="ScreenTitleView">
+        <attr name="stv_subtitle" />
+        <attr name="stv_title" />
+    </declare-styleable>
+
+    <declare-styleable name="CheckableImageView">
+        <attr name="android:checked" />
+    </declare-styleable>
+
+    <declare-styleable name="TernaryCheckBox">
+        <attr name="android:text" />
+        <attr name="tcs_subtext" />
+    </declare-styleable>
+
+    <declare-styleable name="CheckedSetting">
+        <attr name="cs_background" />
+        <attr name="cs_background_tint" />
+        <attr name="cs_container_background" />
+        <attr name="cs_drawable_left" />
+        <attr name="cs_drawable_left_tint" />
+        <attr name="cs_drawable_padding" />
+        <attr name="cs_padding_horizontal" />
+        <attr name="cs_padding_vertical" />
+        <attr name="cs_subtext" />
+        <attr name="cs_subtext_color" />
+        <attr name="cs_subtext_size" />
+        <attr name="cs_text" />
+        <attr name="cs_text_color" />
+        <attr name="cs_text_fontpath" />
+        <attr name="cs_text_size" />
+        <attr name="cs_view_type" />
+    </declare-styleable>
+
+    <declare-styleable name="GuildView">
+        <attr name="gv_image_request_size" />
+        <attr name="gv_text_size" />
+    </declare-styleable>
+
+    <declare-styleable name="CardSegment">
+        <attr name="segment_text" />
+    </declare-styleable>
+
+    <declare-styleable name="SearchInputView">
+        <attr name="siv_hint" />
+        <attr name="siv_search_content_description" />
+    </declare-styleable>
+
+    <declare-styleable name="CodeVerificationView">
+        <attr name="cvv_character_format" />
+        <attr name="cvv_character_input_type" />
+    </declare-styleable>
+</resources>

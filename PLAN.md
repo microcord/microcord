@@ -347,30 +347,36 @@ Status values: `NOT STARTED`, `IN PROGRESS`, `BLOCKED`, `DONE`.
 
 ### Phase 0: Project Baseline
 
-Status: **NOT STARTED**
+Status: **DONE**
 
-- [ ] Record a clean baseline build.
-- [ ] Change application ID to `dev.mantikafasi.manticord`.
-- [ ] Keep namespace `com.discord`.
-- [ ] Change minimum SDK to 21.
-- [ ] Remove Compose plugin, dependencies, source, and theme code.
-- [ ] Enable view binding and BuildConfig generation.
-- [ ] Add AppCompat, Fragment, and Material dependencies.
-- [ ] Add a minimal XML activity and launch it.
-- [ ] Replace template tests with a package/application smoke test.
+- [x] Record a clean baseline build.
+- [x] Change application ID to `dev.mantikafasi.manticord`.
+- [x] Keep namespace `com.discord`.
+- [x] Change minimum SDK to 21.
+- [x] Remove Compose plugin, dependencies, source, and theme code.
+- [x] Enable view binding and BuildConfig generation.
+- [x] Add AppCompat, Fragment, and Material dependencies.
+- [x] Add a minimal XML activity and launch it.
+- [x] Replace template tests with a package/application smoke test.
 
 Exit criteria: `assembleDebug`, unit tests, and lint complete successfully and
 the app launches an XML-backed activity on a supported emulator/device.
 
+Evidence: the untouched Compose template completed `assembleDebug`; the XML
+baseline completed `assembleDebug`, `testDebugUnitTest`, `lintDebug`, and
+`connectedDebugAndroidTest` on Android 13 (Windows Subsystem for Android). The
+instrumented smoke test verified `App`, the Manticord package name, launcher
+activity creation, and inflation of `activity_app.xml`.
+
 ### Phase 1: Resource Foundation
 
-Status: **NOT STARTED**
+Status: **IN PROGRESS**
 
-- [ ] Import all assets.
-- [ ] Import values and resource qualifiers.
-- [ ] Import XML configuration and raw resources.
-- [ ] Import drawables, mipmaps, fonts, and animations.
-- [ ] Import all layout directories.
+- [x] Import all assets.
+- [x] Import values and resource qualifiers.
+- [x] Import XML configuration and raw resources.
+- [x] Import drawables, mipmaps, fonts, and animations.
+- [x] Import all layout directories.
 - [ ] Install resource-owning public dependencies as needed.
 - [ ] Resolve AAPT errors without deleting recovered layouts.
 - [ ] Regenerate view bindings successfully.
@@ -378,6 +384,18 @@ Status: **NOT STARTED**
 
 Exit criteria: all recovered assets and layouts exist in the target project,
 AAPT succeeds, and the launch/loading shell renders without Compose.
+
+Progress: all 36 recovered asset files are present at their original paths,
+including data catalogs, images, Lottie JSON, hCaptcha HTML, and three Krisp
+model files. All recovered value qualifiers, XML/raw resources, visual
+resources, and 1,228 layout variants were imported. `public.xml` and nine
+official service resources were excluded; decoded apostrophe, attr-enum,
+ConstraintLayout-parent, float-resource, and namespace damage was repaired.
+Direct AAPT compilation and Gradle resource merging/linking pass. Installed
+dependencies represent removed merged-library layout copies. View Binding now
+identifies 134 missing first-party custom view classes (1,085 layout
+occurrences); these must be reconstructed with behavior before Phase 1 can be
+completed, so `assembleDebug` currently stops at generated binding compilation.
 
 ### Phase 2: Native Media Spike
 
@@ -583,8 +601,8 @@ large issue hierarchy without work attached.
 
 | Area | Status | Reference evidence | Tests/evidence | Notes |
 | --- | --- | --- | --- | --- |
-| Build/XML shell | NOT STARTED | `App`, `AppActivity`, manifest | None | Compose template currently present |
-| Resources/themes | NOT STARTED | `res/**`, `assets/**` | None | All assets/layouts retained |
+| Build/XML shell | DONE | `App`, `AppActivity`, manifest | Build, unit, lint, and Android 13 connected smoke test pass | Minimal Phase 0 XML loading shell; recovered resources remain Phase 1 |
+| Resources/themes | IN PROGRESS | `res/**`, `assets/**` | Assets and all resource families imported; AAPT/resource link pass | 134 first-party custom views block binding compilation |
 | Native media load | NOT STARTED | `lib/**`, `Discord.java` | None | Early blocker |
 | Dispatcher/stores | NOT STARTED | `stores/**` | None | Preserve serialized mutation |
 | REST | NOT STARTED | `restapi/**` | None | Live backend, fixture tests first |
@@ -664,6 +682,7 @@ or observable behavior. Small implementation details do not belong here.
 | 2026-07-22 | Reuse assets/layouts and `libdiscord.so` | Required for visual and media parity | Resource and JNI compatibility become explicit workstreams |
 | 2026-07-22 | Install public libraries normally | Avoid rebuilding dependency code | Decompiled dependency sources are reference-only |
 | 2026-07-22 | Require complete store/model fields and complete views | Partial models and placeholder UI cannot provide feature parity | Every slice must inventory and verify its full structural surface |
+| 2026-07-23 | Allow scoped JitPack access for recovered uCrop and FlexInput artifacts | Reference-compatible versions are unavailable from Google and Maven Central | Repository content filtering permits only `com.github.yalantis` and `com.github.lytefast` |
 
 ## Progress Journal
 
@@ -672,6 +691,11 @@ Add one concise row after a meaningful completed or blocked work session.
 | Date | Agent | Work completed | Verification | Next action/blocker |
 | --- | --- | --- | --- | --- |
 | 2026-07-22 | OpenCode | Repository/reference inventory and reconstruction plan | Documentation reviewed against inspected files | Begin Phase 0 |
+| 2026-07-23 | OpenCode | Completed Phase 0 Compose-to-XML baseline with Manticord identity and reference-shaped application/activity shell | `assembleDebug`, `testDebugUnitTest`, `lintDebug`, and `connectedDebugAndroidTest` passed on Android 13 | Begin controlled Phase 1 resource import |
+| 2026-07-23 | OpenCode | Inventoried the merged recovered resource surface and imported all 36 assets unchanged by path | `assembleDebug` passed after asset import | Filter/import base values without `public.xml` or official service credentials |
+| 2026-07-23 | OpenCode | Imported and normalized the complete recovered resource/layout surface, installed public resource owners, and generated the custom-view inventory | Direct AAPT compile and Gradle merge/link pass; `assembleDebug` reaches missing first-party binding types | Reconstruct foundational custom views by reference behavior, starting with the text/view primitives |
+| 2026-07-23 | OpenCode | Reconstructed foundational flipper, max-height recycler, rounded containers, Drawee/link text, clickable span, and typing-dot views from reference and DEX evidence | `compileDebugKotlin` passes; connected smoke check added but blocked from execution by remaining binding types | Continue foundational custom views by highest layout occurrence |
+| 2026-07-23 | OpenCode | Reconstructed settings/tri-state controls, loading/title/search/code views, guild imagery, and segmented controls; removed stale decoded Material layouts | `compileDebugKotlin` passes after each cluster; full build advances to remaining first-party binding types | Continue model-independent view clusters; defer `StatusView` until complete Presence models exist |
 
 ## Agent Handoff Template
 
@@ -691,14 +715,15 @@ Recommended next action:
 
 ## Immediate Next Work
 
-Begin Phase 0 only:
+Begin Phase 1 only:
 
-1. Establish whether the current boilerplate builds unchanged.
-2. Convert Gradle configuration from Compose to XML/View Binding.
-3. Set application ID, namespace, and minimum SDK decisions.
-4. Replace the Compose activity with the smallest XML-backed launch shell.
-5. Run build, unit test, and lint checks.
-6. Update Phase 0 and the progress journal with exact evidence.
+1. Inventory target and recovered resource directory/file counts.
+2. Import `assets/**` unchanged.
+3. Import base `values/**`, resolve dependency-owned attributes first, and
+   record any modern AAPT compatibility edits.
+4. Import qualified values, XML/raw/configuration, drawables/mipmaps/fonts/
+   animations, then layouts in separate buildable batches.
+5. Run the smallest relevant build after each batch and update exact evidence.
 
-Do not import the full resource dump in the same change as the build-system
-conversion. A clean XML baseline is the diagnostic boundary for Phase 1.
+Do not begin native, store, networking, or feature implementation while the
+resource foundation is incomplete.

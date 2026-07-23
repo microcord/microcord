@@ -19,9 +19,15 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven("https://jitpack.io") {
+            content {
+                includeGroup("com.github.lytefast")
+                includeGroup("com.github.yalantis")
+            }
+        }
     }
 }
 
 rootProject.name = "Discord"
 include(":app")
- 
+

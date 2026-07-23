@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.compose)
 }
 
 android {
@@ -12,8 +11,8 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.discord"
-        minSdk = 24
+        applicationId = "dev.mantikafasi.manticord"
+        minSdk = 21
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -35,24 +34,41 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
     buildFeatures {
-        compose = true
+        buildConfig = true
+        viewBinding = true
     }
 }
 
 dependencies {
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.ui.graphics)
-    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.browser)
+    implementation(libs.androidx.cardview)
+    implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.preference.ktx)
+    implementation(libs.androidx.recyclerview)
+    implementation(libs.androidx.swiperefreshlayout)
+    implementation(libs.androidx.viewpager2)
+    implementation(libs.exoplayer.ui)
+    implementation(libs.cameraview)
+    implementation(libs.colorpicker)
+    implementation(libs.flexbox)
+    implementation(libs.flexinput) {
+        exclude(group = "com.camerakit", module = "camerakit")
+        exclude(group = "com.camerakit", module = "jpegkit")
+    }
+    implementation(libs.fresco)
+    implementation(libs.fresco.drawee.span)
+    implementation(libs.lottie)
+    implementation(libs.material)
+    implementation(libs.rxjava)
+    implementation(libs.ucrop)
+    implementation(libs.zxing.scanner) {
+        exclude(group = "com.android.support")
+    }
     testImplementation(libs.junit)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
-    debugImplementation(libs.androidx.compose.ui.tooling)
 }

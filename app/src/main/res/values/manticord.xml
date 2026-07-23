@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="loading_background">#2B2E31</color>
+    <string name="manticord_app_name">Manticord</string>
+</resources>
