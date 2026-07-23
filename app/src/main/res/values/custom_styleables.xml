@@ -164,4 +164,19 @@
         <attr name="username_text_color" />
         <attr name="username_text_size" />
     </declare-styleable>
+
+    <declare-styleable name="PileView">
+        <attr name="pile_itemBackgroundColor" />
+        <attr name="pile_itemCutoutThickness" />
+        <attr name="pile_itemOverlap" />
+        <attr name="pile_itemPadding" />
+        <attr name="pile_itemSize" />
+        <attr name="pile_itemTextColor" />
+        <attr name="pile_maxItems" />
+        <attr name="pile_overFlowTextSize" />
+        <attr name="pile_overflowBackgroundColor" />
+        <attr name="pile_roundBackground" />
+        <attr name="pile_roundImage" />
+        <attr name="pile_showOverflowItem" />
+    </declare-styleable>
 </resources>
