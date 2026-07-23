@@ -136,4 +136,22 @@
         <attr name="sb_drawable_start" />
         <attr name="sb_text" />
     </declare-styleable>
+
+    <declare-styleable name="ViewReplySpline">
+        <attr name="cap_style" />
+        <attr name="end_padding" />
+        <attr name="orientation" />
+        <attr name="start_padding" />
+    </declare-styleable>
+
+    <declare-styleable name="GifLoadingView">
+        <attr name="glv_is_staggered" />
+    </declare-styleable>
+
+    <declare-styleable name="StatusView">
+        <attr name="sv_background_color" />
+        <attr name="sv_border_width" />
+        <attr name="sv_corner_radius" />
+        <attr name="sv_show_mobile" />
+    </declare-styleable>
 </resources>

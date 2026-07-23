@@ -61,6 +61,7 @@ dependencies {
     }
     implementation(libs.fresco)
     implementation(libs.fresco.drawee.span)
+    implementation(libs.gson)
     implementation(libs.lottie)
     implementation(libs.material)
     implementation(libs.rxjava)

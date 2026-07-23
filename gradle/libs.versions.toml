@@ -26,6 +26,7 @@ ucrop = "2.2.6"
 zxingScanner = "1.9.8"
 rxjava = "1.3.8"
 simpleast = "2.8.0"
+gson = "2.8.8"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -55,6 +56,7 @@ ucrop = { group = "com.github.yalantis", name = "ucrop", version.ref = "ucrop" }
 zxing-scanner = { group = "me.dm7.barcodescanner", name = "zxing", version.ref = "zxingScanner" }
 rxjava = { group = "io.reactivex", name = "rxjava", version.ref = "rxjava" }
 simpleast = { group = "com.github.discord", name = "SimpleAST", version.ref = "simpleast" }
+gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
