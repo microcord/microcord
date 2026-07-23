@@ -88,4 +88,27 @@
         <attr name="cvv_character_format" />
         <attr name="cvv_character_input_type" />
     </declare-styleable>
+
+    <declare-styleable name="CutoutView">
+        <attr name="cutout_badgeInset" />
+        <attr name="cutout_badgeRadius" />
+        <attr name="cutout_style" />
+    </declare-styleable>
+
+    <declare-styleable name="NumericBadgingView">
+        <attr name="badge_backgroundColor" />
+        <attr name="badge_textColor" />
+    </declare-styleable>
+
+    <declare-styleable name="CommunitySelectorView">
+        <attr name="csv_description_text" />
+        <attr name="csv_is_dropdown" />
+        <attr name="csv_subtitle_text" />
+        <attr name="csv_title_text" />
+    </declare-styleable>
+
+    <declare-styleable name="CommunityGetStartedHeaderIconView">
+        <attr name="chi_icon" />
+        <attr name="chi_title_text" />
+    </declare-styleable>
 </resources>

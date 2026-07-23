@@ -23,6 +23,7 @@ dependencyResolutionManagement {
             content {
                 includeGroup("com.github.lytefast")
                 includeGroup("com.github.yalantis")
+                includeGroup("com.github.discord")
             }
         }
     }
@@ -30,4 +31,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "Discord"
 include(":app")
-

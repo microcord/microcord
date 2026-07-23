@@ -64,6 +64,7 @@ dependencies {
     implementation(libs.lottie)
     implementation(libs.material)
     implementation(libs.rxjava)
+    implementation(libs.simpleast)
     implementation(libs.ucrop)
     implementation(libs.zxing.scanner) {
         exclude(group = "com.android.support")
