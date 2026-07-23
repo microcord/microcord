@@ -154,4 +154,14 @@
         <attr name="sv_corner_radius" />
         <attr name="sv_show_mobile" />
     </declare-styleable>
+
+    <declare-styleable name="UsernameView">
+        <attr name="android:text" />
+        <attr name="username" />
+        <attr name="username_line_spacing_multiplier" />
+        <attr name="username_singleline" />
+        <attr name="username_text_appearance" />
+        <attr name="username_text_color" />
+        <attr name="username_text_size" />
+    </declare-styleable>
 </resources>

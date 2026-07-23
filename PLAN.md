@@ -403,6 +403,12 @@ complete first-party models, and 3 native-dependent views. Phase 1 remains
 incomplete until these classes and their generated bindings compile without
 placeholders.
 
+Native dependency note: symbol inspection proves recovered `libdsti.so`, not
+`libdiscord.so`, exports the six `RLottieDrawable.Companion` JNI functions.
+`libdsti.so` is packaged for the four supported ABIs so RLottie-backed layout
+classes can be reconstructed during Phase 1; native creation/rendering is not
+yet runtime-verified.
+
 ### Phase 2: Native Media Spike
 
 Status: **NOT STARTED**
@@ -708,6 +714,7 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-07-23 | OpenCode | Installed upstream SimpleAST, removed 54 stale dependency layouts, refreshed the unresolved-view inventory, and reconstructed dimmer/community/upload/member-count/step primitives | `compileDebugKotlin` passes; dependency-owned bindings no longer block Java compilation | Complete the remaining 41 model-independent views |
 | 2026-07-23 | OpenCode | Reconstructed 17 additional model-independent settings, sidebar, permission, event, upload, voice, verification, eligibility, admin, and premium controls | `compileDebugKotlin` passes; Java binding errors are only unresolved first-party types | Complete the remaining 24 model-independent views |
 | 2026-07-23 | OpenCode | Added reply/GIF drawing infrastructure, complete activity/presence and sticker value contracts with wire adapters, `StatusView`, directory header, and experiment editor using direct JADX MCP evidence | `compileDebugKotlin` passes; focused contract tests added; Java binding compile advances through these types | Reconstruct complete user/guild models and native RLottie-dependent views |
+| 2026-07-23 | OpenCode | Reconstructed the recursive API user/guild-member/presence subset, normalized `CoreUser`, Username/SuggestedFriend views, and packaged four-ABI RLottie JNI binaries | `compileDebugKotlin` passes; `llvm-nm` confirms exact `libdsti.so` RLottie exports | Implement and runtime-test the RLottie drawable/image bridge, then continue complete guild models |
 
 ## Agent Handoff Template
 
