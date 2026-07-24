@@ -2,11 +2,18 @@ package com.discord.gateway.io
 
 import com.discord.api.channel.Channel
 import com.discord.api.guild.Guild
+import com.discord.api.guildmember.GuildMember
+import com.discord.api.guildmember.GuildMemberRemove
+import com.discord.api.guildmember.GuildMembersChunk
 import com.discord.api.presence.Presence
+import com.discord.api.role.GuildRoleCreate
+import com.discord.api.role.GuildRoleDelete
+import com.discord.api.role.GuildRoleUpdate
 import com.discord.api.stageinstance.StageInstance
 import com.discord.api.user.User
 import com.discord.gateway.opcodes.Opcode
 import com.discord.models.domain.ModelChannelUnreadUpdate
+import com.discord.models.domain.ModelGuildMemberListUpdate
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelReadState
@@ -42,6 +49,13 @@ class IncomingParser(private val gson: Gson) {
         "USER_GUILD_SETTINGS_UPDATE" -> gson.fromJson(data, ModelNotificationSettings::class.java)
         "USER_UPDATE" -> gson.fromJson(data, User::class.java)
         "GUILD_CREATE", "GUILD_UPDATE", "GUILD_DELETE" -> gson.fromJson(data, Guild::class.java)
+        "GUILD_MEMBER_ADD", "GUILD_MEMBER_UPDATE" -> gson.fromJson(data, GuildMember::class.java)
+        "GUILD_MEMBER_REMOVE" -> gson.fromJson(data, GuildMemberRemove::class.java)
+        "GUILD_MEMBERS_CHUNK" -> gson.fromJson(data, GuildMembersChunk::class.java)
+        "GUILD_ROLE_CREATE" -> gson.fromJson(data, GuildRoleCreate::class.java)
+        "GUILD_ROLE_UPDATE" -> gson.fromJson(data, GuildRoleUpdate::class.java)
+        "GUILD_ROLE_DELETE" -> gson.fromJson(data, GuildRoleDelete::class.java)
+        "GUILD_MEMBER_LIST_UPDATE" -> gson.fromJson(data, ModelGuildMemberListUpdate::class.java)
         "CHANNEL_CREATE", "CHANNEL_UPDATE", "CHANNEL_DELETE",
         "THREAD_CREATE", "THREAD_UPDATE", "THREAD_DELETE" -> gson.fromJson(data, Channel::class.java)
         "THREAD_LIST_SYNC" -> gson.fromJson(data, ModelThreadListSync::class.java)

@@ -1,6 +1,11 @@
 package com.discord.restapi
 
+import com.discord.models.domain.ModelGuildFolder
+import com.google.gson.annotations.SerializedName
+
 object RestAPIParams {
+    data class GuildFoldersUpdate(@SerializedName("guild_folders") val guildFolders: List<ModelGuildFolder>)
+
     class EmptyBody {
         override fun toString(): String = "EmptyBody"
     }

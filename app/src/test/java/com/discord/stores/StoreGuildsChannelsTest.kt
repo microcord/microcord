@@ -75,7 +75,7 @@ class StoreGuildsChannelsTest {
             channels.handleChannelOrThreadDelete(channel(11, Channel.PUBLIC_THREAD, 1, "thread", 10))
         }
 
-        assertNull(guilds.getGuild(1))
+        assertEquals("Guild", guilds.getGuild(1)?.name)
         assertEquals(setOf(1L), guilds.getUnavailableGuilds())
         assertNull(channels.getChannel(11))
 

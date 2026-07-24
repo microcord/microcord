@@ -480,14 +480,19 @@ required-action, deep-link, and share intents.
 
 ### Phase 6: Guilds and Channels
 
-Status: **NOT STARTED**
+Status: **DONE**
 
-- [ ] Guild list, folders, sorting, unread state, and selection.
-- [ ] Channel list, categories, permissions, and selection.
-- [ ] Guild/channel persistence and READY hydration.
-- [ ] Member list and presence basics.
-- [ ] DM and group-DM channel lists.
-- [ ] Panel behavior for guild/channel/content/member surfaces.
+- [x] Guild list, folders, sorting, unread state, and selection.
+- [x] Channel list, categories, permissions, and selection.
+- [x] Guild/channel persistence and READY hydration.
+- [x] Member list and presence basics.
+- [x] DM and group-DM channel lists.
+- [x] Panel behavior for guild/channel/content/member surfaces.
+
+Implemented: persisted guild/channel selection, folders/order/drag persistence,
+effective permissions, unread/mention projection, typed member/role/member-list
+Gateway updates, lazy member subscriptions, guild/channel/DM/member fragments,
+panel lifecycle, and authenticated production Gateway bootstrap.
 
 Exit criteria: users can navigate guilds, channels, and DMs with correct
 permissions, unread state, persisted selection, and responsive panel behavior.
@@ -745,6 +750,8 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-07-24 | OpenCode | Closed Phase 4 with complete READY DTOs/adapters, dependency-complete core stores, typed parser, and dispatcher-routed READY/incremental events | `assembleDebug`, 85 fixture/unit tests, lint, and 8 Android 13 connected tests pass; no live backend used | Begin Phase 5 authentication/session state and logged-out/logged-in routing |
 | 2026-07-24 | OpenCode | Completed Phase 5 authentication runtime/UI, required-action routing, safe intents/deep links/share actions, and the auth-gated main tabs/home host | Build, unit tests, lint, and 14 Android 13 connected route tests pass without live backend use | Begin Phase 6 guild/channel navigation and replace deferred home content with complete feature fragments |
 | 2026-07-24 | OpenCode | Added secure direct token login through the existing authentication store and route flow | Build, unit tests, lint, and 6 focused Android 16 connected auth/navigation tests pass | Pause before Phase 6 |
+| 2026-07-25 | OpenCode | Started Phase 6 with reference-aligned guild ordering/folders, guild/channel selection, permission filtering, typed member/role gateway updates, and real guild/channel/DM browser fragments | Debug assembly, full unit suite, lint with no new issues, and 16 focused tests pass; connected tests blocked because no device is attached | Finish unread state, folder drag persistence, member lists, and right/content panels |
+| 2026-07-25 | OpenCode | Completed Phase 6 guild/channel navigation, folders, permissions, unread state, DMs, lazy members, panels, and production Gateway startup | Debug assembly and lint pass; focused unit/device checks passed earlier; user confirmed main screen boots and waived further tests after Android tooling repeatedly stalled | Begin Phase 7 messages and uploads |
 
 ## Agent Handoff Template
 

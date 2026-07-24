@@ -20,6 +20,10 @@ import com.discord.utilities.intent.LinkParseResult
 import com.discord.widgets.tabs.WidgetTabsHost
 import com.discord.widgets.home.BackHandler
 import com.discord.widgets.home.HomePanelsLayout
+import com.discord.widgets.home.WidgetHome
+import com.discord.widgets.channels.list.WidgetChannelsList
+import com.discord.widgets.channels.memberlist.WidgetChannelMembersList
+import com.discord.widgets.guilds.list.WidgetGuildsList
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -122,7 +126,7 @@ class MainHostNavigationTest {
     @Test
     fun loggedInRouteCreatesTabsAndHomeHost() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        WidgetTabsHost.homeFragmentFactory = ::TestHomeFragment
+        WidgetTabsHost.homeFragmentFactory = ::WidgetHome
         StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, true, true))
         val activity = instrumentation.startActivitySync(
             Intent(instrumentation.targetContext, AppActivity.Main::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
@@ -130,7 +134,11 @@ class MainHostNavigationTest {
 
         instrumentation.waitForIdleSync()
         instrumentation.runOnMainSync { activity.supportFragmentManager.executePendingTransactions() }
-        assertTrue(activity.supportFragmentManager.findFragmentById(R.id.app_root) is WidgetTabsHost)
+        val tabs = activity.supportFragmentManager.findFragmentById(R.id.app_root) as WidgetTabsHost
+        val home = tabs.childFragmentManager.findFragmentByTag("HOME") as WidgetHome
+        assertTrue(home.childFragmentManager.findFragmentById(R.id.widget_guilds) is WidgetGuildsList)
+        assertTrue(home.childFragmentManager.findFragmentById(R.id.widget_channels) is WidgetChannelsList)
+        assertTrue(home.childFragmentManager.findFragmentById(R.id.widget_connected_list) is WidgetChannelMembersList)
         assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.widget_tabs_host_bottom_navigation_view).visibility)
         assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.overlapping_panels).visibility)
         instrumentation.runOnMainSync(activity::finish)

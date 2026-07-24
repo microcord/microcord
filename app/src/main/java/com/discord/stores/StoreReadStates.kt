@@ -43,6 +43,7 @@ class StoreReadStates(
         val selectedVoiceChannelAt: Long = 0,
         val activeForumThreads: Map<Long, Channel> = emptyMap(),
         val activeJoinedThreads: Map<Long, ActiveJoinedThread> = emptyMap(),
+        val channelGuildIds: Map<Long, Long> = emptyMap(),
     )
 
     private val readStates = HashMap<Long, ModelReadState>()
@@ -50,10 +51,14 @@ class StoreReadStates(
     private var inputs = Inputs()
     private var unreadChannelIds = emptySet<Long>()
     private var unreadGuildIds = emptySet<Long>()
+    private var mentionCountsByChannel = emptyMap<Long, Int>()
+    private var mentionCountsByGuild = emptyMap<Long, Int>()
     private var readStatesSnapshot: Map<Long, ModelReadState> = emptyMap()
     private var acksSnapshot: Map<Long, Ack> = emptyMap()
     private var unreadChannelIdsSnapshot = emptySet<Long>()
     private var unreadGuildIdsSnapshot = emptySet<Long>()
+    private var mentionCountsByChannelSnapshot = emptyMap<Long, Int>()
+    private var mentionCountsByGuildSnapshot = emptyMap<Long, Int>()
     private var unreadMarker = Unread()
     private var unreadMarkerSnapshot = Unread()
     private val markAsReadSubject = SerializedSubject(BehaviorSubject.create(false))
@@ -72,12 +77,18 @@ class StoreReadStates(
     fun getAck(channelId: Long): Ack? = acksSnapshot[channelId]
     fun getUnreadChannelIdsSnapshot(): Set<Long> = unreadChannelIdsSnapshot
     fun getUnreadGuildIdsSnapshot(): Set<Long> = unreadGuildIdsSnapshot
+    fun getMentionCountsByChannelSnapshot(): Map<Long, Int> = mentionCountsByChannelSnapshot
+    fun getMentionCountsByGuildSnapshot(): Map<Long, Int> = mentionCountsByGuildSnapshot
     fun getUnreadMarkerSnapshot(): Unread = unreadMarkerSnapshot
 
     fun getUnreadChannelIds(): Observable<Set<Long>> =
         observationDeck.connectRx(this, generator = ::getUnreadChannelIdsSnapshot).distinctUntilChanged()
     fun getUnreadGuildIds(): Observable<Set<Long>> =
         observationDeck.connectRx(this, generator = ::getUnreadGuildIdsSnapshot).distinctUntilChanged()
+    fun getMentionCountsByChannel(): Observable<Map<Long, Int>> =
+        observationDeck.connectRx(this, generator = ::getMentionCountsByChannelSnapshot).distinctUntilChanged()
+    fun getMentionCountsByGuild(): Observable<Map<Long, Int>> =
+        observationDeck.connectRx(this, generator = ::getMentionCountsByGuildSnapshot).distinctUntilChanged()
     fun getIsUnread(guildId: Long): Observable<Boolean> =
         getUnreadGuildIds().map { guildId in it }.distinctUntilChanged()
     fun observeAllAcks(): Observable<Map<Long, Ack>> =
@@ -167,6 +178,8 @@ class StoreReadStates(
         inputs = Inputs()
         unreadChannelIds = emptySet()
         unreadGuildIds = emptySet()
+        mentionCountsByChannel = emptyMap()
+        mentionCountsByGuild = emptyMap()
         unreadMarker = Unread()
         unreadMessageMarker.clear(persist = true)
         acksCache.clear(persist = true)
@@ -178,6 +191,8 @@ class StoreReadStates(
         acksSnapshot = acks.toMap()
         unreadChannelIdsSnapshot = unreadChannelIds.toSet()
         unreadGuildIdsSnapshot = unreadGuildIds.toSet()
+        mentionCountsByChannelSnapshot = mentionCountsByChannel.toMap()
+        mentionCountsByGuildSnapshot = mentionCountsByGuild.toMap()
         unreadMarkerSnapshot = unreadMarker
         unreadMessageMarker.set(unreadMarkerSnapshot, persist = true)
         acksCache.set(acksSnapshot)
@@ -205,37 +220,72 @@ class StoreReadStates(
         StoreThreadScheduler.assertCurrentThread()
         val unreadChannels = HashSet<Long>()
         val unreadGuilds = HashSet<Long>()
+        val channelMentions = readStates.values.filter { it.mentionCount > 0 }
+            .associate { it.channelId to it.mentionCount }
+        val guildMentions = HashMap<Long, Int>()
+        channelMentions.forEach { (channelId, count) ->
+            resolveGuildId(channelId)?.let { guildId -> guildMentions[guildId] = (guildMentions[guildId] ?: 0) + count }
+        }
         inputs.recentMessageIds.forEach { (channelId, recentMessageId) ->
             val joined = inputs.activeJoinedThreads[channelId]
             val activeForumThread = inputs.activeForumThreads[channelId]
             val channel = inputs.channels[channelId] ?: joined?.channel ?: activeForumThread ?: return@forEach
             val parent = inputs.channels[channel.parentId]
             val forumPost = channel.isThread() && parent?.type == Channel.GUILD_FORUM
-            if (channel.type == Channel.DM || channel.type == Channel.GROUP_DM) return@forEach
+            val privateChannel = channel.type == Channel.DM || channel.type == Channel.GROUP_DM
             if (channel.isThread() && !forumPost && joined == null) return@forEach
             if (channel.isThread() && forumPost && activeForumThread == null) return@forEach
-            if ((inputs.channelPermissions[channelId] ?: 0L) and VIEW_CHANNEL == 0L) return@forEach
-            if (isChannelMuted(channel, joined)) return@forEach
+            if (!privateChannel && (inputs.channelPermissions[channelId] ?: 0L) and VIEW_CHANNEL == 0L) return@forEach
+            if (!privateChannel && isPlainUnreadMuted(channel, joined)) return@forEach
             if (channel.type == Channel.GUILD_VOICE && channel.id != inputs.selectedVoiceChannelId) return@forEach
             if (channel.type == Channel.GUILD_VOICE && channel.id == inputs.selectedVoiceChannelId &&
                 !wasMessageSentAfterTimestamp(UtcDateTime(inputs.selectedVoiceChannelAt), recentMessageId)) return@forEach
 
             val ackMessageId = acks[channelId]?.messageId
                 ?: if (channel.isThread()) acks[channel.parentId]?.messageId else null
-                ?: inputs.guildJoinedAt[channel.guildId]?.let(::timestampToSnowflake)
-                ?: timestampToSnowflake(clock.currentTimeMillis())
+                ?: if (privateChannel) null else inputs.guildJoinedAt[channel.guildId]?.let(::timestampToSnowflake)
+                ?: if (privateChannel) null else timestampToSnowflake(clock.currentTimeMillis())
             if (!isNewer(recentMessageId, ackMessageId)) return@forEach
             unreadChannels += channelId
+            if (privateChannel) return@forEach
 
             var muted = isChannelMuted(parent, joined)
             if (!muted && channel.isThread()) muted = isChannelMuted(inputs.channels[parent?.parentId], joined)
-            if (!muted) unreadGuilds += channel.guildId
+            if (!muted) unreadGuilds += resolveGuildId(channelId) ?: channel.guildId
         }
-        if (unreadChannels != unreadChannelIds || unreadGuilds != unreadGuildIds) {
+        if (unreadChannels != unreadChannelIds || unreadGuilds != unreadGuildIds ||
+            channelMentions != mentionCountsByChannel || guildMentions != mentionCountsByGuild) {
             unreadChannelIds = unreadChannels
             unreadGuildIds = unreadGuilds
+            mentionCountsByChannel = channelMentions
+            mentionCountsByGuild = guildMentions
             markChanged()
         }
+    }
+
+    private fun resolveGuildId(channelId: Long): Long? {
+        inputs.channelGuildIds[channelId]?.let { return it }
+        var channel = inputs.channels[channelId] ?: inputs.activeJoinedThreads[channelId]?.channel
+            ?: inputs.activeForumThreads[channelId]
+        repeat(3) {
+            channel ?: return null
+            if (channel!!.guildId != 0L) return channel!!.guildId
+            channel = inputs.channels[channel!!.parentId]
+        }
+        return null
+    }
+
+    private fun isPlainUnreadMuted(channel: Channel, joined: ActiveJoinedThread?): Boolean {
+        val guildId = resolveGuildId(channel.id) ?: channel.guildId
+        val settings = inputs.guildSettings[guildId]
+        if (settings?.isMuted == true || isChannelMuted(channel, joined)) return true
+        var parentId = channel.parentId
+        repeat(2) {
+            val parent = inputs.channels[parentId] ?: return false
+            if (settings?.getChannelOverride(parent.id)?.isMuted == true) return true
+            parentId = parent.parentId
+        }
+        return false
     }
 
     private fun isChannelMuted(channel: Channel?, joined: ActiveJoinedThread?): Boolean {

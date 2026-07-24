@@ -61,6 +61,7 @@ class StoreUserSettings(
     fun observeFriendDiscoveryFlags(): Observable<Int> = friendDiscoveryFlagsSubject.distinctUntilChanged()
     fun observeFriendSourceFlags(): Observable<ModelUserSettings.FriendSourceFlags> = friendSourceFlagsSubject.distinctUntilChanged()
     fun observeGuildFolders(): Observable<List<ModelGuildFolder>> = guildFoldersPublisher.getObservable().map { it.toList() }.distinctUntilChanged()
+    internal fun getGuildFolders(): List<ModelGuildFolder> = guildFoldersPublisher.get().toList()
     fun observeIsAccessibilityDetectionAllowed(): Observable<Boolean> = allowAccessibilityDetectionPublisher.getObservable().distinctUntilChanged()
     @JvmOverloads
     fun observeIsAnimatedEmojisEnabled(useReducedMotion: Boolean = true): Observable<Boolean> =

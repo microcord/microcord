@@ -97,14 +97,14 @@ class StoreGuilds(
 
     fun handleGuildRemove(guild: ApiGuild) {
         if (guild.unavailable) {
-            guildsUnavailable.add(guild.id)
-        } else {
-            guildsUnavailable.remove(guild.id)
+            if (guildsUnavailable.add(guild.id)) markChanged(GuildsUpdate)
+            return
         }
+        guildsUnavailable.remove(guild.id)
         val changed = guilds.remove(guild.id) != null || guildRoles.remove(guild.id) != null ||
             guildsJoinedAt.remove(guild.id) != null
         val membersChanged = guildMembers.remove(guild.id) != null || guildMembersComputed.remove(guild.id) != null
-        if (changed || guild.unavailable) markChanged(GuildsUpdate)
+        if (changed) markChanged(GuildsUpdate)
         if (membersChanged) markChanged(ComputedMembersUpdate)
     }
 

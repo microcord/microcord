@@ -9,6 +9,7 @@ import com.discord.gateway.io.Outgoing
 import com.discord.gateway.io.Resume
 import com.discord.gateway.opcodes.Opcode
 import com.discord.models.domain.ModelPayload
+import com.discord.stores.GuildSubscriptionPayload
 import com.discord.utilities.websocket.GatewayWebSocket
 import com.discord.utilities.websocket.GatewayWebSocketFactory
 import com.discord.utilities.websocket.GatewayWebSocketListener
@@ -90,6 +91,8 @@ class GatewaySocket(
     private var failures = 0
     private var backoffMs = MIN_BACKOFF_MS
 
+    init { (eventHandler as? GatewayEventRouter)?.bind(this) }
+
     fun connect() {
         scheduler.schedule(0) {
             if (state == State.DISCONNECTED) discoverAndConnect()
@@ -98,12 +101,18 @@ class GatewaySocket(
 
     fun close(resetSession: Boolean = true) {
         scheduler.schedule(0) {
+            reconnectTask?.cancel()
+            reconnectTask = null
             cleanup(1000, "Client closed")
             state = State.DISCONNECTED
             if (resetSession) clearSession()
             eventHandler.handleConnected(false)
             eventHandler.handleConnectionReady(false)
         }
+    }
+
+    fun updateGuildSubscriptions(payload: GuildSubscriptionPayload) {
+        scheduler.schedule(0) { if (state == State.CONNECTED) send(Opcode.GUILD_SUBSCRIPTIONS, payload) }
     }
 
     fun isSessionEstablished(): Boolean = state == State.CONNECTED

@@ -1,0 +1,55 @@
+package com.discord.api.permission
+
+object Permission {
+    const val NONE = 0L
+    const val CREATE_INSTANT_INVITE = 1L
+    const val KICK_MEMBERS = 2L
+    const val BAN_MEMBERS = 4L
+    const val ADMINISTRATOR = 8L
+    const val MANAGE_CHANNELS = 16L
+    const val MANAGE_GUILD = 32L
+    const val ADD_REACTIONS = 64L
+    const val VIEW_AUDIT_LOG = 128L
+    const val PRIORITY_SPEAKER = 256L
+    const val STREAM = 512L
+    const val VIEW_CHANNEL = 1024L
+    const val SEND_MESSAGES = 2048L
+    const val SEND_TTS_MESSAGES = 4096L
+    const val MANAGE_MESSAGES = 8192L
+    const val EMBED_LINKS = 16384L
+    const val ATTACH_FILES = 32768L
+    const val READ_MESSAGE_HISTORY = 65536L
+    const val MENTION_EVERYONE = 131072L
+    const val USE_EXTERNAL_EMOJIS = 262144L
+    const val VIEW_GUILD_ANALYTICS = 524288L
+    const val CONNECT = 1048576L
+    const val SPEAK = 2097152L
+    const val MUTE_MEMBERS = 4194304L
+    const val DEAFEN_MEMBERS = 8388608L
+    const val MOVE_MEMBERS = 16777216L
+    const val USE_VAD = 33554432L
+    const val CHANGE_NICKNAME = 67108864L
+    const val MANAGE_NICKNAMES = 134217728L
+    const val MANAGE_ROLES = 268435456L
+    const val MANAGE_WEBHOOKS = 536870912L
+    const val MANAGE_EMOJIS_AND_STICKERS = 1073741824L
+    const val USE_APPLICATION_COMMANDS = 2147483648L
+    const val REQUEST_TO_SPEAK = 4294967296L
+    const val MANAGE_EVENTS = 8589934592L
+    const val MANAGE_THREADS = 17179869184L
+    const val CREATE_PUBLIC_THREADS = 34359738368L
+    const val CREATE_PRIVATE_THREADS = 68719476736L
+    const val USE_EXTERNAL_STICKERS = 137438953472L
+    const val SEND_MESSAGES_IN_THREADS = 274877906944L
+    const val MODERATE_MEMBERS = 1099511627776L
+
+    const val DEFAULT = 521942851137L
+    const val ALL = 1649266917119L
+    const val COMMUNICATIONS_DISABLED_DEFAULT = 66560L
+
+    object AllowList {
+        const val COMMUNICATIONS_DISABLED_DEFAULT = Permission.COMMUNICATIONS_DISABLED_DEFAULT
+        const val LURKER_DEFAULT = 66560L
+        const val LURKER_STAGE_CHANNEL = 4331734016L
+    }
+}

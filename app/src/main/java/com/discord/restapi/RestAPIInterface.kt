@@ -4,16 +4,22 @@ import com.discord.api.auth.RegisterResponse
 import com.discord.api.channel.Channel
 import com.discord.api.fingerprint.FingerprintResponse
 import com.discord.models.domain.ModelLocationMetadata
+import com.discord.models.domain.ModelUserSettings
+import com.discord.models.domain.ModelGateway
 import com.discord.models.domain.ModelPhoneVerificationToken
 import com.discord.models.domain.auth.ModelLoginResult
 import retrofit2.http.GET
 import retrofit2.http.Body
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.PATCH
 import retrofit2.Response
 import rx.Observable
 
 interface RestAPIInterface {
+    @GET("gateway")
+    fun getGateway(): Observable<ModelGateway>
+
     @GET("channels/{channelId}")
     fun getChannel(@Path("channelId") channelId: Long): Observable<Channel>
 
@@ -52,4 +58,7 @@ interface RestAPIInterface {
 
     @GET("auth/location-metadata")
     fun getLocationMetadata(): Observable<ModelLocationMetadata>
+
+    @PATCH("users/@me/settings")
+    fun updateUserSettings(@Body body: RestAPIParams.GuildFoldersUpdate): Observable<ModelUserSettings>
 }

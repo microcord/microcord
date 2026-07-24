@@ -2,6 +2,7 @@ package com.discord.gateway
 
 import com.discord.gateway.io.IdentifyClientState
 import com.discord.models.domain.ModelGateway
+import com.discord.stores.GuildSubscriptionPayload
 import com.discord.utilities.websocket.GatewayWebSocket
 import com.discord.utilities.websocket.GatewayWebSocketFactory
 import com.discord.utilities.websocket.GatewayWebSocketListener
@@ -98,6 +99,19 @@ class GatewaySocketTest {
         harness.scheduler.runCurrent()
         assertEquals(6, harness.socket.lastOp())
         assertEquals(listOf(false), harness.handler.disconnects)
+    }
+
+    @Test
+    fun connectedSocketSendsGuildMemberSubscriptions() {
+        val harness = Harness()
+        harness.connectReady(sequence = 1, sessionId = "fixture-session")
+
+        harness.gateway.updateGuildSubscriptions(GuildSubscriptionPayload(2, mapOf(3L to listOf(listOf(0, 99)))))
+        harness.scheduler.runCurrent()
+
+        val payload = harness.socket.lastPayload()
+        assertEquals(14, payload["op"].asInt)
+        assertEquals(99, payload["d"].asJsonObject["channels"].asJsonObject["3"].asJsonArray[0].asJsonArray[1].asInt)
     }
 
     private class Harness {

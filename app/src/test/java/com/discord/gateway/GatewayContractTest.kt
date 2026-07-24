@@ -3,7 +3,13 @@ package com.discord.gateway
 import android.content.SharedPreferences
 import com.discord.api.stageinstance.StageInstance
 import com.discord.api.stageinstance.StageInstancePrivacyLevel
+import com.discord.api.guildmember.GuildMember
+import com.discord.api.guildmember.GuildMemberRemove
+import com.discord.api.guildmember.GuildMembersChunk
+import com.discord.api.role.GuildRoleCreate
+import com.discord.api.role.GuildRoleDelete
 import com.discord.models.domain.ModelPayload
+import com.discord.models.domain.ModelGuildMemberListUpdate
 import com.discord.models.thread.dto.ModelThreadListSync
 import com.discord.gateway.io.Identify
 import com.discord.gateway.io.IdentifyClientState
@@ -72,6 +78,19 @@ class GatewayContractTest {
         assertEquals(StageInstancePrivacyLevel.GUILD_ONLY, (create.data as StageInstance).privacyLevel)
         assertEquals("updated", (update.data as StageInstance).topic)
         assertEquals(3L, (delete.data as StageInstance).channelId)
+
+        val member = parser.parse("""{"op":0,"t":"GUILD_MEMBER_ADD","d":{"guild_id":2,"user":{"id":7,"username":"me"},"roles":[],"pending":false}}""")
+        val removed = parser.parse("""{"op":0,"t":"GUILD_MEMBER_REMOVE","d":{"guild_id":2,"user":{"id":7,"username":"me"}}}""")
+        val chunk = parser.parse("""{"op":0,"t":"GUILD_MEMBERS_CHUNK","d":{"guild_id":2,"members":[],"presences":[],"not_found":[]}}""")
+        val role = parser.parse("""{"op":0,"t":"GUILD_ROLE_CREATE","d":{"guild_id":2,"role_id":3,"role":{"id":3,"name":"role","permissions":1024}}}""")
+        val roleDelete = parser.parse("""{"op":0,"t":"GUILD_ROLE_DELETE","d":{"guild_id":2,"role_id":3}}""")
+        assertEquals(2L, (member.data as GuildMember).guildId)
+        assertEquals(7L, (removed.data as GuildMemberRemove).user.id)
+        assertTrue((chunk.data as GuildMembersChunk).members.orEmpty().isEmpty())
+        assertEquals(3L, (role.data as GuildRoleCreate).role?.id)
+        assertEquals(3L, (roleDelete.data as GuildRoleDelete).roleId)
+        val memberList = parser.parse("""{"op":0,"t":"GUILD_MEMBER_LIST_UPDATE","d":{"guild_id":2,"id":"everyone","groups":[{"id":"online","count":1}],"online_count":1,"member_count":1,"ops":[{"op":"SYNC","range":[0,1],"items":[{"group":{"id":"online","count":1}},{"member":{"guild_id":2,"user":{"id":7,"username":"me","discriminator":"0000"},"roles":[],"pending":false}}]}]}}""")
+        assertTrue((memberList.data as ModelGuildMemberListUpdate).ops.single() is ModelGuildMemberListUpdate.Operation.Sync)
 
         val unknown = parser.parse("{\"op\":0,\"s\":4,\"t\":\"FUTURE_EVENT\",\"d\":{\"value\":1}}")
         assertTrue(unknown.data is JsonElement)

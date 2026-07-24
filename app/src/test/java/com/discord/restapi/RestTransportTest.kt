@@ -2,6 +2,7 @@ package com.discord.restapi
 
 import com.discord.restapi.http.RateLimitInterceptor
 import com.discord.utilities.error.RestApiError
+import com.discord.models.domain.ModelGuildFolder
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
@@ -54,6 +55,19 @@ class RestTransportTest {
         assertEquals("tr-TR,tr;q=0.9", first.getHeader("Accept-Language"))
         assertEquals("Manticord fixture", first.getHeader("User-Agent"))
         assertEquals("session=abc", second.getHeader("Cookie"))
+    }
+
+    @Test
+    fun guildFolderPatchContainsOnlyGuildFolders() {
+        server.enqueue(MockResponse().setBody("{}"))
+        val api = RestAPIBuilder(server.url("/api/").toString(), MemoryCookieJar()).build(RestAPIInterface::class.java)
+
+        api.updateUserSettings(RestAPIParams.GuildFoldersUpdate(listOf(ModelGuildFolder(null, listOf(1))))).toBlocking().first()
+
+        val request = server.takeRequest()
+        assertEquals("PATCH", request.method)
+        assertEquals("/api/v9/users/@me/settings", request.path)
+        assertEquals("{\"guild_folders\":[{\"guild_ids\":[1]}]}", request.body.readUtf8())
     }
 
     @Test
