@@ -431,14 +431,14 @@ initialization, audio subsystem and input/output enumeration, and disposal.
 
 ### Phase 3: Core Runtime and Stores
 
-Status: **NOT STARTED**
+Status: **IN PROGRESS**
 
 - [ ] Implement application initialization.
-- [ ] Implement providers for application/activity context and preferences.
-- [ ] Implement dispatcher and dedicated store scheduler.
-- [ ] Implement `Store`, `StoreV2`, and observation snapshots.
+- [x] Implement providers for application/activity context and preferences.
+- [x] Implement dispatcher and dedicated store scheduler.
+- [x] Implement `Store`, `StoreV2`, and observation snapshots.
 - [ ] Implement the initial `StoreStream` graph.
-- [ ] Implement safe persistence primitives.
+- [x] Implement safe persistence primitives.
 - [ ] Implement logout/reset behavior.
 - [ ] Add deterministic dispatcher/store tests.
 
@@ -708,6 +708,7 @@ or observable behavior. Small implementation details do not belong here.
 | 2026-07-24 | Baseline the imported recovered-resource lint corpus | The immutable corpus carries 16,733 inherited errors and 28,734 warnings from merged libraries, translations, and decoded resources after reconstructed Kotlin issues were fixed | `lintDebug` fails on every new issue while preserving the recovered corpus unchanged |
 | 2026-07-24 | Preserve the recovered compiled WebRTC Java bridge for Phase 2 | No available public artifact matches four JNI-visible descriptors and two are Discord-specific; the user approved the exception required for exact native parity | Vendor only the exact compiled bridge closure, remove the incompatible public artifact, and verify creation/disposal on device |
 | 2026-07-24 | Waive ARM64 runtime execution for the native spike | The user accepted packaged/hash-verified ARM64 libraries with x86_64 lifecycle evidence | Phase 2 closes on x86_64; ARM64 binaries remain present for later device validation |
+| 2026-07-24 | Use Kryo `4.0.2` for reference-shaped persisted store payloads | Recovered metadata and API contracts require Kryo while persistence must remain atomic and path-confined | Persistence uses the public artifact and disables Android application backup before authentication data exists |
 
 ## Progress Journal
 
@@ -735,6 +736,7 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-07-24 | OpenCode | Isolated the approved compiled WebRTC bridge into a reproducible local artifact with no decompiled source or first-party classes | 385 classes, 117 native roots, four hard descriptors, `EglHelper`, duplicate-class check, build, and 41 unit tests pass | Run native create/query/dispose instrumentation when an ADB device is attached |
 | 2026-07-24 | OpenCode | Completed all JNI registration roots under Hammer-and-Chisel, media-engine, and native-engine packages and expanded audio lifecycle coverage | Android 13 x86_64 passes load, EGL creation, engine creation, audio subsystem/input/output queries, and repeated disposal | Run the same native lifecycle tests on an ARM64 device to close Phase 2 |
 | 2026-07-24 | OpenCode | Closed Phase 2 after the approved ARM64 runtime waiver | `assembleDebug`, 43 unit tests, lint with zero new issues, and 8 Android 13 x86_64 connected tests pass | Begin Phase 3 application initialization, dispatcher, and complete store infrastructure |
+| 2026-07-24 | OpenCode | Reconstructed dispatcher/store scheduling, post-dispatch observation snapshots, runtime providers, preferences, and atomic Kryo persistence | `assembleDebug` and 50 deterministic unit tests pass; no placeholder markers found | Implement the complete accessibility/system-settings StoreStream closure before authentication/logout |
 
 ## Agent Handoff Template
 

@@ -69,6 +69,7 @@ dependencies {
     implementation(libs.fresco.drawee.span)
     implementation(libs.photo.drawee.view)
     implementation(libs.gson)
+    implementation(libs.kryo)
     implementation(libs.lottie)
     implementation(libs.material)
     implementation(libs.rxjava)
