@@ -1,0 +1,155 @@
+package com.discord.restapi
+
+import com.discord.restapi.http.RateLimitInterceptor
+import com.discord.utilities.error.RestApiError
+import okhttp3.Cookie
+import okhttp3.CookieJar
+import okhttp3.HttpUrl
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.ResponseBody.Companion.toResponseBody
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import retrofit2.HttpException
+import retrofit2.Response
+import retrofit2.http.GET
+import rx.Observable
+
+class RestTransportTest {
+    private val server = MockWebServer()
+
+    @After
+    fun stopServer() = server.shutdown()
+
+    @Test
+    fun builderAddsVersionHeadersAndPersistsCookies() {
+        server.enqueue(MockResponse().setBody("{\"value\":\"first\"}").addHeader("Set-Cookie", "session=abc; Path=/"))
+        server.enqueue(MockResponse().setBody("{\"value\":\"second\"}"))
+        val headers = object : RequiredHeadersInterceptor.HeadersProvider {
+            override fun getAuthToken() = "fixture-token"
+            override fun getFingerprint() = "fixture-fingerprint"
+            override fun getLocale() = "tr"
+            override fun getAcceptLanguages() = "tr-TR,tr;q=0.9"
+            override fun getUserAgent() = "Manticord fixture"
+            override fun getSpotifyToken(): String? = null
+        }
+        val api = RestAPIBuilder(server.url("/api/").toString(), MemoryCookieJar()).build(
+            FixtureApi::class.java,
+            interceptors = listOf(RequiredHeadersInterceptor(headers)),
+        )
+
+        assertEquals("first", api.get().toBlocking().single().value)
+        assertEquals("second", api.get().toBlocking().single().value)
+        val first = server.takeRequest()
+        val second = server.takeRequest()
+        assertEquals("/api/v9/fixture", first.path)
+        assertEquals("fixture-token", first.getHeader("Authorization"))
+        assertEquals("fixture-fingerprint", first.getHeader("X-Fingerprint"))
+        assertEquals("tr", first.getHeader("X-Discord-Locale"))
+        assertEquals("tr-TR,tr;q=0.9", first.getHeader("Accept-Language"))
+        assertEquals("Manticord fixture", first.getHeader("User-Agent"))
+        assertEquals("session=abc", second.getHeader("Cookie"))
+    }
+
+    @Test
+    fun parsesStructuredErrorsAndRedactsSecrets() {
+        val request = Request.Builder().url("https://example.test/channels?token=query-secret").build()
+        val raw = okhttp3.Response.Builder()
+            .request(request)
+            .protocol(okhttp3.Protocol.HTTP_1_1)
+            .message("Bad Request")
+            .code(400)
+            .build()
+        val exception = HttpException(Response.error<Any>(fixture("structured_error.json").toResponseBody(), raw))
+        val error = RestApiError.from(exception)
+
+        assertEquals(RestApiError.Type.DISCORD_BAD_REQUEST, error.type)
+        assertEquals(50035, error.code)
+        assertEquals(listOf("This field is required"), error.messages["name"])
+        assertFalse(error.toString().contains("query-secret"))
+        val secret = RestApiError.from(java.io.IOException("Authorization: Bearer fixture-secret"))
+        assertFalse(secret.toString().contains("fixture-secret"))
+        assertTrue(secret.toString().contains("<redacted>"))
+    }
+
+    @Test
+    fun coordinatesGlobalAndRouteLimits() {
+        val clock = MutableClock()
+        val client = OkHttpClient.Builder().addInterceptor(
+            RateLimitInterceptor(maxRetries = 0, nowMillis = clock::now, sleep = clock::sleep),
+        ).build()
+        server.enqueue(MockResponse().setResponseCode(429).setBody(fixture("global_rate_limit.json")))
+        server.enqueue(MockResponse().setBody("ok"))
+        assertEquals(429, client.newCall(request("/first")).execute().use { it.code })
+        assertEquals(200, client.newCall(request("/different")).execute().use { it.code })
+        assertEquals(listOf(500L), clock.sleeps)
+
+        val routeClock = MutableClock()
+        val routeClient = OkHttpClient.Builder().addInterceptor(
+            RateLimitInterceptor(maxRetries = 0, nowMillis = routeClock::now, sleep = routeClock::sleep),
+        ).build()
+        server.enqueue(MockResponse().setResponseCode(429).setBody(fixture("route_rate_limit.json")))
+        server.enqueue(MockResponse().setBody("other"))
+        server.enqueue(MockResponse().setBody("same"))
+        routeClient.newCall(request("/route")).execute().close()
+        routeClient.newCall(request("/other")).execute().close()
+        routeClient.newCall(request("/route")).execute().close()
+        assertEquals(listOf(250L), routeClock.sleeps)
+    }
+
+    @Test
+    fun rateLimitRetriesAreBounded() {
+        val clock = MutableClock()
+        repeat(4) {
+            server.enqueue(MockResponse().setResponseCode(429).setBody(fixture("route_rate_limit.json")))
+        }
+        val client = OkHttpClient.Builder().addInterceptor(
+            RateLimitInterceptor(nowMillis = clock::now, sleep = clock::sleep),
+        ).build()
+
+        assertEquals(429, client.newCall(request("/bounded")).execute().use { it.code })
+        assertEquals(4, server.requestCount)
+        assertEquals(listOf(250L, 250L, 250L), clock.sleeps)
+    }
+
+    private fun request(path: String) = Request.Builder().url(server.url(path)).build()
+
+    private fun fixture(name: String): String = requireNotNull(
+        javaClass.getResource("/fixtures/rest/$name"),
+    ).readText()
+
+    private interface FixtureApi {
+        @GET("fixture")
+        fun get(): Observable<FixtureResponse>
+    }
+
+    private data class FixtureResponse(val value: String)
+
+    private class MutableClock {
+        var value = 0L
+        val sleeps = mutableListOf<Long>()
+        fun now() = value
+        fun sleep(delay: Long) {
+            sleeps += delay
+            value += delay
+        }
+    }
+
+    private class MemoryCookieJar : CookieJar {
+        private val cookies = mutableListOf<Cookie>()
+
+        override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
+            this.cookies.removeAll { old ->
+                cookies.any { it.name == old.name && it.domain == old.domain && it.path == old.path }
+            }
+            this.cookies += cookies
+        }
+
+        override fun loadForRequest(url: HttpUrl): List<Cookie> = cookies.filter { it.matches(url) }
+    }
+}

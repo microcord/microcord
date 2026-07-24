@@ -77,6 +77,14 @@ class StoreStream private constructor(
     fun handleStageInstanceCreate(stageInstance: StageInstance) = dispatcher.schedule { stageInstances.handleStageInstanceCreate(stageInstance) }
     fun handleStageInstanceUpdate(stageInstance: StageInstance) = dispatcher.schedule { stageInstances.handleStageInstanceUpdate(stageInstance) }
     fun handleStageInstanceDelete(stageInstance: StageInstance) = dispatcher.schedule { stageInstances.handleStageInstanceDelete(stageInstance) }
+    fun handleGatewayDispatch(type: String?, data: Any) = dispatcher.schedule {
+        val stageInstance = data as? StageInstance ?: return@schedule
+        when (type) {
+            "STAGE_INSTANCE_CREATE" -> stageInstances.handleStageInstanceCreate(stageInstance)
+            "STAGE_INSTANCE_UPDATE" -> stageInstances.handleStageInstanceUpdate(stageInstance)
+            "STAGE_INSTANCE_DELETE" -> stageInstances.handleStageInstanceDelete(stageInstance)
+        }
+    }
     fun handlePreLogout() = dispatcher.schedule { userSettingsSystem.handlePreLogout() }
 
     fun resetForLogout() = dispatcher.schedule {

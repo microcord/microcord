@@ -25,6 +25,7 @@ dependencyResolutionManagement {
                 includeGroup("com.github.yalantis")
                 includeGroup("com.github.discord")
                 includeGroup("com.github.mmin18")
+                includeGroup("com.github.franmontiel")
             }
         }
     }

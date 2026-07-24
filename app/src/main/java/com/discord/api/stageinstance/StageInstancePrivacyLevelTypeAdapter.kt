@@ -11,7 +11,8 @@ class StageInstancePrivacyLevelTypeAdapter : TypeAdapter<StageInstancePrivacyLev
             reader.nextNull()
             return StageInstancePrivacyLevel.INVALID
         }
-        return StageInstancePrivacyLevel.entries.firstOrNull { it.apiValue == reader.nextInt() }
+        val apiValue = reader.nextInt()
+        return StageInstancePrivacyLevel.entries.firstOrNull { it.apiValue == apiValue }
             ?: StageInstancePrivacyLevel.INVALID
     }
 

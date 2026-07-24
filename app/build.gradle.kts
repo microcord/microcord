@@ -75,6 +75,12 @@ dependencies {
     implementation(libs.kryo)
     implementation(libs.lottie)
     implementation(libs.material)
+    implementation(libs.okhttp)
+    implementation(libs.okio)
+    implementation(libs.persistent.cookie.jar)
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.adapter.rxjava)
+    implementation(libs.retrofit.converter.gson)
     implementation(libs.rxjava)
     implementation(libs.realtime.blur.view)
     implementation(libs.simpleast)
@@ -84,6 +90,7 @@ dependencies {
         exclude(group = "com.android.support")
     }
     testImplementation(libs.junit)
+    testImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
 }

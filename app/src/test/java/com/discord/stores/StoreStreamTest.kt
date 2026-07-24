@@ -5,6 +5,10 @@ import com.discord.api.stageinstance.StageInstance
 import com.discord.api.stageinstance.StageInstancePrivacyLevel
 import com.discord.models.domain.ModelCustomStatusSetting
 import com.discord.models.domain.ModelUserSettings
+import com.discord.gateway.io.IncomingParser
+import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
+import com.google.gson.FieldNamingPolicy
+import com.google.gson.GsonBuilder
 import com.discord.utilities.persister.Persister
 import java.lang.reflect.Proxy
 import java.nio.file.Files
@@ -46,6 +50,26 @@ class StoreStreamTest {
 
         assertEquals(emptyMap<Long, StageInstance>(), first)
         assertEquals(setOf(2L), store.getStageInstances().keys)
+    }
+
+    @Test
+    fun typedGatewayStageEventsMutateOnDispatcherAndPublishStableSnapshots() {
+        val store = StoreStream.getStageInstances()
+        val gson = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .registerDiscordApiTypeAdapters().create()
+        val parser = IncomingParser(gson)
+        val snapshots = mutableListOf<Map<Long, StageInstance>>()
+        val observer = stream.observationDeck.connect(store, updateOnConnect = false) { snapshots += store.getStageInstances() }
+
+        parser.parse(stageEvent("STAGE_INSTANCE_CREATE", "first")).also { stream.handleGatewayDispatch(it.type, requireNotNull(it.data)) }
+        val first = store.getStageInstances()
+        parser.parse(stageEvent("STAGE_INSTANCE_UPDATE", "updated")).also { stream.handleGatewayDispatch(it.type, requireNotNull(it.data)) }
+        parser.parse(stageEvent("STAGE_INSTANCE_DELETE", "updated")).also { stream.handleGatewayDispatch(it.type, requireNotNull(it.data)) }
+
+        assertEquals("first", first[3]?.topic)
+        assertEquals(listOf("first", "updated", null), snapshots.map { it[3]?.topic })
+        assertEquals(emptyMap<Long, StageInstance>(), store.getStageInstances())
+        stream.observationDeck.disconnect(observer)
     }
 
     @Test
@@ -153,6 +177,9 @@ class StoreStreamTest {
             StageInstancePrivacyLevel.GUILD_ONLY,
             null,
         )
+
+        private fun stageEvent(type: String, topic: String) =
+            "{\"op\":0,\"s\":4,\"t\":\"$type\",\"d\":{\"id\":1,\"guild_id\":2,\"channel_id\":3,\"topic\":\"$topic\",\"privacy_level\":2,\"invite_code\":null}}"
 
         private fun memoryPreferences(): SharedPreferences {
             val values = linkedMapOf<String, Any?>()

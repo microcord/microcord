@@ -1,0 +1,11 @@
+{
+  "code": 50035,
+  "message": "Invalid Form Body",
+  "errors": {
+    "name": {
+      "_errors": [
+        { "code": "BASE_TYPE_REQUIRED", "message": "This field is required" }
+      ]
+    }
+  }
+}

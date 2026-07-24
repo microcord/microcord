@@ -447,15 +447,15 @@ post-dispatch state, persistence survives restart, and logout clears user data.
 
 ### Phase 4: REST and Gateway
 
-Status: **NOT STARTED**
+Status: **IN PROGRESS**
 
 - [ ] Implement common API models and JSON adapters.
-- [ ] Implement REST builder and endpoint interface.
-- [ ] Implement required headers and cookie persistence.
-- [ ] Implement structured API errors and rate-limit handling.
-- [ ] Implement Gateway discovery and WebSocket connection.
-- [ ] Implement zlib-stream decoding.
-- [ ] Implement identify, resume, heartbeat, ACK timeout, and reconnect.
+- [x] Implement REST builder and endpoint interface.
+- [x] Implement required headers and cookie persistence.
+- [x] Implement structured API errors and rate-limit handling.
+- [x] Implement Gateway discovery and WebSocket connection.
+- [x] Implement zlib-stream decoding.
+- [x] Implement identify, resume, heartbeat, ACK timeout, and reconnect.
 - [ ] Dispatch core gateway events into stores.
 - [ ] Add fixture-based REST and Gateway contract tests.
 
@@ -709,6 +709,7 @@ or observable behavior. Small implementation details do not belong here.
 | 2026-07-24 | Preserve the recovered compiled WebRTC Java bridge for Phase 2 | No available public artifact matches four JNI-visible descriptors and two are Discord-specific; the user approved the exception required for exact native parity | Vendor only the exact compiled bridge closure, remove the incompatible public artifact, and verify creation/disposal on device |
 | 2026-07-24 | Waive ARM64 runtime execution for the native spike | The user accepted packaged/hash-verified ARM64 libraries with x86_64 lifecycle evidence | Phase 2 closes on x86_64; ARM64 binaries remain present for later device validation |
 | 2026-07-24 | Use Kryo `4.0.2` for reference-shaped persisted store payloads | Recovered metadata and API contracts require Kryo while persistence must remain atomic and path-confined | Persistence uses the public artifact and disables Android application backup before authentication data exists |
+| 2026-07-24 | Use OkHttp `4.8.0`, Okio `2.7.0`, Retrofit `2.9.0`, and PersistentCookieJar `v1.0.1` for Phase 4 | OkHttp/Okio versions are recovered; Retrofit and cookie-jar versions are the compatible public artifacts matching the retained API surface | REST/Gateway fixture tests pin headers, cookies, errors, rate limits, and socket behavior without live backend access |
 
 ## Progress Journal
 
@@ -739,6 +740,7 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-07-24 | OpenCode | Reconstructed dispatcher/store scheduling, post-dispatch observation snapshots, runtime providers, preferences, and atomic Kryo persistence | `assembleDebug` and 50 deterministic unit tests pass; no placeholder markers found | Implement the complete accessibility/system-settings StoreStream closure before authentication/logout |
 | 2026-07-24 | OpenCode | Implemented the dependency-complete accessibility/settings/stage StoreStream graph and credential-free application bootstrap | `assembleDebug`, 54 store tests, lint, and 8 Android 13 connected tests pass across the two slices | Implement authentication and its complete selective pre-logout/reset dependency closure |
 | 2026-07-24 | OpenCode | Closed Phase 3 with dispatcher-ordered local logout/reset across the implemented graph, preference domains, and Persister data | Build, deterministic restart/reset unit tests, lint, and 8 Android 13 connected tests pass | Begin Phase 4 common API models, REST transport, and Gateway protocol |
+| 2026-07-24 | OpenCode | Implemented fixture-first REST/Gateway transport plus persistent discovery and typed stage-event dispatch | `assembleDebug`, 69 unit tests, and lint pass; no live backend used | Reconstruct the complete READY model/store closure before routing remaining core events |
 
 ## Agent Handoff Template
 

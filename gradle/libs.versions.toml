@@ -31,6 +31,10 @@ rxjava = "1.3.8"
 simpleast = "2.8.0"
 gson = "2.8.8"
 kryo = "4.0.2"
+okhttp = "4.8.0"
+okio = "2.7.0"
+persistentCookieJar = "v1.0.1"
+retrofit = "2.9.0"
 realtimeBlurView = "82df3520b4"
 
 [libraries]
@@ -67,6 +71,13 @@ rxjava = { group = "io.reactivex", name = "rxjava", version.ref = "rxjava" }
 simpleast = { group = "com.github.discord", name = "SimpleAST", version.ref = "simpleast" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 kryo = { group = "com.esotericsoftware", name = "kryo", version.ref = "kryo" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
+okio = { group = "com.squareup.okio", name = "okio", version.ref = "okio" }
+persistent-cookie-jar = { group = "com.github.franmontiel", name = "PersistentCookieJar", version.ref = "persistentCookieJar" }
+retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
+retrofit-adapter-rxjava = { group = "com.squareup.retrofit2", name = "adapter-rxjava", version.ref = "retrofit" }
+retrofit-converter-gson = { group = "com.squareup.retrofit2", name = "converter-gson", version.ref = "retrofit" }
 realtime-blur-view = { group = "com.github.mmin18", name = "RealtimeBlurView", version.ref = "realtimeBlurView" }
 
 [plugins]
