@@ -125,6 +125,18 @@ class StoreUserSettings(
         updateAllowAccessibilityDetectionInternal(allowed)
     }
 
+    @StoreThread
+    internal fun reset() {
+        StoreThreadScheduler.assertCurrentThread()
+        contactSyncUpsellShown = null
+        shouldRenderEmbedsSubject.onNext(true)
+        explicitContentFilterSubject.onNext(ModelUserSettings.EXPLICIT_CONTENT_FILTER_DISABLED)
+        defaultGuildsRestrictedSubject.onNext(false)
+        friendSourceFlagsSubject.onNext(ModelUserSettings.FriendSourceFlags())
+        friendDiscoveryFlagsSubject.onNext(0)
+        customStatusSubject.onNext(ModelCustomStatusSetting.CLEAR)
+    }
+
     private fun updateAllowAccessibilityDetectionInternal(allowed: Boolean) {
         dispatcher.schedule { accessibilityStore.updateDetectionAllowed(allowed) }
     }

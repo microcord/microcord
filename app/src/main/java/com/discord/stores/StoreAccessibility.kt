@@ -66,6 +66,16 @@ class StoreAccessibility(
     }
 
     @StoreThread
+    internal fun reset() {
+        StoreThreadScheduler.assertCurrentThread()
+        reducedMotionEnabled = false
+        isDetectionAllowed = false
+        fontScaledUp = false
+        fontScaledDown = false
+        markChanged()
+    }
+
+    @StoreThread
     private fun updateMonitoredAccessibilityState(state: AccessibilityState) {
         StoreThreadScheduler.assertCurrentThread()
         accessibilityFeatures = EnumSet.copyOf(state.features)

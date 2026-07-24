@@ -21,6 +21,7 @@ class StoreUserSettingsSystem(
     }
 
     private lateinit var settings: Settings
+    private var defaultTheme = ModelUserSettings.THEME_LIGHT
 
     fun getTheme() = settings.theme
     fun getLocale() = settings.locale
@@ -41,6 +42,7 @@ class StoreUserSettingsSystem(
     }
 
     internal fun restore(defaultTheme: String = ModelUserSettings.THEME_LIGHT) {
+        this.defaultTheme = defaultTheme
         settings = Settings(
             sessionDurablePreferences.getString(KEY_THEME, defaultTheme) ?: defaultTheme,
             preferences.getString(KEY_LOCALE, null),
@@ -91,6 +93,14 @@ class StoreUserSettingsSystem(
         setIsLocaleSyncEnabled(true)
         settings = settings.copy(_locale = null, fontScale = -1)
         preferences.edit { remove(KEY_LOCALE); putInt(KEY_FONT_SCALE, -1) }
+        onFontScaleUpdated(-1)
+        markChanged()
+    }
+
+    @StoreThread
+    internal fun reset() {
+        StoreThreadScheduler.assertCurrentThread()
+        settings = Settings(defaultTheme, null, -1)
         onFontScaleUpdated(-1)
         markChanged()
     }

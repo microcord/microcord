@@ -21,8 +21,8 @@ class StoreStream private constructor(
     val storeThreadScheduler: Scheduler,
     val clock: Clock,
     val observationDeck: ObservationDeck,
-    preferences: SharedPreferences,
-    sessionDurablePreferences: SharedPreferences,
+    private val preferences: SharedPreferences,
+    private val sessionDurablePreferences: SharedPreferences,
 ) {
     private val accessibility = StoreAccessibility(dispatcher, observationDeck)
     private val userSettings = StoreUserSettings(dispatcher, accessibility, preferences)
@@ -78,6 +78,18 @@ class StoreStream private constructor(
     fun handleStageInstanceUpdate(stageInstance: StageInstance) = dispatcher.schedule { stageInstances.handleStageInstanceUpdate(stageInstance) }
     fun handleStageInstanceDelete(stageInstance: StageInstance) = dispatcher.schedule { stageInstances.handleStageInstanceDelete(stageInstance) }
     fun handlePreLogout() = dispatcher.schedule { userSettingsSystem.handlePreLogout() }
+
+    fun resetForLogout() = dispatcher.schedule {
+        userSettingsSystem.handlePreLogout()
+        Persister.reset()
+        val preferencesCleared = preferences.edit().clear().commit()
+        val durablePreferencesCleared = sessionDurablePreferences.edit().clear().commit()
+        accessibility.reset()
+        userSettings.reset()
+        userSettingsSystem.reset()
+        stageInstances.reset()
+        check(preferencesCleared && durablePreferencesCleared) { "Unable to clear logout preferences" }
+    }
 
     fun observeInitialized(): Observable<Boolean> = initialized.distinctUntilChanged()
 

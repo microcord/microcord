@@ -3,18 +3,29 @@ package com.discord.stores
 import android.content.SharedPreferences
 import com.discord.api.stageinstance.StageInstance
 import com.discord.api.stageinstance.StageInstancePrivacyLevel
+import com.discord.models.domain.ModelCustomStatusSetting
+import com.discord.models.domain.ModelUserSettings
+import com.discord.utilities.persister.Persister
 import java.lang.reflect.Proxy
 import java.nio.file.Files
 import java.util.concurrent.Executor
 import org.junit.AfterClass
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
+import org.junit.Before
 import org.junit.BeforeClass
 import org.junit.Test
 import rx.schedulers.Schedulers
 
 class StoreStreamTest {
+    @Before
+    fun reset() {
+        stream.resetForLogout()
+    }
+
     @Test
     fun mutationsRunOnlyOnDispatcher() {
         val store = StoreStream.getStageInstances()
@@ -60,6 +71,59 @@ class StoreStreamTest {
         assertSame(StoreStream.getUserSettingsSystem(), StoreStream.getUserSettingsSystem())
         assertSame(StoreStream.getStageInstances(), StoreStream.getStageInstances())
         assertEquals(true, stream.observeInitialized().toBlocking().first())
+    }
+
+    @Test
+    fun logoutClearsPersistedAndInMemoryStateAfterOneStableDispatch() {
+        val accessibility = StoreStream.getAccessibility()
+        val settings = StoreStream.getUserSettings()
+        val systemSettings = StoreStream.getUserSettingsSystem()
+        val stages = StoreStream.getStageInstances()
+        prefs.edit().putString("private-default", "value").commit()
+        durablePrefs.edit().putString("private-durable", "value").commit()
+        Persister("logout-survival", arrayListOf<String>()).set(arrayListOf("persisted"), persist = true)
+        Persister.init(directory.toFile())
+        assertEquals(listOf("persisted"), Persister("logout-survival", arrayListOf<String>()).get())
+
+        settings.setContactSyncUpsellShown(true)
+        settings.setIsStickerSuggestionsEnabled(false)
+        settings.setIsAccessibilityDetectionAllowed(true)
+        systemSettings.setTheme(ModelUserSettings.THEME_PURE_EVIL, apiSync = false)
+        systemSettings.setLocale("tr", apiSync = false)
+        systemSettings.setFontScale(125)
+        accessibility.setReducedMotionEnabled(true)
+        stream.handleStageInstanceCreate(stage(5))
+
+        val snapshots = mutableListOf<List<Any>>()
+        val observer = stream.observationDeck.connect(accessibility, systemSettings, stages, updateOnConnect = false) {
+            snapshots += listOf(
+                accessibility.isReducedMotionEnabled(),
+                systemSettings.getTheme(),
+                systemSettings.getFontScale(),
+                stages.getStageInstances().size,
+            )
+        }
+
+        stream.resetForLogout()
+
+        assertEquals(listOf(listOf(false, ModelUserSettings.THEME_LIGHT, -1, 0)), snapshots)
+        assertEquals(emptyMap<Long, StageInstance>(), stages.getStageInstances())
+        assertFalse(accessibility.isReducedMotionEnabled())
+        assertNull(settings.getContactSyncUpsellShown())
+        assertEquals(true, settings.getIsStickerSuggestionsEnabled())
+        assertEquals(ModelCustomStatusSetting.CLEAR, settings.observeCustomStatus().toBlocking().first())
+        assertEquals(ModelUserSettings.EXPLICIT_CONTENT_FILTER_DISABLED, settings.observeExplicitContentFilter().toBlocking().first())
+        assertEquals(emptyMap<String, Any?>(), prefs.all)
+        assertEquals(emptyMap<String, Any?>(), durablePrefs.all)
+        Persister.init(directory.toFile())
+        assertEquals(emptyList<String>(), Persister("logout-survival", arrayListOf<String>()).get())
+
+        stream.resetForLogout()
+        assertEquals(emptyMap<String, Any?>(), prefs.all)
+        assertEquals(emptyMap<String, Any?>(), durablePrefs.all)
+        assertEquals(emptyMap<Long, StageInstance>(), stages.getStageInstances())
+        assertEquals(2, snapshots.size)
+        stream.observationDeck.disconnect(observer)
     }
 
     companion object {

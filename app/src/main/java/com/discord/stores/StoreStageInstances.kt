@@ -61,6 +61,14 @@ class StoreStageInstances(
         delete(stageInstance.guildId, stageInstance.channelId)
     }
 
+    @StoreThread
+    internal fun reset() {
+        StoreThreadScheduler.assertCurrentThread()
+        stageInstancesByChannel.clear()
+        stageInstancesByGuild.clear()
+        markChanged()
+    }
+
     override fun snapshotData() {
         stageInstancesByChannelSnapshot = HashMap(stageInstancesByChannel)
         stageInstancesByGuildSnapshot = stageInstancesByGuild.mapValues { HashMap(it.value) }

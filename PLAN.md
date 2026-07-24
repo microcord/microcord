@@ -431,7 +431,7 @@ initialization, audio subsystem and input/output enumeration, and disposal.
 
 ### Phase 3: Core Runtime and Stores
 
-Status: **IN PROGRESS**
+Status: **DONE**
 
 - [x] Implement application initialization.
 - [x] Implement providers for application/activity context and preferences.
@@ -439,8 +439,8 @@ Status: **IN PROGRESS**
 - [x] Implement `Store`, `StoreV2`, and observation snapshots.
 - [x] Implement the initial `StoreStream` graph.
 - [x] Implement safe persistence primitives.
-- [ ] Implement logout/reset behavior.
-- [ ] Add deterministic dispatcher/store tests.
+- [x] Implement logout/reset behavior.
+- [x] Add deterministic dispatcher/store tests.
 
 Exit criteria: stores mutate only on the dispatcher, observers receive stable
 post-dispatch state, persistence survives restart, and logout clears user data.
@@ -738,6 +738,7 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-07-24 | OpenCode | Closed Phase 2 after the approved ARM64 runtime waiver | `assembleDebug`, 43 unit tests, lint with zero new issues, and 8 Android 13 x86_64 connected tests pass | Begin Phase 3 application initialization, dispatcher, and complete store infrastructure |
 | 2026-07-24 | OpenCode | Reconstructed dispatcher/store scheduling, post-dispatch observation snapshots, runtime providers, preferences, and atomic Kryo persistence | `assembleDebug` and 50 deterministic unit tests pass; no placeholder markers found | Implement the complete accessibility/system-settings StoreStream closure before authentication/logout |
 | 2026-07-24 | OpenCode | Implemented the dependency-complete accessibility/settings/stage StoreStream graph and credential-free application bootstrap | `assembleDebug`, 54 store tests, lint, and 8 Android 13 connected tests pass across the two slices | Implement authentication and its complete selective pre-logout/reset dependency closure |
+| 2026-07-24 | OpenCode | Closed Phase 3 with dispatcher-ordered local logout/reset across the implemented graph, preference domains, and Persister data | Build, deterministic restart/reset unit tests, lint, and 8 Android 13 connected tests pass | Begin Phase 4 common API models, REST transport, and Gateway protocol |
 
 ## Agent Handoff Template
 
