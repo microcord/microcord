@@ -1,0 +1,56 @@
+{
+  "v": 9,
+  "user": {"id": 42, "username": "ready-user", "discriminator": "0001"},
+  "session_id": "session-secret",
+  "analytics_token": "analytics-secret",
+  "auth_token": "auth-secret",
+  "required_action": "REQUIRE_VERIFIED_EMAIL",
+  "country_code": "US",
+  "friend_suggestion_count": 3,
+  "read_state": {
+    "version": 7,
+    "partial": true,
+    "entries": [{"id": 100, "last_message_id": 200, "mention_count": 2, "version": 4}]
+  },
+  "user_guild_settings": {
+    "version": 5,
+    "partial": false,
+    "entries": [{
+      "guild_id": 300,
+      "muted": true,
+      "mute_config": {"end_time": "2999-01-01T00:00:00.000Z"},
+      "message_notifications": 1,
+      "mobile_push": false,
+      "notify_highlights": 2,
+      "channel_overrides": [{"channel_id": 301, "flags": 16384}]
+    }]
+  },
+  "experiments": [[111, 2, 3, 4]],
+  "guild_experiments": [[222, null, 6, [[[[8, [{"s": 0, "e": 9999}]]], []]], []]],
+  "merged_presences": {"friends": [], "guilds": [[]]},
+  "merged_members": [[]],
+  "relationships": [],
+  "private_channels": [],
+  "guilds": [],
+  "guild_join_requests": [],
+  "connected_accounts": [],
+  "sessions": [{
+    "session_id": "other-session",
+    "last_modified": 123,
+    "status": "online",
+    "activities": [],
+    "client_info": {"os": "android", "client": "mobile", "number": 1},
+    "active": true
+  }],
+  "users": [],
+  "_trace": ["{\"gateway\":\"ready\"}"],
+  "user_survey": {
+    "prompt": "Prompt",
+    "cta": "Answer",
+    "url": "https://example.invalid",
+    "key": "ready-survey",
+    "guild_requirements": ["is_owner"],
+    "guild_size": [1, null, 10],
+    "guild_permissions": [8]
+  }
+}

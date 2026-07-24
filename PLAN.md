@@ -447,16 +447,16 @@ post-dispatch state, persistence survives restart, and logout clears user data.
 
 ### Phase 4: REST and Gateway
 
-Status: **IN PROGRESS**
+Status: **DONE**
 
-- [ ] Implement common API models and JSON adapters.
+- [x] Implement common API models and JSON adapters.
 - [x] Implement REST builder and endpoint interface.
 - [x] Implement required headers and cookie persistence.
 - [x] Implement structured API errors and rate-limit handling.
 - [x] Implement Gateway discovery and WebSocket connection.
 - [x] Implement zlib-stream decoding.
 - [x] Implement identify, resume, heartbeat, ACK timeout, and reconnect.
-- [ ] Dispatch core gateway events into stores.
+- [x] Dispatch core gateway events into stores.
 - [ ] Add fixture-based REST and Gateway contract tests.
 
 Exit criteria: sanitized fixtures parse correctly, reconnect/resume behavior is
@@ -741,6 +741,7 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-07-24 | OpenCode | Implemented the dependency-complete accessibility/settings/stage StoreStream graph and credential-free application bootstrap | `assembleDebug`, 54 store tests, lint, and 8 Android 13 connected tests pass across the two slices | Implement authentication and its complete selective pre-logout/reset dependency closure |
 | 2026-07-24 | OpenCode | Closed Phase 3 with dispatcher-ordered local logout/reset across the implemented graph, preference domains, and Persister data | Build, deterministic restart/reset unit tests, lint, and 8 Android 13 connected tests pass | Begin Phase 4 common API models, REST transport, and Gateway protocol |
 | 2026-07-24 | OpenCode | Implemented fixture-first REST/Gateway transport plus persistent discovery and typed stage-event dispatch | `assembleDebug`, 69 unit tests, and lint pass; no live backend used | Reconstruct the complete READY model/store closure before routing remaining core events |
+| 2026-07-24 | OpenCode | Closed Phase 4 with complete READY DTOs/adapters, dependency-complete core stores, typed parser, and dispatcher-routed READY/incremental events | `assembleDebug`, 85 fixture/unit tests, lint, and 8 Android 13 connected tests pass; no live backend used | Begin Phase 5 authentication/session state and logged-out/logged-in routing |
 
 ## Agent Handoff Template
 

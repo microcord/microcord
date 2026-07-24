@@ -1,0 +1,101 @@
+{
+  "user": {
+    "id": 100,
+    "username": "ready-user",
+    "avatar": "avatar-hash",
+    "banner": null,
+    "discriminator": "0042",
+    "public_flags": 65537,
+    "flags": 1048576,
+    "bot": false,
+    "system": false,
+    "token": "fixture-token",
+    "email": "fixture@example.invalid",
+    "verified": true,
+    "locale": "en-US",
+    "nsfw_allowed": true,
+    "mfa_enabled": true,
+    "phone": "+10000000000",
+    "analytics_token": "fixture-analytics",
+    "premium_type": 2,
+    "approximate_guild_count": 7,
+    "bio": "fixture bio",
+    "banner_color": "#112233"
+  },
+  "relationships": [
+    { "id": 101, "type": 1, "user_id": 101 }
+  ],
+  "guild_members": [
+    {
+      "guild_id": 77,
+      "user": { "id": 101, "username": "friend" },
+      "roles": [7, 8],
+      "nick": "guild-friend",
+      "premium_since": "2021-01-01T00:00:00.000Z",
+      "joined_at": "2020-01-01T00:00:00.000Z",
+      "pending": false,
+      "presence": { "status": "idle", "user_id": 101 },
+      "user_id": 101,
+      "avatar": "member-avatar",
+      "bio": "member bio",
+      "banner": "member-banner",
+      "communication_disabled_until": null
+    }
+  ],
+  "presences": [
+    {
+      "status": "online",
+      "client_status": { "desktop": "online", "web": "idle", "mobile": "dnd" },
+      "user": { "id": 101, "username": "friend" },
+      "activities": [
+        {
+          "name": "Custom Status",
+          "type": 4,
+          "created_at": 1234,
+          "state": "hello",
+          "emoji": { "id": "9", "name": "wave", "animated": true },
+          "timestamps": { "start": "1000", "end": "1650000000000" },
+          "platform": "spotify",
+          "supported_platforms": ["desktop", "android"],
+          "buttons": ["Join"]
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "session_id": "session-fixture",
+      "last_modified": 55,
+      "status": "online",
+      "activities": [],
+      "client_info": { "os": "Android", "client": "mobile", "number": 1 },
+      "active": true
+    }
+  ],
+  "connected_accounts": [
+    {
+      "id": "account-id",
+      "name": "fixture-name",
+      "visibility": 1,
+      "friend_sync": true,
+      "show_activity": true,
+      "revoked": false,
+      "verified": true,
+      "type": "github",
+      "integrations": [
+        {
+          "id": "integration-id",
+          "type": "twitch",
+          "account": { "id": "nested-id", "name": "nested-name" },
+          "guild": { "id": 77, "icon": "guild-icon", "name": "guild-name" }
+        }
+      ]
+    }
+  ],
+  "custom_status": {
+    "text": "fixture status",
+    "emoji_id": 9,
+    "emoji_name": "wave",
+    "expires_at": "2026-07-24T00:00:00.000Z"
+  }
+}

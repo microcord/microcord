@@ -1,0 +1,44 @@
+{
+  "op": 0,
+  "s": 10,
+  "t": "READY",
+  "d": {
+    "v": 9,
+    "session_id": "sanitized-session",
+    "user": {"id": 42, "username": "ready-user", "discriminator": "0001"},
+    "user_settings": {"status": "online", "theme": "dark", "locale": "en-US"},
+    "relationships": [{"id": 7, "type": 1, "user": {"id": 7, "username": "friend", "discriminator": "0002"}}],
+    "read_state": {
+      "version": 7,
+      "partial": false,
+      "entries": [{"id": 100, "last_message_id": 200, "mention_count": 2, "version": 4}]
+    },
+    "user_guild_settings": {
+      "version": 5,
+      "partial": false,
+      "entries": [{"guild_id": 300, "muted": false, "channel_overrides": []}]
+    },
+    "private_channels": [{"id": 50, "type": 1, "recipients": [{"id": 7, "username": "friend", "discriminator": "0002"}]}],
+    "guilds": [{
+      "id": 300,
+      "name": "Fixture Guild",
+      "owner_id": 42,
+      "unavailable": false,
+      "features": [],
+      "roles": [],
+      "emojis": [],
+      "stickers": [],
+      "members": [{"guild_id": 300, "user": {"id": 42, "username": "ready-user", "discriminator": "0001"}, "roles": [], "nick": "member"}],
+      "channels": [{"id": 100, "type": 0, "guild_id": 300, "name": "general"}],
+      "threads": [{"id": 101, "type": 11, "guild_id": 300, "parent_id": 100, "name": "thread"}],
+      "presences": [{"guild_id": 300, "user": {"id": 7, "username": "friend", "discriminator": "0002"}, "status": "online", "activities": []}],
+      "stage_instances": [{"id": 1, "guild_id": 300, "channel_id": 102, "topic": "stage", "privacy_level": 2}]
+    }],
+    "merged_presences": {"friends": [], "guilds": [[]]},
+    "merged_members": [[]],
+    "sessions": [],
+    "connected_accounts": [],
+    "guild_join_requests": [],
+    "users": []
+  }
+}

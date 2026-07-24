@@ -3,6 +3,8 @@ package com.discord.gateway
 import android.content.SharedPreferences
 import com.discord.api.stageinstance.StageInstance
 import com.discord.api.stageinstance.StageInstancePrivacyLevel
+import com.discord.models.domain.ModelPayload
+import com.discord.models.thread.dto.ModelThreadListSync
 import com.discord.gateway.io.Identify
 import com.discord.gateway.io.IdentifyClientState
 import com.discord.gateway.io.IncomingParser
@@ -12,6 +14,7 @@ import com.discord.models.domain.ModelGateway
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonElement
+import com.google.gson.JsonParser
 import java.lang.reflect.Proxy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
@@ -59,11 +62,13 @@ class GatewayContractTest {
     }
 
     @Test
-    fun parserTypesOnlyStageEventsAndPreservesUnknownData() {
+    fun parserTypesReadyCoreEventsAndPreservesUnknownData() {
         val parser = IncomingParser(gson)
+        val ready = parser.parse(requireNotNull(javaClass.getResource("/fixtures/gateway/ready_core.json")).readText())
         val create = parser.parse(stageEvent("STAGE_INSTANCE_CREATE", "topic"))
         val update = parser.parse(stageEvent("STAGE_INSTANCE_UPDATE", "updated"))
         val delete = parser.parse(stageEvent("STAGE_INSTANCE_DELETE", "updated"))
+        assertEquals("sanitized-session", (ready.data as ModelPayload).sessionId)
         assertEquals(StageInstancePrivacyLevel.GUILD_ONLY, (create.data as StageInstance).privacyLevel)
         assertEquals("updated", (update.data as StageInstance).topic)
         assertEquals(3L, (delete.data as StageInstance).channelId)
@@ -71,6 +76,12 @@ class GatewayContractTest {
         val unknown = parser.parse("{\"op\":0,\"s\":4,\"t\":\"FUTURE_EVENT\",\"d\":{\"value\":1}}")
         assertTrue(unknown.data is JsonElement)
         assertEquals(1, (unknown.data as JsonElement).asJsonObject["value"].asInt)
+
+        val incrementals = JsonParser.parseString(
+            requireNotNull(javaClass.getResource("/fixtures/gateway/incremental_core.json")).readText(),
+        ).asJsonArray.map { parser.parse(it.toString()) }
+        assertTrue(incrementals.single { it.type == "THREAD_LIST_SYNC" }.data is ModelThreadListSync)
+        assertTrue(incrementals.single { it.type == "FUTURE_EVENT" }.data is JsonElement)
     }
 
     private fun stageEvent(type: String, topic: String) =

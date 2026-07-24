@@ -1,0 +1,259 @@
+package com.discord.models.domain
+
+import com.discord.api.channel.Channel
+import com.discord.api.connectedaccounts.ConnectedAccount
+import com.discord.api.guild.Guild
+import com.discord.api.guildjoinrequest.GuildJoinRequest
+import com.discord.api.guildmember.GuildMember
+import com.discord.api.presence.Presence
+import com.discord.api.user.User
+import com.discord.api.user.UserSurvey
+import com.discord.models.experiments.dto.GuildExperimentDto
+import com.discord.models.experiments.dto.GuildExperimentDtoTypeAdapter
+import com.discord.models.experiments.dto.UserExperimentDto
+import com.google.gson.Gson
+import com.google.gson.TypeAdapter
+import com.google.gson.TypeAdapterFactory
+import com.google.gson.annotations.JsonAdapter
+import com.google.gson.reflect.TypeToken
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonWriter
+
+@JsonAdapter(ModelPayloadTypeAdapterFactory::class)
+class ModelPayload() {
+    var v: Int = 0
+        internal set
+    var me: User? = null
+        internal set
+    var userSettings: ModelUserSettings? = null
+        internal set
+    var userGuildSettings: VersionedUserGuildSettings? = null
+        internal set
+    var sessionId: String? = null
+        internal set
+    var relationships: List<ModelUserRelationship>? = null
+        internal set
+    var readState: VersionedReadStates? = null
+        internal set
+    var privateChannels: List<Channel>? = null
+        internal set
+    var guilds: List<Guild>? = null
+        internal set
+    var guildJoinRequests: List<GuildJoinRequest>? = null
+        internal set
+    var presences: List<Presence>? = null
+        internal set
+    var analyticsToken: String? = null
+        internal set
+    var authToken: String? = null
+        internal set
+    var requiredAction: String? = null
+        internal set
+    var experiments: Map<Long, UserExperimentDto>? = null
+        internal set
+    var guildExperiments: List<GuildExperimentDto>? = null
+        internal set
+    var connectedAccounts: List<ConnectedAccount>? = null
+        internal set
+    var sessions: List<ModelSession>? = null
+        internal set
+    var users: List<User>? = null
+        internal set
+    var guildPresences: List<List<Presence>>? = null
+        internal set
+    var guildMembers: List<List<GuildMember>>? = null
+        internal set
+    var countryCode: String? = null
+        internal set
+    var trace: Any? = null
+        internal set
+    var userSurvey: UserSurvey? = null
+        internal set
+    var friendSuggestionCount: Int = 0
+        internal set
+
+    constructor(other: ModelPayload) : this() {
+        v = other.v
+        me = other.me
+        userSettings = other.userSettings
+        userGuildSettings = other.userGuildSettings
+        sessionId = other.sessionId
+        relationships = other.relationships
+        readState = other.readState
+        privateChannels = other.privateChannels
+        guilds = other.guilds
+        guildJoinRequests = other.guildJoinRequests
+        presences = other.presences
+        analyticsToken = other.analyticsToken
+        authToken = other.authToken
+        requiredAction = other.requiredAction
+        experiments = other.experiments
+        guildExperiments = other.guildExperiments
+        connectedAccounts = other.connectedAccounts
+        sessions = other.sessions
+        users = other.users
+        guildPresences = other.guildPresences
+        guildMembers = other.guildMembers
+        countryCode = other.countryCode
+        trace = other.trace
+        userSurvey = other.userSurvey
+        friendSuggestionCount = other.friendSuggestionCount
+    }
+
+    fun withGuilds(guilds: List<Guild>) = ModelPayload(this).also { it.guilds = guilds }
+
+    fun withHydratedUserData(
+        relationships: List<ModelUserRelationship>,
+        privateChannels: List<Channel>,
+        guildPresences: List<List<Presence>>,
+        guildMembers: List<List<GuildMember>>,
+        presences: List<Presence>,
+    ) = ModelPayload(this).also {
+        it.relationships = relationships
+        it.privateChannels = privateChannels
+        it.guildPresences = guildPresences
+        it.guildMembers = guildMembers
+        it.presences = presences
+    }
+
+    override fun equals(other: Any?) = other is ModelPayload && fields() == other.fields()
+    override fun hashCode() = fields().hashCode()
+
+    override fun toString() = "ModelPayload(" +
+        "v=$v, me=$me, userSettings=$userSettings, userGuildSettings=$userGuildSettings, " +
+        "sessionId=$sessionId, relationships=$relationships, readState=$readState, " +
+        "privateChannels=$privateChannels, guilds=$guilds, guildJoinRequests=$guildJoinRequests, " +
+        "presences=$presences, analyticsToken=<redacted>, authToken=<redacted>, " +
+        "requiredAction=$requiredAction, experiments=$experiments, guildExperiments=$guildExperiments, " +
+        "connectedAccounts=$connectedAccounts, sessions=$sessions, users=$users, " +
+        "guildPresences=$guildPresences, guildMembers=$guildMembers, countryCode=$countryCode, " +
+        "trace=$trace, userSurvey=$userSurvey, friendSuggestionCount=$friendSuggestionCount)"
+
+    private fun fields() = listOf(
+        v, me, userSettings, userGuildSettings, sessionId, relationships, readState, privateChannels,
+        guilds, guildJoinRequests, presences, analyticsToken, authToken, requiredAction, experiments,
+        guildExperiments, connectedAccounts, sessions, users, guildPresences, guildMembers, countryCode,
+        trace, userSurvey, friendSuggestionCount,
+    )
+
+    abstract class VersionedModel<T> {
+        var version: Int = DEFAULT_VERSION
+            internal set
+        var entries: List<T>? = null
+            internal set
+        var isPartial: Boolean = false
+            internal set
+
+        override fun equals(other: Any?) = other is VersionedModel<*> &&
+            version == other.version && entries == other.entries && isPartial == other.isPartial
+
+        override fun hashCode() = arrayOf(version, entries, isPartial).contentHashCode()
+        override fun toString() =
+            "ModelPayload.VersionedModel(version=$version, entries=$entries, partial=$isPartial)"
+
+        companion object { const val DEFAULT_VERSION = -1 }
+    }
+
+    class VersionedReadStates : VersionedModel<ModelReadState>()
+    class VersionedUserGuildSettings : VersionedModel<ModelNotificationSettings>()
+
+    @JsonAdapter(MergedPresencesTypeAdapterFactory::class)
+    data class MergedPresences(
+        val friends: List<Presence>? = null,
+        val guilds: List<List<Presence>>? = null,
+    )
+}
+
+class MergedPresencesTypeAdapterFactory : TypeAdapterFactory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : Any?> create(gson: Gson, type: TypeToken<T>): TypeAdapter<T>? =
+        if (type.rawType == ModelPayload.MergedPresences::class.java) {
+            object : TypeAdapter<ModelPayload.MergedPresences>() {
+                override fun read(reader: JsonReader): ModelPayload.MergedPresences {
+                    val json = com.google.gson.JsonParser.parseReader(reader).asJsonObject
+                    return ModelPayload.MergedPresences(
+                        json["friends"]?.let { gson.fromJson(it, object : TypeToken<List<Presence>>() {}.type) },
+                        json["guilds"]?.let {
+                            gson.fromJson(it, object : TypeToken<List<List<Presence>>>() {}.type)
+                        },
+                    )
+                }
+
+                override fun write(writer: JsonWriter, value: ModelPayload.MergedPresences?) =
+                    throw UnsupportedOperationException()
+            } as TypeAdapter<T>
+        } else {
+            null
+        }
+}
+
+class ModelPayloadTypeAdapterFactory : TypeAdapterFactory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : Any?> create(gson: Gson, type: TypeToken<T>): TypeAdapter<T>? =
+        if (type.rawType == ModelPayload::class.java) ModelPayloadAdapter(gson) as TypeAdapter<T> else null
+}
+
+private class ModelPayloadAdapter(private val gson: Gson) : TypeAdapter<ModelPayload>() {
+    override fun read(reader: JsonReader): ModelPayload {
+        val payload = ModelPayload()
+        val root = com.google.gson.JsonParser.parseReader(reader).asJsonObject
+        root.entrySet().forEach { (name, value) ->
+            if (value.isJsonNull) return@forEach
+            when (name) {
+                "v" -> payload.v = value.asInt
+                "user" -> payload.me = gson.fromJson(value, User::class.java)
+                "user_settings" -> payload.userSettings = gson.fromJson(value, ModelUserSettings::class.java)
+                "user_guild_settings" -> payload.userGuildSettings = versionedSettings(value.asJsonObject)
+                "session_id" -> payload.sessionId = value.asString
+                "relationships" -> payload.relationships = gson.fromJson(value, type<List<ModelUserRelationship>>())
+                "read_state" -> payload.readState = versionedReadStates(value.asJsonObject)
+                "private_channels" -> payload.privateChannels = gson.fromJson(value, type<List<Channel>>())
+                "guilds" -> payload.guilds = gson.fromJson(value, type<List<Guild>>())
+                "guild_join_requests" -> payload.guildJoinRequests = gson.fromJson(value, type<List<GuildJoinRequest>>())
+                "presences" -> payload.presences = gson.fromJson(value, type<List<Presence>>())
+                "merged_presences" -> gson.fromJson(value, ModelPayload.MergedPresences::class.java).also {
+                    payload.presences = it.friends
+                    payload.guildPresences = it.guilds
+                }
+                "merged_members" -> payload.guildMembers = gson.fromJson(value, type<List<List<GuildMember>>>())
+                "analytics_token" -> payload.analyticsToken = value.asString
+                "auth_token" -> payload.authToken = value.asString
+                "required_action" -> payload.requiredAction = value.asString
+                "experiments" -> payload.experiments = value.asJsonArray.associate { encoded ->
+                    UserExperimentDto.Adapter().fromJsonTree(encoded).let { it.nameHash to it }
+                }
+                "guild_experiments" -> payload.guildExperiments = value.asJsonArray.map {
+                    GuildExperimentDtoTypeAdapter().fromJsonTree(it)
+                }
+                "connected_accounts" -> payload.connectedAccounts = gson.fromJson(value, type<List<ConnectedAccount>>())
+                "sessions" -> payload.sessions = gson.fromJson(value, type<List<ModelSession>>())
+                "users" -> payload.users = gson.fromJson(value, type<List<User>>())
+                "country_code" -> payload.countryCode = value.asString
+                "_trace" -> payload.trace = value.asJsonArray.firstOrNull()?.takeUnless { it.isJsonNull }
+                    ?.asString?.let { gson.fromJson(it, Any::class.java) }
+                "user_survey" -> payload.userSurvey = gson.fromJson(value, UserSurvey::class.java)
+                "friend_suggestion_count" -> payload.friendSuggestionCount = value.asInt
+            }
+        }
+        return payload
+    }
+
+    override fun write(writer: JsonWriter, value: ModelPayload?) =
+        throw UnsupportedOperationException()
+
+    private fun versionedReadStates(json: com.google.gson.JsonObject) =
+        ModelPayload.VersionedReadStates().also {
+            it.version = json["version"]?.asInt ?: ModelPayload.VersionedModel.DEFAULT_VERSION
+            it.isPartial = json["partial"]?.asBoolean ?: false
+            it.entries = json["entries"]?.let { entries -> gson.fromJson(entries, type<List<ModelReadState>>()) }
+        }
+
+    private fun versionedSettings(json: com.google.gson.JsonObject) =
+        ModelPayload.VersionedUserGuildSettings().also {
+            it.version = json["version"]?.asInt ?: ModelPayload.VersionedModel.DEFAULT_VERSION
+            it.isPartial = json["partial"]?.asBoolean ?: false
+            it.entries = json["entries"]?.let { entries -> gson.fromJson(entries, type<List<ModelNotificationSettings>>()) }
+        }
+
+    private inline fun <reified T> type() = object : TypeToken<T>() {}.type
+}

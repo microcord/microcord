@@ -9,6 +9,7 @@ import com.discord.gateway.io.IncomingParser
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonParser
 import com.discord.utilities.persister.Persister
 import java.lang.reflect.Proxy
 import java.nio.file.Files
@@ -19,6 +20,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.BeforeClass
 import org.junit.Test
@@ -73,6 +75,62 @@ class StoreStreamTest {
     }
 
     @Test
+    fun readyAndIncrementalFixturesHydrateCoreGraphInOneDispatch() {
+        val gson = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .registerDiscordApiTypeAdapters().create()
+        val parser = IncomingParser(gson)
+        val ready = parser.parse(requireNotNull(javaClass.getResource("/fixtures/gateway/ready_core.json")).readText())
+        val snapshots = mutableListOf<Pair<Set<Long>, Set<Long>>>()
+        val observer = stream.observationDeck.connect(
+            StoreStream.getUsers(),
+            StoreStream.getChannels(),
+            updateOnConnect = false,
+        ) {
+            snapshots += StoreStream.getUsers().getUsers().keys to StoreStream.getChannels().getChannelsForGuild(300).keys
+        }
+
+        stream.handleGatewayDispatch(ready.type, requireNotNull(ready.data))
+        val readyChannels = StoreStream.getChannels().observeAllChannels().toBlocking().first()
+
+        assertEquals("ready-user", StoreStream.getUsers().getMe().username)
+        assertEquals("Fixture Guild", StoreStream.getGuilds().getGuild(300)?.name)
+        assertEquals(setOf(100L, 101L), readyChannels.filterValues { it.guildId == 300L }.keys)
+        assertEquals(1, StoreStream.getUserRelationships().getRelationships()[7])
+        assertEquals("stage", StoreStream.getStageInstances().getStageInstanceForChannel(102)?.topic)
+        assertEquals(200L, StoreStream.getReadStates().getAck(100)?.messageId)
+        assertTrue(StoreStream.getChannels().getInitializedForAuthedUser())
+        assertEquals(1, snapshots.size)
+
+        val incrementals = JsonParser.parseString(
+            requireNotNull(javaClass.getResource("/fixtures/gateway/incremental_core.json")).readText(),
+        ).asJsonArray.toList()
+        incrementals.dropLast(1).forEach { event ->
+            parser.parse(event.toString()).also { incoming ->
+                val snapshotCount = snapshots.size
+                stream.handleGatewayDispatch(incoming.type, requireNotNull(incoming.data))
+                if (incoming.type == "FUTURE_EVENT") assertEquals(snapshotCount, snapshots.size)
+            }
+        }
+
+        assertEquals("friend-renamed", StoreStream.getUsers().getUsers()[7]?.username)
+        assertEquals(2, StoreStream.getUserRelationships().getRelationships()[8])
+        assertEquals(true, StoreStream.getUserGuildSettings().getGuildSettings()[300]?.isMuted)
+        assertEquals(275L, StoreStream.getReadStates().getAck(100)?.messageId)
+        assertEquals("updated-stage", StoreStream.getStageInstances().getStageInstanceForChannel(102)?.topic)
+        assertNull(StoreStream.getChannels().getChannel(110))
+        assertNull(StoreStream.getChannels().getChannel(111))
+        assertEquals("synced-thread", StoreStream.getChannels().getChannel(112)?.name)
+
+        parser.parse(incrementals.last().toString()).also { incoming ->
+            stream.handleGatewayDispatch(incoming.type, requireNotNull(incoming.data))
+        }
+        assertNull(StoreStream.getGuilds().getGuild(300))
+        assertNull(StoreStream.getChannels().getChannel(112))
+        assertNull(StoreStream.getStageInstances().getStageInstanceForChannel(102))
+        stream.observationDeck.disconnect(observer)
+    }
+
+    @Test
     fun persistedSystemSettingsRestore() {
         val store = StoreStream.getUserSettingsSystem()
         store.setTheme("pureEvil", apiSync = false)
@@ -93,6 +151,13 @@ class StoreStreamTest {
         assertSame(StoreStream.getAccessibility(), StoreStream.getAccessibility())
         assertSame(StoreStream.getUserSettings(), StoreStream.getUserSettings())
         assertSame(StoreStream.getUserSettingsSystem(), StoreStream.getUserSettingsSystem())
+        assertSame(StoreStream.getUsers(), StoreStream.getUsers())
+        assertSame(StoreStream.getGuilds(), StoreStream.getGuilds())
+        assertSame(StoreStream.getChannels(), StoreStream.getChannels())
+        assertSame(StoreStream.getPresences(), StoreStream.getPresences())
+        assertSame(StoreStream.getUserRelationships(), StoreStream.getUserRelationships())
+        assertSame(StoreStream.getUserGuildSettings(), StoreStream.getUserGuildSettings())
+        assertSame(StoreStream.getReadStates(), StoreStream.getReadStates())
         assertSame(StoreStream.getStageInstances(), StoreStream.getStageInstances())
         assertEquals(true, stream.observeInitialized().toBlocking().first())
     }

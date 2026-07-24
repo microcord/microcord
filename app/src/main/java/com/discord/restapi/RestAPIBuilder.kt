@@ -1,5 +1,6 @@
 package com.discord.restapi
 
+import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
@@ -51,6 +52,7 @@ class RestAPIBuilder(
 
     private fun gson(serializeNulls: Boolean): Gson = GsonBuilder()
         .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+        .registerDiscordApiTypeAdapters()
         .apply { if (serializeNulls) serializeNulls() }
         .create()
 

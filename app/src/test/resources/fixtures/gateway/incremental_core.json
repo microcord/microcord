@@ -1,0 +1,23 @@
+[
+  {"op":0,"s":11,"t":"USER_SETTINGS_UPDATE","d":{"status":"dnd","theme":"dark"}},
+  {"op":0,"s":11,"t":"GUILD_CREATE","d":{"id":400,"name":"Created Guild","owner_id":42,"unavailable":false,"features":[],"roles":[],"members":[],"channels":[]}},
+  {"op":0,"s":11,"t":"GUILD_UPDATE","d":{"id":400,"name":"Updated Guild","owner_id":42,"unavailable":false,"features":[],"roles":[]}},
+  {"op":0,"s":11,"t":"GUILD_DELETE","d":{"id":400,"name":"Updated Guild","owner_id":42,"unavailable":false,"features":[]}},
+  {"op":0,"s":12,"t":"CHANNEL_CREATE","d":{"id":110,"type":0,"guild_id":300,"name":"new-channel"}},
+  {"op":0,"s":12,"t":"CHANNEL_UPDATE","d":{"id":110,"type":0,"guild_id":300,"name":"updated-channel"}},
+  {"op":0,"s":13,"t":"THREAD_CREATE","d":{"id":111,"type":11,"guild_id":300,"parent_id":110,"name":"new-thread"}},
+  {"op":0,"s":13,"t":"THREAD_UPDATE","d":{"id":111,"type":11,"guild_id":300,"parent_id":110,"name":"updated-thread"}},
+  {"op":0,"s":14,"t":"THREAD_LIST_SYNC","d":{"guild_id":300,"threads":[{"id":112,"type":11,"guild_id":300,"parent_id":110,"name":"synced-thread"}],"members":[]}},
+  {"op":0,"s":15,"t":"PRESENCE_UPDATE","d":{"guild_id":300,"user":{"id":7,"username":"friend-renamed","discriminator":"0002"},"status":"idle","activities":[]}},
+  {"op":0,"s":16,"t":"RELATIONSHIP_ADD","d":{"id":8,"type":2,"user":{"id":8,"username":"blocked","discriminator":"0003"}}},
+  {"op":0,"s":17,"t":"USER_GUILD_SETTINGS_UPDATE","d":{"guild_id":300,"muted":true,"channel_overrides":[]}},
+  {"op":0,"s":18,"t":"MESSAGE_ACK","d":{"channel_id":100,"message_id":250,"mention_count":0,"version":5}},
+  {"op":0,"s":19,"t":"CHANNEL_UNREAD_UPDATE","d":{"channel_unread_updates":[{"channel_id":100,"last_message_id":275,"mention_count":1,"version":6}]}},
+  {"op":0,"s":20,"t":"STAGE_INSTANCE_UPDATE","d":{"id":1,"guild_id":300,"channel_id":102,"topic":"updated-stage","privacy_level":2}},
+  {"op":0,"s":20,"t":"STAGE_INSTANCE_CREATE","d":{"id":2,"guild_id":300,"channel_id":103,"topic":"temporary-stage","privacy_level":2}},
+  {"op":0,"s":20,"t":"STAGE_INSTANCE_DELETE","d":{"id":2,"guild_id":300,"channel_id":103,"topic":"temporary-stage","privacy_level":2}},
+  {"op":0,"s":21,"t":"THREAD_DELETE","d":{"id":111,"type":11,"guild_id":300,"parent_id":110}},
+  {"op":0,"s":22,"t":"CHANNEL_DELETE","d":{"id":110,"type":0,"guild_id":300}},
+  {"op":0,"s":23,"t":"FUTURE_EVENT","d":{"value":1}},
+  {"op":0,"s":24,"t":"GUILD_DELETE","d":{"id":300,"name":"Fixture Guild","owner_id":42,"unavailable":false,"features":[]}}
+]

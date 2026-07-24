@@ -67,7 +67,7 @@ class ForumTag(
     val emojiId: Long?,
     val emojiName: String?,
 ) {
-    val customEmojiId: String? = emojiId?.toString()
+    val customEmojiId: String? get() = emojiId?.toString()
 
     override fun equals(other: Any?) = other is ForumTag &&
         id == other.id && name == other.name && emojiId == other.emojiId && emojiName == other.emojiName

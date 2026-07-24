@@ -8,6 +8,7 @@ import com.discord.gateway.io.IncomingParser
 import com.discord.gateway.io.Outgoing
 import com.discord.gateway.io.Resume
 import com.discord.gateway.opcodes.Opcode
+import com.discord.models.domain.ModelPayload
 import com.discord.utilities.websocket.GatewayWebSocket
 import com.discord.utilities.websocket.GatewayWebSocketFactory
 import com.discord.utilities.websocket.GatewayWebSocketListener
@@ -15,7 +16,6 @@ import com.discord.utilities.websocket.ZlibStreamDecoder
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
-import com.google.gson.JsonElement
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
@@ -233,12 +233,12 @@ class GatewaySocket(
         val data = incoming.data
         when (incoming.type) {
             "READY" -> {
-                val readySession = (data as? JsonElement)?.takeIf { it.isJsonObject }?.asJsonObject?.get("session_id")
-                if (readySession == null || readySession.isJsonNull) {
+                val ready = data as? ModelPayload
+                if (ready?.sessionId == null) {
                     reconnect("Invalid READY payload", immediate = false)
                     return
                 }
-                sessionId = readySession.asString
+                sessionId = ready.sessionId
                 establishConnection()
             }
             "RESUMED" -> establishConnection()

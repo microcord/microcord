@@ -11,11 +11,11 @@ data class ThreadMetadata(
 
 data class MuteConfig(val endTime: String?)
 
-data class ThreadMember(
-    val id: Long,
-    val userId: Long,
-    val flags: Int,
-    val joinTimestamp: UtcDateTime,
+open class ThreadMember(
+    open val id: Long,
+    open val userId: Long,
+    open val flags: Int,
+    open val joinTimestamp: UtcDateTime,
     val muted: Boolean,
     val muteConfig: MuteConfig?,
 )
