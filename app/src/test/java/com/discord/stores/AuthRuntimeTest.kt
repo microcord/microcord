@@ -15,6 +15,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import rx.schedulers.Schedulers
 
@@ -68,6 +69,11 @@ class AuthRuntimeTest {
         assertFalse(store.getAuthState().toString().contains("runtime-secret"))
         assertNull(store.getFingerprint())
         assertNull(durablePreferences.getString(StoreAuthentication.CACHE_KEY_FINGERPRINT, null))
+
+        store.loginWithToken(" direct-secret ")
+        assertEquals("direct-secret", store.getAuthState()?.token)
+        assertTrue(store.getAuthState()?.requiredActions.orEmpty().isEmpty())
+        assertFalse(store.getAuthState().toString().contains("direct-secret"))
     }
 
     @Test

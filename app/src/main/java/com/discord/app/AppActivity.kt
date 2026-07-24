@@ -25,6 +25,7 @@ import com.discord.widgets.auth.AuthResult
 import com.discord.widgets.auth.AuthRoute
 import com.discord.widgets.auth.AuthUiActions
 import com.discord.widgets.auth.AuthUiState
+import com.discord.widgets.auth.AuthUiRules
 import com.discord.widgets.auth.WidgetAgeVerify
 import com.discord.widgets.auth.WidgetAuthAgeGated
 import com.discord.widgets.auth.WidgetAuthBirthday
@@ -175,8 +176,21 @@ open class AppActivity : AppCompatActivity(), AuthUiActions {
     }
 
     override fun submit(action: AuthAction, callback: (AuthResult) -> Unit) {
-        authSubmitter?.invoke(action, callback)
-            ?: callback(AuthResult.Failure(message = "Authentication is not initialized."))
+        authSubmitter?.let {
+            it(action, callback)
+            return
+        }
+        if (action is AuthAction.TokenLogin) {
+            val errors = AuthUiRules.token(action.token)
+            if (errors.isEmpty()) {
+                StoreStream.getAuthentication().loginWithToken(action.token)
+                callback(AuthResult.Success())
+            } else {
+                callback(AuthResult.Failure(fieldErrors = errors))
+            }
+        } else {
+            callback(AuthResult.Failure(message = "Authentication is not initialized."))
+        }
     }
 
     override fun close() {

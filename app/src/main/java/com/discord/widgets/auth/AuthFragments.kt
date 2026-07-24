@@ -2,6 +2,7 @@ package com.discord.widgets.auth
 
 import android.app.DatePickerDialog
 import android.os.Bundle
+import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -21,6 +22,7 @@ import com.discord.views.phone.PhoneOrEmailInputView
 import com.discord.views.segmentedcontrol.CardSegment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputLayout
+import com.google.android.material.textfield.TextInputEditText
 import java.text.DateFormat
 import java.util.Calendar
 import java.util.Date
@@ -149,6 +151,7 @@ class WidgetAuthLogin : AuthFragment(R.layout.widget_auth_login, AuthRoute.LOGIN
             captureState(); submit(AuthAction.ForgotPassword(model.state.identifier))
         }
         view.findViewById<TextView>(R.id.auth_login_password_manager_link).setOnClickListener { actions.openPasswordManager() }
+        view.findViewById<TextView>(R.id.auth_login_token_link).setOnClickListener { showTokenLoginDialog() }
     }
 
     private fun login() {
@@ -156,6 +159,37 @@ class WidgetAuthLogin : AuthFragment(R.layout.widget_auth_login, AuthRoute.LOGIN
         val errors = AuthUiRules.login(model.state.identifier, password.text())
         if (errors.isNotEmpty()) model.update { it.copy(fieldErrors = errors) }
         else submit(AuthAction.Login(model.state.identifier, password.text()))
+    }
+
+    private fun showTokenLoginDialog() {
+        val input = TextInputEditText(requireContext()).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            isSingleLine = true
+        }
+        val wrapper = TextInputLayout(requireContext()).apply {
+            hint = getString(R.string.manticord_token)
+            addView(input)
+        }
+        val dialog = AlertDialog.Builder(requireContext())
+            .setTitle(R.string.manticord_login_with_token)
+            .setView(wrapper)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.login, null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val token = input.text?.toString().orEmpty()
+                val errors = AuthUiRules.token(token)
+                wrapper.error = errors["token"]
+                if (errors.isEmpty()) {
+                    input.text?.clear()
+                    dialog.dismiss()
+                    submit(AuthAction.TokenLogin(token))
+                }
+            }
+        }
+        dialog.setOnDismissListener { input.text?.clear() }
+        dialog.show()
     }
 
     override fun captureState() = model.update { it.copy(identifier = input.getTextOrEmpty()) }

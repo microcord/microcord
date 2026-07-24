@@ -710,6 +710,7 @@ or observable behavior. Small implementation details do not belong here.
 | 2026-07-24 | Waive ARM64 runtime execution for the native spike | The user accepted packaged/hash-verified ARM64 libraries with x86_64 lifecycle evidence | Phase 2 closes on x86_64; ARM64 binaries remain present for later device validation |
 | 2026-07-24 | Use Kryo `4.0.2` for reference-shaped persisted store payloads | Recovered metadata and API contracts require Kryo while persistence must remain atomic and path-confined | Persistence uses the public artifact and disables Android application backup before authentication data exists |
 | 2026-07-24 | Use OkHttp `4.8.0`, Okio `2.7.0`, Retrofit `2.9.0`, and PersistentCookieJar `v1.0.1` for Phase 4 | OkHttp/Okio versions are recovered; Retrofit and cookie-jar versions are the compatible public artifacts matching the retained API surface | REST/Gateway fixture tests pin headers, cookies, errors, rate limits, and socket behavior without live backend access |
+| 2026-07-24 | Add a Manticord-only token login entry point | The user explicitly requested direct token authentication | Tokens use password-style transient input, never enter saved UI state or logs, and persist only through the existing redacted auth-state cache |
 
 ## Progress Journal
 
@@ -743,6 +744,7 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-07-24 | OpenCode | Implemented fixture-first REST/Gateway transport plus persistent discovery and typed stage-event dispatch | `assembleDebug`, 69 unit tests, and lint pass; no live backend used | Reconstruct the complete READY model/store closure before routing remaining core events |
 | 2026-07-24 | OpenCode | Closed Phase 4 with complete READY DTOs/adapters, dependency-complete core stores, typed parser, and dispatcher-routed READY/incremental events | `assembleDebug`, 85 fixture/unit tests, lint, and 8 Android 13 connected tests pass; no live backend used | Begin Phase 5 authentication/session state and logged-out/logged-in routing |
 | 2026-07-24 | OpenCode | Completed Phase 5 authentication runtime/UI, required-action routing, safe intents/deep links/share actions, and the auth-gated main tabs/home host | Build, unit tests, lint, and 14 Android 13 connected route tests pass without live backend use | Begin Phase 6 guild/channel navigation and replace deferred home content with complete feature fragments |
+| 2026-07-24 | OpenCode | Added secure direct token login through the existing authentication store and route flow | Build, unit tests, lint, and 6 focused Android 16 connected auth/navigation tests pass | Pause before Phase 6 |
 
 ## Agent Handoff Template
 

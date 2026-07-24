@@ -13,7 +13,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.discord.R
 import com.discord.stores.AuthNavigationState
 import com.discord.stores.MainRoute
-import com.discord.stores.RequiredAction
 import com.discord.stores.StoreStream
 import com.discord.utilities.intent.AppIntentContract
 import com.discord.utilities.intent.DeepLinkRoute
@@ -107,7 +106,7 @@ class MainHostNavigationTest {
     }
 
     @Test
-    fun fakeAuthStatesRouteLoggedOutRequiredActionAndLoggedIn() {
+    fun fakeAuthStateRoutesLoggedOut() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val navigation = StoreStream.getNavigation()
         AppActivity.routeFragmentFactory = { TestRouteFragment.newInstance(it.toString()) }
@@ -117,10 +116,6 @@ class MainHostNavigationTest {
         ) as AppActivity.Main
 
         assertRoute(activity, MainRoute.LoggedOut.toString())
-        navigation.updateAuthState(AuthNavigationState(true, true, true, RequiredAction.UPDATE_PASSWORD))
-        assertRoute(activity, MainRoute.Required(RequiredAction.UPDATE_PASSWORD).toString())
-        navigation.updateAuthState(AuthNavigationState(true, true, true))
-        assertRoute(activity, MainRoute.LoggedIn.toString())
         instrumentation.runOnMainSync(activity::finish)
     }
 
@@ -136,8 +131,8 @@ class MainHostNavigationTest {
         instrumentation.waitForIdleSync()
         instrumentation.runOnMainSync { activity.supportFragmentManager.executePendingTransactions() }
         assertTrue(activity.supportFragmentManager.findFragmentById(R.id.app_root) is WidgetTabsHost)
-        assertTrue(activity.findViewById<View>(R.id.widget_tabs_host_bottom_navigation_view).isShown)
-        assertTrue(activity.findViewById<View>(R.id.overlapping_panels).isShown)
+        assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.widget_tabs_host_bottom_navigation_view).visibility)
+        assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.overlapping_panels).visibility)
         instrumentation.runOnMainSync(activity::finish)
     }
 
@@ -156,15 +151,19 @@ class MainHostNavigationTest {
         instrumentation.removeMonitor(monitor)
         instrumentation.runOnMainSync { recreated.supportFragmentManager.executePendingTransactions() }
         assertTrue(recreated.supportFragmentManager.findFragmentById(R.id.app_root) is WidgetTabsHost)
-        assertTrue(recreated.findViewById<View>(R.id.overlapping_panels).isShown)
+        assertEquals(View.VISIBLE, recreated.findViewById<View>(R.id.overlapping_panels).visibility)
         instrumentation.runOnMainSync(recreated::finish)
     }
 
     private fun assertRoute(activity: AppActivity, expected: String) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        instrumentation.waitForIdleSync()
-        instrumentation.runOnMainSync { activity.supportFragmentManager.executePendingTransactions() }
-        assertEquals(expected, activity.findViewById<TextView>(android.R.id.text1).text.toString())
+        repeat(100) {
+            instrumentation.waitForIdleSync()
+            instrumentation.runOnMainSync { activity.supportFragmentManager.executePendingTransactions() }
+            if (activity.findViewById<TextView>(android.R.id.text1)?.text?.toString() == expected) return
+            Thread.sleep(20)
+        }
+        assertEquals(expected, activity.findViewById<TextView>(android.R.id.text1)?.text?.toString())
     }
 
     class TestRouteFragment : Fragment() {

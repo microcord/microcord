@@ -131,6 +131,11 @@ class StoreAuthentication(
 
     fun handleLoginResult(loginResult: ModelLoginResult) = dispatcher.schedule { onLoginResult(loginResult) }
 
+    fun loginWithToken(token: String) {
+        require(token.isNotBlank()) { "Token is required." }
+        setAuthed(token.trim())
+    }
+
     @StoreThread
     internal fun handleLoginResultInternal(loginResult: ModelLoginResult) {
         setFingerprint(null, true)

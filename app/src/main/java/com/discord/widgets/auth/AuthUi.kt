@@ -62,6 +62,10 @@ sealed class AuthAction {
         override fun toString() = "Login(identifier=<redacted>, password=<redacted>)"
     }
 
+    class TokenLogin(val token: String) : AuthAction() {
+        override fun toString() = "TokenLogin(token=<redacted>)"
+    }
+
     class Register(
         val email: String?,
         val phoneToken: String?,
@@ -133,6 +137,9 @@ object AuthUiRules {
         if (identifier.isBlank()) put("identifier", "Email or phone number is required.")
         if (password.isBlank()) put("password", "Password is required.")
     }
+
+    fun token(token: String): Map<String, String> =
+        if (token.isBlank()) mapOf("token" to "Token is required.") else emptyMap()
 
     fun identity(mode: AuthIdentityMode, value: String): Map<String, String> = buildMap {
         val valid = when (mode) {
