@@ -314,7 +314,7 @@ The recovered binaries are located under reference `app/src/main/lib` for:
 - [x] Audio input/output enumeration returns or fails safely.
 - [x] Native instance disposal is repeatable without crash.
 - [x] Required companion binaries are identified from runtime/linker evidence.
-- [ ] Krisp model assets and `krisp_model_version` resolve if noise processing
+- [x] Krisp model assets and `krisp_model_version` resolve if noise processing
   is enabled.
 
 Do not postpone the native spike until the voice UI phase. If the recovered
@@ -407,17 +407,18 @@ yet runtime-verified.
 
 ### Phase 2: Native Media Spike
 
-Status: **IN PROGRESS**
+Status: **DONE**
 
 - [x] Copy `libdiscord.so` into ABI-specific `jniLibs` directories.
 - [x] Recreate the minimal `com.hammerandchisel.libdiscord` bridge.
 - [x] Recreate required `co.discord.media_engine` types.
 - [x] Select and verify the compatible WebRTC dependency.
-- [ ] Complete every native spike exit criterion.
+- [x] Complete every native spike exit criterion.
 - [x] Add one instrumented native load/lifecycle test.
 
 Exit criteria: the library loads and a native media-engine instance can be
-created, queried minimally, and disposed on at least ARM64 and one emulator ABI.
+created, queried minimally, and disposed on the x86_64 emulator ABI. Per user
+decision, packaged/hash-verified ARM64 binaries do not require runtime execution.
 
 Compatibility resolution: all four recovered `libdiscord.so` binaries require
 four WebRTC descriptors absent from every available public artifact. With user
@@ -425,9 +426,8 @@ approval, the exact compiled WebRTC bridge was isolated from the reference DEX
 without decompiled source or first-party Discord classes. The reproducible
 artifact preserves 385 WebRTC classes, all 117 native roots, the four hard
 descriptors, and `EglHelper`.
-Android 13 x86_64 now passes both native lifecycle tests twice, including EGL
+Android 13 x86_64 passes both native lifecycle tests twice, including EGL
 initialization, audio subsystem and input/output enumeration, and disposal.
-ARM64 runtime evidence is the only remaining Phase 2 exit requirement.
 
 ### Phase 3: Core Runtime and Stores
 
@@ -707,6 +707,7 @@ or observable behavior. Small implementation details do not belong here.
 | 2026-07-24 | Adapt the unpublished Fresco sample `ZoomableDraweeView` package to public PhotoDraweeView `2.1.0` | No published artifact provides `com.facebook.samples.zoomable.ZoomableDraweeView`, and copying public sample source is prohibited | The exact XML class name retains real zoom behavior through a thin adapter |
 | 2026-07-24 | Baseline the imported recovered-resource lint corpus | The immutable corpus carries 16,733 inherited errors and 28,734 warnings from merged libraries, translations, and decoded resources after reconstructed Kotlin issues were fixed | `lintDebug` fails on every new issue while preserving the recovered corpus unchanged |
 | 2026-07-24 | Preserve the recovered compiled WebRTC Java bridge for Phase 2 | No available public artifact matches four JNI-visible descriptors and two are Discord-specific; the user approved the exception required for exact native parity | Vendor only the exact compiled bridge closure, remove the incompatible public artifact, and verify creation/disposal on device |
+| 2026-07-24 | Waive ARM64 runtime execution for the native spike | The user accepted packaged/hash-verified ARM64 libraries with x86_64 lifecycle evidence | Phase 2 closes on x86_64; ARM64 binaries remain present for later device validation |
 
 ## Progress Journal
 
@@ -733,6 +734,7 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-07-24 | OpenCode | Packaged all four `libdiscord.so` binaries, reconstructed the exact Hammer-and-Chisel and media-engine JNI contract surfaces, and added a native lifecycle test | ELF hashes/architectures and 283 exported symbols verified; `assembleDebug` and 41 unit tests pass | Blocked: no available public WebRTC artifact matches four JNI-visible descriptors; request approval for recovered bridge preservation or parity change |
 | 2026-07-24 | OpenCode | Isolated the approved compiled WebRTC bridge into a reproducible local artifact with no decompiled source or first-party classes | 385 classes, 117 native roots, four hard descriptors, `EglHelper`, duplicate-class check, build, and 41 unit tests pass | Run native create/query/dispose instrumentation when an ADB device is attached |
 | 2026-07-24 | OpenCode | Completed all JNI registration roots under Hammer-and-Chisel, media-engine, and native-engine packages and expanded audio lifecycle coverage | Android 13 x86_64 passes load, EGL creation, engine creation, audio subsystem/input/output queries, and repeated disposal | Run the same native lifecycle tests on an ARM64 device to close Phase 2 |
+| 2026-07-24 | OpenCode | Closed Phase 2 after the approved ARM64 runtime waiver | `assembleDebug`, 43 unit tests, lint with zero new issues, and 8 Android 13 x86_64 connected tests pass | Begin Phase 3 application initialization, dispatcher, and complete store infrastructure |
 
 ## Agent Handoff Template
 
