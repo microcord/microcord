@@ -309,7 +309,7 @@ The recovered binaries are located under reference `app/src/main/lib` for:
 - [x] `libdiscord.so` is packaged for all four supported ABIs.
 - [ ] A device/emulator loads the library without `UnsatisfiedLinkError`.
 - [x] The exact required JNI bridge class is resolved.
-- [ ] Required WebRTC classes and method descriptors match the binary.
+- [x] Required WebRTC classes and method descriptors match the binary.
 - [ ] Shared EGL context initializes.
 - [ ] Audio input/output enumeration returns or fails safely.
 - [ ] Native instance disposal is repeatable without crash.
@@ -412,20 +412,19 @@ Status: **IN PROGRESS**
 - [x] Copy `libdiscord.so` into ABI-specific `jniLibs` directories.
 - [x] Recreate the minimal `com.hammerandchisel.libdiscord` bridge.
 - [x] Recreate required `co.discord.media_engine` types.
-- [ ] Select and verify the compatible WebRTC dependency.
+- [x] Select and verify the compatible WebRTC dependency.
 - [ ] Complete every native spike exit criterion.
 - [x] Add one instrumented native load/lifecycle test.
 
 Exit criteria: the library loads and a native media-engine instance can be
 created, queried minimally, and disposed on at least ARM64 and one emulator ABI.
 
-Compatibility blocker: all four recovered `libdiscord.so` binaries require
-four WebRTC descriptors absent from every currently available public artifact.
-The closest M92 build still lacks Discord's ten-argument
-`RtpParameters.Encoding` constructor and `WebRtcAudioTrack(long, boolean)`.
-The original `org.webrtc:google-webrtc` Bintray/JCenter artifact is no longer
-available. Proceeding requires explicit approval to preserve the recovered
-compatible WebRTC Java bridge or to change the native media-engine parity goal.
+Compatibility resolution: all four recovered `libdiscord.so` binaries require
+four WebRTC descriptors absent from every available public artifact. With user
+approval, the exact compiled WebRTC bridge was isolated from the reference DEX
+without decompiled source or first-party Discord classes. The reproducible
+artifact preserves 385 WebRTC classes, all 117 native roots, the four hard
+descriptors, and `EglHelper`; runtime creation/disposal evidence remains pending.
 
 ### Phase 3: Core Runtime and Stores
 
@@ -704,6 +703,7 @@ or observable behavior. Small implementation details do not belong here.
 | 2026-07-24 | Use public WebRTC `104.5112.10`, APNG `1.11.0`, and scoped RealtimeBlurView commit `82df3520b4` for recovered view contracts | These are the available public artifacts matching the reconstructed Java APIs closely enough for Phase 1 | Exact `libdiscord.so` compatibility remains a Phase 2 runtime requirement |
 | 2026-07-24 | Adapt the unpublished Fresco sample `ZoomableDraweeView` package to public PhotoDraweeView `2.1.0` | No published artifact provides `com.facebook.samples.zoomable.ZoomableDraweeView`, and copying public sample source is prohibited | The exact XML class name retains real zoom behavior through a thin adapter |
 | 2026-07-24 | Baseline the imported recovered-resource lint corpus | The immutable corpus carries 16,733 inherited errors and 28,734 warnings from merged libraries, translations, and decoded resources after reconstructed Kotlin issues were fixed | `lintDebug` fails on every new issue while preserving the recovered corpus unchanged |
+| 2026-07-24 | Preserve the recovered compiled WebRTC Java bridge for Phase 2 | No available public artifact matches four JNI-visible descriptors and two are Discord-specific; the user approved the exception required for exact native parity | Vendor only the exact compiled bridge closure, remove the incompatible public artifact, and verify creation/disposal on device |
 
 ## Progress Journal
 
@@ -728,6 +728,7 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-07-24 | OpenCode | Parallelized the remaining binding frontier across forums, events, stickers, voice/video, overlays, threads, notifications, bot UI kit, profiles, guild-role subscriptions, home/tabs, roles, stage, premium, and XML behaviors | Checkpoint is intentionally incomplete: `compileDebugKotlin` now fails in `InlineMediaView` due ExoPlayer API mismatch and in anchored/call voice controls due missing RTC/audio/streaming/embedded-activity/video-device contracts | Reconcile exact ExoPlayer 2.16 API and reconstruct the shared voice contracts before resuming Java binding verification |
 | 2026-07-24 | OpenCode | Completed Phase 1 by restoring shared voice contracts, public media dependencies, all View Bindings, decoded ConstraintLayout/vector resources, lint compatibility, and connected view tests | `assembleDebug`, 39 unit tests, `lintDebug` with zero new issues, and 6 Android 13 connected tests pass | Begin Phase 2 native media spike with exact WebRTC/JNI creation and disposal tests |
 | 2026-07-24 | OpenCode | Packaged all four `libdiscord.so` binaries, reconstructed the exact Hammer-and-Chisel and media-engine JNI contract surfaces, and added a native lifecycle test | ELF hashes/architectures and 283 exported symbols verified; `assembleDebug` and 41 unit tests pass | Blocked: no available public WebRTC artifact matches four JNI-visible descriptors; request approval for recovered bridge preservation or parity change |
+| 2026-07-24 | OpenCode | Isolated the approved compiled WebRTC bridge into a reproducible local artifact with no decompiled source or first-party classes | 385 classes, 117 native roots, four hard descriptors, `EglHelper`, duplicate-class check, build, and 41 unit tests pass | Run native create/query/dispose instrumentation when an ADB device is attached |
 
 ## Agent Handoff Template
 

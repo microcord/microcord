@@ -2333,17 +2333,6 @@
     </issue>
 
     <issue
-        id="NewerVersionAvailable"
-        message="A newer version of io.github.webrtc-sdk:android than 104.5112.10 is available: 144.7559.09"
-        errorLine1="webrtc = &quot;104.5112.10&quot;"
-        errorLine2="         ~~~~~~~~~~~~~">
-        <location
-            file="$HOME/Desktop/projeler/manticordrebuild/gradle/libs.versions.toml"
-            line="33"
-            column="10"/>
-    </issue>
-
-    <issue
         id="PrivateResource"
         message="Overriding `@array/exo_playback_speeds` which is marked as private in com.google.android.exoplayer:exoplayer-ui:2.16.0. If deliberate, use tools:override=&quot;true&quot;, otherwise pick a different name."
         errorLine1="    &lt;array name=&quot;exo_playback_speeds&quot;>"
@@ -61738,98 +61727,77 @@
         id="Aligned16KB"
         message="The native library `arm64-v8a/libapng-drawable.so` (from `com.linecorp:apng:1.11.0`) is not 16 KB aligned">
         <location
-            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/6a15cac7ea31410679eb09d6eb7e7bdc/transformed/apng-1.11.0/jni/arm64-v8a/libapng-drawable.so"/>
+            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/daf884b1e3cf69638e9fd14542a3beb9/transformed/apng-1.11.0/jni/arm64-v8a/libapng-drawable.so"/>
     </issue>
 
     <issue
         id="Aligned16KB"
         message="The native library `arm64-v8a/libapng-drawable.so` (from `com.linecorp:apng:1.11.0`) is not 16 KB aligned">
         <location
-            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/6a15cac7ea31410679eb09d6eb7e7bdc/transformed/apng-1.11.0/jni/arm64-v8a/libapng-drawable.so"/>
+            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/daf884b1e3cf69638e9fd14542a3beb9/transformed/apng-1.11.0/jni/arm64-v8a/libapng-drawable.so"/>
     </issue>
 
     <issue
         id="Aligned16KB"
         message="The native library `arm64-v8a/libimagepipeline.so` (from `com.facebook.fresco:imagepipeline-native:2.6.0`) is not 16 KB aligned">
         <location
-            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/186be9fa3ba733689798e186f3bfec46/transformed/imagepipeline-native-2.6.0/jni/arm64-v8a/libimagepipeline.so"/>
+            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/091280edad558f13d07800b39d9f773b/transformed/imagepipeline-native-2.6.0/jni/arm64-v8a/libimagepipeline.so"/>
     </issue>
 
     <issue
         id="Aligned16KB"
         message="The native library `arm64-v8a/libimagepipeline.so` (from `com.facebook.fresco:imagepipeline-native:2.6.0`) is not 16 KB aligned">
         <location
-            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/186be9fa3ba733689798e186f3bfec46/transformed/imagepipeline-native-2.6.0/jni/arm64-v8a/libimagepipeline.so"/>
+            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/091280edad558f13d07800b39d9f773b/transformed/imagepipeline-native-2.6.0/jni/arm64-v8a/libimagepipeline.so"/>
     </issue>
 
     <issue
         id="Aligned16KB"
         message="The native library `arm64-v8a/libimagepipeline.so` (from `com.facebook.fresco:imagepipeline-native:2.6.0`) is not 16 KB aligned">
         <location
-            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/186be9fa3ba733689798e186f3bfec46/transformed/imagepipeline-native-2.6.0/jni/arm64-v8a/libimagepipeline.so"/>
-    </issue>
-
-    <issue
-        id="Aligned16KB"
-        message="The native library `arm64-v8a/libjingle_peerconnection_so.so` (from `io.github.webrtc-sdk:android:104.5112.10`) is not 16 KB aligned">
-        <location
-            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/793ebb78832c50852c5da9468bc5f059/transformed/android-104.5112.10/jni/arm64-v8a/libjingle_peerconnection_so.so"/>
-    </issue>
-
-    <issue
-        id="Aligned16KB"
-        message="The native library `arm64-v8a/libjingle_peerconnection_so.so` (from `io.github.webrtc-sdk:android:104.5112.10`) is not 16 KB aligned">
-        <location
-            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/793ebb78832c50852c5da9468bc5f059/transformed/android-104.5112.10/jni/arm64-v8a/libjingle_peerconnection_so.so"/>
-    </issue>
-
-    <issue
-        id="Aligned16KB"
-        message="The native library `arm64-v8a/libjingle_peerconnection_so.so` (from `io.github.webrtc-sdk:android:104.5112.10`) is not 16 KB aligned">
-        <location
-            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/793ebb78832c50852c5da9468bc5f059/transformed/android-104.5112.10/jni/arm64-v8a/libjingle_peerconnection_so.so"/>
+            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/091280edad558f13d07800b39d9f773b/transformed/imagepipeline-native-2.6.0/jni/arm64-v8a/libimagepipeline.so"/>
     </issue>
 
     <issue
         id="Aligned16KB"
         message="The native library `arm64-v8a/libnative-filters.so` (from `com.facebook.fresco:nativeimagefilters:2.6.0`) is not 16 KB aligned">
         <location
-            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/ef6a92505ac1e421c27e66e53a21a1a1/transformed/nativeimagefilters-2.6.0/jni/arm64-v8a/libnative-filters.so"/>
+            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/e3c85c42135fc78f3b59b7f663e12a1d/transformed/nativeimagefilters-2.6.0/jni/arm64-v8a/libnative-filters.so"/>
     </issue>
 
     <issue
         id="Aligned16KB"
         message="The native library `arm64-v8a/libnative-filters.so` (from `com.facebook.fresco:nativeimagefilters:2.6.0`) is not 16 KB aligned">
         <location
-            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/ef6a92505ac1e421c27e66e53a21a1a1/transformed/nativeimagefilters-2.6.0/jni/arm64-v8a/libnative-filters.so"/>
+            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/e3c85c42135fc78f3b59b7f663e12a1d/transformed/nativeimagefilters-2.6.0/jni/arm64-v8a/libnative-filters.so"/>
     </issue>
 
     <issue
         id="Aligned16KB"
         message="The native library `arm64-v8a/libnative-filters.so` (from `com.facebook.fresco:nativeimagefilters:2.6.0`) is not 16 KB aligned">
         <location
-            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/ef6a92505ac1e421c27e66e53a21a1a1/transformed/nativeimagefilters-2.6.0/jni/arm64-v8a/libnative-filters.so"/>
+            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/e3c85c42135fc78f3b59b7f663e12a1d/transformed/nativeimagefilters-2.6.0/jni/arm64-v8a/libnative-filters.so"/>
     </issue>
 
     <issue
         id="Aligned16KB"
         message="The native library `arm64-v8a/libnative-imagetranscoder.so` (from `com.facebook.fresco:nativeimagetranscoder:2.6.0`) is not 16 KB aligned">
         <location
-            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/052e829683d822d6ef83843faa74afaa/transformed/nativeimagetranscoder-2.6.0/jni/arm64-v8a/libnative-imagetranscoder.so"/>
+            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/768f80831eee44d77a3dae0a03d144ba/transformed/nativeimagetranscoder-2.6.0/jni/arm64-v8a/libnative-imagetranscoder.so"/>
     </issue>
 
     <issue
         id="Aligned16KB"
         message="The native library `arm64-v8a/libnative-imagetranscoder.so` (from `com.facebook.fresco:nativeimagetranscoder:2.6.0`) is not 16 KB aligned">
         <location
-            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/052e829683d822d6ef83843faa74afaa/transformed/nativeimagetranscoder-2.6.0/jni/arm64-v8a/libnative-imagetranscoder.so"/>
+            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/768f80831eee44d77a3dae0a03d144ba/transformed/nativeimagetranscoder-2.6.0/jni/arm64-v8a/libnative-imagetranscoder.so"/>
     </issue>
 
     <issue
         id="Aligned16KB"
         message="The native library `arm64-v8a/libnative-imagetranscoder.so` (from `com.facebook.fresco:nativeimagetranscoder:2.6.0`) is not 16 KB aligned">
         <location
-            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/052e829683d822d6ef83843faa74afaa/transformed/nativeimagetranscoder-2.6.0/jni/arm64-v8a/libnative-imagetranscoder.so"/>
+            file="$GRADLE_USER_HOME/caches/9.4.1/transforms/768f80831eee44d77a3dae0a03d144ba/transformed/nativeimagetranscoder-2.6.0/jni/arm64-v8a/libnative-imagetranscoder.so"/>
     </issue>
 
     <issue
@@ -61839,7 +61807,7 @@
         errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="$HOME/Desktop/projeler/manticordrebuild/gradle/libs.versions.toml"
-            line="59"
+            line="58"
             column="9"/>
     </issue>
 
@@ -415721,17 +415689,6 @@
         <location
             file="src/main/res/values/strings.xml"
             line="6154"
-            column="13"/>
-    </issue>
-
-    <issue
-        id="UnusedResources"
-        message="The resource `R.string.krisp_model_version` appears to be unused"
-        errorLine1="    &lt;string name=&quot;krisp_model_version&quot;>thz-2021-01-20&lt;/string>"
-        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/res/values/strings.xml"
-            line="6155"
             column="13"/>
     </issue>
 

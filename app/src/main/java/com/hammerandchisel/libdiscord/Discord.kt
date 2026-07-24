@@ -3,6 +3,7 @@ package com.hammerandchisel.libdiscord
 import android.content.Context
 import com.discord.R
 import org.webrtc.EglBase
+import org.webrtc.EglHelper
 import org.webrtc.VideoFrame
 
 class Discord @JvmOverloads constructor(
@@ -99,7 +100,7 @@ class Discord @JvmOverloads constructor(
         const val LOGLEVEL_DEFAULT = -1
 
         private lateinit var krispVersion: String
-        private val eglBase: EglBase by lazy(LazyThreadSafetyMode.SYNCHRONIZED, EglBase::create)
+        private val eglBase: EglBase by lazy(LazyThreadSafetyMode.SYNCHRONIZED, EglHelper::create)
 
         init {
             System.loadLibrary("discord")

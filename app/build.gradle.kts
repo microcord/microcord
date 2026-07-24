@@ -75,7 +75,7 @@ dependencies {
     implementation(libs.realtime.blur.view)
     implementation(libs.simpleast)
     implementation(libs.ucrop)
-    implementation(libs.webrtc)
+    implementation(files("../third_party/webrtc-discord-126.21/webrtc-discord-126.21.jar"))
     implementation(libs.zxing.scanner) {
         exclude(group = "com.android.support")
     }
