@@ -37,6 +37,9 @@ android {
         buildConfig = true
         viewBinding = true
     }
+    bundle {
+        language.enableSplit = false
+    }
     lint {
         baseline = file("lint-baseline.xml")
     }

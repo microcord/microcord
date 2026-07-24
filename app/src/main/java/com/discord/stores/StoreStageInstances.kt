@@ -1,8 +1,14 @@
 package com.discord.stores
 
+import com.discord.api.channel.Channel
+import com.discord.api.guild.Guild
 import com.discord.api.stageinstance.StageInstance
+import com.discord.stores.updates.ObservationDeck
+import rx.Observable
 
-class StoreStageInstances {
+class StoreStageInstances(
+    private val observationDeck: ObservationDeck,
+) : StoreV2() {
     private val stageInstancesByChannel = linkedMapOf<Long, StageInstance>()
     private var stageInstancesByChannelSnapshot: Map<Long, StageInstance> = emptyMap()
     private val stageInstancesByGuild = linkedMapOf<Long, MutableMap<Long, StageInstance>>()
@@ -16,23 +22,61 @@ class StoreStageInstances {
     fun getStageInstancesForGuildInternal(guildId: Long): Map<Long, StageInstance> =
         stageInstancesByGuild[guildId].orEmpty()
 
-    fun handleStageInstanceCreate(stageInstance: StageInstance) = put(stageInstance)
-    fun handleStageInstanceUpdate(stageInstance: StageInstance) = put(stageInstance)
+    fun observeStageInstanceForChannel(channelId: Long): Observable<StageInstance> =
+        observationDeck.connectRx(this, generator = { getStageInstanceForChannel(channelId) }).filter { it != null }.map { it!! }
+    fun observeStageInstances(): Observable<Map<Long, StageInstance>> =
+        observationDeck.connectRx(this, generator = ::getStageInstances)
+    fun observeStageInstancesForGuild(guildId: Long): Observable<Map<Long, StageInstance>> =
+        observationDeck.connectRx(this, generator = { getStageInstancesForGuild(guildId) })
 
-    fun handleStageInstanceDelete(stageInstance: StageInstance) {
-        stageInstancesByChannel.remove(stageInstance.channelId)
-        stageInstancesByGuild[stageInstance.guildId]?.remove(stageInstance.channelId)
-        snapshotData()
+    @StoreThread
+    fun handleConnectionOpen(guilds: List<Guild>) {
+        StoreThreadScheduler.assertCurrentThread()
+        stageInstancesByChannel.clear()
+        stageInstancesByGuild.clear()
+        guilds.forEach(::handleGuildAdd)
+        markChanged()
     }
 
-    fun snapshotData() {
+    @StoreThread
+    fun handleGuildAdd(guild: Guild) = guild.stageInstances.orEmpty().forEach(::put)
+
+    @StoreThread
+    fun handleGuildRemove(guild: Guild) {
+        val channels = stageInstancesByGuild.remove(guild.id)?.keys.orEmpty()
+        stageInstancesByChannel.keys.removeAll(channels)
+        markChanged()
+    }
+
+    @StoreThread
+    fun handleChannelDelete(channel: Channel) = delete(channel.guildId, channel.id)
+
+    @StoreThread
+    fun handleStageInstanceCreate(stageInstance: StageInstance) = put(stageInstance)
+    @StoreThread
+    fun handleStageInstanceUpdate(stageInstance: StageInstance) = put(stageInstance)
+
+    @StoreThread
+    fun handleStageInstanceDelete(stageInstance: StageInstance) {
+        delete(stageInstance.guildId, stageInstance.channelId)
+    }
+
+    override fun snapshotData() {
         stageInstancesByChannelSnapshot = HashMap(stageInstancesByChannel)
         stageInstancesByGuildSnapshot = stageInstancesByGuild.mapValues { HashMap(it.value) }
     }
 
     private fun put(stageInstance: StageInstance) {
+        StoreThreadScheduler.assertCurrentThread()
         stageInstancesByChannel[stageInstance.channelId] = stageInstance
         stageInstancesByGuild.getOrPut(stageInstance.guildId, ::linkedMapOf)[stageInstance.channelId] = stageInstance
-        snapshotData()
+        markChanged()
+    }
+
+    private fun delete(guildId: Long?, channelId: Long) {
+        StoreThreadScheduler.assertCurrentThread()
+        stageInstancesByChannel.remove(channelId)
+        stageInstancesByGuild[guildId]?.remove(channelId)
+        markChanged()
     }
 }

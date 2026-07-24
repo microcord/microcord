@@ -433,11 +433,11 @@ initialization, audio subsystem and input/output enumeration, and disposal.
 
 Status: **IN PROGRESS**
 
-- [ ] Implement application initialization.
+- [x] Implement application initialization.
 - [x] Implement providers for application/activity context and preferences.
 - [x] Implement dispatcher and dedicated store scheduler.
 - [x] Implement `Store`, `StoreV2`, and observation snapshots.
-- [ ] Implement the initial `StoreStream` graph.
+- [x] Implement the initial `StoreStream` graph.
 - [x] Implement safe persistence primitives.
 - [ ] Implement logout/reset behavior.
 - [ ] Add deterministic dispatcher/store tests.
@@ -737,6 +737,7 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-07-24 | OpenCode | Completed all JNI registration roots under Hammer-and-Chisel, media-engine, and native-engine packages and expanded audio lifecycle coverage | Android 13 x86_64 passes load, EGL creation, engine creation, audio subsystem/input/output queries, and repeated disposal | Run the same native lifecycle tests on an ARM64 device to close Phase 2 |
 | 2026-07-24 | OpenCode | Closed Phase 2 after the approved ARM64 runtime waiver | `assembleDebug`, 43 unit tests, lint with zero new issues, and 8 Android 13 x86_64 connected tests pass | Begin Phase 3 application initialization, dispatcher, and complete store infrastructure |
 | 2026-07-24 | OpenCode | Reconstructed dispatcher/store scheduling, post-dispatch observation snapshots, runtime providers, preferences, and atomic Kryo persistence | `assembleDebug` and 50 deterministic unit tests pass; no placeholder markers found | Implement the complete accessibility/system-settings StoreStream closure before authentication/logout |
+| 2026-07-24 | OpenCode | Implemented the dependency-complete accessibility/settings/stage StoreStream graph and credential-free application bootstrap | `assembleDebug`, 54 store tests, lint, and 8 Android 13 connected tests pass across the two slices | Implement authentication and its complete selective pre-logout/reset dependency closure |
 
 ## Agent Handoff Template
 
