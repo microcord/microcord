@@ -54,6 +54,40 @@ class AuthInviteInfoView @JvmOverloads constructor(
         }
     }
 
+    fun configure(content: AuthLandingContent) {
+        when (content) {
+            is AuthLandingContent.GuildTemplate -> {
+                guildAvatar.visibility = View.GONE
+                templateIcon.visibility = View.VISIBLE
+                invitedText.setText(R.string.guild_template_create_discord)
+                guildName.text = content.name
+            }
+            is AuthLandingContent.GuildInvite -> {
+                guildAvatar.visibility = View.VISIBLE
+                templateIcon.visibility = View.GONE
+                guildAvatar.setImageURI(content.icon?.let {
+                    "https://cdn.discordapp.com/icons/${content.id}/$it.webp?size=128"
+                } ?: DEFAULT_ICON)
+                invitedText.text = if (content.memberCount < 200 && !content.inviter.isNullOrBlank()) {
+                    usernameText(R.string.auth_message_invited_by, content.inviter)
+                } else context.getText(R.string.instant_invite_you_have_been_invited_to_join)
+                guildName.text = content.name
+            }
+            is AuthLandingContent.GroupInvite -> {
+                setInviterAvatar(content.inviterId, content.inviterAvatar)
+                invitedText.text = if (content.name.isNullOrBlank() || content.inviter.isNullOrBlank()) {
+                    context.getText(R.string.instant_invite_you_have_been_invited_to_join_group_dm)
+                } else usernameText(R.string.auth_message_invited_by, content.inviter)
+                guildName.text = content.name.orEmpty().ifBlank { content.inviter.orEmpty() }
+            }
+            is AuthLandingContent.DirectInvite -> {
+                setInviterAvatar(content.inviterId, content.inviterAvatar)
+                invitedText.text = context.getText(R.string.instant_invite_you_have_been_invited_to_chat_with)
+                guildName.text = "${content.inviter}#${content.discriminator}"
+            }
+        }
+    }
+
     private fun configureGuildInvite(invite: ModelInvite) {
         val guild = requireNotNull(invite.guild)
         guildAvatar.setImageURI(guild.icon?.let {
@@ -88,6 +122,13 @@ class AuthInviteInfoView @JvmOverloads constructor(
         guildAvatar.setImageURI(if (user != null && hash != null) {
             val extension = if (hash.startsWith("a_")) "gif" else "webp"
             "https://cdn.discordapp.com/avatars/${user.id}/$hash.$extension?size=128"
+        } else DEFAULT_ICON)
+    }
+
+    private fun setInviterAvatar(id: Long?, hash: String?) {
+        guildAvatar.setImageURI(if (id != null && hash != null) {
+            val extension = if (hash.startsWith("a_")) "gif" else "webp"
+            "https://cdn.discordapp.com/avatars/$id/$hash.$extension?size=128"
         } else DEFAULT_ICON)
     }
 

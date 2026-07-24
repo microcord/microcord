@@ -8,6 +8,7 @@ import com.discord.api.guild.Guild
 import com.discord.api.presence.Presence
 import com.discord.api.stageinstance.StageInstance
 import com.discord.api.user.User
+import com.discord.models.authentication.AuthState
 import com.discord.models.domain.ModelChannelUnreadUpdate
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.domain.ModelPayload
@@ -15,7 +16,12 @@ import com.discord.models.domain.ModelReadState
 import com.discord.models.domain.ModelSession
 import com.discord.models.domain.ModelUserRelationship
 import com.discord.models.domain.ModelUserSettings
+import com.discord.models.domain.auth.ModelLoginResult
 import com.discord.models.thread.dto.ModelThreadListSync
+import com.discord.restapi.RequiredHeadersInterceptor
+import com.discord.restapi.RestAPIBuilder
+import com.discord.restapi.RestAPIInterface
+import com.discord.restapi.cookie.CookieJars
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.persister.Persister
@@ -33,6 +39,14 @@ class StoreStream private constructor(
     private val preferences: SharedPreferences,
     private val sessionDurablePreferences: SharedPreferences,
 ) {
+    private val authentication = StoreAuthentication(
+        dispatcher,
+        preferences,
+        sessionDurablePreferences,
+        onAuthStateChanged = ::handleAuthStateInternal,
+        onLoginResult = ::handleLoginResultInternal,
+        onPreLogout = ::handlePreLogout,
+    )
     private val accessibility = StoreAccessibility(dispatcher, observationDeck)
     private val userSettings = StoreUserSettings(dispatcher, accessibility, preferences)
     private val userSettingsSystem = StoreUserSettingsSystem(
@@ -59,6 +73,8 @@ class StoreStream private constructor(
     private val stageInstances = StoreStageInstances(observationDeck)
     private val presences = StoreUserPresence(clock, observationDeck, this)
     private val readStates = StoreReadStates(dispatcher, clock, observationDeck)
+    private val navigation = StoreNavigation(this)
+    private val tabsNavigation = StoreTabsNavigation(dispatcher, this, observationDeck)
     private val storesV2 = listOf(
         accessibility,
         userSettingsSystem,
@@ -70,6 +86,7 @@ class StoreStream private constructor(
         stageInstances,
         presences,
         readStates,
+        tabsNavigation,
     )
     private val storeV2DispatchHandler = StoreV2DispatchHandler(storesV2, observationDeck)
     private val initialized = BehaviorSubject.create(false)
@@ -79,6 +96,8 @@ class StoreStream private constructor(
     }
 
     private fun init(context: Context) {
+        authentication.bindApi(createRestApi(context))
+        authentication.init(context)
         userSettingsSystem.init(context)
         accessibilityMonitorBind(context)
         accessibility.init(context)
@@ -95,6 +114,7 @@ class StoreStream private constructor(
     }
 
     private fun initForTesting() {
+        authentication.init()
         userSettingsSystem.restore()
         accessibility.initForTesting()
         userSettings.initForTesting()
@@ -132,6 +152,7 @@ class StoreStream private constructor(
     fun handleStageInstanceUpdate(stageInstance: StageInstance) = dispatcher.schedule { stageInstances.handleStageInstanceUpdate(stageInstance) }
     fun handleStageInstanceDelete(stageInstance: StageInstance) = dispatcher.schedule { stageInstances.handleStageInstanceDelete(stageInstance) }
     fun handleGatewayConnected(connected: Boolean) = dispatcher.schedule { channels.handleConnected(connected) }
+    fun handleGatewayAuthenticationFailure() = authentication.logout()
 
     fun handleGatewayDispatch(type: String?, data: Any) = dispatcher.schedule {
         when (type) {
@@ -176,7 +197,38 @@ class StoreStream private constructor(
             "STAGE_INSTANCE_DELETE" -> (data as? StageInstance)?.let(stageInstances::handleStageInstanceDelete)
         }
     }
-    fun handlePreLogout() = dispatcher.schedule { userSettingsSystem.handlePreLogout() }
+    fun handlePreLogout() = dispatcher.schedule { handlePreLogoutInternal() }
+
+    @StoreThread
+    private fun handleAuthStateInternal(state: AuthState?) {
+        authentication.handleAuthStateInternal(state)
+        users.handleAuthToken(state?.token)
+        navigation.updateAuthState(state, channels.getInitializedForAuthedUser())
+        if (state == null) {
+            Persister.reset()
+            preferences.edit().clear().apply()
+        }
+    }
+
+    @StoreThread
+    private fun handleLoginResultInternal(loginResult: ModelLoginResult) {
+        authentication.handleLoginResultInternal(loginResult)
+        userSettingsSystem.handleLoginResult(loginResult)
+    }
+
+    @StoreThread
+    private fun handlePreLogoutInternal() {
+        authentication.handlePreLogout()
+        userSettingsSystem.handlePreLogout()
+        userRelationships.handlePreLogout()
+        readStates.handlePreLogout()
+        tabsNavigation.handlePreLogout()
+    }
+
+    @StoreThread
+    internal fun handleHomeTabSelected(panelAction: StoreNavigation.PanelAction) {
+        navigation.handleHomeTabSelected(panelAction)
+    }
 
     fun resetForLogout() = dispatcher.schedule {
         userSettingsSystem.handlePreLogout()
@@ -194,11 +246,14 @@ class StoreStream private constructor(
         stageInstances.reset()
         presences.reset()
         readStates.reset()
+        tabsNavigation.handlePreLogout()
+        navigation.reset()
         check(preferencesCleared && durablePreferencesCleared) { "Unable to clear logout preferences" }
     }
 
     @StoreThread
     private fun handleConnectionOpenInternal(payload: ModelPayload) {
+        payload.authToken?.let(authentication::setAuthed)
         users.handleConnectionOpen(payload)
         payload.userSettings?.let {
             userSettings.handleConnectionOpen(it)
@@ -244,7 +299,24 @@ class StoreStream private constructor(
 
     fun observeInitialized(): Observable<Boolean> = initialized.distinctUntilChanged()
 
+    private fun createRestApi(context: Context): RestAPIInterface {
+        val headers = object : RequiredHeadersInterceptor.HeadersProvider {
+            override fun getAuthToken() = authentication.getAuthState()?.token
+            override fun getFingerprint() = authentication.getFingerprint()
+            override fun getLocale() = userSettingsSystem.getLocale()
+            override fun getAcceptLanguages() = userSettingsSystem.getLocale()
+            override fun getUserAgent() = "Manticord Android/126.21"
+            override fun getSpotifyToken(): String? = null
+        }
+        return RestAPIBuilder(API_BASE_URL, CookieJars.persistent(context)).build(
+            RestAPIInterface::class.java,
+            interceptors = listOf(RequiredHeadersInterceptor(headers)),
+            clientName = "main",
+        )
+    }
+
     companion object {
+        private const val API_BASE_URL = "https://discord.com/api/"
         @Volatile private var instance: StoreStream? = null
 
         @JvmStatic
@@ -302,6 +374,7 @@ class StoreStream private constructor(
         private fun requireInstance() = checkNotNull(instance) { "StoreStream.initialize() must be called first" }
 
         @JvmStatic fun getAccessibility() = requireInstance().accessibility
+        @JvmStatic fun getAuthentication() = requireInstance().authentication
         @JvmStatic fun getUserSettings() = requireInstance().userSettings
         @JvmStatic fun getUserSettingsSystem() = requireInstance().userSettingsSystem
         @JvmStatic fun getUsers() = requireInstance().users
@@ -312,5 +385,7 @@ class StoreStream private constructor(
         @JvmStatic fun getStageInstances() = requireInstance().stageInstances
         @JvmStatic fun getPresences() = requireInstance().presences
         @JvmStatic fun getReadStates() = requireInstance().readStates
+        @JvmStatic fun getNavigation() = requireInstance().navigation
+        @JvmStatic fun getTabsNavigation() = requireInstance().tabsNavigation
     }
 }

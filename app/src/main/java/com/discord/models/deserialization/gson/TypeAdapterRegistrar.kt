@@ -4,6 +4,8 @@ import com.discord.api.activity.ActivityPlatform
 import com.discord.api.activity.ActivityPlatformTypeAdapter
 import com.discord.api.activity.ActivityType
 import com.discord.api.activity.ActivityTypeTypeAdapter
+import com.discord.api.auth.RequiredAction
+import com.discord.api.auth.RequiredActionTypeAdapter
 import com.discord.api.guild.GuildExplicitContentFilter
 import com.discord.api.guild.GuildExplicitContentFilterTypeAdapter
 import com.discord.api.guild.GuildHubType
@@ -39,6 +41,7 @@ fun GsonBuilder.registerDiscordApiTypeAdapters(): GsonBuilder =
         .registerTypeAdapterFactory(UserExperimentDto.TypeAdapterFactory)
         .registerTypeAdapter(ActivityPlatform::class.java, ActivityPlatformTypeAdapter())
         .registerTypeAdapter(ActivityType::class.java, ActivityTypeTypeAdapter())
+        .registerTypeAdapter(RequiredAction::class.java, RequiredActionTypeAdapter())
         .registerTypeAdapter(PremiumTier::class.java, PremiumTierTypeAdapter())
         .registerTypeAdapter(NsfwAllowance::class.java, NsfwAllowanceTypeAdapter())
         .registerTypeAdapter(Phone::class.java, PhoneTypeAdapter())

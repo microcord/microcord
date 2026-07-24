@@ -465,15 +465,15 @@ deterministic in tests, and an opt-in test account can authenticate and receive
 
 ### Phase 5: Authentication and Navigation
 
-Status: **NOT STARTED**
+Status: **DONE**
 
-- [ ] Landing, login, registration, MFA, verification, and logout flows.
-- [ ] Authentication state persistence and invalidation.
-- [ ] Required-action and age-gate routing.
-- [ ] Main fragment host and tabs/home shell.
-- [ ] Deep-link parsing and route handling.
-- [ ] Share/app-action entry point.
-- [ ] Safe external URI handling.
+- [x] Landing, login, registration, MFA, verification, and logout flows.
+- [x] Authentication state persistence and invalidation.
+- [x] Required-action and age-gate routing.
+- [x] Main fragment host and tabs/home shell.
+- [x] Deep-link parsing and route handling.
+- [x] Share/app-action entry point.
+- [x] Safe external URI handling.
 
 Exit criteria: cold start routes correctly for logged-out, logged-in,
 required-action, deep-link, and share intents.
@@ -742,6 +742,7 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-07-24 | OpenCode | Closed Phase 3 with dispatcher-ordered local logout/reset across the implemented graph, preference domains, and Persister data | Build, deterministic restart/reset unit tests, lint, and 8 Android 13 connected tests pass | Begin Phase 4 common API models, REST transport, and Gateway protocol |
 | 2026-07-24 | OpenCode | Implemented fixture-first REST/Gateway transport plus persistent discovery and typed stage-event dispatch | `assembleDebug`, 69 unit tests, and lint pass; no live backend used | Reconstruct the complete READY model/store closure before routing remaining core events |
 | 2026-07-24 | OpenCode | Closed Phase 4 with complete READY DTOs/adapters, dependency-complete core stores, typed parser, and dispatcher-routed READY/incremental events | `assembleDebug`, 85 fixture/unit tests, lint, and 8 Android 13 connected tests pass; no live backend used | Begin Phase 5 authentication/session state and logged-out/logged-in routing |
+| 2026-07-24 | OpenCode | Completed Phase 5 authentication runtime/UI, required-action routing, safe intents/deep links/share actions, and the auth-gated main tabs/home host | Build, unit tests, lint, and 14 Android 13 connected route tests pass without live backend use | Begin Phase 6 guild/channel navigation and replace deferred home content with complete feature fragments |
 
 ## Agent Handoff Template
 

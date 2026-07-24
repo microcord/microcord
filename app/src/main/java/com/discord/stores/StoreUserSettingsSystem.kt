@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.content.res.Configuration
 import androidx.core.content.edit
 import com.discord.models.domain.ModelUserSettings
+import com.discord.models.domain.auth.ModelLoginResult
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.cache.SharedPreferencesProvider
 import rx.Observable
@@ -85,6 +86,20 @@ class StoreUserSettingsSystem(
     fun handleConnectionOpen(userSettings: ModelUserSettings) = handleUserSettings(userSettings)
     @StoreThread
     fun handleUserSettingsUpdate(userSettings: ModelUserSettings) = handleUserSettings(userSettings)
+    @StoreThread
+    internal fun handleLoginResult(loginResult: ModelLoginResult) {
+        StoreThreadScheduler.assertCurrentThread()
+        val bootstrap = loginResult.userSettings ?: return
+        var updated = settings
+        if (getIsThemeSyncEnabled()) bootstrap.theme?.let { updated = updated.copy(theme = it) }
+        if (getIsLocaleSyncEnabled()) bootstrap.locale?.let { updated = updated.copy(_locale = it) }
+        if (updated != settings) {
+            settings = updated
+            sessionDurablePreferences.edit { putString(KEY_THEME, updated.theme) }
+            preferences.edit { putString(KEY_LOCALE, updated._locale) }
+            markChanged()
+        }
+    }
 
     @StoreThread
     fun handlePreLogout() {

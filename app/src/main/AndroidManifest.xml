@@ -28,6 +28,84 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="https" />
+                <data android:host="discord.com" />
+                <data android:host="www.discord.com" />
+                <data android:host="ptb.discord.com" />
+                <data android:host="canary.discord.com" />
+                <data android:host="discordapp.com" />
+                <data android:host="www.discordapp.com" />
+                <data android:host="ptb.discordapp.com" />
+                <data android:host="canary.discordapp.com" />
+                <data android:pathPrefix="/app" />
+                <data android:pathPrefix="/invite/" />
+                <data android:pathPrefix="/gifts/" />
+                <data android:pathPrefix="/template/" />
+                <data android:pathPrefix="/channels/" />
+                <data android:pathPrefix="/users/" />
+                <data android:pathPrefix="/settings" />
+                <data android:pathPrefix="/feature/" />
+                <data android:pathPrefix="/discovery" />
+                <data android:pathPrefix="/query/" />
+                <data android:pathPrefix="/ra/" />
+                <data android:pathPrefix="/events/" />
+                <data android:pathPrefix="/connect/authorize" />
+            </intent-filter>
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="https" />
+                <data android:host="discord.gg" />
+                <data android:host="discord.gift" />
+                <data android:host="discord.new" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="discord" />
+                <data android:scheme="manticord" />
+                <data android:host="app" />
+                <data android:host="action" />
+                <data android:pathPrefix="/" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name="com.discord.app.AppActionActivity"
+            android:exported="true"
+            android:launchMode="standard"
+            android:theme="@style/AppTheme.Loading">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.OPENABLE" />
+
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.discord.intent.action.SDK" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.OPENABLE" />
+
+                <data android:scheme="discord" />
+                <data android:scheme="manticord" />
+                <data android:host="sdk" />
+                <data android:pathPrefix="/" />
+            </intent-filter>
         </activity>
     </application>
 

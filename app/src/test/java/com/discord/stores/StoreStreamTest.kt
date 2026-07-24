@@ -6,11 +6,16 @@ import com.discord.api.stageinstance.StageInstancePrivacyLevel
 import com.discord.models.domain.ModelCustomStatusSetting
 import com.discord.models.domain.ModelUserSettings
 import com.discord.gateway.io.IncomingParser
+import com.discord.gateway.GatewayEventRouter
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
 import com.discord.utilities.persister.Persister
+import com.discord.restapi.RestAPIBuilder
+import okhttp3.CookieJar
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
 import java.lang.reflect.Proxy
 import java.nio.file.Files
 import java.util.concurrent.Executor
@@ -159,7 +164,51 @@ class StoreStreamTest {
         assertSame(StoreStream.getUserGuildSettings(), StoreStream.getUserGuildSettings())
         assertSame(StoreStream.getReadStates(), StoreStream.getReadStates())
         assertSame(StoreStream.getStageInstances(), StoreStream.getStageInstances())
+        assertSame(StoreStream.getNavigation(), StoreStream.getNavigation())
+        assertSame(StoreStream.getTabsNavigation(), StoreStream.getTabsNavigation())
         assertEquals(true, stream.observeInitialized().toBlocking().first())
+    }
+
+    @Test
+    fun mainRoutePriorityIsDeterministic() {
+        val navigation = StoreStream.getNavigation()
+
+        navigation.updateAuthState(AuthNavigationState(false, false))
+        assertEquals(MainRoute.Loading, navigation.getMainRoute())
+        navigation.updateAuthState(AuthNavigationState(true, false))
+        assertEquals(MainRoute.LoggedOut, navigation.getMainRoute())
+        navigation.updateAuthState(
+            AuthNavigationState(true, true, true, RequiredAction.REQUIRE_VERIFIED_EMAIL, StoreNavigation.AgeGate.REGISTER_AGE_GATE),
+        )
+        assertEquals(MainRoute.Required(RequiredAction.REQUIRE_VERIFIED_EMAIL), navigation.getMainRoute())
+        navigation.updateAuthState(AuthNavigationState(true, true, true, ageGate = StoreNavigation.AgeGate.NSFW_CHANNEL_AGE_GATE))
+        assertEquals(MainRoute.AgeGated(StoreNavigation.AgeGate.NSFW_CHANNEL_AGE_GATE), navigation.getMainRoute())
+        navigation.updateAuthState(AuthNavigationState(true, true, true))
+        assertEquals(MainRoute.LoggedIn, navigation.getMainRoute())
+    }
+
+    @Test
+    fun tabsPublishStableSelectionAndHomePanelAction() {
+        val tabs = StoreStream.getTabsNavigation()
+        val selected = mutableListOf<com.discord.widgets.tabs.NavigationTab>()
+        val actions = mutableListOf<StoreNavigation.PanelAction>()
+        val selectedSubscription = tabs.observeSelectedTab().subscribe(selected::add)
+        val actionSubscription = StoreStream.getNavigation().getNavigationPanelAction().subscribe(actions::add)
+
+        tabs.selectTab(com.discord.widgets.tabs.NavigationTab.MENTIONS, true)
+        tabs.selectHomeTab(StoreNavigation.PanelAction.OPEN, true)
+
+        assertEquals(
+            listOf(
+                com.discord.widgets.tabs.NavigationTab.HOME,
+                com.discord.widgets.tabs.NavigationTab.MENTIONS,
+                com.discord.widgets.tabs.NavigationTab.HOME,
+            ),
+            selected,
+        )
+        assertEquals(StoreNavigation.PanelAction.OPEN, actions.last())
+        selectedSubscription.unsubscribe()
+        actionSubscription.unsubscribe()
     }
 
     @Test
@@ -213,6 +262,28 @@ class StoreStreamTest {
         assertEquals(emptyMap<Long, StageInstance>(), stages.getStageInstances())
         assertEquals(2, snapshots.size)
         stream.observationDeck.disconnect(observer)
+    }
+
+    @Test
+    fun gatewayAuthenticationFailureUsesLogoutAndInvalidatesSession() {
+        val server = MockWebServer()
+        try {
+            server.enqueue(MockResponse().setResponseCode(204))
+            server.enqueue(MockResponse().setBody("{\"fingerprint\":\"replacement\"}"))
+            StoreStream.getAuthentication().apply {
+                bindApi(RestAPIBuilder(server.url("/api/").toString(), CookieJar.NO_COOKIES).build(com.discord.restapi.RestAPIInterface::class.java))
+                setFingerprint(null, true)
+                setAuthed("gateway-secret")
+            }
+
+            GatewayEventRouter(stream).handleDisconnect(authenticationFailed = true)
+
+            assertNull(StoreStream.getAuthentication().getAuthState())
+            assertEquals("/api/v9/auth/logout", server.takeRequest().path)
+            assertEquals("/api/v9/auth/fingerprint", server.takeRequest().path)
+        } finally {
+            server.shutdown()
+        }
     }
 
     companion object {
