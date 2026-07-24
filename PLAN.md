@@ -370,17 +370,17 @@ activity creation, and inflation of `activity_app.xml`.
 
 ### Phase 1: Resource Foundation
 
-Status: **IN PROGRESS**
+Status: **DONE**
 
 - [x] Import all assets.
 - [x] Import values and resource qualifiers.
 - [x] Import XML configuration and raw resources.
 - [x] Import drawables, mipmaps, fonts, and animations.
 - [x] Import all layout directories.
-- [ ] Install resource-owning public dependencies as needed.
-- [ ] Resolve AAPT errors without deleting recovered layouts.
-- [ ] Regenerate view bindings successfully.
-- [ ] Establish dark/light themes and launch/loading layouts.
+- [x] Install resource-owning public dependencies as needed.
+- [x] Resolve AAPT errors without deleting recovered layouts.
+- [x] Regenerate view bindings successfully.
+- [x] Establish dark/light themes and launch/loading layouts.
 
 Exit criteria: all recovered assets and layouts exist in the target project,
 AAPT succeeds, and the launch/loading shell renders without Compose.
@@ -391,17 +391,13 @@ model files. All recovered value qualifiers, XML/raw resources, visual
 resources, and 1,228 layout variants were imported. `public.xml` and nine
 official service resources were excluded; decoded apostrophe, attr-enum,
 ConstraintLayout-parent, float-resource, and namespace damage was repaired.
-Direct AAPT compilation and Gradle resource merging/linking pass. Installed
-dependencies represent removed merged-library layout copies. View Binding now
-identifies 134 missing first-party custom view classes (1,085 layout
-occurrences); these must be reconstructed with behavior before Phase 1 can be
-completed, so `assembleDebug` currently stops at generated binding compilation.
-
-Current frontier: foundational and container primitives are implemented. The
-remaining surface contains 24 model-independent views, 59 views requiring
-complete first-party models, and 3 native-dependent views. Phase 1 remains
-incomplete until these classes and their generated bindings compile without
-placeholders.
+Direct AAPT compilation, Gradle resource linking, all generated View Bindings,
+and the reconstructed first-party custom-view surface compile. Modern-AAPT
+repairs preserve ConstraintLayout parent sentinels and decoded vector-gradient
+coordinates without deleting layouts. `assembleDebug`, 39 unit tests, and lint
+with a frozen recovered-resource baseline pass. Six connected tests pass on
+Android 13, covering application/XML launch, foundational view inflation,
+directory rendering, scrolling behavior, home panels, and tabs.
 
 Native dependency note: symbol inspection proves recovered `libdsti.so`, not
 `libdiscord.so`, exports the six `RLottieDrawable.Companion` JNI functions.
@@ -697,6 +693,9 @@ or observable behavior. Small implementation details do not belong here.
 | 2026-07-23 | Allow scoped JitPack access for recovered uCrop and FlexInput artifacts | Reference-compatible versions are unavailable from Google and Maven Central | Repository content filtering permits only `com.github.yalantis` and `com.github.lytefast` |
 | 2026-07-23 | Install upstream SimpleAST 2.8.0 with the reference 2.6.0 rule surface | Recovered behavior uniquely matches 2.6.0, but JitPack no longer serves that artifact; 2.8.0 is the available API-compatible upstream AAR | Public source is not reconstructed; Discord rules must omit post-2.6 diff behavior |
 | 2026-07-23 | Use JADX MCP for decompiled reference inspection | The connected JADX server provides direct class, method, field, and cross-reference evidence | Exported Java/DEX file inspection is fallback-only when MCP lacks a body |
+| 2026-07-24 | Use public WebRTC `104.5112.10`, APNG `1.11.0`, and scoped RealtimeBlurView commit `82df3520b4` for recovered view contracts | These are the available public artifacts matching the reconstructed Java APIs closely enough for Phase 1 | Exact `libdiscord.so` compatibility remains a Phase 2 runtime requirement |
+| 2026-07-24 | Adapt the unpublished Fresco sample `ZoomableDraweeView` package to public PhotoDraweeView `2.1.0` | No published artifact provides `com.facebook.samples.zoomable.ZoomableDraweeView`, and copying public sample source is prohibited | The exact XML class name retains real zoom behavior through a thin adapter |
+| 2026-07-24 | Baseline the imported recovered-resource lint corpus | The immutable corpus carries 16,733 inherited errors and 28,734 warnings from merged libraries, translations, and decoded resources after reconstructed Kotlin issues were fixed | `lintDebug` fails on every new issue while preserving the recovered corpus unchanged |
 
 ## Progress Journal
 
@@ -719,6 +718,7 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-07-23 | OpenCode | Parallel agents reconstructed Chips/Feedback, member and summary models/views, directory item, mobile-report controls, role preview, highlights settings, and supporting tests; rejected a partial AppFragment shortcut | `compileDebugKotlin` passes; Java binding compile remains capped at 100 unresolved composite types | Parallelize scheduled-event, voice/video, auth/phone, forum, billing, and sticker infrastructure clusters |
 | 2026-07-24 | OpenCode | Reconstructed guild-boost progress, account-credit/payment-source models and views, and auth phone-or-email/invite views from direct JADX evidence | `compileDebugKotlin` passes; their generated binding errors are cleared, while Java remains capped at 100 later composite errors | Continue independent forum/events, notification, overlay/thread, and voice leaf clusters before StickerView infrastructure |
 | 2026-07-24 | OpenCode | Parallelized the remaining binding frontier across forums, events, stickers, voice/video, overlays, threads, notifications, bot UI kit, profiles, guild-role subscriptions, home/tabs, roles, stage, premium, and XML behaviors | Checkpoint is intentionally incomplete: `compileDebugKotlin` now fails in `InlineMediaView` due ExoPlayer API mismatch and in anchored/call voice controls due missing RTC/audio/streaming/embedded-activity/video-device contracts | Reconcile exact ExoPlayer 2.16 API and reconstruct the shared voice contracts before resuming Java binding verification |
+| 2026-07-24 | OpenCode | Completed Phase 1 by restoring shared voice contracts, public media dependencies, all View Bindings, decoded ConstraintLayout/vector resources, lint compatibility, and connected view tests | `assembleDebug`, 39 unit tests, `lintDebug` with zero new issues, and 6 Android 13 connected tests pass | Begin Phase 2 native media spike with exact WebRTC/JNI creation and disposal tests |
 
 ## Agent Handoff Template
 

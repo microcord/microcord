@@ -40,7 +40,7 @@ object DownloadUtils {
             if (connection.responseCode !in 200..299) {
                 throw java.io.IOException("HTTP ${connection.responseCode}")
             }
-            val total = connection.contentLengthLong
+            val total = connection.getHeaderField("Content-Length")?.toLongOrNull() ?: -1L
             connection.inputStream.buffered().use { input ->
                 partial.outputStream().buffered().use { output ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)

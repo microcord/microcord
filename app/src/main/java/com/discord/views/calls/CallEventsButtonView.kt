@@ -14,6 +14,7 @@ import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.widget.ImageViewCompat
+import androidx.core.widget.TextViewCompat
 import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.api.guildscheduledevent.GuildScheduledEvent
@@ -86,7 +87,7 @@ class CallEventsButtonView @JvmOverloads constructor(
             requireArguments().getStringArrayList(ARG_TITLES).orEmpty().forEach { title ->
                 container.addView(TextView(requireContext()).apply {
                     text = title
-                    setTextAppearance(R.style.UiKit_TextView_Semibold)
+                    TextViewCompat.setTextAppearance(this, R.style.UiKit_TextView_Semibold)
                     setPadding(0, padding / 2, 0, padding / 2)
                     layoutParams = LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,

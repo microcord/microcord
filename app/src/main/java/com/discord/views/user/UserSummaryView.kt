@@ -20,16 +20,17 @@ class UserSummaryView constructor(
     private var maxAvatars = 3
 
     init {
-        val attributes = intArrayOf(
-            R.attr.summary_avatarOverlap,
-            R.attr.summary_avatarSize,
-            R.attr.summary_maxAvatars,
-        )
-        context.obtainStyledAttributes(attrs, attributes).run {
+        context.obtainStyledAttributes(attrs, R.styleable.UserSummaryView).run {
             try {
-                overlapAmountPx = getDimensionPixelSize(0, overlapAmountPx)
-                avatarSizePx = getDimensionPixelSize(1, avatarSizePx)
-                maxAvatars = getInt(2, maxAvatars)
+                overlapAmountPx = getDimensionPixelSize(
+                    R.styleable.UserSummaryView_summary_avatarOverlap,
+                    overlapAmountPx,
+                )
+                avatarSizePx = getDimensionPixelSize(
+                    R.styleable.UserSummaryView_summary_avatarSize,
+                    avatarSizePx,
+                )
+                maxAvatars = getInt(R.styleable.UserSummaryView_summary_maxAvatars, maxAvatars)
             } finally {
                 recycle()
             }

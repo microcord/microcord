@@ -14,6 +14,7 @@ constraintlayout = "2.0.4"
 exoplayer = "2.16.0"
 flexbox = "3.0.0"
 fresco = "2.6.0"
+photoDraweeView = "2.1.0"
 lottie = "3.4.0"
 apng = "1.11.0"
 preference = "1.1.1"
@@ -48,10 +49,12 @@ androidx-preference-ktx = { group = "androidx.preference", name = "preference-kt
 androidx-recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "recyclerview" }
 androidx-swiperefreshlayout = { group = "androidx.swiperefreshlayout", name = "swiperefreshlayout", version.ref = "swiperefreshlayout" }
 androidx-viewpager2 = { group = "androidx.viewpager2", name = "viewpager2", version.ref = "viewpager2" }
+exoplayer-core = { group = "com.google.android.exoplayer", name = "exoplayer-core", version.ref = "exoplayer" }
 exoplayer-ui = { group = "com.google.android.exoplayer", name = "exoplayer-ui", version.ref = "exoplayer" }
 flexbox = { group = "com.google.android.flexbox", name = "flexbox", version.ref = "flexbox" }
 fresco = { group = "com.facebook.fresco", name = "fresco", version.ref = "fresco" }
 fresco-drawee-span = { group = "com.facebook.fresco", name = "drawee-span", version.ref = "fresco" }
+photo-drawee-view = { group = "me.relex", name = "photodraweeview", version.ref = "photoDraweeView" }
 lottie = { group = "com.airbnb.android", name = "lottie", version.ref = "lottie" }
 apng = { group = "com.linecorp", name = "apng", version.ref = "apng" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }

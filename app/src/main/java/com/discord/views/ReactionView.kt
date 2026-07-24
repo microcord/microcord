@@ -40,10 +40,10 @@ class ReactionView @JvmOverloads constructor(
         counterText2 = requireNotNull(findViewById(R.id.counter_text_2))
         counter = requireNotNull(findViewById(R.id.counter_text_switcher))
         emojiText = requireNotNull(findViewById(R.id.emoji_text_view))
-        context.obtainStyledAttributes(attrs, intArrayOf(R.attr.rv_textColor, R.attr.rv_meTextColor)).run {
+        context.obtainStyledAttributes(attrs, R.styleable.ReactionView).run {
             try {
-                textColor = getColorStateList(0)
-                meTextColor = getColorStateList(1)
+                textColor = getColorStateList(R.styleable.ReactionView_rv_textColor)
+                meTextColor = getColorStateList(R.styleable.ReactionView_rv_meTextColor)
             } finally {
                 recycle()
             }

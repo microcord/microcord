@@ -9,7 +9,7 @@ class GuildRoleSubscriptionViewContractsTest {
     @Test
     fun usesReferenceAssetUrlAndTermsLinkContracts() {
         assertEquals(
-            "https://cdn.discordapp.com/app-assets/12/store/34.jpg?size=128",
+            "https://cdn.discordapp.com/app-assets/12/store/34.jpg?size=100",
             GuildSubscriptionRoleImageUploadView.storeAssetImage(12, 34, 100),
         )
         assertNull(GuildSubscriptionRoleImageUploadView.storeAssetImage(null, 34, 100))

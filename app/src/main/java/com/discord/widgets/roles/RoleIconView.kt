@@ -7,6 +7,7 @@ import android.view.View
 import android.widget.FrameLayout
 import com.discord.R
 import com.discord.api.role.GuildRole
+import com.discord.models.domain.emoji.toCodePoints
 import com.facebook.drawee.view.SimpleDraweeView
 
 class RoleIconView(
@@ -38,9 +39,7 @@ class RoleIconView(
     }
 
     private fun emojiResourceUri(emoji: String): String? {
-        val codePoints = emoji.codePoints()
-            .toArray()
-            .joinToString("_") { it.toString(16) }
+        val codePoints = emoji.toCodePoints()
         val resource = resources.getIdentifier("emoji_$codePoints", "raw", context.packageName)
         return resource.takeIf { it != 0 }?.let { "res:///$it" }
     }

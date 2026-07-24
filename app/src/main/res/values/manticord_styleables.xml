@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="CommunityGetStartedInformationView">
+        <attr name="csi_description_text" />
+        <attr name="csi_icon" />
+        <attr name="csi_title_text" />
+    </declare-styleable>
+    <declare-styleable name="PhoneOrEmailInputView">
+        <attr name="force_mode" />
+        <attr name="hint" />
+        <attr name="nextFocusForward" />
+    </declare-styleable>
+    <declare-styleable name="ReactionView">
+        <attr name="rv_textColor" />
+        <attr name="rv_meTextColor" />
+    </declare-styleable>
+    <declare-styleable name="UserAvatarPresenceView">
+        <attr name="user_avatar_background_color" />
+        <attr name="user_avatar_cutout_space" />
+    </declare-styleable>
+    <declare-styleable name="UserSummaryView">
+        <attr name="summary_avatarOverlap" />
+        <attr name="summary_avatarSize" />
+        <attr name="summary_maxAvatars" />
+    </declare-styleable>
+    <declare-styleable name="VoiceUserView">
+        <attr name="vuv_animate_avatar_when_ringing" />
+        <attr name="vuv_avatar_size" />
+        <attr name="vuv_fade_when_disconnected" />
+    </declare-styleable>
+</resources>

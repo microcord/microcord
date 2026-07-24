@@ -1,5 +1,6 @@
 package com.discord
 
+import android.view.ContextThemeWrapper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.discord.utilities.view.recycler.MaxHeightRecyclerView
@@ -17,7 +18,7 @@ class FoundationalViewsSmokeTest {
     fun foundationalViewsConstructAndAnimate() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         instrumentation.runOnMainSync {
-            val context = instrumentation.targetContext
+            val context = ContextThemeWrapper(instrumentation.targetContext, R.style.AppTheme_Dark)
             assertEquals(0, MaxHeightRecyclerView(context).maxHeight)
             RoundedRelativeLayout(context)
             RoundedCoordinatorLayout(context)

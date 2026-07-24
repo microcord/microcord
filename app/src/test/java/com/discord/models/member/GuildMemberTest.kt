@@ -20,7 +20,7 @@ class GuildMemberTest {
         assertFalse(empty.hasAvatar())
         assertFalse(empty.hasBanner())
         assertFalse(empty.isCommunicationDisabled())
-        assertEquals(7, GuildMember.getColor(empty, 7))
+        assertEquals(0, GuildMember.getColor(empty, 7))
 
         val member = GuildMember(
             Color.RED,

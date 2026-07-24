@@ -30,14 +30,23 @@ class CommunityGetStartedInformationView @JvmOverloads constructor(
         if (attrs != null) {
             context.obtainStyledAttributes(
                 attrs,
-                intArrayOf(R.attr.csi_description_text, R.attr.csi_icon, R.attr.csi_title_text),
+                R.styleable.CommunityGetStartedInformationView,
                 0,
                 0,
             ).run {
                 try {
-                    icon.setImageDrawable(AppCompatResources.getDrawable(context, getResourceId(1, 0)))
-                    title.text = getText(2)
-                    description.text = renderDescription(requireNotNull(getText(0)))
+                    icon.setImageDrawable(
+                        AppCompatResources.getDrawable(
+                            context,
+                            getResourceId(R.styleable.CommunityGetStartedInformationView_csi_icon, 0),
+                        ),
+                    )
+                    title.text = getText(R.styleable.CommunityGetStartedInformationView_csi_title_text)
+                    description.text = renderDescription(
+                        requireNotNull(
+                            getText(R.styleable.CommunityGetStartedInformationView_csi_description_text),
+                        ),
+                    )
                 } finally {
                     recycle()
                 }

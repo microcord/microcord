@@ -1,7 +1,8 @@
 package com.discord.app
 
-import android.util.AttributeSet
-import android.util.Xml
+import android.content.Context
+import android.content.res.XmlResourceParser
+import android.view.ContextThemeWrapper
 import android.view.View
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.graphics.Insets
@@ -9,7 +10,6 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.android.material.appbar.AppBarLayout
-import java.io.StringReader
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -23,13 +23,14 @@ class AppScrollingBehaviorTest {
     fun preservesScrollingBehaviorAndReferenceInsetsHandling() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         instrumentation.runOnMainSync {
-            val context = instrumentation.targetContext
+            val context = ContextThemeWrapper(instrumentation.targetContext, com.discord.R.style.AppTheme_Dark)
             val parent = CoordinatorLayout(context)
             val child = View(context)
             val appBar = AppBarLayout(context)
-            val attrs = emptyAttributeSet()
+            val attrs = emptyAttributeSet(context)
             val scrolling = AppScrollingViewBehavior(context, attrs)
             val nested = AppScrollingNestedViewBehavior(context, attrs)
+            attrs.close()
 
             assertTrue(scrolling.layoutDependsOn(parent, child, appBar))
             assertTrue(nested.layoutDependsOn(parent, child, appBar))
@@ -48,11 +49,10 @@ class AppScrollingBehaviorTest {
         }
     }
 
-    private fun emptyAttributeSet(): AttributeSet {
-        val parser = Xml.newPullParser()
-        parser.setInput(StringReader("<view />"))
+    private fun emptyAttributeSet(context: Context): XmlResourceParser {
+        val parser = context.resources.getLayout(android.R.layout.simple_list_item_1)
         while (parser.next() != XmlPullParser.START_TAG) Unit
-        return Xml.asAttributeSet(parser)
+        return parser
     }
 
     private fun insets(left: Int, top: Int, right: Int, bottom: Int) =

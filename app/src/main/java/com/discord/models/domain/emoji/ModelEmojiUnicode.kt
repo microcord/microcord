@@ -84,7 +84,7 @@ class ModelEmojiUnicode(
     }
 }
 
-internal fun String.toCodePoints(): String {
+internal fun String.toCodePoints(separator: String = "_"): String {
     val values = ArrayList<String>()
     var index = 0
     while (index < length) {
@@ -92,5 +92,5 @@ internal fun String.toCodePoints(): String {
         values += Integer.toHexString(point)
         index += Character.charCount(point)
     }
-    return values.joinToString("_")
+    return values.joinToString(separator)
 }

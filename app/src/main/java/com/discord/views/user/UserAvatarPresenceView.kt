@@ -47,11 +47,18 @@ class UserAvatarPresenceView @JvmOverloads constructor(
         avatarCutout = requireNotNull(findViewById(R.id.avatar_cutout))
         staticAvatar = requireNotNull(findViewById(R.id.static_avatar))
         status = requireNotNull(findViewById(R.id.user_avatar_presence_status))
-        val attributes = intArrayOf(R.attr.user_avatar_background_color, R.attr.user_avatar_cutout_space)
-        context.obtainStyledAttributes(attrs, attributes).run {
+        context.obtainStyledAttributes(attrs, R.styleable.UserAvatarPresenceView).run {
             try {
-                setAvatarBackgroundColor(getColor(0, themedColor(R.attr.colorBackgroundTertiary)))
-                cutoutSpacePx = getDimensionPixelSize(1, 0)
+                setAvatarBackgroundColor(
+                    getColor(
+                        R.styleable.UserAvatarPresenceView_user_avatar_background_color,
+                        themedColor(R.attr.colorBackgroundTertiary),
+                    ),
+                )
+                cutoutSpacePx = getDimensionPixelSize(
+                    R.styleable.UserAvatarPresenceView_user_avatar_cutout_space,
+                    0,
+                )
             } finally {
                 recycle()
             }

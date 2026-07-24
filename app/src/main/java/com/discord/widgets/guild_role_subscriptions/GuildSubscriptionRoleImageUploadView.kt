@@ -9,6 +9,7 @@ import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import com.discord.R
 import com.discord.api.role.GuildRole
+import com.discord.models.domain.emoji.toCodePoints
 import com.facebook.drawee.drawable.ScalingUtils
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.button.MaterialButton
@@ -100,7 +101,7 @@ class GuildSubscriptionRoleImageUploadView @JvmOverloads constructor(
     }
 
     private fun unicodeEmojiUri(value: String): String? {
-        val codePoints = value.codePoints().toArray().joinToString("_") { it.toString(16) }
+        val codePoints = value.toCodePoints()
         val resource = resources.getIdentifier("emoji_$codePoints", "raw", context.packageName)
         return resource.takeIf { it != 0 }?.let { "res:///$it" }
     }

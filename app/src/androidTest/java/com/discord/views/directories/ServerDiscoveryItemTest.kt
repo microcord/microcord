@@ -1,10 +1,12 @@
 package com.discord.views.directories
 
+import android.view.ContextThemeWrapper
 import android.view.View
 import android.widget.TextView
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.discord.R
+import com.facebook.drawee.backends.pipeline.Fresco
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -16,7 +18,9 @@ class ServerDiscoveryItemTest {
     fun bindsDirectStateAndActions() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         instrumentation.runOnMainSync {
-            val view = ServerDiscoveryItem(instrumentation.targetContext, null)
+            Fresco.initialize(instrumentation.targetContext)
+            val context = ContextThemeWrapper(instrumentation.targetContext, R.style.AppTheme_Dark)
+            val view = ServerDiscoveryItem(context, null)
             val description = view.findViewById<TextView>(R.id.server_discovery_item_description)
             val image = view.findViewById<View>(R.id.server_discovery_item_image)
             val join = view.findViewById<View>(R.id.server_discovery_item_button)
@@ -28,7 +32,7 @@ class ServerDiscoveryItemTest {
             assertEquals(View.VISIBLE, description.visibility)
             view.setMembers(12)
             view.setOnline(3)
-            assertEquals(View.NO, image.importantForAccessibility)
+            assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_NO, image.importantForAccessibility)
 
             var clicked = false
             view.setJoinButtonOnClickListener { clicked = true }

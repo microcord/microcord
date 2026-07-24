@@ -45,18 +45,19 @@ class PhoneOrEmailInputView @JvmOverloads constructor(
 
         context.obtainStyledAttributes(
             attrs,
-            intArrayOf(R.attr.force_mode, R.attr.hint, R.attr.nextFocusForward),
+            R.styleable.PhoneOrEmailInputView,
             defStyleAttr,
             0,
         ).run {
             try {
-                setHint(getText(1))
-                mode = when (getString(0)?.lowercase()) {
+                setHint(getText(R.styleable.PhoneOrEmailInputView_hint))
+                mode = when (getString(R.styleable.PhoneOrEmailInputView_force_mode)?.lowercase()) {
                     "email", "1" -> Mode.EMAIL
                     "phone", "2" -> Mode.PHONE
                     else -> Mode.ADAPTIVE
                 }
-                getResourceId(2, View.NO_ID).takeIf { it != View.NO_ID }?.let {
+                getResourceId(R.styleable.PhoneOrEmailInputView_nextFocusForward, View.NO_ID)
+                    .takeIf { it != View.NO_ID }?.let {
                     mainInputLayout.nextFocusForwardId = it
                     mainEditText.nextFocusForwardId = it
                 }

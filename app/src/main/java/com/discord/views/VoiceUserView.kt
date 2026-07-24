@@ -55,17 +55,19 @@ class VoiceUserView @JvmOverloads constructor(
         nameDisplay = requireNotNull(findViewById(R.id.voice_user_name_display))
         context.obtainStyledAttributes(
             attrs,
-            intArrayOf(
-                R.attr.vuv_animate_avatar_when_ringing,
-                R.attr.vuv_avatar_size,
-                R.attr.vuv_fade_when_disconnected,
-            ),
+            R.styleable.VoiceUserView,
         ).run {
             try {
-                val size = getDimensionPixelSize(1, 0)
+                val size = getDimensionPixelSize(R.styleable.VoiceUserView_vuv_avatar_size, 0)
                 if (size > 0) setAvatarSize(size)
-                fadeWhenDisconnected = getBoolean(2, false)
-                animateAvatarWhenRinging = getBoolean(0, false)
+                fadeWhenDisconnected = getBoolean(
+                    R.styleable.VoiceUserView_vuv_fade_when_disconnected,
+                    false,
+                )
+                animateAvatarWhenRinging = getBoolean(
+                    R.styleable.VoiceUserView_vuv_animate_avatar_when_ringing,
+                    false,
+                )
             } finally {
                 recycle()
             }

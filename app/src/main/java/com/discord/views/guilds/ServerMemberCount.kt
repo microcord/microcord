@@ -34,7 +34,10 @@ class ServerMemberCount(context: Context, attrs: AttributeSet?) : FrameLayout(co
 
     fun setOnline(active: Int?) {
         onlineDot.visibility = if (active == null) View.GONE else View.VISIBLE
-        onlineText.text = active?.let { context.getString(R.string.instant_invite_guild_members_online, it) }
+        onlineText.text = active?.let {
+            context.getString(R.string.instant_invite_guild_members_online)
+                .replace("{membersOnline}", it.toString())
+        }
         onlineText.visibility = if (active == null) View.GONE else View.VISIBLE
     }
 

@@ -6,6 +6,7 @@ import com.discord.api.botuikit.ComponentEmoji
 import com.discord.api.botuikit.ComponentType
 import com.discord.api.botuikit.SelectItem
 import com.discord.models.botuikit.MessageComponent
+import com.discord.models.domain.emoji.toCodePoints
 import com.discord.widgets.botuikit.ComponentProvider
 import com.facebook.drawee.view.SimpleDraweeView
 
@@ -54,6 +55,6 @@ internal fun emojiUri(emoji: ComponentEmoji, animationsEnabled: Boolean): Uri {
         val extension = if (animationsEnabled && emoji.animated == true) "gif" else "png"
         return Uri.parse("https://cdn.discordapp.com/emojis/$id.$extension?size=64")
     }
-    val codePoints = emoji.name.codePoints().toArray().joinToString("-") { it.toString(16) }
+    val codePoints = emoji.name.toCodePoints("-")
     return Uri.parse("https://twemoji.maxcdn.com/v/latest/72x72/$codePoints.png")
 }

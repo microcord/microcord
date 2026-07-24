@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.ColorFilter
+import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.drawable.Animatable
@@ -86,7 +87,7 @@ class RLottieDrawable : BitmapDrawable, Animatable {
         widthPx = width
         heightPx = height
         displayRefreshRate = refreshRate
-        paint.flags = 6
+        paint.flags = Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG
     }
 
     fun setPlaybackMode(mode: PlaybackMode) {

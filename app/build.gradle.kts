@@ -37,6 +37,9 @@ android {
         buildConfig = true
         viewBinding = true
     }
+    lint {
+        baseline = file("lint-baseline.xml")
+    }
 }
 
 dependencies {
@@ -53,6 +56,7 @@ dependencies {
     implementation(libs.androidx.recyclerview)
     implementation(libs.androidx.swiperefreshlayout)
     implementation(libs.androidx.viewpager2)
+    implementation(libs.exoplayer.core)
     implementation(libs.exoplayer.ui)
     implementation(libs.cameraview)
     implementation(libs.colorpicker)
@@ -63,6 +67,7 @@ dependencies {
     }
     implementation(libs.fresco)
     implementation(libs.fresco.drawee.span)
+    implementation(libs.photo.drawee.view)
     implementation(libs.gson)
     implementation(libs.lottie)
     implementation(libs.material)
