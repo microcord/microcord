@@ -306,14 +306,14 @@ The recovered binaries are located under reference `app/src/main/lib` for:
 
 ### Native Spike Exit Criteria
 
-- [ ] `libdiscord.so` is packaged for all four supported ABIs.
+- [x] `libdiscord.so` is packaged for all four supported ABIs.
 - [ ] A device/emulator loads the library without `UnsatisfiedLinkError`.
-- [ ] The exact required JNI bridge class is resolved.
+- [x] The exact required JNI bridge class is resolved.
 - [ ] Required WebRTC classes and method descriptors match the binary.
 - [ ] Shared EGL context initializes.
 - [ ] Audio input/output enumeration returns or fails safely.
 - [ ] Native instance disposal is repeatable without crash.
-- [ ] Required companion binaries are identified from runtime/linker evidence.
+- [x] Required companion binaries are identified from runtime/linker evidence.
 - [ ] Krisp model assets and `krisp_model_version` resolve if noise processing
   is enabled.
 
@@ -407,17 +407,25 @@ yet runtime-verified.
 
 ### Phase 2: Native Media Spike
 
-Status: **NOT STARTED**
+Status: **IN PROGRESS**
 
-- [ ] Copy `libdiscord.so` into ABI-specific `jniLibs` directories.
-- [ ] Recreate the minimal `com.hammerandchisel.libdiscord` bridge.
-- [ ] Recreate required `co.discord.media_engine` types.
+- [x] Copy `libdiscord.so` into ABI-specific `jniLibs` directories.
+- [x] Recreate the minimal `com.hammerandchisel.libdiscord` bridge.
+- [x] Recreate required `co.discord.media_engine` types.
 - [ ] Select and verify the compatible WebRTC dependency.
 - [ ] Complete every native spike exit criterion.
-- [ ] Add one instrumented native load/lifecycle test.
+- [x] Add one instrumented native load/lifecycle test.
 
 Exit criteria: the library loads and a native media-engine instance can be
 created, queried minimally, and disposed on at least ARM64 and one emulator ABI.
+
+Compatibility blocker: all four recovered `libdiscord.so` binaries require
+four WebRTC descriptors absent from every currently available public artifact.
+The closest M92 build still lacks Discord's ten-argument
+`RtpParameters.Encoding` constructor and `WebRtcAudioTrack(long, boolean)`.
+The original `org.webrtc:google-webrtc` Bintray/JCenter artifact is no longer
+available. Proceeding requires explicit approval to preserve the recovered
+compatible WebRTC Java bridge or to change the native media-engine parity goal.
 
 ### Phase 3: Core Runtime and Stores
 
@@ -719,6 +727,7 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-07-24 | OpenCode | Reconstructed guild-boost progress, account-credit/payment-source models and views, and auth phone-or-email/invite views from direct JADX evidence | `compileDebugKotlin` passes; their generated binding errors are cleared, while Java remains capped at 100 later composite errors | Continue independent forum/events, notification, overlay/thread, and voice leaf clusters before StickerView infrastructure |
 | 2026-07-24 | OpenCode | Parallelized the remaining binding frontier across forums, events, stickers, voice/video, overlays, threads, notifications, bot UI kit, profiles, guild-role subscriptions, home/tabs, roles, stage, premium, and XML behaviors | Checkpoint is intentionally incomplete: `compileDebugKotlin` now fails in `InlineMediaView` due ExoPlayer API mismatch and in anchored/call voice controls due missing RTC/audio/streaming/embedded-activity/video-device contracts | Reconcile exact ExoPlayer 2.16 API and reconstruct the shared voice contracts before resuming Java binding verification |
 | 2026-07-24 | OpenCode | Completed Phase 1 by restoring shared voice contracts, public media dependencies, all View Bindings, decoded ConstraintLayout/vector resources, lint compatibility, and connected view tests | `assembleDebug`, 39 unit tests, `lintDebug` with zero new issues, and 6 Android 13 connected tests pass | Begin Phase 2 native media spike with exact WebRTC/JNI creation and disposal tests |
+| 2026-07-24 | OpenCode | Packaged all four `libdiscord.so` binaries, reconstructed the exact Hammer-and-Chisel and media-engine JNI contract surfaces, and added a native lifecycle test | ELF hashes/architectures and 283 exported symbols verified; `assembleDebug` and 41 unit tests pass | Blocked: no available public WebRTC artifact matches four JNI-visible descriptors; request approval for recovered bridge preservation or parity change |
 
 ## Agent Handoff Template
 

@@ -2,7 +2,7 @@ package co.discord.media_engine
 
 import android.content.Context
 import android.util.AttributeSet
-import org.webrtc.EglBase
+import com.hammerandchisel.libdiscord.Discord
 import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoFrame
@@ -19,52 +19,86 @@ open class VideoStreamRenderer @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : SurfaceViewRenderer(context, attrs) {
-    private var engine: VideoOutputSink? = null
-    private var streamId = ""
+    private var streamIdentifier = ""
 
     fun attachToStream(
-        engine: VideoOutputSink?,
+        discord: Discord?,
         streamId: String?,
         events: RendererCommon.RendererEvents? = null,
     ) {
-        if (this.streamId.isNotEmpty()) {
+        if (discord == null) return
+        if (streamIdentifier.isNotEmpty()) {
             clearImage()
             release()
-            removeSink(this.engine, this.streamId)
+            removeSink(discord, streamIdentifier)
         }
-        this.engine = engine
-        this.streamId = streamId.orEmpty()
-        if (engine != null && this.streamId.isNotEmpty()) {
-            init(sharedEglBase.eglBaseContext, events)
-            addSink(engine, this.streamId)
+        streamIdentifier = streamId.orEmpty()
+        if (streamIdentifier.isNotEmpty()) {
+            init(SharedEglBaseContext.getEglContext(), events)
+            addSink(discord, streamIdentifier)
         }
     }
 
-    private fun addSink(engine: VideoOutputSink, streamId: String) = synchronized(streams) {
+    fun attachToStream(
+        sink: VideoOutputSink?,
+        streamId: String?,
+        events: RendererCommon.RendererEvents? = null,
+    ) = attach(sink?.let { it::setVideoOutputSink }, streamId, events)
+
+    private fun attach(
+        setSink: ((String, VideoFrameCallback?) -> Unit)?,
+        streamId: String?,
+        events: RendererCommon.RendererEvents?,
+    ) {
+        if (setSink == null) return
+        if (streamIdentifier.isNotEmpty()) {
+            clearImage()
+            release()
+            removeSink(setSink, streamIdentifier)
+        }
+        streamIdentifier = streamId.orEmpty()
+        if (streamIdentifier.isNotEmpty()) {
+            init(SharedEglBaseContext.getEglContext(), events)
+            addSink(setSink, streamIdentifier)
+        }
+    }
+
+    private fun addSink(discord: Discord, streamId: String) = synchronized(streams) {
+        addSink({ id, callback ->
+            discord.setVideoOutputSink(id, callback?.let { Discord.VideoFrameCallback(it::onFrame) })
+        }, streamId)
+    }
+
+    private fun addSink(setSink: (String, VideoFrameCallback?) -> Unit, streamId: String) = synchronized(streams) {
         val sinks = streams[streamId]
         if (sinks != null) {
             sinks += this
         } else {
             val newSinks = linkedSetOf(this)
             streams[streamId] = newSinks
-            engine.setVideoOutputSink(streamId) { frame ->
+            setSink(streamId) { frame ->
                 synchronized(newSinks) { newSinks.toList() }.forEach { it.onFrame(frame) }
                 true
             }
         }
     }
 
-    private fun removeSink(engine: VideoOutputSink?, streamId: String) = synchronized(streams) {
+    private fun removeSink(discord: Discord, streamId: String) = synchronized(streams) {
+        removeSink({ id, callback ->
+            discord.setVideoOutputSink(id, callback?.let { Discord.VideoFrameCallback(it::onFrame) })
+        }, streamId)
+    }
+
+    private fun removeSink(setSink: (String, VideoFrameCallback?) -> Unit, streamId: String) = synchronized(streams) {
         val sinks = streams[streamId] ?: return
         synchronized(sinks) { sinks -= this }
         if (sinks.isEmpty()) {
-            engine?.setVideoOutputSink(streamId, null)
+            setSink(streamId, null)
             streams -= streamId
         }
     }
 
     private companion object {
         val streams = linkedMapOf<String, MutableSet<VideoStreamRenderer>>()
-        val sharedEglBase: EglBase by lazy(LazyThreadSafetyMode.SYNCHRONIZED) { EglBase.create() }
     }
 }
