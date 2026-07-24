@@ -14,11 +14,13 @@ class DiscordNativeLifecycleTest {
     fun createQueryAndDispose() {
         repeat(2) {
             val discord = Discord(InstrumentationRegistry.getInstrumentation().targetContext)
-            val queried = CountDownLatch(1)
+            val queried = CountDownLatch(3)
 
             discord.getAudioSubsystem { _, _ -> queried.countDown() }
+            discord.getAudioInputDevices { queried.countDown() }
+            discord.getAudioOutputDevices { queried.countDown() }
 
-            assertTrue("Native audio-subsystem query timed out", queried.await(10, TimeUnit.SECONDS))
+            assertTrue("Native audio query timed out", queried.await(10, TimeUnit.SECONDS))
             discord.dispose()
         }
     }

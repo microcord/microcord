@@ -307,12 +307,12 @@ The recovered binaries are located under reference `app/src/main/lib` for:
 ### Native Spike Exit Criteria
 
 - [x] `libdiscord.so` is packaged for all four supported ABIs.
-- [ ] A device/emulator loads the library without `UnsatisfiedLinkError`.
+- [x] A device/emulator loads the library without `UnsatisfiedLinkError`.
 - [x] The exact required JNI bridge class is resolved.
 - [x] Required WebRTC classes and method descriptors match the binary.
-- [ ] Shared EGL context initializes.
-- [ ] Audio input/output enumeration returns or fails safely.
-- [ ] Native instance disposal is repeatable without crash.
+- [x] Shared EGL context initializes.
+- [x] Audio input/output enumeration returns or fails safely.
+- [x] Native instance disposal is repeatable without crash.
 - [x] Required companion binaries are identified from runtime/linker evidence.
 - [ ] Krisp model assets and `krisp_model_version` resolve if noise processing
   is enabled.
@@ -424,7 +424,10 @@ four WebRTC descriptors absent from every available public artifact. With user
 approval, the exact compiled WebRTC bridge was isolated from the reference DEX
 without decompiled source or first-party Discord classes. The reproducible
 artifact preserves 385 WebRTC classes, all 117 native roots, the four hard
-descriptors, and `EglHelper`; runtime creation/disposal evidence remains pending.
+descriptors, and `EglHelper`.
+Android 13 x86_64 now passes both native lifecycle tests twice, including EGL
+initialization, audio subsystem and input/output enumeration, and disposal.
+ARM64 runtime evidence is the only remaining Phase 2 exit requirement.
 
 ### Phase 3: Core Runtime and Stores
 
@@ -729,6 +732,7 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-07-24 | OpenCode | Completed Phase 1 by restoring shared voice contracts, public media dependencies, all View Bindings, decoded ConstraintLayout/vector resources, lint compatibility, and connected view tests | `assembleDebug`, 39 unit tests, `lintDebug` with zero new issues, and 6 Android 13 connected tests pass | Begin Phase 2 native media spike with exact WebRTC/JNI creation and disposal tests |
 | 2026-07-24 | OpenCode | Packaged all four `libdiscord.so` binaries, reconstructed the exact Hammer-and-Chisel and media-engine JNI contract surfaces, and added a native lifecycle test | ELF hashes/architectures and 283 exported symbols verified; `assembleDebug` and 41 unit tests pass | Blocked: no available public WebRTC artifact matches four JNI-visible descriptors; request approval for recovered bridge preservation or parity change |
 | 2026-07-24 | OpenCode | Isolated the approved compiled WebRTC bridge into a reproducible local artifact with no decompiled source or first-party classes | 385 classes, 117 native roots, four hard descriptors, `EglHelper`, duplicate-class check, build, and 41 unit tests pass | Run native create/query/dispose instrumentation when an ADB device is attached |
+| 2026-07-24 | OpenCode | Completed all JNI registration roots under Hammer-and-Chisel, media-engine, and native-engine packages and expanded audio lifecycle coverage | Android 13 x86_64 passes load, EGL creation, engine creation, audio subsystem/input/output queries, and repeated disposal | Run the same native lifecycle tests on an ARM64 device to close Phase 2 |
 
 ## Agent Handoff Template
 
