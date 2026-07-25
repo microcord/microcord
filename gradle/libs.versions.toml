@@ -36,6 +36,7 @@ okio = "2.7.0"
 persistentCookieJar = "v1.0.1"
 retrofit = "2.9.0"
 realtimeBlurView = "82df3520b4"
+work = "2.4.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -79,6 +80,7 @@ retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = 
 retrofit-adapter-rxjava = { group = "com.squareup.retrofit2", name = "adapter-rxjava", version.ref = "retrofit" }
 retrofit-converter-gson = { group = "com.squareup.retrofit2", name = "converter-gson", version.ref = "retrofit" }
 realtime-blur-view = { group = "com.github.mmin18", name = "RealtimeBlurView", version.ref = "realtimeBlurView" }
+androidx-work-runtime = { group = "androidx.work", name = "work-runtime", version.ref = "work" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

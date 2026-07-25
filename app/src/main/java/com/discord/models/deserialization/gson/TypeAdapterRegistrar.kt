@@ -6,6 +6,8 @@ import com.discord.api.activity.ActivityType
 import com.discord.api.activity.ActivityTypeTypeAdapter
 import com.discord.api.auth.RequiredAction
 import com.discord.api.auth.RequiredActionTypeAdapter
+import com.discord.api.friendsuggestions.FriendSuggestionReasonType
+import com.discord.api.friendsuggestions.FriendSuggestionReasonTypeAdapter
 import com.discord.api.guild.GuildExplicitContentFilter
 import com.discord.api.guild.GuildExplicitContentFilterTypeAdapter
 import com.discord.api.guild.GuildHubType
@@ -34,14 +36,17 @@ import com.discord.api.user.Phone
 import com.discord.api.user.PhoneTypeAdapter
 import com.discord.models.experiments.dto.UserExperimentDto
 import com.discord.nullserializable.NullSerializableTypeAdapterFactory
+import com.discord.api.botuikit.ComponentTypeAdapterFactory
 import com.google.gson.GsonBuilder
 
 fun GsonBuilder.registerDiscordApiTypeAdapters(): GsonBuilder =
     registerTypeAdapterFactory(NullSerializableTypeAdapterFactory())
+        .registerTypeAdapterFactory(ComponentTypeAdapterFactory())
         .registerTypeAdapterFactory(UserExperimentDto.TypeAdapterFactory)
         .registerTypeAdapter(ActivityPlatform::class.java, ActivityPlatformTypeAdapter())
         .registerTypeAdapter(ActivityType::class.java, ActivityTypeTypeAdapter())
         .registerTypeAdapter(RequiredAction::class.java, RequiredActionTypeAdapter())
+        .registerTypeAdapter(FriendSuggestionReasonType::class.java, FriendSuggestionReasonTypeAdapter())
         .registerTypeAdapter(PremiumTier::class.java, PremiumTierTypeAdapter())
         .registerTypeAdapter(NsfwAllowance::class.java, NsfwAllowanceTypeAdapter())
         .registerTypeAdapter(Phone::class.java, PhoneTypeAdapter())

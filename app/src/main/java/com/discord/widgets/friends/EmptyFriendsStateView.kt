@@ -49,6 +49,10 @@ class EmptyFriendsStateView : ConstraintLayout {
     fun updateView(addFriendSource: String) {
         addFriend.setOnClickListener { WidgetFriendsAddContract.show(context, addFriendSource) }
     }
+
+    fun setOnAddFriendClicked(callback: () -> Unit) {
+        addFriend.setOnClickListener { callback() }
+    }
 }
 
 internal object WidgetFriendsAddContract {

@@ -27,6 +27,7 @@ class StoreUser(
 ) : StoreV2() {
     private var me = EMPTY_ME_USER
     private val users = LinkedHashMap<Long, User>()
+    private val requestedUserIds = HashSet<Long>()
     private var meSnapshot = me
     private var usersSnapshot: Map<Long, User> = emptyMap()
 
@@ -46,6 +47,7 @@ class StoreUser(
         StoreThreadScheduler.assertCurrentThread()
         val apiMe = requireNotNull(payload.me)
         users.clear()
+        requestedUserIds.clear()
         me = MeUser(apiMe)
         users[me.id] = me
         payload.privateChannels.orEmpty().flatMap { it.recipients.orEmpty() }.forEach(::putUser)
@@ -74,6 +76,11 @@ class StoreUser(
     @StoreThread fun handleMessageCreateOrUpdate(message: Message) {
         message.author?.let(::updateUser)
         message.mentions.orEmpty().forEach(::updateUser)
+        if (message.isUrgent() && me.flags and URGENT_MESSAGE_USER_FLAG == 0) {
+            me = me.copy(flags = me.flags or URGENT_MESSAGE_USER_FLAG)
+            users[me.id] = me
+            markChanged(MeUpdate, UsersUpdate)
+        }
     }
     @StoreThread fun handleMessagesLoaded(messages: List<Message>) = messages.forEach(::handleMessageCreateOrUpdate)
     @StoreThread fun handleThreadMemberListUpdate(members: List<GuildMember>, presences: List<Presence>) {
@@ -126,6 +133,7 @@ class StoreUser(
         StoreThreadScheduler.assertCurrentThread()
         me = EMPTY_ME_USER
         users.clear()
+        requestedUserIds.clear()
         meCache.clear()
         markChanged(MeUpdate, UsersUpdate)
     }
@@ -141,7 +149,12 @@ class StoreUser(
     @StoreThread
     private fun updateUser(user: ApiUser) {
         StoreThreadScheduler.assertCurrentThread()
-        val updated = CoreUser(user)
+        requestedUserIds.remove(user.id)
+        val updated = when (val old = users[user.id]) {
+            is MeUser -> mergeMe(old, user)
+            is CoreUser -> mergeCore(old, user)
+            else -> CoreUser(user)
+        }
         if (users[user.id] == updated) return
         users[user.id] = updated
         markChanged(UsersUpdate)
@@ -154,18 +167,37 @@ class StoreUser(
     @StoreThread
     private fun fetchMissing(userIds: Collection<Long>, loadedIds: Set<Long>) {
         StoreThreadScheduler.assertCurrentThread()
-        requestUsers(userIds.filterNot(loadedIds::contains).toSet()) { user ->
-            dispatcher.schedule { notifyUserUpdated(user) }
+        val missing = userIds.filterTo(LinkedHashSet()) { it !in loadedIds && requestedUserIds.add(it) }
+        if (missing.isEmpty()) return
+        requestUsers(missing) { user ->
+            dispatcher.schedule {
+                requestedUserIds.remove(user.id)
+                notifyUserUpdated(user)
+            }
         }
     }
 
-    private fun mergeMe(old: MeUser, new: ApiUser) = old.copy(
-        username = new.username,
+    private fun mergeCore(old: CoreUser, new: ApiUser) = old.copy(
+        username = new.username.ifEmpty { old.username },
         avatar = merge(old.avatar, new.avatar),
         banner = merge(old.banner, new.banner),
         isBot = new.bot ?: old.isBot,
         isSystemUser = new.system ?: old.isSystemUser,
-        discriminator = new.discriminator.toIntOrNull() ?: old.discriminator,
+        discriminator = new.discriminator.toIntOrNull()?.takeUnless { it == 0 } ?: old.discriminator,
+        premiumTier = new.premiumType ?: old.premiumTier,
+        flags = new.flags ?: old.flags,
+        publicFlags = new.publicFlags ?: old.publicFlags,
+        bio = merge(old.bio, new.bio),
+        bannerColor = merge(old.bannerColor, new.bannerColor),
+    )
+
+    private fun mergeMe(old: MeUser, new: ApiUser) = old.copy(
+        username = new.username.ifEmpty { old.username },
+        avatar = merge(old.avatar, new.avatar),
+        banner = merge(old.banner, new.banner),
+        isBot = new.bot ?: old.isBot,
+        isSystemUser = new.system ?: old.isSystemUser,
+        discriminator = new.discriminator.toIntOrNull()?.takeUnless { it == 0 } ?: old.discriminator,
         premiumTier = new.premiumType ?: old.premiumTier,
         email = new.email ?: old.email,
         mfaEnabled = new.mfaEnabled ?: old.mfaEnabled,
@@ -187,6 +219,7 @@ class StoreUser(
 
     companion object {
         const val ME_CACHE_KEY = "STORE_USERS_ME_V13"
+        private const val URGENT_MESSAGE_USER_FLAG = 8192
         @JvmField val MeUpdate = object : ObservationDeck.UpdateSource {}
         @JvmField val UsersUpdate = object : ObservationDeck.UpdateSource {}
         @JvmField val EMPTY_ME_USER = MeUser(

@@ -59,6 +59,7 @@ dependencies {
     implementation(libs.androidx.recyclerview)
     implementation(libs.androidx.swiperefreshlayout)
     implementation(libs.androidx.viewpager2)
+    implementation(libs.androidx.work.runtime)
     implementation(libs.exoplayer.core)
     implementation(libs.exoplayer.ui)
     implementation(libs.cameraview)

@@ -1,5 +1,9 @@
 package com.discord.stores
 
+import com.discord.api.activity.Activity
+import com.discord.api.activity.ActivityAssets
+import com.discord.api.activity.ActivityParty
+import com.discord.api.activity.ActivityType
 import com.discord.api.presence.ClientStatus
 import com.discord.api.presence.ClientStatuses
 import com.discord.api.user.User as ApiUser
@@ -8,6 +12,9 @@ import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelCustomStatusSetting
 import com.discord.models.domain.ModelUserRelationship
 import com.discord.models.domain.ModelUserSettings
+import com.discord.models.message.Message
+import com.discord.models.user.CoreUser
+import com.discord.nullserializable.NullSerializable
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.time.Clock
@@ -50,6 +57,7 @@ class ReadyUserSocialStoresTest {
         dispatcher.schedule { store.handleConnectionOpen(payload) }
         scheduler.triggerActions()
         val first = store.getUsers()
+        val initialMe = store.getMe()
 
         val update = gson.fromJson(
             "{\"id\":42,\"username\":\"renamed\",\"discriminator\":\"0001\",\"avatar\":null}",
@@ -63,6 +71,7 @@ class ReadyUserSocialStoresTest {
         assertEquals("ready-user", first[42]?.username)
         assertEquals("renamed", store.getMe().username)
         assertEquals(null, store.getMe().avatar)
+        assertEquals(initialMe.copy(username = "renamed", avatar = null), store.getMe())
         assertEquals(listOf(setOf(99L)), requested)
         assertEquals(3, snapshots.size)
         assertFalse(store.getMe().toString().contains("auth-secret"))
@@ -77,6 +86,79 @@ class ReadyUserSocialStoresTest {
         dispatcher.schedule { restored.restore() }
         scheduler.triggerActions()
         assertEquals(store.getMe(), restored.getMe())
+    }
+
+    @Test
+    fun sparseUsersMergeAndMissingRequestsAreDeduplicated() {
+        val scheduler = TestScheduler()
+        val deck = ObservationDeck()
+        val dispatcher = Dispatcher(scheduler)
+        val requested = mutableListOf<Set<Long>>()
+        val callbacks = mutableListOf<(ApiUser) -> Unit>()
+        val store = StoreUser(
+            dispatcher = dispatcher,
+            observationDeck = deck,
+            meCache = Persister("test-sparse-me-${System.nanoTime()}", StoreUser.EMPTY_ME_USER),
+            requestUsers = { ids, callback -> requested += ids; callbacks += callback },
+        )
+        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
+        val complete = ApiUser(
+            id = 77,
+            username = "complete",
+            avatar = NullSerializable.Value("avatar"),
+            banner = NullSerializable.Value("banner"),
+            discriminator = "1234",
+            flags = 7,
+            publicFlags = 9,
+            bio = NullSerializable.Value("bio"),
+        )
+
+        dispatcher.schedule {
+            store.handleFriendSuggestionCreate(complete)
+            store.handleFriendSuggestionCreate(ApiUser(77, "renamed"))
+        }
+        scheduler.triggerActions()
+        val merged = store.getUsers()[77] as CoreUser
+        store.fetchUsers(listOf(88, 88))
+        store.fetchUsers(listOf(88))
+        scheduler.triggerActions()
+
+        assertEquals("renamed", merged.username)
+        assertEquals("avatar", merged.avatar)
+        assertEquals("banner", merged.banner)
+        assertEquals(1234, merged.discriminator)
+        assertEquals(7, merged.flags)
+        assertEquals(9, merged.publicFlags)
+        assertEquals("bio", merged.bio)
+        assertEquals(listOf(setOf(88L)), requested)
+        assertEquals(1, callbacks.size)
+
+        callbacks.single()(ApiUser(88, "fetched"))
+        scheduler.triggerActions()
+        store.fetchUsers(listOf(88))
+        scheduler.triggerActions()
+        assertEquals(listOf(setOf(88L), setOf(88L)), requested)
+    }
+
+    @Test
+    fun urgentMessageSetsCurrentUserFlag() {
+        val scheduler = TestScheduler()
+        val deck = ObservationDeck()
+        val dispatcher = Dispatcher(scheduler)
+        val store = StoreUser(
+            dispatcher = dispatcher,
+            observationDeck = deck,
+            meCache = Persister("test-urgent-me-${System.nanoTime()}", StoreUser.EMPTY_ME_USER),
+        )
+        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
+
+        dispatcher.schedule {
+            store.handleConnectionOpen(readyPayload())
+            store.handleMessageCreateOrUpdate(Message(id = 1, flags = 16))
+        }
+        scheduler.triggerActions()
+
+        assertEquals(8192, store.getMe().flags and 8192)
     }
 
     @Test
@@ -148,6 +230,31 @@ class ReadyUserSocialStoresTest {
     }
 
     @Test
+    fun richActivitiesSortBeforePlainActivities() {
+        var now = 1L
+        val scheduler = TestScheduler()
+        val deck = ObservationDeck()
+        val dispatcher = Dispatcher(scheduler)
+        val store = StoreUserPresence(Clock { now }, deck)
+        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
+        val plain = activity("plain", 20)
+        val richValues = listOf(
+            activity("assets", 1, assets = ActivityAssets("large", null, null, null)),
+            activity("party", 2, party = ActivityParty("party", null)),
+            activity("state", 3, state = "state"),
+            activity("details", 4, details = "details"),
+        )
+
+        dispatcher.schedule {
+            store.handleConnectionOpen(readyPayload())
+            store.handlePresenceUpdate(1, 91, ClientStatus.ONLINE, null, listOf(plain) + richValues)
+        }
+        scheduler.triggerActions()
+
+        assertEquals(richValues.map(Activity::name).reversed() + "plain", store.getPresences()[91]?.activities?.map(Activity::name))
+    }
+
+    @Test
     fun mutationFromAnotherThreadIsRejectedBeforeStateChanges() {
         val deck = ObservationDeck()
         val store = StoreUserRelationships(deck, Persister("test-thread-${System.nanoTime()}", mapOf(-1L to -1)))
@@ -164,6 +271,18 @@ class ReadyUserSocialStoresTest {
         val json = requireNotNull(javaClass.classLoader?.getResource("ready/ready-envelope.json")).readText()
         return gson.fromJson(json, ModelPayload::class.java)
     }
+
+    private fun activity(
+        name: String,
+        createdAt: Long,
+        assets: ActivityAssets? = null,
+        party: ActivityParty? = null,
+        state: String? = null,
+        details: String? = null,
+    ) = Activity(
+        name, ActivityType.PLAYING, null, createdAt, null, null, details, state, null, party, assets,
+        null, null, null, null, null, null, null,
+    )
 
     companion object {
         @JvmStatic

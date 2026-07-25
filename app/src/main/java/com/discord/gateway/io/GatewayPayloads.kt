@@ -1,5 +1,6 @@
 package com.discord.gateway.io
 
+import com.discord.api.activity.Activity
 import com.google.gson.JsonElement
 import com.google.gson.annotations.SerializedName
 import com.discord.gateway.opcodes.Opcode
@@ -43,3 +44,10 @@ data class Resume(
 ) {
     override fun toString(): String = "Resume(token=<redacted>, sessionId=$sessionId, seq=$seq)"
 }
+
+data class PresenceUpdate(
+    val status: String?,
+    val since: Long?,
+    val activities: List<Activity> = emptyList(),
+    val afk: Boolean? = false,
+)

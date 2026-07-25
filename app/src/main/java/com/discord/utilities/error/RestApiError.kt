@@ -20,6 +20,8 @@ class RestApiError private constructor(
     val global: Boolean,
     val messages: Map<String, List<String>>,
     val requestUrl: String?,
+    val captchaSitekey: String?,
+    val captchaRqtoken: String?,
     val cause: Throwable,
 ) {
     enum class Type {
@@ -91,6 +93,8 @@ class RestApiError private constructor(
                 json?.get("global")?.takeUnless(JsonElement::isJsonNull)?.asBoolean == true,
                 messages,
                 response?.raw()?.request?.url?.toString(),
+                json?.get("captcha_sitekey")?.takeUnless(JsonElement::isJsonNull)?.asString,
+                json?.get("captcha_rqtoken")?.takeUnless(JsonElement::isJsonNull)?.asString,
                 throwable,
             )
         }
@@ -103,7 +107,7 @@ class RestApiError private constructor(
                 is IOException -> Type.NETWORK
                 else -> Type.OTHER
             }
-            return RestApiError(type, null, 0, throwable.message, null, false, emptyMap(), null, throwable)
+            return RestApiError(type, null, 0, throwable.message, null, false, emptyMap(), null, null, null, throwable)
         }
 
         private fun flattenErrors(node: JsonObject, path: String, output: MutableMap<String, List<String>>) {

@@ -11,6 +11,11 @@ import com.discord.utilities.persister.Persister
 import rx.Observable
 import rx.subjects.BehaviorSubject
 import rx.subjects.SerializedSubject
+import rx.Subscription
+import java.util.concurrent.TimeUnit
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 
 class StoreUserSettings(
     private val dispatcher: Dispatcher,
@@ -32,6 +37,8 @@ class StoreUserSettings(
     private val allowAccessibilityDetectionPublisher = Persister("STORE_SETTINGS_ALLOW_ACCESSIBILITY_DETECTION", false)
     private val autoPlayGifsPublisher = Persister("STORE_SETTINGS_AUTO_PLAY_GIFS", true)
     private var contactSyncUpsellShown: Boolean? = null
+    private var customStatus = ModelCustomStatusSetting.CLEAR
+    private var customStatusExpiration: Subscription? = null
 
     override fun init(context: Context) {
         initForTesting()
@@ -43,6 +50,7 @@ class StoreUserSettings(
     }
 
     fun getContactSyncUpsellShown() = contactSyncUpsellShown
+    fun getCustomStatus() = customStatus
     fun getIsAttachmentMediaInline() = preferences.getBoolean(KEY_INLINE_ATTACHMENT_MEDIA, true)
     fun getIsAutoImageCompressionEnabled() = preferences.getBoolean(KEY_IMAGE_COMPRESSION, false)
     fun getIsAutoPlayGifsEnabled() = preferences.getBoolean(KEY_AUTO_PLAY_GIFS, true)
@@ -106,7 +114,7 @@ class StoreUserSettings(
         settings.explicitContentFilter?.let(explicitContentFilterSubject::onNext)
         settings.friendSourceFlags?.let(friendSourceFlagsSubject::onNext)
         settings.defaultGuildsRestricted?.let(defaultGuildsRestrictedSubject::onNext)
-        settings.customStatus?.let(customStatusSubject::onNext)
+        settings.customStatus?.let(::updateCustomStatusLocal)
         settings.friendDiscoveryFlags?.let(friendDiscoveryFlagsSubject::onNext)
         settings.contactSyncUpsellShown?.let { contactSyncUpsellShown = it }
         settings.allowAccessibilityDetection?.let(::updateAllowAccessibilityDetectionInternal)
@@ -135,11 +143,32 @@ class StoreUserSettings(
         defaultGuildsRestrictedSubject.onNext(false)
         friendSourceFlagsSubject.onNext(ModelUserSettings.FriendSourceFlags())
         friendDiscoveryFlagsSubject.onNext(0)
-        customStatusSubject.onNext(ModelCustomStatusSetting.CLEAR)
+        customStatus = ModelCustomStatusSetting.CLEAR
+        customStatusSubject.onNext(customStatus)
+        customStatusExpiration?.unsubscribe()
+        customStatusExpiration = null
     }
 
     private fun updateAllowAccessibilityDetectionInternal(allowed: Boolean) {
         dispatcher.schedule { accessibilityStore.updateDetectionAllowed(allowed) }
+    }
+
+    private fun updateCustomStatusLocal(status: ModelCustomStatusSetting) {
+        customStatusExpiration?.unsubscribe()
+        customStatusExpiration = null
+        customStatus = status
+        customStatusSubject.onNext(status)
+        val expiresAt = status.expiresAt?.let { value ->
+            runCatching { SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }.parse(value)?.time }.getOrNull()
+        } ?: return
+        customStatusExpiration = Observable.timer(
+            (expiresAt - System.currentTimeMillis()).coerceAtLeast(0), TimeUnit.MILLISECONDS,
+        ).subscribe {
+            customStatus = ModelCustomStatusSetting.CLEAR
+            customStatusSubject.onNext(customStatus)
+        }
     }
 
     private fun putBoolean(key: String, value: Boolean) {

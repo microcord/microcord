@@ -175,7 +175,7 @@ class StoreUserPresence(
         val flattened = latest.copy(
             clientStatuses = latest.clientStatuses ?: offlineClientStatuses(),
             activities = latest.activities?.sortedWith(
-                compareBy<Activity> { it.type.ordinal }.thenBy { it.applicationId != null }.thenBy { it.createdAt },
+                compareBy<Activity> { it.type.ordinal }.thenBy(::isRichPresence).thenBy { it.createdAt },
             )?.reversed(),
         )
         if (presences.put(userId, flattened) != flattened) markChanged()
@@ -239,5 +239,10 @@ class StoreUserPresence(
             ClientStatus.OFFLINE,
             ClientStatus.OFFLINE,
         )
+
+        private fun isRichPresence(activity: Activity) = activity.type != ActivityType.CUSTOM_STATUS && (
+            activity.assets != null || activity.party != null || !activity.state.isNullOrEmpty() ||
+                !activity.details.isNullOrEmpty()
+            )
     }
 }

@@ -13,6 +13,18 @@ import com.discord.utilities.intent.DeepLinkRoute
 import com.discord.utilities.intent.LinkParseResult
 import com.discord.widgets.home.BackHandler
 import com.discord.widgets.home.WidgetHome
+import com.discord.widgets.friends.WidgetFriendsList
+import com.discord.widgets.friends.WidgetFriendsAdd
+import com.discord.widgets.friends.WidgetFriendsAddById
+import com.discord.widgets.user.usersheet.WidgetUserSheet
+import com.discord.widgets.user.WidgetUserStatusSheet
+import com.discord.widgets.user.WidgetUserSetCustomStatus
+import com.discord.widgets.channels.memberlist.WidgetChannelMembersList
+import com.discord.widgets.user.WidgetUserMutualFriends
+import com.discord.widgets.user.WidgetUserMutualGuilds
+import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
+import com.discord.widgets.settings.WidgetSettings
+import com.discord.widgets.settings.account.WidgetSettingsBlockedUsers
 import rx.Subscription
 
 class WidgetTabsHost : Fragment(R.layout.widget_tabs_host), BackHandler {
@@ -29,6 +41,52 @@ class WidgetTabsHost : Fragment(R.layout.widget_tabs_host), BackHandler {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         bottomNavigation = view.findViewById(R.id.widget_tabs_host_bottom_navigation_view)
+        WidgetFriendsList.onAddFriend = {
+            childFragmentManager.commit {
+                replace(R.id.widget_tabs_host_friends, WidgetFriendsAdd())
+                addToBackStack("add_friend")
+            }
+        }
+        WidgetFriendsList.onProfile = { WidgetUserSheet.show(it.id, childFragmentManager) }
+        WidgetFriendsAddById.onCaptcha = { siteKey, rqtoken, done ->
+            WidgetCaptchaBottomSheet.show(
+                childFragmentManager, "friend:${System.nanoTime()}", siteKey, rqtoken,
+            ) { token, _ -> done(token) }
+        }
+        WidgetChannelMembersList.onUserClicked = { WidgetUserSheet.show(it, childFragmentManager) }
+        WidgetUserStatusSheet.onCustomStatus = {
+            StoreStream.getTabsNavigation().selectTab(NavigationTab.SETTINGS, true)
+            childFragmentManager.commit {
+                replace(R.id.widget_tabs_host_user_settings, WidgetUserSetCustomStatus())
+                addToBackStack("custom_status")
+            }
+        }
+        WidgetUserSheet.onMutualFriends = { userId ->
+            childFragmentManager.commit {
+                replace(R.id.widget_tabs_host_home, WidgetUserMutualFriends.newInstance(userId))
+                addToBackStack("mutual_friends")
+            }
+        }
+        WidgetUserSheet.onMutualGuilds = { userId ->
+            childFragmentManager.commit {
+                replace(R.id.widget_tabs_host_home, WidgetUserMutualGuilds.newInstance(userId))
+                addToBackStack("mutual_guilds")
+            }
+        }
+        WidgetUserMutualFriends.onFriendSelected = { WidgetUserSheet.show(it, childFragmentManager) }
+        WidgetUserMutualGuilds.onGuildSelected = {
+            childFragmentManager.popBackStack()
+            StoreStream.selectGuild(it)
+        }
+        WidgetSettings.onSetStatus = { WidgetUserStatusSheet.show(childFragmentManager) }
+        WidgetSettings.onBlockedUsers = {
+            childFragmentManager.commit {
+                replace(R.id.widget_tabs_host_user_settings, WidgetSettingsBlockedUsers())
+                addToBackStack("blocked_users")
+            }
+        }
+        WidgetSettings.onLogout = { StoreStream.getAuthentication().logout() }
+        WidgetSettingsBlockedUsers.onProfile = { WidgetUserSheet.show(it.id, childFragmentManager) }
         if (childFragmentManager.findFragmentByTag(NavigationTab.HOME.name) == null) {
             childFragmentManager.commit {
                 replace(R.id.widget_tabs_host_home, homeFragmentFactory?.invoke() ?: WidgetHome(), NavigationTab.HOME.name)
@@ -73,6 +131,11 @@ class WidgetTabsHost : Fragment(R.layout.widget_tabs_host), BackHandler {
 
     private fun consumeOwnedRoute(contract: AppIntentContract) {
         val route = ((contract as? AppIntentContract.Link)?.result as? LinkParseResult.Internal)?.route ?: return
+        if (route is DeepLinkRoute.User) {
+            WidgetUserSheet.show(route.userId, childFragmentManager)
+            StoreStream.getNavigation().consumePendingIntent(contract)
+            return
+        }
         val tab = when (route) {
             DeepLinkRoute.Home -> NavigationTab.HOME
             DeepLinkRoute.Friends -> NavigationTab.FRIENDS
@@ -118,7 +181,7 @@ class WidgetTabsHost : Fragment(R.layout.widget_tabs_host), BackHandler {
             0,
             0,
             {},
-            {},
+            { WidgetUserStatusSheet.show(childFragmentManager) },
             {},
         )
     }
@@ -139,6 +202,10 @@ class WidgetTabsHost : Fragment(R.layout.widget_tabs_host), BackHandler {
     }.isSuccess
 
     override fun onBackPressed(): Boolean {
+        if (childFragmentManager.backStackEntryCount > 0) {
+            childFragmentManager.popBackStack()
+            return true
+        }
         val selectedTab = StoreStream.getTabsNavigation().getSelectedTab()
         if (selectedTab != NavigationTab.HOME) {
             StoreStream.getTabsNavigation().selectTab(NavigationTab.HOME, true)

@@ -1,5 +1,6 @@
 package com.discord.gateway
 
+import com.discord.api.presence.ClientStatus
 import com.discord.gateway.io.IdentifyClientState
 import com.discord.models.domain.ModelGateway
 import com.discord.stores.GuildSubscriptionPayload
@@ -112,6 +113,25 @@ class GatewaySocketTest {
         val payload = harness.socket.lastPayload()
         assertEquals(14, payload["op"].asInt)
         assertEquals(99, payload["d"].asJsonObject["channels"].asJsonObject["3"].asJsonArray[0].asJsonArray[1].asInt)
+    }
+
+    @Test
+    fun presenceUpdateSendsOpcodeThreeOnlyWhenConnected() {
+        val harness = Harness()
+        harness.gateway.presenceUpdate(ClientStatus.DND, null, emptyList(), false)
+        harness.scheduler.runCurrent()
+        assertTrue(harness.factory.sockets.isEmpty())
+
+        harness.connectReady(sequence = 1, sessionId = "fixture-session")
+        val sentBefore = harness.socket.sent.size
+        harness.gateway.presenceUpdate(ClientStatus.DND, null, emptyList(), false)
+        harness.scheduler.runCurrent()
+
+        assertEquals(sentBefore + 1, harness.socket.sent.size)
+        assertEquals(
+            "{\"op\":3,\"d\":{\"status\":\"dnd\",\"since\":null,\"activities\":[],\"afk\":false}}",
+            harness.socket.sent.last(),
+        )
     }
 
     private class Harness {

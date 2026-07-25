@@ -59,6 +59,16 @@ class SuggestedFriendView @JvmOverloads constructor(
 
     fun setPublicName(publicName: String?) {
         this.publicName.text = publicName
+        this.publicName.visibility = if (publicName.isNullOrBlank()) GONE else VISIBLE
+    }
+
+    fun setUser(user: FriendUserUi, publicName: String? = null) {
+        if (user.avatarUrl == null) setAvatarUrl(user.id, user.discriminator, null) else avatar.setImageURI(user.avatarUrl)
+        setUsername(user.username)
+        setPublicName(publicName)
+        contentDescription = listOfNotNull(user.username, publicName).joinToString(", ")
+        decline.contentDescription = context.getString(R.string.decline)
+        send.contentDescription = context.getString(R.string.add_friend)
     }
 
     fun setOnDeclineClicked(callback: () -> Unit) {
@@ -69,7 +79,7 @@ class SuggestedFriendView @JvmOverloads constructor(
         send.setOnClickListener { callback() }
     }
 
-    private fun mediaProxySize(requested: Int) = MEDIA_PROXY_SIZES.first { it >= requested }
+    private fun mediaProxySize(requested: Int) = MEDIA_PROXY_SIZES.firstOrNull { it >= requested } ?: MEDIA_PROXY_SIZES.last()
 
     private companion object {
         val MEDIA_PROXY_SIZES = intArrayOf(

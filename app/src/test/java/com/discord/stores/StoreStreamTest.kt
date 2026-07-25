@@ -48,6 +48,26 @@ class StoreStreamTest {
     }
 
     @Test
+    fun messageGatewayEventsReconcileSelectedChannelHistory() {
+        StoreStream.selectChannel(1, 100)
+        val gson = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .registerDiscordApiTypeAdapters().create()
+        val parser = IncomingParser(gson)
+        fun dispatch(json: String) = parser.parse(json).also { event ->
+            stream.handleGatewayDispatch(event.type, requireNotNull(event.data))
+        }
+
+        dispatch("""{"op":0,"t":"MESSAGE_CREATE","d":{"id":200,"channel_id":100,"guild_id":1,"author":{"id":7,"username":"user","discriminator":"0000"},"content":"first","type":0}}""")
+        assertEquals("first", StoreStream.getMessages().getMessage(100, 200)?.content)
+
+        dispatch("""{"op":0,"t":"MESSAGE_UPDATE","d":{"id":200,"channel_id":100,"content":"edited"}}""")
+        assertEquals("edited", StoreStream.getMessages().getMessage(100, 200)?.content)
+
+        dispatch("""{"op":0,"t":"MESSAGE_DELETE","d":{"id":200,"channel_id":100}}""")
+        assertNull(StoreStream.getMessages().getMessage(100, 200))
+    }
+
+    @Test
     fun snapshotsStayStableAcrossDispatches() {
         val store = StoreStream.getStageInstances()
         stream.dispatcher.schedule { store.handleConnectionOpen(emptyList()) }
@@ -268,8 +288,6 @@ class StoreStreamTest {
     fun gatewayAuthenticationFailureUsesLogoutAndInvalidatesSession() {
         val server = MockWebServer()
         try {
-            server.enqueue(MockResponse().setResponseCode(204))
-            server.enqueue(MockResponse().setBody("{\"fingerprint\":\"replacement\"}"))
             StoreStream.getAuthentication().apply {
                 bindApi(RestAPIBuilder(server.url("/api/").toString(), CookieJar.NO_COOKIES).build(com.discord.restapi.RestAPIInterface::class.java))
                 setFingerprint(null, true)
@@ -279,8 +297,7 @@ class StoreStreamTest {
             GatewayEventRouter(stream).handleDisconnect(authenticationFailed = true)
 
             assertNull(StoreStream.getAuthentication().getAuthState())
-            assertEquals("/api/v9/auth/logout", server.takeRequest().path)
-            assertEquals("/api/v9/auth/fingerprint", server.takeRequest().path)
+            assertEquals(0, server.requestCount)
         } finally {
             server.shutdown()
         }

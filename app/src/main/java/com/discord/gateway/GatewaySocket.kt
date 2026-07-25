@@ -1,11 +1,14 @@
 package com.discord.gateway
 
+import com.discord.api.activity.Activity
+import com.discord.api.presence.ClientStatus
 import com.discord.gateway.io.Hello
 import com.discord.gateway.io.Identify
 import com.discord.gateway.io.IdentifyClientState
 import com.discord.gateway.io.Incoming
 import com.discord.gateway.io.IncomingParser
 import com.discord.gateway.io.Outgoing
+import com.discord.gateway.io.PresenceUpdate
 import com.discord.gateway.io.Resume
 import com.discord.gateway.opcodes.Opcode
 import com.discord.models.domain.ModelPayload
@@ -21,6 +24,7 @@ import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import java.util.Locale
 
 interface GatewayEventHandler {
     fun handleConnected(connected: Boolean)
@@ -113,6 +117,19 @@ class GatewaySocket(
 
     fun updateGuildSubscriptions(payload: GuildSubscriptionPayload) {
         scheduler.schedule(0) { if (state == State.CONNECTED) send(Opcode.GUILD_SUBSCRIPTIONS, payload) }
+    }
+
+    fun presenceUpdate(
+        status: ClientStatus?,
+        since: Long? = null,
+        activities: List<Activity> = emptyList(),
+        afk: Boolean? = false,
+    ) {
+        scheduler.schedule(0) {
+            if (state == State.CONNECTED) {
+                send(Opcode.PRESENCE_UPDATE, PresenceUpdate(status?.name?.lowercase(Locale.ROOT), since, activities, afk))
+            }
+        }
     }
 
     fun isSessionEstablished(): Boolean = state == State.CONNECTED

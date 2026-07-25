@@ -499,29 +499,29 @@ permissions, unread state, persisted selection, and responsive panel behavior.
 
 ### Phase 7: Messages and Uploads
 
-Status: **NOT STARTED**
+Status: **DONE**
 
-- [ ] Message history loading, pagination, and jump behavior.
-- [ ] Gateway create/update/delete reconciliation.
-- [ ] Optimistic local messages and nonce reconciliation.
-- [ ] Per-channel message queue.
-- [ ] Send, edit, delete, reply, reactions, pins, and ACK/read state.
-- [ ] Attachments, image preprocessing, multipart upload, and progress.
-- [ ] Slow mode, rate limits, captcha, AutoMod, and retry behavior.
-- [ ] Background send/ACK workers.
+- [x] Message history loading, pagination, and jump behavior.
+- [x] Gateway create/update/delete reconciliation.
+- [x] Optimistic local messages and nonce reconciliation.
+- [x] Per-channel message queue.
+- [x] Send, edit, delete, reply, reactions, pins, and ACK/read state.
+- [x] Attachments, image preprocessing, multipart upload, and progress.
+- [x] Slow mode, rate limits, captcha, AutoMod, and retry behavior.
+- [x] Background send/ACK workers.
 
 Exit criteria: ordinary text and attachment messaging works reliably through
 offline/reconnect/rate-limit cases without duplicate or lost local messages.
 
 ### Phase 8: Users and Social Features
 
-Status: **NOT STARTED**
+Status: **DONE**
 
-- [ ] User cache, current user, profiles, notes, and mutual context.
-- [ ] Relationships: friends, blocked, incoming, and outgoing.
-- [ ] Presence, activities, typing, and status controls.
-- [ ] Friend suggestions and affinity-dependent UI where observable.
-- [ ] User sheet, profile, friend list, and add-friend screens.
+- [x] User cache, current user, profiles, notes, and mutual context.
+- [x] Relationships: friends, blocked, incoming, and outgoing.
+- [x] Presence, activities, typing, and status controls.
+- [x] Friend suggestions and affinity-dependent UI where observable.
+- [x] User sheet, profile, friend list, and add-friend screens.
 
 Exit criteria: social state remains consistent across REST mutations, gateway
 updates, persistence, and logout.
@@ -626,15 +626,15 @@ large issue hierarchy without work attached.
 | --- | --- | --- | --- | --- |
 | Build/XML shell | DONE | `App`, `AppActivity`, manifest | Build, unit, lint, and Android 13 connected smoke test pass | Minimal Phase 0 XML loading shell; recovered resources remain Phase 1 |
 | Resources/themes | IN PROGRESS | `res/**`, `assets/**` | Assets and all resource families imported; AAPT/resource link pass | 134 first-party custom views block binding compilation |
-| Native media load | NOT STARTED | `lib/**`, `Discord.java` | None | Early blocker |
-| Dispatcher/stores | NOT STARTED | `stores/**` | None | Preserve serialized mutation |
-| REST | NOT STARTED | `restapi/**` | None | Live backend, fixture tests first |
-| Gateway | NOT STARTED | `gateway/**` | None | v9 + zlib-stream |
-| Authentication | NOT STARTED | `StoreAuthentication`, `widgets/auth` | None | Includes MFA/required actions |
-| Navigation/deep links | NOT STARTED | `StoreNavigation`, `IntentUtils` | None | Central method has JADX damage |
-| Guilds/channels | NOT STARTED | guild/channel stores and widgets | None | Includes permissions |
-| Messages/uploads | NOT STARTED | message stores/queue/chat widgets | None | `doSend` needs DEX inspection |
-| Users/relationships | NOT STARTED | user/relationship stores | None | Presence merging needs care |
+| Native media load | DONE | `lib/**`, `Discord.java` | Native lifecycle tests | ARM64 runtime waived |
+| Dispatcher/stores | DONE | `stores/**` | Unit store tests | Serialized mutation preserved |
+| REST | DONE | `restapi/**` | MockWebServer contracts | Live backend fixture-first |
+| Gateway | DONE | `gateway/**` | Gateway fixture tests | v9 + zlib-stream |
+| Authentication | DONE | `StoreAuthentication`, `widgets/auth` | Auth runtime/UI tests | Includes token/MFA/required actions |
+| Navigation/deep links | DONE | `StoreNavigation`, intent utilities | Route/device tests | Safe intents and panels |
+| Guilds/channels | DONE | guild/channel stores and widgets | Store/UI/device tests | Includes permissions and members |
+| Messages/uploads | DONE | message stores/queue/chat widgets | Full unit suite, assemble, lint | Enforced nonce and guarded replay |
+| Users/relationships | DONE | user/profile/note/relationship/social stores and widgets | Full unit suite, assemble, lint | Presence/status/social routes wired |
 | Notifications | NOT STARTED | FCM utilities/store/workers | None | Use owned Firebase config |
 | Settings | NOT STARTED | settings widgets/stores | None | Local and synced settings |
 | Voice/calls/video | NOT STARTED | RTC/media stores/widgets/native | None | Native binary contract |
@@ -752,6 +752,8 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-07-24 | OpenCode | Added secure direct token login through the existing authentication store and route flow | Build, unit tests, lint, and 6 focused Android 16 connected auth/navigation tests pass | Pause before Phase 6 |
 | 2026-07-25 | OpenCode | Started Phase 6 with reference-aligned guild ordering/folders, guild/channel selection, permission filtering, typed member/role gateway updates, and real guild/channel/DM browser fragments | Debug assembly, full unit suite, lint with no new issues, and 16 focused tests pass; connected tests blocked because no device is attached | Finish unread state, folder drag persistence, member lists, and right/content panels |
 | 2026-07-25 | OpenCode | Completed Phase 6 guild/channel navigation, folders, permissions, unread state, DMs, lazy members, panels, and production Gateway startup | Debug assembly and lint pass; focused unit/device checks passed earlier; user confirmed main screen boots and waived further tests after Android tooling repeatedly stalled | Begin Phase 7 messages and uploads |
+| 2026-07-25 | OpenCode | Completed Phase 7 message history, optimistic per-channel queues, ordinary chat UI/input/actions, attachment uploads/progress, retry/CAPTCHA/AutoMod paths, pins/reactions/ACK, and background replay | Full unit suite, `assembleDebug`, and `lintDebug` pass; configuration cache enabled and reused | Begin Phase 8 users and social features |
+| 2026-07-25 | OpenCode | Completed Phase 8 profiles/notes/mutual context, friends/blocked/pending relationships, suggestions/affinity, presence/typing/status, friends/settings/profile routes, and logout clearing | Full unit suite, `assembleDebug`, and `lintDebug` pass | Begin Phase 9 notifications and background work |
 
 ## Agent Handoff Template
 

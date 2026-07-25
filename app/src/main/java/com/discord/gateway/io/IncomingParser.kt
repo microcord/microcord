@@ -1,16 +1,24 @@
 package com.discord.gateway.io
 
 import com.discord.api.channel.Channel
+import com.discord.api.channel.ChannelPinsUpdate
+import com.discord.api.friendsuggestions.FriendSuggestion
+import com.discord.api.friendsuggestions.FriendSuggestionDelete
 import com.discord.api.guild.Guild
 import com.discord.api.guildmember.GuildMember
 import com.discord.api.guildmember.GuildMemberRemove
 import com.discord.api.guildmember.GuildMembersChunk
+import com.discord.api.message.Message
+import com.discord.api.message.reaction.MessageReactionUpdate
+import com.discord.api.message.reaction.MessageReactionRemoveAll
+import com.discord.api.message.reaction.MessageReactionRemoveEmoji
 import com.discord.api.presence.Presence
 import com.discord.api.role.GuildRoleCreate
 import com.discord.api.role.GuildRoleDelete
 import com.discord.api.role.GuildRoleUpdate
 import com.discord.api.stageinstance.StageInstance
 import com.discord.api.user.User
+import com.discord.api.user.TypingUser
 import com.discord.gateway.opcodes.Opcode
 import com.discord.models.domain.ModelChannelUnreadUpdate
 import com.discord.models.domain.ModelGuildMemberListUpdate
@@ -19,6 +27,7 @@ import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelReadState
 import com.discord.models.domain.ModelSession
 import com.discord.models.domain.ModelUserRelationship
+import com.discord.models.domain.ModelUserNote
 import com.discord.models.domain.ModelUserSettings
 import com.discord.models.thread.dto.ModelThreadListSync
 import com.google.gson.Gson
@@ -63,7 +72,17 @@ class IncomingParser(private val gson: Gson) {
         "PRESENCES_REPLACE" -> gson.fromJson(data, object : TypeToken<List<Presence>>() {}.type)
         "SESSIONS_REPLACE" -> gson.fromJson(data, object : TypeToken<List<ModelSession>>() {}.type)
         "RELATIONSHIP_ADD", "RELATIONSHIP_REMOVE" -> gson.fromJson(data, ModelUserRelationship::class.java)
+        "FRIEND_SUGGESTION_CREATE" -> gson.fromJson(data, FriendSuggestion::class.java)
+        "FRIEND_SUGGESTION_DELETE" -> gson.fromJson(data, FriendSuggestionDelete::class.java)
+        "USER_NOTE_UPDATE" -> gson.fromJson(data, ModelUserNote.Update::class.java)
         "MESSAGE_ACK" -> gson.fromJson(data, ModelReadState::class.java)
+        "MESSAGE_CREATE", "MESSAGE_UPDATE" -> gson.fromJson(data, Message::class.java)
+        "MESSAGE_DELETE", "MESSAGE_DELETE_BULK" -> gson.fromJson(data, MessageDeleteEvent::class.java)
+        "MESSAGE_REACTION_ADD", "MESSAGE_REACTION_REMOVE" -> gson.fromJson(data, MessageReactionUpdate::class.java)
+        "MESSAGE_REACTION_REMOVE_ALL" -> gson.fromJson(data, MessageReactionRemoveAll::class.java)
+        "MESSAGE_REACTION_REMOVE_EMOJI" -> gson.fromJson(data, MessageReactionRemoveEmoji::class.java)
+        "TYPING_START" -> gson.fromJson(data, TypingUser::class.java)
+        "CHANNEL_PINS_UPDATE" -> gson.fromJson(data, ChannelPinsUpdate::class.java)
         "CHANNEL_UNREAD_UPDATE" -> gson.fromJson(data, ModelChannelUnreadUpdate::class.java)
         "STAGE_INSTANCE_CREATE", "STAGE_INSTANCE_UPDATE", "STAGE_INSTANCE_DELETE" ->
             gson.fromJson(data, StageInstance::class.java)

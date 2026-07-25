@@ -6,16 +6,24 @@ import android.content.SharedPreferences
 import android.os.Build
 import com.discord.BuildConfig
 import com.discord.api.channel.Channel
+import com.discord.api.channel.ChannelPinsUpdate
 import com.discord.api.guild.Guild
+import com.discord.api.friendsuggestions.FriendSuggestion
+import com.discord.api.friendsuggestions.FriendSuggestionDelete
 import com.discord.api.guildmember.GuildMember
 import com.discord.api.guildmember.GuildMemberRemove
 import com.discord.api.guildmember.GuildMembersChunk
+import com.discord.api.message.Message as ApiMessage
 import com.discord.api.presence.Presence
 import com.discord.api.role.GuildRoleCreate
 import com.discord.api.role.GuildRoleDelete
 import com.discord.api.role.GuildRoleUpdate
 import com.discord.api.stageinstance.StageInstance
 import com.discord.api.user.User
+import com.discord.api.user.TypingUser
+import com.discord.api.message.reaction.MessageReactionUpdate
+import com.discord.api.message.reaction.MessageReactionRemoveAll
+import com.discord.api.message.reaction.MessageReactionRemoveEmoji
 import com.discord.models.authentication.AuthState
 import com.discord.models.domain.ModelChannelUnreadUpdate
 import com.discord.models.domain.ModelNotificationSettings
@@ -24,6 +32,8 @@ import com.discord.models.domain.ModelReadState
 import com.discord.models.domain.ModelSession
 import com.discord.models.domain.ModelGuildFolder
 import com.discord.models.domain.ModelGuildMemberListUpdate
+import com.discord.models.domain.ModelMessageDelete
+import com.discord.models.domain.ModelUserNote
 import com.discord.gateway.GatewayCancellable
 import com.discord.gateway.GatewayDiscovery
 import com.discord.gateway.GatewayEventRouter
@@ -31,6 +41,7 @@ import com.discord.gateway.GatewaySocket
 import com.discord.gateway.IdentifyData
 import com.discord.gateway.RealGatewayScheduler
 import com.discord.gateway.io.IdentifyClientState
+import com.discord.gateway.io.MessageDeleteEvent
 import com.discord.models.domain.ModelUserRelationship
 import com.discord.models.domain.ModelUserSettings
 import com.discord.models.domain.auth.ModelLoginResult
@@ -45,10 +56,61 @@ import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.time.Clock
 import com.discord.utilities.websocket.OkHttpGatewayWebSocketFactory
+import com.discord.models.message.Message as DomainMessage
+import com.discord.utilities.messagesend.MessageSendCoordinator
+import com.discord.widgets.chat.input.WidgetChatInput
+import com.discord.widgets.chat.list.WidgetChatList
+import com.discord.widgets.chat.overlay.WidgetChatOverlay
+import com.discord.widgets.status.WidgetChatStatus
+import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
+import com.discord.widgets.friends.WidgetFriendsList
+import com.discord.widgets.friends.FriendsListInput
+import com.discord.widgets.friends.FriendRelationshipUi
+import com.discord.widgets.friends.FriendRelationship
+import com.discord.widgets.friends.FriendPresence
+import com.discord.widgets.friends.FriendSuggestionUi
+import com.discord.widgets.friends.FriendUserUi
+import com.discord.widgets.friends.WidgetFriendsAddById
+import com.discord.widgets.friends.AddFriendResult
+import com.discord.widgets.user.usersheet.WidgetUserSheet
+import com.discord.widgets.user.WidgetUserStatusSheet
+import com.discord.widgets.user.WidgetUserSetCustomStatus
+import com.discord.widgets.user.WidgetUserMutualFriends
+import com.discord.widgets.user.WidgetUserMutualGuilds
+import com.discord.widgets.user.profile.UserStatusPresenceCustomView
+import com.discord.widgets.settings.account.WidgetSettingsBlockedUsers
+import com.discord.widgets.friends.BlockedUsersBuilder
+import com.discord.models.domain.emoji.ModelEmojiUnicode
+import com.discord.models.domain.ModelCustomStatusSetting
+import com.discord.api.presence.ClientStatus
+import com.discord.utilities.captcha.CaptchaHelper
+import com.discord.utilities.error.RestApiError
+import com.discord.workers.MessageAckWorker
+import com.discord.widgets.chat.list.actions.MessageActionCoordinator
+import com.discord.restapi.http.RateLimitInterceptor
+import com.discord.utilities.messagesend.NonceGenerator
+import com.discord.utilities.attachments.UploadAttachment
+import com.discord.utilities.attachments.UploadAttachmentPreprocessor
+import com.discord.utilities.attachments.toUploadAttachment
+import com.discord.api.message.MessageReference
+import com.discord.utilities.rest.MessageUploadPayloadBuilder
+import com.discord.restapi.PayloadJSON
+import com.google.gson.Gson
+import com.discord.workers.BackgroundMessageSendWorker
+import com.discord.workers.MessageWorkerActions
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequest
+import androidx.work.WorkManager
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.ConcurrentHashMap
+import rx.Subscription
 import java.io.File
 import rx.Observable
 import rx.Scheduler
 import rx.subjects.BehaviorSubject
+import rx.schedulers.Schedulers
 
 class StoreStream private constructor(
     val dispatcher: Dispatcher,
@@ -75,7 +137,15 @@ class StoreStream private constructor(
         preferences,
         sessionDurablePreferences,
     )
-    private val users = StoreUser(dispatcher = dispatcher, observationDeck = observationDeck)
+    private val users = StoreUser(
+        dispatcher = dispatcher,
+        observationDeck = observationDeck,
+        requestUsers = { ids, callback ->
+            if (::restApi.isInitialized) ids.forEach { userId ->
+                restApi.userGet(userId).subscribeOn(Schedulers.io()).subscribe(callback, {})
+            }
+        },
+    )
     private val userRelationships = StoreUserRelationships(observationDeck)
     private val guilds = StoreGuilds(users, dispatcher, observationDeck)
     private val channels = StoreChannels(
@@ -102,8 +172,98 @@ class StoreStream private constructor(
         getChannel = channels::findChannelById,
     )
     private val stageInstances = StoreStageInstances(observationDeck)
-    private val presences = StoreUserPresence(clock, observationDeck, this)
-    private val readStates = StoreReadStates(dispatcher, clock, observationDeck)
+    private val presences = StoreUserPresence(
+        clock, observationDeck, this,
+        publishLocalPresence = { presence ->
+            gateway?.presenceUpdate(presence.status, activities = presence.activities.orEmpty())
+        },
+    )
+    private val userProfiles = StoreUserProfile(
+        dispatcher,
+        observationDeck,
+        fetchProfile = { userId, guildId, mutual, success, failure ->
+            if (!::restApi.isInitialized) failure() else
+                restApi.userProfileGet(userId, mutual, guildId).subscribeOn(Schedulers.io()).subscribe(success, { failure() })
+        },
+        propagateMember = { member, guildId -> guildId?.let { guilds.handleGuildMember(member, it) } },
+    )
+    private val userNotes = StoreUserNotes(
+        dispatcher,
+        observationDeck,
+        loadNote = { userId, success, failure ->
+            if (!::restApi.isInitialized) failure() else
+                restApi.getUserNote(userId).subscribeOn(Schedulers.io()).subscribe(success, { failure() })
+        },
+        saveNote = { userId, note, success, failure ->
+            if (!::restApi.isInitialized) failure() else
+                restApi.updateUserNotes(userId, RestAPIParams.UserNoteUpdate(note.takeUnless(String::isBlank)))
+                    .subscribeOn(Schedulers.io()).subscribe({}, { failure() }, success)
+        },
+    )
+    private val friendSuggestions = StoreFriendSuggestions(
+        dispatcher,
+        observationDeck,
+        fetchSuggestions = { success, failure ->
+            if (!::restApi.isInitialized) failure() else
+                restApi.getFriendSuggestions().subscribeOn(Schedulers.io()).subscribe(success, { failure() })
+        },
+        hydrateUsers = users::handleFriendSuggestionsLoaded,
+    )
+    private val userAffinities = StoreUserAffinities(
+        dispatcher,
+        observationDeck,
+        fetchAffinities = { success, failure ->
+            if (!::restApi.isInitialized) failure() else
+                restApi.getUserAffinities().subscribeOn(Schedulers.io()).subscribe(success, { failure() })
+        },
+    )
+    private val messagesMostRecent = StoreMessagesMostRecent(observationDeck)
+    private val readStates = StoreReadStates(
+        dispatcher, clock, observationDeck,
+        ackRequest = { channelId, manual, _ ->
+            val messageId = messagesMostRecent.getMostRecentIds()[channelId]
+                ?: channels.findChannelById(channelId)?.lastMessageId
+                ?: 0L
+            if (messageId > 0 && ::restApi.isInitialized) {
+                restApi.postChannelMessagesAck(
+                    channelId, messageId,
+                    RestAPIParams.ChannelMessagesAck(manual, null),
+                ).subscribeOn(Schedulers.io()).subscribe({}, { scheduleAckWorker(channelId, messageId) })
+            }
+        },
+    )
+    private val messages = StoreMessages(observationDeck)
+    private val messagesLoader = StoreMessagesLoader(loader = { request, callback ->
+        val generation = authGeneration
+        val source = when (request.direction) {
+            StoreMessagesLoader.Direction.INITIAL -> restApi.getChannelMessages(request.channelId, limit = request.limit)
+            StoreMessagesLoader.Direction.BEFORE -> restApi.getChannelMessages(request.channelId, before = request.anchorMessageId, limit = request.limit)
+            StoreMessagesLoader.Direction.AFTER -> restApi.getChannelMessages(request.channelId, after = request.anchorMessageId, limit = request.limit)
+            StoreMessagesLoader.Direction.AROUND -> restApi.getChannelMessagesAround(
+                request.channelId, request.limit, requireNotNull(request.anchorMessageId),
+            )
+        }
+        source.subscribeOn(Schedulers.io()).map { apiMessages -> apiMessages.map(::DomainMessage) }.subscribe(
+            { if (generation == authGeneration) callback(Result.success(it)) },
+            { if (generation == authGeneration) callback(Result.failure(it)) },
+        )
+    })
+    private val pendingReplies = StorePendingReplies(dispatcher, observationDeck)
+    private val pinnedMessages = StorePinnedMessages(dispatcher, observationDeck) { channelId, callback ->
+        val generation = authGeneration
+        restApi.getChannelPins(channelId).subscribeOn(Schedulers.io()).map { it.map(::DomainMessage) }.subscribe(
+            { if (generation == authGeneration) callback(Result.success(it)) },
+            { if (generation == authGeneration) callback(Result.failure(it)) },
+        )
+    }
+    private val messageUploads = StoreMessageUploads(observationDeck)
+    private val messageState = StoreMessageState(dispatcher)
+    private val chatInputEditing = StoreChatInputEditing()
+    private val usersTyping = StoreUsersTyping(dispatcher, observationDeck, { users.getMeInternal().id })
+    private lateinit var messageSendCoordinator: MessageSendCoordinator
+    private lateinit var messageActionCoordinator: MessageActionCoordinator
+    private val uploadNonceGenerator = NonceGenerator(System::currentTimeMillis)
+    private lateinit var applicationContext: Context
     private val navigation = StoreNavigation(this)
     private val tabsNavigation = StoreTabsNavigation(dispatcher, this, observationDeck)
     private val storesV2 = listOf(
@@ -124,7 +284,17 @@ class StoreStream private constructor(
         channels,
         stageInstances,
         presences,
+        userProfiles,
+        userNotes,
+        friendSuggestions,
+        userAffinities,
+        usersTyping,
         readStates,
+        messages,
+        messagesMostRecent,
+        pendingReplies,
+        pinnedMessages,
+        messageUploads,
         tabsNavigation,
     )
     private val storeV2DispatchHandler = StoreV2DispatchHandler(storesV2, observationDeck)
@@ -133,15 +303,125 @@ class StoreStream private constructor(
     private var gateway: GatewaySocket? = null
     private var gatewayInitTimeout: GatewayCancellable? = null
     private var gatewayToken: String? = null
+    @Volatile private var authGeneration = 0
+    private val activeUploads = ConcurrentHashMap<String, Pair<Subscription, com.discord.utilities.rest.MessageUploadPayload>>()
+    private val preprocessingUploads = ConcurrentHashMap<String, Subscription>()
+    private data class FailedUpload(
+        val channelId: Long,
+        val content: String,
+        val reference: MessageReference?,
+        val attachments: List<UploadAttachment>,
+    )
+    private val failedUploads = ConcurrentHashMap<String, FailedUpload>()
 
     init {
         dispatcher.registerDispatchHandlers(storeV2DispatchHandler)
     }
 
     private fun init(context: Context) {
+        applicationContext = context.applicationContext
         val api = createRestApi(context)
         authentication.bindApi(api)
         userSettingsSystem.init(context)
+        messageSendCoordinator = MessageSendCoordinator(api)
+        messageActionCoordinator = MessageActionCoordinator(
+            MessageActionCoordinator.Callbacks(
+                deleteRemote = { channelId, messageId, completed ->
+                    api.deleteMessage(channelId, messageId).subscribeOn(Schedulers.io()).subscribe(
+                        {}, { completed(Result.failure(it)) }, { completed(Result.success(Unit)) },
+                    )
+                },
+                editRemote = { channelId, messageId, content, completed ->
+                    api.editMessage(channelId, messageId, RestAPIParams.Message(content = content)).subscribeOn(Schedulers.io()).subscribe(
+                        { completed(Result.success(Unit)) }, { completed(Result.failure(it)) },
+                    )
+                },
+                toggleReactionRemote = { channelId, messageId, reaction, removing, completed ->
+                    val call = if (removing) api.removeSelfReaction(channelId, messageId, reaction)
+                    else api.addReaction(channelId, messageId, reaction)
+                    call.subscribeOn(Schedulers.io()).subscribe(
+                        {}, { completed(Result.failure(it)) }, { completed(Result.success(Unit)) },
+                    )
+                },
+                setPinnedRemote = { channelId, messageId, pinned, completed ->
+                    val call = if (pinned) api.addChannelPin(channelId, messageId) else api.deleteChannelPin(channelId, messageId)
+                    call.subscribeOn(Schedulers.io()).subscribe(
+                        {}, { completed(Result.failure(it)) }, { completed(Result.success(Unit)) },
+                    )
+                },
+                messageUpdated = { message -> dispatcher.schedule {
+                    messages.handleMessageUpdate(message.channelId, message.id) { message }
+                } },
+                messageDeleted = { channelId, messageId -> dispatcher.schedule {
+                    messages.handleMessageDelete(channelId, messageId)
+                } },
+                createPendingReply = { channel, message, mention, showToggle ->
+                    pendingReplies.onCreatePendingReply(channel, message, mention, showToggle)
+                },
+                retryLocal = { message ->
+                    if (message.hasLocalUploads) retryFailedUpload(message)
+                    else message.nonce?.let {
+                        if (!messageSendCoordinator.retry(it)) messageSendCoordinator.resume(message.copy(type = -1))
+                    }
+                },
+                cancelLocal = { message -> message.nonce?.let {
+                    messageSendCoordinator.cancel(it)
+                    cancelUpload(it)
+                } },
+            ),
+        )
+        messageSendCoordinator.observeUpdates().subscribe(::handleMessageSendUpdate)
+        WidgetChatList.installStores(messages, messagesLoader)
+        WidgetChatList.actionCoordinator = messageActionCoordinator
+        WidgetChatInput.coordinatorProvider = { messageSendCoordinator }
+        WidgetChatInput.pendingRepliesStore = pendingReplies
+        WidgetChatInput.editingStore = chatInputEditing
+        WidgetChatInput.uploadHandler = { request -> sendUploads(context, request) }
+        WidgetCaptchaBottomSheet.onSolved = { requestId, token, rqtoken ->
+            if (!messageSendCoordinator.retry(requestId, CaptchaHelper.CaptchaPayload(token, rqtoken))) {
+                retryCaptchaUpload(requestId, CaptchaHelper.CaptchaPayload(token, rqtoken))
+            }
+        }
+        WidgetChatOverlay.onJumpToPresent = { messagesLoader.requestNewestMessages() }
+        WidgetChatOverlay.stateSource = {
+            channelsSelected.observeSelectedChannel().switchMap { channel ->
+                if (channel == null) Observable.just(WidgetChatOverlay.State()) else Observable.combineLatest(
+                    messages.observeIsDetached(channel.id),
+                    usersTyping.observeTypingUsers(channel.id),
+                    users.observeAllUsers(),
+                ) { detached, typingIds, allUsers ->
+                    WidgetChatOverlay.State(
+                        channelId = channel.id,
+                        viewingOldMessages = detached,
+                        typingUsers = typingIds.mapNotNull { allUsers[it]?.username }.take(4),
+                        channelRateLimit = channel.rateLimitPerUser,
+                    )
+                }
+            }
+        }
+        WidgetChatStatus.onJumpToMessage = { channelId, messageId -> messagesLoader.jumpToMessage(channelId, messageId) }
+        MessageWorkerActions.sendPendingMessages = {
+            val pending = messages.localMessagesHolder.getFlattenedMessages().filter { it.type == -1 }
+            val uploads = pending.filter(DomainMessage::hasLocalUploads)
+            uploads.forEach(::retryFailedUpload)
+            messageSendCoordinator.resumeAndWait(pending.filterNot(DomainMessage::hasLocalUploads)) && uploads.isEmpty()
+        }
+        MessageWorkerActions.acknowledgeMessage = { channelId, messageId ->
+            runCatching {
+                restApi.postChannelMessagesAck(
+                    channelId, messageId, RestAPIParams.ChannelMessagesAck(false, 0),
+                ).subscribeOn(Schedulers.io()).toCompletable().await()
+                true
+            }.getOrDefault(false)
+        }
+        MessageWorkerActions.isCurrentAuthGeneration = { it == authGeneration }
+        configureSocialUi()
+        messagesLoader.observeChunks().subscribe { chunk ->
+            dispatcher.schedule {
+                messages.handleMessagesLoaded(chunk)
+                channels.handleMessagesLoaded(chunk.messages.mapNotNull(DomainMessage::thread))
+            }
+        }
         gateway = GatewaySocket(
             identifyDataProvider = {
                 authentication.getAuthState()?.token?.let { token ->
@@ -168,6 +448,9 @@ class StoreStream private constructor(
         accessibilityMonitorBind(context)
         accessibility.init(context)
         userSettings.init(context)
+        userSettings.observeCustomStatus().subscribe { status ->
+            dispatcher.schedule { presences.handleUserSettingsUpdate(ModelUserSettings(customStatus = status)) }
+        }
         dispatcher.schedule {
             users.restore()
             userRelationships.init()
@@ -180,6 +463,8 @@ class StoreStream private constructor(
             collapsedChannelCategories.restore()
             guildSettings.restore()
             readStates.restore()
+            messages.restore()
+            messagesMostRecent.restore()
             guildFolders = userSettings.getGuildFolders()
             updateSortedGuilds()
             updateReadStateInputs()
@@ -204,6 +489,8 @@ class StoreStream private constructor(
             collapsedChannelCategories.restore()
             guildSettings.restore()
             readStates.restore()
+            messages.restore()
+            messagesMostRecent.restore()
             guildFolders = userSettings.getGuildFolders()
             updateSortedGuilds()
             updateReadStateInputs()
@@ -235,7 +522,12 @@ class StoreStream private constructor(
     fun handleStageInstanceCreate(stageInstance: StageInstance) = dispatcher.schedule { stageInstances.handleStageInstanceCreate(stageInstance) }
     fun handleStageInstanceUpdate(stageInstance: StageInstance) = dispatcher.schedule { stageInstances.handleStageInstanceUpdate(stageInstance) }
     fun handleStageInstanceDelete(stageInstance: StageInstance) = dispatcher.schedule { stageInstances.handleStageInstanceDelete(stageInstance) }
-    fun handleGatewayConnected(connected: Boolean) = dispatcher.schedule { channels.handleConnected(connected) }
+    fun handleGatewayConnected(connected: Boolean) = dispatcher.schedule {
+        channels.handleConnected(connected)
+        messages.handleConnected(connected)
+        messagesLoader.handleConnected(connected)
+        if (connected && ::messageSendCoordinator.isInitialized) messageSendCoordinator.handleConnected()
+    }
     fun handleGatewayConnectionReady(ready: Boolean) = dispatcher.schedule { guildSubscriptions.handleConnectionReady(ready) }
     fun handleGatewayAuthenticationFailure() = authentication.invalidate()
 
@@ -254,7 +546,13 @@ class StoreStream private constructor(
                 updateSortedGuilds()
                 updateReadStateInputs()
             }
-            "USER_UPDATE" -> (data as? User)?.let(users::handleUserUpdated)
+            "USER_UPDATE" -> (data as? User)?.let {
+                users.handleUserUpdated(it)
+                userProfiles.updateUser(it)
+            }
+            "USER_NOTE_UPDATE" -> (data as? ModelUserNote.Update)?.let(userNotes::handleNoteUpdate)
+            "FRIEND_SUGGESTION_CREATE" -> (data as? FriendSuggestion)?.let(friendSuggestions::handleFriendSuggestionCreate)
+            "FRIEND_SUGGESTION_DELETE" -> (data as? FriendSuggestionDelete)?.let(friendSuggestions::handleFriendSuggestionDelete)
             "GUILD_CREATE", "GUILD_UPDATE" -> (data as? Guild)?.let(::handleGuildCreateOrUpdateInternal)
             "GUILD_DELETE" -> (data as? Guild)?.let(::handleGuildRemoveInternal)
             "GUILD_MEMBER_ADD", "GUILD_MEMBER_UPDATE" -> (data as? GuildMember)?.let {
@@ -330,6 +628,51 @@ class StoreStream private constructor(
             }
             "RELATIONSHIP_REMOVE" -> (data as? ModelUserRelationship)?.let(userRelationships::handleRelationshipRemove)
             "MESSAGE_ACK" -> (data as? ModelReadState)?.let(readStates::handleMessageAck)
+            "MESSAGE_CREATE" -> (data as? ApiMessage)?.let { message ->
+                val domain = DomainMessage(message)
+                message.nonce?.let { nonce ->
+                    if (::messageSendCoordinator.isInitialized) messageSendCoordinator.reconcileFromGateway(nonce)
+                    reconcileUpload(nonce)
+                }
+                users.handleMessageCreateOrUpdate(domain)
+                messages.handleMessageCreate(domain)
+                messagesMostRecent.handleMessageCreate(domain)
+                usersTyping.handleMessageCreate(domain.channelId, domain.author?.id)
+                message.thread?.let(channels::handleThreadCreateOrUpdate)
+                updateReadStateInputs()
+            }
+            "MESSAGE_UPDATE" -> (data as? ApiMessage)?.let { message ->
+                users.handleMessageCreateOrUpdate(DomainMessage(message))
+                messages.handleMessageUpdate(message)
+                pinnedMessages.handleMessageUpdate(message)
+                messageState.handleMessageUpdate(message)
+            }
+            "MESSAGE_REACTION_ADD" -> (data as? MessageReactionUpdate)?.let {
+                messages.handleReaction(it, true, users.getMeInternal().id)
+            }
+            "MESSAGE_REACTION_REMOVE" -> (data as? MessageReactionUpdate)?.let {
+                messages.handleReaction(it, false, users.getMeInternal().id)
+            }
+            "MESSAGE_REACTION_REMOVE_ALL" -> (data as? MessageReactionRemoveAll)?.let {
+                messages.handleReactionRemoveAll(it.channelId, it.messageId)
+            }
+            "MESSAGE_REACTION_REMOVE_EMOJI" -> (data as? MessageReactionRemoveEmoji)?.let {
+                messages.handleReactionRemoveEmoji(it.channelId, it.messageId, it.emoji)
+            }
+            "TYPING_START" -> (data as? TypingUser)?.let {
+                it.member?.let { member -> guilds.handleGuildMember(member, it.guildId) }
+                usersTyping.handleTypingStart(it)
+            }
+            "CHANNEL_PINS_UPDATE" -> (data as? ChannelPinsUpdate)?.let {
+                pinnedMessages.handlePinsUpdate(it.channelId)
+            }
+            "MESSAGE_DELETE", "MESSAGE_DELETE_BULK" -> (data as? MessageDeleteEvent)?.let { event ->
+                val deleted = ModelMessageDelete(event.channelId, event.messageIds)
+                messages.handleMessageDelete(deleted)
+                pinnedMessages.handleMessageDeleteBulk(event.channelId, event.messageIds)
+                pendingReplies.handleMessageDelete(deleted)
+                messageState.handleMessageDelete(deleted)
+            }
             "CHANNEL_UNREAD_UPDATE" -> (data as? ModelChannelUnreadUpdate)?.let {
                 readStates.handleChannelUnreadUpdate(it.channelReadStates)
             }
@@ -340,6 +683,581 @@ class StoreStream private constructor(
     }
     fun handlePreLogout() = dispatcher.schedule { handlePreLogoutInternal() }
 
+    private fun handleMessageSendUpdate(update: MessageSendCoordinator.Update) = dispatcher.schedule {
+        when (update) {
+            is MessageSendCoordinator.Update.Optimistic -> {
+                if (update.requestId.startsWith("edit:")) {
+                    messages.handleMessageUpdate(update.message.channelId, update.message.id) { update.message }
+                } else {
+                    messages.handleLocalMessageCreate(update.message.channelId, update.requestId, update.message)
+                    scheduleBackgroundMessageSend(update.message.localAttachments.orEmpty().all { attachment ->
+                        runCatching { android.net.Uri.parse(attachment.uriString) }.isSuccess
+                    })
+                }
+            }
+            is MessageSendCoordinator.Update.Reconciled -> {
+                messages.handleLocalMessageDelete(update.message.channelId, update.requestId)
+                messages.handleMessageCreate(update.message)
+                messagesMostRecent.handleMessageCreate(update.message)
+                messageUploads.onSuccess(update.requestId)
+            }
+            is MessageSendCoordinator.Update.Failed -> {
+                if (update.requestId.startsWith("edit:")) {
+                    messages.handleMessageUpdate(update.message.channelId, update.message.id) { update.message }
+                    chatInputEditing.start(update.message)
+                } else {
+                    messages.localMessagesHolder.deleteMessage(update.message.channelId, update.requestId)
+                    messages.handleLocalMessageCreate(update.message.channelId, update.requestId, update.message)
+                }
+                messageUploads.onFailure(update.requestId)
+            }
+            is MessageSendCoordinator.Update.Cancelled -> {
+                messages.localMessagesHolder.getAll().forEach { (channelId, channelMessages) ->
+                    if (channelMessages.any { it.nonce == update.requestId }) {
+                        messages.handleLocalMessageDelete(channelId, update.requestId)
+                    }
+                }
+                messageUploads.onCancel(update.requestId)
+            }
+        }
+    }
+
+    private fun configureSocialUi() {
+        WidgetFriendsList.stateSource = {
+            Observable.combineLatest(
+                users.observeAllUsers(),
+                presences.observeAllPresences(),
+                userRelationships.observeUserRelationshipsState(),
+                friendSuggestions.observeFriendSuggestions(),
+                userAffinities.observeAffinityUserIds(),
+            ) { allUsers, allPresences, relationshipState, suggestions, affinityIds ->
+                val relationships = (relationshipState as? StoreUserRelationships.UserRelationshipsState.Loaded)
+                val rows = relationships?.relationships.orEmpty().mapNotNull { (userId, type) ->
+                    val user = allUsers[userId] ?: return@mapNotNull null
+                    FriendRelationshipUi(
+                        friendUser(user),
+                        when (type) {
+                            ModelUserRelationship.TYPE_FRIEND -> FriendRelationship.FRIEND
+                            ModelUserRelationship.TYPE_BLOCKED -> FriendRelationship.BLOCKED
+                            ModelUserRelationship.TYPE_INVITE_INCOMING -> FriendRelationship.INCOMING
+                            ModelUserRelationship.TYPE_INVITE_OUTGOING -> FriendRelationship.OUTGOING
+                            else -> return@mapNotNull null
+                        },
+                        when (allPresences[userId]?.status) {
+                            ClientStatus.ONLINE -> FriendPresence.ONLINE
+                            ClientStatus.IDLE -> FriendPresence.IDLE
+                            ClientStatus.DND -> FriendPresence.DND
+                            else -> FriendPresence.OFFLINE
+                        },
+                        allPresences[userId]?.activities?.firstOrNull()?.name,
+                    )
+                }
+                FriendsListInput(
+                    loading = relationshipState is StoreUserRelationships.UserRelationshipsState.Unloaded || friendSuggestions.isLoading(),
+                    relationships = rows,
+                    suggestions = suggestions.values.map {
+                        FriendSuggestionUi(friendUser(it.user), it.publicName, affinityIds.indexOf(it.user.id).takeIf { rank -> rank >= 0 } ?: Int.MAX_VALUE)
+                    },
+                )
+            }
+        }
+        WidgetFriendsList.onAccept = { user -> addOrAcceptFriend(user.id) }
+        WidgetFriendsList.onDecline = { user -> declineOrIgnoreFriend(user.id) }
+        WidgetFriendsList.onCancel = { user -> removeRelationship(user.id) }
+        WidgetFriendsList.onMessage = { user -> openDm(user.id) }
+        WidgetSettingsBlockedUsers.stateSource = {
+            Observable.combineLatest(users.observeAllUsers(), userRelationships.observe()) { allUsers, relationships ->
+                BlockedUsersBuilder.build(relationships.mapNotNull { (userId, type) ->
+                    allUsers[userId]?.let { user ->
+                        FriendRelationshipUi(
+                            friendUser(user),
+                            when (type) {
+                                ModelUserRelationship.TYPE_BLOCKED -> FriendRelationship.BLOCKED
+                                ModelUserRelationship.TYPE_FRIEND -> FriendRelationship.FRIEND
+                                ModelUserRelationship.TYPE_INVITE_INCOMING -> FriendRelationship.INCOMING
+                                else -> FriendRelationship.OUTGOING
+                            },
+                        )
+                    }
+                })
+            }
+        }
+        WidgetSettingsBlockedUsers.onUnblock = { removeRelationship(it.id) }
+
+        WidgetFriendsAddById.ownUsername = users.getMe().username
+        WidgetFriendsAddById.submitRequest = { tag, captcha, completed ->
+            restApi.sendRelationshipRequest(
+                RestAPIParams.UserRelationship.Add(tag.username, tag.discriminator, captchaKey = captcha),
+                relationshipContext("Add Friend"),
+            ).subscribeOn(Schedulers.io()).subscribe(
+                {},
+                { error ->
+                    val restError = RestApiError.from(error)
+                    completed(if (restError.captchaSitekey != null) {
+                        AddFriendResult.Captcha(requireNotNull(restError.captchaSitekey), restError.captchaRqtoken)
+                    } else AddFriendResult.Error(restError.message ?: "Unable to send friend request."))
+                },
+                { completed(AddFriendResult.Success) },
+            )
+        }
+
+        WidgetUserSheet.stateSource = { userId -> observeUserSheet(userId) }
+        WidgetUserSheet.onMessage = ::openDm
+        WidgetUserSheet.onNoteSave = userNotes::saveNote
+        WidgetUserSheet.onRelationshipAction = { userId, action ->
+            when (action) {
+                WidgetUserSheet.RelationshipAction.ADD, WidgetUserSheet.RelationshipAction.ACCEPT -> addOrAcceptFriend(userId)
+                WidgetUserSheet.RelationshipAction.IGNORE, WidgetUserSheet.RelationshipAction.REMOVE,
+                WidgetUserSheet.RelationshipAction.UNBLOCK -> removeRelationship(userId)
+                WidgetUserSheet.RelationshipAction.BLOCK -> blockUser(userId)
+            }
+        }
+        WidgetUserMutualGuilds.stateSource = { userId ->
+            userProfiles.fetchProfile(userId, withMutualGuilds = true)
+            Observable.combineLatest(
+                userProfiles.observeUserProfile(userId),
+                guilds.observeGuilds(),
+                users.observeUser(userId),
+                guilds.observeComputed(),
+            ) { profile, allGuilds, user, allMembers ->
+                if (profile == StoreUserProfile.EMPTY_PROFILE) WidgetUserMutualGuilds.State.Loading else
+                    WidgetUserMutualGuilds.State.Loaded(
+                        user?.username,
+                        profile.mutualGuilds.mapNotNull { reference ->
+                            allGuilds[reference.id]?.let { guild ->
+                                WidgetUserMutualGuilds.MutualGuild(
+                                    guild, user, allMembers[reference.id]?.get(userId), reference.nick,
+                                )
+                            }
+                        },
+                    )
+            }
+        }
+        WidgetUserMutualFriends.stateSource = { userId ->
+            restApi.getRelationships(userId).subscribeOn(Schedulers.io()).flatMap { relationships ->
+                val ids = relationships.map(ModelUserRelationship::id)
+                users.fetchUsers(ids)
+                Observable.combineLatest(
+                    users.observeAllUsers(),
+                    presences.observeAllPresences(),
+                    users.observeUser(userId),
+                ) { allUsers, allPresences, target ->
+                    WidgetUserMutualFriends.State.Loaded(
+                        target?.username,
+                        ids.mapNotNull { id -> allUsers[id]?.let { WidgetUserMutualFriends.Friend(it, allPresences[id]) } },
+                    ) as WidgetUserMutualFriends.State
+                }
+            }.onErrorReturn { WidgetUserMutualFriends.State.Error(it.message) }
+        }
+
+        WidgetUserStatusSheet.stateSource = {
+            userSettings.observeCustomStatus().map { status ->
+                val state = if (status == ModelCustomStatusSetting.CLEAR) {
+                    UserStatusPresenceCustomView.ViewState.WithPlaceholder(ModelEmojiUnicode(surrogates = "💬"))
+                } else {
+                    UserStatusPresenceCustomView.ViewState.WithStatus(
+                        status.emojiName?.let { UserStatusPresenceCustomView.Emoji(status.emojiId?.toString(), it, false) },
+                        status.text,
+                    )
+                }
+                WidgetUserStatusSheet.State(state)
+            }
+        }
+        WidgetUserStatusSheet.onStatusSelected = { status ->
+            restApi.updateUserSettingsStatus(RestAPIParams.UserSettingsStatus(status))
+                .subscribeOn(Schedulers.io()).subscribe(::handleUserSettingsUpdate, {})
+        }
+        WidgetUserStatusSheet.onClearCustomStatus = {
+            restApi.updateUserSettingsCustomStatus(RestAPIParams.UserSettingsCustomStatus.clear())
+                .subscribeOn(Schedulers.io()).subscribe(::handleUserSettingsUpdate, {})
+        }
+        WidgetUserSetCustomStatus.initialState = {
+            val current = userSettings.getCustomStatus()
+            WidgetUserSetCustomStatus.Form(
+                text = current.text.orEmpty(),
+                expiration = if (current.expiresAt == null) WidgetUserSetCustomStatus.Expiration.NEVER
+                else WidgetUserSetCustomStatus.Expiration.TOMORROW,
+                emojiUri = current.emojiName,
+            )
+        }
+        WidgetUserSetCustomStatus.onSave = { submission ->
+            val value = if (submission.text == null && submission.emojiUri == null) null else ModelCustomStatusSetting(
+                submission.text, null, submission.emojiUri, submission.expiresAtUtc,
+            )
+            val body = value?.let(RestAPIParams.UserSettingsCustomStatus::set)
+                ?: RestAPIParams.UserSettingsCustomStatus.clear()
+            restApi.updateUserSettingsCustomStatus(body).subscribeOn(Schedulers.io())
+                .subscribe(::handleUserSettingsUpdate, {})
+        }
+        WidgetUserSetCustomStatus.onClear = WidgetUserStatusSheet.onClearCustomStatus
+    }
+
+    private fun friendUser(user: com.discord.models.user.User) = FriendUserUi(
+        user.id,
+        user.username,
+        user.discriminator,
+        user.avatar?.let { "https://cdn.discordapp.com/avatars/${user.id}/$it.webp?size=96" },
+    )
+
+    private fun addOrAcceptFriend(userId: Long) {
+        val incoming = userRelationships.getRelationships()[userId] == ModelUserRelationship.TYPE_INVITE_INCOMING
+        restApi.addRelationship(
+            userId,
+            RestAPIParams.UserRelationship(type = if (incoming) ModelUserRelationship.TYPE_FRIEND else null),
+            relationshipContext(if (incoming) "Accept Friend Request" else "Friends"),
+        ).subscribeOn(Schedulers.io()).subscribe({}, {}, {
+            dispatcher.schedule { userRelationships.handleRelationshipAdd(
+                ModelUserRelationship(userId, if (incoming) ModelUserRelationship.TYPE_FRIEND else ModelUserRelationship.TYPE_INVITE_OUTGOING),
+            ) }
+        })
+    }
+
+    private fun declineOrIgnoreFriend(userId: Long) {
+        if (userId in friendSuggestions.getFriendSuggestions()) {
+            restApi.ignoreFriendSuggestion(userId).subscribeOn(Schedulers.io()).subscribe({}, {}, {
+                dispatcher.schedule { friendSuggestions.handleFriendSuggestionDelete(FriendSuggestionDelete(userId)) }
+            })
+        } else removeRelationship(userId)
+    }
+
+    private fun blockUser(userId: Long) {
+        restApi.addRelationship(
+            userId, RestAPIParams.UserRelationship(type = ModelUserRelationship.TYPE_BLOCKED),
+            relationshipContext("User Profile"),
+        ).subscribeOn(Schedulers.io()).subscribe({}, {}, {
+            dispatcher.schedule { userRelationships.handleRelationshipAdd(
+                ModelUserRelationship(userId, ModelUserRelationship.TYPE_BLOCKED),
+            ) }
+        })
+    }
+
+    private fun removeRelationship(userId: Long) {
+        restApi.removeRelationship(userId, relationshipContext("User Profile"))
+            .subscribeOn(Schedulers.io()).subscribe({}, {}, {
+                dispatcher.schedule { userRelationships.handleRelationshipRemove(ModelUserRelationship(userId)) }
+            })
+    }
+
+    private fun openDm(userId: Long) {
+        restApi.userCreateChannel(RestAPIParams.CreateChannel(userId)).subscribeOn(Schedulers.io()).subscribe(
+            { channel -> dispatcher.schedule {
+                channels.handleChannelOrThreadCreateOrUpdate(channel)
+                guildSelected.handleGuildSelected(0)
+                channelsSelected.handleChannelSelected(0, channel.id)
+                messages.handleChannelSelected(channel.id)
+                messagesLoader.handleChannelSelected(channel.id)
+            } },
+            {},
+        )
+    }
+
+    private fun observeUserSheet(userId: Long): Observable<WidgetUserSheet.State> {
+        users.fetchUsers(listOf(userId))
+        userProfiles.fetchProfile(userId, guildSelected.getSelectedGuildId().takeUnless { it == 0L }, true)
+        userNotes.loadNote(userId)
+        return Observable.combineLatest(
+            users.observeUser(userId),
+            userProfiles.observeUserProfile(userId),
+            presences.observePresenceForUser(userId),
+            userRelationships.observe(userId),
+            userNotes.observeUserNote(userId),
+            userProfiles.observeProfileError(userId),
+        ) { user, profile, presence, relationship, note, profileError ->
+            if (profileError) return@combineLatest WidgetUserSheet.State.Error()
+            if (user == null || profile == StoreUserProfile.EMPTY_PROFILE) return@combineLatest WidgetUserSheet.State.Loading
+            WidgetUserSheet.State.Loaded(
+                user = user,
+                profile = profile,
+                presence = presence,
+                note = when (note) {
+                    StoreUserNotes.UserNoteState.Loading -> WidgetUserSheet.NoteState.Loading
+                    StoreUserNotes.UserNoteState.Empty -> WidgetUserSheet.NoteState.Loaded("")
+                    is StoreUserNotes.UserNoteState.Loaded -> WidgetUserSheet.NoteState.Loaded(note.note.note.orEmpty())
+                },
+                relationshipType = relationship ?: ModelUserRelationship.TYPE_NONE,
+                isMe = userId == users.getMe().id,
+                connections = com.discord.widgets.user.profile.UserProfileConnectionsView.ViewState(
+                    showConnectionsSection = profile.connectedAccounts.isNotEmpty(),
+                    showMutualGuildsAndFriends = userId != users.getMe().id,
+                    connectedAccountItems = profile.connectedAccounts.map {
+                        com.discord.widgets.user.profile.UserProfileConnectionsView.ConnectedAccountItem(it)
+                    },
+                ),
+            )
+        }
+    }
+
+    private fun relationshipContext(location: String): String = android.util.Base64.encodeToString(
+        "{\"location\":\"$location\"}".toByteArray(), android.util.Base64.NO_WRAP,
+    )
+
+    private fun scheduleBackgroundMessageSend(canReplayAttachments: Boolean) {
+        if (!::applicationContext.isInitialized) return
+        val request = OneTimeWorkRequest.Builder(BackgroundMessageSendWorker::class.java)
+            .setInitialDelay(120, TimeUnit.SECONDS)
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setInputData(androidx.work.Data.Builder().putBoolean(
+                BackgroundMessageSendWorker.KEY_CAN_REPLAY_ATTACHMENTS, canReplayAttachments,
+            ).build())
+            .build()
+        WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+            "BACKGROUND_MESSAGE_SENDING", ExistingWorkPolicy.REPLACE, request,
+        )
+    }
+
+    private fun scheduleAckWorker(channelId: Long, messageId: Long) {
+        if (!::applicationContext.isInitialized) return
+        val request = OneTimeWorkRequest.Builder(MessageAckWorker::class.java)
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setInputData(androidx.work.Data.Builder()
+                .putLong(MessageAckWorker.KEY_CHANNEL_ID, channelId)
+                .putLong(MessageAckWorker.KEY_MESSAGE_ID, messageId)
+                .putInt(MessageAckWorker.KEY_AUTH_GENERATION, authGeneration)
+                .build())
+            .addTag("MESSAGE_ACK")
+            .build()
+        WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+            "MESSAGE_ACK_$channelId", ExistingWorkPolicy.REPLACE, request,
+        )
+    }
+
+    private fun cancelActiveUploads() {
+        preprocessingUploads.values.forEach(Subscription::unsubscribe)
+        preprocessingUploads.clear()
+        activeUploads.values.forEach { (subscription, payload) ->
+            subscription.unsubscribe()
+            payload.close()
+        }
+        val nonces = activeUploads.keys.toList()
+        activeUploads.clear()
+        if (::applicationContext.isInitialized) {
+            failedUploads.values.forEach { cleanupProcessedAttachments(applicationContext, it.attachments) }
+        }
+        failedUploads.clear()
+        if (nonces.isNotEmpty()) dispatcher.schedule {
+            nonces.forEach(messageUploads::onCancel)
+            messageUploads.clear()
+        }
+    }
+
+    private fun sendUploads(context: Context, request: WidgetChatInput.UploadRequest): Boolean {
+        if (request.attachments.isEmpty()) return false
+        val nonce = uploadNonceGenerator.nonce().toString()
+        val generation = authGeneration
+        val localAttachments = request.attachments.map {
+            com.discord.api.message.LocalAttachment(it.id, it.uri.toString(), it.displayName)
+        }
+        dispatcher.schedule {
+            messages.handleLocalMessageCreate(
+                request.channelId, nonce,
+                DomainMessage(
+                    id = nonce.toLong(), channelId = request.channelId,
+                    guildId = channels.getChannel(request.channelId)?.guildId?.takeUnless { it == 0L },
+                    content = request.content, nonce = nonce, type = -1, hasLocalUploads = true,
+                    localAttachments = localAttachments,
+                    messageReference = request.pendingReply?.messageReference,
+                ),
+            )
+            messageUploads.onPreprocessing(
+                nonce, request.attachments.size,
+                request.attachments.singleOrNull()?.displayName, null,
+            )
+            scheduleBackgroundMessageSend(localAttachments.all { android.net.Uri.parse(it.uriString).scheme == "content" })
+        }
+        val preprocessing = Schedulers.io().createWorker().schedule {
+            if (generation != authGeneration) return@schedule
+            val attachments = runCatching {
+                UploadAttachmentPreprocessor.compressImages(
+                    context,
+                    request.attachments.map { UploadAttachment.from(context.contentResolver, it) },
+                )
+            }.getOrElse {
+                dispatcher.schedule {
+                    messages.handleLocalMessageDelete(request.channelId, nonce)
+                    messages.handleLocalMessageCreate(request.channelId, nonce, DomainMessage(
+                        id = nonce.toLong(), channelId = request.channelId, content = request.content,
+                        nonce = nonce, type = -3, hasLocalUploads = true, localAttachments = localAttachments,
+                    ))
+                    messageUploads.onFailure(nonce)
+                }
+                return@schedule
+            }
+            if (generation == authGeneration) startUpload(
+                context, request.channelId, request.content,
+                request.pendingReply?.messageReference, attachments, nonce = nonce,
+            )
+        }
+        preprocessingUploads[nonce] = preprocessing
+        return true
+    }
+
+    private fun startUpload(
+        context: Context,
+        channelId: Long,
+        content: String,
+        reference: MessageReference?,
+        attachments: List<UploadAttachment>,
+        captcha: CaptchaHelper.CaptchaPayload? = null,
+        nonce: String,
+    ) {
+        val body = RestAPIParams.Message(
+            content = content.takeUnless(String::isBlank),
+            nonce = nonce,
+            messageReference = reference?.let {
+                RestAPIParams.Message.MessageReference(it.guildId, channelId, it.messageId)
+            },
+            captchaKey = captcha?.captchaKey,
+            captchaRqtoken = captcha?.captchaRqtoken,
+            enforceNonce = true,
+        )
+        val upload = runCatching {
+            MessageUploadPayloadBuilder.build(context.contentResolver, Gson().toJson(body), attachments)
+        }.getOrElse {
+            dispatcher.schedule {
+                messages.handleLocalMessageDelete(channelId, nonce)
+                messages.handleLocalMessageCreate(channelId, nonce, DomainMessage(
+                    id = nonce.toLong(), channelId = channelId, content = content, nonce = nonce,
+                    type = -2, hasLocalUploads = true,
+                    localAttachments = attachments.map(UploadAttachment::toLocalAttachment),
+                ))
+                messageUploads.onFailure(nonce)
+            }
+            return
+        }
+        val optimistic = DomainMessage(
+            id = nonce.toLong(), channelId = channelId,
+            guildId = channels.getChannel(channelId)?.guildId?.takeUnless { it == 0L },
+            content = content, nonce = nonce, type = -1, hasLocalUploads = true,
+            localAttachments = attachments.map(UploadAttachment::toLocalAttachment),
+            messageReference = reference,
+        )
+        dispatcher.schedule {
+            messages.handleLocalMessageDelete(channelId, nonce)
+            messages.handleLocalMessageCreate(channelId, nonce, optimistic)
+            messageUploads.onPreprocessing(nonce, attachments.size, attachments.singleOrNull()?.fileName, attachments.singleOrNull()?.mimeType)
+            messageUploads.bindUpload(nonce, upload.uploads)
+        }
+        preprocessingUploads.remove(nonce)
+        upload.aggregateProgress.subscribe { progress -> dispatcher.schedule { messageUploads.onProgress(nonce, progress) } }
+        val requestSubscription = restApi.sendMessage(channelId, PayloadJSON(body), upload.uploads.map { it.part }.toTypedArray())
+            .subscribeOn(Schedulers.io())
+            .retryWhen { errors -> errors.flatMap { throwable ->
+                val error = RestApiError.from(throwable)
+                val delay = when {
+                    error.statusCode == 429 -> error.retryAfterMs ?: 1_000L
+                    error.type == RestApiError.Type.NETWORK || error.type == RestApiError.Type.TIMEOUT -> 5_000L
+                    else -> null
+                }
+                if (delay == null) Observable.error(throwable) else Observable.timer(delay, TimeUnit.MILLISECONDS)
+            } }
+            .subscribe(
+            { apiMessage ->
+                activeUploads.remove(nonce)
+                failedUploads.remove(nonce)
+                dispatcher.schedule {
+                    messages.handleLocalMessageDelete(channelId, nonce)
+                    messages.handleMessageCreate(DomainMessage(apiMessage))
+                    messagesMostRecent.handleMessageCreate(apiMessage)
+                    messageUploads.onSuccess(nonce)
+                }
+                upload.close()
+                cleanupProcessedAttachments(context, attachments)
+            },
+            { throwable ->
+                activeUploads.remove(nonce)
+                val error = RestApiError.from(throwable)
+                val failedType = when {
+                    error.captchaSitekey != null -> -6
+                    error.code == 200000 -> -8
+                    else -> -2
+                }
+                if (failedType != -8) {
+                    failedUploads[nonce] = FailedUpload(channelId, content, reference, attachments)
+                }
+                if (failedType == -6) {
+                    error.captchaSitekey?.let { WidgetChatInput.requestUploadCaptcha(nonce, it, error.captchaRqtoken) }
+                }
+                dispatcher.schedule {
+                    messages.handleLocalMessageDelete(channelId, nonce)
+                    messages.handleLocalMessageCreate(channelId, nonce, optimistic.copy(type = failedType))
+                    messageUploads.onFailure(nonce)
+                }
+                upload.close()
+                if (failedType == -8) cleanupProcessedAttachments(context, attachments)
+            },
+        )
+        activeUploads[nonce] = requestSubscription to upload
+    }
+
+    private fun cleanupProcessedAttachments(context: Context, attachments: List<UploadAttachment>) {
+        attachments.forEach { attachment ->
+            val path = attachment.uri.path ?: return@forEach
+            if (!attachment.permissionPersisted && attachment.uri.scheme == "file" &&
+                path.startsWith(context.cacheDir.absolutePath)) runCatching { java.io.File(path).delete() }
+        }
+    }
+
+    private fun cancelUpload(nonce: String) {
+        preprocessingUploads.remove(nonce)?.unsubscribe()
+        activeUploads.remove(nonce)?.let { (subscription, payload) ->
+            subscription.unsubscribe()
+            payload.close()
+        }
+        dispatcher.schedule {
+            messages.localMessagesHolder.getAll().forEach { (channelId, channelMessages) ->
+                if (channelMessages.any { it.nonce == nonce }) messages.handleLocalMessageDelete(channelId, nonce)
+            }
+            messageUploads.onCancel(nonce)
+        }
+        failedUploads.remove(nonce)?.let { cleanupProcessedAttachments(applicationContext, it.attachments) }
+    }
+
+    private fun reconcileUpload(nonce: String) {
+        preprocessingUploads.remove(nonce)?.unsubscribe()
+        activeUploads.remove(nonce)?.let { (subscription, payload) ->
+            subscription.unsubscribe()
+            payload.close()
+        }
+        failedUploads.remove(nonce)?.let {
+            if (::applicationContext.isInitialized) cleanupProcessedAttachments(applicationContext, it.attachments)
+        }
+        dispatcher.schedule { messageUploads.onSuccess(nonce) }
+    }
+
+    private fun retryCaptchaUpload(nonce: String, captcha: CaptchaHelper.CaptchaPayload) {
+        val failed = failedUploads.remove(nonce) ?: return
+        dispatcher.schedule { messages.handleLocalMessageDelete(failed.channelId, nonce) }
+        startUpload(
+            applicationContext, failed.channelId, failed.content, failed.reference, failed.attachments, captcha, nonce,
+        )
+    }
+
+    private fun cancelMessageSendInternal(nonce: String) {
+        messageSendCoordinator.cancel(nonce)
+        cancelUpload(nonce)
+    }
+
+    private fun retryFailedUpload(message: DomainMessage) {
+        val nonce = message.nonce ?: return
+        val retained = failedUploads.remove(nonce)
+        if (retained != null) {
+            dispatcher.schedule { messages.handleLocalMessageDelete(retained.channelId, nonce) }
+            startUpload(applicationContext, retained.channelId, retained.content, retained.reference, retained.attachments, nonce = nonce)
+            return
+        }
+        val local = message.localAttachments.orEmpty()
+        if (local.isEmpty() || !::applicationContext.isInitialized) return
+        Schedulers.io().createWorker().schedule {
+            val attachments = runCatching { local.map { it.toUploadAttachment(applicationContext.contentResolver) } }
+                .getOrElse { return@schedule }
+            dispatcher.schedule { message.nonce?.let { messages.handleLocalMessageDelete(message.channelId, it) } }
+            startUpload(
+                applicationContext, message.channelId, message.content.orEmpty(), message.messageReference,
+                attachments, nonce = nonce,
+            )
+        }
+    }
+
     private fun selectGuildInternal(guildId: Long) = dispatcher.schedule {
         guildSelected.handleGuildSelected(guildId)
         channelsSelected.handleGuildSelected()
@@ -348,6 +1266,15 @@ class StoreStream private constructor(
     private fun selectChannelInternal(guildId: Long, channelId: Long) = dispatcher.schedule {
         if (guildSelected.getSelectedGuildIdInternal() != guildId) guildSelected.handleGuildSelected(guildId)
         channelsSelected.handleChannelSelected(guildId, channelId)
+        messages.handleChannelSelected(channelId)
+        messagesLoader.handleChannelSelected(channelId)
+        messageState.handleChannelSelected()
+        val recent = messagesMostRecent.getMostRecentIdsInternal()[channelId] ?: channels.findChannelById(channelId)?.lastMessageId ?: 0L
+        val acknowledged = readStates.getAck(channelId)?.messageId ?: 0L
+        readStates.updateUnreadMarker(
+            StoreReadStates.Unread.Marker(channelId, acknowledged.takeIf { recent > it }),
+            if (recent > acknowledged) 1 else 0,
+        )
         navigation.setNavigationPanelAction(StoreNavigation.PanelAction.CLOSE)
     }
 
@@ -371,7 +1298,8 @@ class StoreStream private constructor(
             guildsSorted.handlePositions(entries)
             userSettings.handleUserSettingsUpdate(ModelUserSettings(guildFolders = folders))
         }
-        if (::restApi.isInitialized) restApi.updateUserSettings(RestAPIParams.GuildFoldersUpdate(folders)).subscribe(
+        if (::restApi.isInitialized) restApi.updateUserSettings(RestAPIParams.GuildFoldersUpdate(folders))
+            .subscribeOn(Schedulers.io()).subscribe(
             ::handleUserSettingsUpdate,
             {
                 dispatcher.schedule {
@@ -390,8 +1318,17 @@ class StoreStream private constructor(
     private fun handleAuthStateInternal(state: AuthState?) {
         authentication.handleAuthStateInternal(state)
         users.handleAuthToken(state?.token)
+        messagesLoader.handleAuthToken(state?.token)
         val token = state?.token
         if (token != gatewayToken) {
+            authGeneration++
+            if (::messageSendCoordinator.isInitialized) messageSendCoordinator.cancelAll()
+            cancelActiveUploads()
+            messagesLoader.reset()
+            if (::applicationContext.isInitialized) {
+                WorkManager.getInstance(applicationContext).cancelUniqueWork("BACKGROUND_MESSAGE_SENDING")
+                WorkManager.getInstance(applicationContext).cancelAllWorkByTag("MESSAGE_ACK")
+            }
             if (gatewayToken != null) gateway?.close(resetSession = true)
             gatewayToken = token
             gatewayInitTimeout?.cancel()
@@ -421,13 +1358,47 @@ class StoreStream private constructor(
 
     @StoreThread
     private fun handlePreLogoutInternal() {
+        authGeneration++
+        if (::messageSendCoordinator.isInitialized) messageSendCoordinator.cancelAll()
+        cancelActiveUploads()
+        messagesLoader.reset()
+        if (::applicationContext.isInitialized) {
+            WorkManager.getInstance(applicationContext).cancelUniqueWork("BACKGROUND_MESSAGE_SENDING")
+            WorkManager.getInstance(applicationContext).cancelAllWorkByTag("MESSAGE_ACK")
+        }
         authentication.handlePreLogout()
         userSettingsSystem.handlePreLogout()
         userRelationships.handlePreLogout()
+        userProfiles.handlePreLogout()
+        userNotes.handlePreLogout()
+        friendSuggestions.handlePreLogout()
+        userAffinities.handlePreLogout()
         readStates.handlePreLogout()
+        messages.handlePreLogout()
+        messagesMostRecent.handlePreLogout()
+        pendingReplies.handlePreLogout()
+        pinnedMessages.handlePreLogout()
+        chatInputEditing.clear()
+        usersTyping.clear()
         guildSelected.handlePreLogout()
         guildSubscriptions.reset()
         tabsNavigation.handlePreLogout()
+        userSettings.reset()
+        userSettingsSystem.reset()
+        users.reset()
+        guilds.reset()
+        channels.reset()
+        permissions.reset()
+        channelsSelected.reset()
+        channelMembers.reset()
+        expandedGuildFolders.reset()
+        collapsedChannelCategories.reset()
+        guildSettings.reset()
+        stageInstances.reset()
+        presences.reset()
+        readStates.reset()
+        messageUploads.clear()
+        navigation.reset()
     }
 
     @StoreThread
@@ -445,6 +1416,10 @@ class StoreStream private constructor(
         userSettingsSystem.reset()
         users.reset()
         userRelationships.handlePreLogout()
+        userProfiles.handlePreLogout()
+        userNotes.handlePreLogout()
+        friendSuggestions.handlePreLogout()
+        userAffinities.handlePreLogout()
         guilds.reset()
         channels.reset()
         permissions.reset()
@@ -458,6 +1433,12 @@ class StoreStream private constructor(
         stageInstances.reset()
         presences.reset()
         readStates.reset()
+        messages.handlePreLogout()
+        messagesMostRecent.handlePreLogout()
+        pendingReplies.handlePreLogout()
+        pinnedMessages.handlePreLogout()
+        chatInputEditing.clear()
+        usersTyping.clear()
         tabsNavigation.handlePreLogout()
         navigation.reset()
         guildFolders = emptyList()
@@ -482,10 +1463,18 @@ class StoreStream private constructor(
         permissions.handleConnectionOpen()
         guildSelected.handleConnectionOpen(payload)
         channelsSelected.handleConnectionOpen(payload)
+        channelsSelected.getId().takeIf { it > 0 }?.let {
+            messages.handleChannelSelected(it)
+            messagesLoader.handleChannelSelected(it)
+        }
         collapsedChannelCategories.handleConnectionOpen(payload)
         stageInstances.handleConnectionOpen(payload.guilds.orEmpty())
         presences.handleConnectionOpen(payload)
         readStates.handleConnectionOpen(payload)
+        messagesMostRecent.handleConnectionOpen(payload)
+        userNotes.handleConnectionOpen()
+        friendSuggestions.handleConnectionOpen(payload)
+        userAffinities.handleConnectionOpen()
         updateSortedGuilds()
         updateReadStateInputs()
         navigation.updateAuthState(authentication.getAuthState(), channels.getInitializedForAuthedUser())
@@ -564,7 +1553,8 @@ class StoreStream private constructor(
                 channels = allChannels,
                 guildJoinedAt = guilds.getGuildsJoinedAtInternal(),
                 guildSettings = guildSettings.getGuildSettingsInternal(),
-                recentMessageIds = allChannels.values.filter { it.lastMessageId != 0L }.associate { it.id to it.lastMessageId },
+                recentMessageIds = allChannels.values.filter { it.lastMessageId != 0L }.associate { it.id to it.lastMessageId } +
+                    messagesMostRecent.getMostRecentIdsInternal(),
                 channelGuildIds = allChannels.mapValues { it.value.guildId },
             ),
         )
@@ -585,7 +1575,7 @@ class StoreStream private constructor(
         }
         return RestAPIBuilder(API_BASE_URL, CookieJars.persistent(context)).build(
             RestAPIInterface::class.java,
-            interceptors = listOf(RequiredHeadersInterceptor(headers)),
+            interceptors = listOf(RateLimitInterceptor(), RequiredHeadersInterceptor(headers)),
             clientName = "main",
         ).also { restApi = it }
     }
@@ -670,6 +1660,19 @@ class StoreStream private constructor(
         @JvmStatic fun getStageInstances() = requireInstance().stageInstances
         @JvmStatic fun getPresences() = requireInstance().presences
         @JvmStatic fun getReadStates() = requireInstance().readStates
+        @JvmStatic fun getMessages() = requireInstance().messages
+        @JvmStatic fun getMessagesLoader() = requireInstance().messagesLoader
+        @JvmStatic fun getMessagesMostRecent() = requireInstance().messagesMostRecent
+        @JvmStatic fun getPendingReplies() = requireInstance().pendingReplies
+        @JvmStatic fun getPinnedMessages() = requireInstance().pinnedMessages
+        @JvmStatic fun getMessageUploads() = requireInstance().messageUploads
+        @JvmStatic fun getMessageState() = requireInstance().messageState
+        @JvmStatic fun getChatInputEditing() = requireInstance().chatInputEditing
+        @JvmStatic fun getUsersTyping() = requireInstance().usersTyping
+        @JvmStatic fun getUserProfiles() = requireInstance().userProfiles
+        @JvmStatic fun getUserNotes() = requireInstance().userNotes
+        @JvmStatic fun getFriendSuggestions() = requireInstance().friendSuggestions
+        @JvmStatic fun getUserAffinities() = requireInstance().userAffinities
         @JvmStatic fun getNavigation() = requireInstance().navigation
         @JvmStatic fun getTabsNavigation() = requireInstance().tabsNavigation
         @JvmStatic fun selectGuild(guildId: Long) = requireInstance().selectGuildInternal(guildId)
@@ -677,5 +1680,6 @@ class StoreStream private constructor(
         @JvmStatic fun updateMemberPanel(channel: Channel?, open: Boolean) = requireInstance().updateMemberPanelInternal(channel, open)
         @JvmStatic fun updateMemberRange(channel: Channel, range: IntRange) = requireInstance().updateMemberRangeInternal(channel, range)
         @JvmStatic fun updateGuildFolders(entries: List<StoreGuildsSorted.Entry>) = requireInstance().updateGuildFoldersInternal(entries)
+        @JvmStatic fun cancelMessageSend(nonce: String) = requireInstance().cancelMessageSendInternal(nonce)
     }
 }

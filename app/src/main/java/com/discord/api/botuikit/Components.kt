@@ -1,6 +1,10 @@
 package com.discord.api.botuikit
 
 import com.google.gson.TypeAdapter
+import com.google.gson.Gson
+import com.google.gson.TypeAdapterFactory
+import com.google.gson.reflect.TypeToken
+import com.google.gson.internal.Streams
 import com.google.gson.annotations.JsonAdapter
 import com.google.gson.annotations.SerializedName
 import com.google.gson.stream.JsonReader
@@ -57,6 +61,29 @@ data class TextComponent(
 
 class UnknownComponent : Component, Serializable {
     override val type = ComponentType.UNKNOWN
+}
+
+class ComponentTypeAdapterFactory : TypeAdapterFactory {
+    override fun <T> create(gson: Gson, type: TypeToken<T>): TypeAdapter<T>? {
+        if (type.rawType != Component::class.java) return null
+        @Suppress("UNCHECKED_CAST")
+        return object : TypeAdapter<Component>() {
+            override fun read(reader: JsonReader): Component {
+                val json = Streams.parse(reader)
+                if (!json.isJsonObject) return UnknownComponent()
+                val componentType = ComponentType.entries.firstOrNull {
+                    it.type == json.asJsonObject.get("type")?.asInt
+                } ?: ComponentType.UNKNOWN
+                return if (componentType == ComponentType.UNKNOWN) UnknownComponent()
+                else gson.fromJson(json, componentType.clazz)
+            }
+
+            override fun write(writer: JsonWriter, value: Component?) {
+                if (value == null) writer.nullValue()
+                else Streams.write(gson.toJsonTree(value, value.javaClass), writer)
+            }
+        } as TypeAdapter<T>
+    }
 }
 
 data class ComponentEmoji(
