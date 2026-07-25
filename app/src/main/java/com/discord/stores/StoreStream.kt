@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
+import android.util.Log
 import com.discord.BuildConfig
 import com.discord.api.channel.Channel
 import com.discord.api.channel.ChannelPinsUpdate
@@ -53,6 +54,8 @@ import com.discord.restapi.RestAPIParams
 import com.discord.restapi.cookie.CookieJars
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.cache.SharedPreferencesProvider
+import com.discord.utilities.logging.BootLog
+import com.discord.utilities.logging.BootLogEvent
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.time.Clock
 import com.discord.utilities.websocket.OkHttpGatewayWebSocketFactory
@@ -154,8 +157,12 @@ class StoreStream private constructor(
         isAuthenticated = { authentication.isAuthed() || users.getMeInternal().id != 0L },
     )
     private val permissions = StorePermissions(users, channels, guilds, observationDeck)
+    private val readyPayloadHydrator = ReadyPayloadHydrator(guilds, channels)
     private val guildSelected = StoreGuildSelected(dispatcher, observationDeck)
-    private val channelsSelected = StoreChannelsSelected(channels, permissions, guildSelected, dispatcher, observationDeck)
+    private val channelsSelected = StoreChannelsSelected(
+        channels, permissions, guildSelected, dispatcher, observationDeck,
+        onResolvedChannelChanged = ::handleResolvedChannelChanged,
+    )
     private val channelMembers = StoreChannelMembers(observationDeck) { guildId, roleId ->
         guilds.getGuildRolesInternal()[guildId]?.get(roleId)
     }
@@ -183,7 +190,13 @@ class StoreStream private constructor(
         observationDeck,
         fetchProfile = { userId, guildId, mutual, success, failure ->
             if (!::restApi.isInitialized) failure() else
-                restApi.userProfileGet(userId, mutual, guildId).subscribeOn(Schedulers.io()).subscribe(success, { failure() })
+                restApi.userProfileGet(userId, mutual, guildId).subscribeOn(Schedulers.io()).subscribe(
+                    { profile ->
+                        success(profile)
+                        dispatcher.schedule { users.handleUserUpdated(profile.user) }
+                    },
+                    { failure() },
+                )
         },
         propagateMember = { member, guildId -> guildId?.let { guilds.handleGuildMember(member, it) } },
     )
@@ -321,6 +334,7 @@ class StoreStream private constructor(
     private fun init(context: Context) {
         applicationContext = context.applicationContext
         val api = createRestApi(context)
+        BootLog.record(BootLogEvent.REST_READY)
         authentication.bindApi(api)
         userSettingsSystem.init(context)
         messageSendCoordinator = MessageSendCoordinator(api)
@@ -444,13 +458,16 @@ class StoreStream private constructor(
             discovery = GatewayDiscovery(preferences) { api.getGateway().toBlocking().single() },
             webSocketFactory = OkHttpGatewayWebSocketFactory(),
         )
+        BootLog.record(BootLogEvent.GATEWAY_READY)
         authentication.init(context)
+        BootLog.record(BootLogEvent.SESSION_READY)
         accessibilityMonitorBind(context)
         accessibility.init(context)
         userSettings.init(context)
         userSettings.observeCustomStatus().subscribe { status ->
             dispatcher.schedule { presences.handleUserSettingsUpdate(ModelUserSettings(customStatus = status)) }
         }
+        BootLog.record(BootLogEvent.CACHE_RESTORE_STARTED)
         dispatcher.schedule {
             users.restore()
             userRelationships.init()
@@ -468,8 +485,10 @@ class StoreStream private constructor(
             guildFolders = userSettings.getGuildFolders()
             updateSortedGuilds()
             updateReadStateInputs()
+            BootLog.record(BootLogEvent.CACHE_RESTORE_FINISHED)
         }
         initialized.onNext(true)
+        BootLog.record(BootLogEvent.RUNTIME_READY)
     }
 
     private fun initForTesting() {
@@ -753,7 +772,7 @@ class StoreStream private constructor(
                     )
                 }
                 FriendsListInput(
-                    loading = relationshipState is StoreUserRelationships.UserRelationshipsState.Unloaded || friendSuggestions.isLoading(),
+                    loading = relationshipState is StoreUserRelationships.UserRelationshipsState.Unloaded,
                     relationships = rows,
                     suggestions = suggestions.values.map {
                         FriendSuggestionUi(friendUser(it.user), it.publicName, affinityIds.indexOf(it.user.id).takeIf { rank -> rank >= 0 } ?: Int.MAX_VALUE)
@@ -764,7 +783,7 @@ class StoreStream private constructor(
         WidgetFriendsList.onAccept = { user -> addOrAcceptFriend(user.id) }
         WidgetFriendsList.onDecline = { user -> declineOrIgnoreFriend(user.id) }
         WidgetFriendsList.onCancel = { user -> removeRelationship(user.id) }
-        WidgetFriendsList.onMessage = { user -> openDm(user.id) }
+        WidgetFriendsList.onMessage = { user -> openDmInternal(user.id) }
         WidgetSettingsBlockedUsers.stateSource = {
             Observable.combineLatest(users.observeAllUsers(), userRelationships.observe()) { allUsers, relationships ->
                 BlockedUsersBuilder.build(relationships.mapNotNull { (userId, type) ->
@@ -802,7 +821,7 @@ class StoreStream private constructor(
         }
 
         WidgetUserSheet.stateSource = { userId -> observeUserSheet(userId) }
-        WidgetUserSheet.onMessage = ::openDm
+        WidgetUserSheet.onMessage = ::openDmInternal
         WidgetUserSheet.onNoteSave = userNotes::saveNote
         WidgetUserSheet.onRelationshipAction = { userId, action ->
             when (action) {
@@ -938,16 +957,23 @@ class StoreStream private constructor(
             })
     }
 
-    private fun openDm(userId: Long) {
-        restApi.userCreateChannel(RestAPIParams.CreateChannel(userId)).subscribeOn(Schedulers.io()).subscribe(
+    private fun openDmInternal(userId: Long) = createPrivateChannelInternal(listOf(userId)) {}
+
+    private fun createPrivateChannelInternal(recipientIds: List<Long>, completed: (Result<Channel>) -> Unit) {
+        val recipients = recipientIds.distinct()
+        if (recipients.isEmpty() || recipients.any { it <= 0L }) {
+            completed(Result.failure(IllegalArgumentException("A private channel requires valid recipients")))
+            return
+        }
+        restApi.userCreateChannel(RestAPIParams.CreateChannel(recipients)).subscribeOn(Schedulers.io()).subscribe(
             { channel -> dispatcher.schedule {
                 channels.handleChannelOrThreadCreateOrUpdate(channel)
                 guildSelected.handleGuildSelected(0)
                 channelsSelected.handleChannelSelected(0, channel.id)
-                messages.handleChannelSelected(channel.id)
-                messagesLoader.handleChannelSelected(channel.id)
+                navigation.setNavigationPanelAction(StoreNavigation.PanelAction.CLOSE)
+                completed(Result.success(channel))
             } },
-            {},
+            { completed(Result.failure(it)) },
         )
     }
 
@@ -1266,16 +1292,21 @@ class StoreStream private constructor(
     private fun selectChannelInternal(guildId: Long, channelId: Long) = dispatcher.schedule {
         if (guildSelected.getSelectedGuildIdInternal() != guildId) guildSelected.handleGuildSelected(guildId)
         channelsSelected.handleChannelSelected(guildId, channelId)
+        navigation.setNavigationPanelAction(StoreNavigation.PanelAction.CLOSE)
+    }
+
+    @StoreThread
+    private fun handleResolvedChannelChanged(channel: Channel?) {
+        val channelId = channel?.id ?: return
         messages.handleChannelSelected(channelId)
         messagesLoader.handleChannelSelected(channelId)
         messageState.handleChannelSelected()
-        val recent = messagesMostRecent.getMostRecentIdsInternal()[channelId] ?: channels.findChannelById(channelId)?.lastMessageId ?: 0L
+        val recent = messagesMostRecent.getMostRecentIdsInternal()[channelId] ?: channel.lastMessageId
         val acknowledged = readStates.getAck(channelId)?.messageId ?: 0L
         readStates.updateUnreadMarker(
             StoreReadStates.Unread.Marker(channelId, acknowledged.takeIf { recent > it }),
             if (recent > acknowledged) 1 else 0,
         )
-        navigation.setNavigationPanelAction(StoreNavigation.PanelAction.CLOSE)
     }
 
     private fun updateMemberPanelInternal(channel: Channel?, open: Boolean) = dispatcher.schedule {
@@ -1337,8 +1368,12 @@ class StoreStream private constructor(
                 gateway?.connect()
                 gatewayInitTimeout = gatewayScheduler.schedule(GATEWAY_INIT_TIMEOUT_MS) {
                     dispatcher.schedule {
-                        channels.handleStoreInitTimeout()
-                        navigation.updateAuthState(authentication.getAuthState(), channels.getInitializedForAuthedUser())
+                        if (channels.getChannelsByIdInternal().isNotEmpty() || guilds.getGuildsInternal().isNotEmpty()) {
+                            channels.handleStoreInitTimeout()
+                            navigation.updateAuthState(authentication.getAuthState(), channels.getInitializedForAuthedUser())
+                        } else {
+                            Log.w("ManticordGateway", "READY timeout with no cached guild/channel state")
+                        }
                     }
                 }
             }
@@ -1446,7 +1481,9 @@ class StoreStream private constructor(
     }
 
     @StoreThread
-    private fun handleConnectionOpenInternal(payload: ModelPayload) {
+    private fun handleConnectionOpenInternal(rawPayload: ModelPayload) {
+        BootLog.record(BootLogEvent.CACHE_HYDRATION_STARTED)
+        val payload = readyPayloadHydrator.hydrate(rawPayload)
         gatewayInitTimeout?.cancel()
         gatewayInitTimeout = null
         payload.authToken?.let(authentication::setAuthed)
@@ -1463,10 +1500,6 @@ class StoreStream private constructor(
         permissions.handleConnectionOpen()
         guildSelected.handleConnectionOpen(payload)
         channelsSelected.handleConnectionOpen(payload)
-        channelsSelected.getId().takeIf { it > 0 }?.let {
-            messages.handleChannelSelected(it)
-            messagesLoader.handleChannelSelected(it)
-        }
         collapsedChannelCategories.handleConnectionOpen(payload)
         stageInstances.handleConnectionOpen(payload.guilds.orEmpty())
         presences.handleConnectionOpen(payload)
@@ -1477,6 +1510,7 @@ class StoreStream private constructor(
         userAffinities.handleConnectionOpen()
         updateSortedGuilds()
         updateReadStateInputs()
+        BootLog.record(BootLogEvent.CACHE_HYDRATION_FINISHED)
         navigation.updateAuthState(authentication.getAuthState(), channels.getInitializedForAuthedUser())
     }
 
@@ -1593,6 +1627,7 @@ class StoreStream private constructor(
             SharedPreferencesProvider.init(context.applicationContext)
             val clock = Clock(System::currentTimeMillis)
             Persister.init(context.applicationContext, clock, Observable.never())
+            BootLog.record(BootLogEvent.PERSISTENCE_READY)
             return create(
                 StoreThreadScheduler.create(),
                 clock,
@@ -1600,6 +1635,7 @@ class StoreStream private constructor(
                 SharedPreferencesProvider.getPrefsSessionDurable(),
             ).also {
                 instance = it
+                BootLog.record(BootLogEvent.STORE_GRAPH_READY)
                 it.init(context.applicationContext)
             }
         }
@@ -1677,6 +1713,11 @@ class StoreStream private constructor(
         @JvmStatic fun getTabsNavigation() = requireInstance().tabsNavigation
         @JvmStatic fun selectGuild(guildId: Long) = requireInstance().selectGuildInternal(guildId)
         @JvmStatic fun selectChannel(guildId: Long, channelId: Long) = requireInstance().selectChannelInternal(guildId, channelId)
+        @JvmStatic fun openDm(userId: Long) = requireInstance().openDmInternal(userId)
+        @JvmStatic fun createPrivateChannel(recipientIds: List<Long>, completed: (Result<Channel>) -> Unit) =
+            requireInstance().createPrivateChannelInternal(recipientIds, completed)
+        @JvmStatic fun getMentions(before: Long? = null) = requireInstance().restApi
+            .getMentions(25, roles = true, everyone = true, before = before)
         @JvmStatic fun updateMemberPanel(channel: Channel?, open: Boolean) = requireInstance().updateMemberPanelInternal(channel, open)
         @JvmStatic fun updateMemberRange(channel: Channel, range: IntRange) = requireInstance().updateMemberRangeInternal(channel, range)
         @JvmStatic fun updateGuildFolders(entries: List<StoreGuildsSorted.Entry>) = requireInstance().updateGuildFoldersInternal(entries)

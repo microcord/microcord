@@ -13,7 +13,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.widget.ImageViewCompat
 import com.discord.R
-import com.discord.models.user.CoreUser
+import com.discord.models.presence.Presence
+import com.discord.models.user.User
 import com.discord.views.user.UserAvatarPresenceView
 
 enum class NavigationTab { HOME, FRIENDS, SEARCH, MENTIONS, SETTINGS, DISCOVERY }
@@ -35,7 +36,8 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
     private val heightChangedListeners = linkedSetOf<HeightChangedListener>()
     private var selectedTab = NavigationTab.HOME
     private var visibleTabs: Set<NavigationTab> = NavigationTab.entries.toSet()
-    private var myUserId = 0L
+    private var myUser: User? = null
+    private var myPresence: Presence? = null
     private var homeNotificationsCount = 0
     private var friendsNotificationsCount = 0
 
@@ -82,7 +84,8 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
         selectedTab: NavigationTab,
         onTabSelected: (NavigationTab) -> Unit,
         buttonsEnabled: Boolean,
-        myUserId: Long,
+        myUser: User,
+        myPresence: Presence?,
         visibleTabs: Set<NavigationTab>,
         homeNotificationsCount: Int,
         friendsNotificationsCount: Int,
@@ -96,10 +99,9 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
         this.friendsNotificationsCount = friendsNotificationsCount
         tabsContainer.weightSum = visibleTabs.size.toFloat()
         applyVisualState()
-        if (this.myUserId != myUserId) {
-            this.myUserId = myUserId
-            configureAvatar()
-        }
+        this.myUser = myUser
+        this.myPresence = myPresence
+        configureAvatar()
         updateNotificationBadges(homeNotificationsCount, friendsNotificationsCount)
         val noClick: (View) -> Unit = {}
         navigationTabToViewMap[NavigationTab.HOME]!!.setOnClickListener(
@@ -152,10 +154,11 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
     }
 
     private fun configureAvatar() {
+        val user = myUser ?: return
         avatar.configure(
             UserAvatarPresenceView.ViewState(
-                CoreUser(myUserId, discriminator = ((myUserId ushr 22) % 5).toInt()),
-                presence = null,
+                user,
+                presence = myPresence,
                 showPresence = true,
             ),
         )
@@ -178,7 +181,6 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
     override fun onSaveInstanceState(): Parcelable = SavedState(super.onSaveInstanceState()).also {
         it.selectedTab = selectedTab.ordinal
         it.visibleTabs = visibleTabs.fold(0) { mask, tab -> mask or (1 shl tab.ordinal) }
-        it.myUserId = myUserId
         it.homeNotificationsCount = homeNotificationsCount
         it.friendsNotificationsCount = friendsNotificationsCount
     }
@@ -191,19 +193,16 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
         super.onRestoreInstanceState(state.superState)
         selectedTab = NavigationTab.entries[state.selectedTab]
         visibleTabs = NavigationTab.entries.filterTo(linkedSetOf()) { state.visibleTabs and (1 shl it.ordinal) != 0 }
-        myUserId = state.myUserId
         homeNotificationsCount = state.homeNotificationsCount
         friendsNotificationsCount = state.friendsNotificationsCount
         tabsContainer.weightSum = visibleTabs.size.toFloat()
         applyVisualState()
-        configureAvatar()
         updateNotificationBadges(homeNotificationsCount, friendsNotificationsCount)
     }
 
     private class SavedState : BaseSavedState {
         var selectedTab = 0
         var visibleTabs = 0
-        var myUserId = 0L
         var homeNotificationsCount = 0
         var friendsNotificationsCount = 0
 
@@ -211,7 +210,6 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
         constructor(source: Parcel) : super(source) {
             selectedTab = source.readInt()
             visibleTabs = source.readInt()
-            myUserId = source.readLong()
             homeNotificationsCount = source.readInt()
             friendsNotificationsCount = source.readInt()
         }
@@ -220,7 +218,6 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
             super.writeToParcel(out, flags)
             out.writeInt(selectedTab)
             out.writeInt(visibleTabs)
-            out.writeLong(myUserId)
             out.writeInt(homeNotificationsCount)
             out.writeInt(friendsNotificationsCount)
         }

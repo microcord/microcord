@@ -23,7 +23,7 @@ data class IdentifyClientState(
     @SerializedName("guild_hashes") val guildHashes: Map<Long, Array<String>>,
     @SerializedName("highest_last_message_id") val highestLastMessageId: Long,
     @SerializedName("read_state_version") val readStateVersion: Int,
-    @SerializedName("useruser_guild_settings_version") val useruserGuildSettingsVersion: Int,
+    @SerializedName("user_guild_settings_version") val userGuildSettingsVersion: Int,
 )
 
 data class Identify(

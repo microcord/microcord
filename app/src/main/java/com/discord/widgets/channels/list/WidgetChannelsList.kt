@@ -5,6 +5,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import android.util.TypedValue
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -14,6 +15,8 @@ import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.stores.StoreStream
 import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.StatusView
+import com.discord.widgets.user.search.WidgetGlobalSearchDialog
 import rx.Observable
 import rx.Subscription
 import java.text.NumberFormat
@@ -35,6 +38,12 @@ class WidgetChannelsList : Fragment(R.layout.widget_channels_list) {
         view.findViewById<RecyclerView>(R.id.channels_list).apply {
             layoutManager = LinearLayoutManager(context)
             adapter = this@WidgetChannelsList.adapter
+        }
+        view.findViewById<View>(R.id.channels_list_search).setOnClickListener {
+            WidgetGlobalSearchDialog.show(parentFragmentManager, false)
+        }
+        view.findViewById<View>(R.id.channels_list_start_group).setOnClickListener {
+            WidgetGlobalSearchDialog.show(parentFragmentManager, true)
         }
     }
 
@@ -63,8 +72,11 @@ class WidgetChannelsList : Fragment(R.layout.widget_channels_list) {
         if (guildId == 0L) return Observable.combineLatest(
             channels,
             Observable.combineLatest(projection, selected) { unread, selectedId -> unread to selectedId },
-        ) { values, state ->
-            State(0, null, ChannelListRows.private(values.values, state.first.unread, state.first.mentions, state.second))
+            StoreStream.getPresences().observeAllPresences(),
+        ) { values, state, presences ->
+            State(0, null, ChannelListRows.private(
+                values.values, state.first.unread, state.first.mentions, state.second, presences,
+            ))
         }
         val permissions = channelPermissions?.invoke(guildId)
             ?: StoreStream.getPermissions().observeChannelPermissionsForGuild(guildId)
@@ -94,7 +106,8 @@ class WidgetChannelsList : Fragment(R.layout.widget_channels_list) {
     private fun render(state: State) {
         val root = requireView()
         val privateChannels = state.guildId == 0L
-        root.findViewById<View>(R.id.app_bar_layout).visibility = if (privateChannels) View.GONE else View.VISIBLE
+        root.findViewById<View>(R.id.app_bar_layout).visibility = View.VISIBLE
+        root.findViewById<View>(R.id.collapsing_toolbar).visibility = if (privateChannels) View.GONE else View.VISIBLE
         root.findViewById<View>(R.id.channels_list_private_channels_header).visibility = if (privateChannels) View.VISIBLE else View.GONE
         root.findViewById<TextView>(R.id.channels_list_header).text = state.guildName.orEmpty()
         root.findViewById<View>(R.id.widget_channels_list_empty_friends_state_view).visibility =
@@ -159,14 +172,32 @@ private class ChannelAdapter(
         })
         nameView.text = row.name
         root.contentDescription = row.name
+        root.isSelected = row.selected
+        root.isActivated = row.selected
+        val background = TypedValue()
+        root.context.theme.resolveAttribute(
+            if (row.selected) R.attr.drawable_overlay_channels_selected else R.attr.bg_pressed_highlight,
+            background,
+            true,
+        )
+        root.setBackgroundResource(background.resourceId)
+        val canOpen = when (row) {
+            is ChannelListRow.Voice -> row.canConnect
+            is ChannelListRow.Stage -> row.canConnect
+            else -> true
+        }
+        root.alpha = if (canOpen) 1f else 0.55f
         bindReadState(root, row)
-        if (row is ChannelListRow.Private) bindPrivate(root, row.channel)
+        if (row is ChannelListRow.Private) bindPrivate(root, row)
         if (row is ChannelListRow.Category) {
             root.isClickable = true
             root.setOnClickListener { categoryClick(guildId, row.channel.id) }
+            root.findViewById<View>(R.id.channels_item_category_arrow).rotation = if (row.collapsed) -90f else 0f
+            root.findViewById<View>(R.id.channels_item_category_add).visibility = View.GONE
+            root.contentDescription = "${row.name}, ${if (row.collapsed) "collapsed" else "expanded"}"
         } else {
-            root.isClickable = true
-            root.setOnClickListener { click(guildId, row.channel.id) }
+            root.isClickable = canOpen
+            root.setOnClickListener(if (canOpen) View.OnClickListener { click(row.channel.guildId, row.channel.id) } else null)
         }
     }
 
@@ -176,7 +207,7 @@ private class ChannelAdapter(
             is ChannelListRow.Thread -> R.id.channels_item_thread_unread
             else -> 0
         }
-        if (unreadId != 0) root.findViewById<View>(unreadId)?.visibility = if (row.unread) View.VISIBLE else View.GONE
+        if (unreadId != 0) root.findViewById<View>(unreadId)?.visibility = if (row.unread && !row.selected) View.VISIBLE else View.GONE
         val mentionsId = when (row) {
             is ChannelListRow.Text, is ChannelListRow.Voice -> R.id.channels_item_channel_mentions
             is ChannelListRow.Thread -> R.id.channels_item_thread_mentions
@@ -190,9 +221,14 @@ private class ChannelAdapter(
         }
     }
 
-    private fun bindPrivate(root: View, channel: Channel) {
+    private fun bindPrivate(root: View, row: ChannelListRow.Private) {
+        val channel = row.channel
         root.findViewById<TextView>(R.id.channels_list_item_private_tag).visibility = View.GONE
-        root.findViewById<TextView>(R.id.channels_list_item_private_desc).text = ""
+        root.findViewById<TextView>(R.id.channels_list_item_private_desc).apply {
+            text = row.presence?.activities.orEmpty().firstOrNull()?.let { it.state ?: it.details ?: it.name }.orEmpty()
+            visibility = if (text.isNullOrBlank()) View.GONE else View.VISIBLE
+        }
+        root.findViewById<StatusView>(R.id.channel_list_item_private_status).setPresence(row.presence)
         val avatar = channel.recipients.orEmpty().firstOrNull()
         root.findViewById<SimpleDraweeView>(R.id.channels_list_item_private_avatar).setImageURI(
             channel.icon?.let { "https://cdn.discordapp.com/channel-icons/${channel.id}/$it.webp?size=64" }

@@ -19,7 +19,11 @@ import com.discord.widgets.chat.list.actions.MessageActionCoordinator
 import com.discord.widgets.chat.list.actions.MessageActions
 import com.discord.widgets.chat.list.actions.WidgetChatListActions
 import com.discord.api.message.reaction.MessageReactionEmoji
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.discord.api.message.reaction.MessageReaction
+import com.discord.widgets.user.usersheet.WidgetUserSheet
+import com.discord.widgets.chat.input.WidgetChatInput
+import com.discord.widgets.chat.input.emoji.WidgetEmojiPickerSheet
+import android.widget.Toast
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
 
@@ -36,7 +40,14 @@ class WidgetChatList : Fragment(R.layout.widget_chat_list), WidgetChatListAction
             { onMessageClick(it) },
             { handleMessageLongClick(it) },
             { StoreStream.cancelMessageSend(it) },
-            { message, emoji -> actionCoordinator?.toggleReaction(message, emoji) },
+            { message, emoji, canAdd ->
+                if (canAdd) actionCoordinator?.toggleReaction(message, emoji)
+                else Toast.makeText(requireContext(), R.string.archived_thread_reactions_disabled_toast, Toast.LENGTH_SHORT).show()
+            },
+            { message, reaction -> onReactionLongClick(message, reaction) },
+            ::requestMessageReaction,
+            { userId -> WidgetUserSheet.show(userId, parentFragmentManager) },
+            WidgetChatInput::requestMention,
         )
     }
 
@@ -125,6 +136,7 @@ class WidgetChatList : Fragment(R.layout.widget_chat_list), WidgetChatListAction
                 projection.first,
                 projection.second.marker.messageId.takeIf { projection.second.marker.channelId == channel.id },
                 history.third,
+                StoreStream.getPermissions().getPermissionsByChannel()[channel.id],
             )
         }
 
@@ -163,10 +175,11 @@ class WidgetChatList : Fragment(R.layout.widget_chat_list), WidgetChatListAction
         StoreStream.getChatInputEditing().start(message)
     }
     override fun requestMessageReaction(message: Message, coordinator: MessageActionCoordinator) {
-        val names = arrayOf("👍", "❤️", "😂", "🎉")
-        MaterialAlertDialogBuilder(requireContext()).setTitle(R.string.add_reaction).setItems(names) { _, index ->
-            coordinator.toggleReaction(message, MessageReactionEmoji(null, names[index], false))
-        }.show()
+        requestMessageReaction(message)
+    }
+
+    private fun requestMessageReaction(message: Message) = WidgetEmojiPickerSheet.show(childFragmentManager) { emoji ->
+        actionCoordinator?.toggleReaction(message, emoji)
     }
 
     data class Stores(val messages: StoreMessages, val loader: StoreMessagesLoader)
@@ -182,6 +195,7 @@ class WidgetChatList : Fragment(R.layout.widget_chat_list), WidgetChatListAction
         }
         var onMessageClick: (Message) -> Unit = {}
         var onMessageLongClick: (Message) -> Boolean = { false }
+        var onReactionLongClick: (Message, MessageReaction) -> Boolean = { _, _ -> false }
 
         fun installStores(messages: StoreMessages, loader: StoreMessagesLoader) {
             stores = Stores(messages, loader)

@@ -5,6 +5,7 @@ import com.discord.api.message.Message as ApiMessage
 import com.discord.api.message.attachment.MessageAttachment
 import com.discord.api.message.reaction.MessageReaction
 import com.discord.api.message.reaction.MessageReactionEmoji
+import com.discord.api.permission.Permission
 import com.discord.api.user.User
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.message.Message
@@ -12,6 +13,7 @@ import com.discord.stores.StoreMessagesLoader
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapter
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -36,18 +38,20 @@ class ChatListRowsTest {
         assertEquals(first.size, first.map(ChatListEntry::stableId).distinct().size)
     }
 
-    @Test fun rendersFailedReplyAttachmentsAndReactionsWithoutRichBinders() {
+    @Test fun replyUsesDedicatedPreviewAndKeepsOriginalContent() {
         val reply = ApiMessage(9, 1, User(2, "reply-author"), "quoted")
         val rich = message(10, 1000).copy(
-            type = -2,
-            content = "failed",
+            type = 19,
+            content = "reply body",
+            messageReference = com.discord.api.message.MessageReference(1, 1, 9),
             referencedMessage = reply,
             attachments = listOf(MessageAttachment("https://cdn/file.bin", 4, 3, "https://proxy/file.bin", "file.bin", null, null)),
             reactions = listOf(MessageReaction(2, MessageReactionEmoji(null, null, false), false)),
         )
         val rows = rows(listOf(rich))
 
-        assertTrue(rows.any { it is ChatListEntry.Failed && "Reply to reply-author" in it.text })
+        assertTrue(rows.any { it is ChatListEntry.Header && it.text == "reply body" })
+        assertTrue(rows.none { it is ChatListEntry.Minimal })
         assertTrue(rows.any { it is ChatListEntry.Attachment && it.attachment.filename == "file.bin" })
         assertTrue(rows.any { it is ChatListEntry.Reactions && it.reactions.single().count == 2 })
     }
@@ -55,6 +59,21 @@ class ChatListRowsTest {
     @Test fun emptyLoadedChannelGetsRealStartRowWhileDetachedGetsLoading() {
         assertTrue(rows(emptyList()).any { it is ChatListEntry.Start })
         assertTrue(rows(emptyList(), detached = true).any { it is ChatListEntry.Loading })
+    }
+
+    @Test fun reactionRowCarriesReferencePermissionsAndLimit() {
+        val reaction = MessageReaction(2, MessageReactionEmoji(null, "👍", false), true)
+        val row = rows(
+            listOf(message(1, 1_000).copy(reactions = listOf(reaction))),
+            permissions = Permission.ADD_REACTIONS,
+        )
+            .filterIsInstance<ChatListEntry.Reactions>().single()
+
+        assertTrue(row.canAddReactions)
+        assertTrue(row.canCreateReactions)
+        assertFalse(rows(listOf(message(1, 1_000).copy(reactions = listOf(reaction))))
+            .filterIsInstance<ChatListEntry.Reactions>().single().canCreateReactions)
+        assertEquals(20, WidgetChatListAdapter.REACTION_LIMIT)
     }
 
     @Test fun adapterHasARecoveredLayoutForEveryBuiltRow() {
@@ -67,6 +86,7 @@ class ChatListRowsTest {
         messages: List<Message>,
         unreadMessageId: Long? = null,
         detached: Boolean = false,
+        permissions: Long? = null,
     ) = ChatListRows.build(ChatListRows.State(
         channel(),
         messages,
@@ -76,6 +96,7 @@ class ChatListRowsTest {
         ),
         detached,
         unreadMessageId,
+        permissions = permissions,
     ))
 
     private fun message(id: Long, timestamp: Long) = Message(

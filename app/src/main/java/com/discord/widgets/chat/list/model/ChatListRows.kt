@@ -1,6 +1,7 @@
 package com.discord.widgets.chat.list.model
 
 import com.discord.api.channel.Channel
+import com.discord.api.permission.Permission
 import com.discord.models.message.Message
 import com.discord.stores.StoreMessagesLoader
 import com.discord.widgets.chat.list.entries.ChatListEntry
@@ -18,6 +19,7 @@ object ChatListRows {
         val detached: Boolean = false,
         val unreadMessageId: Long? = null,
         val uploads: Map<String, StoreMessageUploads.MessageUploadState> = emptyMap(),
+        val permissions: Long? = null,
     )
 
     fun build(state: State): List<ChatListEntry> {
@@ -56,7 +58,14 @@ object ChatListRows {
                 rows += ChatListEntry.Attachment(message, attachment, index)
             }
             val reactions = message.reactions.orEmpty()
-            if (reactions.isNotEmpty()) rows += ChatListEntry.Reactions(message, reactions)
+            if (reactions.isNotEmpty()) rows += ChatListEntry.Reactions(
+                message,
+                reactions,
+                canAddReactions = state.channel.threadMetadata?.archived != true,
+                canCreateReactions = state.channel.threadMetadata?.archived != true &&
+                    (state.channel.type == Channel.DM || state.channel.type == Channel.GROUP_DM ||
+                        state.permissions?.and(Permission.ADD_REACTIONS)?.let { it != 0L } == true),
+            )
             message.nonce?.let { nonce ->
                 state.uploads[nonce]?.takeUnless { it == StoreMessageUploads.MessageUploadState.None }?.let {
                     rows += ChatListEntry.UploadProgress(message, it)
@@ -68,8 +77,17 @@ object ChatListRows {
         return rows.asReversed()
     }
 
+    fun pinnedMessage(message: Message): List<ChatListEntry> = buildList {
+        add(ChatListEntry.Header(message, safeText(message)))
+        message.attachments.orEmpty().forEachIndexed { index, attachment ->
+            add(ChatListEntry.Attachment(message, attachment, index))
+        }
+        message.reactions.orEmpty().takeIf(List<*>::isNotEmpty)?.let { add(ChatListEntry.Reactions(message, it)) }
+    }
+
     private fun canConcatenate(previous: Message?, message: Message, groupSize: Int): Boolean {
         if (previous == null || groupSize >= MAX_CONCATENATED_MESSAGES) return false
+        if (message.type == 19 || message.messageReference != null) return false
         if (previous.isFailed() || isSystem(previous) || message.isFailed() || isSystem(message)) return false
         val previousTime = timestamp(previous)
         val currentTime = timestamp(message)
@@ -79,9 +97,6 @@ object ChatListRows {
 
     private fun safeText(message: Message): String {
         val parts = ArrayList<String>()
-        message.referencedMessage?.let { reply ->
-            parts += "[Reply to ${reply.author?.username ?: "message"}: ${reply.content?.takeIf(String::isNotBlank) ?: "content unavailable"}]"
-        }
         message.content?.takeIf(String::isNotBlank)?.let(parts::add)
         message.embeds.orEmpty().forEach { embed ->
             parts += "[Embed: ${embed.title ?: embed.description ?: "rich content"}]"

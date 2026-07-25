@@ -52,6 +52,7 @@ class StoreUserSettings(
     fun getContactSyncUpsellShown() = contactSyncUpsellShown
     fun getCustomStatus() = customStatus
     fun getIsAttachmentMediaInline() = preferences.getBoolean(KEY_INLINE_ATTACHMENT_MEDIA, true)
+    fun getIsAnimatedEmojisEnabled() = allowAnimatedEmojisPublisher.get()
     fun getIsAutoImageCompressionEnabled() = preferences.getBoolean(KEY_IMAGE_COMPRESSION, false)
     fun getIsAutoPlayGifsEnabled() = preferences.getBoolean(KEY_AUTO_PLAY_GIFS, true)
     fun getIsChromeCustomTabsEnabled() = preferences.getBoolean(KEY_CHROME_CUSTOM_TABS, true)
@@ -124,7 +125,15 @@ class StoreUserSettings(
     fun setIsAutoImageCompressionEnabled(enabled: Boolean) = putBoolean(KEY_IMAGE_COMPRESSION, enabled)
     fun setIsAutoPlayGifsEnabled(enabled: Boolean) = autoPlayGifsPublisher.set(enabled)
     fun setIsChromeCustomTabsEnabled(enabled: Boolean) = putBoolean(KEY_CHROME_CUSTOM_TABS, enabled)
+    fun setIsAttachmentMediaInline(enabled: Boolean) = putBoolean(KEY_INLINE_ATTACHMENT_MEDIA, enabled)
+    fun setIsDeveloperMode(enabled: Boolean) = putBoolean(KEY_DEVELOPER_MODE, enabled)
+    fun setIsEmbedMediaInlined(enabled: Boolean) = putBoolean(KEY_INLINE_EMBED_MEDIA, enabled)
     fun setIsMobileOverlayEnabled(enabled: Boolean) = putBoolean(KEY_MOBILE_OVERLAY, enabled)
+    fun setIsRenderEmbedsEnabled(enabled: Boolean) {
+        putBoolean(KEY_RENDER_EMBEDS, enabled)
+        shouldRenderEmbedsSubject.onNext(enabled)
+    }
+    fun setIsShowCurrentGameEnabled(enabled: Boolean) = showCurrentGame.set(enabled, persist = true)
     fun setIsShiftEnterToSendEnabled(enabled: Boolean) = putBoolean(KEY_SHIFT_ENTER_TO_SEND, enabled)
     fun setIsStickerSuggestionsEnabled(enabled: Boolean) = stickerSuggestionsPublisher.set(enabled, persist = true)
     fun setIsSyncTextAndImagesEnabled(enabled: Boolean) = putBoolean(KEY_SYNC_TEXT_AND_IMAGES, enabled)
@@ -132,6 +141,12 @@ class StoreUserSettings(
     fun setIsAccessibilityDetectionAllowed(allowed: Boolean) {
         allowAccessibilityDetectionPublisher.set(allowed)
         updateAllowAccessibilityDetectionInternal(allowed)
+    }
+
+    fun setIsAnimatedEmojisEnabled(enabled: Boolean) = allowAnimatedEmojisPublisher.set(enabled, persist = true)
+    fun setStickerAnimationSettings(setting: Int) {
+        require(setting in ModelUserSettings.STICKER_ANIMATION_ALWAYS_ANIMATE..ModelUserSettings.STICKER_ANIMATION_NEVER_ANIMATE)
+        stickerAnimationSettingsPublisher.set(setting, persist = true)
     }
 
     @StoreThread

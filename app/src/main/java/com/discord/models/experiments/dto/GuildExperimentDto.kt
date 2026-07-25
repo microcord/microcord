@@ -55,8 +55,16 @@ class GuildExperimentDtoTypeAdapter : TypeAdapter<GuildExperimentDto>() {
         }
         val overrides = if (root.size() > 4) {
             root[4].asJsonArray.map { overrideElement ->
-                val override = overrideElement.asJsonArray
-                GuildExperimentOverridesDto(override[0].asInt, override[1].asJsonArray.map { it.asLong })
+                if (overrideElement.isJsonObject) {
+                    val override = overrideElement.asJsonObject
+                    GuildExperimentOverridesDto(
+                        override["b"]?.asInt ?: 0,
+                        override["k"]?.takeIf { it.isJsonArray }?.asJsonArray?.map { it.asLong }.orEmpty(),
+                    )
+                } else {
+                    val override = overrideElement.asJsonArray
+                    GuildExperimentOverridesDto(override[0].asInt, override[1].asJsonArray.map { it.asLong })
+                }
             }
         } else {
             emptyList()

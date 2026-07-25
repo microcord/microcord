@@ -219,11 +219,11 @@ private class ModelPayloadAdapter(private val gson: Gson) : TypeAdapter<ModelPay
                 "analytics_token" -> payload.analyticsToken = value.asString
                 "auth_token" -> payload.authToken = value.asString
                 "required_action" -> payload.requiredAction = value.asString
-                "experiments" -> payload.experiments = value.asJsonArray.associate { encoded ->
-                    UserExperimentDto.Adapter().fromJsonTree(encoded).let { it.nameHash to it }
-                }
-                "guild_experiments" -> payload.guildExperiments = value.asJsonArray.map {
-                    GuildExperimentDtoTypeAdapter().fromJsonTree(it)
+                "experiments" -> if (value.isJsonArray) payload.experiments = value.asJsonArray.mapNotNull { encoded ->
+                    runCatching { UserExperimentDto.Adapter().fromJsonTree(encoded) }.getOrNull()
+                }.associateBy(UserExperimentDto::nameHash)
+                "guild_experiments" -> if (value.isJsonArray) payload.guildExperiments = value.asJsonArray.mapNotNull {
+                    runCatching { GuildExperimentDtoTypeAdapter().fromJsonTree(it) }.getOrNull()
                 }
                 "connected_accounts" -> payload.connectedAccounts = gson.fromJson(value, type<List<ConnectedAccount>>())
                 "sessions" -> payload.sessions = gson.fromJson(value, type<List<ModelSession>>())

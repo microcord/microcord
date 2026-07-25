@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -31,6 +32,19 @@ class WidgetFriendsList : Fragment(R.layout.widget_friends_list) {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         (activity as? AppCompatActivity)?.supportActionBar?.title = getString(R.string.friends)
+        view.findDescendant(Toolbar::class.java)?.apply {
+            setTitle(R.string.friends)
+            menu.clear()
+            inflateMenu(R.menu.menu_friends)
+            menu.findItem(R.id.menu_friends_contact_sync).isVisible = onContactSync != null
+            menu.findItem(R.id.menu_friends_start_group).isVisible = onStartGroup != null
+            setOnMenuItemClickListener { item -> when (item.itemId) {
+                R.id.menu_friends_add_friend -> true.also { onAddFriend() }
+                R.id.menu_friends_contact_sync -> true.also { onContactSync?.invoke() }
+                R.id.menu_friends_start_group -> true.also { onStartGroup?.invoke() }
+                else -> false
+            } }
+        }
         view.findViewById<EmptyFriendsStateView>(R.id.friends_list_empty_friends_state_view).setOnAddFriendClicked {
             onAddFriend()
         }
@@ -206,6 +220,13 @@ class WidgetFriendsList : Fragment(R.layout.widget_friends_list) {
 
     private class Holder(view: View) : RecyclerView.ViewHolder(view)
 
+    private fun <T : View> View.findDescendant(type: Class<T>): T? {
+        if (type.isInstance(this)) return type.cast(this)
+        if (this !is ViewGroup) return null
+        for (index in 0 until childCount) getChildAt(index).findDescendant(type)?.let { return it }
+        return null
+    }
+
     companion object {
         @JvmField var stateSource: (() -> Observable<FriendsListInput>)? = null
         @JvmField var onAddFriend: () -> Unit = {}
@@ -215,5 +236,7 @@ class WidgetFriendsList : Fragment(R.layout.widget_friends_list) {
         @JvmField var onMessage: (FriendUserUi) -> Unit = {}
         @JvmField var onCall: (FriendUserUi) -> Unit = {}
         @JvmField var onProfile: (FriendUserUi) -> Unit = {}
+        @JvmField var onContactSync: (() -> Unit)? = null
+        @JvmField var onStartGroup: (() -> Unit)? = null
     }
 }

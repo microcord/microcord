@@ -93,17 +93,18 @@ class StoreGuildsSorted(
     private fun validateAndRebuild() {
         val positionedIds = positions.flatMapTo(HashSet(), ModelGuildFolder::guildIds)
         guilds.keys.filter { it !in positionedIds && it !in lurkingGuildIds }
-            .sorted().forEach { positions.add(0, ModelGuildFolder(null, listOf(it))) }
+            .sorted().asReversed().forEach { positions.add(0, ModelGuildFolder(null, listOf(it))) }
 
+        val seenGuildIds = HashSet<Long>()
         positions.indices.forEach { index ->
             val position = positions[index]
             positions[index] = position.copy(
                 guildIds = position.guildIds.filter {
-                    it in guilds && it !in unavailableGuildIds && it !in lurkingGuildIds
+                    it in guilds && it !in unavailableGuildIds && it !in lurkingGuildIds && seenGuildIds.add(it)
                 },
             )
         }
-        lurkingGuildIds.filter(guilds::containsKey).sorted().forEach {
+        lurkingGuildIds.filter(guilds::containsKey).sorted().asReversed().forEach {
             positions.add(0, ModelGuildFolder(null, listOf(it)))
         }
         positions.removeAll { it.guildIds.isEmpty() }

@@ -14,10 +14,13 @@ import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
 import com.discord.widgets.channels.list.WidgetChannelsList
 import com.discord.widgets.channels.memberlist.WidgetChannelMembersList
+import com.discord.widgets.channels.WidgetChannelTopic
+import com.discord.widgets.channels.WidgetChannelSidebarActions
 import com.discord.widgets.guilds.list.WidgetGuildsList
 import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.models.message.Message
 import com.discord.api.channel.Channel
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import rx.Subscription
 
 fun interface BackHandler {
@@ -47,6 +50,16 @@ class WidgetHome : Fragment(R.layout.widget_home), BackHandler, WidgetChannelPin
         if (childFragmentManager.findFragmentByTag(MEMBERS_TAG) == null) {
             childFragmentManager.commitNow { replace(R.id.widget_connected_list, WidgetChannelMembersList(), MEMBERS_TAG) }
         }
+        if (childFragmentManager.findFragmentByTag(TOPIC_TAG) == null) {
+            childFragmentManager.commitNow { replace(R.id.widget_channel_topic, WidgetChannelTopic(), TOPIC_TAG) }
+        }
+        if (childFragmentManager.findFragmentByTag(ACTIONS_TAG) == null) {
+            childFragmentManager.commitNow {
+                replace(R.id.widget_channel_action_bar, WidgetChannelSidebarActions(), ACTIONS_TAG)
+            }
+        }
+        WidgetChannelSidebarActions.onPins = ::openPins
+        WidgetChannelSidebarActions.onNotifications = ::openMuteSettings
     }
 
     override fun onStart() {
@@ -58,6 +71,11 @@ class WidgetHome : Fragment(R.layout.widget_home), BackHandler, WidgetChannelPin
         selectedChannelSubscription = StoreStream.getChannelsSelected().observeSelectedChannel().subscribe { channel ->
             activity?.runOnUiThread {
                 lockCloseRightPanel(channel == null)
+                panels.setStartPanelUseFullPortraitWidth(channel == null)
+                panels.setStartPanelLockState(
+                    if (channel == null) OverlappingPanelsLayout.LockState.OPEN
+                    else OverlappingPanelsLayout.LockState.UNLOCKED,
+                )
                 if (channel != null) ensureChatInflated()
                 view?.findViewById<View>(R.id.widget_home_panel_center_chat)?.visibility =
                     if (channel == null) View.GONE else View.VISIBLE
@@ -74,15 +92,21 @@ class WidgetHome : Fragment(R.layout.widget_home), BackHandler, WidgetChannelPin
         super.onStop()
     }
 
+    override fun onDestroyView() {
+        WidgetChannelSidebarActions.onPins = null
+        WidgetChannelSidebarActions.onNotifications = null
+        super.onDestroyView()
+    }
+
     override fun onBackPressed(): Boolean {
         if (childFragmentManager.backStackEntryCount > 0) {
             childFragmentManager.popBackStack()
             return true
         }
-        if (panels.getSelectedPanel() == OverlappingPanelsLayout.Panel.CENTER) {
-            panels.openStartPanel()
-        } else {
-            panels.closePanels()
+        when (panels.getSelectedPanel()) {
+            OverlappingPanelsLayout.Panel.START -> requireActivity().moveTaskToBack(true)
+            OverlappingPanelsLayout.Panel.CENTER -> panels.openStartPanel()
+            OverlappingPanelsLayout.Panel.END -> panels.closePanels()
         }
         return true
     }
@@ -116,10 +140,7 @@ class WidgetHome : Fragment(R.layout.widget_home), BackHandler, WidgetChannelPin
             when (item.itemId) {
                 R.id.menu_chat_side_panel -> true.also { panels.openEndPanel() }
                 R.id.menu_private_channel_sidebar_pinned_messages -> true.also {
-                    childFragmentManager.commit {
-                        replace(R.id.panel_center, WidgetChannelPinnedMessages.newInstance(channel.id))
-                        addToBackStack("pins")
-                    }
+                    openPins(channel.id)
                 }
                 else -> false
             }
@@ -134,6 +155,26 @@ class WidgetHome : Fragment(R.layout.widget_home), BackHandler, WidgetChannelPin
     }
     override fun onPinnedMessageLongPress(message: Message) = false
 
+    private fun openPins(channelId: Long) {
+        childFragmentManager.commit {
+            replace(R.id.panel_center, WidgetChannelPinnedMessages.newInstance(channelId))
+            addToBackStack("pins")
+        }
+    }
+
+    private fun openMuteSettings(channelId: Long) {
+        val channel = StoreStream.getChannels().getChannel(channelId) ?: return
+        val settings = StoreStream.getUserGuildSettings()
+        val muted = settings.getGuildSettings()[channel.guildId]
+            ?.getChannelOverride(channelId)?.isMuted == true
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.notification_settings)
+            .setItems(arrayOf(getString(if (muted) R.string.unmute else R.string.mute))) { _, _ ->
+                settings.setChannelMuted(requireContext(), channelId, !muted)
+            }
+            .show()
+    }
+
     private fun <T : View> View.findDescendant(type: Class<T>): T? {
         if (type.isInstance(this)) return type.cast(this)
         if (this !is android.view.ViewGroup) return null
@@ -145,5 +186,7 @@ class WidgetHome : Fragment(R.layout.widget_home), BackHandler, WidgetChannelPin
         const val GUILDS_TAG = "WidgetGuildsList"
         const val CHANNELS_TAG = "WidgetChannelsList"
         const val MEMBERS_TAG = "WidgetChannelMembersList"
+        const val TOPIC_TAG = "WidgetChannelTopic"
+        const val ACTIONS_TAG = "WidgetChannelSidebarActions"
     }
 }

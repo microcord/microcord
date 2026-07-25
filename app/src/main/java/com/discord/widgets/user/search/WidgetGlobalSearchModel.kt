@@ -28,6 +28,7 @@ class WidgetGlobalSearchModel private constructor() {
         val guild: Guild? = null,
         override val mentions: Int = 0,
         override val unread: Boolean = false,
+        val presence: Presence? = null,
     ) : ItemDataPayload {
         override val type = TYPE_CHANNEL
         override val key = channel.id.toString()

@@ -3,9 +3,11 @@ package com.discord.widgets.tabs
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
+import androidx.activity.OnBackPressedCallback
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.commit
 import com.discord.R
+import com.discord.panels.PanelState
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
 import com.discord.utilities.intent.AppIntentContract
@@ -25,15 +27,32 @@ import com.discord.widgets.user.WidgetUserMutualGuilds
 import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
 import com.discord.widgets.settings.WidgetSettings
 import com.discord.widgets.settings.account.WidgetSettingsBlockedUsers
+import com.discord.widgets.user.WidgetUserMentions
+import com.discord.widgets.user.search.WidgetGlobalSearch
 import rx.Subscription
+
+internal fun shouldShowBottomNavigation(tab: NavigationTab, leftPanelState: PanelState) =
+    tab != NavigationTab.HOME || leftPanelState == PanelState.Open || leftPanelState == PanelState.Opening
+
+internal val mainNavigationTabs = setOf(
+    NavigationTab.HOME,
+    NavigationTab.FRIENDS,
+    NavigationTab.SEARCH,
+    NavigationTab.MENTIONS,
+    NavigationTab.SETTINGS,
+)
 
 class WidgetTabsHost : Fragment(R.layout.widget_tabs_host), BackHandler {
     private lateinit var bottomNavigation: TabsHostBottomNavigationView
     private var selectedTabSubscription: Subscription? = null
     private var pendingIntentSubscription: Subscription? = null
+    private var leftPanelSubscription: Subscription? = null
+    private var profileSubscription: Subscription? = null
     private var restoredTab: NavigationTab? = null
+    private var leftPanelState: PanelState = PanelState.Closed
     private val destinations = mapOf(
         NavigationTab.FRIENDS to Destination(R.id.widget_tabs_host_friends, "com.discord.widgets.friends.WidgetFriendsList"),
+        NavigationTab.SEARCH to Destination(R.id.widget_tabs_host_search, "com.discord.widgets.user.search.WidgetGlobalSearch"),
         NavigationTab.MENTIONS to Destination(R.id.widget_tabs_host_mentions, "com.discord.widgets.user.WidgetUserMentions"),
         NavigationTab.SETTINGS to Destination(R.id.widget_tabs_host_user_settings, "com.discord.widgets.settings.WidgetSettings"),
     )
@@ -41,6 +60,14 @@ class WidgetTabsHost : Fragment(R.layout.widget_tabs_host), BackHandler {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         bottomNavigation = view.findViewById(R.id.widget_tabs_host_bottom_navigation_view)
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (onBackPressed()) return
+                isEnabled = false
+                requireActivity().onBackPressedDispatcher.onBackPressed()
+                isEnabled = true
+            }
+        })
         WidgetFriendsList.onAddFriend = {
             childFragmentManager.commit {
                 replace(R.id.widget_tabs_host_friends, WidgetFriendsAdd())
@@ -55,27 +82,27 @@ class WidgetTabsHost : Fragment(R.layout.widget_tabs_host), BackHandler {
         }
         WidgetChannelMembersList.onUserClicked = { WidgetUserSheet.show(it, childFragmentManager) }
         WidgetUserStatusSheet.onCustomStatus = {
-            StoreStream.getTabsNavigation().selectTab(NavigationTab.SETTINGS, true)
             childFragmentManager.commit {
-                replace(R.id.widget_tabs_host_user_settings, WidgetUserSetCustomStatus())
+                replace(activeTabContainerId(), WidgetUserSetCustomStatus())
                 addToBackStack("custom_status")
             }
         }
         WidgetUserSheet.onMutualFriends = { userId ->
             childFragmentManager.commit {
-                replace(R.id.widget_tabs_host_home, WidgetUserMutualFriends.newInstance(userId))
+                replace(activeTabContainerId(), WidgetUserMutualFriends.newInstance(userId))
                 addToBackStack("mutual_friends")
             }
         }
         WidgetUserSheet.onMutualGuilds = { userId ->
             childFragmentManager.commit {
-                replace(R.id.widget_tabs_host_home, WidgetUserMutualGuilds.newInstance(userId))
+                replace(activeTabContainerId(), WidgetUserMutualGuilds.newInstance(userId))
                 addToBackStack("mutual_guilds")
             }
         }
         WidgetUserMutualFriends.onFriendSelected = { WidgetUserSheet.show(it, childFragmentManager) }
         WidgetUserMutualGuilds.onGuildSelected = {
             childFragmentManager.popBackStack()
+            StoreStream.getTabsNavigation().selectTab(NavigationTab.HOME, true)
             StoreStream.selectGuild(it)
         }
         WidgetSettings.onSetStatus = { WidgetUserStatusSheet.show(childFragmentManager) }
@@ -114,6 +141,16 @@ class WidgetTabsHost : Fragment(R.layout.widget_tabs_host), BackHandler {
         pendingIntentSubscription = StoreStream.getNavigation().observePendingIntent().subscribe { contract ->
             activity?.runOnUiThread { consumeOwnedRoute(contract) }
         }
+        leftPanelSubscription = StoreStream.getNavigation().observeLeftPanelState().subscribe { state ->
+            leftPanelState = state
+            activity?.runOnUiThread { updateBottomNavigationVisibility() }
+        }
+        profileSubscription = rx.Observable.combineLatest(
+            StoreStream.getUsers().observeMe(),
+            StoreStream.getPresences().observeAllPresences(),
+        ) { user, presences -> user to presences[user.id] }.subscribe {
+            activity?.runOnUiThread { updateBottomNavigation() }
+        }
     }
 
     override fun onStop() {
@@ -121,6 +158,10 @@ class WidgetTabsHost : Fragment(R.layout.widget_tabs_host), BackHandler {
         selectedTabSubscription = null
         pendingIntentSubscription?.unsubscribe()
         pendingIntentSubscription = null
+        leftPanelSubscription?.unsubscribe()
+        leftPanelSubscription = null
+        profileSubscription?.unsubscribe()
+        profileSubscription = null
         super.onStop()
     }
 
@@ -142,7 +183,6 @@ class WidgetTabsHost : Fragment(R.layout.widget_tabs_host), BackHandler {
             is DeepLinkRoute.Settings -> NavigationTab.SETTINGS
             else -> return
         }
-        if (tab != NavigationTab.HOME && destinations[tab]?.let { isFragmentAvailable(it.className) } != true) return
         if (tab == NavigationTab.HOME) {
             StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE, true)
         } else {
@@ -152,10 +192,7 @@ class WidgetTabsHost : Fragment(R.layout.widget_tabs_host), BackHandler {
     }
 
     private fun showTab(requestedTab: NavigationTab) {
-        val visibleTabs = buildSet {
-            add(NavigationTab.HOME)
-            destinations.filterValues { isFragmentAvailable(it.className) }.keys.forEach(::add)
-        }
+        val visibleTabs = mainNavigationTabs
         val tab = requestedTab.takeIf { it in visibleTabs } ?: NavigationTab.HOME
         if (tab != requestedTab) StoreStream.getTabsNavigation().selectTab(tab)
 
@@ -166,24 +203,52 @@ class WidgetTabsHost : Fragment(R.layout.widget_tabs_host), BackHandler {
             container.visibility = if (tab == destinationTab) View.VISIBLE else View.GONE
             if (tab == destinationTab && childFragmentManager.findFragmentByTag(tab.name) == null) {
                 childFragmentManager.commit {
-                    replace(destination.containerId, instantiate(destination.className), tab.name)
+                    replace(
+                        destination.containerId,
+                        when (tab) {
+                            NavigationTab.FRIENDS -> WidgetFriendsList()
+                            NavigationTab.SEARCH -> WidgetGlobalSearch()
+                            NavigationTab.MENTIONS -> WidgetUserMentions()
+                            NavigationTab.SETTINGS -> WidgetSettings()
+                            else -> instantiate(destination.className)
+                        },
+                        tab.name,
+                    )
                 }
             }
         }
 
-        bottomNavigation.visibility = View.VISIBLE
+        updateBottomNavigationVisibility(tab)
+        updateBottomNavigation(tab)
+    }
+
+    private fun updateBottomNavigation(tab: NavigationTab = StoreStream.getTabsNavigation().getSelectedTab()) {
+        val user = StoreStream.getUsers().getMe()
         bottomNavigation.updateView(
             tab,
             ::selectTab,
             true,
-            StoreStream.getUsers().getMe().id,
-            visibleTabs,
+            user,
+            StoreStream.getPresences().getPresences()[user.id],
+            mainNavigationTabs,
             0,
             0,
-            {},
+            { selectTab(NavigationTab.SEARCH) },
             { WidgetUserStatusSheet.show(childFragmentManager) },
             {},
         )
+    }
+
+    private fun updateBottomNavigationVisibility(tab: NavigationTab = StoreStream.getTabsNavigation().getSelectedTab()) {
+        bottomNavigation.visibility = if (shouldShowBottomNavigation(tab, leftPanelState)) View.VISIBLE else View.INVISIBLE
+    }
+
+    private fun activeTabContainerId() = when (StoreStream.getTabsNavigation().getSelectedTab()) {
+        NavigationTab.FRIENDS -> R.id.widget_tabs_host_friends
+        NavigationTab.SEARCH -> R.id.widget_tabs_host_search
+        NavigationTab.SETTINGS -> R.id.widget_tabs_host_user_settings
+        NavigationTab.MENTIONS -> R.id.widget_tabs_host_mentions
+        else -> R.id.widget_tabs_host_home
     }
 
     private fun selectTab(tab: NavigationTab) {
@@ -196,10 +261,6 @@ class WidgetTabsHost : Fragment(R.layout.widget_tabs_host), BackHandler {
 
     private fun instantiate(className: String) = childFragmentManager.fragmentFactory
         .instantiate(requireContext().classLoader, className)
-
-    private fun isFragmentAvailable(className: String) = runCatching {
-        Class.forName(className, false, requireContext().classLoader).asSubclass(Fragment::class.java)
-    }.isSuccess
 
     override fun onBackPressed(): Boolean {
         if (childFragmentManager.backStackEntryCount > 0) {

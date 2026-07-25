@@ -49,13 +49,14 @@ class StoreStreamTest {
 
     @Test
     fun messageGatewayEventsReconcileSelectedChannelHistory() {
-        StoreStream.selectChannel(1, 100)
         val gson = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
             .registerDiscordApiTypeAdapters().create()
         val parser = IncomingParser(gson)
         fun dispatch(json: String) = parser.parse(json).also { event ->
             stream.handleGatewayDispatch(event.type, requireNotNull(event.data))
         }
+        dispatch("""{"op":0,"t":"CHANNEL_CREATE","d":{"id":100,"guild_id":0,"type":1,"name":"dm"}}""")
+        StoreStream.selectChannel(0, 100)
 
         dispatch("""{"op":0,"t":"MESSAGE_CREATE","d":{"id":200,"channel_id":100,"guild_id":1,"author":{"id":7,"username":"user","discriminator":"0000"},"content":"first","type":0}}""")
         assertEquals("first", StoreStream.getMessages().getMessage(100, 200)?.content)

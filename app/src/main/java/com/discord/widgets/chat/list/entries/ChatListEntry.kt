@@ -13,6 +13,8 @@ sealed class ChatListEntry(key: String) {
     open val messageId: Long? = null
 
     data class Loading(val channelId: Long) : ChatListEntry("loading:$channelId")
+    data class EmptyPins(val channelId: Long, val dm: Boolean) : ChatListEntry("empty-pins:$channelId")
+    data class Divider(val key: String) : ChatListEntry("divider:$key")
     data class Start(val channel: Channel) : ChatListEntry("start:${channel.id}")
     data class Spacer(val channelId: Long) : ChatListEntry("spacer:$channelId")
     data class DayDivider(override val messageId: Long, val timestamp: Long) :
@@ -39,7 +41,13 @@ sealed class ChatListEntry(key: String) {
         val attachment: MessageAttachment,
         val index: Int,
     ) : MessageRow(message, attachment.filename, "attachment:${message.id}:$index")
-    data class Reactions(override val message: Message, val reactions: List<MessageReaction>) :
+    data class Reactions(
+        override val message: Message,
+        val reactions: List<MessageReaction>,
+        val canAddReactions: Boolean = true,
+        val canCreateReactions: Boolean = false,
+        val animateEmojis: Boolean = true,
+    ) :
         MessageRow(message, reactions.joinToString { it.emoji.name ?: it.emoji.id.orEmpty() }, "reactions:${message.id}")
     data class UploadProgress(override val message: Message, val state: StoreMessageUploads.MessageUploadState) :
         MessageRow(message, message.content.orEmpty(), "upload:${message.id}")

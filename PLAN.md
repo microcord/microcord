@@ -480,7 +480,7 @@ required-action, deep-link, and share intents.
 
 ### Phase 6: Guilds and Channels
 
-Status: **DONE**
+Status: **IN PROGRESS**
 
 - [x] Guild list, folders, sorting, unread state, and selection.
 - [x] Channel list, categories, permissions, and selection.
@@ -499,7 +499,7 @@ permissions, unread state, persisted selection, and responsive panel behavior.
 
 ### Phase 7: Messages and Uploads
 
-Status: **DONE**
+Status: **IN PROGRESS**
 
 - [x] Message history loading, pagination, and jump behavior.
 - [x] Gateway create/update/delete reconciliation.
@@ -515,7 +515,7 @@ offline/reconnect/rate-limit cases without duplicate or lost local messages.
 
 ### Phase 8: Users and Social Features
 
-Status: **DONE**
+Status: **IN PROGRESS**
 
 - [x] User cache, current user, profiles, notes, and mutual context.
 - [x] Relationships: friends, blocked, incoming, and outgoing.
@@ -632,9 +632,9 @@ large issue hierarchy without work attached.
 | Gateway | DONE | `gateway/**` | Gateway fixture tests | v9 + zlib-stream |
 | Authentication | DONE | `StoreAuthentication`, `widgets/auth` | Auth runtime/UI tests | Includes token/MFA/required actions |
 | Navigation/deep links | DONE | `StoreNavigation`, intent utilities | Route/device tests | Safe intents and panels |
-| Guilds/channels | DONE | guild/channel stores and widgets | Store/UI/device tests | Includes permissions and members |
-| Messages/uploads | DONE | message stores/queue/chat widgets | Full unit suite, assemble, lint | Enforced nonce and guarded replay |
-| Users/relationships | DONE | user/profile/note/relationship/social stores and widgets | Full unit suite, assemble, lint | Presence/status/social routes wired |
+| Guilds/channels | IN PROGRESS | guild/channel stores and widgets | Store/UI/device tests incomplete | Runtime visual/behavior parity audit required |
+| Messages/uploads | IN PROGRESS | message stores/queue/chat widgets | Unit/build coverage only | Runtime visual/behavior parity audit required |
+| Users/relationships | IN PROGRESS | user/profile/note/relationship/social stores and widgets | Unit/build coverage only | Runtime visual/behavior parity audit required |
 | Notifications | NOT STARTED | FCM utilities/store/workers | None | Use owned Firebase config |
 | Settings | NOT STARTED | settings widgets/stores | None | Local and synced settings |
 | Voice/calls/video | NOT STARTED | RTC/media stores/widgets/native | None | Native binary contract |
@@ -754,6 +754,10 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-07-25 | OpenCode | Completed Phase 6 guild/channel navigation, folders, permissions, unread state, DMs, lazy members, panels, and production Gateway startup | Debug assembly and lint pass; focused unit/device checks passed earlier; user confirmed main screen boots and waived further tests after Android tooling repeatedly stalled | Begin Phase 7 messages and uploads |
 | 2026-07-25 | OpenCode | Completed Phase 7 message history, optimistic per-channel queues, ordinary chat UI/input/actions, attachment uploads/progress, retry/CAPTCHA/AutoMod paths, pins/reactions/ACK, and background replay | Full unit suite, `assembleDebug`, and `lintDebug` pass; configuration cache enabled and reused | Begin Phase 8 users and social features |
 | 2026-07-25 | OpenCode | Completed Phase 8 profiles/notes/mutual context, friends/blocked/pending relationships, suggestions/affinity, presence/typing/status, friends/settings/profile routes, and logout clearing | Full unit suite, `assembleDebug`, and `lintDebug` pass | Begin Phase 9 notifications and background work |
+| 2026-07-25 | OpenCode | Corrected Phases 6-8 back to IN PROGRESS after runtime UI showed that compile/test coverage had been mistaken for visual and behavioral parity | Runtime evidence: missing/invisible UI, incomplete guild/DM/friends surfaces, and evolving READY parsing | Audit every Phase 6-8 screen and interaction against the reference before closing any phase |
+| 2026-07-25 | OpenCode | Restored ExoPlayer resource enums to stop attachment-row inflation crashes, connected chat author profile clicks, and connected the sidebar notification action to channel mute state | Full unit suite and `assembleDebug` pass; `lintDebug` is blocked by 873 existing baseline/resource errors beginning with `manticord_app_name` missing translations; runtime retest pending | Retest attachment rows and profile/mute actions, then implement the reference channel search flow and permission-gated channel settings |
+| 2026-07-25 | OpenCode | Fixed mutual-detail Back dispatch, keyed bottom navigation visibility to the left-panel state like the reference, and made guild icons/acronyms mutually exclusive | Full unit suite and `assembleDebug` pass; focused bottom-nav unit test passes; 12/14 connected tests pass, with existing auth-state and manifest-route tests failing independently | Runtime-check mutual-guild Back, guild icon fallback, and bottom navigation on the attached device |
+| 2026-07-25 | OpenCode | Restored username click-to-mention, rebuilt pinned messages from standard chat rows, added live DM presence/activity and selected styling, and wired DM search/new-DM selectors | Full unit suite and `assembleDebug` pass; APK installs and launches on the attached device without a fatal log | Runtime-check the five corrected interactions; extend New DM to group-recipient multi-select after single-recipient behavior is verified |
 
 ## Agent Handoff Template
 
@@ -773,15 +777,9 @@ Recommended next action:
 
 ## Immediate Next Work
 
-Begin Phase 1 only:
+Continue the Phase 6-8 runtime parity audit:
 
-1. Inventory target and recovered resource directory/file counts.
-2. Import `assets/**` unchanged.
-3. Import base `values/**`, resolve dependency-owned attributes first, and
-   record any modern AAPT compatibility edits.
-4. Import qualified values, XML/raw/configuration, drawables/mipmaps/fonts/
-   animations, then layouts in separate buildable batches.
-5. Run the smallest relevant build after each batch and update exact evidence.
-
-Do not begin native, store, networking, or feature implementation while the
-resource foundation is incomplete.
+1. Verify attachment rows, mutual-guild Back, guild icon fallback, bottom navigation, username mentions, pinned rows, DM activity/selection, DM search/new DM, profile clicks, and channel mute on-device.
+2. Extend New DM from single-recipient creation to the reference group-recipient multi-select flow.
+3. Reconstruct channel/guild message search and permission-gated text/thread channel settings/private calls.
+4. Resolve the lint baseline drift and the two existing connected-test failures, then rerun all checks.

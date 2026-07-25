@@ -18,6 +18,7 @@ import androidx.core.content.ContextCompat
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.models.user.User
+import com.discord.views.StatusView
 import com.facebook.drawee.view.SimpleDraweeView
 
 class ViewGlobalSearchItem @JvmOverloads constructor(
@@ -31,6 +32,7 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
     private val mentions: TextView
     private val name: TextView
     private val unread: ImageView
+    private val status: StatusView
 
     init {
         LayoutInflater.from(context).inflate(R.layout.view_global_search_item, this)
@@ -41,6 +43,7 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
         mentions = requireNotNull(findViewById(R.id.item_mentions_tv))
         name = requireNotNull(findViewById(R.id.item_name_tv))
         unread = requireNotNull(findViewById(R.id.item_unread))
+        status = requireNotNull(findViewById(R.id.item_status))
     }
 
     fun configure(data: WidgetGlobalSearchModel.ItemDataPayload) {
@@ -50,6 +53,10 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
 
     fun onConfigure(data: WidgetGlobalSearchModel.ItemChannel) {
         configure(data)
+        status.apply {
+            visibility = if (data.channel.type == Channel.DM) View.VISIBLE else View.GONE
+            setPresence(data.presence)
+        }
         icon.controller = null
         when (data.channel.type) {
             Channel.DM, Channel.GROUP_DM -> setPrivateChannelIcon(data.channel)
@@ -59,16 +66,17 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
             else -> icon.setActualImageResource(R.drawable.ic_channel_text_grey_18dp)
         }
         group.setTextAndVisibility(data.guild?.name)
-        name.text = styledText(data.matchedResult, data.channel.name.orEmpty())
+        name.text = styledText(data.matchedResult, data.channel.name ?: data.matchedResult.value.toString())
 
         when (data.channel.type) {
             Channel.GROUP_DM -> {
                 description.text = styledRecipients(data.channel)
-                description.visibility = View.GONE
+                description.visibility = if (description.text.isNullOrEmpty()) View.GONE else View.VISIBLE
                 description.isAllCaps = false
             }
             Channel.DM -> {
-                description.visibility = View.GONE
+                description.setTextAndVisibility(data.presence?.activities.orEmpty().firstOrNull()?.let { it.state ?: it.details ?: it.name })
+                description.isAllCaps = false
                 val recipient = data.channel.recipients?.firstOrNull()
                 group.setTextAndVisibility(recipient?.let { "${it.username}#${it.discriminator}" })
             }
@@ -83,6 +91,7 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
 
     fun onConfigure(data: WidgetGlobalSearchModel.ItemGuild) {
         configure(data)
+        status.visibility = View.GONE
         val hash = data.guild.icon
         icon.setImageURI(
             if (hash == null) "asset://asset/images/default_icon.jpg"
@@ -95,6 +104,10 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
 
     fun onConfigure(data: WidgetGlobalSearchModel.ItemUser) {
         configure(data)
+        status.apply {
+            visibility = View.VISIBLE
+            setPresence(data.presence)
+        }
         icon.setImageURI(userAvatar(data.user))
         group.text = if (data.isFriend) context.getText(R.string.friends) else null
         name.text = styledText(data.matchedResult, data.matchedResult.value.toString())

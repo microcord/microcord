@@ -131,6 +131,17 @@ class WidgetUserSheet : BottomSheetDialogFragment() {
         }
         if (state !is State.Loaded) return
         loaded = state
+        root.findViewById<View>(R.id.user_sheet_profile_stage_actions_card).visibility = View.GONE
+        root.findViewById<View>(R.id.user_sheet_profile_stage_actions_view).visibility = View.GONE
+        root.findViewById<View>(R.id.user_sheet_profile_voice_settings_header).visibility = View.GONE
+        root.findViewById<View>(R.id.voice_settings_view_card).visibility = View.GONE
+        root.findViewById<View>(R.id.rich_presence_container).visibility = View.GONE
+        root.findViewById<View>(R.id.user_sheet_guild_container).visibility = View.GONE
+        root.findViewById<View>(R.id.user_sheet_developer_header).visibility = View.GONE
+        root.findViewById<View>(R.id.user_sheet_copy_id).visibility = View.GONE
+        root.findViewById<View>(R.id.user_sheet_profile_add_to_server_container).visibility = View.GONE
+        root.findViewById<View>(R.id.user_sheet_profile_edit_container).visibility = View.GONE
+        root.findViewById<View>(R.id.user_sheet_profile_actions_divider).visibility = View.GONE
         showHeader(state)
         showRelationship(state)
         showNote(state.note)
@@ -192,7 +203,13 @@ class WidgetUserSheet : BottomSheetDialogFragment() {
         requireView().findViewById<UserProfileConnectionsView>(R.id.user_sheet_connections_view).apply {
             visibility = if (visible) View.VISIBLE else View.GONE
             updateViewState(state.connections, { name, _, url -> onConnectedAccount?.invoke(name, url) },
-                { onMutualGuilds?.invoke(state.user.id) }, { onMutualFriends?.invoke(state.user.id) })
+                {
+                    dismissAllowingStateLoss()
+                    onMutualGuilds?.invoke(state.user.id)
+                }, {
+                    dismissAllowingStateLoss()
+                    onMutualFriends?.invoke(state.user.id)
+                })
         }
     }
 

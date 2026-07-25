@@ -14,19 +14,20 @@ class StorePinnedMessages(
     private val loading = HashSet<Long>()
     private var snapshot: Map<Long, List<Message>> = emptyMap()
 
-    fun observeForChannel(channelId: Long): Observable<List<Message>> {
+    fun observeForChannel(channelId: Long): Observable<List<Message>?> {
         loadPinnedMessages(channelId)
-        return observationDeck.connectRx(this) { snapshot[channelId].orEmpty() }.distinctUntilChanged()
+        return observationDeck.connectRx(this) { snapshot[channelId] }.distinctUntilChanged()
     }
 
     fun observePinnedMessage(channelId: Long, messageId: Long): Observable<Message?> =
-        observeForChannel(channelId).map { messages -> messages.firstOrNull { it.id == messageId } }.distinctUntilChanged()
+        observeForChannel(channelId).map { messages -> messages?.firstOrNull { it.id == messageId } }.distinctUntilChanged()
 
     fun loadPinnedMessages(channelId: Long) {
         if (channelId in snapshot || !loading.add(channelId)) return
         loader(channelId) { result -> dispatcher.schedule {
             loading.remove(channelId)
-            result.getOrNull()?.let { pinnedMessages[channelId] = it.sortedByDescending(Message::id).toMutableList(); markChanged() }
+            pinnedMessages[channelId] = result.getOrDefault(emptyList()).sortedByDescending(Message::id).toMutableList()
+            markChanged()
         } }
     }
 

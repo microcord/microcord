@@ -96,6 +96,15 @@ interface RestAPIInterface {
     @GET("channels/{channelId}/pins")
     fun getChannelPins(@Path("channelId") channelId: Long): Observable<List<Message>>
 
+    @GET("users/@me/mentions")
+    fun getMentions(
+        @Query("limit") limit: Int,
+        @Query("roles") roles: Boolean,
+        @Query("everyone") everyone: Boolean,
+        @Query("guild_id") guildId: Long? = null,
+        @Query("before") before: Long? = null,
+    ): Observable<List<Message>>
+
     @PUT("channels/{channelId}/pins/{messageId}")
     fun addChannelPin(
         @Path("channelId") channelId: Long,

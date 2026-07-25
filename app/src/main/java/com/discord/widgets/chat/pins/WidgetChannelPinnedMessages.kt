@@ -3,14 +3,17 @@ package com.discord.widgets.chat.pins
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
 import androidx.appcompat.widget.Toolbar
+import androidx.activity.OnBackPressedCallback
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.models.message.Message
 import com.discord.stores.StorePinnedMessages
+import com.discord.widgets.chat.list.adapter.WidgetChatListAdapter
+import com.discord.widgets.chat.list.entries.ChatListEntry
+import com.discord.widgets.chat.list.model.ChatListRows
 import rx.Subscription
 
 class WidgetChannelPinnedMessages : Fragment(R.layout.widget_channel_pinned_messages) {
@@ -28,7 +31,7 @@ class WidgetChannelPinnedMessages : Fragment(R.layout.widget_channel_pinned_mess
         val host = host()
         val channelId = requireArguments().getLong(ARG_CHANNEL_ID)
         val channel = host.channelForPins(channelId)
-        val adapter = PinnedAdapter(
+        val adapter = WidgetChatListAdapter(
             onClick = { host.jumpToPinnedMessage(channelId, it.id) },
             onLongClick = host::onPinnedMessageLongPress,
         )
@@ -38,10 +41,20 @@ class WidgetChannelPinnedMessages : Fragment(R.layout.widget_channel_pinned_mess
             subtitle = channel?.name
             setNavigationOnClickListener { parentFragmentManager.popBackStack() }
         }
-        adapter.showLoading()
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (parentFragmentManager.backStackEntryCount > 0) parentFragmentManager.popBackStack()
+                else {
+                    isEnabled = false
+                    requireActivity().onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
         subscription = host.pinnedMessagesStore().observeForChannel(channelId).subscribe(
-            { messages -> view.post { adapter.submit(messages, channel?.type == Channel.DM) } },
-            { view.post { adapter.showEmpty(channel?.type == Channel.DM) } },
+            { messages -> view.post {
+                adapter.submitList(rows(channelId, channel, messages))
+            } },
+            { view.post { adapter.submitList(listOf(ChatListEntry.EmptyPins(channelId, channel?.type == Channel.DM))) } },
         )
     }
 
@@ -61,59 +74,17 @@ class WidgetChannelPinnedMessages : Fragment(R.layout.widget_channel_pinned_mess
         return null
     }
 
-    private class PinnedAdapter(
-        private val onClick: (Message) -> Unit,
-        private val onLongClick: (Message) -> Boolean,
-    ) : RecyclerView.Adapter<PinnedAdapter.Holder>() {
-        private var rows: List<Row> = listOf(Row.Status(R.string.loading))
-
-        sealed class Row {
-            data class Item(val message: Message) : Row()
-            data class Status(val text: Int) : Row()
-        }
-
-        class Holder(val title: TextView, val body: TextView, view: View) : RecyclerView.ViewHolder(view)
-
-        fun showLoading() = setRows(listOf(Row.Status(R.string.loading)))
-        fun showEmpty(dm: Boolean) = setRows(listOf(Row.Status(if (dm) R.string.no_pins_in_dm else R.string.no_pins_in_channel)))
-        fun submit(messages: List<Message>, dm: Boolean) =
-            if (messages.isEmpty()) showEmpty(dm) else setRows(messages.map(Row::Item))
-
-        private fun setRows(value: List<Row>) {
-            rows = value
-            notifyDataSetChanged()
-        }
-
-        override fun getItemCount() = rows.size
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
-            val view = android.view.LayoutInflater.from(parent.context)
-                .inflate(android.R.layout.simple_list_item_2, parent, false)
-            return Holder(view.findViewById(android.R.id.text1), view.findViewById(android.R.id.text2), view)
-        }
-
-        override fun onBindViewHolder(holder: Holder, position: Int) {
-            when (val row = rows[position]) {
-                is Row.Status -> {
-                    holder.title.setText(row.text)
-                    holder.body.text = ""
-                    holder.itemView.setOnClickListener(null)
-                    holder.itemView.setOnLongClickListener(null)
-                }
-                is Row.Item -> {
-                    val message = row.message
-                    holder.title.text = message.author?.username.orEmpty()
-                    holder.body.text = message.content.orEmpty()
-                    holder.itemView.contentDescription = listOf(holder.title.text, holder.body.text)
-                        .filter(CharSequence::isNotEmpty).joinToString(", ")
-                    holder.itemView.setOnClickListener { onClick(message) }
-                    holder.itemView.setOnLongClickListener { onLongClick(message) }
+    companion object {
+        private const val ARG_CHANNEL_ID = "channel_id"
+        internal fun rows(channelId: Long, channel: Channel?, messages: List<Message>?): List<ChatListEntry> = when {
+            messages == null -> listOf(ChatListEntry.Loading(channelId))
+            messages.isEmpty() -> listOf(ChatListEntry.EmptyPins(channelId, channel?.type == Channel.DM))
+            else -> messages.flatMapIndexed { index, message ->
+                ChatListRows.pinnedMessage(message).toMutableList().apply {
+                    if (index < messages.lastIndex) add(ChatListEntry.Divider("$channelId:${message.id}"))
                 }
             }
         }
-    }
-
-    companion object {
-        private const val ARG_CHANNEL_ID = "channel_id"
         fun newInstance(channelId: Long) = WidgetChannelPinnedMessages().apply {
             arguments = Bundle().apply { putLong(ARG_CHANNEL_ID, channelId) }
         }

@@ -2,6 +2,7 @@ package com.discord.widgets.channels.list
 
 import com.discord.api.channel.Channel
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class ChannelListRowsTest {
@@ -33,7 +34,9 @@ class ChannelListRowsTest {
             5L to ChannelListRows.VIEW_CHANNEL,
         )
 
-        assertEquals(listOf(4L, 5L), ChannelListRows.guild(channels, permissions).map { it.stableId })
+        val rows = ChannelListRows.guild(channels, permissions)
+        assertEquals(listOf(3L, 4L, 5L), rows.map { it.stableId })
+        assertFalse((rows[0] as ChannelListRow.Voice).canConnect)
     }
 
     @Test fun sortsPrivateChannelsByLastMessageThenId() {

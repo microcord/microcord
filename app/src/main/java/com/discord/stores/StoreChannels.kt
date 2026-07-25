@@ -72,8 +72,15 @@ class StoreChannels(
         channelsByGuild.clear()
         channelNames.clear()
         threadsById.clear()
+        val readyUsers = (payload.users.orEmpty() + listOfNotNull(payload.me)).associateBy(User::id)
         channelsByGuild[PRIVATE_CHANNELS_ID] = payload.privateChannels.orEmpty()
-            .filterNot(::isThread).associateByTo(HashMap(), Channel::id)
+            .filterNot(::isThread)
+            .map { channel ->
+                if (!channel.recipients.isNullOrEmpty()) channel else channel.copy(
+                    recipients = channel.recipientIds.orEmpty().mapNotNull(readyUsers::get),
+                )
+            }
+            .associateByTo(HashMap(), Channel::id)
         payload.guilds.orEmpty().forEach(::storeGuild)
         preloadedThreads.values.filterNot { it.id in threadsById }.forEach { storeThread(it, it.guildId) }
         preloadedThreads.clear()
@@ -162,6 +169,7 @@ class StoreChannels(
     }
 
     fun getChannel(channelId: Long): Channel? = channelsByIdSnapshot[channelId] ?: threadsByIdSnapshot[channelId]
+    fun getAllChannels(): Map<Long, Channel> = channelsByIdSnapshot + threadsByIdSnapshot
     fun findChannelById(channelId: Long): Channel? = threadsById[channelId]
         ?: channelsByGuild.values.firstNotNullOfOrNull { it[channelId] }
     fun getChannelsForGuild(guildId: Long): Map<Long, Channel> = channelsByGuildSnapshot[guildId].orEmpty()

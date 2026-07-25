@@ -7,6 +7,8 @@ import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.lifecycle.ActivityProvider
 import com.discord.utilities.lifecycle.ApplicationProvider
 import com.discord.utilities.lifecycle.Backgrounded
+import com.discord.utilities.logging.BootLog
+import com.discord.utilities.logging.BootLogEvent
 import com.discord.utilities.persister.PersisterConfig
 import com.discord.utilities.time.ClockFactory
 import com.facebook.drawee.backends.pipeline.Fresco
@@ -17,6 +19,7 @@ class App : Application() {
         super.onCreate()
         if (!initialized.compareAndSet(false, true)) return
 
+        BootLog.record(BootLogEvent.PROCESS_START)
         SharedPreferencesProvider.init(this)
         ApplicationProvider.init(this)
         ActivityProvider.init(this)
@@ -25,7 +28,9 @@ class App : Application() {
         PersisterConfig.init(this, ClockFactory.get())
         Fresco.initialize(this)
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+        BootLog.record(BootLogEvent.PLATFORM_READY)
         System.loadLibrary("dsti")
+        BootLog.record(BootLogEvent.NATIVE_READY)
         StoreStream.initialize(this)
     }
 

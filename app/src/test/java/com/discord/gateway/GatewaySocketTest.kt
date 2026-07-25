@@ -63,6 +63,7 @@ class GatewaySocketTest {
         harness.scheduler.runCurrent()
         harness.scheduler.advanceBy(3000)
         harness.socket.open()
+        harness.socket.serverMessage(hello())
         harness.scheduler.runCurrent()
 
         val resume = harness.socket.lastPayload()
@@ -97,6 +98,7 @@ class GatewaySocketTest {
 
         assertEquals(2, harness.factory.sockets.size)
         harness.socket.open()
+        harness.socket.serverMessage(hello())
         harness.scheduler.runCurrent()
         assertEquals(6, harness.socket.lastOp())
         assertEquals(listOf(false), harness.handler.disconnects)
@@ -190,7 +192,7 @@ class GatewaySocketTest {
 
         override fun connect(url: String, listener: GatewayWebSocketListener): GatewayWebSocket {
             assertTrue(url.startsWith("wss://"))
-            return FakeSocket(listener, fixture).also(sockets::add)
+            return FakeSocket(listener, ZlibFixture()).also(sockets::add)
         }
     }
 

@@ -22,7 +22,8 @@ sealed class GuildExperimentFilter {
         private val maxIdHash = ExperimentHash.from("max_id")
 
         internal fun parseAll(array: JsonArray): List<GuildExperimentFilter> = array.mapNotNull { item ->
-            val encoded = item.asJsonArray
+            val encoded = item.takeIf { it.isJsonArray }?.asJsonArray ?: return@mapNotNull null
+            if (encoded.size() < 2 || encoded[0].isJsonNull || !encoded[1].isJsonArray) return@mapNotNull null
             val type = encoded[0].asLong
             val options = encoded[1].asJsonArray
             when (type) {
@@ -53,10 +54,11 @@ sealed class GuildExperimentFilter {
             var minimum = 0L
             var maximum = Long.MAX_VALUE
             options.forEach { option ->
-                val pair = option.asJsonArray
+                val pair = option.takeIf { it.isJsonArray }?.asJsonArray ?: return@forEach
+                if (pair.size() < 2 || pair[0].isJsonNull) return@forEach
                 when (pair[0].asLong) {
-                    minIdHash -> minimum = pair[1].asLong
-                    maxIdHash -> maximum = pair[1].asLong
+                    minIdHash -> if (!pair[1].isJsonNull) minimum = pair[1].asLong
+                    maxIdHash -> if (!pair[1].isJsonNull) maximum = pair[1].asLong
                 }
             }
             return minimum..maximum

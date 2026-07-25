@@ -23,6 +23,7 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonParser
 import java.lang.reflect.Proxy
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -62,7 +63,8 @@ class GatewayContractTest {
             Identify("token", 100, true, 351, emptyMap(), IdentifyClientState(emptyMap(), 0, 1, 2)),
         ).asJsonObject
         assertTrue(identify.has("client_state"))
-        assertTrue(identify["client_state"].asJsonObject.has("useruser_guild_settings_version"))
+        assertTrue(identify["client_state"].asJsonObject.has("user_guild_settings_version"))
+        assertFalse(identify["client_state"].asJsonObject.has("useruser_guild_settings_version"))
         val nullableState = gson.toJsonTree(Identify("token", 100, true, 351, emptyMap(), null)).asJsonObject
         assertTrue(nullableState["client_state"].isJsonNull)
     }

@@ -15,7 +15,6 @@ import com.discord.api.user.UserProfile
 import com.discord.models.presence.Presence
 import com.discord.models.user.MeUser
 import com.discord.stores.StoreStream
-import com.discord.widgets.settings.account.WidgetSettingsBlockedUsers
 import com.discord.widgets.user.WidgetUserStatusSheet
 import com.discord.widgets.user.profile.UserProfileHeaderView
 import com.discord.widgets.user.profile.UserProfileHeaderViewModel
@@ -42,16 +41,10 @@ class WidgetSettings : Fragment(R.layout.widget_settings) {
                 onSetStatus?.invoke() ?: WidgetUserStatusSheet.show(parentFragmentManager)
             }
         }
-        view.findViewById<View>(R.id.blocked_users).apply {
-            contentDescription = getString(R.string.user_settings_blocked_users)
-            isFocusable = true
-            setOnClickListener {
-                onBlockedUsers?.invoke() ?: parentFragmentManager.commit {
-                    replace(this@WidgetSettings.id, WidgetSettingsBlockedUsers())
-                    addToBackStack(WidgetSettingsBlockedUsers::class.java.name)
-                }
-            }
-        }
+        bindRoute(view, R.id.text_images_settings, WidgetSettingsMedia())
+        bindRoute(view, R.id.accessibility, WidgetSettingsAccessibility())
+        bindRoute(view, R.id.behavior, WidgetSettingsBehavior())
+        bindRoute(view, R.id.activity_status, WidgetSettingsActivityStatus())
         view.findViewById<Toolbar>(R.id.action_bar_toolbar).apply {
             setTitle(R.string.user_settings)
             menu.clear()
@@ -119,10 +112,24 @@ class WidgetSettings : Fragment(R.layout.widget_settings) {
     }
 
     private fun hideUnavailableRows(view: View) {
-        val keep = setOf(R.id.user_settings_header, R.id.set_status_container, R.id.blocked_users)
+        val keep = setOf(
+            R.id.user_settings_header,
+            R.id.set_status_container,
+            R.id.app_settings_header,
+            *implementedRouteIds.toTypedArray(),
+        )
         val rows = view.findViewById<View>(R.id.user_settings_header).parent as ViewGroup
         for (index in 0 until rows.childCount) {
             rows.getChildAt(index).visibility = if (rows.getChildAt(index).id in keep) View.VISIBLE else View.GONE
+        }
+    }
+
+    private fun bindRoute(view: View, rowId: Int, destination: Fragment) {
+        view.findViewById<View>(rowId).setOnClickListener {
+            parentFragmentManager.commit {
+                replace(this@WidgetSettings.id, destination)
+                addToBackStack(destination::class.java.name)
+            }
         }
     }
 
@@ -132,6 +139,12 @@ class WidgetSettings : Fragment(R.layout.widget_settings) {
     ) { user, presences -> State(user, presences[user.id]) }
 
     companion object {
+        internal val implementedRouteIds = setOf(
+            R.id.text_images_settings,
+            R.id.accessibility,
+            R.id.behavior,
+            R.id.activity_status,
+        )
         @JvmField var stateSource: (() -> Observable<State>)? = null
         @JvmField var onSetStatus: (() -> Unit)? = null
         @JvmField var onBlockedUsers: (() -> Unit)? = null

@@ -2,6 +2,7 @@ package com.discord.widgets.channels.list
 
 import com.discord.api.channel.Channel
 import com.discord.api.permission.Permission
+import com.discord.models.presence.Presence
 
 sealed class ChannelListRow(
     open val channel: Channel,
@@ -12,19 +13,19 @@ sealed class ChannelListRow(
     val stableId: Long get() = channel.id
     val name: String get() = channel.name ?: channel.recipients.orEmpty().joinToString(", ") { it.username }
 
-    data class Category(override val channel: Channel, override val unread: Boolean = false, override val mentionCount: Int = 0) :
+    data class Category(override val channel: Channel, override val unread: Boolean = false, override val mentionCount: Int = 0, val collapsed: Boolean = false) :
         ChannelListRow(channel, unread, mentionCount, false)
     data class Text(override val channel: Channel, override val unread: Boolean = false, override val mentionCount: Int = 0, override val selected: Boolean = false) :
         ChannelListRow(channel, unread, mentionCount, selected)
-    data class Voice(override val channel: Channel, override val unread: Boolean = false, override val mentionCount: Int = 0, override val selected: Boolean = false) :
+    data class Voice(override val channel: Channel, override val unread: Boolean = false, override val mentionCount: Int = 0, override val selected: Boolean = false, val canConnect: Boolean = true) :
         ChannelListRow(channel, unread, mentionCount, selected)
-    data class Stage(override val channel: Channel, override val unread: Boolean = false, override val mentionCount: Int = 0, override val selected: Boolean = false) :
+    data class Stage(override val channel: Channel, override val unread: Boolean = false, override val mentionCount: Int = 0, override val selected: Boolean = false, val canConnect: Boolean = true) :
         ChannelListRow(channel, unread, mentionCount, selected)
     data class Directory(override val channel: Channel, override val unread: Boolean = false, override val mentionCount: Int = 0, override val selected: Boolean = false) :
         ChannelListRow(channel, unread, mentionCount, selected)
     data class Thread(override val channel: Channel, override val unread: Boolean = false, override val mentionCount: Int = 0, override val selected: Boolean = false) :
         ChannelListRow(channel, unread, mentionCount, selected)
-    data class Private(override val channel: Channel, override val unread: Boolean = false, override val mentionCount: Int = 0, override val selected: Boolean = false) :
+    data class Private(override val channel: Channel, override val unread: Boolean = false, override val mentionCount: Int = 0, override val selected: Boolean = false, val presence: Presence? = null) :
         ChannelListRow(channel, unread, mentionCount, selected)
 }
 
@@ -45,10 +46,8 @@ object ChannelListRows {
         val categories = channels.filter { it.type == Channel.CATEGORY }.sortedWith(order)
         val categoryIds = categories.mapTo(HashSet(), Channel::id)
         val visible = channels.filter { channel ->
-            channel.type != Channel.CATEGORY && row(channel, unreadChannelIds, mentionCounts, selectedChannelId) != null &&
-                permissions[channel.id].orZero() and VIEW_CHANNEL != 0L &&
-                (channel.type !in setOf(Channel.GUILD_VOICE, Channel.GUILD_STAGE_VOICE) ||
-                    permissions[channel.id].orZero() and CONNECT != 0L)
+            channel.type != Channel.CATEGORY && row(channel, unreadChannelIds, mentionCounts, selectedChannelId, permissions[channel.id]) != null &&
+                permissions[channel.id].orZero() and VIEW_CHANNEL != 0L
         }
         fun categoryId(channel: Channel): Long? {
             var parentId = channel.parentId
@@ -68,7 +67,7 @@ object ChannelListRows {
         }
         return sections.sortedWith(compareBy<Section> { it.anchor.position }.thenBy { it.anchor.id }).flatMap { section ->
             if (section.anchor.type != Channel.CATEGORY) {
-                listOfNotNull(row(section.anchor, unreadChannelIds, mentionCounts, selectedChannelId))
+                listOfNotNull(row(section.anchor, unreadChannelIds, mentionCounts, selectedChannelId, permissions[section.anchor.id]))
             } else {
                 val displayed = if (section.anchor.id in collapsedCategoryIds) {
                     section.children.filter { it.id == selectedChannelId || it.id in unreadChannelIds || (mentionCounts[it.id] ?: 0) > 0 }
@@ -77,7 +76,8 @@ object ChannelListRows {
                     section.anchor,
                     section.children.any { it.id in unreadChannelIds },
                     section.children.sumOf { mentionCounts[it.id] ?: 0 },
-                )) + displayed.mapNotNull { row(it, unreadChannelIds, mentionCounts, selectedChannelId) }
+                    section.anchor.id in collapsedCategoryIds,
+                )) + displayed.mapNotNull { row(it, unreadChannelIds, mentionCounts, selectedChannelId, permissions[it.id]) }
             }
         }
     }
@@ -87,15 +87,28 @@ object ChannelListRows {
         unreadChannelIds: Set<Long> = emptySet(),
         mentionCounts: Map<Long, Int> = emptyMap(),
         selectedChannelId: Long = 0,
+        presences: Map<Long, Presence> = emptyMap(),
     ): List<ChannelListRow.Private> = channels
         .filter { it.type == Channel.DM || it.type == Channel.GROUP_DM }
         .sortedWith(compareByDescending<Channel> { it.lastMessageId }.thenBy { it.id })
-        .map { ChannelListRow.Private(it, it.id in unreadChannelIds, mentionCounts[it.id] ?: 0, it.id == selectedChannelId) }
+        .map { channel -> ChannelListRow.Private(
+            channel,
+            channel.id in unreadChannelIds,
+            mentionCounts[channel.id] ?: 0,
+            channel.id == selectedChannelId,
+            channel.recipients.orEmpty().firstOrNull()?.id?.let(presences::get),
+        ) }
 
-    private fun row(channel: Channel, unreadIds: Set<Long> = emptySet(), mentions: Map<Long, Int> = emptyMap(), selectedId: Long = 0): ChannelListRow? = when (channel.type) {
+    private fun row(
+        channel: Channel,
+        unreadIds: Set<Long> = emptySet(),
+        mentions: Map<Long, Int> = emptyMap(),
+        selectedId: Long = 0,
+        permissions: Long? = null,
+    ): ChannelListRow? = when (channel.type) {
         Channel.GUILD_TEXT, Channel.GUILD_ANNOUNCEMENT -> ChannelListRow.Text(channel, channel.id in unreadIds, mentions[channel.id] ?: 0, channel.id == selectedId)
-        Channel.GUILD_VOICE -> ChannelListRow.Voice(channel, channel.id in unreadIds, mentions[channel.id] ?: 0, channel.id == selectedId)
-        Channel.GUILD_STAGE_VOICE -> ChannelListRow.Stage(channel, channel.id in unreadIds, mentions[channel.id] ?: 0, channel.id == selectedId)
+        Channel.GUILD_VOICE -> ChannelListRow.Voice(channel, channel.id in unreadIds, mentions[channel.id] ?: 0, channel.id == selectedId, permissions.orZero() and CONNECT != 0L)
+        Channel.GUILD_STAGE_VOICE -> ChannelListRow.Stage(channel, channel.id in unreadIds, mentions[channel.id] ?: 0, channel.id == selectedId, permissions.orZero() and CONNECT != 0L)
         Channel.DIRECTORY -> ChannelListRow.Directory(channel, channel.id in unreadIds, mentions[channel.id] ?: 0, channel.id == selectedId)
         in Channel.ANNOUNCEMENT_THREAD..Channel.PRIVATE_THREAD -> ChannelListRow.Thread(channel, channel.id in unreadIds, mentions[channel.id] ?: 0, channel.id == selectedId)
         else -> null

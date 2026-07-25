@@ -6,6 +6,7 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.widget.ScrollView
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
@@ -17,7 +18,8 @@ import com.discord.stores.RequiredAction
 import com.discord.stores.StoreStream
 import com.discord.stores.IntentRouteResult
 import com.discord.utilities.intent.AppIntentParser
-import com.discord.widgets.home.BackHandler
+import com.discord.utilities.logging.BootLog
+import com.discord.utilities.logging.BootLogEvent
 import com.discord.widgets.tabs.WidgetTabsHost
 import com.discord.widgets.auth.AuthAction
 import com.discord.widgets.auth.AuthFragment
@@ -46,6 +48,7 @@ import rx.Subscription
 open class AppActivity : AppCompatActivity(), AuthUiActions {
     private lateinit var binding: ActivityAppBinding
     private var routeSubscription: Subscription? = null
+    private var stopBootLog: (() -> Unit)? = null
     private var pendingLaunchIntent: Intent? = null
 
     override fun attachBaseContext(newBase: Context) {
@@ -68,8 +71,6 @@ open class AppActivity : AppCompatActivity(), AuthUiActions {
         setContentView(binding.root)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                val fragment = supportFragmentManager.findFragmentById(R.id.app_root)
-                if ((fragment as? BackHandler)?.onBackPressed() == true) return
                 if (supportFragmentManager.backStackEntryCount > 0) supportFragmentManager.popBackStack()
                 else moveTaskToBack(true)
             }
@@ -92,11 +93,19 @@ open class AppActivity : AppCompatActivity(), AuthUiActions {
 
     override fun onStart() {
         super.onStart()
+        stopBootLog = BootLog.observe { lines ->
+            runOnUiThread {
+                binding.appBootLog.text = lines.joinToString("\n")
+                binding.appLoading.post { binding.appLoading.fullScroll(ScrollView.FOCUS_DOWN) }
+            }
+        }
         routeSubscription = StoreStream.getNavigation().observeMainRoute()
             .subscribe { route -> runOnUiThread { showRoute(route) } }
     }
 
     override fun onStop() {
+        stopBootLog?.invoke()
+        stopBootLog = null
         routeSubscription?.unsubscribe()
         routeSubscription = null
         super.onStop()
@@ -108,6 +117,7 @@ open class AppActivity : AppCompatActivity(), AuthUiActions {
             supportFragmentManager.findFragmentById(R.id.app_root)?.view?.visibility = View.GONE
             return
         }
+        BootLog.record(BootLogEvent.OPENING_INTERFACE)
         val tag = routeTag(route)
         binding.appLoading.visibility = View.GONE
         supportFragmentManager.findFragmentById(R.id.app_root)?.view?.visibility = View.VISIBLE

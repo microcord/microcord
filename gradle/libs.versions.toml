@@ -36,7 +36,7 @@ okio = "2.7.0"
 persistentCookieJar = "v1.0.1"
 retrofit = "2.9.0"
 realtimeBlurView = "82df3520b4"
-work = "2.4.0"
+work = "2.9.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }

@@ -168,6 +168,13 @@ class MessageRestContractTest {
     }
 
     @Test
+    fun mentionsUseReferenceFiltersAndPagination() {
+        enqueueList()
+        api.getMentions(25, roles = true, everyone = true, guildId = 7, before = 9).toBlocking().single()
+        assertRequest("GET", "/api/v9/users/@me/mentions?limit=25&roles=true&everyone=true&guild_id=7&before=9")
+    }
+
+    @Test
     fun countingBodyReportsBytesWritten() {
         val body = CountingRequestBody("upload".toRequestBody("text/plain".toMediaType()))
         val progress = mutableListOf<Long>()

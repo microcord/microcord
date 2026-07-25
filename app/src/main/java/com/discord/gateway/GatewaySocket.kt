@@ -1,5 +1,6 @@
 package com.discord.gateway
 
+import android.util.Log
 import com.discord.api.activity.Activity
 import com.discord.api.presence.ClientStatus
 import com.discord.gateway.io.Hello
@@ -13,6 +14,8 @@ import com.discord.gateway.io.Resume
 import com.discord.gateway.opcodes.Opcode
 import com.discord.models.domain.ModelPayload
 import com.discord.stores.GuildSubscriptionPayload
+import com.discord.utilities.logging.BootLog
+import com.discord.utilities.logging.BootLogEvent
 import com.discord.utilities.websocket.GatewayWebSocket
 import com.discord.utilities.websocket.GatewayWebSocketFactory
 import com.discord.utilities.websocket.GatewayWebSocketListener
@@ -98,12 +101,14 @@ class GatewaySocket(
     init { (eventHandler as? GatewayEventRouter)?.bind(this) }
 
     fun connect() {
+        logInfo("connect requested")
         scheduler.schedule(0) {
             if (state == State.DISCONNECTED) discoverAndConnect()
         }
     }
 
     fun close(resetSession: Boolean = true) {
+        logInfo("close requested resetSession=$resetSession")
         scheduler.schedule(0) {
             reconnectTask?.cancel()
             reconnectTask = null
@@ -136,9 +141,11 @@ class GatewaySocket(
 
     private fun discoverAndConnect(ignoreSticky: Boolean = failures > FAILURE_THRESHOLD) {
         state = State.DISCOVERING
+        BootLog.record(BootLogEvent.GATEWAY_DISCOVERY)
         val url = try {
             discovery.discover(ignoreSticky)
         } catch (_: Throwable) {
+            logWarn("gateway discovery failed")
             scheduleReconnect("Gateway discovery failed")
             return
         }
@@ -146,6 +153,7 @@ class GatewaySocket(
         decoder.reset()
         val currentGeneration = ++generation
         val endpoint = url.trimEnd('/') + "/?encoding=json&v=9&compress=zlib-stream"
+        logInfo("connecting host=${runCatching { java.net.URI(url).host }.getOrNull().orEmpty()}")
         helloTimeoutTask = scheduler.schedule(HELLO_TIMEOUT_MS) {
             if (currentGeneration == generation && state == State.CONNECTING) {
                 reconnect("Gateway HELLO timeout", immediate = false)
@@ -153,12 +161,16 @@ class GatewaySocket(
         }
         socket = try {
             webSocketFactory.connect(endpoint, object : GatewayWebSocketListener {
-                override fun onOpen() = serialized(currentGeneration) { resumeOrIdentify() }
+                override fun onOpen() {
+                    BootLog.record(BootLogEvent.GATEWAY_SOCKET_OPEN)
+                    logInfo("websocket opened; waiting for HELLO")
+                }
 
                 override fun onBinaryMessage(bytes: ByteArray) = serialized(currentGeneration) {
                     try {
                         decoder.decode(bytes).forEach(::handleMessage)
                     } catch (error: Throwable) {
+                        logError("inflate/parse failure: ${error.javaClass.simpleName}", error)
                         reconnect("Gateway inflate/parse failure: ${error.javaClass.simpleName}", immediate = false)
                     }
                 }
@@ -168,6 +180,7 @@ class GatewaySocket(
                 }
 
                 override fun onFailure(error: Throwable) = serialized(currentGeneration) {
+                    logWarn("websocket failure: ${error.javaClass.simpleName}")
                     scheduleReconnect("Gateway socket failure: ${error.javaClass.simpleName}")
                 }
             })
@@ -186,6 +199,7 @@ class GatewaySocket(
     private fun resumeOrIdentify() {
         if (sessionId != null && lastHeartbeatAck != 0L && scheduler.now() - lastHeartbeatAck <= RESUME_WINDOW_MS) {
             state = State.RESUMING
+            logInfo("sending RESUME seq=$sequence")
             send(Opcode.RESUME, Resume(token, sessionId, sequence))
             return
         }
@@ -200,6 +214,8 @@ class GatewaySocket(
             return
         }
         state = State.IDENTIFYING
+        BootLog.record(BootLogEvent.GATEWAY_IDENTIFY)
+        logInfo("sending IDENTIFY")
         token = data.token
         send(
             Opcode.IDENTIFY,
@@ -231,11 +247,14 @@ class GatewaySocket(
     }
 
     private fun handleHello(hello: Hello) {
+        BootLog.record(BootLogEvent.GATEWAY_HELLO)
+        logInfo("HELLO heartbeatMs=${hello.heartbeatInterval}")
         helloTimeoutTask?.cancel()
         helloTimeoutTask = null
         heartbeatInterval = hello.heartbeatInterval.toLong()
         heartbeatAcknowledged = true
         scheduleHeartbeat()
+        if (state == State.CONNECTING) resumeOrIdentify()
     }
 
     private fun scheduleHeartbeat() {
@@ -256,6 +275,7 @@ class GatewaySocket(
     }
 
     private fun handleDispatch(incoming: Incoming) {
+        logDebug("dispatch type=${incoming.type.orEmpty()} seq=${incoming.seq ?: sequence}")
         val data = incoming.data
         when (incoming.type) {
             "READY" -> {
@@ -265,6 +285,7 @@ class GatewaySocket(
                     return
                 }
                 sessionId = ready.sessionId
+                BootLog.record(BootLogEvent.GATEWAY_DATA_READY)
                 establishConnection()
             }
             "RESUMED" -> establishConnection()
@@ -282,6 +303,8 @@ class GatewaySocket(
         reconnectTask?.cancel()
         reconnectTask = null
         state = State.CONNECTED
+        BootLog.record(BootLogEvent.GATEWAY_CONNECTED)
+        logInfo("connection established")
         eventHandler.handleConnected(true)
         eventHandler.handleConnectionReady(true)
     }
@@ -305,6 +328,7 @@ class GatewaySocket(
     }
 
     private fun scheduleReconnect(reason: String) {
+        logWarn("reconnect scheduled: ${reason.take(120)}")
         cleanup(4000, reason)
         eventHandler.handleConnected(false)
         eventHandler.handleConnectionReady(false)
@@ -348,7 +372,13 @@ class GatewaySocket(
         socket?.send(gson.toJson(Outgoing(opcode.apiInt, data)))
     }
 
+    private fun logInfo(message: String) { runCatching { Log.i(TAG, message) } }
+    private fun logWarn(message: String) { runCatching { Log.w(TAG, message) } }
+    private fun logDebug(message: String) { runCatching { Log.d(TAG, message) } }
+    private fun logError(message: String, error: Throwable) { runCatching { Log.e(TAG, message, error) } }
+
     private companion object {
+        const val TAG = "ManticordGateway"
         const val HELLO_TIMEOUT_MS = 20_000L
         const val RESUME_WINDOW_MS = 180_000L
         const val MIN_BACKOFF_MS = 1_000L

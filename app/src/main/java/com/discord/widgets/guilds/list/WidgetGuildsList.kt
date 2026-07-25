@@ -246,15 +246,20 @@ private class GuildAdapter(
             is GuildRow.GuildItem -> {
                 val guild = row.guild
                 root.contentDescription = guild.name
-                root.findViewById<SimpleDraweeView>(R.id.guilds_item_avatar).setImageURI(
-                    guild.icon?.let { "https://cdn.discordapp.com/icons/${guild.id}/$it.webp?size=128" },
-                )
+                root.findViewById<SimpleDraweeView>(R.id.guilds_item_avatar).apply {
+                    visibility = if (guild.icon == null) View.GONE else View.VISIBLE
+                    setImageURI(guild.icon?.let { "https://cdn.discordapp.com/icons/${guild.id}/$it.webp?size=128" })
+                }
                 root.findViewById<TextView>(R.id.guilds_item_avatar_text).apply {
                     text = guild.shortName
                     visibility = if (guild.icon == null) View.VISIBLE else View.GONE
                 }
                 root.findViewById<ImageView>(R.id.guilds_item_selected).visibility = if (row.selected) View.VISIBLE else View.GONE
                 root.findViewById<ImageView>(R.id.guilds_item_unread).visibility = if (row.unread) View.VISIBLE else View.GONE
+                root.findViewById<View>(R.id.guilds_item_voice).visibility = View.GONE
+                root.findViewById<View>(R.id.guilds_item_application_stream).visibility = View.GONE
+                root.findViewById<View>(R.id.guilds_item_application_status).visibility = View.GONE
+                root.findViewById<View>(R.id.guilds_item_event_status).visibility = View.GONE
                 root.findViewById<TextView>(R.id.guilds_item_mentions).apply {
                     text = NumberFormat.getIntegerInstance().format(row.mentionCount)
                     visibility = if (row.mentionCount > 0) View.VISIBLE else View.GONE
@@ -279,6 +284,9 @@ private class GuildAdapter(
                     }
                     showCurrentState()
                 }
+                root.findViewById<View>(R.id.guilds_item_highlight).visibility = View.GONE
+                root.findViewById<View>(R.id.guilds_item_selected).visibility = View.GONE
+                root.findViewById<View>(R.id.guilds_item_voice).visibility = View.GONE
                 root.findViewById<ImageView>(R.id.guilds_item_unread).visibility = if (row.unread) View.VISIBLE else View.GONE
                 root.findViewById<TextView>(R.id.guilds_item_mentions).apply {
                     text = NumberFormat.getIntegerInstance().format(row.mentionCount)

@@ -14,6 +14,7 @@ class StoreChannelsSelected(
     private val guildSelected: StoreGuildSelected,
     private val dispatcher: Dispatcher,
     private val observationDeck: ObservationDeck,
+    private val onResolvedChannelChanged: (Channel?) -> Unit = {},
 ) : StoreV2() {
     private val selections = HashMap<Long, Long>()
     private var selectedChannel: Channel? = null
@@ -88,11 +89,13 @@ class StoreChannelsSelected(
                 .filter { it.type != Channel.CATEGORY && PermissionUtils.hasAccess(it, channelPermissions[it.id]) }
                 .minWithOrNull(compareBy<Channel> { it.position }.thenBy { it.id })
         val nextId = selected?.id ?: UNSELECTED
-        if (nextId != selectedIdSnapshot) previousIdSnapshot = selectedIdSnapshot
+        val changed = nextId != selectedIdSnapshot
+        if (changed) previousIdSnapshot = selectedIdSnapshot
         selectedChannel = selected
         selectedIdSnapshot = nextId
         if (selected != null) selections[guildId] = selected.id
         markChanged()
+        if (changed) onResolvedChannelChanged(selected)
     }
 
     companion object {
