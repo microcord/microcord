@@ -58,16 +58,46 @@ import rx.Observable
  */
 @Suppress("TooManyFunctions", "LargeClass")
 class StoreApplicationCommands(
-    private val storeGatewayConnection: StoreGatewayConnection,
-    private val storePermissions: StorePermissions,
-    private val storeApplicationCommandFrecency: StoreApplicationCommandFrecency,
-    private val storeExperiments: StoreExperiments,
     private val dispatcher: Dispatcher,
+    private val storeApplicationCommandFrecency: StoreApplicationCommandFrecency,
+    /**
+     * `StoreGatewayConnection::requestApplicationCommands`.
+     *
+     * A function seam rather than the store itself: `StoreGatewayConnection` takes `StoreStream` in
+     * its constructor, so depending on it directly would make this store impossible to exercise
+     * without standing up the whole graph. Returns false when there is no established session,
+     * which is what drives the built-ins-only fallback.
+     */
+    private val gatewayRequest: ApplicationCommandRequester,
+    /**
+     * `null` while `StorePermissions` is not wired. Every channel is then treated as unrestricted,
+     * which is the same answer the store gives for a DM.
+     */
+    private val storePermissions: StorePermissions? = null,
+    /**
+     * `null` while `StoreExperiments` is not wired. The frecency shortlist is then always empty,
+     * matching an un-enrolled user.
+     */
+    private val storeExperiments: StoreExperiments? = null,
     private val restApi: () -> RestAPIInterface? = { RestAPI.apiOrNull },
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
     private val builtInCommandsProvider: BuiltInCommandsProvider = BuiltInCommands(),
     private val nonceGenerator: NonceGenerator = NonceGenerator(),
 ) : StoreV2() {
+
+    /** The one thing this store asks the socket to do. */
+    fun interface ApplicationCommandRequester {
+        @Suppress("LongParameterList")
+        fun requestApplicationCommands(
+            guildId: Long,
+            nonce: String,
+            applications: Boolean,
+            query: String?,
+            offset: Int?,
+            commandLimit: Int,
+            commandIds: List<String>?,
+        ): Boolean
+    }
 
     // -- Applications --------------------------------------------------------------------------
 
@@ -165,7 +195,7 @@ class StoreApplicationCommands(
      */
     fun observeDiscoverCommands(channelId: Long): Observable<DiscoverCommands> = Observable.combineLatest(
         observationDeck.connectRx(DiscoverCommandsUpdate) { getDiscoverCommands() }.distinctUntilChanged(),
-        storePermissions.observePermissionsForChannel(channelId),
+        storePermissions?.observePermissionsForChannel(channelId) ?: Observable.just<Long?>(null),
     ) { discoveryCommands, channelPermissions ->
         if (shouldReturnApplicationCommands(channelPermissions)) {
             discoveryCommands
@@ -176,8 +206,8 @@ class StoreApplicationCommands(
     }
 
     fun observeGuildApplications(channelId: Long): Observable<List<Application>> =
-        observationDeck.connectRx(GuildApplicationsUpdate, storePermissions) {
-            if (shouldReturnApplicationCommands(storePermissions.getPermissionsByChannel()[channelId])) {
+        observationDeck.connectRx(*sourcesWith(GuildApplicationsUpdate, storePermissions)) {
+            if (shouldReturnApplicationCommands(channelPermissions(channelId))) {
                 getApplications()
             } else {
                 getApplications().filter(Application::builtIn)
@@ -185,8 +215,8 @@ class StoreApplicationCommands(
         }
 
     fun observeQueryCommands(channelId: Long): Observable<List<ApplicationCommand>> =
-        observationDeck.connectRx(QueryCommandsUpdate, storePermissions) {
-            if (shouldReturnApplicationCommands(storePermissions.getPermissionsByChannel()[channelId])) {
+        observationDeck.connectRx(*sourcesWith(QueryCommandsUpdate, storePermissions)) {
+            if (shouldReturnApplicationCommands(channelPermissions(channelId))) {
                 getQueryCommands()
             } else {
                 getQueryCommands().filter(ApplicationCommand::builtIn)
@@ -200,10 +230,13 @@ class StoreApplicationCommands(
      * outside bucket 1 the list is empty and the picker shows no "Frequently Used" application.
      */
     fun observeFrecencyCommands(guildId: Long): Observable<List<ApplicationCommand>> =
-        observationDeck.connectRx(FrecencyCommandsUpdate, storeExperiments) {
-            val experiment = storeExperiments.getUserExperiment(FRECENCY_EXPERIMENT_NAME, false)
-            if (experiment?.bucket == 1) getFrecencyCommands(guildId).take(FRECENCY_LIMIT)
-            else emptyList()
+        observationDeck.connectRx(*sourcesWith(FrecencyCommandsUpdate, storeExperiments)) {
+            val experiment = storeExperiments?.getUserExperiment(FRECENCY_EXPERIMENT_NAME, false)
+            if (experiment?.bucket == FRECENCY_EXPERIMENT_BUCKET) {
+                getFrecencyCommands(guildId).take(FRECENCY_LIMIT)
+            } else {
+                emptyList()
+            }
         }.startWith(emptyList<ApplicationCommand>())
 
     fun observeAutocompleteResults(): Observable<Map<String, Map<String, CommandAutocompleteState>>> =
@@ -343,11 +376,14 @@ class StoreApplicationCommands(
             applicationCommandIndexes.clear()
             markChanged(GuildApplicationsUpdate)
             if (guildId != null && guildId > 0L) {
-                storeGatewayConnection.requestApplicationCommands(
+                gatewayRequest.requestApplicationCommands(
                     guildId = guildId,
                     nonce = nonce,
                     applications = true,
+                    query = null,
+                    offset = null,
                     commandLimit = COMMANDS_LIMIT_PER_REQUEST,
+                    commandIds = null,
                 )
             } else {
                 handleGuildApplicationsUpdate(
@@ -398,12 +434,14 @@ class StoreApplicationCommands(
         queryGuildId = guildId
         this.query = query
         if (guildId != null && guildId > 0L) {
-            storeGatewayConnection.requestApplicationCommands(
+            gatewayRequest.requestApplicationCommands(
                 guildId = guildId,
                 nonce = nonce,
                 applications = false,
                 query = query,
+                offset = null,
                 commandLimit = COMMANDS_LIMIT_PER_REQUEST,
+                commandIds = null,
             )
         } else {
             // A DM has no server-side command search; only built-ins can match.
@@ -517,10 +555,12 @@ class StoreApplicationCommands(
             .distinct()
 
         val requested = remoteIds.isNotEmpty() &&
-            storeGatewayConnection.requestApplicationCommands(
+            gatewayRequest.requestApplicationCommands(
                 guildId = guildId,
                 nonce = nonce,
                 applications = false,
+                query = null,
+                offset = null,
                 commandLimit = COMMANDS_LIMIT_PER_REQUEST,
                 commandIds = remoteIds,
             )
@@ -617,12 +657,14 @@ class StoreApplicationCommands(
         discoverGuildId = guildId
         when {
             guildId != null && guildId > 0L -> {
-                val requested = storeGatewayConnection.requestApplicationCommands(
+                val requested = gatewayRequest.requestApplicationCommands(
                     guildId = guildId,
                     nonce = nonce,
                     applications = false,
+                    query = null,
                     offset = offset,
                     commandLimit = limit,
+                    commandIds = null,
                 )
                 isLoadingDiscoveryCommands = requested
                 if (!requested) handleDiscoverCommandsUpdate(builtInCommandsProvider.getBuiltInCommands())
@@ -847,6 +889,16 @@ class StoreApplicationCommands(
      * A DM (`discoverGuildId` null or 0) always shows commands; a guild channel requires
      * `USE_APPLICATION_COMMANDS`.
      */
+    private fun channelPermissions(channelId: Long): Long? =
+        storePermissions?.getPermissionsByChannel()?.get(channelId)
+
+    /** Drops the optional store from the update-source list when it is not wired. */
+    private fun sourcesWith(
+        own: ObservationDeck.UpdateSource,
+        optional: ObservationDeck.UpdateSource?,
+    ): Array<ObservationDeck.UpdateSource> =
+        if (optional != null) arrayOf(own, optional) else arrayOf(own)
+
     private fun shouldReturnApplicationCommands(channelPermissions: Long?): Boolean {
         val guildId = discoverGuildId ?: return true
         if (guildId == 0L) return true
@@ -895,6 +947,7 @@ class StoreApplicationCommands(
         const val TYPE_APPLICATION_COMMAND_AUTOCOMPLETE = 4L
 
         private const val FRECENCY_EXPERIMENT_NAME = "2021-09_android_app_commands_frecency"
+        private const val FRECENCY_EXPERIMENT_BUCKET = 1
         private const val FRECENCY_LIMIT = 5
     }
 }

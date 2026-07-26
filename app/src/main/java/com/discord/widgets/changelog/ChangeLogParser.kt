@@ -132,7 +132,9 @@ internal class HeaderLineClassedRule<RC, S>(
     private val headerPaddingSpanProvider: () -> List<Any>,
     styleSpanProvider: (Int) -> CharacterStyle,
     classSpanProvider: (String) -> Any?,
-) : MarkdownRules.HeaderLineClassedRule<RC, Any?, S>(styleSpanProvider, classSpanProvider) {
+    // The library bounds its span type as `T : Any`; nullability comes from the provider's own
+    // `-> T?` return, so the type argument must be `Any`, not `Any?`.
+) : MarkdownRules.HeaderLineClassedRule<RC, Any, S>(styleSpanProvider, classSpanProvider) {
 
     override fun parse(matcher: Matcher, parser: Parser<RC, in Node<RC>, S>, state: S): ParseSpec<RC, S> {
         val headerNode = super.parse(matcher, parser, state).root

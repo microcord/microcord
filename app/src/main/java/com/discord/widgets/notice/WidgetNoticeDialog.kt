@@ -21,6 +21,7 @@ import com.discord.app.AppActivity
 import com.discord.app.AppDialog
 import com.discord.app.AppLog
 import com.discord.i18n.i18nRender
+import com.discord.stores.StoreStream
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.utilities.view.text.LinkifiedTextView
 import com.google.android.material.button.MaterialButton

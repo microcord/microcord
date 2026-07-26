@@ -53,7 +53,11 @@ class DefaultSearchStore(
 
     private val displayStateSubject =
         SerializedSubject(BehaviorSubject.create(SearchStore.DisplayState.SUGGESTIONS))
-    private val searchTargetSubject = SerializedSubject(BehaviorSubject.create<SearchTarget?>(null))
+    // `create(null as T?)` rather than `create<T?>(null)`: a bare null makes Kotlin pick the
+    // inherited static `Observable.create(OnSubscribe)` overload, yielding an Observable with no
+    // `onNext`. Same trap as StoreMessagesLoader/StoreRtcConnection/StoreNotices.
+    private val searchTargetSubject =
+        SerializedSubject(BehaviorSubject.create(null as SearchTarget?))
 
     private var searchTarget: SearchTarget? = null
     private var subscription: Subscription? = null

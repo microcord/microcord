@@ -359,7 +359,7 @@ class StoreStream private constructor(
      * posting from both stores would double-ack every channel. `StoreMessageAck` still tracks the
      * ledger locally and feeds [StoreMentions], which is what the mention badges need.
      */
-    private val messageAck = StoreMessageAck(
+    private val messageAck: StoreMessageAck = StoreMessageAck(
         dispatcher,
         observationDeck,
         channels,
@@ -382,7 +382,7 @@ class StoreStream private constructor(
         hasUnavailableGuilds = { guilds.getUnavailableGuildsInternal().isNotEmpty() },
         processMarkUnread = { channelId, messagesAfter -> mentions.processMarkUnread(channelId, messagesAfter) },
     )
-    private val mentions = StoreMentions(
+    private val mentions: StoreMentions = StoreMentions(
         userRelationships,
         permissions,
         messageAck,
@@ -447,7 +447,7 @@ class StoreStream private constructor(
         clock,
         observationDeck,
         clearChannelNotifications = { channelId ->
-            if (::applicationContext.isInitialized) notificationRenderer.cancelChannel(applicationContext, channelId)
+            if (::applicationContext.isInitialized) notificationRenderer.clearChannel(applicationContext, channelId)
         },
         onMessageCandidate = ::deliverNotification,
         // `registerPushToken` stays at its inert default: the reference posts the FCM token through
@@ -478,7 +478,7 @@ class StoreStream private constructor(
     private val channelConversions = StoreChannelConversions(
         selectChannel = { guildId, channelId -> selectChannelInternal(guildId, channelId) },
     )
-    private val userConnections = StoreUserConnections(
+    private val userConnections: StoreUserConnections = StoreUserConnections(
         dispatcher,
         observationDeck,
         api = { if (::restApi.isInitialized) restApi else null },
@@ -544,7 +544,7 @@ class StoreStream private constructor(
             (guilds.getGuildsInternal()[guildId]?.maxVideoChannelUsers as? GuildMaxVideoChannelUsers.Limited)?.limit
         },
     )
-    private val stageChannels = StoreStageChannels(
+    private val stageChannels: StoreStageChannels = StoreStageChannels(
         users, guilds, channels, voiceStates, permissions, stageInstances, observationDeck,
     )
     private val requestedStageChannels = StoreRequestedStageChannels(dispatcher, observationDeck)
@@ -731,10 +731,15 @@ class StoreStream private constructor(
         )
         messageSendCoordinator.observeUpdates().subscribe(::handleMessageSendUpdate)
         installChatStoreWiring()
-        experiments.init(context)
-        userConnections.init(context)
-        mediaSettings.init()
-        notifications.restore()
+        // These mutate store state, so they belong on the store thread. `App.onCreate` calls
+        // `initialize` from the main thread, and `dispatcher.schedule` preserves FIFO order, so the
+        // relative ordering below is unchanged.
+        dispatcher.schedule {
+            experiments.init(context)
+            userConnections.init(context)
+            mediaSettings.init()
+            notifications.restore()
+        }
         // Order is load-bearing. `DiscordParser` builds its rule set once and the unicode-emoji
         // rule captures the catalog pattern at that moment, so `setEmojiDataProvider` must run
         // after the catalog is loaded and before anything parses a message. Miss it and named and

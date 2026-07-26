@@ -61,7 +61,7 @@ class StoreNotices(
     private var lastShownTimes = HashMap<Int, Long>()
 
     private val processTrigger = BehaviorSubject.create<Unit>()
-    private val noticePublisher = BehaviorSubject.create<Notice?>(null)
+    private val noticePublisher = BehaviorSubject.create(null as Notice?)
 
     /**
      * Poll interval, tightened to the shortest queued [Notice.delayPeriodMs] so a notice that only

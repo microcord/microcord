@@ -22,23 +22,6 @@ import rx.Subscription
  * in its own file only because this wave owns `StoreChannelsSelected.kt`; the fully qualified name
  * matches the reference.
  */
-enum class SelectedChannelAnalyticsLocation(val analyticsValue: String) {
-    CHANNEL_LIST("Channel List"),
-    EMBED("Embed"),
-    TEXT_IN_VOICE("Text In Voice"),
-    THREAD_BROWSER("Thread Browser"),
-}
-
-/**
- * Whether the opened channel is being shown in full or only peeked at from a parent surface.
- *
- * Reference: `com.discord.stores.ChannelAnalyticsViewType`.
- */
-enum class ChannelAnalyticsViewType(val analyticsValue: String) {
-    FULL_VIEW("Full View"),
-    PEEK_VIEW("Peek View"),
-}
-
 /**
  * The user's channel selection, per guild, and the channel that selection currently resolves to.
  *

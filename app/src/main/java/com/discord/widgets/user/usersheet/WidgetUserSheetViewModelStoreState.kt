@@ -125,8 +125,12 @@ object WidgetUserSheetViewModelStoreState {
                 val permissions: Observable<Long?> = bootstrap.channel
                     ?.let { storePermissions.observePermissionsForChannel(it.id) }
                     ?: Observable.just(null)
+                // `map` widens the store's non-null Observable to the nullable one this state uses;
+                // RxJava 1's Observable is invariant, so a plain assignment does not compile.
                 val voiceConfig: Observable<StoreMediaSettings.VoiceConfiguration?> =
-                    storeMediaSettings?.getVoiceConfig() ?: Observable.just(null)
+                    storeMediaSettings?.getVoiceConfig()
+                        ?.map<StoreMediaSettings.VoiceConfiguration?> { it }
+                        ?: Observable.just(null)
                 val richPresence = ModelRichPresence.get(user.id, storeUserPresence)
                 val canDisableCommunication: Observable<Boolean> = scopedGuildId
                     ?.let(observeCanDisableCommunication)

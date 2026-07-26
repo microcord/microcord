@@ -1,5 +1,6 @@
 package com.discord.widgets.channels.list
 
+import com.discord.stores.StoreStream
 import com.discord.api.guildjoinrequest.GuildJoinRequest
 import com.discord.api.guildscheduledevent.GuildScheduledEvent
 import com.discord.stores.StoreThreadsActiveJoined.ActiveJoinedThread

@@ -9,7 +9,7 @@ import com.discord.stores.updates.ObservationDeckProvider
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
-import com.discord.utilities.user.UserUtils.isPremiumTier2
+import com.discord.api.premium.PremiumTier
 import rx.Observable
 
 /**
@@ -75,7 +75,9 @@ class StoreOutboundPromotions(
     @StoreThread
     internal fun handleConnectionOpen(readyPayload: ModelPayload) {
         val me = readyPayload.me
-        if (me == null || !me.isPremiumTier2) {
+        // `readyPayload.me` is the API DTO, not the domain model, so `UserUtils.isPremiumTier2`
+        // (an extension on `models.user.User`) does not apply here — read the wire field directly.
+        if (me == null || me.premiumType != PremiumTier.TIER_2) {
             state = State.Loaded(emptyList(), 0)
             markChanged()
             return

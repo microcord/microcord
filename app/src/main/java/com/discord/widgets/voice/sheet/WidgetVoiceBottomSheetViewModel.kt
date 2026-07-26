@@ -3,7 +3,6 @@ package com.discord.widgets.voice.sheet
 import androidx.annotation.MainThread
 import androidx.annotation.StringRes
 import com.discord.R
-import com.discord.api.application.Application
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isPrivate
@@ -14,10 +13,7 @@ import com.discord.api.guildscheduledevent.GuildScheduledEvent
 import com.discord.api.guildscheduledevent.GuildScheduledEventStatus
 import com.discord.api.permission.Permission
 import com.discord.app.AppViewModel
-import com.discord.models.commands.Application as CommandApplication
 import com.discord.models.domain.ModelApplicationStream
-import com.discord.models.embeddedactivities.EmbeddedActivity
-import com.discord.models.guild.UserGuildMember
 import com.discord.rtcconnection.RtcConnection
 import com.discord.stores.StoreApplicationStreamPreviews
 import com.discord.stores.StoreCalls
@@ -37,9 +33,9 @@ import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
 import com.discord.utilities.time.Clock
 import com.discord.utilities.time.ClockFactory
-import com.discord.utilities.user.UserUtils
 import com.discord.utilities.voice.VoiceChannelJoinability
 import com.discord.widgets.voice.VoiceStoreAccess
+import com.discord.widgets.voice.fullscreen.ParticipantsListItemGenerator
 import com.discord.widgets.voice.model.CallModel
 import com.discord.widgets.voice.model.CameraState
 import rx.Observable
@@ -180,7 +176,7 @@ class WidgetVoiceBottomSheetViewModel(
         }
 
         val mySpectatingStreamKey = callModel.activeStream?.stream?.encodedStreamKey
-        val listItems = createConnectedListItems(
+        val listItems = ParticipantsListItemGenerator.createConnectedListItems(
             voiceParticipants = callModel.participants,
             mySpectatingStreamKey = mySpectatingStreamKey,
             channel = channel,
@@ -484,22 +480,15 @@ class WidgetVoiceBottomSheetViewModel(
         StoreStream.getApplicationStreaming().stopStream(activeStream.encodedStreamKey)
     }
 
+
     /**
-     * Requests a preview image for every streaming participant exactly once, and reports whether
-     * the list contains any participant row at all — which is what decides between the participant
-     * list and the "nobody is here" illustration.
+     * Reports whether there is any participant row to show, fetching each stream preview once on
+     * the way through. `null` previews store means no thumbnails, but the list still renders.
      */
     private fun refreshStreams(listItems: List<CallParticipantsAdapter.ListItem>): Boolean {
-        var hasVoiceUsers = false
-        listItems.filterIsInstance<CallParticipantsAdapter.ListItem.VoiceUser>().forEach { item ->
-            hasVoiceUsers = true
-            val streamContext = item.participant.streamContext
-            val streamKey = streamContext?.stream?.encodedStreamKey
-            if (streamKey != null && fetchedPreviews.add(streamKey)) {
-                storeApplicationStreamPreviews?.fetchStreamPreviewIfNotFetching(streamContext)
-            }
-        }
-        return hasVoiceUsers
+        val previews = storeApplicationStreamPreviews
+            ?: return listItems.any { it is CallParticipantsAdapter.ListItem.VoiceUser }
+        return ParticipantsListItemGenerator.refreshStreams(listItems, fetchedPreviews, previews)
     }
 
     companion object {
@@ -557,122 +546,5 @@ class WidgetVoiceBottomSheetViewModel(
             }
         }
 
-        /**
-         * Builds the sheet's row list: at most one event card, the embedded-activity cards, the
-         * ordered participants, and finally the invite affordance.
-         *
-         * The reference keeps this in `voice/fullscreen/ParticipantsListItemGenerator`, which is
-         * being reconstructed separately. **Converge onto that class when it lands** — this is a
-         * faithful copy of `createConnectedListItems`, not a simplification.
-         */
-        fun createConnectedListItems(
-            voiceParticipants: Map<Long, StoreVoiceParticipants.VoiceUser>,
-            mySpectatingStreamKey: String?,
-            channel: Channel,
-            callModel: CallModel,
-            embeddedActivities: List<EmbeddedActivity>,
-            applications: Map<Long, Application>,
-        ): List<CallParticipantsAdapter.ListItem> {
-            val listItems = mutableListOf<CallParticipantsAdapter.ListItem>()
-
-            callModel.guildScheduledEvents
-                .filter { it.status == GuildScheduledEventStatus.ACTIVE || it.isStartable() }
-                .minByOrNull { it.scheduledStartTime.dateTimeMillis }
-                ?.let { event ->
-                    listItems += CallParticipantsAdapter.ListItem.Event(
-                        event = event,
-                        canStartEvent = callModel.canManageEvent(),
-                        isCurrentUserInCall = callModel.isConnected,
-                    )
-                }
-
-            embeddedActivities.forEach { embeddedActivity ->
-                val application = applications[embeddedActivity.applicationId] ?: return@forEach
-                listItems += CallParticipantsAdapter.ListItem.EmbeddedActivityItem(
-                    embeddedActivity = embeddedActivity,
-                    participants = embeddedActivity.userIds.mapNotNull { userId ->
-                        voiceParticipants[userId]?.let { UserGuildMember(it.user, it.guildMember) }
-                    },
-                    application = CommandApplication.fromApiApplication(application),
-                )
-            }
-
-            // In a DM the other party is listed even before they pick up; in a guild channel only
-            // people actually connected are shown.
-            val participants = voiceParticipants.values
-                .filter { it.isConnected || channel.isPrivate() }
-
-            if (participants.isNotEmpty()) {
-                listItems += participants
-                    .sortedWith(createUserItemsComparator(mySpectatingStreamKey))
-                    .map { participant ->
-                        CallParticipantsAdapter.ListItem.VoiceUser(
-                            participant = participant,
-                            canRing = channel.isPrivate() && !participant.isConnected,
-                            isSpectatingSameStream = mySpectatingStreamKey != null &&
-                                mySpectatingStreamKey == participant.watchingStream,
-                        )
-                    }
-                if (callModel.canInvite()) {
-                    listItems += CallParticipantsAdapter.ListItem.Invite
-                }
-            }
-            return listItems
-        }
-
-        /**
-         * Participant order, most relevant first: the stream you are watching, then yourself, then
-         * other viewers of that stream, then anyone streaming, then anyone with video on, and
-         * finally by name.
-         */
-        private fun createUserItemsComparator(
-            mySpectatingStreamKey: String?,
-        ): Comparator<StoreVoiceParticipants.VoiceUser> =
-            Comparator { user1, user2 ->
-                val isSpectating = mySpectatingStreamKey != null
-                val stream1 = user1.applicationStream?.encodedStreamKey
-                val stream2 = user2.applicationStream?.encodedStreamKey
-
-                fun rank(
-                    ownStreamKey: String?,
-                    watchingStream: String?,
-                    isMe: Boolean,
-                    hasVideo: Boolean,
-                ): Int = when {
-                    isSpectating && ownStreamKey == mySpectatingStreamKey -> 0
-                    isMe -> 1
-                    isSpectating && watchingStream == mySpectatingStreamKey -> 2
-                    ownStreamKey != null -> 3
-                    hasVideo -> 4
-                    else -> 5
-                }
-
-                val rank1 = rank(
-                    stream1,
-                    user1.watchingStream,
-                    user1.isMe,
-                    user1.voiceState?.selfVideo == true,
-                )
-                val rank2 = rank(
-                    stream2,
-                    user2.watchingStream,
-                    user2.isMe,
-                    user2.voiceState?.selfVideo == true,
-                )
-                if (rank1 != rank2) {
-                    rank1 - rank2
-                } else {
-                    UserUtils.compareUserNames(
-                        user1.user,
-                        user2.user,
-                        user1.nickname,
-                        user2.nickname,
-                    )
-                }
-            }
-
-        /** An event is startable once its scheduled start time has passed and it has not ended. */
-        private fun GuildScheduledEvent.isStartable(): Boolean =
-            status == GuildScheduledEventStatus.SCHEDULED
     }
 }

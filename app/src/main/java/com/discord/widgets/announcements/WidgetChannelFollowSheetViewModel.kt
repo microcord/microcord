@@ -63,8 +63,8 @@ class WidgetChannelFollowSheetViewModel(
         ) : ViewState()
     }
 
-    private val selectedGuildSubject: BehaviorSubject<Long?> = BehaviorSubject.create<Long?>(null)
-    private val selectedChannelSubject: BehaviorSubject<Long?> = BehaviorSubject.create<Long?>(null)
+    private val selectedGuildSubject: BehaviorSubject<Long?> = BehaviorSubject.create(null as Long?)
+    private val selectedChannelSubject: BehaviorSubject<Long?> = BehaviorSubject.create(null as Long?)
     private val eventSubject: PublishSubject<Event> = PublishSubject.create()
 
     init {

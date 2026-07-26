@@ -10,10 +10,14 @@ import com.discord.models.commands.ApplicationCommandOption
 import com.discord.models.commands.Application as ModelApplication
 import com.discord.models.commands.RemoteApplicationCommand
 import com.discord.stores.updates.ObservationDeck
+import com.discord.utilities.persister.Persister
+import java.nio.file.Files
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import rx.schedulers.TestScheduler
 
@@ -24,6 +28,15 @@ import rx.schedulers.TestScheduler
  * `triggerActions()` — which is also what makes the snapshot/observe boundary observable.
  */
 class ApplicationCommandStoresTest {
+
+    /**
+     * [StoreApplicationCommandFrecency] builds a real [Persister] for its frecency tracker, so the
+     * persistence root has to exist before any fixture is constructed.
+     */
+    private val directory = Files.createTempDirectory("application-command-stores").toFile()
+
+    @Before fun setUp() = Persister.init(directory)
+    @After fun tearDown() { directory.deleteRecursively() }
 
     // -- StoreAutocomplete ---------------------------------------------------------------------
 
@@ -239,7 +252,7 @@ class ApplicationCommandStoresTest {
         val scheduler = TestScheduler()
         val dispatcher = Dispatcher(scheduler)
         val deck = ObservationDeck()
-        val store = StoreApplicationCommandFrecency(dispatcher, deck, InMemoryPersister())
+        val store = StoreApplicationCommandFrecency(dispatcher, deck)
         dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
 
         store.onCommandUsed(GUILD_ID, "100")
@@ -259,24 +272,15 @@ class ApplicationCommandStoresTest {
         val dispatcher = Dispatcher(scheduler)
         val deck = ObservationDeck()
         val gateway = RecordingGateway(gatewayAccepts)
-        val frecency = StoreApplicationCommandFrecency(dispatcher, deck, InMemoryPersister())
-        val experiments = StoreExperiments(
-            clock = { 0L },
-            dispatcher = dispatcher,
-            observationDeck = deck,
-        )
+        val frecency = StoreApplicationCommandFrecency(dispatcher, deck)
         val store = StoreApplicationCommands(
-            storeGatewayConnection = gateway,
-            storePermissions = StorePermissions(dispatcher, deck),
-            storeApplicationCommandFrecency = frecency,
-            storeExperiments = experiments,
             dispatcher = dispatcher,
+            storeApplicationCommandFrecency = frecency,
+            gatewayRequest = gateway,
             restApi = { null },
             observationDeck = deck,
         )
-        dispatcher.registerDispatchHandlers(
-            StoreV2DispatchHandler(listOf(store, frecency, experiments), deck),
-        )
+        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store, frecency), deck))
         // The store parks requests until the socket says it is ready.
         dispatcher.schedule { store.handleConnectionReady(true) }
         scheduler.triggerActions()
@@ -291,7 +295,8 @@ class ApplicationCommandStoresTest {
     )
 
     /** Captures the nonce of the last request instead of touching a socket. */
-    private class RecordingGateway(private val accepts: Boolean) : StoreGatewayConnection() {
+    private class RecordingGateway(private val accepts: Boolean) :
+        StoreApplicationCommands.ApplicationCommandRequester {
         var lastNonce: String = ""
             private set
 

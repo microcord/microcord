@@ -160,7 +160,6 @@ data class CallModel(
                     audioManagerState = audioManagerState,
                 )
             }
-        }
 
         /**
          * Everything the voice UI needs about [channelId], or `null` while the channel is unknown.

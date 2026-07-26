@@ -55,10 +55,17 @@ class SettingsAppearanceViewModel(
 
     /** One-shot effects the screen renders but does not decide. */
     sealed class Event {
-        /** Five taps on "Light": flash the screen white and turn the torch on for three seconds. */
+        /**
+         * The sixth consecutive tap on "Light": flash the screen white and turn the torch on for
+         * three seconds. (The reference compares the *pre-increment* counter against
+         * `HOLY_LIGHT_UNLOCK_COUNT = 5`, so five taps arm it and the sixth fires it.)
+         */
         object ShowHolyLight : Event()
 
-        /** Taps 3..7 on "Dark" tease the hidden theme; [remaining] counts down to the reveal. */
+        /**
+         * Taps four through eight on "Dark" tease the hidden theme; [remaining] counts down to the
+         * reveal, which lands on the ninth. Same pre-increment counting as [ShowHolyLight].
+         */
         data class PureEvilHint(val remaining: Int) : Event()
 
         object PureEvilRevealed : Event()
@@ -106,7 +113,7 @@ class SettingsAppearanceViewModel(
 
     /**
      * Tapping "Dark" while the hidden theme is still locked counts towards revealing it. The taps
-     * are silent until the third, then count down out loud until the eighth reveals the switch.
+     * are silent for the first three, then count down out loud until the ninth reveals the switch.
      */
     @MainThread
     fun onDarkThemeTapped(canSeePureEvil: Boolean) {
