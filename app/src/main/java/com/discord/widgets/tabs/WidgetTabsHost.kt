@@ -3,7 +3,6 @@ package com.discord.widgets.tabs
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
-import androidx.activity.OnBackPressedCallback
 import androidx.fragment.app.Fragment
 import com.discord.app.AppFragment
 import androidx.fragment.app.commit
@@ -14,7 +13,6 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.intent.AppIntentContract
 import com.discord.utilities.intent.DeepLinkRoute
 import com.discord.utilities.intent.LinkParseResult
-import com.discord.widgets.home.BackHandler
 import com.discord.widgets.home.WidgetHome
 import com.discord.widgets.friends.WidgetFriendsList
 import com.discord.widgets.friends.WidgetFriendsAdd
@@ -43,7 +41,7 @@ internal val mainNavigationTabs = setOf(
     NavigationTab.SETTINGS,
 )
 
-class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host), BackHandler {
+class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
     private lateinit var bottomNavigation: TabsHostBottomNavigationView
     private var selectedTabSubscription: Subscription? = null
     private var pendingIntentSubscription: Subscription? = null
@@ -61,14 +59,9 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host), BackHandler {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         bottomNavigation = view.findViewById(R.id.widget_tabs_host_bottom_navigation_view)
-        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if (onBackPressed()) return
-                isEnabled = false
-                requireActivity().onBackPressedDispatcher.onBackPressed()
-                isEnabled = true
-            }
-        })
+        // Registered before the home fragment is committed below so the tabs host keeps the first
+        // look at every back press; see BackPressHandlerRegistry for why that order matters.
+        setOnBackPressed(::handleBackPress)
         WidgetFriendsList.onAddFriend = {
             childFragmentManager.commit {
                 replace(R.id.widget_tabs_host_friends, WidgetFriendsAdd())
@@ -252,29 +245,44 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host), BackHandler {
         else -> R.id.widget_tabs_host_home
     }
 
+    /**
+     * Selecting home always moves the panels: it closes them only when the user re-taps home while
+     * the left panel is already open, and otherwise opens the left panel. That is what makes both
+     * "tap home from another tab" and "press back from another tab" land on the guild/channel list
+     * rather than on whatever chat was last open.
+     */
     private fun selectTab(tab: NavigationTab) {
-        if (tab == NavigationTab.HOME && StoreStream.getTabsNavigation().getSelectedTab() == NavigationTab.HOME) {
-            StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.OPEN, true)
-        } else {
+        if (tab != NavigationTab.HOME) {
             StoreStream.getTabsNavigation().selectTab(tab, true)
+            return
         }
+        val wasOnHome = StoreStream.getTabsNavigation().getSelectedTab() == NavigationTab.HOME
+        val panelAction = if (wasOnHome && leftPanelState == PanelState.Open) {
+            StoreNavigation.PanelAction.CLOSE
+        } else {
+            StoreNavigation.PanelAction.OPEN
+        }
+        StoreStream.getTabsNavigation().selectHomeTab(panelAction, true)
     }
 
     private fun instantiate(className: String) = childFragmentManager.fragmentFactory
         .instantiate(requireContext().classLoader, className)
 
-    override fun onBackPressed(): Boolean {
+    /**
+     * The tabs host gets the first look at every back press.
+     *
+     * It consumes the press only while the user is somewhere it can step back from: an in-tab
+     * screen pushed onto its child back stack, or any tab other than home. On the home tab it
+     * declines, which hands the press to [com.discord.widgets.home.WidgetHome] and its panels.
+     */
+    private fun handleBackPress(): Boolean {
         if (childFragmentManager.backStackEntryCount > 0) {
             childFragmentManager.popBackStack()
             return true
         }
-        val selectedTab = StoreStream.getTabsNavigation().getSelectedTab()
-        if (selectedTab != NavigationTab.HOME) {
-            StoreStream.getTabsNavigation().selectTab(NavigationTab.HOME, true)
-            return true
-        }
-        return (childFragmentManager.findFragmentByTag(NavigationTab.HOME.name) as? BackHandler)
-            ?.onBackPressed() == true
+        if (StoreStream.getTabsNavigation().getSelectedTab() == NavigationTab.HOME) return false
+        selectTab(NavigationTab.HOME)
+        return true
     }
 
     private data class Destination(val containerId: Int, val className: String)

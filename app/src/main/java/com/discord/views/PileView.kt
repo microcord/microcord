@@ -10,6 +10,8 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
 import com.discord.R
+import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.shape.MaterialShapeDrawable
 import com.google.android.material.shape.ShapeAppearanceModel
@@ -94,12 +96,12 @@ class PileView(context: Context, attrs: AttributeSet?) : FrameLayout(context, at
             background.visibility = View.VISIBLE
         }
         if (index != lastIndex || overflowCount > 0) root.style = cutoutStyle
-        val uri = item.getImageUri(mediaProxySize(itemSizePx))
+        val uri = item.getImageUri(IconUtils.getMediaProxySize(itemSizePx))
         initials.visibility = if (uri == null) View.VISIBLE else View.GONE
         initials.text = item.getInitials?.invoke()
         if (itemTextColor != 0) initials.setTextColor(itemTextColor)
         image.visibility = if (uri == null) View.GONE else View.VISIBLE
-        if (uri != null) image.setImageURI(uri)
+        if (uri != null) MGImages.setImage(image, uri, useSmallCache = true)
     }
 
     private fun addOverflow(overflowCount: Int) {
@@ -124,13 +126,4 @@ class PileView(context: Context, attrs: AttributeSet?) : FrameLayout(context, at
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
-    private fun mediaProxySize(requested: Int) = MEDIA_PROXY_SIZES.first { it >= requested }
-
-    private companion object {
-        val MEDIA_PROXY_SIZES = intArrayOf(
-            16, 20, 22, 24, 28, 32, 40, 44, 48, 56, 60, 64, 80, 96, 100, 128,
-            160, 240, 256, 300, 320, 480, 512, 600, 640, 1024, 1280, 1536, 2048,
-            3072, 4096,
-        )
-    }
 }

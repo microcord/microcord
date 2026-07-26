@@ -1,7 +1,6 @@
 package com.discord.views.sticker
 
 import android.content.Context
-import android.net.Uri
 import android.os.Build
 import android.util.AttributeSet
 import android.util.Log
@@ -21,6 +20,7 @@ import com.discord.rlottie.RLottieImageView
 import com.discord.stores.StickerAnimationSettingsStore
 import com.discord.utilities.apng.ApngUtils
 import com.discord.utilities.file.DownloadUtils
+import com.discord.utilities.images.MGImages
 import com.discord.utilities.stickers.StickerUtils
 import com.facebook.drawee.drawable.ScalingUtils
 import com.facebook.drawee.view.SimpleDraweeView
@@ -77,7 +77,7 @@ class StickerView @JvmOverloads constructor(
         placeholder.visibility = View.GONE
         imageView.contentDescription = contentDescription(sticker)
         imageView.hierarchy.actualImageScaleType = ScalingUtils.ScaleType.FIT_CENTER
-        imageView.setImageURI(Uri.parse(StickerUtils.getCDNAssetUrl(sticker)))
+        MGImages.setImage(imageView, StickerUtils.getCDNAssetUrl(sticker), useSmallCache = true)
     }
 
     private fun loadAnimated(sticker: BaseSticker, localSetting: Int?) {
@@ -140,14 +140,14 @@ class StickerView @JvmOverloads constructor(
             when (setting) {
                 StickerUtils.ALWAYS_ANIMATE -> renderApng(file)
                 StickerUtils.ANIMATE_ON_INTERACTION -> {
-                    imageView.setImageURI(Uri.parse(StickerUtils.getCDNAssetUrl(sticker)))
+                    MGImages.setImage(imageView, StickerUtils.getCDNAssetUrl(sticker), useSmallCache = true)
                     imageView.setOnLongClickListener {
                         renderApng(file)
                         true
                     }
                 }
                 StickerUtils.NEVER_ANIMATE -> {
-                    imageView.setImageURI(Uri.parse(StickerUtils.getCDNAssetUrl(sticker)))
+                    MGImages.setImage(imageView, StickerUtils.getCDNAssetUrl(sticker), useSmallCache = true)
                     imageView.setOnLongClickListener(null)
                 }
             }
@@ -175,7 +175,7 @@ class StickerView @JvmOverloads constructor(
     }
 
     private fun resetViews() {
-        imageView.setImageURI(null as Uri?)
+        MGImages.cancelImageRequests(imageView)
         imageView.setOnLongClickListener(null)
         lottieView.rlottieDrawable?.stop()
         lottieView.setImageDrawable(null)

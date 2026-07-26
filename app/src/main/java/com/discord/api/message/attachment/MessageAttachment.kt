@@ -2,6 +2,12 @@ package com.discord.api.message.attachment
 
 import java.util.Locale
 
+/** Filename suffixes the client renders inline as an image. */
+val IMAGE_MIME_TYPES: List<String> = listOf(".jpeg", ".jpg", ".gif", ".png", ".bmp", ".webp")
+
+/** Filename suffixes the client renders inline as a video. */
+val VIDEO_MIME_TYPES: List<String> = listOf(".webm", ".mov", ".mpeg", ".mpg", ".mp4")
+
 data class MessageAttachment(
     val url: String,
     val size: Long,
@@ -15,8 +21,8 @@ data class MessageAttachment(
         get() {
             val path = url.lowercase(Locale.ROOT)
             return when {
-                IMAGE_EXTENSIONS.any(path::contains) -> MessageAttachmentType.IMAGE
-                VIDEO_EXTENSIONS.any(path::contains) -> MessageAttachmentType.VIDEO
+                IMAGE_MIME_TYPES.any(path::contains) -> MessageAttachmentType.IMAGE
+                VIDEO_MIME_TYPES.any(path::contains) -> MessageAttachmentType.VIDEO
                 else -> MessageAttachmentType.FILE
             }
         }
@@ -26,8 +32,6 @@ data class MessageAttachment(
 
     companion object {
         const val SPOILER_PREFIX = "SPOILER_"
-        private val IMAGE_EXTENSIONS = listOf(".jpeg", ".jpg", ".gif", ".png", ".bmp", ".webp")
-        private val VIDEO_EXTENSIONS = listOf(".webm", ".mov", ".mpeg", ".mpg", ".mp4")
     }
 }
 

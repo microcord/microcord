@@ -1,5 +1,6 @@
 package com.discord.utilities.textprocessing.node
 
+import android.graphics.Typeface
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.BackgroundColorSpan
@@ -26,7 +27,7 @@ class ChannelMentionNode<T : ChannelMentionNode.RenderContext>(
         val start = builder.length
         val channelName = renderContext.channelNames?.get(channelId) ?: DELETED_CHANNEL
 
-        val spans = mutableListOf<CharacterStyle>(StyleSpan(android.graphics.Typeface.BOLD))
+        val spans = mutableListOf<CharacterStyle>(StyleSpan(Typeface.BOLD))
         val onClick = renderContext.channelMentionOnClick
         spans += if (onClick != null) {
             ClickableSpan(

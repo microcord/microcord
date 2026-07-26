@@ -1,8 +1,13 @@
 package com.discord.stores
 
 import com.discord.api.user.TypingUser
+import com.discord.restapi.RestAPIInterface
+import com.discord.restapi.RestAPIParams
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
+import com.discord.utilities.permissions.SlowModeType
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.time.Clock
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -20,6 +25,15 @@ class StoreUsersTyping(
     private val currentUserId: () -> Long,
     private val scheduler: TypingScheduler = DEFAULT_SCHEDULER,
     private val standalone: Boolean = false,
+    private val api: () -> RestAPIInterface? = { null },
+    /**
+     * `StoreSlowMode.onCooldown`. `POST /channels/{id}/typing` is the only endpoint that reports
+     * the *remaining* slow-mode window, so the typing ping doubles as the cooldown probe.
+     * `StoreSlowMode` is not reconstructed yet; until it is, the cooldown is discarded and the
+     * chat input will not pre-emptively disable itself.
+     */
+    private val onCooldown: (channelId: Long, cooldownMs: Long, type: SlowModeType) -> Unit =
+        { _, _, _ -> },
 ) : StoreV2() {
     private val typingUsers = HashMap<Long, MutableSet<Long>>()
     private val removalTasks = HashMap<Long, MutableMap<Long, TypingCancellable>>()
@@ -59,6 +73,30 @@ class StoreUsersTyping(
             remove(channelId, userId)
             publishStandalone()
         }
+    }
+
+    /**
+     * Tells the server this user is typing in [channelId].
+     *
+     * The caller is responsible for throttling: 126.21 pings once per keystroke burst, and the
+     * server-side indicator lasts ~10s. A zero channel id is dropped rather than sent, because
+     * "no channel selected" reaches here through the same input path.
+     */
+    fun setUserTyping(channelId: Long) {
+        if (channelId == 0L) return
+        val api = api() ?: return
+        api.setUserTyping(channelId, RestAPIParams.EmptyBody())
+            .restSubscribeOn()
+            .appSubscribe(errorTag = TYPING_EVENT_TAG) { response ->
+                // Despite the reference's local name ("...CooldownSecs") the value forwarded is the
+                // raw millisecond field.
+                response.messageSendCooldownMs?.takeIf { it > 0L }?.let { cooldownMs ->
+                    dispatcher.schedule { onCooldown(channelId, cooldownMs, SlowModeType.MESSAGE_SEND) }
+                }
+                response.threadCreateCooldownMs?.takeIf { it > 0L }?.let { cooldownMs ->
+                    dispatcher.schedule { onCooldown(channelId, cooldownMs, SlowModeType.THREAD_CREATE) }
+                }
+            }
     }
 
     fun observeTypingUsers(channelId: Long): Observable<Set<Long>> =
@@ -102,6 +140,7 @@ class StoreUsersTyping(
 
     companion object {
         private const val TIMEOUT_MS = 10_000L
+        private const val TYPING_EVENT_TAG = "typingEvent"
         private val executor = Executors.newSingleThreadScheduledExecutor { runnable ->
             Thread(runnable, "TypingExpiry").apply { isDaemon = true }
         }

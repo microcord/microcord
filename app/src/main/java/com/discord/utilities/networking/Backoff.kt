@@ -21,6 +21,11 @@ import kotlin.math.min
  * return current
  * ```
  *
+ * Note the growth factor this implies: without jitter each failure triples the delay, and
+ * [minBackoffMs] is the seed rather than the first delay — the first armed retry already waits
+ * `3 * minBackoffMs`. With jitter on (the default) each failure multiplies by a random factor in
+ * `[1, 3)`. This is unintuitive but it is what the shipped bytecode does.
+ *
  * The [isPending] flag is what makes this shared rather than per-call: while a delayed retry is
  * armed, callers such as `MessageQueue.processNextRequest` refuse to start new work, and a later
  * [fail] does not arm a second timer. [cancel] disarms it (used when connectivity is restored) and

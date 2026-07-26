@@ -75,7 +75,9 @@ class StoreGuildsChannelsTest {
             channels.handleChannelOrThreadDelete(channel(11, Channel.PUBLIC_THREAD, 1, "thread", 10))
         }
 
-        assertEquals("Guild", guilds.getGuild(1)?.name)
+        // GUILD_DELETE always drops the guild from the live map, even when it is only becoming
+        // unavailable; the id survives in the unavailable set so the sidebar can grey it out.
+        assertNull(guilds.getGuild(1))
         assertEquals(setOf(1L), guilds.getUnavailableGuilds())
         assertNull(channels.getChannel(11))
 

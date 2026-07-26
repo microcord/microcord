@@ -7,9 +7,9 @@ import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.lifecycle.ActivityProvider
 import com.discord.utilities.lifecycle.ApplicationProvider
 import com.discord.utilities.lifecycle.Backgrounded
+import com.discord.utilities.images.MGImagesConfig
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
-import com.discord.utilities.images.MGImagesConfig
 import com.discord.utilities.persister.PersisterConfig
 import com.discord.utilities.time.ClockFactory
 import java.util.concurrent.atomic.AtomicBoolean

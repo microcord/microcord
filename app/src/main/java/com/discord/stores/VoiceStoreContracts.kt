@@ -1,76 +1,105 @@
 package com.discord.stores
 
-import com.discord.models.domain.ModelApplicationStream
+import com.discord.api.voice.state.StageRequestToSpeakState
+import com.discord.api.voice.state.VoiceState
 import com.discord.rtcconnection.audio.DiscordAudioManager
-import com.discord.rtcconnection.mediaengine.MediaEngineConnection
 
-class StoreApplicationStreaming private constructor() {
-    data class ActiveApplicationStream(
-        val state: State,
-        val stream: ModelApplicationStream,
-    ) {
-        enum class State {
-            CONNECTING,
-            ACTIVE,
-            RECONNECTING,
-            ENDED,
-            PAUSED,
-            DENIED_FULL;
+/**
+ * Seams the voice/media store layer needs from the RTC transport, which belongs to Phase 11.
+ *
+ * Everything in this file has a real home in `com.discord.rtcconnection` in the reference. It lives
+ * here only because the transport package is still a shim; when Phase 11 reconstructs
+ * `com.discord.rtcconnection`, these declarations move there unchanged and the stores keep
+ * compiling against the same shapes.
+ *
+ * Nothing here is invented: each type mirrors the reference declaration cited on it.
+ */
 
-            fun isStreamActive() = this in ACTIVE_STATES
+/**
+ * Per-user video track description reported by the media engine.
+ *
+ * Reference: `com.discord.rtcconnection.VideoMetadata`. **Move to that package in Phase 11.**
+ */
+data class VideoMetadata(
+    val userID: Long,
+    val maxWidth: Int,
+    val maxHeight: Int,
+    val maxFrameRate: Int?,
+    val type: ResolutionType,
+)
 
-            companion object {
-                val ACTIVE_STATES = listOf(CONNECTING, ACTIVE, RECONNECTING, ENDED)
-            }
-        }
+/**
+ * How a video track's resolution is negotiated.
+ *
+ * Reference: `com.discord.rtcconnection.socket.io.Payloads.ResolutionType`, wire values `source` /
+ * `fixed`, declared in that order. **Move to that package in Phase 11.**
+ */
+enum class ResolutionType(val apiValue: String) {
+    Source("source"),
+    Fixed("fixed"),
+}
+
+/**
+ * The audio-routing side effects [StoreAudioManagerV2] drives.
+ *
+ * The reference calls `DiscordAudioManager` singleton methods directly from the store; that class is
+ * still a data-only shim here, so the store takes this instead. Phase 11 implements it on top of the
+ * real `DiscordAudioManager` and can then delete the seam.
+ */
+interface AudioOutputController {
+    /** Routes to [device], honouring availability. Reference: `DiscordAudioManager.setDevice`. */
+    fun selectOutputDevice(device: DiscordAudioManager.DeviceTypes)
+
+    /** Enters/leaves the in-call audio mode. Reference: `DiscordAudioManager.setCallActive`. */
+    fun setCallActive(active: Boolean)
+
+    /** Sets the media stream volume from a 0..1 ratio. Reference: `DiscordAudioManager.setMediaVolume`. */
+    fun setMediaVolume(ratio: Float)
+
+    /**
+     * Marks the earpiece available or not. The reference forces it available while the local camera
+     * is on so a video call can be held to the ear.
+     */
+    fun setEarpieceForceAvailable(forceAvailable: Boolean)
+
+    /** The device index whose volume slider [setMediaVolume] addresses; used to normalise volumes. */
+    val maxMediaVolume: Int
+
+    object NoOp : AudioOutputController {
+        override fun selectOutputDevice(device: DiscordAudioManager.DeviceTypes) = Unit
+        override fun setCallActive(active: Boolean) = Unit
+        override fun setMediaVolume(ratio: Float) = Unit
+        override fun setEarpieceForceAvailable(forceAvailable: Boolean) = Unit
+        override val maxMediaVolume: Int get() = 0
     }
 }
 
-class StoreAudioManagerV2 private constructor() {
-    data class State(
-        var audioDevices: List<DiscordAudioManager.AudioDevice> = DiscordAudioManager.defaultAudioDevices(),
-        var activeAudioDevice: DiscordAudioManager.DeviceTypes = DiscordAudioManager.DeviceTypes.INVALID,
-    )
-}
+/**
+ * `true` when this voice state means "drop this user", i.e. it carries no channel.
+ *
+ * The gateway signals a leave by sending a voice state whose `channel_id` is null rather than by
+ * sending a delete, so every voice cache treats this as a removal.
+ *
+ * Reference: `VoiceState.isRemoveSignal` (`b.c.a.a0.d.X0`), `channelId == null`.
+ */
+val VoiceState.isRemoveSignal: Boolean
+    get() = channelId == null
 
-class StoreMediaSettings private constructor() {
-    enum class NoiseProcessing {
-        None,
-        Suppression,
-        Cancellation,
-        CancellationTemporarilyDisabled,
+/**
+ * Stage speaking state derived from a voice state.
+ *
+ * Reference: `VoiceState.getStageRequestToSpeakState` (`b.c.a.a0.d.y0`):
+ * - suppressed **with** a request timestamp -> [StageRequestToSpeakState.REQUESTED_TO_SPEAK]
+ * - not suppressed **with** a request timestamp -> the moderator invited us and we have not
+ *   acknowledged yet ([StageRequestToSpeakState.REQUESTED_TO_SPEAK_AND_AWAITING_USER_ACK])
+ * - no timestamp -> [StageRequestToSpeakState.ON_STAGE] when not suppressed, else
+ *   [StageRequestToSpeakState.NONE]
+ */
+val VoiceState?.stageRequestToSpeakState: StageRequestToSpeakState
+    get() = when {
+        this == null -> StageRequestToSpeakState.NONE
+        requestToSpeakTimestamp == null ->
+            if (!suppress) StageRequestToSpeakState.ON_STAGE else StageRequestToSpeakState.NONE
+        suppress -> StageRequestToSpeakState.REQUESTED_TO_SPEAK
+        else -> StageRequestToSpeakState.REQUESTED_TO_SPEAK_AND_AWAITING_USER_ACK
     }
-
-    enum class SelfMuteFailure { CANNOT_USE_VAD }
-
-    enum class VadUseKrisp {
-        Disabled,
-        Enabled,
-        TemporarilyDisabled,
-    }
-
-    data class VoiceConfiguration(
-        val isSelfMuted: Boolean = false,
-        val isSelfDeafened: Boolean = false,
-        val automaticVad: Boolean = true,
-        val vadUseKrisp: VadUseKrisp = VadUseKrisp.Enabled,
-        val automaticGainControl: Boolean = true,
-        val echoCancellation: Boolean = true,
-        val noiseProcessing: NoiseProcessing = NoiseProcessing.Cancellation,
-        val sensitivity: Float = DEFAULT_SENSITIVITY,
-        val inputMode: MediaEngineConnection.InputMode = MediaEngineConnection.InputMode.VOICE_ACTIVITY,
-        val outputVolume: Float = DEFAULT_OUTPUT_VOLUME,
-        val mutedUsers: Map<Long, Boolean> = emptyMap(),
-        val userOutputVolumes: Map<Long, Float> = emptyMap(),
-        val offScreenUsers: Map<Long, Boolean> = emptyMap(),
-        val enableVideoHardwareScaling: Boolean = false,
-        val voiceParticipantsHidden: Boolean = false,
-    ) {
-        companion object {
-            const val DEFAULT_OUTPUT_VOLUME = 100f
-            const val DEFAULT_SENSITIVITY = -50f
-            val DEFAULT_VOICE_CONFIG = VoiceConfiguration()
-            val DEFAULT_NOISE_PROCESSING = DEFAULT_VOICE_CONFIG.noiseProcessing.ordinal
-        }
-    }
-}

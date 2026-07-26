@@ -39,7 +39,7 @@ class IconUtilsTest {
     fun quantisesTheRequestedAvatarSizeInTheQueryString() {
         assertEquals(
             "https://cdn.discordapp.com/avatars/1/abc.$staticExtension?size=128",
-            IconUtils.getForUser(1L, "abc", 1, false, 100),
+            IconUtils.getForUser(1L, "abc", 1, false, 101),
         )
     }
 
@@ -158,8 +158,8 @@ class IconUtilsTest {
     @Test
     fun buildsUserBannerUrls() {
         assertEquals(
-            "https://cdn.discordapp.com/banners/42/a_b.gif?size=600",
-            IconUtils.getForUserBanner(42L, "a_b", 512, allowAnimation = true),
+            "https://cdn.discordapp.com/banners/42/a_b.gif?size=512",
+            IconUtils.getForUserBanner(42L, "a_b", 500, allowAnimation = true),
         )
         assertNull(IconUtils.getForUserBanner(42L, null))
         assertNull(IconUtils.getForUserBanner(42L, "  "))
@@ -208,11 +208,11 @@ class IconUtilsTest {
     fun buildsGuildIconBannerAndSplashUrls() {
         assertEquals(
             "https://cdn.discordapp.com/icons/1/hash.$staticExtension?size=128",
-            IconUtils.getForGuild(1L, "hash", null, false, 100),
+            IconUtils.getForGuild(1L, "hash", null, false, 101),
         )
         assertEquals(
             "https://cdn.discordapp.com/banners/1/hash.$staticExtension?size=512",
-            IconUtils.getBannerForGuild(1L, "hash", 512),
+            IconUtils.getBannerForGuild(1L, "hash", 500),
         )
         assertEquals(
             "https://cdn.discordapp.com/splashes/1/hash.$staticExtension?size=1024",
@@ -228,7 +228,7 @@ class IconUtilsTest {
     fun returnsTheDefaultIconWhenTheGuildHasNone() {
         assertEquals(IconUtils.DEFAULT_ICON, IconUtils.getForGuild(1L, null, IconUtils.DEFAULT_ICON))
         assertEquals(IconUtils.DEFAULT_ICON, IconUtils.getForGuild(1L, "", IconUtils.DEFAULT_ICON))
-        assertNull(IconUtils.getForGuild(null, "hash"))
+        assertNull(IconUtils.getForGuild(null as Long?, "hash"))
     }
 
     @Test

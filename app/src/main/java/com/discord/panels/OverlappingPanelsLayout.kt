@@ -385,11 +385,18 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
         startPanelLockState = LockState.entries[state.startLockState]
         endPanelLockState = LockState.entries[state.endLockState]
         useFullWidthForStartPanel = state.fullWidthStartPanel
+        // Restore the resting panel before layout runs, not only once the pending update applies
+        // the matching x offset. Back press is answered from these three fields, and a back press
+        // can land between the restore and the first layout pass.
+        val restored = Panel.entries[state.selectedPanel]
+        selectedPanel = restored
+        startPanelState = if (restored == Panel.START) PanelState.Open else PanelState.Closed
+        endPanelState = if (restored == Panel.END) PanelState.Open else PanelState.Closed
         pendingUpdate = {
             resetStartPanelWidth()
             updatePanelWidths()
             updateCenterPanelX(
-                when (Panel.entries[state.selectedPanel]) {
+                when (restored) {
                     Panel.START -> startPanelOpenedCenterPanelX
                     Panel.CENTER -> 0f
                     Panel.END -> endPanelOpenedCenterPanelX

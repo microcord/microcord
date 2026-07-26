@@ -137,7 +137,6 @@ data class ModelGuildMemberListUpdate(
             if (type.rawType != ModelGuildMemberListUpdate::class.java) return null
             @Suppress("UNCHECKED_CAST")
             return Adapter() as TypeAdapter<T>
-
         }
     }
 

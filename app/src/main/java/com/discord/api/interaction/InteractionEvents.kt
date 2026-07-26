@@ -1,7 +1,7 @@
 package com.discord.api.interaction
 
-import com.discord.api.application.Application
 import com.discord.api.botuikit.Component
+import com.discord.api.commands.Application
 import java.io.Serializable
 
 /**

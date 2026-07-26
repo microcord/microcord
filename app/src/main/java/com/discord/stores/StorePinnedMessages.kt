@@ -22,8 +22,9 @@ class StorePinnedMessages(
     fun observePinnedMessage(channelId: Long, messageId: Long): Observable<Message?> =
         observeForChannel(channelId).map { messages -> messages?.firstOrNull { it.id == messageId } }.distinctUntilChanged()
 
-    fun loadPinnedMessages(channelId: Long) {
-        if (channelId in snapshot || !loading.add(channelId)) return
+    @JvmOverloads
+    fun loadPinnedMessages(channelId: Long, force: Boolean = false) {
+        if ((!force && channelId in snapshot) || !loading.add(channelId)) return
         loader(channelId) { result -> dispatcher.schedule {
             loading.remove(channelId)
             pinnedMessages[channelId] = result.getOrDefault(emptyList()).sortedByDescending(Message::id).toMutableList()
@@ -31,12 +32,22 @@ class StorePinnedMessages(
         } }
     }
 
+    /**
+     * `CHANNEL_PINS_UPDATE`: the pin set changed, so refetch it.
+     *
+     * Only the working map is cleared. `snapshot` is rebuilt exclusively by [snapshotData] at the
+     * end of the dispatch; writing it from a handler would let an observer read a map that is
+     * half this channel's old pins and half nothing, which is the torn state StoreV2's snapshot
+     * confinement exists to prevent.
+     *
+     * [loadPinnedMessages] must be told to reload explicitly, because its own dedupe would see
+     * the still-published snapshot and decide the channel was already loaded.
+     */
     @StoreThread
     fun handlePinsUpdate(channelId: Long) {
         pinnedMessages.remove(channelId)
-        snapshot = snapshot - channelId
         markChanged()
-        loadPinnedMessages(channelId)
+        loadPinnedMessages(channelId, force = true)
     }
 
     @StoreThread

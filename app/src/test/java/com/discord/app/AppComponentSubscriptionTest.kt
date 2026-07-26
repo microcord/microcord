@@ -1,5 +1,6 @@
 package com.discord.app
 
+import com.discord.utilities.rx.bindToComponentLifecycle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

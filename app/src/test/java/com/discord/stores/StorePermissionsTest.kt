@@ -4,6 +4,7 @@ import com.discord.api.channel.Channel
 import com.discord.api.permission.Permission
 import com.discord.api.permission.PermissionOverwrite
 import com.discord.api.role.GuildRole
+import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.models.domain.ModelPayload
 import com.discord.models.member.GuildMember
@@ -53,7 +54,7 @@ class StorePermissionsTest {
                 overwrite(1, PermissionOverwrite.Type.ROLE, deny = Permission.SEND_MESSAGES),
                 overwrite(2, PermissionOverwrite.Type.ROLE, deny = Permission.VIEW_CHANNEL),
                 overwrite(3, PermissionOverwrite.Type.ROLE, allow = Permission.SEND_MESSAGES),
-                overwrite(7, PermissionOverwrite.Type.ROLE, allow = Permission.CONNECT),
+                overwrite(4, PermissionOverwrite.Type.ROLE, allow = Permission.CONNECT),
                 overwrite(7, PermissionOverwrite.Type.MEMBER, allow = Permission.VIEW_CHANNEL, deny = Permission.SEND_MESSAGES),
             ),
         )
@@ -117,8 +118,10 @@ class StorePermissionsTest {
     private fun role(id: Long, permissions: Long) =
         GuildRole(0, "role", id, 0, false, permissions, false, false, null, null, null)
 
+    // joinedAt must be set: a member with no join timestamp is a lurker, and lurker
+    // permissions are masked down to the view/read allow list.
     private fun member(userId: Long, vararg roles: Long) =
-        GuildMember(0, 0, roles.toList(), null, null, false, null, 1, userId)
+        GuildMember(0, 0, roles.toList(), null, null, false, UtcDateTime(0), 1, userId)
 
     private fun overwrite(
         id: Long,

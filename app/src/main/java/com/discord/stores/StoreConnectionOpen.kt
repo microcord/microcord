@@ -33,15 +33,16 @@ class StoreConnectionOpen(
     fun isConnectionOpen(): Boolean = connectionOpen
 
     /**
-     * @param delayForUI debounces by [UI_DEBOUNCE_MS] so a reconnect blip does not flash the UI.
+     * @param delayForUI holds each value back by [UI_DELAY_MS] so a screen observing this does not
+     *   render before the stores hydrated by the same READY have finished their dispatch.
      */
     @JvmOverloads
     fun observeConnectionOpen(delayForUI: Boolean = true): Observable<Boolean> {
         val source = observationDeck.connectRx(this, generator = { connectionOpen })
-        return if (delayForUI) source.debounce(UI_DEBOUNCE_MS, TimeUnit.MILLISECONDS) else source
+        return if (delayForUI) source.delay(UI_DELAY_MS, TimeUnit.MILLISECONDS) else source
     }
 
     private companion object {
-        const val UI_DEBOUNCE_MS = 100L
+        const val UI_DELAY_MS = 100L
     }
 }

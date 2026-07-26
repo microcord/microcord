@@ -2,7 +2,6 @@ package com.discord.views
 
 import com.discord.api.premium.PremiumTier
 import com.discord.api.voice.state.VoiceState
-import com.discord.models.member.GuildMember
 import com.discord.models.user.User
 import com.discord.stores.StoreVoiceParticipants
 import com.discord.views.calls.rotatedFrameSize
@@ -26,20 +25,33 @@ class VoiceVideoLeafBehaviorTest {
         assertEquals(1920, rotatedFrameSize(1920, 1080, -180).first)
     }
 
+    /**
+     * `VoiceUser` is the reference data class again, not an interface, so `isConnected`,
+     * `isSpeaking` and `isMuted` are derived rather than supplied: a disconnected participant is one
+     * with no voice state at all.
+     */
     private fun voiceUser(
         speaking: Boolean = false,
         ringing: Boolean = false,
         connected: Boolean = true,
         muted: Boolean = false,
-    ) = object : StoreVoiceParticipants.VoiceUser {
-        override val user = TestUser
-        override val voiceState = VoiceState(1, false, null, muted, false, false, false, false, 1, false, null, null, 1)
-        override val guildMember: GuildMember? = null
-        override val displayName = "Test"
-        override val isSpeaking = speaking
-        override val isRinging = ringing
-        override val isConnected = connected
-    }
+    ) = StoreVoiceParticipants.VoiceUser(
+        user = TestUser,
+        voiceState = if (connected) {
+            VoiceState(1, false, null, muted, false, false, false, false, 1, false, null, null, 1)
+        } else {
+            null
+        },
+        isRinging = ringing,
+        streams = null,
+        isMe = false,
+        guildMember = null,
+        watchingStream = null,
+        streamContext = null,
+        isBooster = false,
+        voiceConfiguration = null,
+        _isSpeaking = speaking,
+    )
 
     private object TestUser : User {
         override val isSystemUser = false

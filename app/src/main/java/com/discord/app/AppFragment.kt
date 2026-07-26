@@ -15,6 +15,7 @@ import androidx.annotation.StringRes
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
 import com.discord.R
+import com.discord.utilities.view.ToastManager
 import com.discord.views.ToolbarTitleLayout
 import java.io.File
 import java.io.IOException
@@ -66,7 +67,6 @@ abstract class AppFragment : Fragment, AppComponent, AppPermissionsRequests, App
 
     // region lifecycle
 
-    @CallSuper
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         bindToolbar(view)
@@ -283,14 +283,12 @@ abstract class AppFragment : Fragment, AppComponent, AppPermissionsRequests, App
 
     open fun onImageCropped(uri: Uri, mimeType: String) = Unit
 
+    private val toastManager = ToastManager()
+
     private fun onMediaPickerFailed(cause: Exception) {
         AppLog.w("Media picker failed in ${javaClass.simpleName}", cause)
         val context = context ?: return
-        android.widget.Toast.makeText(
-            context,
-            getString(R.string.upload_open_file_failed, cause.message.orEmpty()),
-            android.widget.Toast.LENGTH_SHORT,
-        ).show()
+        toastManager.show(context, context.getNamedFormatString(R.string.upload_open_file_failed, cause.message.orEmpty()))
     }
 
     // endregion

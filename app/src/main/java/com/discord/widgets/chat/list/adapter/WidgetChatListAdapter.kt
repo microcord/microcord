@@ -1,392 +1,672 @@
 package com.discord.widgets.chat.list.adapter
 
-import android.view.LayoutInflater
+import android.content.Context
+import android.graphics.drawable.TransitionDrawable
+import android.net.Uri
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
-import android.widget.ImageView
-import android.util.TypedValue
-import android.text.Spannable
-import android.text.SpannableString
-import android.text.style.LeadingMarginSpan
-import android.view.Gravity
-import androidx.core.text.BidiFormatter
-import androidx.core.content.ContextCompat
-import androidx.recyclerview.widget.DiffUtil
-import androidx.recyclerview.widget.ListAdapter
+import androidx.fragment.app.FragmentManager
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.api.activity.Activity
+import com.discord.api.application.Application
 import com.discord.api.channel.Channel
-import com.discord.models.message.Message
-import com.discord.models.member.GuildMember
-import com.discord.stores.StoreStream
-import com.discord.utilities.textprocessing.MessageTextRenderer
-import com.discord.utilities.view.text.SimpleDraweeSpanTextView
-import com.discord.widgets.chat.list.entries.ChatListEntry
-import com.facebook.drawee.view.SimpleDraweeView
-import com.google.android.flexbox.FlexboxLayout
-import com.discord.views.UploadProgressView
-import com.discord.stores.StoreMessageUploads
-import com.discord.api.message.reaction.MessageReactionEmoji
+import com.discord.api.guildscheduledevent.GuildScheduledEvent
+import com.discord.api.message.activity.MessageActivityType
 import com.discord.api.message.reaction.MessageReaction
-import com.discord.views.ReactionView
-import java.text.DateFormat
-import java.util.Date
+import com.discord.api.sticker.BaseSticker
+import com.discord.api.sticker.Sticker
+import com.discord.app.AppFragment
+import com.discord.app.AppPermissionsRequests
+import com.discord.models.guild.Guild
+import com.discord.models.message.Message
+import com.discord.stores.StoreChat
+import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
+import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
+import com.discord.utilities.time.Clock
+import com.discord.utilities.time.ClockFactory
+import com.discord.widgets.botuikit.ComponentProvider
+import com.discord.widgets.chat.list.FragmentLifecycleListener
+import com.discord.widgets.chat.list.entries.ChatListEntry
+import com.discord.widgets.chat.list.entries.MessageEntry
+import com.discord.widgets.chat.list.entries.NewMessagesEntry
+import com.discord.widgets.chat.list.model.WidgetChatListModel
+import java.lang.ref.WeakReference
 
-class WidgetChatListAdapter(
-    private val onClick: (Message) -> Unit = {},
-    private val onLongClick: (Message) -> Boolean = { false },
-    private val onCancelUpload: (String) -> Unit = {},
-    private val onReactionClick: (Message, MessageReactionEmoji, Boolean) -> Unit = { _, _, _ -> },
-    private val onReactionLongClick: (Message, MessageReaction) -> Boolean = { _, _ -> false },
-    private val onAddReaction: (Message) -> Unit = {},
-    private val onAuthorClick: (Long) -> Unit = {},
-    private val onAuthorMention: (Long) -> Unit = {},
-) : ListAdapter<ChatListEntry, WidgetChatListAdapter.Holder>(DIFF) {
-    init {
-        setHasStableIds(true)
-        stateRestorationPolicy = StateRestorationPolicy.PREVENT_WHEN_EMPTY
+/**
+ * The chat list.
+ *
+ * The adapter owns three concerns beyond turning [ChatListEntry] rows into views:
+ *
+ *  * **Interaction reporting.** Scroll position and whether the user has touched the list since the
+ *    last programmatic jump are published back to [StoreChat] on every scroll, update and touch.
+ *    `StoreMessagesLoader` drives pagination off that signal, so a list that never publishes never
+ *    paginates.
+ *  * **Jump-to-message.** [scrollToMessageId] retries until the target row exists (history may
+ *    still be loading), then flashes it.
+ *  * **Row lifecycle.** Inline media players are started and stopped through [onResume]/[onPause]
+ *    rather than left running when the screen is not visible.
+ */
+class WidgetChatListAdapter @JvmOverloads constructor(
+    recycler: RecyclerView,
+    val appPermissionsRequests: AppPermissionsRequests,
+    var fragmentManager: FragmentManager,
+    val eventHandler: EventHandler,
+    val clock: Clock = ClockFactory.get(),
+) : MGRecyclerAdapterSimple<ChatListEntry>(recycler) {
+
+    val botUiComponentProvider = ComponentProvider(recycler.context)
+
+    /**
+     * The whole state the rows render from. Assigning it also pushes the row list through the
+     * differ, so callers only ever set this one property.
+     */
+    var data: Data = EmptyData()
+        set(value) {
+            field = value
+            setData(value.list)
+        }
+
+    /**
+     * Whether a message that mentions the viewer paints its highlight background. Off for surfaces
+     * such as pinned messages and search results, where every row would otherwise light up.
+     */
+    var mentionMeMessageLevelHighlighting: Boolean = true
+
+    private val handlerOfTouches = HandlerOfTouches()
+    private val handlerOfScrolls = HandlerOfScrolls()
+    private val handlerOfUpdates = HandlerOfUpdates()
+
+    private var isTouchedSinceLastJump: Boolean = false
+    private var scrollToWithHighlight: ScrollToWithHighlight? = null
+
+    val layoutManager: LinearLayoutManager?
+        get() = recycler.layoutManager as? LinearLayoutManager
+
+    override fun onCreateViewHolder(
+        parent: ViewGroup,
+        viewType: Int,
+    ): MGRecyclerViewHolder<WidgetChatListAdapter, ChatListEntry> = when (viewType) {
+        ChatListEntry.MESSAGE, ChatListEntry.REPLY ->
+            WidgetChatListAdapterItemMessage(R.layout.widget_chat_list_adapter_item_text, this)
+        ChatListEntry.MESSAGE_MINIMAL ->
+            WidgetChatListAdapterItemMessage(R.layout.widget_chat_list_adapter_item_minimal, this)
+        ChatListEntry.LOAD_INDICATOR ->
+            WidgetChatListItem(R.layout.widget_chat_list_adapter_item_loading, this)
+        ChatListEntry.START_OF_CHAT -> WidgetChatListAdapterItemStart(this)
+        ChatListEntry.REACTIONS -> WidgetChatListAdapterItemReactions(this)
+        ChatListEntry.SYSTEM_MESSAGE -> WidgetChatListAdapterItemSystemMessage(this)
+        ChatListEntry.UPLOAD_STATUS -> WidgetChatListAdapterItemUploadProgress(this)
+        ChatListEntry.SPACER ->
+            WidgetChatListItem(R.layout.widget_chat_list_adapter_item_spacer, this)
+        ChatListEntry.NEW_MESSAGES -> WidgetChatListAdapterItemNewMessages(this)
+        ChatListEntry.TIMESTAMP -> WidgetChatListAdapterItemTimestamp(this)
+        ChatListEntry.BLOCKED_MESSAGES -> WidgetChatListAdapterItemBlocked(this)
+        ChatListEntry.SEARCH_RESULT_COUNT -> WidgetChatListAdapterItemSearchResultCount(this)
+        ChatListEntry.SEARCH_INDEXING ->
+            MGRecyclerViewHolder(R.layout.widget_chat_list_adapter_item_search_indexing, this)
+        ChatListEntry.SEARCH_EMPTY ->
+            MGRecyclerViewHolder(R.layout.widget_chat_list_adapter_item_search_empty, this)
+        ChatListEntry.SEARCH_ERROR ->
+            MGRecyclerViewHolder(R.layout.widget_chat_list_adapter_item_search_error, this)
+        ChatListEntry.DIVIDER ->
+            MGRecyclerViewHolder(R.layout.widget_chat_list_adapter_item_divider, this)
+        ChatListEntry.EMPTY_PINS -> WidgetChatListAdapterItemEmptyPins(this)
+        ChatListEntry.MESSAGE_HEADER -> WidgetChatListAdapterItemMessageHeader(this)
+        ChatListEntry.MENTION_FOOTER -> WidgetChatListAdapterItemMentionFooter(this)
+        ChatListEntry.CALL_MESSAGE -> WidgetChatListAdapterItemCallMessage(this)
+        ChatListEntry.MESSAGE_FAILED ->
+            WidgetChatListAdapterItemMessage(R.layout.widget_chat_list_adapter_item_failed, this)
+        ChatListEntry.MESSAGE_EMBED -> WidgetChatListAdapterItemEmbed(this)
+        ChatListEntry.GAME_INVITE -> WidgetChatListAdapterItemGameInvite(this)
+        ChatListEntry.SPOTIFY_LISTEN_TOGETHER -> WidgetChatListAdapterItemSpotifyListenTogether(this)
+        ChatListEntry.INVITE -> WidgetChatListAdapterItemInvite(this)
+        ChatListEntry.GUILD_WELCOME -> WidgetChatListAdapterItemGuildWelcome(this)
+        ChatListEntry.GIFT -> WidgetChatListAdapterItemGift(this)
+        ChatListEntry.MESSAGE_ATTACHMENT -> WidgetChatListAdapterItemAttachment(this)
+        ChatListEntry.START_OF_PRIVATE_CHAT -> WidgetChatListAdapterItemPrivateChannelStart(this)
+        ChatListEntry.GUILD_TEMPLATE -> WidgetChatListAdapterItemGuildTemplate(this)
+        ChatListEntry.STICKER -> WidgetChatListAdapterItemSticker(this)
+        ChatListEntry.APPLICATION_COMMAND -> WidgetChatListAdapterItemApplicationCommand(this)
+        ChatListEntry.EPHEMERAL_MESSAGE -> WidgetChatListAdapterItemEphemeralMessage(this)
+        ChatListEntry.THREAD_EMBED -> WidgetChatListAdapterItemThreadEmbed(this)
+        ChatListEntry.BOT_UI_COMPONENT -> WidgetChatListAdapterItemBotComponentRow(this)
+        ChatListEntry.THREAD_DRAFT_FORM -> WidgetChatListAdapterItemThreadDraftForm(this)
+        ChatListEntry.GUILD_INVITE_REMINDER -> WidgetChatListAdapterItemGuildInviteReminder(this)
+        ChatListEntry.STAGE_INVITE -> WidgetChatListAdapterItemStageInvite(this)
+        ChatListEntry.THREAD_STARTER_DIVIDER ->
+            MGRecyclerViewHolder(R.layout.widget_chat_list_adapter_item_thread_starter_divider, this)
+        ChatListEntry.STICKER_GREET -> WidgetChatListAdapterItemStickerGreet(this)
+        ChatListEntry.STICKER_GREET_COMPACT -> WidgetChatListAdapterItemStickerGreetCompact(this)
+        ChatListEntry.GUILD_SCHEDULED_EVENT_INVITE ->
+            WidgetChatListAdapterItemGuildScheduledEventInvite(this)
+        ChatListEntry.AUTOMOD_BLOCKED -> WidgetChatListAdapterItemAutoModBlocked(this)
+        ChatListEntry.AUTOMOD_SYSTEM_MESSAGE -> WidgetChatListAdapterItemAutoModSystemMessageEmbed(this)
+        else -> throw invalidViewTypeException(viewType)
     }
 
-    val oldestMessageId: Long?
-        get() = currentList.mapNotNull(ChatListEntry::messageId).minOrNull()
+    // region lifecycle
 
-    override fun getItemId(position: Int) = getItem(position).stableId
-    override fun getItemViewType(position: Int) = viewType(getItem(position))
+    /**
+     * Installs the touch, scroll and update handlers. Called from the host's `onResume`, because
+     * the handlers publish into a store and must not keep doing so while the screen is away.
+     */
+    fun setHandlers() {
+        setOnUpdated { _, _ ->
+            recycler.removeCallbacks(handlerOfUpdates)
+            recycler.post(handlerOfUpdates)
+            recycler.setOnTouchListener(handlerOfTouches)
+            recycler.removeOnScrollListener(handlerOfScrolls)
+            recycler.addOnScrollListener(handlerOfScrolls)
+        }
+    }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = Holder(
-        LayoutInflater.from(parent.context).inflate(layoutFor(viewType), parent, false),
+    /**
+     * Detaches everything [setHandlers] installed and publishes a final interaction state with a
+     * null layout manager, which reads as "no position known" rather than "scrolled to the top" —
+     * the difference between the loader idling and the loader paginating into a dead screen.
+     */
+    fun disposeHandlers() {
+        setOnUpdated { _, _ -> }
+        recycler.removeCallbacks(handlerOfUpdates)
+        recycler.setOnTouchListener(null)
+        recycler.removeOnScrollListener(handlerOfScrolls)
+        eventHandler.onInteractionStateUpdated(
+            StoreChat.InteractionState(data.channelId, 0L, isTouchedSinceLastJump, null),
+        )
+    }
+
+    /** Forwards to every bound row that cares, so inline players stop with the screen. */
+    fun onPause() = forEachVisibleLifecycleListener(FragmentLifecycleListener::onPause)
+
+    fun onResume() = forEachVisibleLifecycleListener(FragmentLifecycleListener::onResume)
+
+    private fun forEachVisibleLifecycleListener(action: (FragmentLifecycleListener) -> Unit) {
+        repeat(recycler.childCount) { index ->
+            val holder = recycler.getChildViewHolder(recycler.getChildAt(index))
+            if (holder is FragmentLifecycleListener) action(holder)
+        }
+    }
+
+    // endregion
+
+    // region jump to message
+
+    /**
+     * Scrolls to [messageId], flashes it, then calls [onCompleted].
+     *
+     * A jump that is already running for a real message wins over a later "jump to newest"
+     * (`messageId <= 0`) request: the newest-message scroll is issued on every channel change and
+     * would otherwise cancel the jump the user explicitly asked for.
+     */
+    fun scrollToMessageId(messageId: Long, onCompleted: () -> Unit) {
+        val supersededByJump = scrollToWithHighlight.let { it != null && it.messageId > 0L } &&
+            messageId <= 0L
+        if (supersededByJump) {
+            onCompleted()
+            return
+        }
+        isTouchedSinceLastJump = false
+        scrollToWithHighlight?.cancel()
+        scrollToWithHighlight = ScrollToWithHighlight(this, messageId) {
+            scrollToWithHighlight = null
+            publishInteractionState()
+            onCompleted()
+        }
+    }
+
+    // endregion
+
+    // region event fan-out
+    // The rows know their own entry but not the surrounding channel/guild/viewer, so the adapter
+    // completes each callback from `data` before handing it to the host's EventHandler.
+
+    fun onQuickAddReactionClicked(messageId: Long) {
+        eventHandler.onQuickAddReactionClicked(data.guildId, data.userId, data.channelId, messageId)
+    }
+
+    fun onReactionClicked(messageId: Long, reaction: MessageReaction, canAddReactions: Boolean) {
+        eventHandler.onReactionClicked(
+            data.guildId,
+            data.userId,
+            data.channelId,
+            messageId,
+            reaction,
+            canAddReactions,
+        )
+    }
+
+    fun onReactionLongClicked(messageId: Long, reaction: MessageReaction) {
+        eventHandler.onReactionLongClicked(data.guildId, data.channelId, messageId, reaction)
+    }
+
+    fun onBotUiComponentClicked(
+        applicationId: Long,
+        messageId: Long,
+        messageFlags: Long?,
+        componentIndex: Int,
+        customId: String?,
+        values: List<String>?,
+    ) {
+        eventHandler.onBotUiComponentClicked(
+            applicationId,
+            data.guild?.id,
+            data.channelId,
+            messageId,
+            messageFlags,
+            componentIndex,
+            customId,
+            values,
+        )
+    }
+
+    fun onRoleSubscriptionPurchaseSystemMessageClicked(roleSubscriptionListingId: Long, messageId: Long) {
+        eventHandler.onRoleSubscriptionPurchaseTierClick(
+            roleSubscriptionListingId,
+            data.guildId,
+            data.userId,
+            data.channelId,
+            messageId,
+        )
+    }
+
+    fun onShareButtonClick(
+        guildEvent: GuildScheduledEvent,
+        weakContext: WeakReference<Context>,
+        weakFragment: WeakReference<AppFragment>,
+    ) = eventHandler.onShareButtonClick(guildEvent, weakContext, weakFragment)
+
+    fun onStickerClicked(message: Message, sticker: BaseSticker) =
+        eventHandler.onStickerClicked(message, sticker)
+
+    fun onThreadClicked(channel: Channel) = eventHandler.onThreadClicked(channel)
+
+    fun onThreadLongClicked(channel: Channel) = eventHandler.onThreadLongClicked(channel)
+
+    fun onUserActivityAction(
+        authorId: Long,
+        messageId: Long,
+        messageActivityType: MessageActivityType,
+        activity: Activity,
+        application: Application,
+    ) = eventHandler.onUserActivityAction(
+        authorId,
+        data.channelId,
+        messageId,
+        messageActivityType,
+        activity,
+        application,
     )
 
-    override fun onBindViewHolder(holder: Holder, position: Int) {
-        val row = getItem(position)
-        when (row) {
-            is ChatListEntry.Loading, is ChatListEntry.Spacer, is ChatListEntry.Divider -> Unit
-            is ChatListEntry.EmptyPins -> holder.itemView.findViewById<TextView>(R.id.chat_list_empty_pins_text)
-                .setText(if (row.dm) R.string.no_pins_in_dm else R.string.no_pins_in_channel)
-            is ChatListEntry.Start -> bindStart(holder.itemView, row.channel)
-            is ChatListEntry.DayDivider -> bindDivider(holder.itemView, formatDate(row.timestamp), false)
-            is ChatListEntry.UnreadDivider -> bindDivider(holder.itemView, holder.itemView.context.getString(R.string.new_messages_divider), true)
-            is ChatListEntry.Header -> bindHeader(holder.itemView, row)
-            is ChatListEntry.Minimal -> bindMinimal(holder.itemView, row)
-            is ChatListEntry.System -> bindSystem(holder.itemView, row)
-            is ChatListEntry.Failed -> bindFailed(holder.itemView, row)
-            is ChatListEntry.Attachment -> bindAttachment(holder.itemView, row)
-            is ChatListEntry.Reactions -> bindReactions(holder.itemView, row)
-            is ChatListEntry.UploadProgress -> bindUploadProgress(holder.itemView, row)
-        }
-        (row as? ChatListEntry.MessageRow)?.let { messageRow ->
-            holder.itemView.setOnClickListener { onClick(messageRow.message) }
-            holder.itemView.setOnLongClickListener { onLongClick(messageRow.message) }
-        } ?: run {
-            holder.itemView.setOnClickListener(null)
-            holder.itemView.setOnLongClickListener(null)
-        }
+    // endregion
+
+    /**
+     * Publishes where the list is now. [WidgetChatListModel.newestKnownMessageId] is only available
+     * on the real model — the pins and search surfaces use a different [Data] and report 0, which
+     * reads as "nothing newer to load".
+     */
+    private fun publishInteractionState() {
+        val newestKnownMessageId = (data as? WidgetChatListModel)?.newestKnownMessageId ?: 0L
+        eventHandler.onInteractionStateUpdated(
+            StoreChat.InteractionState(
+                data.channelId,
+                newestKnownMessageId,
+                isTouchedSinceLastJump,
+                layoutManager,
+            ),
+        )
     }
 
-    fun positionForMessage(messageId: Long): Int =
-        currentList.indexOfFirst { it.messageId == messageId }
+    /** Everything the rows need that is not carried by the row itself. */
+    interface Data {
+        val channelId: Long
+        val channelNames: Map<Long, String>
+        val guild: Guild?
+        val guildId: Long
+        val list: List<ChatListEntry>
+        val myRoleIds: Set<Long>
+        val newMessagesMarkerMessageId: Long
+        val oldestMessageId: Long
+        val userId: Long
 
-    private fun bindHeader(root: View, row: ChatListEntry.Header) {
-        root.findViewById<View>(R.id.chat_list_adapter_item_thread_embed_spine)?.visibility = View.GONE
-        root.findViewById<View>(R.id.chat_list_adapter_item_highlighted_bg)?.visibility = View.GONE
-        root.findViewById<View>(R.id.chat_list_adapter_item_gutter_bg)?.visibility = View.GONE
-        val author = row.message.author
-        root.findViewById<TextView>(R.id.chat_list_adapter_item_text_name).text = author?.username ?: "Unknown User"
-        val plainText = bindMessageText(root.findViewById(R.id.chat_list_adapter_item_text), row.message, row.text)
-        root.findViewById<TextView>(R.id.chat_list_adapter_item_text_timestamp).text = formatTimestamp(row.message)
-        root.findViewById<View>(R.id.chat_list_adapter_item_communication_disabled_icon).visibility = View.GONE
-        root.findViewById<View>(R.id.chat_list_adapter_item_text_role_icon).visibility = View.GONE
-        root.findViewById<View>(R.id.chat_list_adapter_item_text_tag).visibility = View.GONE
-        root.findViewById<View>(R.id.chat_list_adapter_item_text_decorator).visibility = View.GONE
-        bindReply(root, row.message)
-        root.findViewById<SimpleDraweeView>(R.id.chat_list_adapter_item_text_avatar).setImageURI(avatarUrl(author?.id, author?.avatar?.value))
-        root.findViewById<View>(R.id.chat_list_adapter_item_text_avatar).setOnClickListener {
-            author?.id?.let(onAuthorClick)
-        }
-        root.findViewById<View>(R.id.chat_list_adapter_item_text_name).setOnClickListener {
-            author?.id?.let(onAuthorMention)
-        }
-        root.contentDescription = accessibility(row.message, plainText)
+        /** False on read-only surfaces (pins, search) where tapping a spoiler must not reveal it. */
+        val isSpoilerClickAllowed: Boolean
     }
 
-    private fun bindReply(root: View, message: Message) {
-        val holder = root.findViewById<View>(R.id.chat_list_adapter_item_text_decorator)
-        val link = root.findViewById<View>(R.id.chat_list_adapter_item_text_decorator_reply_link_icon)
-        val shown = message.type == 19 && message.messageReference != null
-        holder.visibility = if (shown) View.VISIBLE else View.GONE
-        link.visibility = holder.visibility
-        if (!shown) return
+    /** What the adapter renders before its first real assignment. */
+    private class EmptyData : Data {
+        override val channelId: Long = 0L
+        override val channelNames: Map<Long, String> = emptyMap()
+        override val guild: Guild? = null
+        override val guildId: Long = 0L
+        override val list: List<ChatListEntry> = emptyList()
+        override val myRoleIds: Set<Long> = emptySet()
+        override val newMessagesMarkerMessageId: Long = 0L
+        override val oldestMessageId: Long = 0L
+        override val userId: Long = 0L
+        override val isSpoilerClickAllowed: Boolean = false
+    }
 
-        val reply = message.referencedMessage
-        val icon = root.findViewById<ImageView>(R.id.chat_list_adapter_item_text_decorator_reply_icon)
-        val avatar = root.findViewById<SimpleDraweeView>(R.id.chat_list_adapter_item_text_decorator_avatar)
-        val name = root.findViewById<TextView>(R.id.chat_list_adapter_item_text_decorator_reply_name)
-        val content = root.findViewById<SimpleDraweeSpanTextView>(R.id.chat_list_adapter_item_text_reply_content)
-        val author = reply?.author
-        val member = message.guildId?.let { guildId -> author?.id?.let { StoreStream.getGuilds().getMember(guildId, it) } }
-        icon.visibility = if (author == null) View.VISIBLE else View.GONE
-        avatar.visibility = if (author == null) View.GONE else View.VISIBLE
-        avatar.setImageURI(avatarUrl(author?.id, author?.avatar?.value))
-        name.text = author?.let {
-            val displayName = member?.nick?.takeUnless(String::isBlank) ?: reply.member?.nick?.takeUnless(String::isBlank) ?: it.username
-            if (message.mentions.orEmpty().any { mentioned -> mentioned.id == it.id }) "@$displayName" else displayName
-        }.orEmpty()
-        name.visibility = if (name.text.isEmpty()) View.GONE else View.VISIBLE
-        name.setTextColor(GuildMember.getColor(member, themedColor(root, R.attr.colorHeaderPrimary)))
-        val replyText = when {
-            reply == null -> root.context.getString(R.string.reply_quote_message_not_loaded)
-            !reply.content.isNullOrEmpty() -> reply.content.orEmpty()
-            !reply.stickers.isNullOrEmpty() || !reply.stickerItems.isNullOrEmpty() -> root.context.getString(R.string.reply_quote_sticker_mobile)
-            !reply.attachments.isNullOrEmpty() || !reply.embeds.isNullOrEmpty() -> root.context.getString(R.string.reply_quote_no_text_content_mobile)
-            else -> ""
-        }
-        val leading = root.findViewById<View>(R.id.chat_list_adapter_item_reply_leading_views).run {
-            measure(0, 0)
-            LeadingMarginSpan.Standard(measuredWidth, 0)
-        }
-        val replyPlain = if (reply != null && !reply.content.isNullOrEmpty()) {
-            val rendered = MessageTextRenderer.render(Message(reply).copy(guildId = message.guildId), content)
-            rendered.text.setSpan(leading, 0, rendered.text.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-            content.setDraweeSpanStringBuilder(rendered.text)
-            rendered.plainText
-        } else {
-            content.text = SpannableString(replyText).apply {
-                setSpan(leading, 0, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+    /**
+     * Everything a chat row can ask its host to do.
+     *
+     * Every member has a no-op default so a surface implements only what it supports — the pinned
+     * messages list, for instance, wires long-press and unpin but nothing about threads.
+     */
+    interface EventHandler {
+        fun onBotUiComponentClicked(
+            applicationId: Long,
+            guildId: Long?,
+            channelId: Long,
+            messageId: Long,
+            messageFlags: Long?,
+            componentIndex: Int,
+            customId: String?,
+            values: List<String>?,
+        ) = Unit
+
+        fun onCallMessageClicked(voiceChannelId: Long, callStatus: WidgetChatListAdapterItemCallMessage.CallStatus) = Unit
+
+        fun onCommandClicked(
+            interactionId: Long,
+            guildId: Long?,
+            channelId: Long,
+            messageId: Long,
+            interactionUserId: Long,
+            applicationId: Long,
+            messageNonce: String?,
+        ) = Unit
+
+        fun onDismissClicked(message: Message) = Unit
+
+        fun onDismissLocalMessageClicked(message: Message) = Unit
+
+        fun onInteractionStateUpdated(interactionState: StoreChat.InteractionState) = Unit
+
+        fun onListClicked() = Unit
+
+        fun onMessageAuthorAvatarClicked(message: Message, guildId: Long) = Unit
+
+        fun onMessageAuthorLongClicked(message: Message, guildId: Long?) = Unit
+
+        fun onMessageAuthorNameClicked(message: Message, guildId: Long) = Unit
+
+        fun onMessageBlockedGroupClicked(message: Message) = Unit
+
+        fun onMessageClicked(message: Message, isThreadStarterMessage: Boolean) = Unit
+
+        fun onMessageLongClicked(
+            message: Message,
+            formattedMessage: CharSequence,
+            isThreadStarterMessage: Boolean,
+        ) = Unit
+
+        fun onOldestMessageId(channelId: Long, oldestMessageId: Long) = Unit
+
+        fun onOpenPinsClicked(message: Message) = Unit
+
+        fun onQuickAddReactionClicked(guildId: Long, myUserId: Long, channelId: Long, messageId: Long) = Unit
+
+        fun onQuickDownloadClicked(uri: Uri, fileName: String): Boolean = false
+
+        fun onReactionClicked(
+            guildId: Long,
+            myUserId: Long,
+            channelId: Long,
+            messageId: Long,
+            reaction: MessageReaction,
+            canAddReactions: Boolean,
+        ) = Unit
+
+        fun onReactionLongClicked(guildId: Long, channelId: Long, messageId: Long, reaction: MessageReaction) = Unit
+
+        fun onReportIssueWithAutoMod(context: Context, message: Message) = Unit
+
+        fun onRoleSubscriptionPurchaseTierClick(
+            roleSubscriptionListingId: Long,
+            guildId: Long,
+            userId: Long,
+            channelId: Long,
+            messageId: Long,
+        ) = Unit
+
+        fun onSendGreetMessageClicked(channelId: Long, channelType: Int, sticker: Sticker) = Unit
+
+        fun onShareButtonClick(
+            guildEvent: GuildScheduledEvent,
+            weakContext: WeakReference<Context>,
+            weakFragment: WeakReference<AppFragment>,
+        ) = Unit
+
+        fun onStickerClicked(message: Message, sticker: BaseSticker) = Unit
+
+        fun onSystemMessageCtaClicked(message: Message, channel: Channel, sticker: BaseSticker) = Unit
+
+        fun onThreadClicked(channel: Channel) = Unit
+
+        fun onThreadLongClicked(channel: Channel) = Unit
+
+        fun onUrlLongClicked(url: String) = Unit
+
+        fun onUserActivityAction(
+            authorId: Long,
+            channelId: Long,
+            messageId: Long,
+            messageActivityType: MessageActivityType,
+            activity: Activity,
+            application: Application,
+        ) = Unit
+
+        fun onUserMentionClicked(userId: Long, channelId: Long, guildId: Long) = Unit
+    }
+
+    /** Republishes the interaction state whenever the scroll settles or the channel changes. */
+    private inner class HandlerOfScrolls : RecyclerView.OnScrollListener() {
+        private var channelId: Long = 0L
+        private var scrollState: Int = 0
+
+        override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+            super.onScrollStateChanged(recyclerView, newState)
+            if (scrollState != newState || data.channelId != channelId) {
+                scrollState = newState
+                channelId = data.channelId
+                publishInteractionState()
             }
-            replyText
         }
-        holder.layoutDirection = if (BidiFormatter.getInstance().isRtl(content.text)) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
-        holder.setOnClickListener(reply?.let { quoted -> View.OnClickListener { onClick(Message(quoted)) } })
-        holder.contentDescription = if (author == null) replyPlain else listOf(name.text, replyPlain).joinToString(", ")
     }
 
-    private fun bindMinimal(root: View, row: ChatListEntry.Minimal) {
-        root.findViewById<View>(R.id.chat_list_adapter_item_highlighted_bg)?.visibility = View.GONE
-        root.findViewById<View>(R.id.chat_list_adapter_item_gutter_bg)?.visibility = View.GONE
-        val plainText = bindMessageText(root.findViewById(R.id.chat_list_adapter_item_text), row.message, row.text)
-        root.contentDescription = accessibility(row.message, plainText)
-    }
+    /**
+     * Records the first drag since the last jump — until then the list is where the app put it, not
+     * where the user put it, and edge-triggered pagination stays disabled. Also turns a tap
+     * anywhere on the list into `onListClicked`, which is how the chat overlay dismisses itself.
+     */
+    private inner class HandlerOfTouches : View.OnTouchListener {
+        private val tapGestureDetector = GestureDetector(
+            recycler.context,
+            object : GestureDetector.SimpleOnGestureListener() {
+                override fun onSingleTapUp(e: MotionEvent): Boolean {
+                    eventHandler.onListClicked()
+                    return super.onSingleTapUp(e)
+                }
+            },
+        )
 
-    private fun bindSystem(root: View, row: ChatListEntry.System) {
-        root.findViewById<View>(R.id.system_welcome_cta_button)?.visibility = View.GONE
-        root.findViewById<TextView>(R.id.system_text).text = row.text
-        root.findViewById<TextView>(R.id.system_timestamp).text = formatTimestamp(row.message)
-        root.contentDescription = accessibility(row.message, row.text)
-    }
-
-    private fun bindFailed(root: View, row: ChatListEntry.Failed) {
-        root.findViewById<View>(R.id.chat_list_adapter_item_failed_upload_list)?.visibility =
-            if (row.message.localAttachments.isNullOrEmpty()) View.GONE else View.VISIBLE
-        val author = row.message.author
-        root.findViewById<TextView>(R.id.chat_list_adapter_item_text_name).text = author?.username ?: "Unknown User"
-        val plainText = bindMessageText(root.findViewById(R.id.chat_list_adapter_item_text), row.message, row.text)
-        root.findViewById<SimpleDraweeView>(R.id.chat_list_adapter_item_text_avatar).setImageURI(avatarUrl(author?.id, author?.avatar?.value))
-        root.contentDescription = "${accessibility(row.message, plainText)}. ${root.context.getString(R.string.send_message_failure)}"
-    }
-
-    private fun bindAttachment(root: View, row: ChatListEntry.Attachment) {
-        root.findViewById<View>(R.id.chat_list_adapter_item_highlighted_bg)?.visibility = View.GONE
-        root.findViewById<View>(R.id.chat_list_adapter_item_gutter_bg)?.visibility = View.GONE
-        root.findViewById<View>(R.id.chat_list_item_attachment_inline_media).visibility = View.GONE
-        root.findViewById<View>(R.id.chat_list_item_attachment_card).visibility = View.VISIBLE
-        root.findViewById<TextView>(R.id.chat_list_item_attachment_name).text = row.attachment.filename
-        root.findViewById<TextView>(R.id.chat_list_item_attachment_description).text = "${row.attachment.size} bytes"
-        root.contentDescription = "Attachment ${row.attachment.filename}"
-    }
-
-    private fun bindReactions(root: View, row: ChatListEntry.Reactions) {
-        root.findViewById<View>(R.id.chat_list_adapter_item_highlighted_bg)?.visibility = View.GONE
-        root.findViewById<View>(R.id.chat_list_adapter_item_gutter_bg)?.visibility = View.GONE
-        val reactions = root.findViewById<FlexboxLayout>(R.id.chat_list_item_reactions)
-        val quickAdd = reactions.findViewById<ImageView>(R.id.reaction_quick_add)
-        if (quickAdd != null) reactions.removeView(quickAdd)
-        val existing = reactions.childCount
-        row.reactions.forEachIndexed { index, reaction ->
-            val view = if (index < existing) reactions.getChildAt(index) as ReactionView else ReactionView(reactions.context).also {
-                val horizontalPadding = dp(root, 6)
-                it.setPadding(horizontalPadding, it.paddingTop, horizontalPadding, it.paddingBottom)
-                it.background = ContextCompat.getDrawable(it.context, themedResource(it, R.attr.theme_chat_reaction_background))
-                it.gravity = Gravity.CENTER
-                reactions.addView(it)
-                it.layoutParams.height = dp(root, 26)
+        override fun onTouch(v: View?, event: MotionEvent?): Boolean {
+            val isMove = event?.action == MotionEvent.ACTION_MOVE
+            if (!isTouchedSinceLastJump && isMove) {
+                isTouchedSinceLastJump = true
+                publishInteractionState()
             }
-            view.visibility = View.VISIBLE
-            view.configure(reaction, row.message.id, row.animateEmojis)
-            view.contentDescription = root.context.getString(R.string.reaction_tooltip_n)
-                .replace("{n}", reaction.count.toString())
-                .replace("!!", "")
-                .replace("{emojiName}", reaction.emoji.name ?: reaction.emoji.id ?: "")
-            view.setOnClickListener { onReactionClick(row.message, reaction.emoji, row.canAddReactions) }
-            view.setOnLongClickListener {
-                onReactionLongClick(row.message, reaction)
-                true
+            return event != null && tapGestureDetector.onTouchEvent(event)
+        }
+    }
+
+    /**
+     * Runs once per list update, off the diff callback.
+     *
+     * Switching channel re-pins the list to the newest message and clears the touched flag; a new
+     * oldest message is reported so the host can prefetch further back.
+     */
+    private inner class HandlerOfUpdates : Runnable {
+        private var channelId: Long = 0L
+        private var oldestMessageId: Long = 0L
+
+        override fun run() {
+            if (channelId != data.channelId) {
+                val hadPreviousChannel = channelId != 0L
+                channelId = data.channelId
+                if (hadPreviousChannel) scrollToMessageId(0L) {}
+                isTouchedSinceLastJump = false
+            }
+            if (oldestMessageId != data.oldestMessageId) {
+                oldestMessageId = data.oldestMessageId
+                eventHandler.onOldestMessageId(channelId, oldestMessageId)
+            }
+            publishInteractionState()
+        }
+    }
+
+    /**
+     * One jump attempt, rescheduled until the target row is both present and laid out.
+     *
+     * The row may not exist yet (the page containing it is still loading) and, even once it does,
+     * `findViewByPosition` returns null until the layout pass runs — hence retrying rather than
+     * scrolling once and hoping.
+     */
+    private class ScrollToWithHighlight(
+        private val adapter: WidgetChatListAdapter,
+        val messageId: Long,
+        private val onCompleted: () -> Unit,
+    ) : Runnable {
+        private var attempts: Int = 0
+
+        init {
+            adapter.recycler.post(this)
+        }
+
+        fun cancel() {
+            adapter.recycler.removeCallbacks(this)
+        }
+
+        override fun run() {
+            val model = adapter.data as? WidgetChatListModel
+            if (model != null && model.isLoadingMessages) {
+                scheduleRetry()
+                return
+            }
+            val index = adapter.data.list.newMessageEntryIndex()
+            if (index < 0) {
+                scheduleRetry()
+                return
+            }
+            val centreOffset = (adapter.recycler.height / 2f).toInt()
+            val layoutManager = adapter.layoutManager
+            layoutManager?.scrollToPositionWithOffset(index, centreOffset)
+            val view = layoutManager?.findViewByPosition(index)
+            if (view == null) {
+                scheduleRetry()
+                return
+            }
+            // The unread divider is its own affordance; flashing it as well would be noise.
+            val landedOnDivider = index < adapter.data.list.size &&
+                adapter.data.list[index] is NewMessagesEntry
+            if (!landedOnDivider) view.animateHighlight()
+            onCompleted()
+        }
+
+        private fun scheduleRetry() {
+            if (attempts >= MAX_ATTEMPTS) {
+                onCompleted()
+                return
+            }
+            attempts++
+            adapter.recycler.postDelayed(this, RETRY_DELAY_MS)
+        }
+
+        private fun View.animateHighlight() {
+            setBackgroundResource(R.drawable.drawable_bg_highlight)
+            (background as? TransitionDrawable)?.let { transition ->
+                transition.startTransition(HIGHLIGHT_FADE_IN_MS)
+                postDelayed({ transition.reverseTransition(HIGHLIGHT_FADE_OUT_MS) }, HIGHLIGHT_HOLD_MS)
             }
         }
-        for (index in row.reactions.size until existing) reactions.getChildAt(index).visibility = View.GONE
-        if (row.reactions.size < REACTION_LIMIT && row.canCreateReactions) {
-            val add = LayoutInflater.from(reactions.context).inflate(R.layout.reaction_quick_add, reactions, false)
-            add.setOnClickListener { onAddReaction(row.message) }
-            reactions.addView(add)
-        }
-        root.contentDescription = null
-    }
 
-    private fun bindUploadProgress(root: View, row: ChatListEntry.UploadProgress) {
-        val view = root.findViewById<UploadProgressView>(R.id.upload_progress_1)
-        val nonce = row.message.nonce.orEmpty()
-        when (val state = row.state) {
-            StoreMessageUploads.MessageUploadState.None -> view.configure("", -2)
-            is StoreMessageUploads.MessageUploadState.Preprocessing -> view.configure(
-                state.displayName ?: root.context.getString(R.string.uploading_files).replace("{count}", state.numFiles.toString()),
-                -1,
-            )
-            is StoreMessageUploads.MessageUploadState.Uploading -> view.configure(
-                state.uploads.singleOrNull()?.name ?: root.context.getString(R.string.uploading_files)
-                    .replace("{count}", state.uploads.size.toString()),
-                (state.progress.fraction * 100).toInt(),
-            )
-        }
-        listOf(R.id.progress_cancel_top, R.id.progress_cancel_centered).forEach { id ->
-            root.findViewById<View>(id).setOnClickListener { onCancelUpload(nonce) }
-        }
-        root.findViewById<View>(R.id.progress_cancel_top).visibility = View.GONE
-        root.findViewById<View>(R.id.progress_cancel_centered).visibility = View.VISIBLE
-    }
-
-    private fun bindDivider(root: View, text: String, unread: Boolean) {
-        root.findViewById<TextView>(R.id.divider_text).apply {
-            this.text = text
-            if (unread) setTextColor(ContextCompat.getColor(context, R.color.status_red_500))
-        }
-        root.contentDescription = text
-    }
-
-    private fun bindStart(root: View, channel: Channel) {
-        val privateChannel = channel.type == Channel.DM || channel.type == Channel.GROUP_DM
-        if (privateChannel) {
-            val recipient = channel.recipients.orEmpty().firstOrNull()
-            root.findViewById<TextView>(R.id.chat_list_adapter_item_private_channel_start_header).text =
-                channel.name ?: recipient?.username ?: "Direct Message"
-            root.findViewById<TextView>(R.id.private_channel_start_text).text = if (channel.type == Channel.GROUP_DM) {
-                "Welcome to the beginning of this group."
+        /**
+         * The row to land on.
+         *
+         * `0` means "wherever the unread marker is"; `1` means "the newest message". Otherwise the
+         * first row at or older than [messageId] is used, since the exact message may have been
+         * deleted. If the run lands next to the unread divider for the same message, the divider
+         * wins so the user sees the boundary rather than the message under it.
+         */
+        private fun List<ChatListEntry>.newMessageEntryIndex(): Int {
+            if (messageId == SCROLL_TO_NEWEST) return 0
+            val isScrollToUnread = messageId == SCROLL_TO_UNREAD
+            val targetId = if (isScrollToUnread) {
+                adapter.data.newMessagesMarkerMessageId.takeIf { it > 0L } ?: return 0
             } else {
-                "This is the beginning of your direct message history."
+                messageId
             }
-            root.findViewById<SimpleDraweeView>(R.id.private_channel_start_image).setImageURI(
-                avatarUrl(recipient?.id, recipient?.avatar?.value),
-            )
-        } else {
-            val name = channel.name ?: "channel"
-            root.findViewById<TextView>(R.id.chat_list_adapter_item_header).text = "#$name"
-            root.findViewById<TextView>(R.id.chat_list_adapter_item_subheader2).text = "This is the start of the $name channel."
-            root.findViewById<View>(R.id.chat_list_adapter_item_subheader1).visibility = View.GONE
-            root.findViewById<View>(R.id.chat_list_adapter_item_edit_channel).visibility = View.GONE
-            root.findViewById<View>(R.id.chat_list_adapter_tags).visibility = View.GONE
+            if (targetId <= 0L) return -1
+
+            var index = indexOfFirst { it is MessageEntry && it.message.id <= targetId }
+            if (index < 0 && isScrollToUnread) {
+                index = findBestNewMessagesPosition(lastIndex)
+            }
+            for (candidate in index downTo 0) {
+                val entry = getOrNull(candidate)
+                if (entry is NewMessagesEntry && entry.messageId == targetId) return candidate
+            }
+            return index
         }
-        root.contentDescription = "Start of ${channel.name ?: "chat"}"
+
+        private companion object {
+            private const val MAX_ATTEMPTS = 20
+            private const val RETRY_DELAY_MS = 100L
+            private const val HIGHLIGHT_FADE_IN_MS = 500
+            private const val HIGHLIGHT_HOLD_MS = 1_000L
+            private const val HIGHLIGHT_FADE_OUT_MS = 500
+
+            /** Mirrors `StoreMessagesLoader.SCROLL_TO_LAST_UNREAD`. */
+            private const val SCROLL_TO_UNREAD = 0L
+
+            /** Mirrors `StoreMessagesLoader.SCROLL_TO_LATEST`. */
+            private const val SCROLL_TO_NEWEST = 1L
+        }
     }
-
-    private fun accessibility(message: Message, text: String): String = buildString {
-        append(message.author?.username ?: "System")
-        append(", ")
-        append(text)
-        append(", ")
-        append(formatTimestamp(message))
-        if (message.isFailed()) append(", failed to send")
-    }
-
-    private fun bindMessageText(view: SimpleDraweeSpanTextView, message: Message, text: String): String =
-        MessageTextRenderer.render(message.copy(content = text), view).also {
-            view.setDraweeSpanStringBuilder(it.text)
-        }.plainText
-
-    private fun themedColor(view: View, attribute: Int) = TypedValue().let {
-        view.context.theme.resolveAttribute(attribute, it, true)
-        it.data
-    }
-
-    private fun themedResource(view: View, attribute: Int) = TypedValue().let {
-        view.context.theme.resolveAttribute(attribute, it, true)
-        it.resourceId
-    }
-
-    private fun dp(view: View, value: Int) = (value * view.resources.displayMetrics.density).toInt()
-
-    private fun formatTimestamp(message: Message): String {
-        val time = message.timestamp?.dateTimeMillis ?: 0L
-        val rendered = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(time))
-        return if (message.editedTimestamp != null) "$rendered (${messageTextEdited})" else rendered
-    }
-
-    class Holder(view: View) : RecyclerView.ViewHolder(view)
 
     companion object {
-        private const val LOADING = 0
-        private const val START = 1
-        private const val PRIVATE_START = 2
-        private const val SPACER = 3
-        private const val DIVIDER = 4
-        private const val HEADER = 5
-        private const val MINIMAL = 6
-        private const val SYSTEM = 7
-        private const val FAILED = 8
-        private const val ATTACHMENT = 9
-        private const val REACTIONS = 10
-        private const val UPLOAD = 11
-        private const val EMPTY_PINS = 12
-        private const val PIN_DIVIDER = 13
-        private const val messageTextEdited = "edited"
-        internal const val REACTION_LIMIT = 20
+        private const val NEW_MESSAGES_MIN_SCROLLBACK_COUNT = 10
+        private const val NEW_MESSAGES_MAX_SCROLLBACK_COUNT = 30
 
-        internal fun viewType(row: ChatListEntry) = when (row) {
-            is ChatListEntry.Loading -> LOADING
-            is ChatListEntry.EmptyPins -> EMPTY_PINS
-            is ChatListEntry.Divider -> PIN_DIVIDER
-            is ChatListEntry.Start -> if (row.channel.type == Channel.DM || row.channel.type == Channel.GROUP_DM) {
-                PRIVATE_START
-            } else {
-                START
-            }
-            is ChatListEntry.Spacer -> SPACER
-            is ChatListEntry.DayDivider, is ChatListEntry.UnreadDivider -> DIVIDER
-            is ChatListEntry.Header -> HEADER
-            is ChatListEntry.Minimal -> MINIMAL
-            is ChatListEntry.System -> SYSTEM
-            is ChatListEntry.Failed -> FAILED
-            is ChatListEntry.Attachment -> ATTACHMENT
-            is ChatListEntry.Reactions -> REACTIONS
-            is ChatListEntry.UploadProgress -> UPLOAD
+        /**
+         * Where to land when the unread marker is not in the loaded window.
+         *
+         * Fewer than ten rows behind: everything fits on screen, so land at the newest message
+         * (`-1` reads as "no row", which leaves the list where it already is). Between ten and
+         * thirty: land on the oldest loaded row. Beyond thirty: land thirty rows back, far enough
+         * to feel like "where you left off" without scrolling through unbounded history.
+         */
+        internal fun findBestNewMessagesPosition(numKnownMessages: Int): Int = when {
+            numKnownMessages in -1 until NEW_MESSAGES_MIN_SCROLLBACK_COUNT -> -1
+            numKnownMessages < NEW_MESSAGES_MIN_SCROLLBACK_COUNT -> NEW_MESSAGES_MAX_SCROLLBACK_COUNT
+            numKnownMessages >= NEW_MESSAGES_MAX_SCROLLBACK_COUNT -> NEW_MESSAGES_MAX_SCROLLBACK_COUNT
+            else -> numKnownMessages
         }
-
-        internal fun layoutFor(type: Int) = when (type) {
-            LOADING -> R.layout.widget_chat_list_adapter_item_loading
-            START -> R.layout.widget_chat_list_adapter_item_start
-            PRIVATE_START -> R.layout.widget_chat_list_adapter_item_private_channel_start
-            SPACER -> R.layout.widget_chat_list_adapter_item_spacer
-            DIVIDER -> R.layout.widget_chat_list_adapter_item_text_divider
-            HEADER -> R.layout.widget_chat_list_adapter_item_text
-            MINIMAL -> R.layout.widget_chat_list_adapter_item_minimal
-            SYSTEM -> R.layout.widget_chat_list_adapter_item_system
-            FAILED -> R.layout.widget_chat_list_adapter_item_failed
-            ATTACHMENT -> R.layout.widget_chat_list_adapter_item_attachment
-            REACTIONS -> R.layout.widget_chat_list_adapter_item_reactions
-            UPLOAD -> R.layout.widget_chat_list_adapter_item_upload_progress
-            EMPTY_PINS -> R.layout.widget_chat_list_adapter_item_empty_pins
-            PIN_DIVIDER -> R.layout.widget_chat_list_adapter_item_divider
-            else -> error("Unknown chat row type: $type")
-        }
-
-        private fun formatDate(timestamp: Long) =
-            DateFormat.getDateInstance(DateFormat.LONG).format(Date(timestamp))
-
-        private fun avatarUrl(userId: Long?, hash: String?) =
-            if (userId != null && hash != null) "https://cdn.discordapp.com/avatars/$userId/$hash.webp?size=96" else null
     }
-
 }
 
-private val DIFF = object : DiffUtil.ItemCallback<ChatListEntry>() {
-    override fun areItemsTheSame(oldItem: ChatListEntry, newItem: ChatListEntry) = oldItem.stableId == newItem.stableId
-    override fun areContentsTheSame(oldItem: ChatListEntry, newItem: ChatListEntry) = oldItem == newItem
+/**
+ * Whether [message] mentions the viewer, directly, through one of their roles, or via `@everyone`.
+ *
+ * Returns false outright when the surface has turned message-level mention highlighting off.
+ */
+fun WidgetChatListAdapter.isUserMentioned(message: Message): Boolean {
+    if (!mentionMeMessageLevelHighlighting) return false
+    if (message.mentionEveryone == true) return true
+    if (message.mentions.orEmpty().any { it.id == data.userId }) return true
+    return message.mentionRoles.orEmpty().any { data.myRoleIds.contains(it) }
 }

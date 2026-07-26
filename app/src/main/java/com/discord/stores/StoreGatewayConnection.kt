@@ -21,8 +21,6 @@ import com.discord.api.guildscheduledevent.GuildScheduledEventUserUpdate
 import com.discord.api.interaction.InteractionModalCreate
 import com.discord.api.interaction.InteractionStateUpdate
 import com.discord.api.message.Message
-import com.discord.api.message.reaction.MessageReactionRemoveAll
-import com.discord.api.message.reaction.MessageReactionRemoveEmoji
 import com.discord.api.message.reaction.MessageReactionUpdate
 import com.discord.api.presence.ClientStatus
 import com.discord.api.presence.Presence
@@ -222,8 +220,8 @@ class StoreGatewayConnection(
     val messageAck = behavior<ModelReadState>()
     val messageReactionAdd = behavior<MessageReactionUpdate>()
     val messageReactionRemove = behavior<MessageReactionUpdate>()
-    val messageReactionRemoveAll = behavior<MessageReactionRemoveAll>()
-    val messageReactionRemoveEmoji = behavior<MessageReactionRemoveEmoji>()
+    val messageReactionRemoveAll = behavior<MessageReactionUpdate>()
+    val messageReactionRemoveEmoji = behavior<MessageReactionUpdate>()
 
     // Presence and typing
     val presenceUpdate = behavior<Presence>()
@@ -279,8 +277,9 @@ class StoreGatewayConnection(
             observeSelectedVoiceChannelId,
             GatewayConnectionConsumers.observeHasConsumers(),
             stream.getClientDataStateInternal().observeClientState(),
-            ClientState::create,
-        )
+        ) { backgrounded, token, selectedVoiceChannelId, hasConsumers, clientDataState ->
+            ClientState.create(backgrounded, token, selectedVoiceChannelId, hasConsumers, clientDataState)
+        }
             .distinctUntilChanged()
             .observeOn(scheduler)
             .subscribe(::handleClientStateUpdate, {})
@@ -389,12 +388,12 @@ class StoreGatewayConnection(
 
     @StoreThread
     fun streamCreate(streamKey: String, preferredRegion: String?) {
-        val stream = ModelApplicationStream.decodeStreamKey(streamKey)
+        val applicationStream = ModelApplicationStream.decodeStreamKey(streamKey)
         requestIfSessionEstablished {
             it.streamCreate(
-                stream.type,
-                stream.channelId,
-                (stream as? ModelApplicationStream.GuildStream)?.guildId,
+                applicationStream.type,
+                applicationStream.channelId,
+                (applicationStream as? ModelApplicationStream.GuildStream)?.guildId,
                 preferredRegion,
             )
         }

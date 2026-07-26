@@ -13,17 +13,24 @@ data class ModelSubscription(
     val trialId: String?,
     val trialEndsAt: String?,
     val renewalMutations: SubscriptionRenewalMutations?,
-    val items: List<SubscriptionItem>,
+    override val items: List<SubscriptionItem>,
     val paymentGatewayPlanId: String?,
     @SerializedName("status") private val statusValue: Int,
     @SerializedName("type") private val typeValue: Int,
-) {
+) : HasSubscriptionItems() {
     data class SubscriptionItem(val id: Long, val planId: Long, val quantity: Int)
 
+    /**
+     * A plan bought on top of the base plan — in practice the guild-boost slots bundled with a
+     * Nitro subscription. Unlike [SubscriptionItem] it has no id of its own because it is derived
+     * from the subscription's items rather than sent as a separate record.
+     */
+    data class SubscriptionAdditionalPlan(val planId: Long, val quantity: Int)
+
     data class SubscriptionRenewalMutations(
-        val items: List<SubscriptionItem>,
+        override val items: List<SubscriptionItem>,
         val paymentGatewayPlanId: String?,
-    )
+    ) : HasSubscriptionItems()
 
     enum class PaymentGateway(val intRepresentation: Int?) {
         STRIPE(1),

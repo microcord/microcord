@@ -1,16 +1,15 @@
 package com.discord.utilities.recycler
 
 import android.annotation.SuppressLint
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import androidx.annotation.MainThread
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.app.AppComponent
 import com.discord.utilities.collections.ShallowPartitionMap
+import com.discord.utilities.rx.computationBuffered
+import com.discord.utilities.rx.ui
 import rx.Subscription
-import rx.schedulers.Schedulers
 import rx.subjects.PublishSubject
 
 /**
@@ -27,7 +26,6 @@ class DiffCreator<T : List<DiffKeyProvider>, VH : RecyclerView.ViewHolder>(
 ) {
 
     private val updateRequestsSubject = PublishSubject.create<UpdateRequest<T, VH>>()
-    private val mainThreadHandler: Handler by lazy { Handler(Looper.getMainLooper()) }
     private var asyncDiffSubscription: Subscription? = null
 
     init {
@@ -119,20 +117,17 @@ class DiffCreator<T : List<DiffKeyProvider>, VH : RecyclerView.ViewHolder>(
 
     private fun subscribeToAsyncUpdateRequests(asyncDiffSubscriptionScope: AppComponent) {
         asyncDiffSubscription = updateRequestsSubject
-            .onBackpressureBuffer()
-            .observeOn(Schedulers.computation())
+            .computationBuffered()
             .map { request -> request to calculateDiffResult(request.oldItems, request.newItems) }
-            .takeUntil(asyncDiffSubscriptionScope.unsubscribeSignal)
+            .ui(asyncDiffSubscriptionScope)
             .subscribe(
                 { (request, diffResult) ->
-                    mainThreadHandler.post {
-                        setItemsAndDispatchUpdate(
-                            request.adapter,
-                            request.setItems,
-                            request.newItems,
-                            diffResult,
-                        )
-                    }
+                    setItemsAndDispatchUpdate(
+                        request.adapter,
+                        request.setItems,
+                        request.newItems,
+                        diffResult,
+                    )
                 },
                 { throwable -> Log.e(TAG, "Unable to compute async diff.", throwable) },
             )

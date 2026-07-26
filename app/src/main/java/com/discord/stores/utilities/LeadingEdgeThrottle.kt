@@ -26,7 +26,7 @@ class LeadingEdgeThrottle<T>(
 
     override fun call(child: Subscriber<in T>): Subscriber<in T> {
         val worker = scheduler.createWorker()
-        val serialized = SerializedSubscriber(child)
+        val serialized = SerializedSubscriber<T>(child)
         val serial = SerialSubscription()
         serialized.add(worker)
         serialized.add(serial)
@@ -90,6 +90,7 @@ class LeadingEdgeThrottle<T>(
             hasValue = false
         }
 
+        @Suppress("UNCHECKED_CAST")
         fun emit(index: Int, child: Subscriber<in T>, self: Subscriber<*>) {
             var emitted: T? = null
             synchronized(this) {
@@ -99,7 +100,6 @@ class LeadingEdgeThrottle<T>(
                 hasValue = false
                 emitting = true
             }
-            @Suppress("UNCHECKED_CAST")
             try {
                 child.onNext(emitted as T)
             } catch (throwable: Throwable) {
@@ -111,9 +111,10 @@ class LeadingEdgeThrottle<T>(
             }
         }
 
+        @Suppress("UNCHECKED_CAST")
         fun emitAndComplete(child: Subscriber<in T>, self: Subscriber<*>) {
             var emitted: T? = null
-            var shouldEmit: Boolean
+            var shouldEmit = false
             synchronized(this) {
                 if (emitting) {
                     terminate = true
@@ -126,7 +127,6 @@ class LeadingEdgeThrottle<T>(
                 emitting = true
             }
             if (shouldEmit) {
-                @Suppress("UNCHECKED_CAST")
                 try {
                     child.onNext(emitted as T)
                 } catch (throwable: Throwable) {

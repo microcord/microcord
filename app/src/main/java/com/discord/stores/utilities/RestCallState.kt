@@ -44,8 +44,8 @@ fun <T> Observable<T>.executeRequest(
 ): Subscription {
     resultHandler(Loading)
     return subscribeOn(scheduler).subscribe(
-        { response -> resultHandler(Success(response)) },
-        { throwable -> resultHandler(Failure(RestApiError.from(throwable))) },
+        { response -> resultHandler(Success<T>(response)) },
+        { throwable -> resultHandler(Failure<T>(RestApiError.from(throwable))) },
     )
 }
 

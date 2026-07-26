@@ -3,6 +3,7 @@ package com.discord.views.segmentedcontrol
 import android.content.Context
 import android.util.AttributeSet
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
 
 /**
@@ -18,11 +19,11 @@ class SegmentedControlContainer(context: Context, attrs: AttributeSet?) : Linear
     private var segmentSelectedChangeListener: ((Int) -> Unit)? = null
     private var selectedIndex = 0
 
-    override fun onViewAdded(child: View) {
-        super.onViewAdded(child)
-        val segment = child.asSegment()
-        child.setOnClickListener { segmentSelectedChangeListener?.invoke(indexOfChild(child)) }
-        segment.setSegmentSelected(indexOfChild(child) == selectedIndex)
+    // Every addView overload funnels through this one, including layout inflation,
+    // so wiring here covers both XML and programmatic segments on every API level.
+    override fun addView(child: View, index: Int, params: ViewGroup.LayoutParams?) {
+        super.addView(child, index, params)
+        wire(child)
     }
 
     /**
@@ -33,11 +34,15 @@ class SegmentedControlContainer(context: Context, attrs: AttributeSet?) : Linear
     @JvmOverloads
     fun setup(selectedIndex: Int = 0) {
         for (index in 0 until childCount) {
-            val child = getChildAt(index)
-            child.asSegment()
-            child.setOnClickListener { segmentSelectedChangeListener?.invoke(indexOfChild(child)) }
+            wire(getChildAt(index))
         }
         setSelectedIndex(selectedIndex)
+    }
+
+    private fun wire(child: View) {
+        val segment = child.asSegment()
+        child.setOnClickListener { segmentSelectedChangeListener?.invoke(indexOfChild(child)) }
+        segment.setSegmentSelected(indexOfChild(child) == selectedIndex)
     }
 
     fun setSelectedIndex(selectedIndex: Int) {
@@ -46,8 +51,6 @@ class SegmentedControlContainer(context: Context, attrs: AttributeSet?) : Linear
             getChildAt(index).asSegment().setSegmentSelected(index == selectedIndex)
         }
     }
-
-    fun getSelectedIndex(): Int = selectedIndex
 
     fun setOnSegmentSelectedChangeListener(listener: (Int) -> Unit) {
         segmentSelectedChangeListener = listener

@@ -127,11 +127,8 @@ fun Channel.shouldPlayJoinLeaveSounds(): Boolean = isVoiceChannel() || isPrivate
  * string rather than `null` so callers never render "null".
  */
 fun Channel.getDisplayName(): String {
-    if (isPrivate()) {
-        val name = name
-        if (name.isNullOrEmpty()) {
-            return recipients?.joinToString { it.username } ?: ""
-        }
+    if (isPrivate() && name.isNullOrEmpty()) {
+        return recipients?.joinToString { it.username } ?: ""
     }
     return name ?: ""
 }

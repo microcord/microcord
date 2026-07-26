@@ -382,6 +382,9 @@ class GatewaySocket(
         }
         if (data != null && data !== IncomingParser.DISPATCH_UNPARSED) {
             eventHandler.handleDispatch(incoming.type, data)
+        } else if (incoming.type in EXPECTED_NULL_DATA_EVENTS) {
+            // These two arrive with no `d` at all; their stores only need the nudge.
+            eventHandler.handleDispatch(incoming.type, Unit)
         }
     }
 
@@ -478,5 +481,6 @@ class GatewaySocket(
         const val MAX_BACKOFF_MS = 10_000L
         const val FAILURE_THRESHOLD = 4
         const val DEFAULT_MEMBER_REQUEST_LIMIT = 100
+        val EXPECTED_NULL_DATA_EVENTS = setOf("USER_SUBSCRIPTIONS_UPDATE", "USER_PAYMENT_SOURCES_UPDATE")
     }
 }

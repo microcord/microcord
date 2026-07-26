@@ -22,8 +22,13 @@ class StoreUserNotes(
 
     fun getNotesByUserId(): Map<Long, UserNoteState> = notesByUserIdSnapshot
 
+    /**
+     * An unknown user defaults to [UserNoteState.Loading], not [UserNoteState.Empty]: a profile
+     * sheet opens before [loadNote] has resolved, and reporting "no note" there would flash the
+     * empty state over a note the user actually wrote.
+     */
     fun observeUserNote(userId: Long): Observable<UserNoteState> =
-        observationDeck.connectRx(this) { notesByUserIdSnapshot[userId] ?: UserNoteState.Empty }
+        observationDeck.connectRx(this) { notesByUserIdSnapshot[userId] ?: UserNoteState.Loading }
             .distinctUntilChanged()
 
     fun loadNote(userId: Long) = dispatcher.schedule {

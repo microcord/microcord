@@ -3,6 +3,7 @@ package com.discord.stores
 import com.discord.stores.updates.ObservationDeck
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -93,7 +94,7 @@ class StoreV2ThreadingTest {
         offThread.start()
         offThread.join()
 
-        assertEquals(null, failure)
+        assertNull(failure)
         assertEquals(5, delegate.getValue(null, TestStore::delegated))
     }
 }

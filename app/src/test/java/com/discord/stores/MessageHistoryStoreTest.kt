@@ -1,14 +1,16 @@
 package com.discord.stores
 
+import com.discord.models.domain.ModelChannelUnreadUpdate
+import com.discord.models.domain.ModelReadState
 import com.discord.models.message.Message
 import com.discord.stores.StoreMessagesLoader.Direction
 import com.discord.stores.StoreMessagesLoader.LoadRequest
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.persister.Persister
 import java.nio.file.Files
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -25,16 +27,15 @@ class MessageHistoryStoreTest {
     @Test
     fun loadPaginateAndJumpUseFiftyMessageRequests() {
         val requests = mutableListOf<LoadRequest>()
-        val loader = StoreMessagesLoader(loader = { request, callback ->
-            requests += request
+        val loader = loader(requests) { request ->
             val start = when (request.direction) {
                 Direction.INITIAL -> 101L
                 Direction.BEFORE -> 51L
                 Direction.AFTER -> 151L
                 Direction.AROUND -> requireNotNull(request.anchorMessageId) - 24
             }
-            callback(Result.success((start until start + request.limit).map(::message)))
-        })
+            Result.success((start until start + request.limit).map(::message))
+        }
         val chunks = mutableListOf<StoreMessagesLoader.ChannelChunk>()
         val scrolls = mutableListOf<Long>()
         loader.observeChunks().subscribe(chunks::add)
@@ -47,46 +48,98 @@ class MessageHistoryStoreTest {
         loader.loadAfter(7, 150)
         loader.jumpToMessage(7, 500)
 
-        assertEquals(listOf(Direction.INITIAL, Direction.BEFORE, Direction.AFTER, Direction.AROUND), requests.map { it.direction })
+        assertEquals(
+            listOf(Direction.INITIAL, Direction.BEFORE, Direction.AFTER, Direction.AROUND),
+            requests.map { it.direction },
+        )
         assertTrue(requests.all { it.limit == 50 })
         assertEquals(4, chunks.size)
         assertTrue(chunks.last().isJump)
-        assertEquals(listOf(500L), scrolls)
+        // The initial load scrolls to the unread divider; the jump then targets its own message.
+        assertEquals(listOf(StoreMessagesLoader.SCROLL_TO_LAST_UNREAD, 500L), scrolls)
+    }
+
+    /** A short page means there is nothing older; a full one leaves the door open. */
+    @Test
+    fun shortInitialPageMarksOldestLoaded() {
+        val loader = loader(mutableListOf()) { Result.success((1L..3L).map(::message)) }
+        val states = mutableListOf<StoreMessagesLoader.ChannelLoadedState>()
+        loader.getMessagesLoadedState(11).subscribe(states::add)
+        loader.handleAuthToken("token")
+        loader.handleConnected(true)
+        loader.handleChannelSelected(11)
+
+        assertTrue(states.last().isInitialMessagesLoaded)
+        assertTrue(states.last().isOldestMessagesLoaded)
+        assertFalse(states.last().isLoadingMessages)
     }
 
     @Test
-    fun loadFailurePublishesRetryStateAndCanRetry() {
+    fun loadFailureRetriesOnJitteredBackoff() {
         var attempts = 0
-        val loader = StoreMessagesLoader(loader = { _, callback ->
-            attempts++
-            if (attempts == 1) callback(Result.failure(IllegalStateException("offline")))
-            else callback(Result.success(emptyList()))
-        })
+        val scheduler = TestScheduler()
+        val loader = StoreMessagesLoader(
+            loader = { _, callback ->
+                attempts++
+                if (attempts == 1) callback(Result.failure(IllegalStateException("offline")))
+                else callback(Result.success(emptyList()))
+            },
+            scheduler = scheduler,
+            retryJitter = { 0 },
+        )
         val states = mutableListOf<StoreMessagesLoader.ChannelLoadedState>()
         loader.getMessagesLoadedState(9).subscribe(states::add)
         loader.handleAuthToken("test-token")
         loader.handleConnected(true)
         loader.handleChannelSelected(9)
 
-        assertNotNull(states.last().lastError)
-        assertEquals(3_000L, states.last().retryDelayMillis)
-        loader.retry()
+        assertEquals(1, attempts)
+        assertFalse(states.last().isLoadingMessages)
+
+        // The default 1500 ms delay is doubled on failure; jitter is pinned to 0 for the test.
+        scheduler.advanceTimeBy(2_999, TimeUnit.MILLISECONDS)
+        assertEquals(1, attempts)
+        scheduler.advanceTimeBy(2, TimeUnit.MILLISECONDS)
         assertEquals(2, attempts)
-        assertEquals(1_500L, states.last().retryDelayMillis)
+    }
+
+    /** Nothing is fetched while the app reports itself backgrounded. */
+    @Test
+    fun backgroundedSuppressesLoads() {
+        var attempts = 0
+        val loader = StoreMessagesLoader(
+            loader = { _, callback ->
+                attempts++
+                callback(Result.success(emptyList()))
+            },
+            scheduler = TestScheduler(),
+        )
+        loader.handleAuthToken("token")
+        loader.handleConnected(true)
+        loader.handleBackgrounded(true)
+        loader.handleChannelSelected(12)
+        assertEquals(0, attempts)
+
+        loader.handleBackgrounded(false)
+        assertEquals(1, attempts)
     }
 
     @Test
     fun holderTrimsAtThresholdDetachesAndPublishesImmutableSnapshots() {
         val holder = StoreMessagesHolder(cache = Persister("trim-${System.nanoTime()}", emptyMap()))
         holder.selectChannel(1)
-        holder.loadMessageChunks(listOf(StoreMessagesLoader.ChannelChunk(
-            channelId = 1,
-            messages = (1L..200L).map(::message),
-            isInitial = true,
-            isPresent = false,
-            isAppendingTop = true,
-            isJump = false,
-        )))
+        holder.loadMessageChunks(
+            listOf(
+                StoreMessagesLoader.ChannelChunk(
+                    channelId = 1,
+                    messages = (1L..200L).map { message(it).copy(channelId = 1) },
+                    isInitial = true,
+                    isPresent = false,
+                    isAppendingTop = true,
+                    isJump = false,
+                ),
+            ),
+        )
 
         assertEquals((1L..100L).toList(), holder.getMessages(1).map(Message::id))
         assertEquals(setOf(1L), holder.getDetached())
@@ -94,6 +147,30 @@ class MessageHistoryStoreTest {
             @Suppress("UNCHECKED_CAST")
             (holder.getAll() as MutableMap<Long, List<Message>>)[2] = emptyList()
         }
+    }
+
+    /** A chunk that reaches the present re-attaches a detached channel. */
+    @Test
+    fun presentChunkReattachesDetachedChannel() {
+        val holder = StoreMessagesHolder(cache = Persister("detach-${System.nanoTime()}", emptyMap()))
+        holder.selectChannel(1)
+        holder.loadMessageChunks(listOf(chunk((1L..5L).map { message(it).copy(channelId = 1) }, isJump = true)))
+        assertEquals(setOf(1L), holder.getDetached())
+
+        holder.loadMessageChunks(listOf(chunk((6L..9L).map { message(it).copy(channelId = 1) }, isPresent = true)))
+        assertTrue(holder.getDetached().isEmpty())
+    }
+
+    /** A detached channel must not have live messages spliced onto its historical window. */
+    @Test
+    fun detachedChannelIgnoresLiveMessages() {
+        val holder = StoreMessagesHolder(cache = Persister("live-${System.nanoTime()}", emptyMap()))
+        holder.selectChannel(1)
+        holder.loadMessageChunks(listOf(chunk((1L..3L).map { message(it).copy(channelId = 1) }, isJump = true)))
+
+        holder.addMessages(listOf(message(99).copy(channelId = 1)))
+
+        assertEquals(listOf(1L, 2L, 3L), holder.getMessages(1).map(Message::id))
     }
 
     @Test
@@ -133,26 +210,53 @@ class MessageHistoryStoreTest {
         assertEquals(null, fixture.store.localMessagesHolder.getMessage(4, "nonce"))
     }
 
+    /**
+     * The cache is written at most once per minute, not once per message: 50 mutations inside the
+     * window produce no write, and the first mutation past it produces one.
+     */
+    @Test
+    fun holderPersistsOncePerThrottleWindow() {
+        var now = 1_000_000L
+        val cache = Persister<Map<Long, List<Message>>>("throttle-${System.nanoTime()}", emptyMap())
+        val holder = StoreMessagesHolder(cache, clock = { now }, persistScheduler = TestScheduler())
+        holder.restore(enabled = true)
+        holder.selectChannel(6)
+
+        (1L..50L).forEach { holder.addMessages(listOf(message(it).copy(channelId = 6))) }
+        assertTrue("nothing may be written inside the throttle window", cache.get().isEmpty())
+
+        now += StoreMessagesHolder.CACHE_PERSIST_INTERVAL + 1
+        holder.addMessages(listOf(message(51).copy(channelId = 6)))
+        assertEquals(setOf(6L), cache.get().keys)
+    }
+
     @Test
     fun cachesRestoreAndLogoutClearsBothHistories() {
+        var now = 5_000_000L
         val syncedKey = "synced-${System.nanoTime()}"
         val localKey = "local-${System.nanoTime()}"
-        val first = storeFixture(syncedKey, localKey)
+        val first = storeFixture(syncedKey, localKey) { now }
         first.dispatcher.schedule {
+            first.store.restore()
             first.store.handleChannelSelected(5)
             first.store.handleMessageCreate(5, message(300, "cached"))
             first.store.handleLocalMessageCreate(5, "pending", message(301, "pending"))
         }
         first.scheduler.triggerActions()
+        // Push past the synced holder's persist throttle, then force one more publish.
+        now += StoreMessagesHolder.CACHE_PERSIST_INTERVAL + 1
+        first.dispatcher.schedule { first.store.handleMessageCreate(5, message(302, "flush")) }
+        first.scheduler.triggerActions()
         Persister.persistAll()
 
-        val restored = storeFixture(syncedKey, localKey)
+        val restored = storeFixture(syncedKey, localKey) { now }
         restored.dispatcher.schedule {
             restored.store.restore()
             restored.store.handleChannelSelected(5)
         }
         restored.scheduler.triggerActions()
-        assertEquals(listOf(300L, 301L), restored.store.getMessages(5).map(Message::id))
+        // Local messages are appended after the synced history, never sorted into it.
+        assertEquals(listOf(300L, 302L, 301L), restored.store.getMessages(5).map(Message::id))
 
         restored.dispatcher.schedule { restored.store.handlePreLogout() }
         restored.scheduler.triggerActions()
@@ -160,7 +264,7 @@ class MessageHistoryStoreTest {
         assertTrue(restored.store.localMessagesHolder.getFlattenedMessages().isEmpty())
         Persister.persistAll()
 
-        val afterLogout = storeFixture(syncedKey, localKey)
+        val afterLogout = storeFixture(syncedKey, localKey) { now }
         afterLogout.dispatcher.schedule {
             afterLogout.store.restore()
             afterLogout.store.handleChannelSelected(5)
@@ -171,32 +275,75 @@ class MessageHistoryStoreTest {
 
     @Test
     fun mostRecentOnlyMovesForwardAndClearsOnLogout() {
+        val fixture = mostRecentFixture()
+        fixture.dispatcher.schedule {
+            fixture.store.handleMessageCreate(8, 20)
+            fixture.store.handleMessageCreate(8, 19)
+        }
+        fixture.scheduler.triggerActions()
+        assertEquals(20L, fixture.store.getMostRecentIds()[8])
+        fixture.dispatcher.schedule { fixture.store.handlePreLogout() }
+        fixture.scheduler.triggerActions()
+        assertFalse(fixture.store.getMostRecentIds().containsKey(8))
+    }
+
+    /** `CHANNEL_UNREAD_UPDATE` is the only source for channels with no live subscription. */
+    @Test
+    fun channelUnreadUpdateAdvancesMostRecentIds() {
+        val fixture = mostRecentFixture()
+        fixture.dispatcher.schedule {
+            fixture.store.handleChannelUnreadUpdate(
+                ModelChannelUnreadUpdate(listOf(ModelReadState(42L, 900L, 0, 1))),
+            )
+        }
+        fixture.scheduler.triggerActions()
+        assertEquals(900L, fixture.store.getMostRecentIds()[42])
+    }
+
+    private fun loader(
+        requests: MutableList<LoadRequest>,
+        respond: (LoadRequest) -> Result<List<Message>>,
+    ) = StoreMessagesLoader(
+        loader = { request, callback ->
+            requests += request
+            callback(respond(request))
+        },
+        scheduler = TestScheduler(),
+        retryJitter = { 0 },
+    )
+
+    private fun chunk(
+        messages: List<Message>,
+        isInitial: Boolean = false,
+        isPresent: Boolean = false,
+        isAppendingTop: Boolean = false,
+        isJump: Boolean = false,
+    ) = StoreMessagesLoader.ChannelChunk(1, messages, isInitial, isPresent, isAppendingTop, isJump)
+
+    private fun mostRecentFixture(): MostRecentFixture {
         val scheduler = TestScheduler()
         val dispatcher = Dispatcher(scheduler)
         val deck = ObservationDeck()
         val store = StoreMessagesMostRecent(deck, Persister("recent-${System.nanoTime()}", emptyMap()))
         dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
-        dispatcher.schedule {
-            store.handleMessageCreate(8, 20)
-            store.handleMessageCreate(8, 19)
-        }
-        scheduler.triggerActions()
-        assertEquals(20L, store.getMostRecentIds()[8])
-        dispatcher.schedule { store.handlePreLogout() }
-        scheduler.triggerActions()
-        assertFalse(store.getMostRecentIds().containsKey(8))
+        return MostRecentFixture(scheduler, dispatcher, store)
     }
 
     private fun storeFixture(
         syncedKey: String = "synced-${System.nanoTime()}",
         localKey: String = "local-${System.nanoTime()}",
+        clock: () -> Long = { System.currentTimeMillis() },
     ): Fixture {
         val scheduler = TestScheduler()
         val dispatcher = Dispatcher(scheduler)
         val deck = ObservationDeck()
         val store = StoreMessages(
             deck,
-            StoreMessagesHolder(Persister(syncedKey, emptyMap())),
+            StoreMessagesHolder(
+                Persister(syncedKey, emptyMap()),
+                clock = { clock() },
+                persistScheduler = TestScheduler(),
+            ),
             StoreLocalMessagesHolder(Persister(localKey, emptyMap())),
         )
         dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
@@ -209,5 +356,11 @@ class MessageHistoryStoreTest {
         val scheduler: TestScheduler,
         val dispatcher: Dispatcher,
         val store: StoreMessages,
+    )
+
+    private data class MostRecentFixture(
+        val scheduler: TestScheduler,
+        val dispatcher: Dispatcher,
+        val store: StoreMessagesMostRecent,
     )
 }

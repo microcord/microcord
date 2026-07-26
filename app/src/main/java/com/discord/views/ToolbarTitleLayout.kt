@@ -8,6 +8,7 @@ import androidx.annotation.DrawableRes
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import com.discord.databinding.ViewToolbarTitleBinding
+import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 
 /**
  * Title area installed as the first child of the action bar toolbar.
@@ -36,8 +37,7 @@ class ToolbarTitleLayout(context: Context) : ConstraintLayout(context) {
     }
 
     fun setSubtitle(subtitle: CharSequence?) {
-        binding.toolbarTitleSubtext.text = subtitle
-        binding.toolbarTitleSubtext.visibility = if (subtitle.isNullOrEmpty()) View.GONE else View.VISIBLE
+        binding.toolbarTitleSubtext.setTextAndVisibilityBy(subtitle)
     }
 
     fun setTitleColor(@ColorInt color: Int) {

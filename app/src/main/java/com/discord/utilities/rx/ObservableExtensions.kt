@@ -6,8 +6,11 @@ import android.content.Context
 import com.discord.app.AppComponent
 import com.discord.utilities.dimmer.DimmerView
 import com.discord.utilities.error.RestApiError
+import java.io.IOException
 import java.lang.ref.WeakReference
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
+import retrofit2.HttpException
 import rx.Observable
 import rx.Subscription
 import rx.android.schedulers.AndroidSchedulers
@@ -58,14 +61,20 @@ fun <T> Observable<T>.computationLatest(): Observable<T> =
 /**
  * Subscribe REST work on the IO pool, optionally retrying transient transport failures.
  *
- * Reference `restSubscribeOn(retry)`. The reference delegates the retry policy to
- * `com.discord.restapi.utils.RetryWithDelay`, which lives in a package this agent does not own and
- * has not been reconstructed; the same policy — retry only connectivity-class failures, with a
- * capped exponential delay — is applied inline here and should move to `RetryWithDelay` when that
- * class is built.
+ * Reference `restSubscribeOn(retry)`, which delegates to
+ * `com.discord.restapi.utils.RetryWithDelay.restRetry(delay = 1000, maxRetries = 3,
+ * maxBackoffs = 3, predicate = ::isNetworkError)`. That class lives in a package this slice does not
+ * own and has not been reconstructed yet, so its policy is applied inline here and should move to
+ * `RetryWithDelay` once it exists. The policy, taken from the reference predicate:
  *
- * Only callers that can safely repeat the request pass `retry = true`. `MessageQueue.doSend` sets it
- * from `message.nonce != null`, because a nonce lets the server de-duplicate a repeated send.
+ * - Only `IOException`s are retried at all.
+ * - An `HttpException` is never retried when the request was **not** a GET, nor for status
+ *   401/403/404/429/503. A `TimeoutException` is never retried.
+ * - Delay is 1s for the first retry, then doubles (2s, 4s), for at most three retries.
+ *
+ * The "non-GET is never retried" rule is why `MessageQueue`'s own [com.discord.utilities.networking.Backoff]
+ * is the real network retry for sends: a POST or PATCH never gets a second transport attempt here.
+ * `MessageQueue.doSend` still passes `retry = message.nonce != null`, matching the reference.
  */
 @JvmOverloads
 fun <T> Observable<T>.restSubscribeOn(retry: Boolean = true): Observable<T> {
@@ -74,29 +83,41 @@ fun <T> Observable<T>.restSubscribeOn(retry: Boolean = true): Observable<T> {
 }
 
 private fun <T> Observable<T>.retryTransportFailures(): Observable<T> = retryWhen { failures ->
-    failures.zipWith(Observable.range(1, REST_RETRY_MAX_ATTEMPTS + 1)) { failure, attempt -> failure to attempt }
-        .flatMap { (failure, attempt) ->
-            val type = RestApiError.from(failure).type
-            val retryable = type == RestApiError.Type.NETWORK ||
-                type == RestApiError.Type.TIMEOUT ||
-                type == RestApiError.Type.INTERMITTENT_CLOUD_FLARE
-            if (!retryable || attempt > REST_RETRY_MAX_ATTEMPTS) {
-                Observable.error(failure)
-            } else {
-                val delayMs = (REST_RETRY_BASE_DELAY_MS shl (attempt - 1)).coerceAtMost(REST_RETRY_MAX_DELAY_MS)
-                Observable.timer(delayMs, TimeUnit.MILLISECONDS)
-            }
+    var attempt = 0
+    var delayMs = REST_RETRY_INITIAL_DELAY_MS
+    failures.flatMap { failure: Throwable ->
+        if (attempt++ < REST_RETRY_MAX_ATTEMPTS && failure.isRetryableTransportFailure()) {
+            if (attempt > 1) delayMs *= 2
+            Observable.timer(delayMs, TimeUnit.MILLISECONDS)
+        } else {
+            Observable.error<Long>(failure)
         }
+    }
 }
 
+/** Reference `RetryWithDelay$restRetry$1`, the `isNetworkError` predicate. */
+private fun Throwable.isRetryableTransportFailure(): Boolean {
+    when (this) {
+        is HttpException -> {
+            val method = response()?.raw()?.request?.method
+            if (method != null && method != "GET") return false
+            if (code() in NON_RETRYABLE_STATUS_CODES) return false
+        }
+
+        is TimeoutException -> return false
+    }
+    return this is IOException
+}
+
+private val NON_RETRYABLE_STATUS_CODES = setOf(401, 403, 404, 429, 503)
 private const val REST_RETRY_MAX_ATTEMPTS = 3
-private const val REST_RETRY_BASE_DELAY_MS = 1_000L
-private const val REST_RETRY_MAX_DELAY_MS = 10_000L
+private const val REST_RETRY_INITIAL_DELAY_MS = 1_000L
 
 /** Drop nulls and re-type the stream as non-null. Reference `filterNull()`. */
 fun <T : Any> Observable<T?>.filterNull(): Observable<T> = filter { it != null }.map { it!! }
 
 /** Keep only emissions of type [R]. Reference `filterIs()`. */
+@Suppress("UNCHECKED_CAST")
 inline fun <reified R : Any> Observable<*>.filterIs(): Observable<R> =
     filter { it is R }.map { it as R }
 

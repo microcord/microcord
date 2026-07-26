@@ -2,63 +2,85 @@ package com.discord.stores
 
 import android.content.Context
 import com.discord.api.channel.Channel
+import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isTextChannel
+import com.discord.api.channel.isThread
 import com.discord.models.domain.ModelMuteConfig
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.domain.ModelPayload
 import com.discord.models.guild.Guild
+import com.discord.restapi.RestAPIInterface
+import com.discord.restapi.RestAPIParams
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.persister.Persister
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.restSubscribeOn
+import com.discord.utilities.rx.ui
 import com.discord.utilities.time.Clock
 import java.util.concurrent.TimeUnit
 import rx.Observable
 import rx.Subscription
 import rx.subjects.PublishSubject
 
+/**
+ * Per-guild notification settings: mute state, notification frequency, channel overrides and the
+ * "hide muted channels" preference.
+ *
+ * Every setter is a REST write. Local state is *not* updated optimistically — the server echoes the
+ * change back over the gateway as `USER_GUILD_SETTINGS_UPDATE`, and writing locally first would let
+ * a stale response resurrect settings the gateway already superseded.
+ */
 class StoreUserGuildSettings(
     private val dispatcher: Dispatcher,
     private val clock: Clock,
     private val observationDeck: ObservationDeck,
+    /**
+     * Resolve a channel on the store thread. Wired from `StoreChannels.findChannelByIdInternal`.
+     */
     private val getChannel: (Long) -> Channel? = { null },
+    /**
+     * Current notification flags for a joined thread, for the analytics before/after pair.
+     * Wired from `StoreThreadsJoined.getJoinedThread(id)?.flags`.
+     */
     private val getJoinedThreadFlags: (Long) -> Int = { 0 },
-    private val updateGuildSettings: (Long, UserGuildSettingsUpdate) -> Observable<ModelNotificationSettings> =
-        { _, _ -> Observable.empty() },
-    private val updateThreadSettings: (Long, ThreadMemberSettingsUpdate) -> Observable<Unit> =
-        { _, _ -> Observable.empty() },
-    private val trackSettingsUpdated: (SettingsUpdateType, Long?) -> Unit = { _, _ -> },
+    private val analytics: Analytics = Analytics.NONE,
+    /**
+     * Feature gate for the redesigned forum notification flags. Reference:
+     * `ForumUtils.canAccessRedesignedForumChannels(guildId)`.
+     */
+    private val canAccessRedesignedForumChannels: (Long) -> Boolean = { true },
     private val guildSettingsCache: Persister<Map<Long, ModelNotificationSettings>> =
         Persister(GUILD_SETTINGS_CACHE_KEY, emptyMap()),
     private val hiddenMutedChannelsCache: Persister<Set<Long>> =
         Persister(HIDDEN_MUTED_CHANNELS_CACHE_KEY, emptySet()),
 ) : StoreV2() {
+
     enum class SettingsUpdateType { GUILD, CHANNEL, THREAD, CATEGORY }
 
     sealed class Event {
         data class SettingsUpdated(val type: SettingsUpdateType) : Event()
     }
 
-    data class ChannelOverrideUpdate(
-        val muted: Boolean? = null,
-        val muteConfig: ModelMuteConfig? = null,
-        val messageNotifications: Int? = null,
-        val flags: Int? = null,
-    )
+    /**
+     * The analytics surface this store needs. Separated from `StoreAnalytics` so that the settings
+     * object and both flag values survive the call instead of being flattened into a label.
+     */
+    interface Analytics {
+        fun onNotificationSettingsUpdated(settings: ModelNotificationSettings, channelId: Long?)
+        fun onThreadNotificationSettingsUpdated(channelId: Long, parentChannelId: Long, flags: Int, oldFlags: Int)
 
-    data class UserGuildSettingsUpdate(
-        val suppressEveryone: Boolean? = null,
-        val suppressRoles: Boolean? = null,
-        val muted: Boolean? = null,
-        val muteConfig: ModelMuteConfig? = null,
-        val mobilePush: Boolean? = null,
-        val messageNotifications: Int? = null,
-        val channelOverrides: Map<Long, ChannelOverrideUpdate>? = null,
-        val notifyHighlights: Int? = null,
-    )
-
-    data class ThreadMemberSettingsUpdate(
-        val flags: Int? = null,
-        val muted: Boolean? = null,
-        val muteConfig: ModelMuteConfig? = null,
-    )
+        companion object {
+            val NONE = object : Analytics {
+                override fun onNotificationSettingsUpdated(settings: ModelNotificationSettings, channelId: Long?) = Unit
+                override fun onThreadNotificationSettingsUpdated(
+                    channelId: Long,
+                    parentChannelId: Long,
+                    flags: Int,
+                    oldFlags: Int,
+                ) = Unit
+            }
+        }
+    }
 
     private val guildSettings = HashMap<Long, ModelNotificationSettings>()
     private val guildsToHideMutedChannelsIn = HashSet<Long>()
@@ -67,8 +89,19 @@ class StoreUserGuildSettings(
     private val eventSubject = PublishSubject.create<Event>()
     private var recomputeSettingsSubscription: Subscription? = null
 
+    /** Bound by `StoreStream` once the REST stack exists; every setter is inert until then. */
+    private var restApi: RestAPIInterface? = null
+
+    fun bindApi(api: RestAPIInterface) {
+        this.restApi = api
+    }
+
+    // -- Lifecycle ------------------------------------------------------------------------------
+
+    @StoreThread
     override fun init(context: Context) = restore()
 
+    @StoreThread
     internal fun restore() {
         guildSettings.putAll(guildSettingsCache.get())
         guildsToHideMutedChannelsIn.addAll(hiddenMutedChannelsCache.get())
@@ -76,21 +109,55 @@ class StoreUserGuildSettings(
         scheduleMuteRecompute()
     }
 
+    @StoreThread
+    internal fun reset() {
+        StoreThreadScheduler.assertCurrentThread()
+        recomputeSettingsSubscription?.unsubscribe()
+        recomputeSettingsSubscription = null
+        guildSettings.clear()
+        guildsToHideMutedChannelsIn.clear()
+        guildSettingsCache.clear(persist = true)
+        hiddenMutedChannelsCache.clear(persist = true)
+        markChanged()
+    }
+
+    @StoreThread
+    override fun snapshotData() {
+        guildSettingsSnapshot = guildSettings.toMap()
+        guildsToHideMutedChannelsInSnapshot = guildsToHideMutedChannelsIn.toSet()
+        guildSettingsCache.set(guildSettingsSnapshot)
+        hiddenMutedChannelsCache.set(guildsToHideMutedChannelsInSnapshot, persist = true)
+    }
+
+    // -- Reads ----------------------------------------------------------------------------------
+
     fun getGuildSettings(): Map<Long, ModelNotificationSettings> = guildSettingsSnapshot
+
+    @StoreThread
     internal fun getGuildSettingsInternal(): Map<Long, ModelNotificationSettings> = guildSettings
+
     fun getGuildsToHideMutedChannelsIn(): Set<Long> = guildsToHideMutedChannelsInSnapshot
 
     fun observeEvents(): Observable<Event> = eventSubject
     fun observeGuildSettings(): Observable<Map<Long, ModelNotificationSettings>> =
         observationDeck.connectRx(this, generator = ::getGuildSettings).distinctUntilChanged()
-    fun observeGuildSettings(guildId: Long): Observable<ModelNotificationSettings?> =
-        observeGuildSettings().map { it[guildId] }.distinctUntilChanged()
+
+    /**
+     * Never `null`: a guild with no stored settings behaves as a default one (unmuted, mobile push
+     * on, frequency unset), and returning `null` would push that decision onto every caller.
+     */
+    fun observeGuildSettings(guildId: Long): Observable<ModelNotificationSettings> =
+        observeGuildSettings().map { it[guildId] ?: ModelNotificationSettings(guildId = guildId) }
+            .distinctUntilChanged()
+
     fun observeHideMutedChannels(guildId: Long): Observable<Boolean> =
         observationDeck.connectRx(this, generator = ::getGuildsToHideMutedChannelsIn)
             .map { guildId in it }.distinctUntilChanged()
     fun observeMutedGuildIds(): Observable<List<Long>> = observeGuildSettings()
         .map { settings -> settings.values.filter(ModelNotificationSettings::isMuted).map { it.guildId } }
         .distinctUntilChanged()
+
+    // -- Gateway handlers -----------------------------------------------------------------------
 
     @StoreThread
     fun handleConnectionOpen(payload: ModelPayload) {
@@ -117,6 +184,8 @@ class StoreUserGuildSettings(
         scheduleMuteRecompute()
     }
 
+    // -- Setters --------------------------------------------------------------------------------
+
     fun setHideMutedChannels(guildId: Long, hide: Boolean) = dispatcher.schedule {
         if (if (hide) guildsToHideMutedChannelsIn.add(guildId) else guildsToHideMutedChannelsIn.remove(guildId)) {
             markChanged()
@@ -125,18 +194,20 @@ class StoreUserGuildSettings(
 
     fun setChannelFrequency(context: Context, channel: Channel, frequency: Int) {
         if (channel.isThread()) {
-            val flags = when (frequency) {
-                ModelNotificationSettings.FREQUENCY_NOTHING -> 8
-                ModelNotificationSettings.FREQUENCY_MENTIONS -> 4
-                else -> 2
-            }
-            submitThreadUpdate(channel, ThreadMemberSettingsUpdate(flags = flags), getJoinedThreadFlags(channel.id))
+            updateThreadMemberSettings(
+                context,
+                channel,
+                RestAPIParams.ThreadMemberSettings(flags = frequency.toThreadNotificationFlags()),
+            )
         } else {
-            submitGuildUpdate(
+            updateUserGuildSettings(
+                context,
                 channel.guildId,
-                UserGuildSettingsUpdate(channelOverrides = mapOf(channel.id to ChannelOverrideUpdate(messageNotifications = frequency))),
+                RestAPIParams.UserGuildSettings(
+                    channel.id,
+                    RestAPIParams.UserGuildSettings.ChannelOverride(messageNotifications = frequency, flags = null),
+                ),
                 settingsUpdateType(channel),
-                channel.id,
             )
         }
     }
@@ -146,53 +217,69 @@ class StoreUserGuildSettings(
         dispatcher.schedule {
             val channel = getChannel(channelId) ?: return@schedule
             if (channel.isThread()) {
-                submitThreadUpdate(channel, ThreadMemberSettingsUpdate(muted = muted, muteConfig = muteConfig), getJoinedThreadFlags(channel.id))
+                updateThreadMemberSettings(
+                    context,
+                    channel,
+                    RestAPIParams.ThreadMemberSettings(muted = muted, muteConfig = muteConfig),
+                )
             } else {
-                submitGuildUpdate(
+                updateUserGuildSettings(
+                    context,
                     channel.guildId,
-                    UserGuildSettingsUpdate(channelOverrides = mapOf(channel.id to ChannelOverrideUpdate(muted, muteConfig))),
+                    RestAPIParams.UserGuildSettings(
+                        channel.id,
+                        RestAPIParams.UserGuildSettings.ChannelOverride(muted, muteConfig),
+                    ),
                     settingsUpdateType(channel),
-                    channel.id,
                 )
             }
         }
 
     fun setChannelNotificationFlags(context: Context, channel: Channel, flags: Int) {
-        if (channel.type != Channel.GUILD_FORUM) return
-        submitGuildUpdate(
+        if (!channel.isGuildForumChannel() || !canAccessRedesignedForumChannels(channel.guildId)) return
+        updateUserGuildSettings(
+            context,
             channel.guildId,
-            UserGuildSettingsUpdate(channelOverrides = mapOf(channel.id to ChannelOverrideUpdate(flags = flags))),
+            RestAPIParams.UserGuildSettings(
+                channel.id,
+                RestAPIParams.UserGuildSettings.ChannelOverride(messageNotifications = null, flags = flags),
+            ),
             settingsUpdateType(channel),
-            channel.id,
         )
     }
 
     fun setChannelNotificationsDefault(context: Context, channel: Channel) {
         if (channel.isThread()) return
-        submitGuildUpdate(
+        updateUserGuildSettings(
+            context,
             channel.guildId,
-            UserGuildSettingsUpdate(
-                channelOverrides = mapOf(
-                    channel.id to ChannelOverrideUpdate(
-                        muted = false,
-                        messageNotifications = ModelNotificationSettings.FREQUENCY_UNSET,
-                    ),
+            RestAPIParams.UserGuildSettings(
+                channel.id,
+                RestAPIParams.UserGuildSettings.ChannelOverride(
+                    muted = false,
+                    muteConfig = null,
+                    messageNotifications = ModelNotificationSettings.FREQUENCY_UNSET,
                 ),
             ),
             settingsUpdateType(channel),
-            channel.id,
         )
     }
 
-    fun setGuildFrequency(context: Context, guild: Guild, frequency: Int) = submitGuildUpdate(
+    fun setGuildFrequency(context: Context, guild: Guild, frequency: Int) = updateUserGuildSettings(
+        context,
         guild.id,
-        UserGuildSettingsUpdate(messageNotifications = frequency),
+        RestAPIParams.UserGuildSettings(messageNotifications = frequency),
         SettingsUpdateType.GUILD,
     )
 
     @JvmOverloads
     fun setGuildMuted(context: Context, guildId: Long, muted: Boolean, muteConfig: ModelMuteConfig? = null) =
-        submitGuildUpdate(guildId, UserGuildSettingsUpdate(muted = muted, muteConfig = muteConfig), SettingsUpdateType.GUILD)
+        updateUserGuildSettings(
+            context,
+            guildId,
+            RestAPIParams.UserGuildSettings(muted = muted, muteConfig = muteConfig),
+            SettingsUpdateType.GUILD,
+        )
 
     fun setGuildToggles(
         context: Context,
@@ -201,61 +288,84 @@ class StoreUserGuildSettings(
         suppressRoles: Boolean? = null,
         mobilePush: Boolean? = null,
         muted: Boolean? = null,
-    ) = submitGuildUpdate(
+    ) = updateUserGuildSettings(
+        context,
         guild.id,
-        UserGuildSettingsUpdate(suppressEveryone, suppressRoles, muted, mobilePush = mobilePush),
+        RestAPIParams.UserGuildSettings(
+            suppressEveryone = suppressEveryone,
+            suppressRoles = suppressRoles,
+            muted = muted,
+            mobilePush = mobilePush,
+        ),
         SettingsUpdateType.GUILD,
     )
 
-    fun setNotifyHighlights(context: Context, guild: Guild, notifyHighlights: Int) = submitGuildUpdate(
+    fun setNotifyHighlights(context: Context, guild: Guild, notifyHighlights: Int) = updateUserGuildSettings(
+        context,
         guild.id,
-        UserGuildSettingsUpdate(notifyHighlights = notifyHighlights),
+        RestAPIParams.UserGuildSettings(notifyHighlights = notifyHighlights),
         SettingsUpdateType.GUILD,
     )
 
-    @StoreThread
-    internal fun reset() {
-        StoreThreadScheduler.assertCurrentThread()
-        recomputeSettingsSubscription?.unsubscribe()
-        recomputeSettingsSubscription = null
-        guildSettings.clear()
-        guildsToHideMutedChannelsIn.clear()
-        guildSettingsCache.clear(persist = true)
-        hiddenMutedChannelsCache.clear(persist = true)
-        markChanged()
-    }
+    // -- REST -----------------------------------------------------------------------------------
 
-    override fun snapshotData() {
-        guildSettingsSnapshot = guildSettings.toMap()
-        guildsToHideMutedChannelsInSnapshot = guildsToHideMutedChannelsIn.toSet()
-        guildSettingsCache.set(guildSettingsSnapshot)
-        hiddenMutedChannelsCache.set(guildsToHideMutedChannelsInSnapshot, persist = true)
-    }
-
-    private fun submitGuildUpdate(
+    /**
+     * `PATCH /users/@me/guilds/{guildId}/settings`.
+     *
+     * Bound to [context] so a failure surfaces as the app's standard error toast instead of being
+     * swallowed; the success callback runs on the main thread, which is where [observeEvents]
+     * consumers live.
+     */
+    private fun updateUserGuildSettings(
+        context: Context,
         guildId: Long,
-        update: UserGuildSettingsUpdate,
-        type: SettingsUpdateType,
-        channelId: Long? = update.channelOverrides?.keys?.firstOrNull(),
+        userGuildSettings: RestAPIParams.UserGuildSettings,
+        settingsUpdateType: SettingsUpdateType,
     ) {
-        updateGuildSettings(guildId, update).take(1).subscribe { settings ->
-            dispatcher.schedule {
-                handleGuildSettingUpdated(listOf(settings))
-                trackSettingsUpdated(type, channelId)
-                eventSubject.onNext(Event.SettingsUpdated(type))
+        val api = restApi ?: return
+        val channelId = userGuildSettings.channelOverrides?.keys?.firstOrNull()
+        api.updateUserGuildSettings(guildId, userGuildSettings)
+            .restSubscribeOn()
+            .ui()
+            .appSubscribe(StoreUserGuildSettings::class.java, context) { notifSettings ->
+                analytics.onNotificationSettingsUpdated(notifSettings, channelId)
+                eventSubject.onNext(Event.SettingsUpdated(settingsUpdateType))
             }
-        }
     }
 
-    private fun submitThreadUpdate(channel: Channel, update: ThreadMemberSettingsUpdate, oldFlags: Int) {
-        updateThreadSettings(channel.id, update).take(1).subscribe {
-            dispatcher.schedule {
-                trackSettingsUpdated(SettingsUpdateType.THREAD, channel.id)
+    /** `PATCH /channels/{channelId}/thread-members/@me/settings`. */
+    private fun updateThreadMemberSettings(
+        context: Context,
+        channel: Channel,
+        threadMemberSettings: RestAPIParams.ThreadMemberSettings,
+    ) {
+        val api = restApi ?: return
+        val channelId = channel.id
+        val parentChannelId = channel.parentId
+        val oldFlags = getJoinedThreadFlags(channelId)
+        api.updateThreadMemberSettings(channelId, threadMemberSettings)
+            .restSubscribeOn()
+            .ui()
+            .appSubscribe(StoreUserGuildSettings::class.java, context) { threadMember ->
+                analytics.onThreadNotificationSettingsUpdated(
+                    channelId,
+                    parentChannelId,
+                    threadMember.flags,
+                    oldFlags,
+                )
                 eventSubject.onNext(Event.SettingsUpdated(SettingsUpdateType.THREAD))
             }
-        }
     }
 
+    // -- Internals -------------------------------------------------------------------------------
+
+    /**
+     * Re-evaluate temporary mutes when the earliest one expires.
+     *
+     * `ModelNotificationSettings.derivedMute` is a function of the wall clock, so without this timer
+     * a mute that ended while the app was open would keep suppressing notifications until the next
+     * gateway update.
+     */
     private fun scheduleMuteRecompute() {
         val next = guildSettings.values.minOfOrNull { it.getNextMuteEndTimeMs(clock) } ?: Long.MAX_VALUE
         if (next == Long.MAX_VALUE) return
@@ -266,16 +376,28 @@ class StoreUserGuildSettings(
         ).subscribe { dispatcher.schedule { handleGuildSettings(guildSettings.values.toList()) } }
     }
 
+    /**
+     * Analytics label only. A voice, stage or store channel is neither a text channel nor a
+     * category and is reported as `CATEGORY`, matching the reference's fallback.
+     */
     private fun settingsUpdateType(channel: Channel) = when {
         channel.isThread() -> SettingsUpdateType.THREAD
-        channel.type == Channel.CATEGORY -> SettingsUpdateType.CATEGORY
-        else -> SettingsUpdateType.CHANNEL
+        channel.isTextChannel() -> SettingsUpdateType.CHANNEL
+        else -> SettingsUpdateType.CATEGORY
     }
 
-    private fun Channel.isThread() = type in Channel.ANNOUNCEMENT_THREAD..Channel.PRIVATE_THREAD
+    private fun Int.toThreadNotificationFlags(): Int = when (this) {
+        ModelNotificationSettings.FREQUENCY_NOTHING -> THREAD_FLAG_NO_MESSAGES
+        ModelNotificationSettings.FREQUENCY_MENTIONS -> THREAD_FLAG_ONLY_MENTIONS
+        else -> THREAD_FLAG_ALL_MESSAGES
+    }
 
     companion object {
         const val GUILD_SETTINGS_CACHE_KEY = "STORE_SETTINGS_USER_GUILD_V6"
         const val HIDDEN_MUTED_CHANNELS_CACHE_KEY = "STORE_SHOW_HIDE_MUTED_CHANNELS_V2"
+
+        private const val THREAD_FLAG_ALL_MESSAGES = 2
+        private const val THREAD_FLAG_ONLY_MENTIONS = 4
+        private const val THREAD_FLAG_NO_MESSAGES = 8
     }
 }

@@ -18,7 +18,6 @@ import com.discord.utilities.intent.AppIntentContract
 import com.discord.utilities.intent.DeepLinkRoute
 import com.discord.utilities.intent.LinkParseResult
 import com.discord.widgets.tabs.WidgetTabsHost
-import com.discord.widgets.home.BackHandler
 import com.discord.widgets.home.HomePanelsLayout
 import com.discord.widgets.home.WidgetHome
 import com.discord.widgets.channels.list.WidgetChannelsList
@@ -189,13 +188,11 @@ class MainHostNavigationTest {
         }
     }
 
-    class TestHomeFragment : Fragment(), BackHandler {
+    class TestHomeFragment : Fragment() {
         override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
             HomePanelsLayout(requireContext()).apply {
                 id = R.id.overlapping_panels
                 repeat(3) { addView(FrameLayout(context), FrameLayout.LayoutParams(-1, -1)) }
             }
-
-        override fun onBackPressed() = false
     }
 }

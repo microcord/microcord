@@ -94,8 +94,8 @@ object CaptchaHelper {
      * reference's `CHALLENGE_CLOSED` completion needs a dismissal hook on that sheet, which is owned
      * by the widget layer.
      */
-    fun tryShowCaptcha(captchaRequest: CaptchaRequest): Observable<String> = Observable.create(
-        { emitter ->
+    fun tryShowCaptcha(captchaRequest: CaptchaRequest): Observable<String> = Observable.create<String>(
+        { emitter: Emitter<String> ->
             when (captchaRequest) {
                 is CaptchaRequest.HCaptcha -> showHCaptcha(captchaRequest, emitter)
                 is CaptchaRequest.ReCaptcha -> emitter.onError(

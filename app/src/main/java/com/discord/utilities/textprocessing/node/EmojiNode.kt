@@ -10,6 +10,7 @@ import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.simpleast.core.node.TextNode
 import com.discord.utilities.spans.ClickableSpan
 import com.discord.utilities.textprocessing.EmojiImages
+import com.discord.utilities.textprocessing.Rules
 import com.discord.utilities.textprocessing.dpToPixels
 import com.discord.utilities.textprocessing.themedColor
 import com.facebook.drawee.backends.pipeline.Fresco
@@ -151,11 +152,18 @@ class EmojiNode<T : EmojiNode.RenderContext>(
             size: Int = EMOJI_SIZE,
         ): EmojiNode<T> = from(name, emojiId, isAnimated, size, EmojiIdAndType.Custom(emojiId, isAnimated, name))
 
+        /**
+         * Rebuilds a node from a stored identity.
+         *
+         * Returns null for a unicode emoji whose name is not in the installed catalog, which is
+         * the only case where the caller has nothing to draw.
+         */
         fun <T : RenderContext> from(size: Int = EMOJI_SIZE, emojiIdAndType: EmojiIdAndType): EmojiNode<T>? =
             when (emojiIdAndType) {
                 is EmojiIdAndType.Custom ->
                     from(emojiIdAndType.name, emojiIdAndType.id, emojiIdAndType.isAnimated, size, emojiIdAndType)
-                is EmojiIdAndType.Unicode -> null
+                is EmojiIdAndType.Unicode ->
+                    Rules.unicodeEmojiByName(emojiIdAndType.name)?.let { from<T>(it, size) }
             }
 
         fun generateEmojiIdAndType(unicodeEmoji: ModelEmojiUnicode) =

@@ -106,17 +106,16 @@ object UriHandler {
         onFailure: (() -> Unit)? = null,
     ) {
         if (url == null) return
+        if (!isSafeScheme(url)) {
+            Log.w(TAG, "Refusing to open a URI with an unsupported scheme.")
+            onFailure?.invoke()
+            return
+        }
         val uri = try {
             Uri.parse(url)
         } catch (e: Exception) {
             null
         } ?: return
-
-        if (!isSafeScheme(uri)) {
-            Log.w(TAG, "Refusing to open a URI with an unsupported scheme.")
-            onFailure?.invoke()
-            return
-        }
 
         if (forceExternal || !handleUriSpecialCase(context, uri)) {
             openUrl(context, uri, url, forceExternal, preventCustomTab, onFailure)
@@ -156,11 +155,27 @@ object UriHandler {
     fun isImplicitlyTrustedDomain(host: String): Boolean =
         IMPLICITLY_TRUSTED_HOSTS.contains(host) || DISCORD_DOMAINS_REGEX.containsMatchIn(host)
 
-    /** @return false for schemes that must not be launched from untrusted content. */
+    /**
+     * @return false for URLs whose scheme must not be launched from untrusted content, and for
+     *   URLs with no scheme at all (a bare `evil.com` would otherwise be resolved by the platform).
+     */
     @JvmStatic
-    fun isSafeScheme(uri: Uri): Boolean {
-        val scheme = uri.scheme?.lowercase() ?: return false
+    fun isSafeScheme(url: String): Boolean {
+        val scheme = parseScheme(url) ?: return false
         return scheme !in UNSAFE_SCHEMES
+    }
+
+    /**
+     * Extracts the scheme without `android.net.Uri`, so the safety decision is a pure function
+     * that does not depend on the platform's lenient parsing.
+     */
+    private fun parseScheme(url: String): String? {
+        val separator = url.indexOf(':')
+        if (separator <= 0) return null
+        val scheme = url.substring(0, separator)
+        if (!scheme.all { it.isLetterOrDigit() || it == '+' || it == '-' || it == '.' }) return null
+        if (!scheme.first().isLetter()) return null
+        return scheme.lowercase()
     }
 
     /**
@@ -191,6 +206,7 @@ object UriHandler {
      * URIs the app claims but that are not ordinary navigation (currently the role-subscription
      * handoff). Returns true when the URI was consumed.
      */
+    @Suppress("UNUSED_PARAMETER")
     private fun handleUriSpecialCase(context: Context, uri: Uri): Boolean = false
 
     private fun openUrl(
@@ -297,9 +313,19 @@ object UriHandler {
         return typedValue.data
     }
 
-    private fun getDomainName(url: String): String? = try {
-        Uri.parse(url).host
-    } catch (e: Exception) {
-        null
+    /**
+     * Extracts the host, lower-cased, without `android.net.Uri` so trust decisions stay a pure
+     * function. Userinfo (`https://discord.com@evil.com/`) is stripped exactly as a browser would,
+     * because that is the classic way to make a hostile host look first-party.
+     */
+    internal fun getDomainName(url: String): String? {
+        val schemeEnd = url.indexOf("://")
+        if (schemeEnd < 0) return null
+        val afterScheme = url.substring(schemeEnd + 3)
+        val authorityEnd = afterScheme.indexOfFirst { it == '/' || it == '?' || it == '#' }
+        val authority = if (authorityEnd < 0) afterScheme else afterScheme.substring(0, authorityEnd)
+        val hostPort = authority.substringAfterLast('@')
+        val host = hostPort.substringBefore(':')
+        return host.ifEmpty { null }?.lowercase()
     }
 }

@@ -23,8 +23,9 @@ class MobileReportsBreadcrumbs @JvmOverloads constructor(
         history.orEmpty()
             .flatMap { result ->
                 listOf(
-                    result.b()?.a()?.takeIf { it.isNotEmpty() }?.joinToString(", ") { it.b() },
-                    result.a()?.a(),
+                    result.elementResult?.data?.takeIf { it.isNotEmpty() }
+                        ?.joinToString(", ") { it.elementValue },
+                    result.destination?.name,
                 )
             }
             .filterNotNull()

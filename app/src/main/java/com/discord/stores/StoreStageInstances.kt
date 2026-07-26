@@ -22,8 +22,12 @@ class StoreStageInstances(
     fun getStageInstancesForGuildInternal(guildId: Long): Map<Long, StageInstance> =
         stageInstancesByGuild[guildId].orEmpty()
 
-    fun observeStageInstanceForChannel(channelId: Long): Observable<StageInstance> =
-        observationDeck.connectRx(this, generator = { getStageInstanceForChannel(channelId) }).filter { it != null }.map { it!! }
+    /**
+     * Emits `null` when the channel has no live stage, because ending a stage is exactly what
+     * subscribers need to react to — filtering nulls out would leave the stage UI up forever.
+     */
+    fun observeStageInstanceForChannel(channelId: Long): Observable<StageInstance?> =
+        observationDeck.connectRx(this) { getStageInstanceForChannel(channelId) }
     fun observeStageInstances(): Observable<Map<Long, StageInstance>> =
         observationDeck.connectRx(this, generator = ::getStageInstances)
     fun observeStageInstancesForGuild(guildId: Long): Observable<Map<Long, StageInstance>> =

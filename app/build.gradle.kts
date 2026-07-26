@@ -43,6 +43,11 @@ android {
     lint {
         baseline = file("lint-baseline.xml")
     }
+    testOptions {
+        // Android framework stubs return defaults instead of throwing, so plain JUnit tests can
+        // construct framework types (e.g. View) when only the surrounding Kotlin logic is asserted.
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {

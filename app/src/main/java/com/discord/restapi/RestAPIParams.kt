@@ -18,6 +18,7 @@ import com.discord.models.domain.ModelCustomStatusSetting
 import com.discord.models.domain.ModelGuildFolder
 import com.discord.models.domain.ModelMemberVerificationForm
 import com.discord.models.domain.ModelMuteConfig
+import com.discord.models.domain.ModelSubscription
 import com.discord.nullserializable.NullSerializable
 import com.google.gson.JsonElement
 import com.google.gson.JsonNull
@@ -131,7 +132,7 @@ object RestAPIParams {
      */
     class ChannelPermissionOverwrites private constructor(
         val type: Int?,
-        val id: String,
+        val id: String?,
         val allow: Long?,
         val deny: Long?,
     ) {
@@ -184,7 +185,7 @@ object RestAPIParams {
                     addProperty("id", src.id)
                     addProperty("position", src.position)
                     src.parentId?.let { parentId ->
-                        if (parentId == PARENT_ID_NONE) {
+                        if (parentId == ChannelPosition.PARENT_ID_NONE) {
                             add("parent_id", JsonNull.INSTANCE)
                         } else {
                             addProperty("parent_id", parentId)
@@ -775,13 +776,13 @@ object RestAPIParams {
         val status: Int? = null,
         val paymentSourceId: String? = null,
         val planId: Long? = null,
-        val additionalPlans: List<com.discord.models.domain.ModelSubscription.SubscriptionAdditionalPlan>? = null,
+        val additionalPlans: List<ModelSubscription.SubscriptionAdditionalPlan>? = null,
     )
 
     class UploadContacts(
         val friendListEntries: List<ContactEntry>,
         val background: Boolean,
-        val setUseForSuggestions: com.discord.api.friendsuggestions.AllowedInSuggestionsType =
+        val setUseForSuggestions: com.discord.api.friendsuggestions.AllowedInSuggestionsType? =
             com.discord.api.friendsuggestions.AllowedInSuggestionsType.DISABLED,
     ) {
         override fun toString(): String =

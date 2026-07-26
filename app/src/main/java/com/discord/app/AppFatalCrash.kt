@@ -46,6 +46,6 @@ object AppFatalCrash {
     }
 
     private fun View.setText(viewId: Int, stringResId: Int, argument: String) {
-        findViewById<TextView>(viewId)?.text = context.getString(stringResId, argument)
+        findViewById<TextView>(viewId)?.text = context.getNamedFormatString(stringResId, argument)
     }
 }

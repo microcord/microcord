@@ -49,10 +49,13 @@ class StoreGuildsSorted(
      * Signals that the guild inputs changed. Sorting the whole guild list is expensive and its
      * inputs change on nearly every dispatch, so rebuilds are throttled rather than run inline.
      */
-    private val storeChanges = SerializedSubject<Unit, Unit>(BehaviorSubject.create())
+    private val storeChanges = SerializedSubject<Unit, Unit>(BehaviorSubject.create<Unit>())
     private var storesSubscription: Subscription? = null
 
     init {
+        // StoreStream builds this store but does not run the Store.init(Context) pass over it,
+        // so the rebuild pipeline is connected at construction and init() only guards against
+        // a second subscription once that pass exists.
         subscribeToStores()
     }
 

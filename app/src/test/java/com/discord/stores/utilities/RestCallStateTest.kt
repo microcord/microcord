@@ -1,5 +1,6 @@
 package com.discord.stores.utilities
 
+import com.discord.utilities.error.RestApiError
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -35,8 +36,8 @@ class RestCallStateTest {
         assertEquals(2, states.size)
         assertEquals(Loading, states[0])
         val failure = states[1]
-        assertTrue(failure is Failure)
-        assertEquals("offline", (failure as Failure).error.message)
+        assertTrue(failure is Failure<*>)
+        assertEquals("offline", (failure as Failure<*>).error.message)
     }
 
     @Test
@@ -45,5 +46,5 @@ class RestCallStateTest {
         assertTrue(Success(7) != Success(8))
     }
 
-    private fun restApiError() = com.discord.utilities.error.RestApiError.from(IOException("boom"))
+    private fun restApiError() = RestApiError.from(IOException("boom"))
 }

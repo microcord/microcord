@@ -69,7 +69,9 @@ open class ShallowPartitionMap<K, V>(
         get() = ShallowPartitionImmutableCollection.Set(partitions.map { it.keys }, partitionStrategy)
 
     override val values: MutableCollection<V>
-        get() = ShallowPartitionImmutableCollection(partitions.map { it.values })
+        get() = ShallowPartitionImmutableCollection<V, MutableCollection<V>>(
+            partitions.map { it.values },
+        )
 
     /**
      * A partitioned map that can hand out a defensive copy in [fastCopy] while only duplicating

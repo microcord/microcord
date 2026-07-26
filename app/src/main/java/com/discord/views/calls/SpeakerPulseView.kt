@@ -3,7 +3,6 @@ package com.discord.views.calls
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.content.Context
-import android.provider.Settings
 import android.util.AttributeSet
 import android.view.Gravity
 import android.view.View
@@ -11,6 +10,7 @@ import android.view.animation.PathInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
 import com.discord.R
+import com.discord.stores.StoreStream
 
 class SpeakerPulseView @JvmOverloads constructor(
     context: Context,
@@ -45,7 +45,7 @@ class SpeakerPulseView @JvmOverloads constructor(
     }
 
     private fun startAnimating() {
-        if (!isAttachedToWindow || animationsDisabled()) return
+        if (!isAttachedToWindow || reducedMotionEnabled()) return
         hasAnimated = true
         stopAnimations(false)
         animatePulse(innerView(), 200, 500)
@@ -80,7 +80,7 @@ class SpeakerPulseView @JvmOverloads constructor(
         val size = actualChild.layoutParams?.width?.takeIf { it > 0 }?.plus(extra) ?: LayoutParams.MATCH_PARENT
         return ImageView(context).also {
             it.alpha = 0f
-            it.setImageResource(R.drawable.drawable_circle_brand)
+            it.setImageResource(R.drawable.drawable_circle_white)
             addView(it, (childCount - 1).coerceAtLeast(0), LayoutParams(size, size, Gravity.CENTER))
         }
     }
@@ -88,9 +88,11 @@ class SpeakerPulseView @JvmOverloads constructor(
     private fun innerView() = inner ?: pulseView(0).also { inner = it }
     private fun outerView() = outer ?: pulseView(1).also { outer = it }
 
-    private fun animationsDisabled() = Settings.Global.getFloat(
-        context.contentResolver,
-        Settings.Global.ANIMATOR_DURATION_SCALE,
-        1f,
-    ) == 0f
+    /**
+     * Reduced motion is an in-app accessibility preference, not the system animator
+     * scale: a user who wants the speaking pulse suppressed sets it in Discord's own
+     * accessibility settings.
+     */
+    private fun reducedMotionEnabled(): Boolean =
+        !isInEditMode && StoreStream.getAccessibility().isReducedMotionEnabled()
 }

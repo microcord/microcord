@@ -65,7 +65,7 @@ class MessageQueue @JvmOverloads constructor(
 
     /** Adds [request] to the tail of this channel's queue and drains if nothing is in flight. */
     fun enqueue(request: MessageRequest) {
-        executorService.submit {
+        executorService.execute {
             queue.add(request)
             processNextRequest()
         }
@@ -78,14 +78,14 @@ class MessageQueue @JvmOverloads constructor(
      * the completion idempotent, so a response that was already on the wire cannot also complete it.
      */
     fun cancel(requestId: String) {
-        executorService.submit {
+        executorService.execute {
             val inFlight = inFlightRequest
             if (inFlight != null && inFlight.baseRequest.requestId == requestId) {
                 inFlight.networkSubscription.unsubscribe()
                 inFlight.drainListener.complete(MessageResult.UserCancelled)
-                return@submit
+                return@execute
             }
-            val queued = queue.firstOrNull { it.requestId == requestId } ?: return@submit
+            val queued = queue.firstOrNull { it.requestId == requestId } ?: return@execute
             queue.remove(queued)
             queued.onCompleted(MessageResult.UserCancelled, queue.isEmpty())
         }
@@ -93,7 +93,7 @@ class MessageQueue @JvmOverloads constructor(
 
     /** Called when the gateway reconnects: drops the network backoff and resumes draining. */
     fun handleConnected() {
-        executorService.submit {
+        executorService.execute {
             if (networkBackoff.isPending) {
                 networkBackoff.cancel()
                 processNextRequest()
@@ -101,18 +101,24 @@ class MessageQueue @JvmOverloads constructor(
         }
     }
 
-    /** Cancels everything, completing each request as [MessageResult.UserCancelled]. */
+    /**
+     * Cancels everything, completing each request as [MessageResult.UserCancelled].
+     *
+     * The waiting queue is drained *before* the in-flight request is cancelled: settling the
+     * in-flight one re-enters [processNextRequest], which would otherwise pick up and send the very
+     * requests this call is meant to discard.
+     */
     fun cancelAll() {
-        executorService.submit {
+        executorService.execute {
             retrySubscription?.unsubscribe()
             retrySubscription = null
             networkBackoff.cancel()
+            while (queue.isNotEmpty()) {
+                queue.remove().onCompleted(MessageResult.UserCancelled, queue.isEmpty())
+            }
             inFlightRequest?.let { inFlight ->
                 inFlight.networkSubscription.unsubscribe()
                 inFlight.drainListener.complete(MessageResult.UserCancelled)
-            }
-            while (queue.isNotEmpty()) {
-                queue.remove().onCompleted(MessageResult.UserCancelled, queue.isEmpty())
             }
         }
     }
@@ -150,7 +156,7 @@ class MessageQueue @JvmOverloads constructor(
                         errorClass = MessageQueue::class.java,
                         subscriptionHandler = { retrySubscription = it },
                         onNext = {
-                            executorService.submit {
+                            executorService.execute {
                                 queue.addFirst(request)
                                 retrySubscription = null
                                 onDrainingCompleted()
@@ -159,13 +165,13 @@ class MessageQueue @JvmOverloads constructor(
                         },
                     )
 
-            MessageResult.NetworkFailure -> executorService.submit {
+            MessageResult.NetworkFailure -> executorService.execute {
                 onDrainingCompleted()
                 queue.addFirst(request)
-                networkBackoff.fail { executorService.submit { processNextRequest() } }
+                networkBackoff.fail { executorService.execute { processNextRequest() } }
             }
 
-            else -> executorService.submit {
+            else -> executorService.execute {
                 onDrainingCompleted()
                 request.onCompleted(result, queue.isEmpty())
                 networkBackoff.succeed()
@@ -353,7 +359,10 @@ class MessageQueue @JvmOverloads constructor(
         /** Requests older than an hour are dropped rather than sent. */
         const val MESSAGE_TIMEOUT_MS = 3_600_000L
 
-        /** First network-failure backoff step; grows jittered up to [MESSAGE_TIMEOUT_MS]. */
+        /**
+         * Seed for the network-failure backoff, which grows jittered up to [MESSAGE_TIMEOUT_MS].
+         * Note this is the seed, not the first delay: see [Backoff.fail] for the growth formula.
+         */
         const val NETWORK_INITIAL_FAILURE_RETRY_MS = 5_000L
 
         /** Fallback delay when the API reports a limit without a `retry_after`. */

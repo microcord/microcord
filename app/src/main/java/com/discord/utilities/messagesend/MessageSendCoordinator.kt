@@ -73,15 +73,28 @@ class MessageSendCoordinator @JvmOverloads constructor(
         data class Reconciled(override val requestId: String, val message: Message) : Update()
         data class Failed(override val requestId: String, val message: Message, val result: MessageResult) : Update()
         data class Cancelled(override val requestId: String) : Update()
+    }
+
+    /**
+     * Attachment-upload progress for a queued send.
+     *
+     * Deliberately a separate stream from [Update] rather than more [Update] variants: [Update] is
+     * consumed by an exhaustive `when` in the store, and upload progress is an orthogonal concern
+     * that only the upload UI cares about. The reference keeps the same separation by routing
+     * `MessageRequest.Send.onPreprocessing`/`onProgress` straight into `StoreMessageUploads` instead
+     * of through the message-result path.
+     */
+    sealed class UploadEvent {
+        abstract val requestId: String
 
         /** Attachment count is known and files are about to be read. */
         data class Preprocessing(
             override val requestId: String,
             val preprocessing: SendUtils.SendPayload.Preprocessing,
-        ) : Update()
+        ) : UploadEvent()
 
         /** Multipart parts exist; [uploads] carry the live per-file byte counters. */
-        data class Progress(override val requestId: String, val uploads: List<FileUpload>) : Update()
+        data class Progress(override val requestId: String, val uploads: List<FileUpload>) : UploadEvent()
     }
 
     private class Operation(
@@ -95,10 +108,14 @@ class MessageSendCoordinator @JvmOverloads constructor(
 
     private val operations = ConcurrentHashMap<String, Operation>()
     private val updates = PublishSubject.create<Update>().toSerialized()
+    private val uploadEvents = PublishSubject.create<UploadEvent>().toSerialized()
     private val queues = ConcurrentHashMap<Long, MessageQueue>()
     private val typingAt = ConcurrentHashMap<Long, Long>()
 
     fun observeUpdates(): Observable<Update> = updates
+
+    /** Attachment preprocessing and per-file upload progress for in-flight sends. */
+    fun observeUploadEvents(): Observable<UploadEvent> = uploadEvents
 
     fun send(input: Send): Submission {
         validate(input)?.let { return Submission.Rejected(it) }
@@ -228,7 +245,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
             when (update) {
                 is Update.Reconciled -> Unit
                 is Update.Failed, is Update.Cancelled -> failed = true
-                is Update.Optimistic, is Update.Preprocessing, is Update.Progress -> return@subscribe
+                is Update.Optimistic -> return@subscribe
             }
             if (remaining.remove(update.requestId)) latch.countDown()
         }
@@ -262,8 +279,8 @@ class MessageSendCoordinator @JvmOverloads constructor(
                 activity = null,
                 attachments = operation.attachments,
                 onCompleted = { result, _ -> settle(requestId, result) },
-                onPreprocessing = { updates.onNext(Update.Preprocessing(requestId, it)) },
-                onProgress = { updates.onNext(Update.Progress(requestId, it)) },
+                onPreprocessing = { uploadEvents.onNext(UploadEvent.Preprocessing(requestId, it)) },
+                onProgress = { uploadEvents.onNext(UploadEvent.Progress(requestId, it)) },
                 attemptTimestamp = operation.optimistic.lastManualAttemptTimestamp
                     ?: operation.optimistic.initialAttemptTimestamp
                     ?: now(),

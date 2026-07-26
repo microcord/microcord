@@ -1,13 +1,10 @@
 package com.discord.gateway
 
-import com.discord.api.channel.ChannelPinsUpdate
 import com.discord.api.message.Message
 import com.discord.api.message.reaction.MessageReactionUpdate
-import com.discord.api.message.reaction.MessageReactionRemoveAll
-import com.discord.api.message.reaction.MessageReactionRemoveEmoji
 import com.discord.api.user.TypingUser
 import com.discord.gateway.io.IncomingParser
-import com.discord.gateway.io.MessageDeleteEvent
+import com.discord.models.domain.ModelMessageDelete
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
@@ -46,12 +43,12 @@ class MessageGatewayContractTest {
 
     @Test
     fun parsesSingleAndBulkDeletesWithCompatibleMessageIds() {
-        val single = parse("MESSAGE_DELETE", """{"id":101,"channel_id":202,"guild_id":303}""") as MessageDeleteEvent
-        val bulk = parse("MESSAGE_DELETE_BULK", """{"ids":[101,102],"channel_id":202,"guild_id":303}""") as MessageDeleteEvent
+        val single = parse("MESSAGE_DELETE", """{"id":101,"channel_id":202,"guild_id":303}""") as ModelMessageDelete
+        val bulk = parse("MESSAGE_DELETE_BULK", """{"ids":[101,102],"channel_id":202,"guild_id":303}""") as ModelMessageDelete
 
         assertEquals(listOf(101L), single.messageIds)
         assertEquals(listOf(101L, 102L), bulk.messageIds)
-        assertEquals(303L, single.guildId)
+        assertEquals(202L, single.channelId)
     }
 
     @Test
@@ -67,33 +64,42 @@ class MessageGatewayContractTest {
         val removeAll = parse(
             "MESSAGE_REACTION_REMOVE_ALL",
             """{"channel_id":202,"message_id":101,"guild_id":303}""",
-        ) as MessageReactionRemoveAll
+        ) as MessageReactionUpdate
         val removeEmoji = parse(
             "MESSAGE_REACTION_REMOVE_EMOJI",
             """{"channel_id":202,"message_id":101,"guild_id":303,"emoji":{"id":505,"name":"wave","animated":false}}""",
-        ) as MessageReactionRemoveEmoji
+        ) as MessageReactionUpdate
 
         assertEquals(404L, add.userId)
-        assertEquals("wave", remove.emoji?.name)
+        assertEquals("wave", remove.emoji.name)
         assertEquals(101L, removeAll.messageId)
-        assertEquals("505", removeEmoji.emoji?.id)
+        assertEquals("505", removeEmoji.emoji.id)
+        // REMOVE_ALL carries no emoji on the wire; the shared payload type leaves it absent.
+        assertNull(removeAll.emoji as Any?)
     }
 
     @Test
-    fun parsesTypingAndChannelPinsUpdates() {
+    fun parsesTypingStart() {
         val typing = parse(
             "TYPING_START",
             """{"channel_id":202,"guild_id":303,"user_id":404,"timestamp":1627819200,"member":{"guild_id":303,"user":{"id":404,"username":"fixture-user"},"roles":[],"pending":false}}""",
         ) as TypingUser
-        val pins = parse(
-            "CHANNEL_PINS_UPDATE",
-            """{"guild_id":303,"channel_id":202,"last_pin_timestamp":"2021-08-01T12:00:00.000000+00:00"}""",
-        ) as ChannelPinsUpdate
 
         assertEquals(404L, typing.userId)
         assertEquals(404L, typing.member?.user?.id)
-        assertEquals(202L, pins.channelId)
-        assertTrue(pins.lastPinTimestamp != null)
+    }
+
+    /**
+     * `CHANNEL_PINS_UPDATE` is not one of the 83 dispatch types the reference client routes, so the
+     * parser must not manufacture a payload for it.
+     */
+    @Test
+    fun leavesChannelPinsUpdateUnparsed() {
+        val parsed = parser.parse(
+            """{"op":0,"s":7,"t":"CHANNEL_PINS_UPDATE","d":{"guild_id":303,"channel_id":202}}""",
+        ).data
+
+        assertTrue(parsed === IncomingParser.DISPATCH_UNPARSED)
     }
 
     private fun parse(type: String, data: String): Any =

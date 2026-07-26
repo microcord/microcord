@@ -1,96 +1,148 @@
 package com.discord.widgets.status
 
-import android.os.Bundle
-import android.text.format.DateUtils
 import android.view.View
+import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.fragment.app.Fragment
-import com.discord.app.AppFragment
-import androidx.lifecycle.Lifecycle
+import androidx.annotation.MainThread
 import com.discord.R
+import com.discord.app.AppFragment
+import com.discord.i18n.i18nFormat
+import com.discord.i18n.i18nPlural
 import com.discord.stores.StoreReadStates
 import com.discord.stores.StoreStream
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.computationLatest
+import com.discord.utilities.rx.leadingEdgeThrottle
+import com.discord.utilities.rx.ui
+import com.discord.utilities.time.TimeUtils
+import java.util.concurrent.TimeUnit
 import rx.Observable
-import rx.Subscription
 
+/**
+ * The "N new messages since <date>" banner pinned above the chat list, with its jump and
+ * mark-as-read affordances.
+ *
+ * The banner only appears while the unread marker is still *valid*: the channel's last ack has to
+ * be older than the newest message the client knows about. Once the user catches up, that validity
+ * stream completes, so the banner stays hidden until a different channel is selected — which is
+ * what stops it from flickering back in while the user is reading.
+ */
 class WidgetChatStatus : AppFragment(R.layout.widget_chat_status) {
-    data class State(
-        val channelId: Long = 0,
-        val messageId: Long = 0,
-        val unreadCount: Int = 0,
-        val estimated: Boolean = false,
-    )
 
-    private var subscription: Subscription? = null
-    private var currentState: State? = null
+    override fun onViewBoundOrOnResume() {
+        super.onViewBoundOrOnResume()
+        Model.get()
+            .ui(this)
+            .appSubscribe(WidgetChatStatus::class.java) { configureUI(it) }
+    }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        view.findViewById<View>(R.id.chat_status_unread_messages).setOnClickListener {
-            currentState?.takeIf { state -> state.channelId > 0 && state.messageId > 0 }?.let {
-                onJumpToMessage?.invoke(it.channelId, it.messageId)
+    @MainThread
+    private fun configureUI(data: Model) {
+        val view = view ?: return
+        view.findViewById<LinearLayout>(R.id.chat_status_unread_messages).apply {
+            visibility = if (data.unreadVisible) View.VISIBLE else View.GONE
+            setOnClickListener {
+                StoreStream.getMessagesLoader().jumpToMessage(data.unreadChannelId, data.unreadMessageId)
             }
         }
+        view.findViewById<TextView>(R.id.chat_status_unread_messages_text).text =
+            getUnreadMessageText(data.isUnreadEstimate, data.unreadCount, data.unreadMessageId)
         view.findViewById<View>(R.id.chat_status_unread_messages_mark).setOnClickListener {
-            currentState?.takeIf { state -> state.channelId > 0 }?.let {
-                onMarkRead?.invoke(it.channelId) ?: StoreStream.getReadStates().markAsRead(it.channelId)
+            StoreStream.getReadStates().markAsRead(data.unreadChannelId)
+        }
+    }
+
+    private fun getUnreadMessageText(isEstimate: Boolean, count: Int, messageId: Long): CharSequence {
+        val context = requireContext()
+        val timestamp = TimeUtils.renderUtcDate(TimeUtils.parseSnowflake(messageId), context)
+        return if (isEstimate) {
+            context.i18nFormat(
+                R.string.new_messages_estimated,
+                "count" to count.toString(),
+                "timestamp" to timestamp,
+            )
+        } else {
+            val countPlural = context.i18nPlural(R.plurals.new_messages_count, count, "count" to count)
+            context.i18nFormat(R.string.new_messages, "count" to countPlural, "timestamp" to timestamp)
+        }
+    }
+
+    internal data class Model(
+        val unreadVisible: Boolean,
+        val unreadMessageId: Long,
+        val unreadChannelId: Long,
+        val unreadCount: Int,
+        val isUnreadEstimate: Boolean,
+    ) {
+        companion object {
+            /** Cap on the rendered count. A channel whose history is detached is capped lower. */
+            const val ATTACHED_COUNT_CAP = 50
+            const val DETACHED_COUNT_CAP = 25
+
+            /** Debounce applied to both halves of the ack-validity comparison. */
+            private const val ACK_VALIDITY_DEBOUNCE_MS = 200L
+
+            /** The banner may not re-render more than once per this window. */
+            private const val EMIT_THROTTLE_MS = 500L
+
+            fun get(): Observable<Model> {
+                val unreadValid = StoreStream.getChannelsSelected().observeId()
+                    .distinctUntilChanged()
+                    .switchMap { selectedChannelId -> observeUnreadValid(selectedChannelId) }
+                    .distinctUntilChanged()
+
+                return Observable.combineLatest(
+                    unreadValid,
+                    StoreStream.getMessages().observeDetachedChannels(),
+                    StoreStream.getReadStates().getUnreadMarkerForSelectedChannel(),
+                ) { isUnreadValid, detachedChannels, unread ->
+                    createModel(isUnreadValid, detachedChannels, unread)
+                }
+                    .leadingEdgeThrottle(EMIT_THROTTLE_MS, TimeUnit.MILLISECONDS)
+                    .computationLatest()
+                    .distinctUntilChanged()
             }
-        }
-    }
 
-    override fun onStart() {
-        super.onStart()
-        subscription = (stateSource?.invoke() ?: defaultStateSource()).distinctUntilChanged().subscribe { state ->
-            view?.post {
-                if (view != null && viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) show(state)
+            /**
+             * `false` until the client can prove the channel holds messages newer than its last
+             * ack, then `true` while that holds. The stream completes on the first `false` after
+             * that point; a new channel selection resubscribes it.
+             *
+             * The reference reads the ack from `StoreMessageAck.observeForChannel`. That store
+             * exists in this project but is not yet reachable from `StoreStream`, so the
+             * equivalent ledger on `StoreReadStates` is used instead.
+             */
+            private fun observeUnreadValid(channelId: Long): Observable<Boolean> {
+                val lastAckOlderThanMostRecent = Observable.combineLatest(
+                    StoreStream.getReadStates().observeAck(channelId)
+                        .debounce(ACK_VALIDITY_DEBOUNCE_MS, TimeUnit.MILLISECONDS),
+                    StoreStream.getMessagesMostRecent().observeRecentMessageIds()
+                        .map { mostRecentIds -> mostRecentIds[channelId] ?: 0L }
+                        .debounce(ACK_VALIDITY_DEBOUNCE_MS, TimeUnit.MILLISECONDS)
+                        .take(1),
+                ) { ack: StoreReadStates.Ack?, mostRecentIdSnapshot: Long ->
+                    (ack?.messageId ?: 0L) < mostRecentIdSnapshot
+                }
+                    .takeUntil { isValid -> !isValid }
+
+                return Observable.concat(Observable.just(false), lastAckOlderThanMostRecent)
             }
-        }
-    }
 
-    override fun onStop() {
-        subscription?.unsubscribe()
-        subscription = null
-        currentState = null
-        super.onStop()
-    }
-
-    private fun show(state: State) {
-        currentState = state
-        val visible = state.channelId > 0 && state.messageId > 0 && state.unreadCount > 0
-        requireView().findViewById<View>(R.id.chat_status_unread_messages).apply {
-            visibility = if (visible) View.VISIBLE else View.GONE
-            isClickable = onJumpToMessage != null
-        }
-        if (!visible) return
-        val count = state.unreadCount.coerceIn(1, 50)
-        val timestamp = DateUtils.getRelativeTimeSpanString(
-            (state.messageId ushr 22) + DISCORD_EPOCH,
-            System.currentTimeMillis(),
-            DateUtils.MINUTE_IN_MILLIS,
-        )
-        val countText = if (state.estimated) count.toString() else
-            resources.getQuantityString(R.plurals.new_messages_count, count, count)
-        val template = getString(if (state.estimated) R.string.new_messages_estimated else R.string.new_messages)
-        requireView().findViewById<TextView>(R.id.chat_status_unread_messages_text).text = template
-            .replace("{count}", countText)
-            .replace("{timestamp}", timestamp.toString())
-    }
-
-    private fun defaultStateSource(): Observable<State> = Observable.combineLatest(
-        StoreStream.getChannelsSelected().observeSelectedChannel(),
-        StoreStream.getReadStates().getUnreadMarkerForSelectedChannel(),
-    ) { channel, unread -> state(channel?.id ?: 0, unread) }
-
-    companion object {
-        @JvmField var stateSource: (() -> Observable<State>)? = null
-        @JvmField var onJumpToMessage: ((Long, Long) -> Unit)? = null
-        @JvmField var onMarkRead: ((Long) -> Unit)? = null
-
-        private const val DISCORD_EPOCH = 1_420_070_400_000L
-        private fun state(selectedChannelId: Long, unread: StoreReadStates.Unread): State {
-            if (unread.marker.channelId != selectedChannelId) return State()
-            val count = unread.count.coerceAtLeast(0)
-            return State(selectedChannelId, unread.marker.messageId ?: 0, count.coerceAtMost(50), count >= 50)
+            fun createModel(
+                isUnreadValid: Boolean,
+                detachedChannels: Set<Long>,
+                unread: StoreReadStates.Unread,
+            ): Model {
+                val marker = unread.marker
+                val cap = if (detachedChannels.contains(marker.channelId)) DETACHED_COUNT_CAP else ATTACHED_COUNT_CAP
+                return Model(
+                    unreadVisible = isUnreadValid && unread.count > 0 && marker.channelId > 0,
+                    unreadMessageId = marker.messageId ?: 0L,
+                    unreadChannelId = marker.channelId,
+                    unreadCount = unread.count.coerceIn(0, cap),
+                    isUnreadEstimate = unread.count >= cap,
+                )
+            }
         }
     }
 }

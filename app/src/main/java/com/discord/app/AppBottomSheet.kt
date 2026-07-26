@@ -202,7 +202,7 @@ abstract class AppBottomSheet(
     /**
      * Keeps the collapsed peek height in sync with the bottom of [targetView].
      *
-     * Passing `null` falls back to the sheet's own root view.
+     * Passing `null` stops tracking and leaves the peek height at its last value.
      */
     fun setPeekHeightBottomView(targetView: View?) {
         if (peekBottomView === targetView) return

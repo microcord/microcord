@@ -11,6 +11,7 @@ import androidx.appcompat.widget.Toolbar
 import com.discord.R
 import com.discord.panels.OverlappingPanelsLayout
 import com.discord.panels.PanelState
+import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
 import com.discord.widgets.channels.list.WidgetChannelsList
@@ -24,11 +25,7 @@ import com.discord.api.channel.Channel
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import rx.Subscription
 
-fun interface BackHandler {
-    fun onBackPressed(): Boolean
-}
-
-class WidgetHome : AppFragment(R.layout.widget_home), BackHandler, WidgetChannelPinnedMessages.Host {
+class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessages.Host {
     private lateinit var panels: HomePanelsLayout
     private var navigationSubscription: Subscription? = null
     private var selectedChannelSubscription: Subscription? = null
@@ -36,6 +33,9 @@ class WidgetHome : AppFragment(R.layout.widget_home), BackHandler, WidgetChannel
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         panels = view.findViewById(R.id.overlapping_panels)
+        // Registered here rather than in onViewBound so `panels` is already resolved, and before the
+        // child transactions below so this stays behind WidgetTabsHost in the registry.
+        setOnBackPressed(::handleBackPressed)
         panels.registerStartPanelStateListeners(
             OverlappingPanelsLayout.PanelStateListener { StoreStream.getNavigation().setLeftPanelState(it) },
         )
@@ -99,17 +99,47 @@ class WidgetHome : AppFragment(R.layout.widget_home), BackHandler, WidgetChannel
         super.onDestroyView()
     }
 
-    override fun onBackPressed(): Boolean {
+    /**
+     * The home surface consumes every back press it is offered, and what it does depends only on
+     * which panel is resting in front of the user:
+     *
+     * - left panel (guilds + channels) already open: there is nowhere further back, so leave the
+     *   app without destroying the task;
+     * - centre panel (the chat): step back to the left panel, see [handleCenterPanelBack];
+     * - right panel (members): close it back to the chat.
+     */
+    private fun handleBackPressed(): Boolean {
         if (childFragmentManager.backStackEntryCount > 0) {
             childFragmentManager.popBackStack()
             return true
         }
         when (panels.getSelectedPanel()) {
             OverlappingPanelsLayout.Panel.START -> requireActivity().moveTaskToBack(true)
-            OverlappingPanelsLayout.Panel.CENTER -> panels.openStartPanel()
+            OverlappingPanelsLayout.Panel.CENTER -> handleCenterPanelBack()
             OverlappingPanelsLayout.Panel.END -> panels.closePanels()
         }
         return true
+    }
+
+    /**
+     * Back from the chat panel. A peeked channel steps back to the channel it was peeked from;
+     * anything else opens the left panel.
+     *
+     * Two reference branches are not reachable yet and are deliberately absent rather than
+     * approximated: dismissing an open thread-creation composer (`StoreChannelsSelected`'s
+     * `dismissCreateThread` is `@StoreThread` and has no UI-callable wrapper), and re-entering the
+     * fullscreen call surface when the selected channel is the vocal channel currently connected
+     * (`WidgetCallFullscreen` / `WidgetCallPreviewFullscreen` do not exist in this project).
+     */
+    internal fun handleCenterPanelBack() {
+        val selected = StoreStream.getChannelsSelected().getResolvedSelectedChannel()
+            as? StoreChannelsSelected.ResolvedSelectedChannel.Channel
+        val peekParent = selected?.peekParent
+        if (selected != null && peekParent != null) {
+            StoreStream.selectChannel(selected.channel.guildId, peekParent)
+            return
+        }
+        panels.openStartPanel()
     }
 
     fun getPanelLayout(): PanelLayout = panels

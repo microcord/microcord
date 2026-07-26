@@ -1,5 +1,8 @@
 package com.discord.api.application
 
+/** [ThirdPartySku.distributor] value that marks a Play Store listing. */
+private const val DISTRIBUTOR_GPLAY = "google_play"
+
 data class Application(
     val id: Long,
     val name: String,
@@ -17,7 +20,7 @@ data class Application(
         get() = deeplinkUri?.removeSuffix("/")?.plus("/_discord") ?: "dscd$id://connect/_discord"
 
     val googlePlayPackageNames: List<String>
-        get() = thirdPartySkus.orEmpty().filter { it.distributor == "google_play" }.mapNotNull { it.sku }
+        get() = thirdPartySkus.orEmpty().filter { it.distributor == DISTRIBUTOR_GPLAY }.mapNotNull { it.sku }
 }
 
 data class ThirdPartySku(val id: String, val sku: String?, val distributor: String?)

@@ -1,7 +1,6 @@
 package com.discord.views.user
 
 import android.content.Context
-import android.net.Uri
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
@@ -10,6 +9,8 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import com.discord.R
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
+import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
 import com.discord.views.ThemedColor
 import com.discord.views.UsernameView
 import com.facebook.drawee.backends.pipeline.Fresco
@@ -19,8 +20,6 @@ import com.facebook.drawee.generic.RoundingParams
 import com.facebook.drawee.span.DraweeSpanStringBuilder
 import com.facebook.drawee.span.SimpleDraweeSpanTextView
 import com.facebook.drawee.view.SimpleDraweeView
-import com.facebook.imagepipeline.common.ResizeOptions
-import com.facebook.imagepipeline.request.ImageRequestBuilder
 import java.util.Locale
 
 class SettingsMemberView constructor(
@@ -33,6 +32,9 @@ class SettingsMemberView constructor(
     private var avatarBackgroundColor = themedColor(R.attr.colorBackgroundPrimary)
     private var user: User? = null
     private var guildMember: GuildMember? = null
+
+    /** Skips re-issuing the avatar request when the row is rebound with the same user. */
+    private val avatarChangeDetector = MGImages.DistinctChangeDetector()
 
     init {
         LayoutInflater.from(context).inflate(R.layout.settings_member_view, this)
@@ -56,7 +58,12 @@ class SettingsMemberView constructor(
         val hasNickname = !nickname.isNullOrBlank()
         val hasGuildAvatar = guildMember?.hasAvatar() == true
         val avatarRequestSize = resources.getDimensionPixelSize(R.dimen.avatar_size_large)
-        setAvatar(largeAvatar, avatarUrl(user, guildMember, avatarRequestSize), true, avatarRequestSize)
+        IconUtils.setIcon(
+            largeAvatar,
+            avatarUrl(user, guildMember, avatarRequestSize),
+            R.dimen.avatar_size_large,
+            changeDetector = avatarChangeDetector,
+        )
         memberTitle.configureUsername(nickname ?: user.username)
         memberTitle.configureTag(
             user.isBot,
@@ -94,9 +101,7 @@ class SettingsMemberView constructor(
         val start = length
         append('#')
         append('\u2002')
-        val request = ImageRequestBuilder.newBuilderWithSource(Uri.parse(url))
-            .setResizeOptions(ResizeOptions(mediaProxySize(sizePx), mediaProxySize(sizePx)))
-            .build()
+        val request = MGImages.getImageRequest(url, sizePx, sizePx, useSmallCache = true).build()
         val controller = Fresco.newDraweeControllerBuilder()
             .setImageRequest(request)
             .setAutoPlayAnimations(false)
@@ -116,39 +121,39 @@ class SettingsMemberView constructor(
     }
 }
 
+/**
+ * Avatar URL for a user, preferring their per-guild avatar.
+ *
+ * A locally picked avatar is already a `data:` URL and must be passed through
+ * untouched; everything else is built by [IconUtils] so every screen shares the
+ * same CDN cache entries.
+ */
 internal fun avatarUrl(user: User, guildMember: GuildMember?, size: Int? = null, animate: Boolean = true): String {
     val hash = guildMember?.takeIf(GuildMember::hasAvatar)?.avatarHash
     if (hash?.startsWith("data:") == true) return hash
     if (hash == null && user.avatar?.startsWith("data:") == true) return user.avatar!!
-    val base = if (hash != null) {
-        val extension = if (animate && hash.startsWith("a_")) "gif" else "webp"
-        "https://cdn.discordapp.com/guilds/${guildMember.guildId}/users/${user.id}/avatars/$hash.$extension"
-    } else if (user.avatar != null) {
-        val extension = if (animate && user.avatar!!.startsWith("a_")) "gif" else "webp"
-        "https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.$extension"
-    } else {
-        return "asset://asset/images/default_avatar_${user.discriminator % 5}.png"
-    }
-    return size?.let { "$base?size=${mediaProxySize(it)}" } ?: base
+    return IconUtils.getForGuildMemberOrUser(user, guildMember, size, animate)
+        ?: IconUtils.getDefaultAvatar(0)
 }
 
-internal fun setAvatar(view: SimpleDraweeView, url: String, animate: Boolean, resizePx: Int? = null) {
-    val request = ImageRequestBuilder.newBuilderWithSource(Uri.parse(url)).apply {
-        resizePx?.let { resizeOptions = ResizeOptions(it, it) }
-    }.build()
-    view.controller = Fresco.newDraweeControllerBuilder()
-        .setOldController(view.controller)
-        .setImageRequest(request)
-        .setAutoPlayAnimations(animate)
-        .build()
+/**
+ * Binds an avatar URL through the shared image pipeline, so the request is
+ * deduplicated, resized and rounded consistently with every other avatar.
+ *
+ * Animation is decided by the URL extension chosen in [avatarUrl] rather than by
+ * the controller.
+ */
+internal fun setAvatar(
+    view: SimpleDraweeView,
+    url: String,
+    @Suppress("UNUSED_PARAMETER") animate: Boolean = true,
+    resizePx: Int? = null,
+) {
+    val size = resizePx ?: 0
+    IconUtils.setIcon(view, url, size, size)
 }
 
 internal fun formatUsername(user: User): String =
     String.format(Locale.ROOT, "%s#%04d", user.username, user.discriminator)
 
-internal fun mediaProxySize(requested: Int) = MEDIA_PROXY_SIZES.first { it >= requested }
-
-private val MEDIA_PROXY_SIZES = intArrayOf(
-    16, 20, 22, 24, 28, 32, 40, 44, 48, 56, 60, 64, 80, 96, 100, 128,
-    160, 240, 256, 300, 320, 480, 512, 600, 640, 1024, 1280, 1536, 2048, 3072, 4096,
-)
+internal fun mediaProxySize(requested: Int) = IconUtils.getMediaProxySize(requested)

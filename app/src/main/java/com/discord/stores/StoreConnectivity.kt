@@ -4,7 +4,7 @@ import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
 import com.discord.utilities.networking.NetworkMonitor
 import com.discord.utilities.time.Clock
-import kotlin.math.roundToLong
+import kotlin.math.roundToInt
 import rx.Observable
 import rx.Subscription
 
@@ -28,7 +28,7 @@ class StoreConnectivity(
 
     data class DelayedState(val state: State, val delay: Long = DELAY_NOMINAL)
 
-    private var state: DelayedState by MarkChangedDelegate(DelayedState(State.CONNECTING, DELAY_EXTENDED))
+    private var delayedState: DelayedState by MarkChangedDelegate(DelayedState(State.CONNECTING, DELAY_EXTENDED))
 
     private var deviceNetworkState: NetworkMonitor.State = NetworkMonitor.State.OFFLINE
     private var isReadyPayloadReceived: Boolean = false
@@ -52,12 +52,12 @@ class StoreConnectivity(
         )
     }
 
-    fun isConnected(): Boolean = state.state == State.ONLINE
+    fun isConnected(): Boolean = delayedState.state == State.ONLINE
 
-    fun getState(): DelayedState = state
+    fun getState(): DelayedState = delayedState
 
     fun observeState(): Observable<DelayedState> =
-        observationDeck.connectRx(this, generator = { state }).distinctUntilChanged()
+        observationDeck.connectRx(this, generator = { delayedState }).distinctUntilChanged()
 
     @StoreThread
     fun handleConnected(connected: Boolean) {
@@ -100,11 +100,11 @@ class StoreConnectivity(
             isReadyPayloadReceived && !channelMessagesLoading -> State.ONLINE
             else -> State.CONNECTING
         }
-        if (state.state != nextState || stateTriggeredTimeMillis == null) {
+        if (delayedState.state != nextState || stateTriggeredTimeMillis == null) {
             stateTriggeredTimeMillis = clock.currentTimeMillis()
-            stateTriggeredDelay = getNextStateDelayInitial(state, nextState)
+            stateTriggeredDelay = getNextStateDelayInitial(delayedState, nextState)
         }
-        state = DelayedState(nextState, getStateDelay(stateTriggeredDelay))
+        delayedState = DelayedState(nextState, getStateDelay(stateTriggeredDelay))
     }
 
     private fun getNextStateDelayInitial(currentState: DelayedState, nextState: State): Long = when (nextState) {
@@ -122,8 +122,7 @@ class StoreConnectivity(
 
     /** Remaining delay, quantised to [DELAY_INTERVAL] so equal states de-duplicate. */
     private fun getStateDelay(defaultDelay: Long): Long =
-        ((defaultDelay - getStateActiveMillis()).toFloat() / DELAY_INTERVAL).roundToLong()
-            .times(DELAY_INTERVAL)
+        (((defaultDelay - getStateActiveMillis()).toFloat() / DELAY_INTERVAL).roundToInt().toLong() * DELAY_INTERVAL)
             .coerceAtLeast(0L)
 
     fun reset() {

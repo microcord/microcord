@@ -117,7 +117,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                     is MessageResult.Slowmode -> Toast.makeText(
                         requireContext(), R.string.channel_slowmode_desc_short, Toast.LENGTH_SHORT,
                     ).show()
-                    MessageResult.AutoModBlock -> Toast.makeText(
+                    is MessageResult.AutoModBlock -> Toast.makeText(
                         requireContext(), R.string.guild_automod_blocked_message_send_notice, Toast.LENGTH_LONG,
                     ).show()
                     else -> Unit

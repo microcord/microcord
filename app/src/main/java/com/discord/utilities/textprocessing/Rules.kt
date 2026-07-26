@@ -1,8 +1,10 @@
 package com.discord.utilities.textprocessing
 
+import android.graphics.Typeface
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.BackgroundColorSpan
+import android.text.style.CharacterStyle
 import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.StrikethroughSpan
@@ -124,6 +126,10 @@ object Rules {
         this.unicodeEmojiPattern = anchoredUnicodeEmojiPattern(emojiDataProvider)
     }
 
+    /** Looks a unicode emoji up by its canonical name, for callers that only kept the name. */
+    internal fun unicodeEmojiByName(name: String): ModelEmojiUnicode? =
+        emojiDataProvider.unicodeEmojisNamesMap[name]
+
     private fun anchoredUnicodeEmojiPattern(provider: EmojiDataProvider): Pattern =
         Pattern.compile("^(${provider.unicodeEmojisPattern.pattern()})")
 
@@ -146,13 +152,13 @@ object Rules {
     /** `**bold**` in a fixed colour, used by the changelog and other non-chat surfaces. */
     fun <T, S> createBoldColoredRule(@ColorInt color: Int): Rule<T, Node<T>, S> =
         SimpleMarkdownRules.createSimpleStyleRule(SimpleMarkdownRules.PATTERN_BOLD) {
-            listOf(ForegroundColorSpan(color), StyleSpan(android.graphics.Typeface.BOLD))
+            listOf<CharacterStyle>(ForegroundColorSpan(color), StyleSpan(Typeface.BOLD))
         }
 
     /** `~~struck~~` in a fixed colour. */
     fun <T, S> createStrikethroughColoredRule(@ColorInt color: Int): Rule<T, Node<T>, S> =
         SimpleMarkdownRules.createSimpleStyleRule(SimpleMarkdownRules.PATTERN_STRIKETHRU) {
-            listOf(ForegroundColorSpan(color), StrikethroughSpan())
+            listOf<CharacterStyle>(ForegroundColorSpan(color), StrikethroughSpan())
         }
 
     // endregion
@@ -211,7 +217,9 @@ object Rules {
     fun <RC : BasicRenderContext, S : BlockQuoteState<S>> createInlineCodeRule(): Rule<RC, Node<RC>, S> =
         CodeRules.createInlineCodeRule(
             spanProvider { context -> listOf(codeTextAppearance(context), RelativeSizeSpan(CODE_TEXT_SCALE)) },
-            spanProvider { renderContext -> listOf(BackgroundColorSpan(themedColor(renderContext.context, R.attr.theme_chat_code))) },
+            spanProvider { renderContext ->
+                listOf(BackgroundColorSpan(themedColor(renderContext.context, R.attr.theme_chat_code)))
+            },
         )
 
     /** `# heading` through `### heading`. */
@@ -472,7 +480,8 @@ object Rules {
             ): ParseSpec<T, S> {
                 val replaced = replaceEmojiSurrogates(matcher.group())
                 @Suppress("UNCHECKED_CAST")
-                val parsed = parser.parse(replaced, state, innerRules) as List<Node<T>>
+                val innerParser = parser as Parser<T, Node<T>, S>
+                val parsed = innerParser.parse(replaced, state, innerRules)
                 val node = if (parsed.size == 1) {
                     parsed.first()
                 } else {

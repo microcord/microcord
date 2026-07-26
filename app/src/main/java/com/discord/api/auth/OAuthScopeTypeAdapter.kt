@@ -1,0 +1,61 @@
+package com.discord.api.auth
+
+import com.google.gson.TypeAdapter
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
+import com.google.gson.stream.JsonWriter
+
+/**
+ * Maps a scope name onto the matching [OAuthScope] singleton.
+ *
+ * An unrecognised name becomes [OAuthScope.Invalid] rather than `null`, so the authorize screen
+ * can still show a scope this build predates.
+ *
+ * The reference builds the lookup table by reflecting over the sealed hierarchy; the table is
+ * listed explicitly here because this build does not ship `kotlin-reflect`.
+ */
+class OAuthScopeTypeAdapter : TypeAdapter<OAuthScope>() {
+    override fun read(reader: JsonReader): OAuthScope? {
+        if (reader.peek() == JsonToken.NULL) {
+            reader.nextNull()
+            return null
+        }
+        val scopeName = reader.nextString()
+        return NAME_TO_SCOPE[scopeName] ?: OAuthScope.Invalid(scopeName)
+    }
+
+    override fun write(writer: JsonWriter, value: OAuthScope?) {
+        if (value == null) writer.nullValue() else writer.value(value.scopeName)
+    }
+
+    private companion object {
+        private val NAME_TO_SCOPE: Map<String, OAuthScope> = listOf(
+            OAuthScope.Identify,
+            OAuthScope.Email,
+            OAuthScope.Connections,
+            OAuthScope.Guilds,
+            OAuthScope.GuildsJoin,
+            OAuthScope.GuildsMembersRead,
+            OAuthScope.GdmJoin,
+            OAuthScope.Rpc,
+            OAuthScope.RpcNotificationsRead,
+            OAuthScope.RpcVoiceRead,
+            OAuthScope.RpcVoiceWrite,
+            OAuthScope.RpcActivitiesWrite,
+            OAuthScope.Bot,
+            OAuthScope.WebhookIncoming,
+            OAuthScope.MessagesRead,
+            OAuthScope.ApplicationsBuildsUpload,
+            OAuthScope.ApplicationsBuildsRead,
+            OAuthScope.ApplicationsCommands,
+            OAuthScope.ApplicationsCommandsUpdate,
+            OAuthScope.ApplicationsStoreUpdate,
+            OAuthScope.ApplicationsEntitlements,
+            OAuthScope.ActivitiesRead,
+            OAuthScope.ActivitiesWrite,
+            OAuthScope.RelationshipsRead,
+            OAuthScope.Voice,
+            OAuthScope.DMChannelsRead,
+        ).associateBy { it.scopeName }
+    }
+}

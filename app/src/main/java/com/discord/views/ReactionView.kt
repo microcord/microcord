@@ -2,7 +2,6 @@ package com.discord.views
 
 import android.content.Context
 import android.content.res.ColorStateList
-import android.net.Uri
 import android.util.AttributeSet
 import android.widget.LinearLayout
 import android.widget.TextSwitcher
@@ -10,12 +9,11 @@ import android.widget.TextView
 import com.discord.R
 import com.discord.api.message.reaction.MessageReaction
 import com.discord.api.message.reaction.MessageReactionEmoji
+import com.discord.models.domain.emoji.ModelEmojiUnicode
+import com.discord.models.domain.emoji.toCodePoints
+import com.discord.utilities.textprocessing.node.EmojiNode
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
-import com.facebook.drawee.backends.pipeline.Fresco
-import com.facebook.drawee.generic.GenericDraweeHierarchyBuilder
 import com.facebook.drawee.span.DraweeSpanStringBuilder
-import com.facebook.imagepipeline.common.ResizeOptions
-import com.facebook.imagepipeline.request.ImageRequestBuilder
 
 class ReactionView @JvmOverloads constructor(
     context: Context,
@@ -91,39 +89,43 @@ class ReactionView @JvmOverloads constructor(
     }
 }
 
+/**
+ * Draws a reaction emoji as an inline image span, exactly as message text does.
+ *
+ * Unicode emoji are Discord's own bundled artwork rather than the device emoji
+ * font, so a reaction looks the same on every device; custom emoji come from the
+ * CDN and animate only when the user allows it.
+ */
 internal fun renderReactionEmoji(
     view: SimpleDraweeSpanTextView,
     emoji: MessageReactionEmoji,
     animate: Boolean,
-    sizePx: Int = (view.resources.displayMetrics.density * 16).toInt(),
+    sizePx: Int = EmojiNode.EMOJI_SIZE,
 ) {
-    val id = emoji.id
-    if (id == null) {
-        view.text = emoji.name.orEmpty()
-        return
-    }
-    val extension = if (emoji.animated) "gif" else "png"
-    val url = "https://cdn.discordapp.com/emojis/$id.$extension?size=32&quality=lossless"
-    val request = ImageRequestBuilder.newBuilderWithSource(Uri.parse(url))
-        .setResizeOptions(ResizeOptions(sizePx, sizePx))
-        .build()
-    val controller = Fresco.newDraweeControllerBuilder()
-        .setImageRequest(request)
-        .setAutoPlayAnimations(animate)
-        .build()
-    val builder = DraweeSpanStringBuilder().apply {
-        append('#')
-        setImageSpan(
-            view.context,
-            GenericDraweeHierarchyBuilder(view.resources).build(),
-            controller,
-            0,
-            0,
+    val name = emoji.name.orEmpty()
+    val customId = emoji.id?.toLongOrNull()
+    val node: EmojiNode<EmojiNode.RenderContext> = if (customId == null) {
+        val codePoints = name.toCodePoints()
+        EmojiNode(
+            name,
+            { _, _, context -> ModelEmojiUnicode.getImageUri(codePoints, context) },
+            EmojiNode.EmojiIdAndType.Unicode(name),
             sizePx,
             sizePx,
-            false,
-            2,
         )
+    } else {
+        EmojiNode.from(name, customId, emoji.animated, sizePx)
     }
+    val builder = DraweeSpanStringBuilder()
+    // A hair space gives the span something to sit on without widening the pill.
+    builder.append(HAIR_SPACE)
+    node.render(builder, ReactionEmojiRenderContext(view.context, animate))
     view.setDraweeSpanStringBuilder(builder)
 }
+
+private const val HAIR_SPACE = '\u200A'
+
+private class ReactionEmojiRenderContext(
+    override val context: Context,
+    override val isAnimationEnabled: Boolean,
+) : EmojiNode.RenderContext

@@ -117,7 +117,7 @@ class SparseMutableList<T>(
                         chunks[chunkIndex].addAtListIndex(index, element)
                         incrementChunksFromIndex(chunkIndex + 1)
                     } else {
-                        val chunk = Chunk.create(element, index, expectedChunkSize)
+                        val chunk = Chunk.create<T>(element, index, expectedChunkSize)
                         val firstAfter = getFirstChunkIndexAfter(index)
                         if (firstAfter == -1) {
                             addChunk(chunk)
@@ -252,8 +252,10 @@ class SparseMutableList<T>(
         return copy
     }
 
-    /** A contiguous run of materialised values beginning at [startIndex] in list coordinates. */
-    data class Chunk<T>(private var startIndex: Int, var list: MutableList<T?>) : Comparable<Chunk<T>> {
+    /** A contiguous run of materialised values beginning at `startIndex` in list coordinates. */
+    class Chunk<T>(private var startIndex: Int, var list: MutableList<T?>) : Comparable<Chunk<T>> {
+
+        override fun toString(): String = "Chunk(startIndex=$startIndex, list=$list)"
 
         val size: Int get() = list.size
 
@@ -310,10 +312,13 @@ class SparseMutableList<T>(
             return if (index < 0) -1 else startIndex + index
         }
 
-        fun deepCopy(): Chunk<T> = Chunk(startIndex, ArrayList(list))
+        fun deepCopy(): Chunk<T> = Chunk(startIndex, ArrayList<T?>(list))
 
-        fun <R> deepCopy(transform: (T) -> R): Chunk<R> =
-            Chunk(startIndex, list.mapTo(ArrayList(list.size)) { it?.let(transform) })
+        fun <R> deepCopy(transform: (T) -> R): Chunk<R> {
+            val copied = ArrayList<R?>(list.size)
+            for (element in list) copied.add(if (element == null) null else transform(element))
+            return Chunk(startIndex, copied)
+        }
 
         companion object {
             fun <T> create(element: T?, startIndex: Int, initialCapacity: Int): Chunk<T> {

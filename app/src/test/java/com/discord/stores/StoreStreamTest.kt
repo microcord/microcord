@@ -6,7 +6,6 @@ import com.discord.api.stageinstance.StageInstancePrivacyLevel
 import com.discord.models.domain.ModelCustomStatusSetting
 import com.discord.models.domain.ModelUserSettings
 import com.discord.gateway.io.IncomingParser
-import com.discord.gateway.GatewayEventRouter
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
@@ -295,7 +294,7 @@ class StoreStreamTest {
                 setAuthed("gateway-secret")
             }
 
-            GatewayEventRouter(stream).handleDisconnect(authenticationFailed = true)
+            StoreStream.getGatewayConnection().handleDisconnect(authenticationFailed = true)
 
             assertNull(StoreStream.getAuthentication().getAuthState())
             assertEquals(0, server.requestCount)

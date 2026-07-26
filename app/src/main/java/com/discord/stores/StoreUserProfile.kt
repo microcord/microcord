@@ -54,7 +54,12 @@ class StoreUserProfile(
             { profile ->
                 dispatcher.schedule {
                     handleUserProfile(profile)
-                    profile.guildMember?.let { propagateMember?.invoke(it, guildId) }
+                    // The reference's `StoreStream.handleUserProfile(profile, guildId)` fan-out is
+                    // exactly this: the member is only propagated when the fetch was scoped to a
+                    // guild, because the profile's member has no guild id of its own.
+                    if (guildId != null) {
+                        profile.guildMember?.let { propagateMember?.invoke(it, guildId) }
+                    }
                     onFetchSuccess?.invoke(profile)
                 }
             },

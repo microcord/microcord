@@ -59,7 +59,6 @@ abstract class AppDialog : DialogFragment, AppComponent {
         dialog?.window?.setBackgroundDrawableResource(R.color.transparent)
     }
 
-    @CallSuper
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         isRecreated = savedInstanceState != null

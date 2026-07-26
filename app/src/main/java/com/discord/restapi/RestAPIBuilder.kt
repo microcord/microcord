@@ -53,6 +53,13 @@ class RestAPIBuilder(
     private fun gson(serializeNulls: Boolean): Gson = GsonBuilder()
         .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
         .registerDiscordApiTypeAdapters()
+        // A channel reorder must be able to write `"parent_id": null` to move a channel out of its
+        // category while still omitting the key when the parent is unchanged, which the default
+        // reflective adapter cannot express.
+        .registerTypeAdapter(
+            RestAPIParams.ChannelPosition::class.java,
+            RestAPIParams.ChannelPosition.Serializer(),
+        )
         .apply { if (serializeNulls) serializeNulls() }
         .create()
 

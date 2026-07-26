@@ -84,6 +84,71 @@ class BackPressHandlerRegistryTest {
         assertEquals(listOf("explicit", "default"), invoked)
     }
 
+    /**
+     * Both shell screens register at the default priority, so their relative order is what decides
+     * whether a back press on the friends/mentions/settings tab returns to the home tab or drives
+     * the hidden home panels. The tabs host has to run first.
+     */
+    @Test
+    fun `the tabs host is offered the press before the home surface`() {
+        val registry = BackPressHandlerRegistry()
+        val invoked = mutableListOf<String>()
+        var selectedTabIsHome = false
+
+        registry.set("com.discord.widgets.tabs.WidgetTabsHost") {
+            invoked += "tabs"
+            !selectedTabIsHome
+        }
+        registry.set("com.discord.widgets.home.WidgetHome") {
+            invoked += "home"
+            true
+        }
+
+        // On another tab the tabs host consumes the press and home never sees it.
+        assertTrue(registry.dispatchBackPressed())
+        assertEquals(listOf("tabs"), invoked)
+
+        // On the home tab the tabs host declines and home takes over.
+        invoked.clear()
+        selectedTabIsHome = true
+        assertTrue(registry.dispatchBackPressed())
+        assertEquals(listOf("tabs", "home"), invoked)
+    }
+
+    @Test
+    fun `a screen that re-registers keeps its place behind an earlier screen`() {
+        val registry = BackPressHandlerRegistry()
+        val invoked = mutableListOf<String>()
+
+        registry.set("com.discord.widgets.tabs.WidgetTabsHost") { invoked += "tabs"; false }
+        registry.set("com.discord.widgets.home.WidgetHome") { invoked += "stale"; false }
+
+        // A view recreation drops the handler and registers a fresh one.
+        registry.remove("com.discord.widgets.home.WidgetHome")
+        registry.set("com.discord.widgets.home.WidgetHome") { invoked += "home"; true }
+
+        assertTrue(registry.dispatchBackPressed())
+        assertEquals(listOf("tabs", "home"), invoked)
+    }
+
+    @Test
+    fun `a handler may register another during dispatch`() {
+        val registry = BackPressHandlerRegistry()
+        val invoked = mutableListOf<String>()
+
+        registry.set("screen", priority = 1) {
+            invoked += "screen"
+            registry.set("pushed", priority = 0) { invoked += "pushed"; true }
+            true
+        }
+
+        assertTrue(registry.dispatchBackPressed())
+        assertEquals(listOf("screen"), invoked)
+
+        assertTrue(registry.dispatchBackPressed())
+        assertEquals(listOf("screen", "pushed"), invoked)
+    }
+
     @Test
     fun `a handler may unregister itself during dispatch`() {
         val registry = BackPressHandlerRegistry()

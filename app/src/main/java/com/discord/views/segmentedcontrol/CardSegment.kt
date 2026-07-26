@@ -2,7 +2,6 @@ package com.discord.views.segmentedcontrol
 
 import android.content.Context
 import android.util.AttributeSet
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -10,6 +9,7 @@ import android.widget.TextView
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import com.discord.R
+import com.discord.views.ThemedColor
 
 class CardSegment(context: Context, attrs: AttributeSet?) : CardView(context, attrs), SegmentedControlSegment {
     private val textView: TextView
@@ -59,9 +59,5 @@ class CardSegment(context: Context, attrs: AttributeSet?) : CardView(context, at
         )
     }
 
-    private fun themedColor(attribute: Int): Int {
-        val value = TypedValue()
-        context.theme.resolveAttribute(attribute, value, true)
-        return if (value.resourceId != 0) ContextCompat.getColor(context, value.resourceId) else value.data
-    }
+    private fun themedColor(attribute: Int): Int = ThemedColor.resolve(context, attribute)
 }

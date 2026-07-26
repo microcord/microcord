@@ -22,8 +22,6 @@ import com.discord.api.stageinstance.StageInstance
 import com.discord.api.user.User
 import com.discord.api.user.TypingUser
 import com.discord.api.message.reaction.MessageReactionUpdate
-import com.discord.api.message.reaction.MessageReactionRemoveAll
-import com.discord.api.message.reaction.MessageReactionRemoveEmoji
 import com.discord.models.authentication.AuthState
 import com.discord.models.domain.ModelChannelUnreadUpdate
 import com.discord.models.domain.ModelNotificationSettings
@@ -61,7 +59,6 @@ import com.discord.utilities.messagesend.MessageSendCoordinator
 import com.discord.widgets.chat.input.WidgetChatInput
 import com.discord.widgets.chat.list.WidgetChatList
 import com.discord.widgets.chat.overlay.WidgetChatOverlay
-import com.discord.widgets.status.WidgetChatStatus
 import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
 import com.discord.widgets.friends.WidgetFriendsList
 import com.discord.widgets.friends.FriendsListInput
@@ -417,7 +414,6 @@ class StoreStream private constructor(
                 }
             }
         }
-        WidgetChatStatus.onJumpToMessage = { channelId, messageId -> messagesLoader.jumpToMessage(channelId, messageId) }
         MessageWorkerActions.sendPendingMessages = {
             val pending = messages.localMessagesHolder.getFlattenedMessages().filter { it.type == -1 }
             val uploads = pending.filter(DomainMessage::hasLocalUploads)
@@ -462,6 +458,10 @@ class StoreStream private constructor(
             initGatewaySocketListeners()
         }
         connectivity.init(NetworkMonitor(context), messagesLoader.observeChannelMessagesLoading())
+        com.discord.utilities.lifecycle.Backgrounded.observe().subscribe(
+            { backgrounded -> dispatcher.schedule { connectivity.handleBackgrounded(backgrounded) } },
+            {},
+        )
         BootLog.record(BootLogEvent.GATEWAY_READY)
         authentication.init(context)
         BootLog.record(BootLogEvent.SESSION_READY)
@@ -496,7 +496,6 @@ class StoreStream private constructor(
     }
 
     private fun initForTesting() {
-        initGatewaySocketListeners()
         authentication.init()
         userSettingsSystem.restore()
         accessibility.initForTesting()
@@ -519,6 +518,9 @@ class StoreStream private constructor(
             updateSortedGuilds()
             updateReadStateInputs()
         }
+        // No socket is attached in tests; the listeners still let a test drive the router directly
+        // through handleGatewayDispatch.
+        initGatewaySocketListeners()
         initialized.onNext(true)
     }
 
@@ -569,8 +571,14 @@ class StoreStream private constructor(
         )
     }
 
-    /** Batched variant: the coalesced list is replayed one value at a time to [action]. */
-    private fun <T> dispatchSubscribe(source: Batched<T>, name: String, action: (T) -> Unit) =
+    /**
+     * Batched variant: the coalesced list is replayed one value at a time to [action].
+     *
+     * Unused until the voice stores land — `gatewayConnection.voiceStateUpdate` is the only batched
+     * subject, and its consumer is TODO(StoreVoiceStates).
+     */
+    @Suppress("unused")
+    private fun <T> dispatchSubscribeBatched(source: Batched<T>, name: String, action: (T) -> Unit) =
         dispatchSubscribe(source.observe(), name) { batch -> batch.forEach(action) }
 
     /**
@@ -602,21 +610,21 @@ class StoreStream private constructor(
      *   hashes only; the emoji/sticker caches are TODO(StoreEmoji, StoreStickers)
      */
     private fun initGatewaySocketListeners() {
-        val gateway = gatewayConnection
+        val events = gatewayConnection
 
-        dispatchSubscribe(gateway.getConnected(), "streamConnected", ::handleGatewayConnectedInternal)
-        dispatchSubscribe(gateway.getConnectionReady(), "streamReady", ::handleGatewayConnectionReadyInternal)
-        dispatchSubscribe(gateway.ready, "streamConnectionOpen", ::handleConnectionOpenInternal)
+        dispatchSubscribe(events.getConnected(), "streamConnected", ::handleGatewayConnectedInternal)
+        dispatchSubscribe(events.getConnectionReady(), "streamReady", ::handleGatewayConnectionReadyInternal)
+        dispatchSubscribe(events.ready, "streamConnectionOpen", ::handleConnectionOpenInternal)
 
         // Guilds
-        dispatchSubscribe(gateway.guildCreate, "streamGuildCreate", ::handleGuildCreateOrUpdateInternal)
-        dispatchSubscribe(gateway.guildUpdate, "streamGuildUpdate", ::handleGuildCreateOrUpdateInternal)
-        dispatchSubscribe(gateway.guildDeleted, "streamGuildRemove", ::handleGuildRemoveInternal)
-        dispatchSubscribe(gateway.guildEmojisUpdate, "streamEmojisUpdate", clientDataState::handleEmojiUpdate)
-        dispatchSubscribe(gateway.guildStickersUpdate, "streamStickersUpdate", clientDataState::handleStickersUpdate)
+        dispatchSubscribe(events.guildCreate, "streamGuildCreate", ::handleGuildCreateOrUpdateInternal)
+        dispatchSubscribe(events.guildUpdate, "streamGuildUpdate", ::handleGuildCreateOrUpdateInternal)
+        dispatchSubscribe(events.guildDeleted, "streamGuildRemove", ::handleGuildRemoveInternal)
+        dispatchSubscribe(events.guildEmojisUpdate, "streamEmojisUpdate", clientDataState::handleEmojiUpdate)
+        dispatchSubscribe(events.guildStickersUpdate, "streamStickersUpdate", clientDataState::handleStickersUpdate)
 
         // Guild roles
-        dispatchSubscribe(gateway.guildRoleCreate, "streamGuildRoleAdd") { event ->
+        dispatchSubscribe(events.guildRoleCreate, "streamGuildRoleAdd") { event ->
             event.role?.let { role ->
                 guilds.handleGuildRoleCreateOrUpdate(event.guildId, role)
                 channelMembers.handleGuildRoleCreateOrUpdate(event.guildId, role)
@@ -626,7 +634,7 @@ class StoreStream private constructor(
             clientDataState.handleRoleAddOrRemove(event.guildId, event.guildHashes)
             updateReadStateInputs()
         }
-        dispatchSubscribe(gateway.guildRoleUpdate, "streamGuildRoleUpdate") { event ->
+        dispatchSubscribe(events.guildRoleUpdate, "streamGuildRoleUpdate") { event ->
             event.role?.let { role ->
                 guilds.handleGuildRoleCreateOrUpdate(event.guildId, role)
                 channelMembers.handleGuildRoleCreateOrUpdate(event.guildId, role)
@@ -636,7 +644,7 @@ class StoreStream private constructor(
             clientDataState.handleRoleAddOrRemove(event.guildId, event.guildHashes)
             updateReadStateInputs()
         }
-        dispatchSubscribe(gateway.guildRoleDelete, "streamGuildRoleRemove") { event ->
+        dispatchSubscribe(events.guildRoleDelete, "streamGuildRoleRemove") { event ->
             guilds.handleGuildRoleRemove(event.guildId, event.roleId)
             permissions.handleGuildRolesChanged(event.guildId)
             channelsSelected.handlePermissionsChanged(event.guildId)
@@ -645,8 +653,8 @@ class StoreStream private constructor(
         }
 
         // Guild membership
-        dispatchSubscribe(gateway.guildMembersAdd, "streamGuildMemberAdd", ::handleGuildMemberAddInternal)
-        dispatchSubscribe(gateway.guildMemberRemove, "streamGuildMemberRemove") { event ->
+        dispatchSubscribe(events.guildMembersAdd, "streamGuildMemberAdd", ::handleGuildMemberAddInternal)
+        dispatchSubscribe(events.guildMemberRemove, "streamGuildMemberRemove") { event ->
             guilds.handleGuildMemberRemove(event.guildId, event.user.id)
             channelMembers.handleGuildMemberRemove(event.guildId, event.user.id)
             presences.handleGuildMemberRemove(event.user.id, event.guildId)
@@ -654,7 +662,7 @@ class StoreStream private constructor(
             channelsSelected.handlePermissionsChanged(event.guildId)
             updateReadStateInputs()
         }
-        dispatchSubscribe(gateway.guildMembersChunk, "streamGuildMemberChunk") { chunk ->
+        dispatchSubscribe(events.guildMembersChunk, "streamGuildMemberChunk") { chunk ->
             val members = chunk.members.orEmpty()
             users.handleGuildMembersChunk(members)
             guilds.handleGuildMembersChunk(chunk.guildId, members)
@@ -666,96 +674,96 @@ class StoreStream private constructor(
             members.forEach { member -> channelMembers.handleGuildMemberUpdate(chunk.guildId, member) }
             updateReadStateInputs()
         }
-        dispatchSubscribe(gateway.guildMemberListUpdate, "guildMemberListUpdate", channelMembers::handleGuildMemberListUpdate)
+        dispatchSubscribe(events.guildMemberListUpdate, "guildMemberListUpdate", channelMembers::handleGuildMemberListUpdate)
 
         // Channels and threads
-        dispatchSubscribe(gateway.channelCreateOrUpdate, "streamChannelCreateOrUpdate", ::handleChannelCreateOrUpdateInternal)
-        dispatchSubscribe(gateway.channelDeleted, "streamChannelDelete", ::handleChannelDeleteInternal)
-        dispatchSubscribe(gateway.channelUnreadUpdate, "streamChannelUnreadUpdate") { update ->
+        dispatchSubscribe(events.channelCreateOrUpdate, "streamChannelCreateOrUpdate", ::handleChannelCreateOrUpdateInternal)
+        dispatchSubscribe(events.channelDeleted, "streamChannelDelete", ::handleChannelDeleteInternal)
+        dispatchSubscribe(events.channelUnreadUpdate, "streamChannelUnreadUpdate") { update ->
             readStates.handleChannelUnreadUpdate(update.channelReadStates)
         }
-        dispatchSubscribe(gateway.channelRecipientAdd, "streamGroupDMRecipientAdd") { recipient ->
+        dispatchSubscribe(events.channelRecipientAdd, "streamGroupDMRecipientAdd") { recipient ->
             users.handleUserUpdated(recipient.user)
             channels.handleGroupDMRecipient(recipient.channelId, recipient.user, recipient.nick, added = true)
         }
-        dispatchSubscribe(gateway.channelRecipientRemove, "streamGroupDMRecipientRemove") { recipient ->
+        dispatchSubscribe(events.channelRecipientRemove, "streamGroupDMRecipientRemove") { recipient ->
             channels.handleGroupDMRecipient(recipient.channelId, recipient.user, recipient.nick, added = false)
         }
-        dispatchSubscribe(gateway.threadCreateOrUpdate, "streamThreadCreateOrUpdate", ::handleChannelCreateOrUpdateInternal)
-        dispatchSubscribe(gateway.threadDelete, "streamThreadDelete", ::handleChannelDeleteInternal)
-        dispatchSubscribe(gateway.threadListSync, "streamThreadListSync") { sync ->
+        dispatchSubscribe(events.threadCreateOrUpdate, "streamThreadCreateOrUpdate", ::handleChannelCreateOrUpdateInternal)
+        dispatchSubscribe(events.threadDelete, "streamThreadDelete", ::handleChannelDeleteInternal)
+        dispatchSubscribe(events.threadListSync, "streamThreadListSync") { sync ->
             channels.handleThreadListSync(sync.guildId, sync.threads)
             permissions.recomputeAllPermissions()
             updateReadStateInputs()
         }
 
         // Users, relationships and presence
-        dispatchSubscribe(gateway.userUpdate, "streamUserUpdated") { user ->
+        dispatchSubscribe(events.userUpdate, "streamUserUpdated") { user ->
             users.handleUserUpdated(user)
             userProfiles.updateUser(user)
         }
-        dispatchSubscribe(gateway.userNoteUpdate, "handleUserNoteUpdated", userNotes::handleNoteUpdate)
-        dispatchSubscribe(gateway.relationshipAdd, "streamRelationshipAdd") { relationship ->
+        dispatchSubscribe(events.userNoteUpdate, "handleUserNoteUpdated", userNotes::handleNoteUpdate)
+        dispatchSubscribe(events.relationshipAdd, "streamRelationshipAdd") { relationship ->
             users.handleUserRelationshipAdd(relationship)
             userRelationships.handleRelationshipAdd(relationship)
         }
-        dispatchSubscribe(gateway.relationshipRemove, "streamRelationshipRemove", userRelationships::handleRelationshipRemove)
-        dispatchSubscribe(gateway.friendSuggestionCreate, "friendSuggestionCreate", friendSuggestions::handleFriendSuggestionCreate)
-        dispatchSubscribe(gateway.friendSuggestionDelete, "friendSuggestionDelete", friendSuggestions::handleFriendSuggestionDelete)
-        dispatchSubscribe(gateway.presenceUpdate, "streamPresenceUpdate") { presence ->
+        dispatchSubscribe(events.relationshipRemove, "streamRelationshipRemove", userRelationships::handleRelationshipRemove)
+        dispatchSubscribe(events.friendSuggestionCreate, "friendSuggestionCreate", friendSuggestions::handleFriendSuggestionCreate)
+        dispatchSubscribe(events.friendSuggestionDelete, "friendSuggestionDelete", friendSuggestions::handleFriendSuggestionDelete)
+        dispatchSubscribe(events.presenceUpdate, "streamPresenceUpdate") { presence ->
             users.handlePresenceUpdate(presence)
             presences.handlePresenceUpdate(presence.guildId ?: 0L, presence)
         }
-        dispatchSubscribe(gateway.presenceReplace, "streamPresenceReplace") { replaced ->
+        dispatchSubscribe(events.presenceReplace, "streamPresenceReplace") { replaced ->
             replaced.forEach(users::handlePresenceUpdate)
             presences.handlePresenceReplace(replaced)
         }
-        dispatchSubscribe(gateway.sessionsReplace, "streamSessionsReplace", presences::handleSessionsReplace)
-        dispatchSubscribe(gateway.typingStart, "streamTypingStart") { typing ->
+        dispatchSubscribe(events.sessionsReplace, "streamSessionsReplace", presences::handleSessionsReplace)
+        dispatchSubscribe(events.typingStart, "streamTypingStart") { typing ->
             typing.member?.let { member -> guilds.handleGuildMember(member, typing.guildId) }
             usersTyping.handleTypingStart(typing)
         }
 
         // Messages
-        dispatchSubscribe(gateway.messageCreate, "streamMessageCreate", ::handleMessageCreateInternal)
-        dispatchSubscribe(gateway.messageUpdate, "streamMessageUpdate") { message ->
+        dispatchSubscribe(events.messageCreate, "streamMessageCreate", ::handleMessageCreateInternal)
+        dispatchSubscribe(events.messageUpdate, "streamMessageUpdate") { message ->
             users.handleMessageCreateOrUpdate(DomainMessage(message))
             messages.handleMessageUpdate(message)
             pinnedMessages.handleMessageUpdate(message)
             messageState.handleMessageUpdate(message)
         }
-        dispatchSubscribe(gateway.messageDelete, "streamMessageDelete") { deleted ->
+        dispatchSubscribe(events.messageDelete, "streamMessageDelete") { deleted ->
             messages.handleMessageDelete(deleted)
             pinnedMessages.handleMessageDeleteBulk(deleted.channelId, deleted.messageIds.orEmpty())
             pendingReplies.handleMessageDelete(deleted)
             messageState.handleMessageDelete(deleted)
         }
-        dispatchSubscribe(gateway.messageAck, "streamMessageAck") { readState ->
+        dispatchSubscribe(events.messageAck, "streamMessageAck") { readState ->
             readStates.handleMessageAck(readState)
             clientDataState.handleMessageAck(readState)
         }
-        dispatchSubscribe(gateway.messageReactionAdd, "streamReactionAdd") { reaction ->
+        dispatchSubscribe(events.messageReactionAdd, "streamReactionAdd") { reaction ->
             messages.handleReaction(reaction, true, users.getMeInternal().id)
         }
-        dispatchSubscribe(gateway.messageReactionRemove, "streamReactionRemove") { reaction ->
+        dispatchSubscribe(events.messageReactionRemove, "streamReactionRemove") { reaction ->
             messages.handleReaction(reaction, false, users.getMeInternal().id)
         }
-        dispatchSubscribe(gateway.messageReactionRemoveAll, "streamMessageRemoveAll") { reaction ->
+        dispatchSubscribe(events.messageReactionRemoveAll, "streamMessageRemoveAll") { reaction ->
             messages.handleReactionRemoveAll(reaction.channelId, reaction.messageId)
         }
-        dispatchSubscribe(gateway.messageReactionRemoveEmoji, "streamMessageRemoveEmoji") { reaction ->
+        dispatchSubscribe(events.messageReactionRemoveEmoji, "streamMessageRemoveEmoji") { reaction ->
             messages.handleReactionRemoveEmoji(reaction.channelId, reaction.messageId, reaction.emoji)
         }
 
         // Settings
-        dispatchSubscribe(gateway.userSettingsUpdate, "streamUserSettingsUpdate") { settings ->
+        dispatchSubscribe(events.userSettingsUpdate, "streamUserSettingsUpdate") { settings ->
             userSettings.handleUserSettingsUpdate(settings)
             userSettingsSystem.handleUserSettingsUpdate(settings)
             presences.handleUserSettingsUpdate(settings)
             settings.guildFolders?.let { folders -> guildFolders = folders }
             updateSortedGuilds()
         }
-        dispatchSubscribe(gateway.userGuildSettingsUpdate, "streamGuildSettingUpdated") { settings ->
+        dispatchSubscribe(events.userGuildSettingsUpdate, "streamGuildSettingUpdated") { settings ->
             guildSettings.handleGuildSettingUpdated(listOf(settings))
             clientDataState.handleGuildSettingUpdated(settings)
             updateSortedGuilds()
@@ -763,9 +771,9 @@ class StoreStream private constructor(
         }
 
         // Stage instances
-        dispatchSubscribe(gateway.stageInstanceCreate, "stageInstanceCreate", stageInstances::handleStageInstanceCreate)
-        dispatchSubscribe(gateway.stageInstanceUpdate, "stageInstanceUpdate", stageInstances::handleStageInstanceUpdate)
-        dispatchSubscribe(gateway.stageInstanceDelete, "stageInstanceDelete", stageInstances::handleStageInstanceDelete)
+        dispatchSubscribe(events.stageInstanceCreate, "stageInstanceCreate", stageInstances::handleStageInstanceCreate)
+        dispatchSubscribe(events.stageInstanceUpdate, "stageInstanceUpdate", stageInstances::handleStageInstanceUpdate)
+        dispatchSubscribe(events.stageInstanceDelete, "stageInstanceDelete", stageInstances::handleStageInstanceDelete)
     }
 
     @StoreThread

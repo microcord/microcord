@@ -7,6 +7,7 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import com.discord.R
 import com.discord.models.guild.UserGuildMember
 import com.discord.models.user.CoreUser
+import com.discord.utilities.icon.IconUtils
 import com.discord.views.CutoutView
 import com.facebook.drawee.view.SimpleDraweeView
 
@@ -52,15 +53,17 @@ class UserSummaryView constructor(
             }
             val avatar = requireNotNull<SimpleDraweeView>(cutout.findViewById(R.id.avatar))
             val member = members[index]
-            val url = avatarUrl(member.user, member.guildMember, mediaProxySize(avatarSizePx))
+            val url = avatarUrl(
+                member.user,
+                member.guildMember,
+                IconUtils.getMediaProxySize(avatarSizePx),
+                animate = false,
+            )
+            // Recycled rows are rebound constantly; only re-issue the request when the
+            // avatar actually differs.
             if (avatar.tag != url) {
                 avatar.tag = url
-                setAvatar(
-                    avatar,
-                    url,
-                    true,
-                    resources.getDimensionPixelSize(R.dimen.avatar_size_profile_small),
-                )
+                IconUtils.setIcon(avatar, url, R.dimen.avatar_size_reply)
             }
         }
     }

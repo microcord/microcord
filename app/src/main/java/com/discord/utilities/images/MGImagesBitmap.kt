@@ -80,7 +80,7 @@ object MGImagesBitmap {
         }
         val dataSource = Fresco.getImagePipeline()
             .fetchDecodedImage(requestBuilder.build(), null)
-        return Observable.unsafeCreate { subscriber ->
+        return Observable.unsafeCreate<Bitmap> { subscriber ->
             dataSource.subscribe(
                 object : BaseBitmapDataSubscriber() {
                     override fun onNewResultImpl(bitmap: Bitmap?) {

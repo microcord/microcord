@@ -85,7 +85,7 @@ class ChannelMemberListStateTest {
         dispatcher.schedule { store.handleViewportChanged(1, 10, 150..250) }
 
         assertEquals(2, payloads.size)
-        assertEquals(listOf(0..99, 100..199, 200..299), store.get(1)[10])
+        assertEquals(listOf(0 until 100, 100 until 200, 200 until 300), store.get(1)[10])
         assertEquals(listOf(listOf(0, 99), listOf(100, 199), listOf(200, 299)), payloads.last().channels[10])
 
         dispatcher.schedule { store.handlePanelClosed(1, 10) }

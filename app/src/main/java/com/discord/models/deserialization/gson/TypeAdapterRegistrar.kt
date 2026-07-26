@@ -4,8 +4,24 @@ import com.discord.api.activity.ActivityPlatform
 import com.discord.api.activity.ActivityPlatformTypeAdapter
 import com.discord.api.activity.ActivityType
 import com.discord.api.activity.ActivityTypeTypeAdapter
+import com.discord.api.application.ApplicationType
+import com.discord.api.application.ApplicationTypeAdapter
+import com.discord.api.auth.OAuthScope
+import com.discord.api.auth.OAuthScopeTypeAdapter
 import com.discord.api.auth.RequiredAction
 import com.discord.api.auth.RequiredActionTypeAdapter
+import com.discord.api.botuikit.ButtonStyle
+import com.discord.api.botuikit.ButtonStyleTypeAdapter
+import com.discord.api.botuikit.ComponentType
+import com.discord.api.botuikit.ComponentTypeTypeAdapter
+import com.discord.api.botuikit.TextStyle
+import com.discord.api.botuikit.TextStyleTypeAdapter
+import com.discord.api.commands.ApplicationCommandPermissionType
+import com.discord.api.commands.ApplicationCommandPermissionTypeTypeAdapter
+import com.discord.api.commands.ApplicationCommandType
+import com.discord.api.commands.CommandTypeAdapter
+import com.discord.api.friendsuggestions.AllowedInSuggestionsType
+import com.discord.api.friendsuggestions.AllowedInSuggestionsTypeAdapter
 import com.discord.api.friendsuggestions.FriendSuggestionReasonType
 import com.discord.api.friendsuggestions.FriendSuggestionReasonTypeAdapter
 import com.discord.api.guild.GuildExplicitContentFilter
@@ -18,10 +34,36 @@ import com.discord.api.guild.GuildVerificationLevel
 import com.discord.api.guild.GuildVerificationLevelTypeAdapter
 import com.discord.api.guildscheduledevent.GuildScheduledEventEntityType
 import com.discord.api.guildscheduledevent.GuildScheduledEventEntityTypeTypeAdapter
+import com.discord.api.guildjoinrequest.ApplicationStatus
+import com.discord.api.guildjoinrequest.ApplicationStatusTypeAdapter
+import com.discord.api.guildrolesubscription.GuildRoleSubscriptionBenefitType
+import com.discord.api.guildrolesubscription.GuildRoleSubscriptionBenefitTypeAdapter
+import com.discord.api.guildrolesubscription.PayoutGroupStatus
+import com.discord.api.guildrolesubscription.PayoutGroupStatusTypeAdapter
+import com.discord.api.guildrolesubscription.PayoutGroupType
+import com.discord.api.guildrolesubscription.PayoutGroupTypeAdapter
+import com.discord.api.guildrolesubscription.PayoutStatus
+import com.discord.api.guildrolesubscription.PayoutStatusAdapter
 import com.discord.api.guildscheduledevent.GuildScheduledEventStatus
 import com.discord.api.guildscheduledevent.GuildScheduledEventStatusTypeAdapter
+import com.discord.api.localizedstring.LocalizedString
+import com.discord.api.localizedstring.LocalizedStringTypeAdapter
+import com.discord.api.message.activity.MessageActivityType
+import com.discord.api.message.activity.MessageActivityTypeTypeAdapter
+import com.discord.api.message.embed.EmbedType
+import com.discord.api.message.embed.EmbedTypeTypeAdapter
 import com.discord.api.premium.PremiumTier
 import com.discord.api.premium.PremiumTierTypeAdapter
+import com.discord.api.premium.PriceTierType
+import com.discord.api.premium.PriceTierTypeAdapter
+import com.discord.api.report.ReportNodeBottomButton
+import com.discord.api.report.ReportNodeBottomButtonTypeAdapter
+import com.discord.api.report.ReportNodeChild
+import com.discord.api.report.ReportNodeChildTypeAdapter
+import com.discord.api.report.ReportNodeElementData
+import com.discord.api.report.ReportNodeElementDataTypeAdapter
+import com.discord.api.science.AnalyticsSchemaTypeAdapter
+import com.discord.api.science.Science
 import com.discord.api.stageinstance.StageInstancePrivacyLevel
 import com.discord.api.stageinstance.StageInstancePrivacyLevelTypeAdapter
 import com.discord.api.sticker.StickerFormatType
@@ -60,3 +102,24 @@ fun GsonBuilder.registerDiscordApiTypeAdapters(): GsonBuilder =
         .registerTypeAdapter(GuildMaxVideoChannelUsers::class.java, GuildMaxVideoChannelUsersTypeAdapter())
         .registerTypeAdapter(GuildScheduledEventStatus::class.java, GuildScheduledEventStatusTypeAdapter())
         .registerTypeAdapter(GuildScheduledEventEntityType::class.java, GuildScheduledEventEntityTypeTypeAdapter())
+        .registerTypeAdapter(AllowedInSuggestionsType::class.java, AllowedInSuggestionsTypeAdapter())
+        .registerTypeAdapter(ApplicationCommandPermissionType::class.java, ApplicationCommandPermissionTypeTypeAdapter())
+        .registerTypeAdapter(ApplicationCommandType::class.java, CommandTypeAdapter())
+        .registerTypeAdapter(ApplicationStatus::class.java, ApplicationStatusTypeAdapter())
+        .registerTypeAdapter(ApplicationType::class.java, ApplicationTypeAdapter())
+        .registerTypeAdapter(ButtonStyle::class.java, ButtonStyleTypeAdapter())
+        .registerTypeAdapter(ComponentType::class.java, ComponentTypeTypeAdapter())
+        .registerTypeAdapter(TextStyle::class.java, TextStyleTypeAdapter())
+        .registerTypeAdapter(EmbedType::class.java, EmbedTypeTypeAdapter())
+        .registerTypeAdapter(GuildRoleSubscriptionBenefitType::class.java, GuildRoleSubscriptionBenefitTypeAdapter())
+        .registerTypeAdapter(LocalizedString::class.java, LocalizedStringTypeAdapter())
+        .registerTypeAdapter(MessageActivityType::class.java, MessageActivityTypeTypeAdapter())
+        .registerTypeAdapter(OAuthScope::class.java, OAuthScopeTypeAdapter())
+        .registerTypeAdapter(PayoutGroupStatus::class.java, PayoutGroupStatusTypeAdapter())
+        .registerTypeAdapter(PayoutGroupType::class.java, PayoutGroupTypeAdapter())
+        .registerTypeAdapter(PayoutStatus::class.java, PayoutStatusAdapter())
+        .registerTypeAdapter(PriceTierType::class.java, PriceTierTypeAdapter())
+        .registerTypeAdapter(ReportNodeBottomButton::class.java, ReportNodeBottomButtonTypeAdapter())
+        .registerTypeAdapter(ReportNodeChild::class.java, ReportNodeChildTypeAdapter())
+        .registerTypeAdapter(ReportNodeElementData::class.java, ReportNodeElementDataTypeAdapter())
+        .registerTypeAdapter(Science.Event.SchemaObject::class.java, AnalyticsSchemaTypeAdapter())

@@ -1,6 +1,7 @@
 package com.discord.stores
 
 import com.discord.api.channel.Channel
+import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelReadState
@@ -116,9 +117,12 @@ class StoreGuildSettingsReadStatesTest {
                     30L to setting(30, muted = true),
                 ),
                 recentMessageIds = channels.associate { it.id to newMessage },
-                activeJoinedThreads = mapOf(12L to StoreReadStates.ActiveJoinedThread(channels[2], false)),
                 channelGuildIds = mapOf(12L to 20L),
             ))
+            store.updateActiveThreads(
+                activeJoinedThreads = mapOf(12L to activeJoinedThread(channels[2])),
+                activeForumThreads = emptyMap(),
+            )
         }
         scheduler.triggerActions()
 
@@ -127,6 +131,9 @@ class StoreGuildSettingsReadStatesTest {
         assertEquals(mapOf(10L to 2, 11L to 3, 12L to 4, 13L to 5), store.getMentionCountsByChannelSnapshot())
         assertEquals(mapOf(20L to 9, 30L to 5), store.getMentionCountsByGuildSnapshot())
     }
+
+    private fun activeJoinedThread(channel: Channel, muted: Boolean = false) =
+        StoreThreadsActiveJoined.ActiveJoinedThread(channel, UtcDateTime(0), muted)
 
     private fun settingsPayload(partial: Boolean, vararg settings: ModelNotificationSettings) = ModelPayload().also {
         it.userGuildSettings = ModelPayload.VersionedUserGuildSettings().also { versioned ->

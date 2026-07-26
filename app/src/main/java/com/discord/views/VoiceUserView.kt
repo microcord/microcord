@@ -1,23 +1,25 @@
 package com.discord.views
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.animation.ObjectAnimator
 import android.content.Context
 import android.graphics.Bitmap
-import android.net.Uri
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
+import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.annotation.DimenRes
 import androidx.annotation.MainThread
 import com.discord.R
 import com.discord.stores.StoreVoiceParticipants
+import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.view.extensions.fadeBy
 import com.discord.views.user.avatarUrl
-import com.facebook.drawee.backends.pipeline.Fresco
 import com.facebook.drawee.view.SimpleDraweeView
 import com.facebook.imagepipeline.request.BasePostprocessor
-import com.facebook.imagepipeline.request.ImageRequestBuilder
 
 internal enum class VoiceDisplayState { CONNECTED, SPEAKING, MUTED, RINGING, DISCONNECTED }
 
@@ -43,10 +45,29 @@ class VoiceUserView @JvmOverloads constructor(
     private var fadeWhenDisconnected = false
     private var animateAvatarWhenRinging = false
     private var bitmapListener: (Bitmap, String?) -> Unit = { _, _ -> }
+    /**
+     * Pulses the whole tile while the user is being rung. Each run fades out and
+     * back once; it re-arms itself so the pulse continues for as long as the call
+     * is ringing.
+     */
     private val ringAnimator = ObjectAnimator.ofFloat(this, View.ALPHA, 1f, 0.1f).apply {
-        duration = 1_000
+        duration = RING_PULSE_DURATION_MS
         repeatMode = ObjectAnimator.REVERSE
         repeatCount = 1
+        interpolator = AccelerateDecelerateInterpolator()
+        addListener(object : AnimatorListenerAdapter() {
+            private var cancelled = false
+
+            override fun onAnimationCancel(animation: Animator) {
+                cancelled = true
+            }
+
+            override fun onAnimationEnd(animation: Animator) {
+                val wasCancelled = cancelled
+                cancelled = false
+                if (!wasCancelled && isRinging()) animation.start()
+            }
+        })
     }
 
     init {
@@ -74,30 +95,34 @@ class VoiceUserView @JvmOverloads constructor(
         }
     }
 
+    /**
+     * The tile sizes itself from its layout, so the avatar is requested unrestricted
+     * unless a caller asks for a specific dimension; pinning it to a small bitmap
+     * makes large tiles blurry.
+     */
     @MainThread
     fun setVoiceUser(voiceUser: StoreVoiceParticipants.VoiceUser) =
-        setVoiceUser(voiceUser, R.dimen.avatar_size_standard)
+        setVoiceUser(voiceUser, R.dimen.avatar_size_unrestricted)
 
     @MainThread
     fun setVoiceUser(voiceUser: StoreVoiceParticipants.VoiceUser, @DimenRes sizeDimenRes: Int) {
         if (this.voiceUser == voiceUser) return
         this.voiceUser = voiceUser
-        val requestedSize = resources.getDimensionPixelSize(sizeDimenRes).takeIf { it > 0 }
-        val url = avatarUrl(voiceUser.user, voiceUser.guildMember, requestedSize)
+        val requestedSize = resources.getDimensionPixelSize(sizeDimenRes)
+            .takeIf { it > 0 }
+            ?.let(IconUtils::getMediaProxySize)
+        val url = avatarUrl(voiceUser.user, voiceUser.guildMember, requestedSize, animate = false)
         if (url != previousAvatarUrl) {
             previousAvatarUrl = url
-            val request = ImageRequestBuilder.newBuilderWithSource(Uri.parse(url)).apply {
-                postprocessor = object : BasePostprocessor() {
+            IconUtils.setIcon(avatar, url, sizeDimenRes, transform = { builder ->
+                // The tile tints its background from the avatar, so the decoded bitmap
+                // is handed back to whoever asked for it.
+                builder.postprocessor = object : BasePostprocessor() {
                     override fun process(bitmap: Bitmap) {
                         bitmapListener(bitmap.copy(Bitmap.Config.ARGB_8888, false), url)
                     }
                 }
-            }.build()
-            avatar.controller = Fresco.newDraweeControllerBuilder()
-                .setOldController(avatar.controller)
-                .setImageRequest(request)
-                .setAutoPlayAnimations(true)
-                .build()
+            })
         }
         nameDisplay.text = voiceUser.displayName
         setVoiceState(voiceDisplayState(voiceUser))
@@ -143,17 +168,12 @@ class VoiceUserView @JvmOverloads constructor(
     override fun setSelected(selected: Boolean) {
         val changed = isSelected != selected
         super.setSelected(selected)
-        if (!changed) return
-        nameDisplay.animate().cancel()
-        if (selected) {
-            nameDisplay.visibility = View.VISIBLE
-            nameDisplay.animate().alpha(1f).setDuration(200).start()
-        } else {
-            nameDisplay.animate().alpha(0f).setDuration(200).withEndAction {
-                nameDisplay.visibility = View.GONE
-            }.start()
-        }
+        // Only the name overlay reacts to selection, and it cross-fades rather than
+        // popping in and out.
+        if (changed) nameDisplay.fadeBy(isSelected)
     }
+
+    private fun isRinging() = state == VoiceDisplayState.RINGING && animateAvatarWhenRinging
 
     private fun setVoiceState(newState: VoiceDisplayState) {
         if (state == newState) return
@@ -168,7 +188,7 @@ class VoiceUserView @JvmOverloads constructor(
         val alpha = if (newState == VoiceDisplayState.DISCONNECTED && fadeWhenDisconnected) 0.3f else 1f
         avatar.alpha = alpha
         this.alpha = alpha
-        if (newState == VoiceDisplayState.RINGING && animateAvatarWhenRinging) {
+        if (isRinging()) {
             if (!ringAnimator.isRunning) ringAnimator.start()
         } else if (ringAnimator.isRunning) {
             ringAnimator.cancel()
@@ -178,5 +198,9 @@ class VoiceUserView @JvmOverloads constructor(
 
     private fun View.resize(size: Int) {
         layoutParams = layoutParams.apply { width = size; height = size }
+    }
+
+    private companion object {
+        const val RING_PULSE_DURATION_MS = 1_000L
     }
 }

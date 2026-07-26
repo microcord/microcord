@@ -126,9 +126,9 @@ object PermissionUtils {
         roleOverwrite: PermissionOverwrite?,
     ): Boolean {
         if (role == null) return false
-        val permissions = role.permissions
-        val allowed = (permissions and (roleOverwrite?.deny ?: 0L)).inv() and permissions or
-            (roleOverwrite?.allow ?: 0L)
+        val deny = roleOverwrite?.deny ?: Permission.NONE
+        val allow = roleOverwrite?.allow ?: Permission.NONE
+        val allowed = (role.permissions and deny.inv()) or allow
         return (allowed and permission) == permission
     }
 

@@ -11,11 +11,15 @@ import android.util.Patterns
 import androidx.core.content.ContextCompat
 import com.discord.api.auth.RegisterResponse
 import com.discord.api.auth.RequiredAction
+import com.discord.api.channel.Channel
 import com.discord.models.authentication.AuthState
 import com.discord.models.domain.auth.ModelLoginResult
+import com.discord.models.user.MeUser
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.authentication.AuthStateCache
+import com.discord.utilities.persister.Persister
+import com.discord.utilities.time.TimeUtils
 import java.util.concurrent.TimeUnit
 import retrofit2.HttpException
 import retrofit2.Response
@@ -29,7 +33,7 @@ import rx.subjects.SerializedSubject
 
 class StoreAuthentication(
     private val dispatcher: Dispatcher,
-    preferences: SharedPreferences,
+    private val preferences: SharedPreferences,
     private val sessionDurablePreferences: SharedPreferences,
     private val onAuthStateChanged: (AuthState?) -> Unit = {},
     private val onLoginResult: (ModelLoginResult) -> Unit = {},
@@ -37,12 +41,24 @@ class StoreAuthentication(
     private val pushTokenProvider: () -> String? = { null },
     private val timeoutScheduler: Scheduler = Schedulers.computation(),
     private val logoutTimeoutMillis: Long = 10_000L,
+    /** `StoreUser.observeMe(true)` — must emit the empty user too, or the gate never evaluates. */
+    private val observeMe: () -> Observable<MeUser> = { Observable.never() },
+    /** `StoreChannelsSelected.observeSelectedChannel()`. */
+    private val observeSelectedChannel: () -> Observable<Channel?> = { Observable.never() },
 ) {
     private var _isConsentRequired: Boolean? = null
     private val ageGateError = BehaviorSubject.create<String?>()
     private var authState: AuthState? = null
     private val authStateCache = AuthStateCache(preferences)
-    private val authStateSubject = SerializedSubject<AuthState?, AuthState?>(BehaviorSubject.create())
+    /**
+     * Seeded with `null` so a subscriber attaching before [init] immediately learns "logged out"
+     * rather than hanging. Every routing decision downstream is driven by this subject, so an
+     * unseeded one leaves the app on the splash screen until the first dispatch lands.
+     */
+    private val authStateSubject: SerializedSubject<AuthState?, AuthState?> =
+        // The cast is load-bearing: a bare `null` here resolves to the inherited
+        // `Observable.create(OnSubscribe)` overload instead of `BehaviorSubject.create(default)`.
+        SerializedSubject(BehaviorSubject.create(null as AuthState?))
     private var fingerprint: String? = null
     private val fingerprintSubject = SerializedSubject<String, String>(BehaviorSubject.create())
     private var isConsentRequiredSubscription: Subscription? = null
@@ -80,7 +96,12 @@ class StoreAuthentication(
             requireApi().postAuthLogin(
                 RestAPIParams.AuthLogin(login, password, captchaKey, captchaRqtoken, undelete, loginSource),
             ).body()
-        }.doOnNext(::handleLoginResult)
+        }.doOnNext { loginResult ->
+            // An MFA challenge is a 200 carrying a ticket and no token. Dispatching it would
+            // publish a null-token auth state and fire the "logged in" event; the caller must be
+            // allowed to present the code screen and call [authMFA] instead.
+            if (!loginResult.mfa) handleLoginResult(loginResult)
+        }
     }
 
     fun register(
@@ -171,6 +192,14 @@ class StoreAuthentication(
     internal fun handleAuthStateInternal(state: AuthState?) {
         authState = state
         authStateCache.cacheAuthState(state)
+        if (state == null) {
+            // Logout must leave nothing of the previous account behind: every Kryo-backed
+            // Persister value and the whole preference store go, not just the token. Without this
+            // the next account inherits the previous one's guild order, folders, read states and
+            // settings.
+            Persister.reset()
+            preferences.edit().clear().apply()
+        }
     }
 
     fun handlePreLogout() = resetIsConsentRequired()
@@ -187,6 +216,33 @@ class StoreAuthentication(
     fun observeAgeGateError(): Observable<String?> = ageGateError.distinctUntilChanged()
     fun getOAuthUriObservable(): Observable<Uri> = oauthUriSubject.distinctUntilChanged()
     fun setOAuthUriSubject(uri: Uri) = oauthUriSubject.onNext(uri)
+
+    /**
+     * Which age gate, if any, must be presented before the user can continue.
+     *
+     * Two distinct gates share one source because both are answered by the same "enter your date
+     * of birth" screen:
+     *
+     * - **Register gate** — the account has no birthday on file *and* was created after Discord
+     *   started requiring one. Older accounts are grandfathered, which is why the snowflake
+     *   timestamp is compared rather than just checking for a missing birthday.
+     * - **NSFW gate** — the account has no birthday and the user opened an age-restricted channel.
+     *   Suppressed while an age-gate error is outstanding so a rejected submission does not
+     *   immediately re-prompt.
+     */
+    fun getShouldShowAgeGate(): Observable<StoreNavigation.AgeGate?> = Observable.combineLatest(
+        observeMe(),
+        observeAgeGateError(),
+        observeSelectedChannel(),
+    ) { meUser, ageGateError, channel ->
+        when {
+            !meUser.hasBirthday && TimeUtils.parseSnowflake(meUser.id) > BIRTHDAY_REQUIRED_AFTER_MS ->
+                StoreNavigation.AgeGate.REGISTER_AGE_GATE
+            ageGateError == null && !meUser.hasBirthday && channel?.nsfw == true ->
+                StoreNavigation.AgeGate.NSFW_CHANNEL_AGE_GATE
+            else -> null
+        }
+    }.distinctUntilChanged()
 
     fun setAgeGateError(error: String?) = dispatcher.schedule { handleAgeGateError(error) }
 
@@ -264,5 +320,11 @@ class StoreAuthentication(
         const val CACHE_KEY_LOGIN = "STORE_AUTHED_LOGIN"
         private const val RNA_CACHE_NAME = "CacheStore"
         private const val RNA_TOKEN_KEY = "token"
+
+        /**
+         * Accounts created after this instant must have a date of birth on file. Accounts older
+         * than it are grandfathered and are only age-gated when they open NSFW content.
+         */
+        private val BIRTHDAY_REQUIRED_AFTER_MS = TimeUtils.parseUTCDate("2021-02-05T12:00:00+0000")
     }
 }

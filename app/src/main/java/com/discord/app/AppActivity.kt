@@ -29,6 +29,7 @@ import com.discord.stores.IntentRouteResult
 import com.discord.utilities.intent.AppIntentParser
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
+import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.views.ToolbarTitleLayout
 import com.discord.widgets.tabs.WidgetTabsHost
 import com.discord.widgets.auth.AuthAction
@@ -81,6 +82,20 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
 
     /** Priority ordered back-press handlers contributed by the currently bound screens. */
     val backPressHandlers = BackPressHandlerRegistry()
+
+    /**
+     * The activity's own back handling, registered *without* a [androidx.lifecycle.LifecycleOwner].
+     *
+     * That is deliberate. A lifecycle-bound callback only enters the dispatcher's stack when its
+     * owner starts, and from API 29 the activity's own `ON_START` is delivered *after* its
+     * fragments', which puts the activity on top of the stack and lets it swallow every back press
+     * before any fragment sees it. Registering eagerly in [onCreate] pins this callback to the
+     * bottom of the stack instead, so screen-owned callbacks and the [backPressHandlers] registry
+     * always get the first look and this is the true fallback.
+     */
+    private val backPressedCallback = object : OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() = dispatchBackPressed()
+    }
 
     private val newIntentListeners = LinkedHashMap<Int, (Intent) -> Unit>()
 
@@ -142,11 +157,7 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
         try {
             binding = ActivityAppBinding.inflate(layoutInflater)
             setContentView(binding.root)
-            onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-                override fun handleOnBackPressed() {
-                    dispatchBackPressed()
-                }
-            })
+            onBackPressedDispatcher.addCallback(backPressedCallback)
             pendingLaunchIntent = savedInstanceState?.pendingIntent() ?: intent
             mostRecentIntent = intent ?: Intent()
             consumeIntent(requireNotNull(pendingLaunchIntent))
@@ -226,10 +237,26 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
 
     // region back press and new intents
 
+    /**
+     * Offers the press to every registered screen handler, highest precedence first, and falls back
+     * to the platform behaviour when none of them consumed it.
+     *
+     * "Leave the app" is *not* part of this fallback: the reference lets the screen decide, and
+     * `WidgetHome` is the screen that calls `moveTaskToBack` when the left panel is already open.
+     */
     private fun dispatchBackPressed() {
         if (backPressHandlers.dispatchBackPressed() || isFinishing) return
-        if (supportFragmentManager.backStackEntryCount > 0) supportFragmentManager.popBackStack()
-        else moveTaskToBack(true)
+        // The reference swallows exactly these two around its `super.onBackPressed()`: a fragment
+        // manager whose state was already saved throws IllegalStateException, and a transaction
+        // against a torn-down host throws IllegalArgumentException. Neither should crash the app.
+        try {
+            if (supportFragmentManager.backStackEntryCount > 0) supportFragmentManager.popBackStack()
+            else finish()
+        } catch (e: IllegalArgumentException) {
+            AppLog.d("Back press could not be completed", e)
+        } catch (e: IllegalStateException) {
+            AppLog.d("Back press could not be completed", e)
+        }
     }
 
     /** Registers a listener, keyed by the owning fragment id, for intents delivered while resumed. */

@@ -3,13 +3,13 @@ package com.discord.app
 import android.Manifest
 import android.os.Build
 import android.os.SystemClock
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.MainThread
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import com.discord.R
+import com.discord.utilities.view.ToastManager
 
 /**
  * Activity-scoped implementation of [AppPermissionsRequests].
@@ -106,8 +106,10 @@ class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRe
         ContextCompat.checkSelfPermission(activity, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }
 
+    private val toastManager = ToastManager()
+
     private fun toast(@StringRes messageResId: Int) {
-        Toast.makeText(activity, messageResId, Toast.LENGTH_SHORT).show()
+        toastManager.show(activity, messageResId)
     }
 
     private companion object {

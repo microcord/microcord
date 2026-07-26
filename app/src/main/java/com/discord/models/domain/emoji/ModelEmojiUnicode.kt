@@ -6,16 +6,16 @@ import android.os.Parcel
 import android.os.Parcelable
 
 class ModelEmojiUnicode(
-    val names: List<String> = emptyList(),
+    override val names: List<String> = emptyList(),
     val surrogates: String = "",
     val hasDiversity: Boolean = false,
     val hasMultiDiversity: Boolean = false,
     val hasDiversityParent: Boolean = false,
     val hasMultiDiversityParent: Boolean = false,
     val diversityChildren: List<ModelEmojiUnicode>? = null,
-) : Parcelable {
+) : Emoji {
     val codePoints: String by lazy { surrogates.toCodePoints() }
-    val firstName: String get() = names.first()
+    override val firstName: String get() = names.first()
     val asDiverse: List<ModelEmojiUnicode> get() = diversityChildren.orEmpty()
 
     constructor(parcel: Parcel) : this(
@@ -28,16 +28,19 @@ class ModelEmojiUnicode(
         parcel.createTypedArrayList(CREATOR),
     )
 
-    fun getCommand(name: String? = null) = ":${name ?: firstName}:"
-    fun getImageUri(allowAnimated: Boolean, imageSize: Int, context: Context) = getImageUri(codePoints, context)
-    fun getChatInputText() = getCommand()
-    fun getMessageContentReplacement() = surrogates
-    fun getReactionKey() = surrogates
-    fun getUniqueId() = surrogates
-    fun isAvailable() = true
-    fun isUsable() = true
-    fun requiresColons() = true
-    fun getRegex(name: String? = null) = Regex("([^\\\\]|^):${Regex.escape(name ?: firstName)}:").toPattern()
+    override fun getCommand(name: String?) = ":${name ?: firstName}:"
+    override fun getImageUri(allowAnimated: Boolean, imageSize: Int, context: Context) =
+        getImageUri(codePoints, context)
+
+    override fun getChatInputText() = getCommand()
+    override fun getMessageContentReplacement() = surrogates
+    override fun getReactionKey() = surrogates
+    override fun getUniqueId() = surrogates
+    override fun isAvailable() = true
+    override fun isUsable() = true
+    override fun requiresColons() = true
+    override fun getRegex(name: String?) =
+        Regex("([^\\\\]|^):${Regex.escape(name ?: firstName)}:").toPattern()
 
     override fun writeToParcel(parcel: Parcel, flags: Int) {
         parcel.writeStringList(names)

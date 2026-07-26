@@ -9,13 +9,15 @@ import com.discord.api.presence.ClientStatuses
 import com.discord.api.presence.Presence as ApiPresence
 import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelCustomStatusSetting
-import com.discord.models.domain.ModelMuteConfig
 import com.discord.models.domain.ModelSession
 import com.discord.models.domain.ModelUserSettings
 import com.discord.models.presence.Presence
 import com.discord.models.user.MeUser
 import com.discord.stores.updates.ObservationDeck
+import com.discord.utilities.presence.PresenceUtils
+import com.discord.utilities.presence.createCustomStatusActivity
 import com.discord.utilities.time.Clock
+import com.discord.utilities.time.TimeUtils
 import rx.Observable
 
 class StoreUserPresence(
@@ -23,7 +25,19 @@ class StoreUserPresence(
     val observationDeck: ObservationDeck,
     val stream: StoreStream? = null,
     private val publishLocalPresence: (Presence) -> Unit = {},
-    private val resolveCustomEmoji: (Long) -> ActivityEmoji? = { ActivityEmoji(it.toString(), null, false) },
+    /**
+     * `StoreEmoji.getCustomEmojiInternal` — resolves a custom-status emoji id to its name and
+     * animated flag. Returning null when the emoji is not in the emoji store is deliberate: the
+     * reference drops the emoji rather than publishing one with a missing name, because the name
+     * is what the CDN URL and the accessibility label are built from.
+     */
+    private val resolveCustomEmoji: (Long) -> ActivityEmoji? = { null },
+    /**
+     * `StoreEmoji.unicodeEmojiSurrogateMap` — maps a shortcode such as `smile` to its surrogate
+     * pair. Also null on miss: the stored value is a *name*, not the character, so passing it
+     * through unresolved would render the literal text "smile".
+     */
+    private val resolveUnicodeEmoji: (String) -> ActivityEmoji? = { null },
 ) : StoreV2() {
     data class TimestampedPresence(val presence: Presence, val timestamp: Long)
 
@@ -111,7 +125,10 @@ class StoreUserPresence(
         StoreThreadScheduler.assertCurrentThread()
         val existing = localPresence.activities.orEmpty().firstOrNull { it.type == activity?.type }
         if (!force && existing == activity) return
-        val activities = localPresence.activities.orEmpty().filterNot { it.type == type }.toMutableList()
+        // When replacing, the removal key is the *new* activity's type, not [type]; the two differ
+        // for callers that clear one slot while setting another. Only the first match is dropped,
+        // matching the reference's index-based removal.
+        val activities = removeActivityInList(activity?.type ?: type, localPresence.activities)
         activity?.let(activities::add)
         localPresence = Presence(localPresence.status, null, activities.filterNot { it.type == ActivityType.UNKNOWN })
         markChanged(LocalPresenceUpdateSource)
@@ -174,9 +191,9 @@ class StoreUserPresence(
         }
         val flattened = latest.copy(
             clientStatuses = latest.clientStatuses ?: offlineClientStatuses(),
-            activities = latest.activities?.sortedWith(
-                compareBy<Activity> { it.type.ordinal }.thenBy(::isRichPresence).thenBy { it.createdAt },
-            )?.reversed(),
+            activities = latest.activities
+                ?.sortedWith(PresenceUtils.ACTIVITY_COMPARATOR)
+                ?.reversed(),
         )
         if (presences.put(userId, flattened) != flattened) markChanged()
     }
@@ -189,46 +206,63 @@ class StoreUserPresence(
         val remoteActivities = sessions?.firstOrNull(ModelSession::active)?.activities
             ?: presences[userId]?.activities
             ?: localPresence.activities
-        val localActivities = settings?.customStatus?.let(::customStatusActivity)
-            ?.let { custom -> localPresence.activities.orEmpty().filterNot { it.type == ActivityType.CUSTOM_STATUS } + custom }
-            ?: if (settings?.customStatus != null) {
-                localPresence.activities.orEmpty().filterNot { it.type == ActivityType.CUSTOM_STATUS }
+        val customStatusSetting = settings?.customStatus
+        val localActivities = if (customStatusSetting == null) {
+            localPresence.activities
+        } else {
+            val custom = getCustomStatusActivityFromSetting(customStatusSetting)
+            if (custom != null) {
+                replaceActivityInList(custom, localPresence.activities)
             } else {
-                localPresence.activities
+                removeActivityInList(ActivityType.CUSTOM_STATUS, localPresence.activities)
             }
+        }
         if (localPresence.status != status || localPresence.activities != localActivities) {
             localPresence = Presence(status, null, localActivities)
             markChanged(LocalPresenceUpdateSource)
         }
         handlePresenceUpdate(ME_GUILD_ID, userId, status, null, remoteActivities)
-        if (!markLocal && settings?.customStatus == null) markUnchanged(LocalPresenceUpdateSource)
+        // The test is on the *resulting* presence, not the incoming settings: a settings payload
+        // carrying a status that resolved to null (expired, or an emoji we cannot resolve) leaves
+        // nothing worth republishing to the gateway.
+        val resolvedCustomStatus = with(PresenceUtils) { localPresence.customStatusActivity }
+        if (!markLocal && resolvedCustomStatus == null) markUnchanged(LocalPresenceUpdateSource)
     }
 
-    private fun customStatusActivity(setting: ModelCustomStatusSetting): Activity? {
+    /**
+     * Drops the first activity of [type]. Only the first, because a client may legitimately hold
+     * two activities of the same type (two games) and the reference replaces one at a time.
+     */
+    private fun removeActivityInList(type: ActivityType, oldActivities: List<Activity>?): MutableList<Activity> {
+        val activities = oldActivities?.toMutableList() ?: mutableListOf()
+        val index = activities.indexOfFirst { it.type == type }
+        if (index != -1) activities.removeAt(index)
+        return activities
+    }
+
+    private fun replaceActivityInList(newActivity: Activity, oldActivities: List<Activity>?): List<Activity> =
+        removeActivityInList(newActivity.type, oldActivities).apply { add(newActivity) }
+
+    /**
+     * @return the local `CUSTOM_STATUS` activity for [setting], or null when the status is
+     *   cleared or already expired.
+     *
+     * Expiry is evaluated here rather than by a timer so a status that lapsed while the process
+     * was dead is never republished on the next connect.
+     */
+    private fun getCustomStatusActivityFromSetting(setting: ModelCustomStatusSetting): Activity? {
         if (setting == ModelCustomStatusSetting.CLEAR) return null
-        if (setting.expiresAt?.let { ModelMuteConfig(it).endTimeMs ?: 0L }?.let { it <= clock.currentTimeMillis() } == true) return null
-        val emoji = setting.emojiId?.let(resolveCustomEmoji)
-            ?: setting.emojiName?.let { ActivityEmoji(null, it, false) }
-        return Activity(
-            name = "Custom Status",
-            type = ActivityType.CUSTOM_STATUS,
-            url = null,
-            createdAt = clock.currentTimeMillis(),
-            timestamps = null,
-            applicationId = null,
-            details = null,
-            state = setting.text,
-            emoji = emoji,
-            party = null,
-            assets = null,
-            flags = null,
-            syncId = null,
-            sessionId = null,
-            metadata = null,
-            platform = null,
-            supportedPlatforms = null,
-            buttons = null,
-        )
+        val expiresAt = setting.expiresAt
+        if (expiresAt != null && TimeUtils.parseUTCDate(expiresAt) - clock.currentTimeMillis() <= 0L) return null
+        // Exclusive branches, not a fallback chain: an unresolvable custom emoji id must not fall
+        // through to the (unrelated) name field.
+        val emojiId = setting.emojiId
+        val emoji = if (emojiId != null) {
+            resolveCustomEmoji(emojiId)
+        } else {
+            setting.emojiName?.let(resolveUnicodeEmoji)
+        }
+        return createCustomStatusActivity(setting.text, emoji, clock.currentTimeMillis())
     }
 
     companion object {
@@ -239,10 +273,5 @@ class StoreUserPresence(
             ClientStatus.OFFLINE,
             ClientStatus.OFFLINE,
         )
-
-        private fun isRichPresence(activity: Activity) = activity.type != ActivityType.CUSTOM_STATUS && (
-            activity.assets != null || activity.party != null || !activity.state.isNullOrEmpty() ||
-                !activity.details.isNullOrEmpty()
-            )
     }
 }

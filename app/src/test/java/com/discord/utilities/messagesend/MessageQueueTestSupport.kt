@@ -1,11 +1,13 @@
 package com.discord.utilities.messagesend
 
+import com.discord.api.message.Message as ApiMessage
+import com.discord.restapi.PayloadJSON
 import com.discord.restapi.RestAPIInterface
+import com.discord.restapi.RestAPIParams
 import com.discord.utilities.networking.Backoff
 import java.lang.reflect.Proxy
 import java.util.ArrayDeque
 import java.util.concurrent.AbstractExecutorService
-import java.util.concurrent.ExecutorService
 import java.util.concurrent.TimeUnit
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -15,25 +17,25 @@ import rx.Emitter
 import rx.Observable
 
 /**
- * Shared fakes for the message-send tests.
+ * Shared deterministic fakes for the message-send tests.
  *
- * Everything here is deterministic and single threaded: the queue runs on [DirectExecutorService] so
- * `executorService.submit { }` executes inline, [ManualBackoffScheduler] captures the delayed retry
- * instead of arming a timer, and rate-limit retries use an `rx.schedulers.TestScheduler`. That makes
- * ordering and timing assertions exact rather than flaky.
+ * Everything is single threaded: the queue runs on [DirectExecutorService] so `execute { }` happens
+ * inline, [ManualBackoffScheduler] captures the delayed retry instead of arming a timer, and
+ * rate-limit retries run on an `rx.schedulers.TestScheduler`. That makes ordering and timing
+ * assertions exact instead of flaky.
  *
- * No fixture here contains a real token, site key or user content.
+ * No fixture here contains a real token, site key, or user content.
  */
 
 /** Runs every submitted task on the calling thread, preserving submission order. */
 class DirectExecutorService : AbstractExecutorService() {
-    private var shutdown = false
+    private var stopped = false
 
     override fun execute(command: Runnable) = command.run()
-    override fun shutdown() { shutdown = true }
-    override fun shutdownNow(): List<Runnable> { shutdown = true; return emptyList() }
-    override fun isShutdown() = shutdown
-    override fun isTerminated() = shutdown
+    override fun shutdown() { stopped = true }
+    override fun shutdownNow(): MutableList<Runnable> { stopped = true; return mutableListOf() }
+    override fun isShutdown() = stopped
+    override fun isTerminated() = stopped
     override fun awaitTermination(timeout: Long, unit: TimeUnit) = true
 }
 
@@ -41,6 +43,8 @@ class DirectExecutorService : AbstractExecutorService() {
 class ManualBackoffScheduler : Backoff.Scheduler {
     val scheduledDelays = mutableListOf<Long>()
     private var pendingAction: (() -> Unit)? = null
+
+    val hasPendingAction: Boolean get() = pendingAction != null
 
     override fun schedule(action: () -> Unit, delayMs: Long) {
         scheduledDelays += delayMs
@@ -51,17 +55,15 @@ class ManualBackoffScheduler : Backoff.Scheduler {
         pendingAction = null
     }
 
-    val hasPendingAction: Boolean get() = pendingAction != null
-
     /** Runs the armed action, as the real timer would once the delay elapsed. */
     fun fire() {
-        val action = pendingAction ?: error("No backoff action is armed")
+        val action = checkNotNull(pendingAction) { "No backoff action is armed" }
         pendingAction = null
         action()
     }
 }
 
-/** Deterministic backoff: no jitter, so delay growth is exactly reproducible. */
+/** Deterministic backoff: jitter off, so delay growth is exactly reproducible. */
 fun testBackoff(scheduler: ManualBackoffScheduler) = Backoff(
     minBackoffMs = MessageQueue.NETWORK_INITIAL_FAILURE_RETRY_MS,
     maxBackoffMs = MessageQueue.MESSAGE_TIMEOUT_MS,
@@ -71,17 +73,12 @@ fun testBackoff(scheduler: ManualBackoffScheduler) = Backoff(
 )
 
 /**
- * A [RestAPIInterface] that records every send/edit and hands the test control of each response.
+ * A [RestAPIInterface] that records every call and lets the test decide when each one responds.
  *
  * Implemented with [Proxy] because the project intentionally has no mocking library.
  */
 class RecordingRestApi {
-    data class SendCall(
-        val channelId: Long,
-        val body: com.discord.restapi.RestAPIParams.Message?,
-        val multipart: Boolean,
-    )
-
+    data class SendCall(val channelId: Long, val body: RestAPIParams.Message?, val multipart: Boolean)
     data class EditCall(val channelId: Long, val messageId: Long, val content: String?)
 
     val sendCalls = mutableListOf<SendCall>()
@@ -90,10 +87,9 @@ class RecordingRestApi {
 
     private val pendingEmitters = ArrayDeque<Emitter<Any>>()
 
-    /** True while a request is on the wire and has neither succeeded nor failed. */
+    /** Requests that are on the wire and have neither succeeded nor failed. */
     val inFlightCount: Int get() = pendingEmitters.size
 
-    @Suppress("UNCHECKED_CAST")
     val api: RestAPIInterface = Proxy.newProxyInstance(
         RestAPIInterface::class.java.classLoader,
         arrayOf(RestAPIInterface::class.java),
@@ -101,15 +97,13 @@ class RecordingRestApi {
         val arguments = args ?: emptyArray()
         when (method.name) {
             "sendMessage" -> {
-                val channelId = arguments[0] as Long
                 val multipart = arguments.size > 2
-                val body = when {
-                    multipart -> (arguments[1] as com.discord.restapi.PayloadJSON<*>).let { payload ->
-                        payloadMessage(payload)
-                    }
-                    else -> arguments[1] as com.discord.restapi.RestAPIParams.Message
+                val body = if (multipart) {
+                    payloadMessage(arguments[1] as PayloadJSON<*>)
+                } else {
+                    arguments[1] as RestAPIParams.Message
                 }
-                sendCalls += SendCall(channelId, body, multipart)
+                sendCalls += SendCall(arguments[0] as Long, body, multipart)
                 deferred()
             }
 
@@ -117,7 +111,7 @@ class RecordingRestApi {
                 editCalls += EditCall(
                     arguments[0] as Long,
                     arguments[1] as Long,
-                    (arguments[2] as com.discord.restapi.RestAPIParams.Message).content,
+                    (arguments[2] as RestAPIParams.Message).content,
                 )
                 deferred()
             }
@@ -131,29 +125,27 @@ class RecordingRestApi {
         }
     } as RestAPIInterface
 
-    private fun payloadMessage(payload: com.discord.restapi.PayloadJSON<*>): com.discord.restapi.RestAPIParams.Message? {
-        val field = com.discord.restapi.PayloadJSON::class.java.getDeclaredField("data")
-        field.isAccessible = true
-        return field.get(payload) as? com.discord.restapi.RestAPIParams.Message
-    }
-
-    private fun deferred(): Observable<Any> = Observable.create(
-        { emitter -> pendingEmitters.addLast(emitter) },
-        Emitter.BackpressureMode.BUFFER,
-    )
-
-    fun respondSuccess(message: com.discord.api.message.Message) {
+    fun respondSuccess(message: ApiMessage) {
         val emitter = pendingEmitters.removeFirst()
         emitter.onNext(message)
         emitter.onCompleted()
     }
 
-    fun respondError(throwable: Throwable) {
-        pendingEmitters.removeFirst().onError(throwable)
+    fun respondError(throwable: Throwable) = pendingEmitters.removeFirst().onError(throwable)
+
+    /** Fails the oldest in-flight request with a Discord error body. */
+    fun respondApiError(status: Int, json: String) = respondError(httpException(status, json))
+
+    private fun payloadMessage(payload: PayloadJSON<*>): RestAPIParams.Message? {
+        val field = PayloadJSON::class.java.getDeclaredField("data")
+        field.isAccessible = true
+        return field.get(payload) as? RestAPIParams.Message
     }
 
-    /** Fails the in-flight request with a Discord error body of [status] and [json]. */
-    fun respondApiError(status: Int, json: String) = respondError(httpException(status, json))
+    private fun deferred(): Observable<Any> = Observable.create<Any>(
+        { emitter: Emitter<Any> -> pendingEmitters.addLast(emitter) },
+        Emitter.BackpressureMode.BUFFER,
+    )
 
     companion object {
         fun httpException(status: Int, json: String): HttpException = HttpException(
@@ -162,4 +154,15 @@ class RecordingRestApi {
     }
 }
 
-fun executor(): ExecutorService = DirectExecutorService()
+/** Server response for "this channel is in slow mode", cooldown 2.5s. */
+const val SLOW_MODE_BODY = """{"message":"You are sending messages too quickly.","code":20016,"retry_after":2.5}"""
+
+/** Server response for a rate limit, retry after 0.75s. */
+const val RATE_LIMIT_BODY = """{"message":"You are being rate limited.","retry_after":0.75,"global":false}"""
+
+/** Server response demanding a captcha. Site key and token are obvious placeholders. */
+const val CAPTCHA_BODY =
+    """{"captcha_key":["captcha-required"],"captcha_sitekey":"test-site-key","captcha_service":"hcaptcha","captcha_rqtoken":"test-rqtoken"}"""
+
+/** Server response for an AutoMod block. */
+const val AUTOMOD_BODY = """{"message":"Message blocked by automatic moderation","code":200000}"""

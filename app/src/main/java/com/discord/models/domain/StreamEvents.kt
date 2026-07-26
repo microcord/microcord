@@ -17,15 +17,21 @@ data class StreamCreateOrUpdate(
     val streamKey: String,
     val rtcServerId: String? = null,
     val paused: Boolean = false,
-    val viewerIds: List<Long> = emptyList(),
-)
+    val viewerIds: List<Long>? = null,
+) {
+    /** Viewers of the stream; empty when the update omits the list rather than sending `[]`. */
+    val viewers: List<Long> get() = viewerIds.orEmpty()
+}
 
 /** Payload of `STREAM_DELETE`. */
 data class StreamDelete(
     val streamKey: String,
-    val reason: Reason = Reason.UNKNOWN,
+    val reason: Reason? = null,
     val unavailable: Boolean = false,
 ) {
+    /** [reason] is absent for a normal end-of-stream, which the client treats as [Reason.UNKNOWN]. */
+    val deleteReason: Reason get() = reason ?: Reason.UNKNOWN
+
     @JsonAdapter(ReasonTypeAdapter::class)
     enum class Reason(val apiValue: String) {
         USER_REQUESTED("user_requested"),

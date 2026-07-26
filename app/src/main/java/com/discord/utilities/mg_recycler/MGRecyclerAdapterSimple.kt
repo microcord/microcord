@@ -1,12 +1,11 @@
 package com.discord.utilities.mg_recycler
 
 import android.annotation.SuppressLint
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.utilities.recycler.DiffCreator
+import com.discord.utilities.rx.ui
 import rx.Observable
 import rx.Subscription
 import rx.schedulers.Schedulers
@@ -29,7 +28,6 @@ abstract class MGRecyclerAdapterSimple<D : MGRecyclerDataPayload> @JvmOverloads 
 
     private val diffCreator =
         DiffCreator<List<D>, MGRecyclerViewHolder<MGRecyclerAdapterSimple<D>, D>>(null)
-    private val mainThreadHandler: Handler by lazy { Handler(Looper.getMainLooper()) }
 
     private var diffingSubscription: Subscription? = null
     private var onUpdated: ((List<D>, List<D>) -> Unit)? = null
@@ -52,10 +50,9 @@ abstract class MGRecyclerAdapterSimple<D : MGRecyclerDataPayload> @JvmOverloads 
                 diffingSubscription = Observable
                     .fromCallable { diffCreator.calculateDiffResult(oldData, data) }
                     .subscribeOn(Schedulers.computation())
+                    .ui()
                     .subscribe(
-                        { diffResult ->
-                            mainThreadHandler.post { dispatchUpdates(diffResult, oldData, data) }
-                        },
+                        { diffResult -> dispatchUpdates(diffResult, oldData, data) },
                         ::handleError,
                     )
             }

@@ -21,8 +21,6 @@ import com.discord.api.interaction.InteractionModalCreate
 import com.discord.api.interaction.InteractionStateUpdate
 import com.discord.api.message.Message
 import com.discord.api.message.reaction.MessageReactionUpdate
-import com.discord.api.message.reaction.MessageReactionRemoveAll
-import com.discord.api.message.reaction.MessageReactionRemoveEmoji
 import com.discord.api.presence.Presence
 import com.discord.api.requiredaction.UserRequiredActionUpdate
 import com.discord.api.role.GuildRoleCreate
@@ -94,7 +92,7 @@ class IncomingParser(private val gson: Gson) {
      *   that; everything else yields null so the socket does not publish an empty payload.
      */
     private fun parseDispatch(type: String?, data: JsonElement?): Any? {
-        // The backend sends no body for these; they are pure "refetch me" nudges.
+        // Pure "refetch me" nudges: whatever body they carry is discarded.
         if (type in BODYLESS_EVENTS) return Unit
         if (data == null) return null
         return parseDispatchBody(type, data)
@@ -161,9 +159,11 @@ class IncomingParser(private val gson: Gson) {
         "MESSAGE_CREATE", "MESSAGE_UPDATE" -> gson.fromJson(data, Message::class.java)
         "MESSAGE_DELETE", "MESSAGE_DELETE_BULK" -> gson.fromJson(data, ModelMessageDelete::class.java)
         "MESSAGE_ACK" -> gson.fromJson(data, ModelReadState::class.java)
-        "MESSAGE_REACTION_ADD", "MESSAGE_REACTION_REMOVE" -> gson.fromJson(data, MessageReactionUpdate::class.java)
-        "MESSAGE_REACTION_REMOVE_ALL" -> gson.fromJson(data, MessageReactionRemoveAll::class.java)
-        "MESSAGE_REACTION_REMOVE_EMOJI" -> gson.fromJson(data, MessageReactionRemoveEmoji::class.java)
+        // All four reaction events share one payload type. REMOVE_ALL carries no user or emoji and
+        // REMOVE_EMOJI carries no user, so those members are absent on the wire for them.
+        "MESSAGE_REACTION_ADD", "MESSAGE_REACTION_REMOVE",
+        "MESSAGE_REACTION_REMOVE_ALL", "MESSAGE_REACTION_REMOVE_EMOJI" ->
+            gson.fromJson(data, MessageReactionUpdate::class.java)
 
         // Presence and typing
         "PRESENCE_UPDATE" -> gson.fromJson(data, Presence::class.java)
@@ -190,11 +190,15 @@ class IncomingParser(private val gson: Gson) {
     }
 
     companion object {
-        /** Dispatch types that arrive with `d: null` and still need to reach their store. */
+        /**
+         * Dispatch types whose body the client skips outright, yielding [Unit].
+         *
+         * `USER_SUBSCRIPTIONS_UPDATE` and `USER_PAYMENT_SOURCES_UPDATE` are deliberately absent:
+         * those arrive with no `d` at all and the socket substitutes [Unit] for them.
+         */
         val BODYLESS_EVENTS = setOf(
             "USER_CONNECTIONS_UPDATE",
-            "USER_SUBSCRIPTIONS_UPDATE",
-            "USER_PAYMENT_SOURCES_UPDATE",
+            "USER_CONNECTIONS_INTEGRATION_JOINING",
         )
 
         private val sessionListType = object : TypeToken<List<ModelSession>>() {}.type

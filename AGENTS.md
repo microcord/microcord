@@ -65,14 +65,40 @@ work in one change unless the dependency is unavoidable.
 
 ## Reference Interpretation
 
-Trust evidence in this order:
+### Available evidence sources
+
+| Source | Path | Use for |
+| --- | --- | --- |
+| JADX Java export | `C:\Users\manti\StudioProjects\discord-jadx` | Structure, resources, manifest, call sites |
+| **Vineflower Kotlin decompile of the DEX** | `C:\Users\manti\Desktop\projeler\discorddecompile\out\**` (4,853 `.kt` files, paths mirror the reference) | Constructors, `equals`/`hashCode`/`toString`, declaration order, nullability — **recovers what JADX drops** |
+| **dex2jar JAR** | `C:\Users\manti\Desktop\projeler\discorddecompile\discord126.21-dex2jar.jar` | `javap -p` for exact signatures/arity/field types; `javap -v` for runtime-visible annotations |
+| Original DEX | `discord-jadx/app/src/main/classes*.dex` | `dexdump` when even the above disagree |
+
+All are READ-ONLY. **Check the Kotlin decompile before declaring anything
+unverifiable** — many findings in `docs/parity-audit/` were marked "JADX broken"
+purely because JADX omitted members that Vineflower recovers.
+
+Techniques that work:
+
+- Declaration order — read the synthesized `equals`/`toString` bodies; a Kotlin
+  data class emits them in declaration order.
+- Nullability — Kotlin-metadata types plus `checkNotNullParameter` guards.
+- Defaults — presence/absence of the synthetic
+  `(..., int mask, DefaultConstructorMarker)` constructor. **This check matters:
+  it catches false "defaults" that decompilers print from `copy$default`.**
+- R8-emptied classes — `javap` showing zero members and a `@Metadata` `d2` array
+  listing no declarations means nothing is recoverable. Do not invent a body.
+
+### Trust order
 
 1. Runtime behavior and controlled observations.
-2. DEX/smali instructions and signatures.
+2. DEX/smali instructions and signatures, including the Vineflower Kotlin
+   decompile and `javap` output above.
 3. Android manifest, resources, and serialized payloads.
 4. Kotlin metadata and unobfuscated declarations.
 5. Callers, tests added by this project, and sibling implementations.
-6. Decompiled Java bodies.
+6. Decompiled Java bodies (JADX) — the weakest source; it silently drops
+   constructors, catch tables, and whole method bodies.
 
 JADX output is not valid source by default. Do not copy synthetic lambda
 classes, bridge methods, generated bindings, obfuscated utility packages, or
