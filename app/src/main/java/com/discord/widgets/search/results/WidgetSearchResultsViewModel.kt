@@ -73,46 +73,45 @@ class WidgetSearchResultsViewModel(
 
             val settled = searchState.queryFetchState == QueryFetchState.COMPLETED ||
                 searchState.queryFetchState == QueryFetchState.LOADING_MORE
-            if (!settled) {
+            if (settled) {
+                val hits = searchState.hits.orEmpty()
+                if (hits.isNotEmpty()) {
+                    // Pagination walks backwards from the last hit on screen.
+                    oldestMessageId = hits.last().id
+                    rows += SearchResultCountEntry(searchState.totalResults)
+                }
+
+                hits.forEach { message ->
+                    val channel = channels[message.channelId] ?: return@forEach
+                    val guildMembers = members[channel.guildId].orEmpty()
+                    // The viewer's own roles decide which role mentions highlight; collected across
+                    // every guild the results span, because one list can cross guilds.
+                    myRoleIds += guildMembers[meId]?.getRoles().orEmpty()
+                    rows += ChatListRows.contextMessageRows(
+                        ChatListRows.State(
+                            channel = channel,
+                            guild = guilds[channel.guildId],
+                            guildMembers = guildMembers,
+                            guildRoles = StoreStream.getGuilds().getRoles()[channel.guildId].orEmpty(),
+                            animateEmojis = StoreStream.getUserSettings().getIsAnimatedEmojisEnabled(),
+                            autoPlayGifs = StoreStream.getUserSettings().getIsAutoPlayGifsEnabled(),
+                            renderEmbeds = StoreStream.getUserSettings().getIsRenderEmbedsEnabled(),
+                        ),
+                        message,
+                    )
+                }
+
+                when {
+                    searchState.queryFetchState == QueryFetchState.LOADING_MORE -> rows += LoadingEntry()
+                    rows.isEmpty() -> rows += SearchEmptyEntry()
+                }
+            } else {
                 when (searchState.queryFetchState) {
                     QueryFetchState.IN_PROGRESS -> rows += LoadingEntry()
                     QueryFetchState.INDEXING -> rows += SearchIndexingEntry()
                     QueryFetchState.FAILED -> rows += SearchErrorEntry()
                     else -> Unit
                 }
-                return@combineLatest ViewState(rows, meId, channelNames(channels), 0L, myRoleIds)
-            }
-
-            val hits = searchState.hits.orEmpty()
-            if (hits.isNotEmpty()) {
-                // Pagination walks backwards from the last hit on screen.
-                oldestMessageId = hits.last().id
-                rows += SearchResultCountEntry(searchState.totalResults)
-            }
-
-            hits.forEach { message ->
-                val channel = channels[message.channelId] ?: return@forEach
-                val guildMembers = members[channel.guildId].orEmpty()
-                // The viewer's own roles decide which role mentions highlight; collected across
-                // every guild the results span, because one list can cross guilds.
-                myRoleIds += guildMembers[meId]?.roles.orEmpty()
-                rows += ChatListRows.contextMessageRows(
-                    ChatListRows.State(
-                        channel = channel,
-                        guild = guilds[channel.guildId],
-                        guildMembers = guildMembers,
-                        guildRoles = StoreStream.getGuilds().getRoles()[channel.guildId].orEmpty(),
-                        animateEmojis = StoreStream.getUserSettings().getIsAnimatedEmojisEnabled(),
-                        autoPlayGifs = StoreStream.getUserSettings().getIsAutoPlayGifsEnabled(),
-                        renderEmbeds = StoreStream.getUserSettings().getIsRenderEmbedsEnabled(),
-                    ),
-                    message,
-                )
-            }
-
-            when {
-                searchState.queryFetchState == QueryFetchState.LOADING_MORE -> rows += LoadingEntry()
-                rows.isEmpty() -> rows += SearchEmptyEntry()
             }
 
             ViewState(rows, meId, channelNames(channels), oldestMessageId, myRoleIds)

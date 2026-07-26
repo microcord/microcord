@@ -17,6 +17,7 @@ import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import androidx.core.widget.ImageViewCompat
 import com.discord.R
+import com.discord.api.channel.isStageVoiceChannel
 import com.discord.views.NumericBadgingView
 import com.discord.views.calls.VolumeSliderView
 import com.discord.widgets.stage.StageRoles
@@ -110,14 +111,21 @@ class VoiceControlsSheetView @JvmOverloads constructor(
         stopWatchingButton.show(isStreamFocused)
         stopWatchingButton.setOnClickListener { onStopWatchingClick() }
 
-        val isStage = stageRoles != null
-        val audience = isStage && stageRoles?.isSpeaker == false
+        // Two different notions of "stage" and the reference uses each deliberately.
+        // The disconnect chrome keys off whether the user *has* stage roles, because an audience
+        // member leaves through a different affordance than a speaker. Everything else keys off
+        // the channel type, so the control set stays correct even while roles are still resolving.
+        val hasStageRoles = stageRoles != null
+        val isStage = model.channel.isStageVoiceChannel()
+        val audience = hasStageRoles && stageRoles?.isSpeaker == false
         disconnectButton.show(showDisconnect && !audience)
         stageDisconnectButton.show(showDisconnect && audience)
-        disconnectButton.setImageResource(if (isStage) R.drawable.ic_stage_leave_20dp else R.drawable.ic_call_disconnect_24dp)
+        disconnectButton.setImageResource(
+            if (hasStageRoles) R.drawable.ic_stage_leave_20dp else R.drawable.ic_call_disconnect_24dp,
+        )
         disconnectButton.setOnClickListener { onDisconnectClick() }
         stageDisconnectButton.setOnClickListener { onDisconnectClick() }
-        pushToTalkButton.show(isPushToTalk && (!isStage || stageRoles?.isSpeaker == true))
+        pushToTalkButton.show(isPushToTalk && (!hasStageRoles || stageRoles?.isSpeaker == true))
 
         deafenSecondaryButton.setText(if (isDeafened) R.string.undeafen else R.string.deafen)
         deafenSecondaryButton.isActivated = isDeafened
@@ -157,7 +165,9 @@ class VoiceControlsSheetView @JvmOverloads constructor(
         }
         muteButton.visibility = VISIBLE
         val muted = model.isMeMutedByAnySource
-        muteButton.setImageResource(if (muted) R.drawable.ic_mute_v2_muted else R.drawable.ic_mic_white_24dp)
+        muteButton.setImageResource(
+            if (muted) R.drawable.ic_mic_mute_red_strike_24dp else R.drawable.ic_mic_white_24dp,
+        )
         muteButton.backgroundTintList = ColorStateList.valueOf(buttonBackground(muted))
         muteButton.contentDescription = context.getString(if (muted) R.string.unmute else R.string.mute)
         muteButton.setOnClickListener { callback() }
@@ -196,7 +206,8 @@ class VoiceControlsSheetView @JvmOverloads constructor(
         isStage: Boolean,
     ) {
         val active = model.isStreaming
-        val icon = if (active) R.drawable.ic_stop_stream else R.drawable.ic_mobile_screenshare_24dp
+        val icon =
+            if (active) R.drawable.ic_mobile_screenshare_end_24dp else R.drawable.ic_mobile_screenshare_24dp
         screenShareButton.show(primary && !isStage)
         screenShareSecondaryButton.show(!primary && !isStage)
         screenShareButton.setImageResource(icon)
@@ -204,7 +215,9 @@ class VoiceControlsSheetView @JvmOverloads constructor(
             if (active) R.string.stop_streaming else R.string.mobile_stream_screen_share,
         )
         screenShareSecondaryButton.setCompoundDrawablesWithIntrinsicBounds(icon, 0, 0, 0)
-        screenShareSecondaryButton.setText(if (active) R.string.mobile_stream_stop_sharing else R.string.mobile_stream_screen_share)
+        screenShareSecondaryButton.setText(
+            if (active) R.string.stop_streaming else R.string.mobile_stream_screen_share,
+        )
         screenShareButton.imageTintList = ColorStateList.valueOf(if (active) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
         screenShareButton.backgroundTintList = ColorStateList.valueOf(buttonBackground(active))
         screenShareButton.setOnClickListener { callback() }
@@ -250,7 +263,7 @@ class VoiceControlsSheetView @JvmOverloads constructor(
         val moderator = roles?.isModerator == true
         val active = !moderator && model.isMyHandRaised
         raiseHandButton.setImageResource(
-            if (moderator) R.drawable.ic_stage_invite_speak else R.drawable.ic_stage_raised_hand,
+            if (moderator) R.drawable.ic_stage_raised_hand_list else R.drawable.ic_stage_raised_hand,
         )
         raiseHandButton.isEnabled = moderator || (!updating && model.canRequestToSpeak())
         raiseHandButton.alpha = if (raiseHandButton.isEnabled) 1f else 0.2f
@@ -258,7 +271,7 @@ class VoiceControlsSheetView @JvmOverloads constructor(
         ImageViewCompat.setImageTintList(raiseHandButton, ColorStateList.valueOf(buttonIcon(active)))
         raiseHandButton.contentDescription = context.getString(
             when {
-                moderator -> R.string.request_to_speak_accessibility_text
+                moderator -> R.string.request_to_speak_area_title
                 !model.canRequestToSpeak() -> R.string.audience_raise_hand_no_permission
                 model.isMyHandRaised -> R.string.audience_lower_hand
                 else -> R.string.audience_raise_hand_cta
@@ -275,7 +288,7 @@ class VoiceControlsSheetView @JvmOverloads constructor(
     private fun buttonIcon(active: Boolean): Int {
         if (!active) return ContextCompat.getColor(context, R.color.white)
         val value = TypedValue()
-        context.theme.resolveAttribute(R.attr.colorBackgroundPrimary, value, true)
+        context.theme.resolveAttribute(R.attr.call_controls_active_button_icon_color, value, true)
         return if (value.resourceId != 0) ContextCompat.getColor(context, value.resourceId) else value.data
     }
 
@@ -297,8 +310,8 @@ enum class VoiceControlsOutputSelectorState(
     val showMoreOptions: Boolean,
 ) {
     SPEAKER_ON(R.drawable.ic_sound_24dp, true, false),
-    SPEAKER_OFF(R.drawable.ic_sound_24dp, false, false),
+    SPEAKER_OFF(R.drawable.ic_sound_quiet_24dp, false, false),
     BLUETOOTH_ON_AND_MORE(R.drawable.ic_sound_bluetooth_24dp, true, true),
     SPEAKER_ON_AND_MORE(R.drawable.ic_sound_24dp, true, true),
-    SPEAKER_OFF_AND_MORE(R.drawable.ic_sound_24dp, false, true),
+    SPEAKER_OFF_AND_MORE(R.drawable.ic_sound_quiet_24dp, false, true),
 }

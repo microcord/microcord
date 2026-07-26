@@ -1,6 +1,5 @@
 package com.discord.widgets.search.results
 
-import android.content.Context
 import android.view.View
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
@@ -12,6 +11,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rx.ui
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapter
+import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.search.SearchStore
 import com.discord.widgets.search.SearchStoreProvider
 
@@ -33,12 +33,15 @@ class WidgetSearchResults : AppFragment(R.layout.widget_search_results) {
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         val recycler = view.findViewById<RecyclerView>(R.id.search_results_list)
-        adapter = MGRecyclerAdapter.configure(
+        adapter = MGRecyclerAdapter.configure<ChatListEntry, WidgetChatListAdapter>(
             WidgetChatListAdapter(
                 recycler,
-                requireAppActivity().appPermissions,
+                this,
                 parentFragmentManager,
-                SearchResultAdapterEventHandler(view.context, SearchStoreProvider.get()),
+                SearchResultAdapterEventHandler(
+                    searchStore = SearchStoreProvider.get(),
+                    closeSearch = { activity?.finish() },
+                ),
             ),
         ).apply {
             // Every result would otherwise be highlighted, since a search commonly filters on the
@@ -64,15 +67,15 @@ class WidgetSearchResults : AppFragment(R.layout.widget_search_results) {
      * list is scrolled to the top, and that asks the store for the page before the oldest hit.
      */
     private class SearchResultAdapterEventHandler(
-        private val context: Context,
         private val searchStore: SearchStore,
+        private val closeSearch: () -> Unit,
     ) : WidgetChatListAdapter.EventHandler {
 
         private var oldestMessageId: Long = 0L
 
         private fun jumpToChat(message: Message) {
             StoreStream.getMessagesLoader().jumpToMessage(message.channelId, message.id)
-            (context as? androidx.fragment.app.FragmentActivity)?.finish()
+            closeSearch()
         }
 
         override fun onOldestMessageId(channelId: Long, oldestMessageId: Long) {

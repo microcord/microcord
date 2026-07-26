@@ -2,13 +2,15 @@ package com.discord.widgets.chat.list.adapter
 
 import android.view.View
 import android.widget.LinearLayout
+import androidx.lifecycle.findViewTreeLifecycleOwner
 import com.discord.R
 import com.discord.api.botuikit.SelectItem
 import com.discord.widgets.botuikit.replaceViews
 import com.discord.widgets.botuikit.views.ComponentActionListener
+import com.discord.widgets.botuikit.views.select.ComponentContext
+import com.discord.widgets.botuikit.views.select.SelectComponentBottomSheet
 import com.discord.widgets.chat.list.entries.BotUiComponentEntry
 import com.discord.widgets.chat.list.entries.ChatListEntry
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 /**
  * The buttons and select menus a bot attached to its message.
@@ -56,6 +58,15 @@ class WidgetChatListAdapterItemBotComponentRow(
         )
     }
 
+    /**
+     * Opens the real select sheet.
+     *
+     * The result comes back through the fragment-result API rather than a captured callback: the
+     * sheet outlives this view holder (recycling, rotation, process death), so anything it captured
+     * would either be stale or a leak. The listener is registered against the item view's lifecycle
+     * owner — the chat list's view — which is exactly the scope in which delivering a result still
+     * makes sense.
+     */
     override fun onSelectComponentClick(
         componentIndex: Int,
         customId: String,
@@ -66,45 +77,41 @@ class WidgetChatListAdapterItemBotComponentRow(
         maxOptionsToSelect: Int,
         emojiAnimationsEnabled: Boolean,
     ) {
-        // The reference opens `SelectComponentBottomSheet`, which is not reconstructed. A dialog
-        // over the same option list keeps the interaction whole: single choice dispatches on tap,
-        // multiple choice dispatches once the user confirms, and both report the chosen values back
-        // through the same callback the sheet would have used.
-        val labels = options.map(SelectItem::label).toTypedArray()
-        val builder = MaterialAlertDialogBuilder(itemView.context).setTitle(placeholder)
-        if (maxOptionsToSelect <= 1) {
-            val checked = options.indexOfFirst { option -> selectedItems.any { it.value == option.value } }
-            builder.setSingleChoiceItems(labels, checked) { dialog, which ->
-                dispatchSelection(componentIndex, customId, listOf(options[which]))
-                dialog.dismiss()
-            }
-        } else {
-            val checked = BooleanArray(options.size) { index ->
-                selectedItems.any { it.value == options[index].value }
-            }
-            builder.setMultiChoiceItems(labels, checked) { _, which, isChecked ->
-                checked[which] = isChecked
-            }
-            builder.setPositiveButton(R.string.okay) { dialog, _ ->
-                val chosen = options.filterIndexed { index, _ -> checked[index] }
-                if (chosen.size >= minOptionsToSelect && chosen.size <= maxOptionsToSelect) {
-                    dispatchSelection(componentIndex, customId, chosen)
-                }
-                dialog.dismiss()
-            }
-            builder.setNegativeButton(R.string.cancel) { dialog, _ -> dialog.dismiss() }
+        val lifecycleOwner = itemView.findViewTreeLifecycleOwner() ?: return
+        adapter.fragmentManager.setFragmentResultListener(
+            SelectComponentBottomSheet.RESULT_KEY,
+            lifecycleOwner,
+        ) { _, result ->
+            val context =
+                result.getSerializable(SelectComponentBottomSheet.RESULT_COMPONENT_CONTEXT) as? ComponentContext
+                    ?: return@setFragmentResultListener
+            adapter.onBotUiComponentClicked(
+                applicationId = context.applicationId,
+                messageId = context.messageId,
+                messageFlags = context.messageFlags,
+                componentIndex = result.getInt(SelectComponentBottomSheet.RESULT_COMPONENT_INDEX),
+                customId = result.getString(SelectComponentBottomSheet.RESULT_CUSTOM_ID),
+                values = result.getStringArrayList(SelectComponentBottomSheet.RESULT_VALUES),
+            )
         }
-        builder.show()
-    }
 
-    private fun dispatchSelection(componentIndex: Int, customId: String, chosen: List<SelectItem>) {
-        adapter.onBotUiComponentClicked(
-            applicationId = entry.applicationId,
-            messageId = entry.message.id,
-            messageFlags = entry.message.flags,
+        SelectComponentBottomSheet.show(
+            fragmentManager = adapter.fragmentManager,
+            componentContext = ComponentContext(
+                guildId = entry.guildId,
+                messageId = entry.message.id,
+                channelId = entry.message.channelId,
+                messageFlags = entry.message.flags,
+                applicationId = entry.applicationId,
+            ),
             componentIndex = componentIndex,
             customId = customId,
-            values = chosen.map(SelectItem::value),
+            placeholder = placeholder,
+            min = minOptionsToSelect,
+            max = maxOptionsToSelect,
+            options = options,
+            selectedItems = selectedItems,
+            emojiAnimationsEnabled = emojiAnimationsEnabled,
         )
     }
 }

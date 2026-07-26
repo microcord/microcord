@@ -82,8 +82,8 @@ class WidgetMuteSettingsSheet : AppBottomSheet() {
     }
 
     override fun bindSubscriptions(compositeSubscription: CompositeSubscription) {
-        viewModel.observeViewState().distinctUntilChanged().ui(this).subscribe(::updateViews)
-        viewModel.observeEvents().ui(this).subscribe(::handleEvent)
+        viewModel.observeViewState().distinctUntilChanged().ui(this).subscribe { updateViews(it) }
+        viewModel.observeEvents().ui(this).subscribe { handleEvent(it) }
     }
 
     private fun bindDuration(rowId: Int, durationMs: Long) {
@@ -116,7 +116,7 @@ class WidgetMuteSettingsSheet : AppBottomSheet() {
             }
 
             is MuteSettingsSheetViewModel.ViewState.Loaded -> {
-                title.text = titleResFor(viewState.settingsType)?.let(::getString).orEmpty()
+                title.text = titleResFor(viewState.settingsType)?.let { getString(it) }.orEmpty()
                 subtitle.text = viewState.subtitle
                 configureUnmuteButton(viewState)
                 configureNotificationSettings(viewState)

@@ -31,12 +31,12 @@ class WidgetSearchViewModel(
         val guild: Observable<Guild?> = if (targetType == WidgetSearch.TargetType.GUILD) {
             StoreStream.getGuilds().observeGuild(targetId)
         } else {
-            Observable.just(null)
+            Observable.just<Guild?>(null)
         }
         val channel: Observable<Channel?> = if (targetType == WidgetSearch.TargetType.CHANNEL) {
             StoreStream.getChannels().observeChannel(targetId)
         } else {
-            Observable.just(null)
+            Observable.just<Channel?>(null)
         }
 
         Observable

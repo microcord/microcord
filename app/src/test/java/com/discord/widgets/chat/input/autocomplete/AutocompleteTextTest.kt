@@ -1,0 +1,98 @@
+package com.discord.widgets.chat.input.autocomplete
+
+import com.discord.api.channel.Channel
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class AutocompleteTextTest {
+
+    private fun channelAutocompletable(id: Long, name: String) = ChannelAutocompletable(
+        Channel(
+            topic = null,
+            type = Channel.GUILD_TEXT,
+            guildId = 1L,
+            name = name,
+            lastMessageId = 0,
+            id = id,
+            ownerId = 0,
+            recipientIds = null,
+            recipients = null,
+            position = 0,
+            permissionOverwrites = null,
+            userLimit = 0,
+            bitrate = 0,
+            icon = null,
+            originChannelId = 0,
+            applicationId = 0,
+            nicks = null,
+            nsfw = false,
+            parentId = 0,
+            memberListId = null,
+            rateLimitPerUser = 0,
+            defaultAutoArchiveDuration = null,
+            rtcRegion = null,
+            flags = null,
+            guildHashes = null,
+            availableTags = null,
+            appliedTags = null,
+            threadMetadata = null,
+            messageCount = null,
+            memberCount = null,
+            memberIdsPreview = null,
+            member = null,
+        ),
+    )
+
+    @Test
+    fun tokenIsOnlyProducedForAKnownLeadingIdentifier() {
+        val at = AutocompleteModelUtils.getMessageAutocompleteToken("hello @ali", 10..10)
+        assertEquals(LeadingIdentifier.MENTION, at?.leadingIdentifier)
+        assertEquals("@ali", at?.token)
+        assertEquals("ali", at?.formattedToken)
+        assertEquals(6, at?.startIndex)
+
+        assertNull(AutocompleteModelUtils.getMessageAutocompleteToken("hello ali", 9..9))
+        // A caret sitting after a completed word offers nothing.
+        assertNull(AutocompleteModelUtils.getMessageAutocompleteToken("hello @ali ", 11..11))
+    }
+
+    @Test
+    fun aSlashCommandIsMatchedFromTheStartOfTheInputNotFromTheCaretsWord() {
+        val token = AutocompleteModelUtils.getMessageAutocompleteToken("/ban someone", 12..12)
+        assertEquals(LeadingIdentifier.APP_COMMAND, token?.leadingIdentifier)
+        assertEquals(0, token?.startIndex)
+        assertEquals(true, token?.isAtStart)
+    }
+
+    @Test
+    fun mentionsAreRewrittenToTheirServerFormInAscendingOrder() {
+        val input = "see #general and #random"
+        val map = mapOf(
+            IntRange(4, 12) to channelAutocompletable(1L, "general"),
+            IntRange(17, 24) to channelAutocompletable(2L, "random"),
+        )
+
+        assertEquals("see <#1> and <#2>", input.replaceAutocompleteDataWithServerValues(map))
+    }
+
+    @Test
+    fun anOutOfBoundsRangeIsSkippedRatherThanThrowing() {
+        val input = "hi"
+        val map = mapOf(IntRange(50, 60) to channelAutocompletable(1L, "general"))
+
+        assertEquals("hi", input.replaceAutocompleteDataWithServerValues(map))
+    }
+
+    @Test
+    fun flattenPreservesBucketOrder() {
+        val flattened = mapOf(
+            LeadingIdentifier.CHANNELS to listOf<Autocompletable>(channelAutocompletable(1L, "a")),
+            LeadingIdentifier.MENTION to listOf<Autocompletable>(GlobalRoleAutocompletable.everyone),
+        ).flatten()
+
+        assertEquals(2, flattened.size)
+        assertEquals("<#1>", flattened[0].getInputReplacement())
+        assertEquals("@everyone", flattened[1].getInputReplacement())
+    }
+}

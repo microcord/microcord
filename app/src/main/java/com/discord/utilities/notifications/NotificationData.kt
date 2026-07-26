@@ -16,12 +16,22 @@ data class NotificationData(
     val authGeneration: Int,
     val allowReply: Boolean = false,
     val source: NotificationSource = NotificationSource.LOCAL,
+    /** Push payload discriminator (`MESSAGE_CREATE`, `top_messages_push`, …); null for local notifications. */
+    val type: String? = null,
 )
 
 class NotificationCache(private val maxMessages: Int = 20) {
     data class Snapshot(val notificationId: Int, val messages: List<NotificationData>)
 
     private val channels = mutableMapOf<Long, MutableList<NotificationData>>()
+
+    /**
+     * Channels exempt from exactly one ack-driven clear.
+     *
+     * A direct reply acks the channel it replied to. Without this exemption that ack would also
+     * cancel a notification that arrived between the reply being typed and the ack landing.
+     */
+    private val ignoreNextClearForAck = mutableSetOf<Long>()
 
     init { require(maxMessages > 0) }
 
@@ -34,9 +44,36 @@ class NotificationCache(private val maxMessages: Int = 20) {
         return Snapshot(notificationId(data.channelId), messages.toList())
     }
 
+    /**
+     * Drops the cached notifications for [channelId] and returns the notification id to cancel, or
+     * null when nothing should be cancelled — including when an ack-driven clear was consumed by
+     * the exemption set by [setIgnoreNextClearForAck].
+     */
     @Synchronized
-    fun removeChannel(channelId: Long): Int? =
-        channels.remove(channelId)?.let { notificationId(channelId) }
+    fun removeChannel(channelId: Long, isAckRequest: Boolean = false): Int? {
+        if (isAckRequest && ignoreNextClearForAck.remove(channelId)) return null
+        ignoreNextClearForAck.remove(channelId)
+        return channels.remove(channelId)?.let { notificationId(channelId) }
+    }
+
+    /**
+     * Whether a clear for [channelId] should go ahead, consuming the ack exemption if one is set.
+     *
+     * Separate from [removeChannel] because a clear must still reach the system tray when the cache
+     * is empty — a broadcast receiver woken into a fresh process has no cached notifications, and
+     * the tray notification is still there.
+     */
+    @Synchronized
+    fun consumeAckExemption(channelId: Long, isAckRequest: Boolean): Boolean {
+        if (isAckRequest && ignoreNextClearForAck.remove(channelId)) return false
+        ignoreNextClearForAck.remove(channelId)
+        return true
+    }
+
+    @Synchronized
+    fun setIgnoreNextClearForAck(channelId: Long, shouldIgnore: Boolean) {
+        if (shouldIgnore) ignoreNextClearForAck += channelId else ignoreNextClearForAck -= channelId
+    }
 
     @Synchronized
     fun get(channelId: Long): Snapshot? =

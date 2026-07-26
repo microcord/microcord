@@ -40,7 +40,8 @@ class UserProfileStageActionsView(context: Context, attrs: AttributeSet) : Linea
         if (visibility != View.VISIBLE) return
         invite.visibility = if (state.userRequestToSpeakState.canBeInvitedToSpeak) View.VISIBLE else View.GONE
         invite.isEnabled = !state.isInvitingToSpeak
-        invite.setText(if (state.isMe) R.string.stage_channel_user_invited_to_speak else R.string.stage_channel_user_invite_to_speak)
+        // Your own row offers to raise your hand; someone else's offers to invite them up.
+        invite.setText(if (state.isMe) R.string.moderator_raise_own_hand else R.string.stage_channel_user_invite_to_speak)
         invite.setCompoundDrawablesWithIntrinsicBounds(
             if (state.isMe) R.drawable.ic_stage_move_to_speaker else R.drawable.ic_stage_invite_speak,
             0, 0, 0,

@@ -3,6 +3,7 @@ package com.discord.widgets.stickers
 import androidx.annotation.MainThread
 import com.discord.api.premium.PremiumTier
 import com.discord.api.sticker.Sticker
+import com.discord.app.AppViewModel
 import com.discord.models.sticker.dto.ModelStickerPack
 import com.discord.models.user.MeUser
 import com.discord.stores.StoreStream
@@ -24,7 +25,7 @@ class StickerSheetViewModel(
     private val storeUser: StoreUser = StoreStream.getUsers(),
     private val location: String?,
     storeStateObservable: Observable<StoreState> = observeStoreState(stickerStore, storeUser, sticker),
-) : com.discord.app.AppViewModel<StickerSheetViewModel.ViewState>() {
+) : AppViewModel<StickerSheetViewModel.ViewState>() {
 
     data class StoreState(
         val stickerPack: StickerStore.StickerPackState,

@@ -1,11 +1,14 @@
 package com.discord.widgets.channels.settings
 
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
 import com.discord.app.AppFragment
+import com.discord.app.AppScreenRouter
 import com.discord.R
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.views.CheckedSetting
@@ -93,7 +96,23 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
         @JvmField var onOpenSystemSettings: ((Long) -> Unit)? = null
         @JvmField var onError: ((Throwable) -> Unit)? = null
         fun newInstance(channelId: Long, showSystemSettings: Boolean = false) = WidgetChannelNotificationSettings().apply {
-            arguments = Bundle().apply { putLong(ARG_CHANNEL_ID, channelId); putBoolean(ARG_SHOW_SYSTEM, showSystemSettings) }
+            arguments = argumentsOf(channelId, showSystemSettings)
+        }
+
+        /** Opens the screen as a top-level destination, as the reference's `launch` does. */
+        @JvmStatic
+        @JvmOverloads
+        fun launch(context: Context, channelId: Long, showSystemSettings: Boolean = false) {
+            AppScreenRouter.launch(
+                context,
+                WidgetChannelNotificationSettings::class.java,
+                Intent().putExtras(argumentsOf(channelId, showSystemSettings)),
+            )
+        }
+
+        private fun argumentsOf(channelId: Long, showSystemSettings: Boolean) = Bundle().apply {
+            putLong(ARG_CHANNEL_ID, channelId)
+            putBoolean(ARG_SHOW_SYSTEM, showSystemSettings)
         }
         private const val ARG_SHOW_SYSTEM = "show_system_settings"
     }

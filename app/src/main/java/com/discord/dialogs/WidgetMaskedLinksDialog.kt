@@ -4,14 +4,22 @@ import android.content.Context
 import android.os.Bundle
 import android.view.View
 import android.widget.TextView
-import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentManager
 import com.discord.R
+import com.discord.app.AppComponent
 import com.discord.app.AppDialog
 import com.discord.i18n.setI18nText
+import com.discord.stores.StoreNotices
+import com.discord.stores.StoreStream
 import com.discord.utilities.string.toPunyCodeASCIIUrl
 import com.discord.utilities.uri.UriHandler
+import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
+import com.discord.widgets.home.WidgetHome
+import com.discord.widgets.media.WidgetMedia
+import com.discord.widgets.search.WidgetSearch
+import com.discord.widgets.user.WidgetUserMentions
 import com.google.android.material.button.MaterialButton
+import kotlin.reflect.KClass
 
 /**
  * The phishing guard shown before an untrusted masked link is opened.
@@ -61,8 +69,8 @@ class WidgetMaskedLinksDialog : AppDialog(R.layout.widget_masked_links_dialog) {
 
     override fun onDestroy() {
         super.onDestroy()
-        // The notice queue holds the next notice back while this one is on screen.
-        noticeSeenHandler?.invoke(NOTICE_NAME)
+        // The notice queue holds the next notice back until this one is marked seen.
+        StoreStream.getNotices().markSeen(NOTICE_NAME)
     }
 
     /**
@@ -81,21 +89,27 @@ class WidgetMaskedLinksDialog : AppDialog(R.layout.widget_masked_links_dialog) {
         private const val ARG_URL = "WIDGET_SPOOPY_LINKS_DIALOG_URL"
 
         /**
+         * Only screens that can actually contain a link may interrupt with this dialog; anywhere
+         * else the notice waits in the queue.
+         */
+        private val VALID_SCREENS: List<KClass<out AppComponent>> = listOf(
+            WidgetHome::class,
+            WidgetUserMentions::class,
+            WidgetSearch::class,
+            WidgetChannelPinnedMessages::class,
+            WidgetMedia::class,
+        )
+
+        /**
          * Remembers a domain the user chose to trust.
          *
          * Installed by whoever publishes `StoreMaskedLinks` on `StoreStream`; the reference calls
-         * `StoreStream.getMaskedLinks().trustDomain(url)` directly. Until it is installed the
-         * "Trust this Domain" row still opens the link, it just does not persist the decision.
+         * `StoreStream.getMaskedLinks().trustDomain(url)` directly. `StoreStream` does not construct
+         * that store yet, so until it does the "Trust this Domain" row still opens the link — it
+         * just does not persist the decision.
          */
         @JvmStatic
         var trustDomainHandler: ((url: String) -> Unit)? = null
-
-        /**
-         * Records that this notice was shown. Installed by `StoreNotices` when it lands; it is the
-         * same hook `WidgetNoticeDialog.dialogSeenHandler` uses, and both take the notice name.
-         */
-        @JvmStatic
-        var noticeSeenHandler: ((noticeName: String) -> Unit)? = null
 
         fun show(fragmentManager: FragmentManager, url: String) {
             WidgetMaskedLinksDialog().apply {
@@ -107,32 +121,33 @@ class WidgetMaskedLinksDialog : AppDialog(R.layout.widget_masked_links_dialog) {
          * Installs this dialog as [UriHandler]'s untrusted-link confirmation step.
          *
          * The reference does not need an installer: `UriHandler.handleOrUntrusted` enqueues the
-         * notice itself. This project's `UriHandler` has no dependency on the widget tree, so the
-         * wiring is inverted and has to be performed once during app start-up. **Until it is called,
-         * an untrusted link is silently dropped.**
+         * notice itself. This project's `UriHandler` deliberately has no dependency on the widget
+         * tree or the store graph, so the wiring is inverted and has to be performed once during
+         * app start-up. **Until it is called, an untrusted link is silently dropped.**
          */
         @JvmStatic
         fun installUntrustedLinkHandler() {
-            UriHandler.untrustedLinkHandler = { context, url ->
-                val fragmentManager = context.findFragmentManager()
-                if (fragmentManager != null) {
-                    show(fragmentManager, url)
-                } else {
-                    // No host to show a dialog on. Dropping the link is the safe failure: the
-                    // alternative is opening a destination the user never confirmed.
-                    com.discord.app.AppLog.w("Dropped untrusted link: no FragmentManager for $context")
-                }
+            UriHandler.untrustedLinkHandler = { _, url ->
+                StoreStream.getNotices().requestToShow(
+                    StoreNotices.Notice(
+                        name = NOTICE_NAME,
+                        requestedShowTimestamp = 0L,
+                        priority = StoreNotices.PRIORITY_HIGH,
+                        persist = false,
+                        validScreens = VALID_SCREENS,
+                        delayPeriodMs = DELAY_PERIOD_MS,
+                        // The user asked for this link now; a previous confirmation must not
+                        // suppress the next one.
+                        sinceLastPeriodMs = 0L,
+                        show = { activity ->
+                            show(activity.supportFragmentManager, url)
+                            true
+                        },
+                    ),
+                )
             }
         }
 
-        /** Unwraps `ContextWrapper`s until a [FragmentActivity] appears, or gives up. */
-        private fun Context.findFragmentManager(): FragmentManager? {
-            var current: Context? = this
-            while (current != null) {
-                if (current is FragmentActivity) return current.supportFragmentManager
-                current = (current as? android.content.ContextWrapper)?.baseContext
-            }
-            return null
-        }
+        private const val DELAY_PERIOD_MS = 1000L
     }
 }

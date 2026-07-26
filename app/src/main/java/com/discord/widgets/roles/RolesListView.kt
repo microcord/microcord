@@ -43,7 +43,7 @@ class RolesListView(
                 chip.findViewById<ImageView>(R.id.role_chip_dot),
                 ColorStateList.valueOf(roleChipColor(role.color, roleDefaultColor)),
             )
-            chip.findViewById<RoleIconView>(R.id.role_chip_icon).setRoleIconPreview(role)
+            chip.findViewById<RoleIconView>(R.id.role_chip_icon).setRole(role, guildId)
             if (developerModeEnabled) {
                 chip.setOnClickListener { copyRoleId(role) }
             }

@@ -176,11 +176,20 @@ class WidgetStickerSheet : AppBottomSheet() {
         /**
          * Only meaningful for [StickerType.STANDARD]; other types are handled by the sibling
          * sheets. [channelId] decides the analytics page name only.
+         *
+         * The reference bails out entirely when the channel is not in the store. That is a purely
+         * analytical dependency, and refusing to open the popout because a *label* cannot be
+         * derived is the failure mode this feature was reported for, so the label is dropped
+         * instead.
          */
         fun show(fragmentManager: FragmentManager, sticker: Sticker, channelId: Long) {
             if (sticker.type != StickerType.STANDARD) return
-            val channel = StoreStream.getChannels().findChannelById(channelId) ?: return
-            val page = if (channel.guildId == 0L) "DM Channel" else "Guild Channel"
+            val channel = StoreStream.getChannels().findChannelById(channelId)
+            val page = when {
+                channel == null -> null
+                channel.guildId == 0L -> "DM Channel"
+                else -> "Guild Channel"
+            }
             WidgetStickerSheet().apply {
                 arguments = Bundle().apply {
                     putSerializable(EXTRA_STICKER, sticker)

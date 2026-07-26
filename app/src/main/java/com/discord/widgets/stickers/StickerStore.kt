@@ -2,20 +2,15 @@ package com.discord.widgets.stickers
 
 import com.discord.api.sticker.Sticker
 import com.discord.models.sticker.dto.ModelStickerPack
+import com.discord.stores.StoreStream
 import rx.Observable
 
 /**
  * The standard (Discord-published) sticker catalogue.
  *
  * This is the contract the sticker popout and the sticker picker need. It is declared here, in the
- * feature package, because `com.discord.stores.StoreStickers` does not exist yet — see the handoff
- * note in `docs/parity-audit/followups.md`. Every member below mirrors the reference store
- * one-for-one, so the store wave closes this by making `StoreStickers` implement [StickerStore]
- * and pointing [StickerStores.stickers] at `StoreStream.getStickers()`; no call site changes.
- *
- * Until then [StickerStores.stickers] resolves to [RestBackedStickerStore], which is a real,
- * working implementation over the (already wired) REST endpoints, but with no dispatcher
- * confinement, no `ObservationDeck` participation and no persistence.
+ * feature package, and `com.discord.stores.StoreStickers` implements it, so [StickerStores.stickers]
+ * now resolves to the real dispatcher-confined, `ObservationDeck`-backed, persisted store.
  */
 interface StickerStore {
 
@@ -71,11 +66,9 @@ interface StickerStore {
 /**
  * Custom stickers uploaded to guilds, keyed `guildId -> stickerId -> Sticker`.
  *
- * Same story as [StickerStore]: `com.discord.stores.StoreGuildStickers` does not exist, so the
- * contract lives here and [StickerStores.guildStickers] resolves to [GuildsBackedGuildStickerStore],
- * which reads the sticker lists `StoreGuilds` already keeps on each `Guild`. That is faithful — the
- * reference store is fed from the same GUILD_CREATE/GUILD_UPDATE payloads — but it misses
- * `GUILD_STICKERS_UPDATE`, which `StoreGuilds` does not currently route.
+ * Same story as [StickerStore]: the contract lives here in the feature package and
+ * `com.discord.stores.StoreGuildStickers` implements it, so [StickerStores.guildStickers] resolves
+ * to the real store — which, unlike the retired stand-in, also consumes `GUILD_STICKERS_UPDATE`.
  */
 interface GuildStickerStore {
 
@@ -102,11 +95,11 @@ interface GuildStickerStore {
  * when nobody installed them. View models take their store as a defaulted constructor parameter and
  * tests pass a fake, so nothing here has to be swapped at runtime.
  *
- * When the store wave lands, these two lines become `StoreStream.getStickers()` and
- * `StoreStream.getGuildStickers()`.
+ * Both resolve to the real store graph. `RestBackedStickerStore` and
+ * `GuildsBackedGuildStickerStore` in `StickerStoreDefaults.kt` are now dead and can be deleted.
  */
 object StickerStores {
-    val stickers: StickerStore by lazy { RestBackedStickerStore() }
+    val stickers: StickerStore get() = StoreStream.getStickers()
 
-    val guildStickers: GuildStickerStore by lazy { GuildsBackedGuildStickerStore() }
+    val guildStickers: GuildStickerStore get() = StoreStream.getGuildStickers()
 }

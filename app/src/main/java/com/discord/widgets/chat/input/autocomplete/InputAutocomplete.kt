@@ -104,7 +104,7 @@ class InputAutocomplete(
         } finally {
             applyingSelection = false
         }
-        viewModel.onAutocompleteDismissed()
+        resyncAfterEdit()
     }
 
     private fun configureUI(viewState: AutocompleteViewState) = when (viewState) {
@@ -165,6 +165,22 @@ class InputAutocomplete(
         } finally {
             applyingSelection = false
         }
-        viewModel.onAutocompleteDismissed()
+        resyncAfterEdit()
+    }
+
+    /**
+     * Re-derives the mention map after a programmatic edit.
+     *
+     * The [TextWatcher] is suppressed while the edit is applied — otherwise picking a candidate
+     * would immediately re-open the popup on the text just inserted — so the model would otherwise
+     * be left holding a map built from the *previous* text and would refuse to rewrite any other
+     * mention in the message on send.
+     *
+     * Feeding the new text back in is safe: the caret now sits after a trailing space, so
+     * `getSelectedToken` finds no word under it and the state reduces to `Hidden`.
+     */
+    private fun resyncAfterEdit() {
+        val caret = editText.selectionStart.coerceAtLeast(0)
+        viewModel.onInputChanged(editText.text ?: "", caret..caret)
     }
 }

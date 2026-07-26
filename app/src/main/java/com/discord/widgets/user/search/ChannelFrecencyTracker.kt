@@ -17,7 +17,10 @@ class ChannelFrecencyTracker : FrecencyTracker<Long>(
     override fun List<Long>.computeScore(currentTime: Long): Int = sumOf { timestamp ->
         val age = currentTime - timestamp
         if (age < OLDEST_ALLOWED_DELTA_MS) {
-            (100 - Math.pow(0.1, age.toDouble() / OLDEST_ALLOWED_DELTA_MS)).toInt()
+            // Truncated before the subtraction, exactly as the reference does: `0.1^fraction` only
+            // reaches 1 for an instantaneous visit, so in practice every in-window visit is worth
+            // 100 and the decay only bites at the week boundary.
+            100 - Math.pow(0.1, age.toDouble() / OLDEST_ALLOWED_DELTA_MS).toInt()
         } else {
             0
         }

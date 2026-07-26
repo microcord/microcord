@@ -30,6 +30,7 @@ import com.discord.widgets.settings.WidgetSettings
 import com.discord.widgets.settings.account.WidgetSettingsBlockedUsers
 import com.discord.widgets.user.WidgetUserMentions
 import com.discord.widgets.user.search.WidgetGlobalSearch
+import com.discord.widgets.user.search.WidgetGlobalSearchDialog
 import rx.Subscription
 
 internal fun shouldShowBottomNavigation(tab: NavigationTab, leftPanelState: PanelState) =
@@ -171,6 +172,14 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
         if (route is DeepLinkRoute.User) {
             WidgetUserSheet.show(route.userId, childFragmentManager)
             StoreStream.getNavigation().consumePendingIntent(contract)
+            return
+        }
+        // A `/query/` App Action names a destination rather than identifying one; the quick switcher
+        // is what resolves a name, so the link opens it pre-filled.
+        if (route is DeepLinkRoute.Query) {
+            if (WidgetGlobalSearchDialog.showForQuery(childFragmentManager, route)) {
+                StoreStream.getNavigation().consumePendingIntent(contract)
+            }
             return
         }
         if (route is DeepLinkRoute.Discovery) {

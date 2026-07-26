@@ -79,7 +79,7 @@ class SettingsViewModel(
         }
             .distinctUntilChanged()
             .ui(this)
-            .subscribe(::handleStoreState)
+            .subscribe { handleStoreState(it) }
     }
 
     fun observeProfileHeaderViewState(): Observable<UserProfileHeaderViewModel.ViewState> =

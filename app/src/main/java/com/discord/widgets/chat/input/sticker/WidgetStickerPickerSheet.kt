@@ -3,6 +3,7 @@ package com.discord.widgets.chat.input.sticker
 import android.content.DialogInterface
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
 import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.api.sticker.Sticker
@@ -44,8 +45,15 @@ class WidgetStickerPickerSheet : AppBottomSheet(), StickerPickerListener {
             .runOnCommit {
                 // The sheet has to be given a height explicitly: its only child is a
                 // FragmentContainerView, which measures to nothing until the picker inflates.
-                view.layoutParams = view.layoutParams?.apply {
-                    height = (resources.displayMetrics.heightPixels * SHEET_HEIGHT_FRACTION).toInt()
+                // Posted because the content view has no layout params until it is attached.
+                view.post {
+                    val params = view.layoutParams ?: ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    )
+                    params.height =
+                        (resources.displayMetrics.heightPixels * SHEET_HEIGHT_FRACTION).toInt()
+                    view.layoutParams = params
                 }
             }
             .commit()

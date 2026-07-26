@@ -99,6 +99,8 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
             }
         }
         bindRoute(view, R.id.text_images_settings, ::WidgetSettingsMedia)
+        bindRoute(view, R.id.appearance, ::WidgetSettingsAppearance)
+        bindRoute(view, R.id.language, ::WidgetSettingsLanguage)
         bindRoute(view, R.id.accessibility, ::WidgetSettingsAccessibility)
         bindRoute(view, R.id.behavior, ::WidgetSettingsBehavior)
         bindRoute(view, R.id.activity_status, ::WidgetSettingsActivityStatus)
@@ -261,6 +263,8 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         internal val implementedRouteIds = setOf(
             R.id.blocked_users,
             R.id.text_images_settings,
+            R.id.appearance,
+            R.id.language,
             R.id.accessibility,
             R.id.behavior,
             R.id.activity_status,

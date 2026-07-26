@@ -55,7 +55,9 @@ class PrivateCallGridView @JvmOverloads constructor(
                 setRingMargin(6.dp)
             }
         }.also {
-            it.setVoiceUser(user, R.dimen.avatar_size_large)
+            // `avatar_size_unrestricted` is 0dp: the tile has already been sized to 92dp above, so
+            // the avatar must not re-clamp itself to a dimen of its own.
+            it.setVoiceUser(user, R.dimen.avatar_size_unrestricted)
             it.isSelected = false
         }
 

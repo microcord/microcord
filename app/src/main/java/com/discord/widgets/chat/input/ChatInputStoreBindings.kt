@@ -3,6 +3,7 @@ package com.discord.widgets.chat.input
 import com.discord.api.channel.Channel
 import com.discord.stores.StoreChat
 import com.discord.stores.StoreSlowMode
+import com.discord.stores.StoreThreadDraft
 import rx.Observable
 
 /**
@@ -39,4 +40,23 @@ object ChatInputStoreBindings {
     /** `StoreThreadsActiveJoined.observeActiveJoinedThreadsChannelsForGuild`. */
     @JvmStatic
     var joinedThreads: (guildId: Long) -> Observable<Map<Long, Channel>> = { Observable.just(emptyMap()) }
+
+    /**
+     * [com.discord.stores.StoreLurking.isLurkingObs].
+     *
+     * Unset → the composer never shows the "join to talk" guard, so a lurked guild looks writable
+     * until the send is rejected by the API.
+     */
+    @JvmStatic
+    var isLurking: (guildId: Long) -> Observable<Boolean> = { Observable.just(false) }
+
+    /**
+     * [com.discord.stores.StoreThreadDraft.observeDraftState].
+     *
+     * Unset → the thread-creation composer reports an empty draft; harmless while thread creation
+     * itself is unreconstructed.
+     */
+    @JvmStatic
+    var threadDraftState: () -> Observable<StoreThreadDraft.ThreadDraftState> =
+        { Observable.just(StoreThreadDraft.ThreadDraftState()) }
 }

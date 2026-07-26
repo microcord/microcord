@@ -1,6 +1,7 @@
 package com.discord.utilities.notifications
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -16,6 +17,28 @@ class NotificationUtilitiesTest {
         assertEquals(2L, snapshot.messages.first().messageId)
         assertEquals("updated", snapshot.messages.last().body)
         assertEquals(NotificationCache.notificationId(CHANNEL), cache.removeChannel(CHANNEL))
+        assertNull(cache.get(CHANNEL))
+    }
+
+    @Test fun ackDrivenClearIsSkippedExactlyOnceAfterAReply() {
+        val cache = NotificationCache(20)
+        cache.add(message(1))
+        cache.setIgnoreNextClearForAck(CHANNEL, true)
+
+        // The reply's own ack must not cancel the notification...
+        assertNull(cache.removeChannel(CHANNEL, isAckRequest = true))
+        assertNotNull(cache.get(CHANNEL))
+        // ...but the exemption is spent, so the next ack does.
+        assertEquals(NotificationCache.notificationId(CHANNEL), cache.removeChannel(CHANNEL, isAckRequest = true))
+        assertNull(cache.get(CHANNEL))
+    }
+
+    @Test fun userDrivenClearIgnoresTheAckExemption() {
+        val cache = NotificationCache(20)
+        cache.add(message(1))
+        cache.setIgnoreNextClearForAck(CHANNEL, true)
+
+        assertEquals(NotificationCache.notificationId(CHANNEL), cache.removeChannel(CHANNEL, isAckRequest = false))
         assertNull(cache.get(CHANNEL))
     }
 

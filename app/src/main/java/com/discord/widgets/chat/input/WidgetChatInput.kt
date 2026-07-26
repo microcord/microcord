@@ -1,59 +1,68 @@
 package com.discord.widgets.chat.input
 
-import android.os.Bundle
+import android.content.Context
+import android.content.res.ColorStateList
 import android.text.Editable
+import android.text.SpannableString
+import android.text.Spanned
 import android.text.TextWatcher
+import android.text.style.ForegroundColorSpan
+import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.View
-import android.widget.TextView
-import android.widget.ImageView
-import android.content.res.ColorStateList
-import android.text.SpannableString
-import android.text.style.ForegroundColorSpan
-import android.text.Spanned
-import android.util.TypedValue
-import android.widget.Toast
-import android.widget.EditText
-import android.content.Context
 import android.view.inputmethod.InputMethodManager
-import androidx.activity.OnBackPressedCallback
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.FileProvider
-import androidx.fragment.app.Fragment
-import com.discord.app.AppFragment
-import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
+import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
-import com.discord.api.permission.Permission
-import com.discord.models.message.Message
+import com.discord.api.channel.getDisplayName
+import com.discord.api.guild.GuildVerificationLevel
+import com.discord.app.AppFragment
+import com.discord.i18n.FormatUtils
+import com.discord.models.domain.emoji.Emoji
 import com.discord.models.member.GuildMember
-import com.discord.models.user.MeUser
 import com.discord.stores.StoreChatInputEditing
 import com.discord.stores.StorePendingReplies
 import com.discord.stores.StoreStream
+import com.discord.utilities.duration.humanizeCountdownDuration
 import com.discord.utilities.messagesend.MessageResult
 import com.discord.utilities.messagesend.MessageSendCoordinator
+import com.discord.utilities.rx.ui
+import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
+import com.discord.widgets.chat.input.autocomplete.AutocompleteViewModel
+import com.discord.widgets.chat.input.autocomplete.ChatInputAutocompletables
+import com.discord.widgets.chat.input.autocomplete.InputAutocomplete
+import com.discord.widgets.chat.input.emoji.EmojiPickerContextType
 import com.discord.widgets.chat.input.emoji.WidgetEmojiPicker
+import com.google.android.material.button.MaterialButton
 import com.lytefast.flexinput.InputListener
 import com.lytefast.flexinput.fragment.FlexInputFragment
+import com.lytefast.flexinput.managers.FileManager
+import com.lytefast.flexinput.managers.KeyboardManager
 import com.lytefast.flexinput.model.Attachment
 import com.lytefast.flexinput.widget.FlexEditText
-import com.lytefast.flexinput.managers.KeyboardManager
-import com.lytefast.flexinput.managers.FileManager
 import java.io.File
-import rx.Observable
 import rx.Subscription
 import rx.subjects.PublishSubject
 
+/**
+ * The message composer.
+ *
+ * State comes from [ChatInputViewModel] as one `Loaded` snapshot per channel, and the fragment's
+ * whole job is to turn that into either the composer or exactly one guard explaining why the
+ * composer is absent. The guards are mutually exclusive and ordered — see [configureChatGuard].
+ *
+ * Autocomplete is a separate controller ([InputAutocomplete]) rather than inline code here,
+ * because it drives three views that live in different parts of the layout and it has to own the
+ * FlexInput child fragment's `EditText`, which does not exist until that fragment is laid out.
+ */
 class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPicker.Host {
-    data class State(
-        val channel: Channel? = null,
-        val canSend: Boolean = false,
-        val communicationDisabled: Boolean = false,
-        val systemDm: Boolean = false,
-        val pendingReply: StorePendingReplies.PendingReply? = null,
-        val editing: Message? = null,
-    )
 
     data class UploadRequest(
         val channelId: Long,
@@ -62,51 +71,89 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val pendingReply: StorePendingReplies.PendingReply?,
     )
 
-    private var subscription: Subscription? = null
+    private lateinit var viewModel: ChatInputViewModel
+    private lateinit var autocompleteViewModel: AutocompleteViewModel
+
     private var sendResultSubscription: Subscription? = null
     private var uploadCaptchaSubscription: Subscription? = null
     private var mentionSubscription: Subscription? = null
     private var input: FlexEditText? = null
     private var expressionTray: View? = null
-    private var expressionBackCallback: OnBackPressedCallback? = null
-    private var state = State()
+    private var autocomplete: InputAutocomplete? = null
+
+    private var state: ChatInputViewModel.ViewState.Loaded? = null
+
+    /** `true` while [restoreInput] rewrites the composer, so the draft watcher ignores the edit. */
     private var restoringText = false
+
     private val drafts get() = draftsProvider()
+
     private val watcher = object : TextWatcher {
         override fun beforeTextChanged(value: CharSequence?, start: Int, count: Int, after: Int) = Unit
         override fun onTextChanged(value: CharSequence?, start: Int, before: Int, count: Int) = Unit
         override fun afterTextChanged(value: Editable?) {
             if (restoringText) return
-            val channelId = state.channel?.id ?: return
-            if (state.editing == null) drafts.setTextChannelInput(channelId, value)
-            coordinatorProvider()?.typing(channelId, value?.toString().orEmpty())
+            val loaded = state ?: return
+            if (!loaded.isEditing) drafts.setTextChannelInput(loaded.channelId, value)
+            coordinatorProvider()?.typing(loaded.channelId, value?.toString().orEmpty())
         }
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        view.findViewById<View>(R.id.chat_input_context_cancel).setOnClickListener {
-            val channelId = state.channel?.id ?: return@setOnClickListener
-            if (state.editing != null) editingStore?.stop(channelId) else pendingRepliesStore?.onDeletePendingReply(channelId)
+    override fun onViewBound(view: View) {
+        super.onViewBound(view)
+        // Stopgap until StoreEmoji exists; see ChatInputAutocompletables.installDefaultEmojiSetSource.
+        ChatInputAutocompletables.installDefaultEmojiSetSource(requireContext())
+        viewModel = ViewModelProvider(this).get(ChatInputViewModel::class.java)
+        autocompleteViewModel = ViewModelProvider(this).get(AutocompleteViewModel::class.java)
+
+        view.findViewById<View>(R.id.chat_input_context_cancel).apply {
+            contentDescription = getString(R.string.cancel)
+            setOnClickListener {
+                val loaded = state ?: return@setOnClickListener
+                if (loaded.isEditing) editingStore?.stop(loaded.channelId)
+                else pendingRepliesStore?.onDeletePendingReply(loaded.channelId)
+            }
         }
-        view.findViewById<View>(R.id.chat_input_context_cancel).contentDescription = getString(R.string.cancel)
         view.findViewById<View>(R.id.chat_input_context_reply_mention_button).setOnClickListener {
-            val channelId = state.channel?.id ?: return@setOnClickListener
-            state.pendingReply?.let { pendingRepliesStore?.onSetPendingReplyShouldMention(channelId, !it.shouldMention) }
+            val loaded = state ?: return@setOnClickListener
+            val replying = loaded.pendingReplyState as? ChatInputViewModel.ViewState.PendingReplyState.Replying
+                ?: return@setOnClickListener
+            pendingRepliesStore?.onSetPendingReplyShouldMention(
+                loaded.channelId,
+                !replying.pendingReply.shouldMention,
+            )
         }
-        expressionBackCallback = object : OnBackPressedCallback(false) {
-            override fun handleOnBackPressed() = hideExpressionTray(true)
-        }.also { requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, it) }
+
+        // Back closes, in order: the autocomplete popup, then the expression tray. Registering
+        // through the registry rather than the activity's dispatcher keeps this ordered against
+        // every other handler in the app instead of relying on attach order.
+        setOnBackPressed(handler = {
+            when {
+                autocomplete?.isShowing() == true -> {
+                    autocomplete?.dismiss()
+                    true
+                }
+                expressionTray?.visibility == View.VISIBLE -> {
+                    hideExpressionTray(true)
+                    true
+                }
+                else -> false
+            }
+        })
+
         view.post(::bindFlexInput)
+    }
+
+    override fun onViewBoundOrOnResume() {
+        super.onViewBoundOrOnResume()
+        viewModel.observeViewState()
+            .ui(this)
+            .subscribe({ configureUI(it) }, { /* a render failure must not kill the composer */ })
+        autocomplete?.onViewBoundOrOnResume()
     }
 
     override fun onStart() {
         super.onStart()
-        subscription = (stateSource?.invoke() ?: defaultStateSource()).distinctUntilChanged().subscribe { next ->
-            view?.post {
-                if (view != null && viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) show(next)
-            }
-        }
         sendResultSubscription = coordinatorProvider()?.observeUpdates()?.subscribe { update ->
             val failed = update as? MessageSendCoordinator.Update.Failed ?: return@subscribe
             view?.post {
@@ -135,8 +182,6 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     }
 
     override fun onStop() {
-        subscription?.unsubscribe()
-        subscription = null
         sendResultSubscription?.unsubscribe()
         sendResultSubscription = null
         uploadCaptchaSubscription?.unsubscribe()
@@ -148,9 +193,10 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
 
     override fun onDestroyView() {
         input?.removeTextChangedListener(watcher)
+        autocomplete?.onDestroyView()
+        autocomplete = null
         input = null
         expressionTray = null
-        expressionBackCallback = null
         super.onDestroyView()
     }
 
@@ -159,14 +205,12 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         flex.setKeyboardManager(object : KeyboardManager {
             override fun requestDisplay(editText: EditText) {
                 editText.requestFocus()
-                (requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-                    .showSoftInput(editText, InputMethodManager.SHOW_IMPLICIT)
+                inputMethodManager().showSoftInput(editText, InputMethodManager.SHOW_IMPLICIT)
             }
 
             override fun requestHide() {
                 val token = activity?.currentFocus?.windowToken ?: view?.windowToken ?: return
-                (requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-                    .hideSoftInputFromWindow(token, 0)
+                inputMethodManager().hideSoftInputFromWindow(token, 0)
             }
         })
         flex.setFileManager(object : FileManager {
@@ -190,10 +234,33 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         }
         flex.setInputListener(object : InputListener {
             override fun onSend(data: Editable, attachments: List<Attachment<*>>): Boolean =
-                submit(data.toString(), attachments)
+                submit(attachments)
         })
+        bindAutocomplete(editText)
         bindEmojiPicker(flex)
-        show(state)
+        // The composer is bound from a `post`, so the first view state usually arrives before this
+        // point and found no EditText to write into. Restore explicitly rather than relying on
+        // configureLoaded, whose "channel changed" test is false when re-rendering the same state.
+        state?.let {
+            restoreInput(it)
+            configureLoaded(it)
+        }
+    }
+
+    private fun bindAutocomplete(editText: EditText) {
+        val root = view ?: return
+        autocomplete?.onDestroyView()
+        autocomplete = InputAutocomplete(
+            appComponent = this,
+            editText = editText,
+            autocompleteHeader = root.findViewById(R.id.chat_input_emoji_matching_header),
+            autocompleteRecyclerView = root.findViewById<RecyclerView>(R.id.chat_input_mentions_recycler),
+            stickersContainer = root.findViewById(R.id.chat_input_stickers_container),
+            viewModel = autocompleteViewModel,
+        ).also {
+            it.setChannelId(state?.channelId)
+            it.onViewBoundOrOnResume()
+        }
     }
 
     private fun bindEmojiPicker(flex: FlexInputFragment) {
@@ -203,18 +270,18 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         expressionTray = tray
         if (flex.childFragmentManager.findFragmentById(R.id.emoji_container) == null) {
             flex.childFragmentManager.beginTransaction()
-                .replace(R.id.emoji_container, WidgetEmojiPicker())
+                .replace(R.id.emoji_container, WidgetEmojiPicker.create(EmojiPickerContextType.Chat))
                 .commitNow()
         }
         button.visibility = View.VISIBLE
         button.setOnClickListener {
-            if (tray.visibility == View.VISIBLE) hideExpressionTray(true) else {
+            if (tray.visibility == View.VISIBLE) {
+                hideExpressionTray(true)
+            } else {
                 tray.visibility = View.VISIBLE
                 button.isSelected = true
-                expressionBackCallback?.isEnabled = true
                 val token = activity?.currentFocus?.windowToken ?: view?.windowToken
-                if (token != null) (requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-                    .hideSoftInputFromWindow(token, 0)
+                if (token != null) inputMethodManager().hideSoftInputFromWindow(token, 0)
             }
         }
     }
@@ -222,17 +289,16 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     private fun hideExpressionTray(showKeyboard: Boolean) {
         val tray = expressionTray ?: return
         tray.visibility = View.GONE
-        expressionBackCallback?.isEnabled = false
         view?.findViewById<View>(R.id.emoji_btn)?.isSelected = false
         if (showKeyboard) {
             input?.requestFocus()
-            (requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-                .showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+            inputMethodManager().showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
         }
     }
 
-    override fun onEmojiPicked(text: String) {
+    override fun onEmojiPicked(emoji: Emoji) {
         val editor = input ?: return
+        val text = emoji.getChatInputText() + " "
         val start = minOf(editor.selectionStart, editor.selectionEnd).coerceAtLeast(0)
         val end = maxOf(editor.selectionStart, editor.selectionEnd).coerceAtLeast(start)
         editor.text?.replace(start, end, text)
@@ -244,36 +310,51 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         input?.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL))
     }
 
-    private fun submit(content: String, attachments: List<Attachment<*>>): Boolean {
-        val channel = state.channel ?: return false
+    /**
+     * Sends whatever is in the composer.
+     *
+     * Content is taken from [InputAutocomplete.getInputContent] rather than the raw text, so a
+     * mention the user typed by hand (`@alice#0001`) leaves as `<@id>` exactly like one they
+     * picked from the popup.
+     */
+    private fun submit(attachments: List<Attachment<*>>): Boolean {
+        val loaded = state ?: return false
+        val content = autocomplete?.getInputContent() ?: input?.text?.toString().orEmpty()
+        val pendingReply =
+            (loaded.pendingReplyState as? ChatInputViewModel.ViewState.PendingReplyState.Replying)?.pendingReply
+
         if (attachments.isNotEmpty()) {
-            if (state.editing != null) {
+            if (loaded.isEditing) {
                 Toast.makeText(requireContext(), R.string.editing_with_attachment_error, Toast.LENGTH_SHORT).show()
                 return false
             }
-            val accepted = uploadHandler?.invoke(UploadRequest(channel.id, content, attachments, state.pendingReply)) == true
+            val accepted = uploadHandler?.invoke(
+                UploadRequest(loaded.channelId, content, attachments, pendingReply),
+            ) == true
             if (accepted) {
-                drafts.setTextChannelInput(channel.id, null)
-                pendingRepliesStore?.onDeletePendingReply(channel.id)
+                drafts.setTextChannelInput(loaded.channelId, null)
+                pendingRepliesStore?.onDeletePendingReply(loaded.channelId)
             }
             return accepted
         }
+
         val coordinator = coordinatorProvider() ?: return false
-        val submission = state.editing?.let { coordinator.edit(it, content) } ?: coordinator.send(
+        val editing = loaded.editingMessage.takeIf { loaded.isEditing }
+        val submission = editing?.let { coordinator.edit(it, content) } ?: coordinator.send(
             MessageSendCoordinator.Send(
-                channelId = channel.id,
-                guildId = channel.guildId.takeUnless { it == 0L },
+                channelId = loaded.channelId,
+                guildId = loaded.channel.guildId.takeUnless { it == 0L },
                 content = content,
-                canSend = state.canSend,
-                communicationDisabled = state.communicationDisabled,
-                systemDm = state.systemDm,
-                reply = state.pendingReply,
+                canSend = loaded.ableToSendMessage,
+                communicationDisabled = loaded.isCommunicationDisabled,
+                systemDm = loaded.isSystemDM,
+                reply = pendingReply,
             ),
         )
         if (submission is MessageSendCoordinator.Submission.Accepted) {
-            drafts.setTextChannelInput(channel.id, null)
-            pendingRepliesStore?.onDeletePendingReply(channel.id)
-            editingStore?.stop(channel.id)
+            drafts.setTextChannelInput(loaded.channelId, null)
+            pendingRepliesStore?.onDeletePendingReply(loaded.channelId)
+            editingStore?.stop(loaded.channelId)
             return true
         }
         val result = (submission as MessageSendCoordinator.Submission.Rejected).result
@@ -286,104 +367,287 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val start = editor.selectionStart.coerceAtLeast(0)
         editor.text?.insert(start, "<@$userId> ")
         editor.requestFocus()
-        (requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-            .showSoftInput(editor, InputMethodManager.SHOW_IMPLICIT)
+        inputMethodManager().showSoftInput(editor, InputMethodManager.SHOW_IMPLICIT)
     }
 
-    private fun show(next: State) {
-        val previousChannel = state.channel?.id
-        val previousEditing = state.editing
-        if (previousChannel != null && previousChannel != next.channel?.id && state.editing == null) {
-            drafts.setTextChannelInput(previousChannel, input?.text)
+    private fun configureUI(viewState: ChatInputViewModel.ViewState) = when (viewState) {
+        ChatInputViewModel.ViewState.Loading -> {
+            state = null
+            requireView().findViewById<View>(R.id.chat_input_wrap).visibility = View.GONE
+            requireView().findViewById<View>(R.id.guard).visibility = View.GONE
+            requireView().findViewById<View>(R.id.guard_member_verification).visibility = View.GONE
+            requireView().findViewById<View>(R.id.guard_communication_disabled).visibility = View.GONE
+        }
+        is ChatInputViewModel.ViewState.Loaded -> configureLoaded(viewState)
+    }
+
+    private fun configureLoaded(next: ChatInputViewModel.ViewState.Loaded) {
+        val previous = state
+        if (previous != null && previous.channelId != next.channelId && !previous.isEditing) {
+            drafts.setTextChannelInput(previous.channelId, input?.text)
         }
         state = next
-        val blocked = next.channel == null || !next.canSend || next.communicationDisabled || next.systemDm
-        if (blocked) hideExpressionTray(false)
-        requireView().findViewById<View>(R.id.chat_input_wrap).visibility = if (blocked) View.GONE else View.VISIBLE
-        requireView().findViewById<View>(R.id.guard_member_verification).visibility = View.GONE
-        requireView().findViewById<View>(R.id.guard_communication_disabled).visibility =
-            if (next.communicationDisabled) View.VISIBLE else View.GONE
-        val generalGuard = requireView().findViewById<View>(R.id.guard)
-        generalGuard.visibility = if (!next.communicationDisabled && (next.systemDm || next.channel != null && !next.canSend)) View.VISIBLE else View.GONE
-        requireView().findViewById<TextView>(R.id.chat_input_guard_text).text = getString(
-            if (next.systemDm) R.string.system_dm_channel_description else R.string.no_send_messages_permission_placeholder,
-        )
-        requireView().findViewById<View>(R.id.chat_input_guard_action).visibility = View.GONE
-        requireView().findViewById<View>(R.id.chat_input_guard_action_secondary).visibility = View.GONE
-        showContext(next)
 
-        if (previousChannel != next.channel?.id || previousEditing != next.editing) restoreInput(next)
-        input?.isEnabled = !blocked
-        input?.hint = next.channel?.name?.let {
-            getString(R.string.textarea_placeholder).replace("{channel}", it).replace("!!", "")
+        requireView().findViewById<View>(R.id.chat_input_wrap).visibility =
+            if (next.isInputShowing) View.VISIBLE else View.GONE
+        configureChatGuard(next)
+        configureContextBar(next)
+
+        val channelChanged = previous?.channelId != next.channelId
+        if (channelChanged) autocomplete?.setChannelId(next.channelId)
+        // The composer is only rewritten when it is showing something else: switching channel, or
+        // entering/leaving edit mode. Any other state change must leave what the user typed alone.
+        if (channelChanged || previous?.editingMessage != next.editingMessage) restoreInput(next)
+        input?.isEnabled = next.isInputShowing
+        input?.hint = getHint(requireContext(), next.channel, next.isBlocked, next.ableToSendMessage)
+    }
+
+    /**
+     * Exactly one of the three guards is shown, and the precedence is not arbitrary:
+     *
+     * 1. the **general guard** (lurking / verification level / system DM / follow) wins outright;
+     * 2. the **member-verification** card only when that guard is hidden; and
+     * 3. the **timeout** card only when both of the others are hidden.
+     *
+     * The ordering exists because the conditions genuinely overlap — a lurker in a screened guild
+     * satisfies both (1) and (2) — and showing two stacked cards over the composer is what the
+     * reference is avoiding.
+     */
+    private fun configureChatGuard(viewState: ChatInputViewModel.ViewState.Loaded) {
+        val root = requireView()
+        val guard = root.findViewById<View>(R.id.guard)
+        val guardText = root.findViewById<TextView>(R.id.chat_input_guard_text)
+        val guardSubtext = root.findViewById<TextView>(R.id.chat_input_guard_subtext)
+        val guardAction = root.findViewById<MaterialButton>(R.id.chat_input_guard_action)
+        val guardActionSecondary = root.findViewById<MaterialButton>(R.id.chat_input_guard_action_secondary)
+
+        val showGuard = viewState.isLurking ||
+            viewState.isVerificationLevelTriggered ||
+            viewState.isSystemDM ||
+            viewState.shouldShowFollow
+        guard.visibility = if (showGuard) View.VISIBLE else View.GONE
+        root.findViewById<View>(R.id.guard_member_verification).visibility =
+            if (!showGuard && viewState.shouldShowVerificationGate) View.VISIBLE else View.GONE
+        root.findViewById<View>(R.id.guard_communication_disabled).visibility =
+            if (!showGuard && !viewState.shouldShowVerificationGate && viewState.isCommunicationDisabled) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+
+        guardSubtext.visibility = View.GONE
+        guardActionSecondary.visibility = View.GONE
+
+        when {
+            viewState.isSystemDM -> {
+                guardText.setText(R.string.system_dm_channel_description)
+                guardSubtext.setTextAndVisibilityBy(getString(R.string.system_dm_channel_description_subtext))
+                guardAction.visibility = View.GONE
+            }
+
+            viewState.shouldShowFollow -> {
+                guardText.setText(R.string.follow_news_chat_input_message)
+                bindGuardAction(guardAction, R.string.game_popout_follow, ChatInputGuardActions.showFollowSheet != null) {
+                    ChatInputGuardActions.showFollowSheet?.invoke(
+                        parentFragmentManager,
+                        viewState.channelId,
+                        viewState.channel.guildId,
+                    )
+                }
+            }
+
+            viewState.isLurking -> {
+                guardText.setText(R.string.lurker_mode_chat_input_message)
+                bindGuardAction(
+                    guardAction,
+                    R.string.lurker_mode_chat_input_button,
+                    ChatInputGuardActions.joinGuildAsMember != null,
+                ) {
+                    ChatInputGuardActions.joinGuildAsMember?.invoke(viewState.channel.guildId, {}, {})
+                }
+            }
+
+            viewState.isCommunicationDisabled -> {
+                configureTimeoutGuard(root, viewState)
+            }
+
+            viewState.shouldShowVerificationGate -> {
+                configureMemberVerificationGuard(root, viewState)
+            }
+
+            else -> {
+                guardText.text = getVerificationText(requireContext(), viewState.verificationLevelTriggered)
+                bindGuardAction(
+                    guardAction,
+                    verificationActionTextRes(viewState.verificationLevelTriggered),
+                    ChatInputGuardActions.launchAccountVerification != null,
+                ) {
+                    ChatInputGuardActions.launchAccountVerification
+                        ?.invoke(requireContext(), viewState.verificationLevelTriggered)
+                }
+            }
         }
     }
 
-    private fun restoreInput(next: State) {
-        val text = next.editing?.content ?: next.channel?.id?.let(drafts::getTextChannelInput)?.toString().orEmpty()
+    private fun bindGuardAction(
+        button: MaterialButton,
+        textRes: Int?,
+        enabled: Boolean,
+        onClick: () -> Unit,
+    ) {
+        if (textRes == null || !enabled) {
+            button.visibility = View.GONE
+            button.setOnClickListener(null)
+            return
+        }
+        button.setTextAndVisibilityBy(getString(textRes))
+        button.setOnClickListener { onClick() }
+    }
+
+    private fun configureTimeoutGuard(root: View, viewState: ChatInputViewModel.ViewState.Loaded) {
+        val body = root.findViewById<TextView>(R.id.chat_input_communication_disabled_guard_text)
+        body.text = FormatUtils.format(
+            getString(R.string.guild_communication_disabled_chat_notice_description),
+            "articleLink" to TIMEOUT_HELP_ARTICLE_URL,
+        )
+        root.findViewById<TextView>(R.id.chat_input_communication_disabled_guard_timer_text).text =
+            humanizeCountdownDuration(requireContext(), viewState.timeoutLeftMs)
+    }
+
+    /**
+     * The screening card.
+     *
+     * Only the "not applied yet" branch is reachable: the reference's other two states (application
+     * pending, application rejected) come from `StoreGuildJoinRequests`, which does not exist here,
+     * so `joinRequestStatus` has no source and the reference's own default branch is the one that
+     * runs.
+     */
+    private fun configureMemberVerificationGuard(root: View, viewState: ChatInputViewModel.ViewState.Loaded) {
+        root.findViewById<MaterialButton>(R.id.chat_input_member_verification_guard_button).visibility = View.GONE
+        val action = root.findViewById<ImageView>(R.id.chat_input_member_verification_guard_action)
+        action.visibility = View.VISIBLE
+        action.setImageResource(R.drawable.ic_arrow_right_24dp)
+        root.findViewById<TextView>(R.id.chat_input_member_verification_guard_text)
+            .setText(R.string.member_verification_chat_blocker_text)
+        root.findViewById<ImageView>(R.id.chat_input_member_verification_guard_icon)
+            .setImageResource(R.drawable.img_member_verification_started)
+        root.findViewById<View>(R.id.chat_input_member_verification_guard).setOnClickListener {
+            ChatInputGuardActions.showMemberVerificationGate
+                ?.invoke(requireContext(), parentFragmentManager, viewState.channel.guildId)
+        }
+    }
+
+    private fun getHint(
+        context: Context,
+        channel: Channel,
+        isBlocked: Boolean,
+        hasSendMessagePermissions: Boolean,
+    ): CharSequence = when {
+        isBlocked -> context.getString(R.string.dm_verification_text_blocked)
+        !hasSendMessagePermissions -> context.getString(R.string.no_send_messages_permission_placeholder)
+        else -> FormatUtils.format(
+            context.getString(R.string.textarea_placeholder),
+            "channel" to channel.getDisplayName(),
+        )
+    }
+
+    /**
+     * `MEDIUM` and `HIGH` are waiting periods — there is nothing the user can do but wait — so the
+     * reference offers no button for them, and neither does this.
+     */
+    private fun verificationActionTextRes(level: GuildVerificationLevel): Int? = when (level) {
+        GuildVerificationLevel.LOW -> R.string.verify_account
+        GuildVerificationLevel.HIGHEST -> R.string.verify_phone
+        else -> null
+    }
+
+    private fun getVerificationText(context: Context, level: GuildVerificationLevel): CharSequence? = when (level) {
+        GuildVerificationLevel.LOW -> context.getString(R.string.guild_verification_text_not_claimed)
+        GuildVerificationLevel.MEDIUM -> FormatUtils.format(
+            context.getString(R.string.guild_verification_text_account_age),
+            "minutes" to "5",
+        )
+        GuildVerificationLevel.HIGH -> FormatUtils.format(
+            context.getString(R.string.guild_verification_text_member_age),
+            "minutes" to "10",
+        )
+        GuildVerificationLevel.HIGHEST -> context.getString(R.string.guild_verification_text_not_phone_verified)
+        GuildVerificationLevel.NONE -> null
+    }
+
+    private fun restoreInput(next: ChatInputViewModel.ViewState.Loaded) {
+        val text = next.editingMessage?.content?.takeIf { next.isEditing }
+            ?: drafts.getTextChannelInput(next.channelId)?.toString().orEmpty()
         restoringText = true
         input?.setText(text)
         input?.setSelection(input?.text?.length ?: 0)
         restoringText = false
     }
 
-    private fun showContext(next: State) {
+    private fun configureContextBar(next: ChatInputViewModel.ViewState.Loaded) {
         val bar = requireView().findViewById<View>(R.id.chat_input_context_bar)
-        val pending = next.pendingReply
-        bar.visibility = if (next.editing != null || pending != null) View.VISIBLE else View.GONE
+        val replying = next.pendingReplyState as? ChatInputViewModel.ViewState.PendingReplyState.Replying
+        bar.visibility = if (next.isEditing || replying != null) View.VISIBLE else View.GONE
         if (bar.visibility != View.VISIBLE) return
+
         val mention = requireView().findViewById<View>(R.id.chat_input_context_reply_mention_button)
-        if (next.editing != null) {
-            val description = requireView().findViewById<TextView>(R.id.chat_input_context_description)
+        val description = requireView().findViewById<TextView>(R.id.chat_input_context_description)
+
+        if (next.isEditing) {
             description.setText(R.string.editing_message)
             bar.contentDescription = description.text
             bar.isClickable = false
             bar.setOnClickListener(null)
             mention.visibility = View.GONE
-        } else if (pending != null) {
-            val author = pending.originalMessage.author
-            val member = pending.messageReference.guildId?.let { guildId -> author?.id?.let { StoreStream.getGuilds().getMember(guildId, it) } }
-            val username = member?.nick?.takeUnless(String::isBlank) ?: author?.username.orEmpty()
-            val text = getString(R.string.mobile_replying_to).replace("{username}", username).replace("**", "")
-            requireView().findViewById<TextView>(R.id.chat_input_context_description).text = SpannableString(text).apply {
-                val start = text.indexOf(username)
-                if (start >= 0) setSpan(ForegroundColorSpan(GuildMember.getColor(member, themedColor(R.attr.colorHeaderPrimary))), start, start + username.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-            bar.contentDescription = text
-            bar.isClickable = true
-            bar.setOnClickListener {
-                val reference = pending.messageReference
-                val channelId = reference.channelId ?: return@setOnClickListener
-                val messageId = reference.messageId ?: return@setOnClickListener
-                StoreStream.getMessagesLoader().jumpToMessage(channelId, messageId)
-            }
-            mention.visibility = if (pending.showMentionToggle) View.VISIBLE else View.GONE
-            val mentionColor = themedColor(if (pending.shouldMention) R.attr.colorControlBrandForeground else R.attr.colorTextMuted)
-            requireView().findViewById<ImageView>(R.id.chat_input_context_reply_mention_button_image).imageTintList = ColorStateList.valueOf(mentionColor)
-            requireView().findViewById<TextView>(R.id.chat_input_context_reply_mention_button_text).apply {
-                setTextColor(mentionColor)
-                setText(if (pending.shouldMention) R.string.reply_mention_on else R.string.reply_mention_off)
-            }
-            mention.contentDescription = getString(if (pending.shouldMention) R.string.reply_mention_on_tooltip else R.string.reply_mention_off_tooltip)
+            return
         }
+
+        val pending = replying?.pendingReply ?: return
+        val author = pending.originalMessage.author
+        val member = pending.messageReference.guildId?.let { guildId ->
+            author?.id?.let { StoreStream.getGuilds().getMember(guildId, it) }
+        }
+        val username = member?.nick?.takeUnless(String::isBlank) ?: author?.username.orEmpty()
+        val text = FormatUtils.format(getString(R.string.mobile_replying_to), "username" to username)
+            .replace("**", "")
+        description.text = SpannableString(text).apply {
+            val start = text.indexOf(username)
+            if (start >= 0) {
+                setSpan(
+                    ForegroundColorSpan(GuildMember.getColor(member, themedColor(R.attr.colorHeaderPrimary))),
+                    start,
+                    start + username.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+            }
+        }
+        bar.contentDescription = text
+        bar.isClickable = true
+        bar.setOnClickListener {
+            val reference = pending.messageReference
+            val channelId = reference.channelId ?: return@setOnClickListener
+            val messageId = reference.messageId ?: return@setOnClickListener
+            StoreStream.getMessagesLoader().jumpToMessage(channelId, messageId)
+        }
+        mention.visibility = if (pending.showMentionToggle) View.VISIBLE else View.GONE
+        val mentionColor =
+            themedColor(if (pending.shouldMention) R.attr.colorControlBrandForeground else R.attr.colorTextMuted)
+        requireView().findViewById<ImageView>(R.id.chat_input_context_reply_mention_button_image).imageTintList =
+            ColorStateList.valueOf(mentionColor)
+        requireView().findViewById<TextView>(R.id.chat_input_context_reply_mention_button_text).apply {
+            setTextColor(mentionColor)
+            setText(if (pending.shouldMention) R.string.reply_mention_on else R.string.reply_mention_off)
+        }
+        mention.contentDescription =
+            getString(if (pending.shouldMention) R.string.reply_mention_on_tooltip else R.string.reply_mention_off_tooltip)
     }
+
+    private fun inputMethodManager(): InputMethodManager =
+        requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
 
     private fun themedColor(attribute: Int) = TypedValue().let {
         requireContext().theme.resolveAttribute(attribute, it, true)
         it.data
-    }
-
-    private fun defaultStateSource(): Observable<State> = StoreStream.getChannelsSelected().observeSelectedChannel().switchMap { channel ->
-        if (channel == null) return@switchMap Observable.just(State())
-        val member = if (channel.guildId == 0L) Observable.just(null)
-            else StoreStream.getGuilds().observeComputedMember(channel.guildId, StoreStream.getUsers().getMe().id)
-        Observable.combineLatest(
-            StoreStream.getPermissions().observePermissionsForChannel(channel.id),
-            StoreStream.getUsers().observeMe(true),
-            member,
-            pendingRepliesStore?.observePendingReply(channel.id) ?: Observable.just(null),
-            editingStore?.observe(channel.id) ?: Observable.just(null),
-        ) { permissions, me, guildMember, pending, editing -> state(channel, permissions, me, guildMember?.isCommunicationDisabled() == true, pending, editing) }
     }
 
     private fun validationMessage(result: MessageResult): String = when (result) {
@@ -393,39 +657,25 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     }
 
     companion object {
+        /** Discord's own help-centre article on timeouts; the reference hardcodes the same id. */
+        private const val TIMEOUT_HELP_ARTICLE_URL =
+            "https://support.discord.com/hc/articles/360045138571"
+
         data class UploadCaptchaChallenge(val requestId: String, val siteKey: String, val rqtoken: String?)
+
         private val uploadCaptchaChallenges = PublishSubject.create<UploadCaptchaChallenge>().toSerialized()
         private val mentionRequests = PublishSubject.create<Long>().toSerialized()
+
         @JvmField var coordinatorProvider: () -> MessageSendCoordinator? = { null }
         @JvmField var draftsProvider: () -> MessageDraftsRepo = { MessageDraftsRepo.Provider.get() }
         @JvmField var pendingRepliesStore: StorePendingReplies? = null
         @JvmField var editingStore: StoreChatInputEditing? = null
         @JvmField var uploadHandler: ((UploadRequest) -> Boolean)? = null
-        @JvmField var stateSource: (() -> Observable<State>)? = null
 
         fun requestUploadCaptcha(requestId: String, siteKey: String, rqtoken: String?) {
             uploadCaptchaChallenges.onNext(UploadCaptchaChallenge(requestId, siteKey, rqtoken))
         }
 
         fun requestMention(userId: Long) = mentionRequests.onNext(userId)
-
-        private fun state(
-            channel: Channel,
-            permissions: Long?,
-            me: MeUser,
-            communicationDisabled: Boolean,
-            pending: StorePendingReplies.PendingReply?,
-            editing: Message?,
-        ): State {
-            val privateChannel = channel.type == Channel.DM || channel.type == Channel.GROUP_DM
-            return State(
-                channel,
-                privateChannel || permissions?.and(Permission.SEND_MESSAGES)?.let { it != 0L } == true,
-                communicationDisabled,
-                privateChannel && channel.recipients.orEmpty().any { it.id != me.id && it.system == true },
-                pending,
-                editing,
-            )
-        }
     }
 }

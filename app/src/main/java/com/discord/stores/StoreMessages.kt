@@ -875,11 +875,12 @@ class StoreMessages @JvmOverloads constructor(
      * [applySendUpdate]. A background send is scheduled at the same time so a message queued and
      * then backgrounded still leaves the device.
      *
-     * Known gaps against the reference, all rooted in
-     * [MessageSendCoordinator.Send] not carrying the fields: [stickers], [application],
-     * [messageActivity] and explicit [mentions] are attached to the *local* message for rendering
-     * but are not part of the queued request body, so a sticker-only send currently posts as an
-     * empty message. Flagged for the wave that owns `utilities/messagesend`.
+     * [stickers] now ride on [MessageSendCoordinator.Send] and therefore reach `sticker_ids` on the
+     * wire as well as the local row.
+     *
+     * Still local-only, because [MessageSendCoordinator.Send] does not carry them: [application],
+     * [messageActivity] and explicit [mentions] are attached to the optimistic message for
+     * rendering but are absent from the queued request body.
      */
     @Suppress("LongParameterList")
     @JvmOverloads
@@ -911,6 +912,7 @@ class StoreMessages @JvmOverloads constructor(
                 allowedMentions = allowedMentions?.toRestApiParams(),
                 captcha = captchaPayload,
                 attachments = attachments,
+                stickers = stickers,
             ),
         )
         return when (submission) {

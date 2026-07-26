@@ -17,7 +17,7 @@ class WidgetNoticeNuxOverlay : AppDialog(R.layout.widget_notice_nux_overlay) {
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        WidgetNoticeDialog.dialogSeenHandler?.invoke(NOTICE_NAME)
+        StoreStream.getNotices().markDialogSeen(NOTICE_NAME)
 
         view.findViewById<MaterialButton>(R.id.enable_button).setOnClickListener {
             openOverlaySetting?.invoke(it.context)

@@ -9,6 +9,7 @@ import androidx.work.Data
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import com.discord.utilities.fcm.NotificationClient
 
 data class NotificationActionCallbacks(
     val isCurrentAuthGeneration: (Int) -> Boolean,
@@ -31,9 +32,20 @@ class NotificationActionReceiver : BroadcastReceiver() {
         val actions = callbacks ?: return
         if (!actions.isCurrentAuthGeneration(command.authGeneration)) return
         when (command) {
-            is NotificationCommand.MarkRead -> enqueue<NotificationMarkReadWorker>(context, command.channelId, command.messageId, null, command.authGeneration)
-            is NotificationCommand.Reply -> enqueue<NotificationReplyWorker>(context, command.channelId, -1, command.text, command.authGeneration)
-            is NotificationCommand.Delete -> actions.delete(command.channelId)
+            is NotificationCommand.MarkRead -> {
+                enqueue<NotificationMarkReadWorker>(context, command.channelId, command.messageId, null, command.authGeneration)
+                NotificationClient.clear(command.channelId, context, isAckRequest = true)
+            }
+            is NotificationCommand.Reply -> {
+                // The reply's own read-ack must not cancel a notification that lands while the
+                // send is in flight, so this channel skips exactly one ack-driven clear.
+                NotificationClient.setIgnoreNextClearForAck(command.channelId, true)
+                enqueue<NotificationReplyWorker>(context, command.channelId, -1, command.text, command.authGeneration)
+            }
+            is NotificationCommand.Delete -> {
+                NotificationClient.clear(command.channelId, context)
+                actions.delete(command.channelId)
+            }
             is NotificationCommand.Cancel -> actions.cancel(command.notificationId)
         }
     }

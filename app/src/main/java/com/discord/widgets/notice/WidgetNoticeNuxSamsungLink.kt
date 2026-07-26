@@ -8,6 +8,7 @@ import android.os.Build
 import android.view.View
 import com.discord.R
 import com.discord.app.AppDialog
+import com.discord.stores.StoreStream
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
@@ -30,7 +31,7 @@ class WidgetNoticeNuxSamsungLink : AppDialog(R.layout.widget_notice_nux_samsung_
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        WidgetNoticeDialog.dialogSeenHandler?.invoke(NOTICE_NAME)
+        StoreStream.getNotices().markDialogSeen(NOTICE_NAME)
 
         RestAPI.apiOrNull?.getOAuthTokens()
             ?.restSubscribeOn()

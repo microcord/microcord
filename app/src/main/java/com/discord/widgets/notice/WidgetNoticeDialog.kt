@@ -36,10 +36,10 @@ import com.google.android.material.textfield.TextInputLayout
  * still dismisses correctly, it just no longer runs the caller's action.
  *
  * ### Notice queue
- * The reference marks the dialog seen through `StoreNotices.markDialogSeen(type)` so a queued
- * notice is not shown again. `StoreNotices` does not exist in this project yet, so the type travels
- * as a plain [String] and is handed to [dialogSeenHandler], which the store installs once it lands.
- * Until then a notice-typed dialog simply is not recorded as seen.
+ * A dialog built with a `noticeType` marks itself seen through
+ * [com.discord.stores.StoreNotices.markDialogSeen] as soon as it binds, so the queue does not offer
+ * it again. The type travels as a plain [String] rather than as `StoreNotices.Dialog.Type` because
+ * it has to survive the arguments bundle.
  */
 class WidgetNoticeDialog : AppDialog(R.layout.widget_notice_dialog) {
 
@@ -85,7 +85,9 @@ class WidgetNoticeDialog : AppDialog(R.layout.widget_notice_dialog) {
         super.onViewBound(view)
         val arguments = argumentsOrDefault
         isCancelable = arguments.getBoolean(ARG_CANCELABLE, true)
-        arguments.getString(ARG_NOTICE_TYPE)?.let { type -> dialogSeenHandler?.invoke(type) }
+        arguments.getString(ARG_NOTICE_TYPE)?.let { type ->
+            StoreStream.getNotices().markDialogSeen(type)
+        }
 
         val header = view.findViewById<TextView>(R.id.notice_header)
         val headerText = arguments.getCharSequence(ARG_HEADER_TEXT)
@@ -213,15 +215,6 @@ class WidgetNoticeDialog : AppDialog(R.layout.widget_notice_dialog) {
 
         /** Listener-map key for the "the dialog just bound its view" hook. */
         const val ON_SHOW = 0
-
-        /**
-         * Records that a notice-typed dialog was shown.
-         *
-         * `StoreNotices` installs this at graph construction; it is `null` until then. See the class
-         * documentation for what the store has to provide.
-         */
-        @JvmStatic
-        var dialogSeenHandler: ((noticeType: String) -> Unit)? = null
 
         /**
          * @param listenerMap click handlers by view id. [ON_SHOW] runs once when the view binds,

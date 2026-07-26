@@ -35,7 +35,7 @@ import com.discord.api.guild.Guild as ApiGuild
 class GuildStickerSheetViewModel(
     private val sticker: Sticker,
     private val api: RestAPIInterface = RestAPI.api,
-    private val storeUser: StoreUser = StoreStream.getUsers(),
+    storeUser: StoreUser = StoreStream.getUsers(),
     storeChannelsSelected: StoreChannelsSelected = StoreStream.getChannelsSelected(),
     storeGuilds: StoreGuilds = StoreStream.getGuilds(),
     storeStateObservable: Observable<StoreState> =
@@ -136,46 +136,49 @@ class GuildStickerSheetViewModel(
             api: RestAPIInterface,
             sticker: Sticker,
             storeGuilds: StoreGuilds,
-        ): Observable<GuildStickerGuildInfo> =
-            Observable.fromCallable { storeGuilds.getGuilds()[sticker.guildId] }
-                .flatMap { joinedGuild ->
-                    when {
-                        joinedGuild == null -> fetchStickerGuild(api, sticker)
-                            .map { guild ->
-                                GuildStickerGuildInfo.Known(
-                                    guild,
-                                    isPublic = true,
-                                    isUserInGuild = false,
-                                    approximateOnline = guild.approximatePresenceCount,
-                                )
-                            }
-                            .onErrorReturn { GuildStickerGuildInfo.Unknown }
-
-                        joinedGuild.hasFeature(GuildFeature.DISCOVERABLE) ->
-                            fetchStickerGuild(api, sticker)
-                                .map { guild ->
-                                    GuildStickerGuildInfo.Known(
-                                        guild,
-                                        isPublic = true,
-                                        isUserInGuild = true,
-                                        approximateOnline = guild.approximatePresenceCount,
-                                    )
-                                }
-                                .onErrorReturn { error ->
-                                    // 404: the guild left discovery. We are still a member, so keep
-                                    // what we know and drop the public profile.
-                                    if (error is HttpException && error.code() == 404) {
-                                        GuildStickerGuildInfo.Known(joinedGuild, false, true, null)
-                                    } else {
-                                        GuildStickerGuildInfo.Unknown
-                                    }
-                                }
-
-                        else -> Observable.just(
-                            GuildStickerGuildInfo.Known(joinedGuild, false, true, null),
+        ): Observable<GuildStickerGuildInfo> = Observable.defer {
+            val joinedGuild = sticker.guildId?.let { storeGuilds.getGuilds()[it] }
+            when {
+                // Not a member: the public profile is all we can ever see.
+                joinedGuild == null -> fetchStickerGuild(api, sticker)
+                    .map<GuildStickerGuildInfo> { guild ->
+                        GuildStickerGuildInfo.Known(
+                            guild,
+                            isPublic = true,
+                            isUserInGuild = false,
+                            approximateOnline = guild.approximatePresenceCount,
                         )
                     }
-                }
+                    .onErrorReturn { GuildStickerGuildInfo.Unknown }
+
+                // A member of a discoverable guild: the endpoint adds the online count.
+                joinedGuild.hasFeature(GuildFeature.DISCOVERABLE) -> fetchStickerGuild(api, sticker)
+                    .map<GuildStickerGuildInfo> { guild ->
+                        GuildStickerGuildInfo.Known(
+                            guild,
+                            isPublic = true,
+                            isUserInGuild = true,
+                            approximateOnline = guild.approximatePresenceCount,
+                        )
+                    }
+                    .onErrorReturn { error ->
+                        // 404: the guild left discovery. We are still a member, so keep what we
+                        // know and drop the public profile.
+                        if (error is HttpException && error.code() == HTTP_NOT_FOUND) {
+                            GuildStickerGuildInfo.Known(joinedGuild, false, true, null)
+                        } else {
+                            GuildStickerGuildInfo.Unknown
+                        }
+                    }
+
+                // A member of a private guild: nothing public to fetch.
+                else -> Observable.just<GuildStickerGuildInfo>(
+                    GuildStickerGuildInfo.Known(joinedGuild, false, true, null),
+                )
+            }
+        }
+
+        private const val HTTP_NOT_FOUND = 404
 
         private fun fetchStickerGuild(api: RestAPIInterface, sticker: Sticker): Observable<Guild> =
             api.getStickerGuild(sticker.id).map { it.toModelGuild() }

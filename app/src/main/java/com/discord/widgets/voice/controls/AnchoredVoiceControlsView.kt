@@ -2,7 +2,6 @@ package com.discord.widgets.voice.controls
 
 import android.content.Context
 import android.content.res.ColorStateList
-import android.graphics.Rect
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.LayoutInflater
@@ -11,16 +10,17 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.fragment.app.FragmentManager
-import androidx.preference.PreferenceManager
 import com.discord.R
 import com.discord.app.AppComponent
 import com.discord.rtcconnection.audio.DiscordAudioManager
 import com.discord.rtcconnection.mediaengine.MediaEngineConnection
 import com.discord.stores.StoreAudioManagerV2
+import com.discord.tooltips.FloatingViewGravity
+import com.discord.tooltips.FloatingViewManager
 import com.discord.tooltips.SparkleView
+import com.discord.tooltips.TooltipManager
 import com.discord.widgets.voice.model.CameraState
 import com.discord.widgets.voice.sheet.WidgetVoiceBottomSheet
-import rx.Subscription
 
 class AnchoredVoiceControlsView @JvmOverloads constructor(
     context: Context,
@@ -34,7 +34,8 @@ class AnchoredVoiceControlsView @JvmOverloads constructor(
     private val screenShare: ImageView
     private val speaker: ImageView
     private var sparkle: SparkleView? = null
-    private var sparkleSubscription: Subscription? = null
+    private val tooltipManager: TooltipManager =
+        TooltipManager.Provider.get(FloatingViewManager.Provider.get())
 
     init {
         LayoutInflater.from(context).inflate(R.layout.anchored_voice_controls_view, this, true)
@@ -134,6 +135,14 @@ class AnchoredVoiceControlsView @JvmOverloads constructor(
         super.onDetachedFromWindow()
     }
 
+    /**
+     * Shows or hides the one-time sparkle on the screen-share button.
+     *
+     * Placement, the per-cold-start quota and the persisted acknowledgement all belong to
+     * [TooltipManager], so the sparkle is deduplicated against every other coach mark in the app
+     * and is torn down centrally when the hosting component pauses.
+     */
+    @Suppress("LongParameterList")
     private fun configureScreenShareSparkle(
         show: Boolean,
         appComponent: AppComponent,
@@ -145,18 +154,18 @@ class AnchoredVoiceControlsView @JvmOverloads constructor(
         onNavigateToScreenShareNfxSheet: () -> Unit,
         onScreenSharePressed: () -> Unit,
     ) {
-        val preferences = PreferenceManager.getDefaultSharedPreferences(context)
-        if (!show || preferences.contains(SPARKLE_ACKNOWLEDGED)) {
-            removeSparkle()
+        if (!show) {
+            tooltipManager.hideTooltip(ScreenShareButtonSparkleTooltip)
+            sparkle = null
             return
         }
+        // Already on screen: re-configuring the controls must not restart the animation.
         if (sparkle != null) return
 
-        sparkleSubscription = appComponent.unsubscribeSignal.subscribe { removeSparkle() }
-        sparkle = SparkleView(context, null).also { view ->
+        val sparkleView = SparkleView(screenShare.context, null).also { view ->
             view.setOnClickListener {
-                preferences.edit().putBoolean(SPARKLE_ACKNOWLEDGED, true).apply()
-                removeSparkle()
+                tooltipManager.ackTooltip(ScreenShareButtonSparkleTooltip)
+                sparkle = null
                 if (WidgetScreenShareNfxSheet.canShow()) {
                     WidgetScreenShareNfxSheet.show(
                         fragmentManager,
@@ -172,24 +181,21 @@ class AnchoredVoiceControlsView @JvmOverloads constructor(
                     onScreenSharePressed()
                 }
             }
-            addView(view)
-            view.post {
-                val bounds = Rect().also(screenShare::getDrawingRect)
-                offsetDescendantRectToMyCoords(screenShare, bounds)
-                view.x = bounds.exactCenterX() - view.width / 2f
-                view.y = bounds.exactCenterY() - view.height / 2f
-            }
         }
+        sparkle = sparkleView
+        tooltipManager.showTooltip(
+            anchorView = screenShare,
+            tooltipView = sparkleView,
+            tooltip = ScreenShareButtonSparkleTooltip,
+            tooltipGravity = FloatingViewGravity.CENTER,
+            componentPausedObservable = appComponent.unsubscribeSignal.map { },
+        )
     }
 
     private fun removeSparkle() {
-        sparkle?.let {
-            it.stop()
-            removeView(it)
-        }
+        tooltipManager.hideTooltip(ScreenShareButtonSparkleTooltip)
+        sparkle?.stop()
         sparkle = null
-        sparkleSubscription?.unsubscribe()
-        sparkleSubscription = null
     }
 
     private fun themedTint(active: Boolean): ColorStateList {
@@ -210,9 +216,6 @@ class AnchoredVoiceControlsView @JvmOverloads constructor(
     private fun Context.getColorCompat(resource: Int): Int =
         androidx.core.content.ContextCompat.getColor(this, resource)
 
-    private companion object {
-        const val SPARKLE_ACKNOWLEDGED = "CACHE_KEY_SCREEN_SHARE_BUTTON_SPARKLE_ACKNOWLEDGED"
-    }
 }
 
 internal data class AnchoredVoiceControlsPresentation(
@@ -236,7 +239,12 @@ internal fun anchoredVoiceControlsPresentation(
     showPtt = inputMode == MediaEngineConnection.InputMode.PUSH_TO_TALK,
     showCamera = cameraState != CameraState.CAMERA_DISABLED,
     cameraActive = cameraState == CameraState.CAMERA_ON,
-    cameraDescription = if (cameraState == CameraState.CAMERA_ON) R.string.camera_off else R.string.camera_on,
+    // REFERENCE BUG REPRODUCED. `camera_on` is "Turn On Camera" and `camera_off` is
+    // "Turn Off Camera" — action labels — yet the reference announces "Turn On Camera" while the
+    // camera is already on (`AnchoredVoiceControlsView.java:159` / `:166`). Every sibling control
+    // here labels the *action*: the mute button says "Unmute" while muted. Kept for parity and
+    // recorded in docs/parity-audit/followups.md; swapping the two branches is the whole fix.
+    cameraDescription = if (cameraState == CameraState.CAMERA_ON) R.string.camera_on else R.string.camera_off,
     speakerIcon = if (activeAudioDevice == DiscordAudioManager.DeviceTypes.BLUETOOTH_HEADSET) {
         R.drawable.ic_audio_output_bluetooth_white_24dp
     } else {
@@ -253,6 +261,6 @@ internal fun anchoredVoiceControlsPresentation(
     screenShareDescription = if (isScreensharing) {
         R.string.stop_streaming
     } else {
-        R.string.mobile_stream_screen_share
+        R.string.screenshare_screen
     },
 )

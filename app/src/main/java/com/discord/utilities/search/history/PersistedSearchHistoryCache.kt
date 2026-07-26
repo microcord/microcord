@@ -27,7 +27,7 @@ class PersistedSearchHistoryCache : SearchHistoryCache {
         Persister<LinkedList<TargetHistory>>(PERSISTENCE_KEY, LinkedList())
 
     override fun getHistory(searchTarget: SearchTarget): Observable<Collection<List<QueryNode>>> =
-        backingCache.getObservable().map { it.find(searchTarget) }
+        backingCache.getObservable().map { it.historyFor(searchTarget) }
 
     override fun persistQuery(searchTarget: SearchTarget, query: List<QueryNode>) {
         if (query.isEmpty()) return
@@ -38,7 +38,7 @@ class PersistedSearchHistoryCache : SearchHistoryCache {
         backingCache.set(backingCache.get().removeAndCopy(searchTarget), persist = true)
     }
 
-    private fun LinkedList<TargetHistory>.find(key: SearchTarget): Collection<List<QueryNode>> =
+    private fun LinkedList<TargetHistory>.historyFor(key: SearchTarget): Collection<List<QueryNode>> =
         firstOrNull { it.searchTarget == key }?.recentQueries ?: emptyList()
 
     private fun LinkedList<TargetHistory>.putAndCopy(

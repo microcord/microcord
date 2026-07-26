@@ -7,6 +7,7 @@ import com.discord.app.AppFragment
 import com.discord.app.appViewModels
 import com.discord.stores.StoreStream
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
+import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
 import com.discord.utilities.rx.ui
 import com.discord.utilities.search.strings.ContextSearchStringProvider
 import com.discord.utilities.search.strings.SearchStringProvider
@@ -35,7 +36,10 @@ class WidgetSearchSuggestions : AppFragment(R.layout.widget_search_suggestions) 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         val recycler = view.findViewById<RecyclerView>(R.id.search_suggestions_recycler)
-        adapter = MGRecyclerAdapter.configure(WidgetSearchSuggestionsAdapter(recycler))
+        adapter = MGRecyclerAdapter
+            .configure<MGRecyclerDataPayload, WidgetSearchSuggestionsAdapter>(
+                WidgetSearchSuggestionsAdapter(recycler),
+            )
         // The list is rebuilt on nearly every keystroke; cross-fading each rebuild reads as flicker.
         if (StoreStream.getAccessibility().isReducedMotionEnabled()) recycler.itemAnimator = null
     }

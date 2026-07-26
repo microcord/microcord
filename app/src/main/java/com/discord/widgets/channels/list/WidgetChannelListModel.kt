@@ -1,6 +1,7 @@
 package com.discord.widgets.channels.list
 
 import com.discord.api.channel.Channel
+import com.discord.api.channel.getSortByMostRecent
 import com.discord.api.channel.getSortByNameAndType
 import com.discord.api.channel.isCategory
 import com.discord.api.channel.isThread
@@ -14,13 +15,20 @@ import com.discord.api.guildscheduledevent.GuildScheduledEventStatus
 import com.discord.api.permission.Permission
 import com.discord.api.role.GuildRole
 import com.discord.api.stageinstance.StageInstance
+import com.discord.api.voice.state.VoiceState
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.guild.Guild
 import com.discord.models.guild.UserGuildMember
 import com.discord.models.member.GuildMember
+import com.discord.stores.StoreStream
 import com.discord.stores.StoreThreadsActiveJoined.ActiveJoinedThread
 import com.discord.stores.StoreThreadsJoined.JoinedThread
+import com.discord.models.user.User
 import com.discord.utilities.permissions.PermissionUtils
+import com.discord.utilities.rx.computationLatest
+import com.discord.utilities.rx.leadingEdgeThrottle
+import com.discord.widgets.voice.VoiceStoreAccess
+import java.util.concurrent.TimeUnit
 import com.discord.widgets.channels.list.items.ChannelListBottomNavSpaceItem
 import com.discord.widgets.channels.list.items.ChannelListItem
 import com.discord.widgets.channels.list.items.ChannelListItemActiveEvent
@@ -42,6 +50,7 @@ import com.discord.widgets.channels.list.items.ChannelListItemThread
 import com.discord.widgets.channels.list.items.ChannelListItemVoiceChannel
 import com.discord.widgets.channels.list.items.ChannelListItemVoiceUser
 import com.discord.widgets.guildscheduledevent.GuildScheduledEventLocationInfo
+import rx.Observable
 
 /**
  * Everything the channels sidebar renders for one guild (or for the private-channel list).
@@ -131,6 +140,53 @@ data class WidgetChannelListModel(
         val unelevated: Boolean,
     )
 
+    /** Thread inputs, grouped so [get] stays inside rx's 9-argument `combineLatest` limit. */
+    private data class ThreadState(
+        val activeJoinedThreads: Map<Long, Map<Long, ActiveJoinedThread>>,
+        val joinedThreads: Map<Long, JoinedThread>,
+        val channelsWithActiveThreads: Set<Long>,
+    )
+
+    /** What is selected and what is unread. */
+    private data class SelectionState(
+        val selectedChannel: Channel?,
+        val selectedVoiceChannelId: Long,
+        val mentionCounts: Map<Long, Int>,
+        val unreadChannelIds: Set<Long>,
+        val collapsedCategories: Set<Long>,
+    )
+
+    private data class StageState(
+        val voiceUsers: Map<Long, List<ChannelListItemVoiceUser>>,
+        val stageChannels: Map<Long, StageChannelInfo>,
+        val stageInstances: Map<Long, StageInstance>,
+    )
+
+    private data class ScheduledState(
+        val guildScheduledEvents: List<GuildScheduledEvent>,
+        val canCreateAnyEvent: Boolean,
+        val canSeeGuildRoleSubscriptions: Boolean,
+        val directoryUnreadCounts: Map<Long, Int>,
+    )
+
+    private data class MembershipState(
+        val guildJoinRequest: GuildJoinRequest?,
+        val meGuildMember: GuildMember?,
+    )
+
+    /** Stage, scheduled-event, directory and membership-screening inputs. */
+    private data class EventState(
+        val voiceUsers: Map<Long, List<ChannelListItemVoiceUser>>,
+        val stageChannels: Map<Long, StageChannelInfo>,
+        val stageInstances: Map<Long, StageInstance>,
+        val guildScheduledEvents: List<GuildScheduledEvent>,
+        val canCreateAnyEvent: Boolean,
+        val canSeeGuildRoleSubscriptions: Boolean,
+        val directoryUnreadCounts: Map<Long, Int>,
+        val guildJoinRequest: GuildJoinRequest?,
+        val meGuildMember: GuildMember?,
+    )
+
     /**
      * The live stage state for one stage channel.
      *
@@ -147,7 +203,290 @@ data class WidgetChannelListModel(
         val isMeSpeaker: Boolean,
     )
 
+    /**
+     * Builds the per-channel voice-participant rows the sidebar draws underneath a vocal channel.
+     *
+     * Kept separate from the row builder because it is throttled independently: voice states churn
+     * far faster than the channel list itself.
+     */
+    object VoiceStates {
+
+        /**
+         * Groups the guild's voice states by channel and turns each into a row.
+         *
+         * A participant is dropped when their user, guild member or channel is not loaded — the
+         * reference does the same rather than rendering a blank avatar.
+         */
+        @JvmStatic
+        @JvmOverloads
+        fun createVoiceStates(
+            voiceStates: Map<Long, VoiceState>,
+            users: Map<Long, User>,
+            guildMembers: Map<Long, GuildMember>,
+            guildChannels: Map<Long, Channel>,
+            streamingUserIds: Set<Long>,
+            guildPermissions: Map<Long, Long>,
+            comparator: Comparator<ChannelListItemVoiceUser> = voiceUserComparator,
+        ): Map<Long, List<ChannelListItemVoiceUser>> {
+            val byChannel = HashMap<Long, MutableList<ChannelListItemVoiceUser>>()
+            for (voiceState in voiceStates.values) {
+                val userId = voiceState.userId
+                val user = users[userId] ?: continue
+                val channelId = voiceState.channelId ?: continue
+                val member = guildMembers[userId] ?: continue
+                val channel = guildChannels[channelId] ?: continue
+                byChannel.getOrPut(channelId) { ArrayList() }.add(
+                    ChannelListItemVoiceUser(
+                        channel = channel,
+                        voiceState = voiceState,
+                        user = user,
+                        computed = member,
+                        isApplicationStreaming = userId in streamingUserIds,
+                        hasChannelConnectPermission = PermissionUtils.can(
+                            Permission.CONNECT,
+                            guildPermissions[channelId],
+                        ),
+                    ),
+                )
+            }
+            byChannel.values.forEach { it.sortWith(comparator) }
+            return byChannel
+        }
+
+        /** Streamers float to the top of a channel; everyone else is ordered by display name. */
+        @JvmStatic
+        val voiceUserComparator: Comparator<ChannelListItemVoiceUser> =
+            Comparator { first, second ->
+                when {
+                    first.isApplicationStreaming && !second.isApplicationStreaming -> -1
+                    second.isApplicationStreaming && !first.isApplicationStreaming -> 1
+                    else -> GuildMember.compareUserNames(
+                        first.user,
+                        second.user,
+                        first.computed,
+                        second.computed,
+                    )
+                }
+            }
+
+        /**
+         * The live participant map for [guildId].
+         *
+         * Voice states are throttled to a leading edge because a busy channel emits on every
+         * mute/unmute; the rest of the inputs change rarely.
+         */
+        @JvmStatic
+        fun get(guildId: Long): Observable<Map<Long, List<ChannelListItemVoiceUser>>> {
+            // `StoreStream` publishes the voice *state* stores directly; `VoiceStoreAccess` only
+            // carries the three RTC-transport stores it does not construct.
+            return Observable.combineLatest(
+                StoreStream.getApplicationStreaming().observeStreamsForGuild(guildId),
+                StoreStream.getVoiceStates().observe(guildId)
+                    .leadingEdgeThrottle(VOICE_STATE_THROTTLE_MS, TimeUnit.MILLISECONDS),
+                StoreStream.getUsers().observeAllUsers(),
+                StoreStream.getGuilds().observeComputed(guildId),
+                StoreStream.getChannels().observeChannelsForGuild(guildId),
+                StoreStream.getPermissions().observeChannelPermissionsForGuild(guildId),
+            ) { streams, voiceStates, users, guildMembers, guildChannels, guildPermissions ->
+                createVoiceStates(
+                    voiceStates = voiceStates,
+                    users = users,
+                    guildMembers = guildMembers,
+                    guildChannels = guildChannels,
+                    streamingUserIds = streams.keys,
+                    guildPermissions = guildPermissions,
+                )
+            }.computationLatest().distinctUntilChanged()
+        }
+
+        private const val VOICE_STATE_THROTTLE_MS = 200L
+    }
+
     companion object {
+
+        /** `guildId == 0` is the pseudo-guild the private channels are filed under. */
+        private const val PRIVATE_CHANNELS_GUILD_ID = 0L
+
+        /**
+         * The live sidebar model: the private-channel list while no guild is selected, otherwise
+         * the selected guild's channel list.
+         *
+         * Store inputs `StoreStream` does not publish yet come from [ChannelListSources], which
+         * documents exactly what each one costs while it is inert.
+         */
+        @JvmStatic
+        fun get(): Observable<WidgetChannelListModel> =
+            StoreStream.getGuildSelected()
+                .observeSelectedGuildId()
+                .distinctUntilChanged()
+                .switchMap { guildId ->
+                    if (guildId == PRIVATE_CHANNELS_GUILD_ID) {
+                        privateChannelList()
+                    } else {
+                        guildChannelList(guildId)
+                    }
+                }
+                .computationLatest()
+
+        private fun privateChannelList(): Observable<WidgetChannelListModel> = Observable
+            .combineLatest(
+                StoreStream.getChannels().observeChannelsForGuild(PRIVATE_CHANNELS_GUILD_ID),
+                StoreStream.getChannelsSelected().observeId(),
+                StoreStream.getPresences().observeAllPresences(),
+                StoreStream.getReadStates().getMentionCountsByChannel(),
+                ChannelListSources.streamingUserIds(),
+                StoreStream.getUserGuildSettings().observeGuildSettings(PRIVATE_CHANNELS_GUILD_ID),
+            ) { channels, selectedChannelId, presences, mentionCounts, streamingUserIds, settings ->
+                // The reference sorts by `StoreMessagesMostRecent`, which also counts messages that
+                // arrived while the channel was open. That store is not published by StoreStream,
+                // so the channel's own `lastMessageId` stands in — identical ordering except while
+                // a DM is being read.
+                val mostRecentIds = channels.values.associate { it.id to it.lastMessageId }
+                privateListBuilder(
+                    channels = channels.values.sortedWith(
+                        Channel.getSortByMostRecent(mostRecentIds),
+                    ),
+                    selectedChannelId = selectedChannelId,
+                    presences = presences,
+                    mentionCounts = mentionCounts,
+                    streamingUserIds = streamingUserIds,
+                    notificationSettings = settings,
+                )
+            }
+
+        private fun guildChannelList(guildId: Long): Observable<WidgetChannelListModel> {
+            val rows = Observable.combineLatest(
+                guildInfo(guildId),
+                threadState(guildId),
+                selectionState(guildId),
+                eventState(guildId),
+                StoreStream.getChannels().observeChannelsForGuild(guildId),
+                StoreStream.getUsers().observeMeId(),
+            ) { guild, threads, selection, events, guildChannels, meUserId ->
+                guildListBuilder(
+                    selectedGuildId = guildId,
+                    guild = guild,
+                    guildChannels = guildChannels,
+                    activeJoinedGuildThreads = threads.activeJoinedThreads,
+                    joinedThreads = threads.joinedThreads,
+                    channelsWithActiveThreads = threads.channelsWithActiveThreads,
+                    selectedChannel = selection.selectedChannel,
+                    selectedVoiceChannelId = selection.selectedVoiceChannelId,
+                    voiceStates = events.voiceUsers,
+                    mentionCounts = selection.mentionCounts,
+                    unreadChannelIds = selection.unreadChannelIds,
+                    collapsedCategories = selection.collapsedCategories,
+                    stageChannels = events.stageChannels,
+                    stageInstances = events.stageInstances,
+                    guildScheduledEvents = events.guildScheduledEvents,
+                    canCreateAnyEvent = events.canCreateAnyEvent,
+                    canSeeGuildRoleSubscriptions = events.canSeeGuildRoleSubscriptions,
+                    directoryUnreadCounts = events.directoryUnreadCounts,
+                    guildJoinRequest = events.guildJoinRequest,
+                    member = events.meGuildMember,
+                    meUserId = meUserId,
+                    hubEnabled = ChannelListSources.hubEnabled(),
+                    hubStudyGroupEnabled = ChannelListSources.hubStudyGroupEnabled(),
+                    hubEventsEnabled = ChannelListSources.hubEventsEnabled(),
+                ) to guild.guild
+            }
+            return Observable.combineLatest(
+                rows,
+                ChannelListSources.showPremiumGuildHint(guildId),
+            ) { (items, guild), showPremiumGuildHint ->
+                WidgetChannelListModel(
+                    selectedGuild = guild,
+                    items = items + ChannelListBottomNavSpaceItem(guildId),
+                    isGuildSelected = true,
+                    showPremiumGuildHint = showPremiumGuildHint,
+                )
+            }
+        }
+
+        private fun guildInfo(guildId: Long): Observable<GuildInfo> = Observable.combineLatest(
+            StoreStream.getUsers().observeMe(emitEmpty = true),
+            StoreStream.getGuilds().observeGuild(guildId),
+            StoreStream.getGuilds().observeRoles(guildId),
+            StoreStream.getUserGuildSettings().observeGuildSettings(guildId),
+            StoreStream.getUserGuildSettings().observeHideMutedChannels(guildId),
+            StoreStream.getPermissions().observePermissionsForGuild(guildId),
+            StoreStream.getPermissions().observeChannelPermissionsForGuild(guildId),
+        ) { me, guild, roles, settings, hideMuted, guildPermissions, channelPermissions ->
+            GuildInfo(
+                guild = guild,
+                // The @everyone role always carries the guild's own id.
+                everyoneRole = roles[guildId],
+                guildRoles = roles,
+                notificationSettings = settings,
+                hideMutedChannels = hideMuted,
+                channelPermissions = channelPermissions,
+                ableToInstantInvite = PermissionUtils.can(
+                    Permission.CREATE_INSTANT_INVITE,
+                    guildPermissions,
+                ),
+                // "Unelevated" is the state the MFA notice exists for: the user holds a permission
+                // the guild gates behind MFA, but their account has none enabled.
+                unelevated = guild != null &&
+                    (Permission.ELEVATED and (guildPermissions ?: Permission.NONE)) != 0L &&
+                    !PermissionUtils.isElevated(me.mfaEnabled, guild.mfaLevel),
+            )
+        }.distinctUntilChanged()
+
+        private fun threadState(guildId: Long): Observable<ThreadState> = Observable.combineLatest(
+            ChannelListSources.activeJoinedThreads(guildId),
+            ChannelListSources.joinedThreads(),
+            ChannelListSources.channelsWithActiveThreads(guildId),
+        ) { activeJoined, joined, withActiveThreads ->
+            ThreadState(activeJoined, joined, withActiveThreads)
+        }
+
+        private fun selectionState(guildId: Long): Observable<SelectionState> =
+            Observable.combineLatest(
+                StoreStream.getChannelsSelected().observeSelectedChannel(),
+                ChannelListSources.selectedVoiceChannelId(),
+                StoreStream.getReadStates().getMentionCountsByChannel(),
+                StoreStream.getReadStates().getUnreadChannelIds(),
+                StoreStream.getCollapsedChannelCategories().observeCollapsedCategories(guildId),
+            ) { selectedChannel, voiceChannelId, mentionCounts, unreadIds, collapsed ->
+                SelectionState(selectedChannel, voiceChannelId, mentionCounts, unreadIds, collapsed)
+            }
+
+        private fun eventState(guildId: Long): Observable<EventState> {
+            val stage = Observable.combineLatest(
+                ChannelListSources.voiceUsers(guildId),
+                ChannelListSources.stageChannels(guildId),
+                StoreStream.getStageInstances().observeStageInstancesForGuild(guildId),
+            ) { voiceUsers, stageChannels, stageInstances ->
+                StageState(voiceUsers, stageChannels, stageInstances)
+            }
+            val scheduled = Observable.combineLatest(
+                ChannelListSources.guildScheduledEvents(guildId),
+                ChannelListSources.canCreateAnyEvent(guildId),
+                ChannelListSources.canSeeGuildRoleSubscriptions(guildId),
+                ChannelListSources.directoryUnreadCounts(guildId),
+            ) { scheduled, canCreate, canSeeSubs, directoryUnreads ->
+                ScheduledState(scheduled, canCreate, canSeeSubs, directoryUnreads)
+            }
+            val membership = Observable.combineLatest(
+                ChannelListSources.guildJoinRequest(guildId),
+                StoreStream.getUsers().observeMeId()
+                    .switchMap { StoreStream.getGuilds().observeGuildMember(guildId, it) },
+            ) { joinRequest, member -> MembershipState(joinRequest, member) }
+
+            return Observable.combineLatest(stage, scheduled, membership) { s, e, m ->
+                EventState(
+                    voiceUsers = s.voiceUsers,
+                    stageChannels = s.stageChannels,
+                    stageInstances = s.stageInstances,
+                    guildScheduledEvents = e.guildScheduledEvents,
+                    canCreateAnyEvent = e.canCreateAnyEvent,
+                    canSeeGuildRoleSubscriptions = e.canSeeGuildRoleSubscriptions,
+                    directoryUnreadCounts = e.directoryUnreadCounts,
+                    guildJoinRequest = m.guildJoinRequest,
+                    meGuildMember = m.meGuildMember,
+                )
+            }
+        }
 
         /**
          * Builds the private-channel ("Direct Messages") list.

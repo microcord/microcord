@@ -14,7 +14,6 @@ import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreGuildsSorted
 import com.discord.stores.StoreMessages
 import com.discord.stores.StorePermissions
-import com.discord.stores.StoreSlowMode
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUser
 import com.discord.stores.StoreUserSettings
@@ -228,6 +227,11 @@ open class StickerPickerViewModel(
         )
 
         /**
+         * @param cooldownSecs seconds of slow mode left on a channel. `StoreSlowMode` exists but
+         * `StoreStream` publishes no accessor for it, so this defaults to "never on cooldown" and
+         * **the picker does not enforce slow mode today** — the send is still rejected server-side.
+         * Pass `StoreStream.getSlowMode()::observeCooldownSecs` once that accessor exists.
+         *
          * @param isStickerTabSelected whether the expression tray is currently showing the sticker
          * tab. `widgets/chat/input/expression` — and with it `StoreExpressionPickerNavigation` —
          * has not been reconstructed, so this defaults to "yes": a picker that is on screen at all
@@ -244,7 +248,7 @@ open class StickerPickerViewModel(
             storeUser: StoreUser = StoreStream.getUsers(),
             storeChannelsSelected: StoreChannelsSelected = StoreStream.getChannelsSelected(),
             storePermissions: StorePermissions = StoreStream.getPermissions(),
-            storeSlowMode: StoreSlowMode = StoreStream.getSlowMode(),
+            cooldownSecs: (channelId: Long?) -> Observable<Int> = { Observable.just(0) },
             isStickerTabSelected: Observable<Boolean> = Observable.just(true),
         ): Observable<StoreState> =
             storeChannelsSelected.observeSelectedChannel().switchMap { channel ->
@@ -265,13 +269,13 @@ open class StickerPickerViewModel(
                 val context = Observable.combineLatest(
                     storeUser.observeMe(),
                     storePermissions.observePermissionsForAllChannels(),
-                    storeSlowMode.observeCooldownSecs(channel?.id, StoreSlowMode.Type.MessageSend),
-                ) { meUser, permissions, cooldownSecs ->
+                    cooldownSecs(channel?.id),
+                ) { meUser, permissions, secondsLeft ->
                     ChannelContext(
                         meUser = meUser,
                         currentChannel = channel,
                         currentChannelPermissions = permissions[channel?.id ?: 0L] ?: 0L,
-                        isOnCooldown = cooldownSecs > 0,
+                        isOnCooldown = secondsLeft > 0,
                     )
                 }
                 Observable.combineLatest(catalog, query, context) { c, q, ctx ->
@@ -297,7 +301,7 @@ open class StickerPickerViewModel(
             storeGuildsSorted: StoreGuildsSorted,
             currentGuildId: Long?,
         ): Observable<Map<Long, Guild>> =
-            storeGuildsSorted.observeOrderedGuilds().map { guilds ->
+            storeGuildsSorted.observeOrderedGuilds().map<Map<Long, Guild>> { guilds ->
                 val ordered = LinkedHashMap<Long, Guild>()
                 currentGuildId?.let { id -> guilds[id]?.let { ordered[id] = it } }
                 guilds.forEach { (id, guild) -> if (id !in ordered) ordered[id] = guild }

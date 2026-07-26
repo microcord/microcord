@@ -2,14 +2,14 @@ package com.discord.widgets.voice.fullscreen.grid
 
 import android.content.Context
 import android.content.res.Configuration
-import android.graphics.Color
 import android.util.AttributeSet
 import android.widget.FrameLayout
 import android.widget.GridLayout
 import androidx.core.graphics.ColorUtils
 import com.discord.R
 import com.discord.stores.StoreVoiceParticipants
-import com.discord.views.user.avatarUrl
+import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.icon.IconUtils
 import com.facebook.drawee.view.SimpleDraweeView
 import com.github.mmin18.widget.RealtimeBlurView
 
@@ -29,7 +29,12 @@ class PrivateCallBlurredGridView @JvmOverloads constructor(
         addView(RealtimeBlurView(context, null).apply {
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
             setBlurRadius(64.dp.toFloat())
-            setOverlayColor(ColorUtils.setAlphaComponent(resolveBackground(), 204))
+            setOverlayColor(
+                ColorUtils.setAlphaComponent(
+                    ColorCompat.getColor(context, R.color.primary_dark_600),
+                    OVERLAY_ALPHA,
+                ),
+            )
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         })
     }
@@ -41,7 +46,9 @@ class PrivateCallBlurredGridView @JvmOverloads constructor(
         shown.forEachIndexed { index, voiceUser ->
             val fullWidth = shown.size == 2 || (index == shown.lastIndex && (index - 1) % 2 != 0)
             val item = gridItems.getOrPut(voiceUser.user.id) { createItem(fullWidth) }
-            item.setImageURI(avatarUrl(voiceUser.user, voiceUser.guildMember))
+            // `setIcon` supplies the default-avatar fallback for a user with no avatar set;
+            // binding the URL directly would leave those tiles blank.
+            IconUtils.setIcon(item, voiceUser.user, guildMember = voiceUser.guildMember)
             item.contentDescription = voiceUser.displayName
             if (orderChanged) grid.addView(item)
         }
@@ -56,15 +63,13 @@ class PrivateCallBlurredGridView @JvmOverloads constructor(
         scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
     }
 
-    private fun resolveBackground(): Int {
-        val value = android.util.TypedValue()
-        return if (context.theme.resolveAttribute(R.attr.colorBackgroundPrimary, value, true)) {
-            if (value.resourceId != 0) androidx.core.content.ContextCompat.getColor(context, value.resourceId) else value.data
-        } else Color.BLACK
-    }
-
     private fun columns() = if (isLandscape) 3 else 2
     private fun maxShownParticipants() = if (isLandscape) 6 else 4
     private val isLandscape get() = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     private val Int.dp get() = (this * resources.displayMetrics.density).toInt()
+
+    private companion object {
+        /** 80 % opaque, so the blurred avatars read as a backdrop rather than as content. */
+        const val OVERLAY_ALPHA = 204
+    }
 }

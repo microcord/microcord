@@ -55,7 +55,7 @@ class WidgetGlobalSearchViewModel : AppViewModel<WidgetGlobalSearchModel>() {
             .filter { it != 0L }
             .distinctUntilChanged()
             .ui(this)
-            .subscribe(frecencyTracker::track)
+            .subscribe { channelId -> frecencyTracker.track(channelId) }
 
         Observable
             .combineLatest(
@@ -99,7 +99,7 @@ class WidgetGlobalSearchViewModel : AppViewModel<WidgetGlobalSearchModel>() {
         ) { channels, permissions, guilds, mentionCounts, unreadChannelIds ->
             // Gate before anything else: an inaccessible channel must not even influence ranking.
             val visible = channels.filterValues {
-                WidgetGlobalSearchModel.DEFAULT_PERMISSIONS_PREDICATE(it, permissions)
+                WidgetGlobalSearchModel.DEFAULT_PERMISSIONS_PREDICATE.invoke(it, permissions)
             }
             ChannelContext(visible, guilds, mentionCounts, unreadChannelIds)
         }

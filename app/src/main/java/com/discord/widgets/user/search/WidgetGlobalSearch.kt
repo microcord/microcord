@@ -50,11 +50,21 @@ class WidgetGlobalSearch : AppFragment(R.layout.widget_global_search) {
 
         val recycler = view.findViewById<RecyclerView>(R.id.global_search_recycler)
         recycler.layoutManager = LinearLayoutManager(recycler.context)
-        adapter = MGRecyclerAdapter.configure(WidgetGlobalSearchAdapter(recycler))
+        adapter = MGRecyclerAdapter
+            .configure<WidgetGlobalSearchModel.ItemDataPayload, WidgetGlobalSearchAdapter>(
+                WidgetGlobalSearchAdapter(recycler),
+            )
         adapter.onSelectedListener = ::handleOnSelected
 
         val guildRecycler = view.findViewById<RecyclerView>(R.id.global_search_guild_list)
-        guildsAdapter = MGRecyclerAdapter.configure(WidgetGlobalSearchGuildsAdapter(guildRecycler))
+        // The rail scrolls sideways; `configure` copies the orientation off whatever manager it
+        // finds, so it has to be set first.
+        guildRecycler.layoutManager =
+            LinearLayoutManager(guildRecycler.context, RecyclerView.HORIZONTAL, false)
+        guildsAdapter = MGRecyclerAdapter
+            .configure<WidgetGlobalSearchGuildsModel.Item, WidgetGlobalSearchGuildsAdapter>(
+                WidgetGlobalSearchGuildsAdapter(guildRecycler),
+            )
         guildsAdapter.onClickListener = ::handleGuildSelected
         guildsAdapter.onLongClickListener = { item ->
             // Long-pressing a server scopes the query to it instead of navigating.
@@ -75,7 +85,14 @@ class WidgetGlobalSearch : AppFragment(R.layout.widget_global_search) {
             }
         })
 
-        arguments?.getString(EXTRA_SEARCH_TEXT)?.let { searchBarText.setText(it) }
+        // The dialog hosts carry the initial text on *their* arguments, because the fragment they
+        // host is inflated by a FragmentContainerView and so never receives arguments of its own.
+        val initialText = arguments?.getString(EXTRA_SEARCH_TEXT)
+            ?: parentFragment?.arguments?.getString(EXTRA_SEARCH_TEXT)
+        if (!initialText.isNullOrEmpty()) {
+            searchBarText.setText(initialText)
+            searchBarText.setSelection(searchBarText.length())
+        }
 
         // Nothing produces friend suggestions or joinable servers from here yet, so the two
         // no-results shortcuts stay hidden rather than leading nowhere.

@@ -9,10 +9,17 @@ import com.discord.app.AppLog
  * `<@1234>`, `<#5678>`, `<:smile:9012>`. [inputMentionsMap] is the range→candidate map built by
  * [AutocompleteModelUtils.mapInputToMentions]; this applies it.
  *
- * Ranges are applied in ascending start order, and each replacement shifts the text under the
- * later ones — which is exactly why the reference bounds-checks every range against the *current*
- * string rather than the original. A range that no longer fits is skipped and logged instead of
- * throwing: a stale map must never be able to lose a user's message.
+ * Ranges are applied **last-first**, and that ordering is the whole trick: a replacement only moves
+ * text that follows it, so working backwards leaves every remaining range still valid against the
+ * partially-rewritten string. Applying them in ascending order would corrupt the message as soon as
+ * two mentions appeared and the replacement differed in length from the typed text.
+ *
+ * A range that no longer fits is skipped and logged rather than throwing — a stale map must never
+ * be able to lose a user's message.
+ *
+ * `IntRange.last` is the **exclusive** end here: the map is built by
+ * [AutocompleteModelUtils.mapInputToMentions] as `index until index + matcher.length`, expressed as
+ * `IntRange(index, index + length)`.
  *
  * Reference: `AutocompleteExtensionsKt.replaceAutocompleteDataWithServerValues`.
  */
@@ -20,7 +27,7 @@ fun String.replaceAutocompleteDataWithServerValues(
     inputMentionsMap: Map<IntRange, Autocompletable>,
 ): String {
     var result = this
-    for (range in inputMentionsMap.keys.sortedBy { it.first }) {
+    for (range in inputMentionsMap.keys.sortedByDescending { it.first }) {
         val autocompletable = inputMentionsMap[range] ?: continue
         val replacement = autocompletable.getInputReplacement()
         if (range.first <= result.length && range.last <= result.length) {

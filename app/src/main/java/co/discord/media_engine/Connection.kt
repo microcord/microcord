@@ -6,7 +6,7 @@ import org.webrtc.VideoCapturer
 class Connection private constructor(val nativeInstance: Long) {
     private var userSpeakingStatusChangedCallback: UserSpeakingStatusChangedCallback? = null
 
-    interface EncryptionModesCallback {
+    fun interface EncryptionModesCallback {
         fun onEncryptionModes(modes: Array<String>)
     }
 
@@ -25,7 +25,7 @@ class Connection private constructor(val nativeInstance: Long) {
         }
     }
 
-    interface OnVideoCallback {
+    fun interface OnVideoCallback {
         fun onVideo(userId: Long, ssrc: Int, streamIdentifier: String, streams: Array<StreamParameters>)
     }
 
@@ -38,7 +38,7 @@ class Connection private constructor(val nativeInstance: Long) {
         }
     }
 
-    interface UserSpeakingStatusChangedCallback {
+    fun interface UserSpeakingStatusChangedCallback {
         fun onUserSpeakingStatusChanged(userId: Long, isUserSpeakingNow: Boolean, wantsPriority: Boolean)
     }
 

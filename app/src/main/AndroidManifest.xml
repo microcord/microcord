@@ -2,7 +2,114 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!--
+        Hardware the app can use but never requires: every entry is required="false" so the app
+        stays installable on devices without a camera, microphone or bluetooth radio, exactly as
+        the reference declares it.
+    -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.front"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.autofocus"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.faketouch"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.bluetooth"
+        android:required="false" />
+
+    <!-- Normal permissions. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.BROADCAST_STICKY" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Voice audio routing; from API 31 the runtime equivalent is BLUETOOTH_CONNECT (Phase 11). -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+
+    <!-- Runtime permissions requested by com.discord.app.AppPermissions. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Superseded by scoped storage; AppPermissions treats it as granted from API 29. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <!-- Not grantable from API 33; the media picker needs READ_MEDIA_* there (tracked follow-up). -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <!-- Required from API 33 or NotificationManagerCompat silently drops every notification. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Special-access permissions: granted from system settings, never from a runtime dialog. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+
+    <!--
+        Android 11 package visibility. Without this block the app cannot resolve the Spotify,
+        Samsung Game Tools/Home or authenticator apps, nor the chooser/pick/get-content/custom-tab
+        intents it launches, on API 30+.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.CHOOSER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+
+            <category android:name="android.intent.category.BROWSABLE" />
+
+            <data android:scheme="http" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+
+            <category android:name="android.intent.category.BROWSABLE" />
+
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.PICK" />
+
+            <data android:mimeType="image/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.GET_CONTENT" />
+
+            <data android:mimeType="image/*" />
+        </intent>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+
+        <package android:name="com.spotify.music" />
+        <package android:name="com.samsung.android.game.gametools" />
+        <package android:name="com.samsung.android.game.gamehome" />
+        <package android:name="com.authy.authy" />
+        <package android:name="com.google.android.apps.authenticator2" />
+    </queries>
 
     <application
         android:name="com.discord.app.App"
@@ -26,6 +133,17 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/image_share_filepaths" />
         </provider>
+        <!--
+            The base activity, so AppScreenRouter screen intents can start a real activity instead
+            of only ever back-stacking a fragment onto Main. Not exported and filter-less: it is
+            reachable only from an explicit in-process intent.
+        -->
+        <activity
+            android:name="com.discord.app.AppActivity"
+            android:exported="false"
+            android:screenOrientation="fullUser"
+            android:theme="@style/AppTheme.Dark"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
         <activity
             android:name="com.discord.app.AppActivity$Main"
             android:exported="true"
@@ -39,7 +157,7 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <intent-filter android:autoVerify="false">
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
@@ -68,7 +186,12 @@
                 <data android:pathPrefix="/events/" />
                 <data android:pathPrefix="/connect/authorize" />
             </intent-filter>
-            <intent-filter android:autoVerify="false">
+            <!--
+                autoVerify matches the reference. App Links verification only succeeds for a domain
+                whose assetlinks.json lists this app's signing certificate, so until Phase 13
+                registers one these links still fall back to the disambiguation dialog.
+            -->
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
@@ -91,6 +214,11 @@
                 <data android:host="action" />
                 <data android:pathPrefix="/" />
             </intent-filter>
+
+            <!-- App shortcuts and Direct Share targets (res/xml/shortcuts.xml). -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
         <activity
             android:name="com.discord.app.AppActionActivity"
@@ -118,6 +246,51 @@
                 <data android:pathPrefix="/" />
             </intent-filter>
         </activity>
+
+        <!--
+            Avatar/banner cropping. com.discord.media_picker.MediaPicker already launches UCrop, and
+            the ucrop 2.2.6 AAR ships an activity-less manifest, so without this entry every crop
+            throws ActivityNotFoundException. Not exported: only this app starts it.
+        -->
+        <activity
+            android:name="com.yalantis.ucrop.UCropActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+
+        <!--
+            Notification action broadcasts (mark-as-read, direct reply, delete, cancel). Not
+            exported: every PendingIntent that targets it names the component explicitly, so no
+            other app needs to reach it, and the intent-filter exists only to document the contract.
+        -->
+        <receiver
+            android:name="com.discord.utilities.notifications.NotificationActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="dev.mantikafasi.manticord.notification.MARK_READ" />
+                <action android:name="dev.mantikafasi.manticord.notification.REPLY" />
+                <action android:name="dev.mantikafasi.manticord.notification.DELETE" />
+                <action android:name="dev.mantikafasi.manticord.notification.CANCEL" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+            DownloadManager broadcasts completion from another UID, so this receiver has to be
+            exported. It reads only EXTRA_DOWNLOAD_ID from the intent and re-queries DownloadManager
+            for the actual status, and it drops any id it did not enqueue, so a spoofed broadcast
+            can at worst resolve a download we already started.
+        -->
+        <receiver
+            android:name="com.discord.utilities.io.UserDownloadCompleteReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.DOWNLOAD_COMPLETE" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Google Assistant App Actions fulfillment (res/xml/actions.xml). -->
+        <meta-data
+            android:name="com.google.android.actions"
+            android:resource="@xml/actions" />
     </application>
 
 </manifest>

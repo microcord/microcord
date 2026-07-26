@@ -154,6 +154,130 @@ Commented in code. Same question as `SparseMutableList`: parity vs correctness.
 
 ---
 
+## Guild-admin + stage stores (13 stores) — READY TO APPLY
+
+Source: guild-feature-stores agent handoff. Every store takes
+`() -> RestAPIInterface?` and no-ops when null, so ordering against
+`createRestApi` does not matter.
+
+**Construction** — guild-admin group after `stageInstances`; stage group after
+`voiceChannelSelected`:
+`bans`, `guildIntegrations`, `guildJoinRequests`, `guildTemplates`,
+`guildMemberVerificationForm`, `auditLog`, `guildRoleSubscriptions`,
+`guildBoost`, `guildScheduledEvents`, `instantInvites` (its
+`onGuildScheduledEventResolved` points at
+`guildScheduledEvents::addGuildScheduledEventFromInvite`), then `stageChannels`,
+`requestedStageChannels`, `stageChannelSelfPresence`.
+
+**`storesV2`** — append all except `guildIntegrations`, which is deliberately
+**not** a `StoreV2` (the reference uses a plain `BehaviorSubject` store).
+
+**Voice fan-out** — replace the inert lambda: `notifyVoiceStatesUpdated` must
+call `stageChannels.handleVoiceStatesUpdated(guildId, channelId, userId)`, and
+`voiceStates.handleVoiceStateUpdate(voiceState)` must also call
+`stageChannelSelfPresence.handleVoiceStateUpdate(voiceState)`.
+
+**Gateway routing** — resolves 10 of the outstanding TODOs: `guildBanAdd/Remove`
+→ `bans`; `guildIntegrationsUpdate` → `guildIntegrations`;
+`guildJoinRequestCreateOrUpdate`/`Delete` → `guildJoinRequests`; all five
+`guildScheduledEvent*` → `guildScheduledEvents`. Extend the three existing
+`stageInstance*` subscriptions with `stageChannelSelfPresence` equivalents.
+
+**Lifecycle** — `handleConnectionOpen`, `handleGuildCreate/Remove`,
+`handleChannelDelete`, `handleGuildMemberAdd/Remove`,
+`handleGuildRoleCreateOrUpdate`, both logout/reset blocks, and
+`stageChannelSelfPresence.init()`. **12 new companion accessors.**
+
+The agent's full report has the exact line numbers and call list.
+
+### Seams this unblocks
+- **`InviteEmbedStore`** in `WidgetChatListAdapterItemInvite.kt:438-466` — delete;
+  use `StoreInstantInvites`. States map 1:1 except the store adds `LoadFailed`.
+  The row must key `observeInvite` on `ModelInvite.getInviteStoreKey(code, eventId)`.
+  Merge `entries/InviteEmbedResolver` at the same time.
+- **`ChatListRowNavigation.toggleEventRsvp`** — now backed by
+  `guildScheduledEvents.toggleMeRsvpForEvent(event)`; rows should read
+  `isMeRsvpedToEvent` instead of deriving RSVP from the payload.
+- **Stage-invite speakers / listener count** — `stageChannels.observeGuildStageChannels(guildId)`
+  for joined guilds; `requestedStageChannels.enqueueStageChannelFetch(channelId)`
+  for invite-reached channels. This closes the audit's "largest behavioural gap".
+- **Guild-template row** — `guildTemplates.maybeInitTemplateState(code)` +
+  `observeGuildTemplate(code)` gives cross-row caching.
+
+### Types to relocate (co-located only because of file-ownership limits)
+`StageChannel` → `widgets/stage/model/`; `StageChannelRoleContext` → its own file
+in `stores/` (pure move); `GuildScheduledEventUser` → `widgets/guildscheduledevent/`.
+
+### Reference bug reproduced — decision needed
+`StoreAuditLog.recordDeletedTarget` compares a deleted channel's `type` (parsed
+as `Long`) against a boxed `Integer.valueOf(0)` — confirmed at disassembly offset
+807. **Always false, so a deleted text channel never renders its leading `#`.**
+One numeric comparison to fix.
+
+### Unverified
+`StoreStageChannels.handleConnectionOpen` clears its maps **without**
+`markChanged()` — real reference behaviour, reproduced. Because `snapshotData`
+only runs for changed stores and carries untouched channels over, **stale stage
+roles survive a reconnect** until something dirties them.
+
+## Emoji / sticker / notice stores (9 stores) — READY TO APPLY
+
+Source: emoji-stores agent handoff. `StoreExperiments` and `StoreUserSurvey`
+were already complete and wired; untouched.
+
+**Construction** (after `permissions`, `guildsSorted`, `userSettingsSystem`,
+`experiments`): `notices`, `nux`, `reviewRequest`, `changeLog`, `emojiCustom`,
+`emoji`, `emojiGuild`, `stickers`, `guildStickers`.
+
+**`storesV2`** — add ONLY `emojiCustom`, `emojiGuild`, `stickers`,
+`guildStickers`. `StoreEmoji`, `StoreNotices`, `StoreNux`, `StoreReviewRequest`
+and `StoreChangeLog` are plain `Store`s and must **not** go in that list.
+
+**`init(context)` — order is load-bearing:**
+```kotlin
+notices.init(context); reviewRequest.init(context)
+changeLog.init(context.applicationContext as Application)
+emoji.initBlocking(context)
+Rules.setEmojiDataProvider(emoji)   // MUST precede the first parse
+stickers.init()
+```
+**This closes the "Required init-order coupling" item below.** `StoreEmoji`
+implements `Rules.EmojiDataProvider` directly. Until this line exists, named and
+unicode emoji render as literal text everywhere and nothing errors.
+
+**Gateway** — replace the client-data-state-only handlers at `:1049-1050` so
+`guildEmojisUpdate` also reaches `emojiCustom` + `emojiGuild`, and
+`guildStickersUpdate` also reaches `guildStickers`. Delete the
+`TODO(StoreEmoji, StoreStickers)` at `:1035`.
+
+**Lifecycle** — `handleConnectionOpen`, guild create/remove, guild-member-add
+(own role changes only), guild selection → `nux`, and the logout path.
+**9 new accessors.**
+
+### Two seams this closes in the same edit
+- **`StoreUserPresence`** is constructed with stubbed emoji lambdas — pass
+  `resolveCustomEmoji`/`resolveUnicodeEmoji` backed by `emoji`. Custom-status
+  emoji are currently stubbed.
+- **`widgets/stickers/StickerStores`** (lines 109/111) → `StoreStream.getStickers()`
+  / `getGuildStickers()`. The new stores implement those exact interfaces, so it
+  is a one-line swap each; `RestBackedStickerStore` and
+  `GuildsBackedGuildStickerStore` in `StickerStoreDefaults.kt` then become dead.
+
+### Reference behaviours reproduced verbatim — flagged
+- **Guild emoji sort is reverse-alphabetical** (`sortedByDescending` on the
+  lowercased name). Looks like a reference bug.
+- **`noticeQueue`'s second sort key is `-priority`**, so numerically-higher (less
+  urgent) priorities sort first among plain notices.
+- **`StoreChangeLog`'s experiment branches are dead** — R8 folded the bucket to a
+  constant `null` in 126.21 and the experiment name is unrecoverable, so
+  `WidgetChangeLogSpecial` is permanently unreachable.
+
+### Still not presented
+`Notice.show()` / `validScreens` have **no consumer**. The reference filters and
+honours `autoMarkSeen` inside `StoreNavigation.ActivityNavigationLifecycleCallbacks`.
+Until `StoreNavigation` subscribes to `getNotices()`, notices queue and publish
+but nothing displays them.
+
 ## Pending from other Wave 3 agents
 
 Messages, guilds, channels, users/social, and voice agents are still running.

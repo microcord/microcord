@@ -11,6 +11,7 @@ material = "1.3.0"
 billing = "4.0.0"
 cardview = "1.0.0"
 constraintlayout = "2.0.4"
+dynamicanimation = "1.0.0"
 exoplayer = "2.16.0"
 flexbox = "3.0.0"
 fresco = "2.6.0"
@@ -52,6 +53,7 @@ material = { group = "com.google.android.material", name = "material", version.r
 billing = { group = "com.android.billingclient", name = "billing", version.ref = "billing" }
 androidx-cardview = { group = "androidx.cardview", name = "cardview", version.ref = "cardview" }
 androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
+androidx-dynamicanimation = { group = "androidx.dynamicanimation", name = "dynamicanimation", version.ref = "dynamicanimation" }
 androidx-preference-ktx = { group = "androidx.preference", name = "preference-ktx", version.ref = "preference" }
 androidx-recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "recyclerview" }
 androidx-swiperefreshlayout = { group = "androidx.swiperefreshlayout", name = "swiperefreshlayout", version.ref = "swiperefreshlayout" }

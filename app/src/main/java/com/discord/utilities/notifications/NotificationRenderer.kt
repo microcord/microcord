@@ -18,18 +18,23 @@ import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
 import com.discord.R
 import com.discord.app.AppActivity
+import com.discord.utilities.fcm.NotificationClient
 
 class NotificationRenderer(private val cache: NotificationCache = NotificationCache()) {
-    fun renderLocal(context: Context, data: NotificationData, enabled: Boolean = true) =
-        render(context, data.copy(source = NotificationSource.LOCAL), enabled)
+    fun renderLocal(context: Context, data: NotificationData, settings: NotificationClient.SettingsV2 = NotificationClient.getSettings()) =
+        render(context, data.copy(source = NotificationSource.LOCAL), settings)
 
-    fun renderGateway(context: Context, data: NotificationData, enabled: Boolean = true) =
-        render(context, data.copy(source = NotificationSource.GATEWAY), enabled)
+    fun renderGateway(context: Context, data: NotificationData, settings: NotificationClient.SettingsV2 = NotificationClient.getSettings()) =
+        render(context, data.copy(source = NotificationSource.GATEWAY), settings)
 
     @SuppressLint("MissingPermission", "NotificationPermission")
-    fun render(context: Context, data: NotificationData, enabled: Boolean = true): Boolean {
-        if (!canNotify(context, enabled) || !isValid(data)) return false
-        createChannels(context)
+    fun render(
+        context: Context,
+        data: NotificationData,
+        settings: NotificationClient.SettingsV2 = NotificationClient.getSettings(),
+    ): Boolean {
+        if (!canNotify(context, settings.isEnabled) || !isValid(data)) return false
+        initNotificationChannels(context)
         val snapshot = cache.add(data)
         val channelId = data.kind.channelId
         val private = data.kind != NotificationKind.GENERAL
@@ -40,6 +45,7 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
             .setWhen(data.timestamp)
             .setAutoCancel(true)
             .setOnlyAlertOnce(snapshot.messages.size > 1)
+            .setDefaults(notificationDefaults(settings))
             .setCategory(if (data.kind == NotificationKind.SOCIAL) NotificationCompat.CATEGORY_SOCIAL else NotificationCompat.CATEGORY_MESSAGE)
             .setVisibility(if (private) NotificationCompat.VISIBILITY_PRIVATE else NotificationCompat.VISIBILITY_PUBLIC)
             .setGroup("manticord.channel.${data.channelId}")
@@ -47,11 +53,17 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
             .setContentIntent(contentIntent(context, data))
             .setDeleteIntent(actionIntent(context, data, NotificationActionReceiver.ACTION_DELETE))
 
+        // Notification channels carry sound/vibration/light policy from API 26; below that the
+        // notification itself has to, which is why the reference only sets these on the builder.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O && !settings.isDisableBlink) {
+            builder.setLights(ContextCompat.getColor(context, R.color.brand_500), LIGHT_PERIOD_MS, LIGHT_PERIOD_MS)
+        }
+
         if (private) builder.setPublicVersion(
             NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(R.drawable.ic_notifications_white_24dp)
-                .setContentTitle("Manticord")
-                .setContentText("New notification")
+                .setContentTitle(context.getString(R.string.manticord_app_name))
+                .setContentText(context.getString(R.string.new_messages))
                 .build(),
         )
         if (data.kind == NotificationKind.MESSAGE || data.kind == NotificationKind.DIRECT_MESSAGE) {
@@ -59,11 +71,13 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
             data.messageId?.let {
                 builder.addAction(
                     R.drawable.ic_check_white_24dp,
-                    "Mark As Read",
+                    context.getString(R.string.mark_as_read),
                     actionIntent(context, data, NotificationActionReceiver.ACTION_MARK_READ),
                 )
             }
-            if (data.allowReply) builder.addAction(replyAction(context, data))
+            // A reply action the user cannot act on is worse than none: the reference suppresses it
+            // for every channel where SEND_MESSAGES is denied.
+            if (data.allowReply && settings.canReplyTo(data.channelId)) builder.addAction(replyAction(context, data))
         } else {
             builder.setStyle(NotificationCompat.BigTextStyle().bigText(data.body))
         }
@@ -71,11 +85,24 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
         return true
     }
 
-    fun cancelChannel(context: Context, channelId: Long): Boolean {
-        val id = cache.removeChannel(channelId) ?: return false
-        NotificationManagerCompat.from(context).cancel(id)
+    /**
+     * Cancels every notification shown for [channelId].
+     *
+     * [isAckRequest] marks a clear driven by our own read-ack; see [NotificationCache.removeChannel].
+     */
+    @JvmOverloads
+    fun clearChannel(context: Context, channelId: Long, isAckRequest: Boolean = false): Boolean {
+        if (!cache.consumeAckExemption(channelId, isAckRequest)) return false
+        cache.removeChannel(channelId)
+        // The id is derived from the channel id rather than read back from the cache, so a receiver
+        // woken into a fresh process — where the in-memory cache is empty — still cancels the
+        // notification that is actually on screen.
+        NotificationManagerCompat.from(context).cancel(NotificationCache.notificationId(channelId))
         return true
     }
+
+    fun setIgnoreNextClearForAck(channelId: Long, shouldIgnore: Boolean) =
+        cache.setIgnoreNextClearForAck(channelId, shouldIgnore)
 
     fun cancel(context: Context, notificationId: Int) {
         if (notificationId > 0) NotificationManagerCompat.from(context).cancel(notificationId)
@@ -86,6 +113,13 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
         (Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(
             context, Manifest.permission.POST_NOTIFICATIONS,
         ) == PackageManager.PERMISSION_GRANTED)
+
+    private fun notificationDefaults(settings: NotificationClient.SettingsV2): Int {
+        var defaults = Notification.DEFAULT_LIGHTS
+        if (!settings.isDisableSound) defaults = defaults or Notification.DEFAULT_SOUND
+        if (!settings.isDisableVibrate) defaults = defaults or Notification.DEFAULT_VIBRATE
+        return defaults
+    }
 
     private fun isValid(data: NotificationData) = data.channelId > 0 && data.authGeneration >= 0 &&
         data.title.isNotBlank() && data.body.isNotBlank() &&
@@ -129,7 +163,9 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
     }
 
     private fun replyAction(context: Context, data: NotificationData): NotificationCompat.Action {
-        val input = RemoteInput.Builder(NotificationActionReceiver.REMOTE_INPUT_REPLY).setLabel("Reply").build()
+        val input = RemoteInput.Builder(NotificationActionReceiver.REMOTE_INPUT_REPLY)
+            .setLabel(context.getString(R.string.notification_reply))
+            .build()
         val intent = Intent(
             NotificationActionReceiver.ACTION_REPLY,
             actionUri(NotificationActionReceiver.ACTION_REPLY, data.channelId),
@@ -139,7 +175,7 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
             .putExtra(NotificationActionReceiver.EXTRA_NOTIFICATION_ID, NotificationCache.notificationId(data.channelId))
             .putExtra(NotificationActionReceiver.EXTRA_AUTH_GENERATION, data.authGeneration)
         val pending = PendingIntent.getBroadcast(context, requestCode(data, 2), intent, mutableReplyFlags())
-        return NotificationCompat.Action.Builder(R.drawable.ic_notifications_white_24dp, "Reply", pending)
+        return NotificationCompat.Action.Builder(R.drawable.ic_notifications_white_24dp, context.getString(R.string.notification_reply), pending)
             .addRemoteInput(input)
             .setAllowGeneratedReplies(true)
             .build()
@@ -154,11 +190,22 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
     private fun immutableFlags() = PendingIntent.FLAG_UPDATE_CURRENT or
         if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0
 
+    /**
+     * The only mutable PendingIntent in the app.
+     *
+     * `RemoteInput` works by having the system write the typed text into the intent it fires, which
+     * is impossible with FLAG_IMMUTABLE. The blast radius is bounded because the intent names its
+     * component explicitly (so only [NotificationActionReceiver], which is not exported, can
+     * receive it), it carries no data URI another app could redirect, and every field it does carry
+     * — channel id, notification id, auth generation — is re-validated by
+     * [NotificationActionValidator] and re-checked against the live auth generation before any work
+     * is enqueued.
+     */
     private fun mutableReplyFlags() = PendingIntent.FLAG_UPDATE_CURRENT or
         if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
 
-    private fun createChannels(context: Context) {
-        if (Build.VERSION.SDK_INT < 26) return
+    fun initNotificationChannels(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java)
         NotificationKind.entries.forEach { kind ->
             manager.createNotificationChannel(NotificationChannel(kind.channelId, kind.channelId, NotificationManager.IMPORTANCE_DEFAULT).apply {
@@ -168,10 +215,12 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
     }
 
     companion object {
-        const val CHANNEL_MESSAGES = "Messages"
-        const val CHANNEL_DIRECT_MESSAGES = "DM"
-        const val CHANNEL_SOCIAL = "Social"
-        const val CHANNEL_GENERAL = "General"
+        const val CHANNEL_MESSAGES = NotificationClient.NOTIF_CHANNEL_MESSAGES
+        const val CHANNEL_DIRECT_MESSAGES = NotificationClient.NOTIF_CHANNEL_MESSAGES_DIRECT
+        const val CHANNEL_SOCIAL = NotificationClient.NOTIF_CHANNEL_SOCIAL
+        const val CHANNEL_GENERAL = NotificationClient.NOTIF_GENERAL
+
+        private const val LIGHT_PERIOD_MS = 1_500
 
         private val NotificationKind.channelId: String get() = when (this) {
             NotificationKind.MESSAGE -> CHANNEL_MESSAGES

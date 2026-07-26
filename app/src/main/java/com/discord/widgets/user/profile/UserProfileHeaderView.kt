@@ -14,9 +14,9 @@ import androidx.cardview.widget.CardView
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
-import com.discord.api.activity.ActivityType
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
+import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.UsernameView
 import com.discord.views.user.UserAvatarPresenceView
@@ -86,9 +86,13 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         aka.visibility = if (state.showAkas) View.VISIBLE else View.GONE
         aka.configure(state.guildMembersForAka)
         badgeAdapter.items = badgesFor(state)
-        val status = state.presence?.activities?.firstOrNull { it.type == ActivityType.CUSTOM_STATUS }
-        customStatus.text = listOfNotNull(status?.emoji?.name?.let { ":$it:" }, status?.state).joinToString(" ")
-        customStatus.visibility = if (status == null) View.GONE else View.VISIBLE
+        // Renders the custom-status emoji as an image span rather than its `:name:` shorthand,
+        // and hides the row when the user has no status at all.
+        PresenceUtils.setPresenceText(
+            presence = state.presence,
+            isStreamingApplication = state.streamContext != null,
+            textView = customStatus,
+        )
         avatarEdit.visibility = if (state.editable) View.VISIBLE else View.GONE
         bannerEdit.visibility = if (state.editable) View.VISIBLE else View.GONE
     }
@@ -123,22 +127,18 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         secondaryName.visibility = if (secondary != null && !state.showAkas) View.VISIBLE else View.GONE
     }
 
-    private fun badgesFor(state: UserProfileHeaderViewModel.ViewState.Loaded): List<Badge> = buildList {
-        val flags = state.user.publicFlags
-        if (flags and 1 != 0) add(Badge(R.drawable.ic_profile_badge_staff_32dp, context.getString(R.string.staff_badge_tooltip)))
-        if (flags and 2 != 0) add(Badge(R.drawable.ic_profile_badge_partner_32dp, context.getString(R.string.partner_badge_tooltip)))
-        if (flags and 4 != 0) add(Badge(R.drawable.ic_profile_badge_hypesquad_32dp, context.getString(R.string.hypesquad_badge_tooltip)))
-        if (flags and 8 != 0) add(Badge(R.drawable.ic_profile_badge_bughunter_level_1_32dp, context.getString(R.string.bug_hunter_badge_tooltip)))
-        if (flags and 64 != 0) add(Badge(R.drawable.ic_hypesquad_house1_32dp, context.getString(R.string.hypesquad_house_1)))
-        if (flags and 128 != 0) add(Badge(R.drawable.ic_hypesquad_house2_32dp, context.getString(R.string.hypesquad_house_2)))
-        if (flags and 256 != 0) add(Badge(R.drawable.ic_hypesquad_house3_32dp, context.getString(R.string.hypesquad_house_3)))
-        if (flags and 512 != 0) add(Badge(R.drawable.ic_profile_badge_premium_early_supporter_32dp, context.getString(R.string.premium_badge_tooltip)))
-        if (flags and 16384 != 0) add(Badge(R.drawable.ic_profile_badge_bughunter_level_2_32dp, context.getString(R.string.bug_hunter_badge_tooltip)))
-        if (flags and 131072 != 0) add(Badge(R.drawable.ic_profile_badge_verified_developer_32dp, context.getString(R.string.verified_developer_badge_tooltip)))
-        if (flags and 262144 != 0) add(Badge(R.drawable.ic_profile_badge_certified_moderator_32dp, context.getString(R.string.certified_moderator_badge_tooltip)))
-        if (state.userProfile.premiumSince != null) add(Badge(R.drawable.ic_profile_badge_nitro_32dp, context.getString(R.string.premium_badge_tooltip)))
-        if (state.userProfile.premiumGuildSince != null) add(Badge(R.drawable.ic_profile_badge_premium_guild_subscription_lvl1_32dp, context.getString(R.string.premium_badge_tooltip)))
-    }
+    /**
+     * Delegates to [Badge.getBadgesForUser], which owns the full badge matrix — tooltips, the
+     * nine-tier boost icon, and the Nitro up-sell flags.
+     */
+    private fun badgesFor(state: UserProfileHeaderViewModel.ViewState.Loaded): List<Badge> =
+        Badge.getBadgesForUser(
+            user = state.user,
+            profile = state.userProfile,
+            isMeUserPremium = state.isMeUserPremium,
+            isMeUserVerified = state.isMeUserVerified,
+            context = context,
+        )
 
     private inner class BadgeAdapter : RecyclerView.Adapter<BadgeHolder>() {
         var items = emptyList<Badge>()

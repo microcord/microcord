@@ -38,9 +38,9 @@ object WidgetGlobalSearchScoreStrategy {
     fun ItemDataPayload.score(searchType: Int, frecencyChannels: Collection<Long>): Int {
         val channelId = channel?.id ?: 0L
         var score = frecencyChannels.scoreFrecency(channelId)
-        score += when (this) {
-            is ItemUser -> scoreUser(searchType)
-            is ItemChannel -> scoreChannel()
+        score += when (val item = this) {
+            is ItemUser -> item.scoreUser(searchType)
+            is ItemChannel -> item.scoreChannel()
             else -> 0
         }
         // An unread mention dominates every other signal: the count is added on top of a flat 100,

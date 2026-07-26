@@ -1,25 +1,27 @@
 package com.discord.widgets.servers
 
 import android.content.Context
-import android.graphics.Typeface
-import android.text.Spannable
-import android.text.SpannableStringBuilder
 import android.text.style.ForegroundColorSpan
-import android.text.style.StyleSpan
 import android.util.AttributeSet
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.annotation.StringRes
-import androidx.core.content.ContextCompat
 import com.discord.R
+import com.discord.utilities.time.TimeUtils
+import com.discord.views.ThemedColor
+import com.discord.widgets.settings.SettingsStrings
 import java.text.DateFormat
-import java.text.SimpleDateFormat
-import java.util.Locale
-import java.util.TimeZone
 
+/**
+ * The mute/unmute row shared by the server, channel and category notification screens: the action
+ * itself, the "you have muted this until …" status, and an optional explanation underneath.
+ *
+ * Reference: `com.discord.widgets.servers.NotificationMuteSettingsView`. The caller supplies every
+ * string because the wording differs per surface; only the "muted until" line is formatted here,
+ * since it is the one that needs the end time substituted and styled.
+ */
 class NotificationMuteSettingsView(context: Context, attrs: AttributeSet) :
     LinearLayout(context, attrs) {
     data class ViewState(
@@ -56,10 +58,7 @@ class NotificationMuteSettingsView(context: Context, attrs: AttributeSet) :
         muteItemStatus.text = when {
             !viewState.isMuted -> ""
             viewState.muteEndTime == null -> viewState.rawMutedStatusText
-            else -> mutedUntilText(
-                context.getString(viewState.rawMutedUntilStatusResId),
-                renderUtcDateTime(viewState.muteEndTime),
-            )
+            else -> mutedUntilText(viewState.rawMutedUntilStatusResId, viewState.muteEndTime)
         }
         muteItemStatus.visibility = if (viewState.isMuted) View.VISIBLE else View.GONE
         muteItemDescription.text = viewState.muteDescriptionText
@@ -67,34 +66,30 @@ class NotificationMuteSettingsView(context: Context, attrs: AttributeSet) :
             if (viewState.muteDescriptionText != null) View.VISIBLE else View.GONE
     }
 
-    private fun renderUtcDateTime(value: String): String {
-        val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).apply {
-            timeZone = TimeZone.getTimeZone("UTC")
-        }
-        return DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
-            .format(parser.parse(value) ?: java.util.Date())
-    }
+    /**
+     * `"You have muted this server until $[**{endTime}**](endTimeHook)"` — the hook run is the
+     * formatted end time, emphasised in the brand colour.
+     */
+    private fun mutedUntilText(@StringRes templateResId: Int, muteEndTime: String): CharSequence =
+        SettingsStrings.render(
+            context,
+            templateResId,
+            "endTime" to TimeUtils.renderUtcDateTime(
+                utcDateTime = muteEndTime,
+                context = context,
+                outputDateFormat = DateFormat.MEDIUM,
+                outputTimeFormat = DateFormat.SHORT,
+            ),
+            hooks = mapOf(
+                HOOK_END_TIME to listOf(
+                    ForegroundColorSpan(
+                        ThemedColor.resolve(context, R.attr.colorControlBrandForeground),
+                    ),
+                ),
+            ),
+        )
 
-    private fun mutedUntilText(template: String, endTime: String): CharSequence {
-        val text = template
-            .replace("{endTime}", endTime)
-            .replace("$[**", "")
-            .replace("**](endTimeHook)", "")
-        val start = text.indexOf(endTime)
-        if (start < 0) return text
-
-        val color = TypedValue().let { value ->
-            context.theme.resolveAttribute(R.attr.colorTextLink, value, true)
-            if (value.resourceId != 0) ContextCompat.getColor(context, value.resourceId) else value.data
-        }
-        return SpannableStringBuilder(text).apply {
-            setSpan(StyleSpan(Typeface.BOLD), start, start + endTime.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-            setSpan(
-                ForegroundColorSpan(color),
-                start,
-                start + endTime.length,
-                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
-            )
-        }
+    private companion object {
+        const val HOOK_END_TIME = "endTimeHook"
     }
 }

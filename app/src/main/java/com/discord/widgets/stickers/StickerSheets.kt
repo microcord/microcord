@@ -82,15 +82,18 @@ object StickerSheets {
         stickerId: Long,
         fetchIfMissing: Boolean = false,
     ): Observable<Sticker?> {
-        StickerStores.stickers.getStickers()[stickerId]?.let { return Observable.just(it) }
-        StickerStores.guildStickers.getGuildSticker(stickerId)?.let { return Observable.just(it) }
-        if (!fetchIfMissing) return Observable.just(null)
-        return RestAPI.api.getSticker(stickerId)
+        StickerStores.stickers.getStickers()[stickerId]?.let { return Observable.just<Sticker?>(it) }
+        StickerStores.guildStickers.getGuildSticker(stickerId)
+            ?.let { return Observable.just<Sticker?>(it) }
+        // Uncached and no client yet (pre-login): report "unknown" instead of crashing.
+        val api = RestAPI.apiOrNull
+        if (!fetchIfMissing || api == null) return Observable.just<Sticker?>(null)
+        return api.getSticker(stickerId)
             .restSubscribeOn()
             .doOnNext { fetched ->
                 StickerStores.stickers.handleFetchedSticker(fetched)
                 StickerStores.guildStickers.handleFetchedSticker(fetched)
             }
-            .map { it }
+            .map<Sticker?> { it }
     }
 }

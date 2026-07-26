@@ -25,6 +25,7 @@ import com.discord.models.domain.ModelUserSettings
 import com.discord.stores.MainRoute
 import com.discord.stores.RequiredAction
 import com.discord.stores.StoreStream
+import com.discord.utilities.uri.UriHandler
 import com.discord.stores.IntentRouteResult
 import com.discord.utilities.intent.AppIntentParser
 import com.discord.utilities.logging.BootLog
@@ -400,16 +401,42 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
     }
 
     private fun consumeIntent(intent: Intent) {
+        // A screen intent addresses one fragment directly and bypasses MainRoute entirely. Without
+        // this branch `AppScreenRouter.launch` silently re-entered the tab host, which left every
+        // router-launched screen (media viewer, QR scanner, TOS report) unreachable.
+        AppScreenRouter.screenOf(intent)?.let { screen ->
+            showScreen(screen, intent)
+            return
+        }
         when (val result = StoreStream.getNavigation().routeIntent(AppIntentParser.parse(intent))) {
-            is IntentRouteResult.External -> runCatching {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.uri)))
-            }
+            is IntentRouteResult.External -> UriHandler.handle(this, result.uri)
             IntentRouteResult.Queued -> pendingLaunchIntent = Intent(intent)
             IntentRouteResult.Rejected -> Unit
         }
         if (intent.action != Intent.ACTION_MAIN) {
             setIntent(Intent(this, Main::class.java).setAction(Intent.ACTION_MAIN))
         }
+    }
+
+    /**
+     * Shows a fragment addressed directly by [AppScreenRouter.EXTRA_SCREEN].
+     *
+     * The launching intent's extras are carried through as fragment arguments so a screen can read
+     * its arguments either way, and the transaction is added to the back stack so Back returns to
+     * whatever was showing.
+     */
+    private fun showScreen(screen: Class<out Fragment>, intent: Intent) {
+        val tag = "screen:${screen.name}"
+        if (supportFragmentManager.findFragmentByTag(tag) != null) return
+        binding.appLoading.visibility = View.GONE
+        val fragment = supportFragmentManager.fragmentFactory
+            .instantiate(classLoader, screen.name)
+            .apply { arguments = intent.extras }
+        AppLog.recordNavigation(javaClass.simpleName, screen.simpleName)
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.app_root, fragment, tag)
+            .addToBackStack(tag)
+            .commit()
     }
 
     private fun createRouteFragment(route: MainRoute): Fragment = routeFragmentFactory?.invoke(route) ?: when (route) {

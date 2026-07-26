@@ -24,11 +24,16 @@ class WidgetSettingsTest {
      *    publishes `StoreNotifications`; the route itself is live.
      *  - `text_images_settings`, `accessibility`, `behavior`, `activity_status` all read and write
      *    `StoreStream.getUserSettings()`.
+     *  - `appearance` -> `WidgetSettingsAppearance` and `language` -> `WidgetSettingsLanguage`, both
+     *    reading `StoreStream.getUserSettingsSystem()` and mirroring the change to the account
+     *    through `RestAPI`.
      */
     @Test fun `main settings exposes only implemented recovered app routes`() {
         assertEquals(setOf(
             com.discord.R.id.blocked_users,
             com.discord.R.id.text_images_settings,
+            com.discord.R.id.appearance,
+            com.discord.R.id.language,
             com.discord.R.id.accessibility,
             com.discord.R.id.behavior,
             com.discord.R.id.activity_status,

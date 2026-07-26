@@ -3,6 +3,7 @@ package com.discord.widgets.guilds.list
 import com.discord.api.channel.Channel
 import com.discord.api.guildjoinrequest.ApplicationStatus
 import com.discord.models.guild.Guild
+import com.discord.widgets.channels.list.WidgetChannelListUnreads
 
 /**
  * One row of the guild sidebar.
@@ -11,11 +12,8 @@ import com.discord.models.guild.Guild
  * the fixed chrome rows use the reserved negative sentinels declared in [GuildListItem.Companion],
  * which is why no folder id may ever be negative.
  *
- * `isUnread`/`mentionCount` are declared on the three rows that can carry unread state so the
- * floating "new messages" pill can scan the item list. The reference expresses that through
- * `WidgetChannelListUnreads.UnreadItem`; that class lives in `widgets/channels` and does not exist
- * yet, so the members are declared directly here and the interface can be added over them later
- * without changing any of this.
+ * The three rows that can carry unread state implement [WidgetChannelListUnreads.UnreadItem], which
+ * is what drives the floating "new messages ↑/↓" pill over the sidebar.
  */
 sealed class GuildListItem(val itemId: Long) {
 
@@ -29,7 +27,7 @@ sealed class GuildListItem(val itemId: Long) {
     data class PrivateChannelItem(
         val channel: Channel,
         override val mentionCount: Int,
-    ) : GuildListItem(channel.id), UnreadItem {
+    ) : GuildListItem(channel.id), WidgetChannelListUnreads.UnreadItem {
         override val isUnread: Boolean get() = mentionCount > 0
     }
 
@@ -52,7 +50,7 @@ sealed class GuildListItem(val itemId: Long) {
         val hasActiveStageChannel: Boolean = false,
         val isConnectedToStageChannel: Boolean = false,
         val hasActiveScheduledEvent: Boolean = false,
-    ) : GuildListItem(guild.id), UnreadItem
+    ) : GuildListItem(guild.id), WidgetChannelListUnreads.UnreadItem
 
     /** Aggregated "N servers are unavailable" row shown during a partial outage. */
     data class UnavailableItem(val unavailableGuildCount: Int) : GuildListItem(ID_UNIDENTIFIED)
@@ -73,7 +71,7 @@ sealed class GuildListItem(val itemId: Long) {
         override val isUnread: Boolean,
         /** True while a drag hovers this folder and dropping would add the guild to it. */
         val isTargetedForFolderAddition: Boolean = false,
-    ) : GuildListItem(folderId), UnreadItem {
+    ) : GuildListItem(folderId), WidgetChannelListUnreads.UnreadItem {
         /**
          * The synthetic folder holding guilds whose join request is still being reviewed. It is
          * never reorderable and never a drop target.
@@ -89,12 +87,6 @@ sealed class GuildListItem(val itemId: Long) {
 
     /** Student-hub discovery entry point. */
     data class HubItem(val showSparkle: Boolean) : GuildListItem(ID_HUB)
-
-    /** Rows the "new messages" pill can point at. */
-    interface UnreadItem {
-        val isUnread: Boolean
-        val mentionCount: Int
-    }
 
     companion object {
         const val TYPE_FRIENDS = 0

@@ -58,6 +58,7 @@ dependencies {
     implementation(libs.androidx.cardview)
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.dynamicanimation)
     implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.preference.ktx)

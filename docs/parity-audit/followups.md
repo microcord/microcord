@@ -184,6 +184,28 @@ dispatcher-scheduled public wrapper, and `WidgetCallFullscreen` /
 
 ## CLOSED — audit findings now fixed
 
+- **`AppActivity` never consumed `AppScreenRouter.EXTRA_SCREEN`.** `screenOf` was
+  dead code and the activity only ever showed the fragment for the current
+  `MainRoute`, so `AppScreenRouter.launch` silently re-entered the tab host —
+  leaving **every router-launched screen unreachable** (media viewer, QR scanner,
+  `WidgetTosReportViolation`, `EmptyFriendsStateView`). `consumeIntent` now
+  branches on `screenOf(intent)` into a new `showScreen(...)`, carrying the
+  intent extras through as fragment arguments and adding the transaction to the
+  back stack. The media viewer's own `presentScreen()` workaround can be removed.
+- **`AppActivity.kt`'s raw `startActivity(ACTION_VIEW)`** for external routes now
+  goes through `utilities/uri/UriHandler.handle` — this was the last of the four
+  raw `ACTION_VIEW` sites listed below, and the reason Phase 5's "safe external
+  URI handling" claim was untrue.
+
+### Still needed for full parity on this
+The reference launches the **base** `com.discord.app.AppActivity` (its manifest
+line 70, standard launch mode) for screen intents; the target declares only
+`AppActivity$Main` and `AppActivity$AppAction`, and `createScreenIntent` targets
+`Main`. Adding the base activity to the manifest would let screens run as real
+activities rather than back-stacked fragments, which also preserves the chat
+list's scroll position while a viewer is open. **Manifest is owned by the
+notifications/manifest agent.**
+
 - **Blocked-users row is no longer a dead end.** It is shown, and its callback
   *is* invoked: `StoreStream.kt:904` installs `stateSource`, `:921` installs
   `onUnblock`, `WidgetTabsHost.kt:110` installs `onProfile`, `:103` installs
@@ -683,3 +705,781 @@ The reference declares only six — **`destroy` is exported by the library but t
 declared or called it**; the target's `external fun destroy(ptr: Long)` is an addition, and its
 `(J)V` descriptor is now confirmed by disassembly (`x86_64/libdsti.so+0x49b3f`: null-checks `rdx`,
 calls `LottieInfo::~LottieInfo`, then `operator delete`). `createCache` likewise confirmed `(JII)V`.
+
+## Message search + quick switcher (Phase 12) — handoff
+
+### `StoreSearch` and friends: the interface the store wave must implement
+
+Message search needs four stores the project does not have. Rather than build a competing store
+under `com.discord.stores`, the search screens talk to interfaces declared in
+`widgets/search/SearchStore.kt`, and `widgets/search/DefaultSearchStore.kt` supplies a working
+implementation behind `SearchStoreProvider`. **When the real stores land, either implement these
+interfaces or delete them and point the widgets at the stores; then call
+`SearchStoreProvider.install(...)` once from `StoreStream` and delete `DefaultSearchStore.kt`.**
+The split below is the reference's, member for member.
+
+`SearchStore` (ref `StoreSearch`)
+- `val storeSearchInput: SearchInputStore`, `val storeSearchQuery: SearchQueryStore`,
+  `val storeSearchData: SearchDataStore`
+- `fun initForGuild(guildId: Long, searchStringProvider: SearchStringProvider)`
+- `fun initForChannel(channelId: Long, searchStringProvider: SearchStringProvider)`
+- `fun getDisplayState(): Observable<DisplayState>` — `enum DisplayState { SUGGESTIONS, RESULTS }`
+- `fun getHistory(): Observable<Collection<List<QueryNode>>>`
+- `fun loadInitial(queryString: String, searchStringProvider: SearchStringProvider)`
+- `fun loadMore(oldestMessageId: Long)`
+- `fun clearHistory()`, `fun clear()`
+
+`SearchInputStore` (ref `StoreSearchInput`)
+- `val currentParsedInput: Observable<List<QueryNode>>`
+- `val forcedInput: Observable<List<QueryNode>>`
+- `val isInputValid: Observable<Boolean>`
+- `fun init(searchStringProvider)`, `fun updateInput(input: String)`, `fun clear()`
+- `onFilterClicked(filterType, searchStringProvider, query)`,
+  `onFromUserClicked(userSuggestion, fromFilterString, query)`,
+  `onMentionsUserClicked(userSuggestion, mentionsFilterString, query)`,
+  `onInChannelClicked(channelSuggestion, inFilterString, query)`,
+  `onHasClicked(hasAnswerOption, hasFilterString, hasAnswerString, query)`,
+  `onQueryClicked(query)`
+
+`SearchQueryStore` (ref `StoreSearchQuery`)
+- `val state: Observable<SearchState>`
+- `parseAndQuery(searchTarget, queryString, searchStringProvider, includeNsfw, onQueryParsed)` —
+  the reference takes the `StoreSearch` itself and calls back into `persistQuery`; the callback
+  removes the cycle
+- `loadMore(searchTarget, oldestMessageId)`, `clear()`
+
+`SearchDataStore` (ref `StoreSearchData`)
+- `get(): Observable<SearchData>`, `init(searchTarget)`, `clear()`
+
+Reference details the implementation must preserve, all currently honoured by `DefaultSearchStore`:
+- `DisplayState` follows both inputs: any parsed-input emission drops to `SUGGESTIONS` *and* clears
+  the query store; any `queryFetchState != NONE` switches to `RESULTS`.
+- `isInputValid` is `nodes.any { it !is FilterNode }` — confirmed at bytecode level
+  (`StoreSearchInput$1.call`); JADX renders it as an unreadable `all`-shaped loop.
+- Input parsing is `leadingEdgeThrottle(100 ms)` then `distinctUntilChanged` then parse on the
+  computation scheduler; validation is a separate `leadingEdgeThrottle(50 ms)` off the AST subject.
+- `loadMore` only fires from `COMPLETED` + `hasMore`, and republishes with `hasMore = false` so a
+  second scroll cannot double-request.
+- `parseAndQuery` gives the search data one second to arrive, then fails the search.
+- Guild `SearchData` is `leadingEdgeThrottle(3 s)`; the reference uses
+  `ObservableWithLeadingEdgeThrottle.combineLatest`, which does not exist here — a plain
+  `combineLatest` plus `leadingEdgeThrottle` stands in.
+
+Also needed from the store wave:
+- **`SearchTarget` currently lives at `utilities/search/SearchTarget.kt`.** The reference nests it as
+  `StoreSearch.SearchTarget`; the history cache, the fetcher and the query store are all keyed on it,
+  so it had to exist before the store did. Move it back when `StoreSearch` lands.
+- `StoreGuildsNsfw` is not reachable from `StoreStream`, so the NSFW gate only checks
+  `MeUser.nsfwAllowance`; a guild whose NSFW gate has not been agreed still returns age-restricted
+  results. Reference: `StoreSearch.includeNsfw` also requires `isGuildNsfwGateAgreed(guildId)`.
+- `StoreStream.handleSearchFinish(searchState)` is never called; the reference dispatches every
+  search state into `StoreStream` so other surfaces can react.
+
+### New package `com/discord/utilities/search/**` — unowned, created here
+
+The whole search domain layer was missing and is a hard dependency of `widgets/search`. Added:
+`query/FilterType`, `query/node/{QueryNode, content/ContentNode, filter/FilterNode,
+answer/{AnswerNode, ChannelNode, UserNode, HasNode, HasAnswerOption}}`, `query/parsing/QueryParser`,
+`strings/{SearchStringProvider, ContextSearchStringProvider}`, `validation/SearchData`,
+`network/{SearchQuery, SearchFetcher, state/{QueryFetchState, SearchState}}`,
+`history/{SearchHistoryCache, PersistedSearchHistoryCache}`, `suggestion/{SearchSuggestionEngine,
+entries/*}`, `SearchUtils`, `SearchTarget`.
+
+Deviations to close later:
+- `FilterNode.render` uses a plain bold `StyleSpan`; the reference uses
+  `FontUtils.getThemedFont(context, R.attr.font_display_bold)` plus `TypefaceSpanCompat`, neither of
+  which exists in the project.
+- `PersistedSearchHistoryCache` replaces `MGPreferenceSearchHistoryCache` (same `Persister` key
+  `SEARCH_HISTORY_V2`, same 10-target / 5-query caps).
+- The suggestion entries are grouped into one `suggestion/entries/Suggestions.kt` rather than one
+  file per class; the FQNs match the reference.
+
+### Enum orders recovered from static initialisers — the decompiled source order is wrong
+
+Vineflower prints these alphabetically. The real ordinals (from the `$VALUES` array) are:
+- `FilterType`: `FROM, MENTIONS, HAS, IN` — corroborated by `UserNode.updateQuery` (ordinal 0 maps
+  to `author_id`, 1 to `mentions`).
+- `HasAnswerOption`: `LINK, EMBED, FILE, VIDEO, IMAGE, SOUND, STICKER` — the icon table is indexed
+  by it.
+- `SearchSuggestion.Category`: `FILTER, MENTIONS_USER, FROM_USER, HAS, BEFORE_DATE, IN_CHANNEL,
+  RECENT_QUERY` — the header-label table is indexed by it. `BEFORE_DATE` has no producer on mobile
+  but keeps its slot.
+- `QueryFetchState`: `NONE, INDEXING, IN_PROGRESS, LOADING_MORE, COMPLETED, FAILED`.
+- `StoreSearch.DisplayState`: `SUGGESTIONS, RESULTS`. `SearchTarget.Type`: `GUILD, CHANNEL`.
+
+### Quick-switcher scoring weights — RECOVERED, previously reported unrecoverable
+
+`audit-widgets-user-friends.md` section 7 says `WidgetGlobalSearchScoreStrategy.java:65,158` are
+JADX-broken and "the exact weights **cannot be recovered** from this decompile". **They can.**
+`discorddecompile/out/com/discord/widgets/user/search/WidgetGlobalSearchScoreStrategy.kt` decompiles
+cleanly, and the one genuinely ambiguous part (the presence `when`, because the class has a
+`$WhenMappings` table) was settled with `javap -c`: `scoreUser` calls `Enum.ordinal()` directly, so
+the presence scores key off raw `ClientStatus` ordinals, not a switch map. The enum weights were
+confirmed a second way from `SearchType.<clinit>` bytecode. Everything is transcribed in
+`widgets/user/search/WidgetGlobalSearchScoreStrategy.kt` and pinned by
+`WidgetGlobalSearchScoreStrategyTest`.
+
+### `WidgetGlobalSearchDialog` was the wrong feature — split, with a compatibility shim
+
+The target's `WidgetGlobalSearchDialog` was a DM quick-switcher plus a group-DM recipient picker.
+The reference class is a thin `AppDialog` host for `WidgetGlobalSearch`. It is now that host; the
+recipient picker moved verbatim to `widgets/user/search/WidgetGroupDmPickerDialog.kt`.
+`WidgetChannelsList.kt:46,49` still calls `show(fragmentManager, Boolean)`, so a `@Deprecated`
+two-arg overload routes `false` to the quick switcher and `true` to the picker. **`WidgetChannelsList`
+should call `WidgetGlobalSearchDialog.show(fm)` and `WidgetGroupDmPickerDialog.show(fm)` directly;
+then delete the overload.** The picker's real reference home is
+`widgets/guilds/invite/WidgetGroupInviteFriends`, which is not reconstructed — fold it in when that
+lands.
+
+### Edits made outside the search slice
+
+- `widgets/channels/WidgetChannelSidebarActions.kt` — `onSearch` now takes the `Channel`, not the
+  channel id: a guild channel searches its *guild*, a DM searches itself, and the host cannot tell
+  them apart from an id. `WidgetHome` assigns it (`openSearch`). This closes audit finding **D2**.
+- `widgets/tabs/WidgetTabsHost.kt` — three lines in `consumeOwnedRoute` so a `/query/` App Action
+  opens the quick switcher pre-filled instead of being parsed and dropped (audit finding **D4**).
+  The prefix construction lives in `WidgetGlobalSearchDialog.showForQuery`. **Not handled:** a query
+  carrying `messageText`, which the reference forwards to `WidgetIncomingShare.launch(activity,
+  text, query)`; `WidgetIncomingShare` has no text-only entry point yet, so such a link opens the
+  switcher and drops the text.
+
+### Reference bug reproduced — DECISION NEEDED
+
+**`QueryNode.Preprocessor.preprocess` never demotes stale answers.** It maps the node list into a
+fresh `ArrayList`, demoting `AnswerNode`s that no longer resolve, and then consolidates the
+*original* list — discarding the mapped one. JADX (`QueryNode.java:54-65`) and Vineflower agree
+instruction for instruction. Consequence: a `from:` user who left the guild, or an `in:` channel
+that was deleted, still reaches `SearchQuery.Builder` and contributes `author_id=null` or nothing at
+all, instead of degrading to searchable text. Behaviour is preserved; the intended pass is kept as
+`QueryNode.Preprocessor.demote` so the fix is one call away.
+
+### Degraded because a dependency is absent
+
+| What | Degradation | Blocked on |
+| --- | --- | --- |
+| Quick-switcher frecency | `ChannelFrecencyTracker` is fed from `StoreChannelsSelected.observeId()` inside `WidgetGlobalSearchViewModel`, so it only accumulates while a switcher has existed this session and does not persist | tracking belongs in `StoreChannelsSelected` |
+| Quick-switcher user rows | `ItemUser.aliases` is always empty, so nicknames are neither matched nor shown as secondary text | a per-guild member-name index (`WidgetGlobalSearchModel.UsersContext.members` in the reference) |
+| Guild rail | `Item.connectedToVoice` is always false | `StoreVoiceChannelSelected` |
+| Guild rail | `unavailableGuildCount` is never populated | reference `WidgetGlobalSearchGuildsModel` folds unavailable guilds into the last item |
+| Quick switcher | add-a-friend / join-server buttons on the no-results card stay hidden | nothing produces those destinations from here yet |
+| `WidgetQuickMentionsDialog` | the mentions tab draws its own toolbar inside the pager | `WidgetUserMentions.create(isEmbedded: Boolean)` — `widgets/user` is another wave's file |
+| Search and quick switcher | no analytics (`AnalyticsTracker.quickSwitcherOpen()`, search-result tracking) | `AnalyticsTracker` |
+
+### Unverified
+
+- `WidgetSearch` hint strings were matched to resource ids by elimination: `search_in` is used for
+  both a guild and a group DM, `search_dm_with` for a 1:1 DM, bare `search` otherwise. The numeric
+  ids in the decompile (`2131895350`, `2131895317`, `2131895292`) were not cross-checked against a
+  resource table.
+- `SearchFetcher`'s indexing retry loop is `repeatWhen { timer(retryMillis) }` plus
+  `takeUntil { !isIndexing }`; the reference uses obfuscated rx operators (`j0.l.a.y`,
+  `j0.l.e.e.c`) that were read structurally rather than proven. The retry cadence should be checked
+  against a guild that is genuinely still indexing.
+- Gradle was not run (project rule), so nothing here is compile-verified.
+
+## `contact_sync` + `phone` wave — seams, decisions and one-line wirings
+
+13 of 13 reference classes built (`widgets/contact_sync/**` 9, `widgets/phone/**` 4).
+`WidgetContactSyncViewModelKt` is the file-level facade of `WidgetContactSyncViewModel.kt`,
+as in the reference.
+
+### libphonenumber — SETTLED, do not add the dependency
+
+`utilities/phone/PhoneUtils`'s two hand-rolled regexes **are** the reference implementation.
+`javap -c com.discord.utilities.phone.PhoneUtils` shows the literal `ldc "^[-() \d]+$"`, and
+`unzip -l discord126.21-dex2jar.jar | grep i18n/phonenumbers` returns **zero** classes — the
+reference APK does not ship libphonenumber at all. No dependency is needed and none was added.
+
+### One-line wirings that make this feature live
+
+| Wiring | Consequence today | Owner |
+| --- | --- | --- |
+| `StoreStream` never constructs `StorePhone` **or** `StoreContactSync` — neither class is referenced anywhere else in the repo | Both are dead code. Install them into `com.discord.widgets.phone.PhoneCountryCodes.store` and `ContactSyncDependencies.contactSync`, then delete those seams | store wave |
+| `StoreUserConnections` / `StoreExperiments` are constructed but private on `StoreStream` (no `@JvmStatic` accessor) | Contact sync can never find an existing `contacts` connection, so it always creates a new one; `isPhoneVerifyCaptchaEnabled` is hardcoded `false` | store wave |
+| `WidgetFriendsList.kt:39` hides `R.id.menu_friends_contact_sync` because `onContactSync` is never assigned | The only in-app entry point to the whole flow is invisible. Assign `onContactSync = { WidgetContactSync.launch(requireContext()) }` | `widgets/friends` owner |
+| `views/phone/PhoneOrEmailInputView.bind` leaves `onCountryCodeClick` null by default | The reference wires the picker **inside** `bind(fragment)` (`PhoneOrEmailInputView.b()` → `WidgetPhoneCountryCodeBottomSheet.Companion.show(fragment.parentFragmentManager)`), so every phone screen gets it for free. `WidgetContactSync` passes it explicitly; **`widgets/auth` and `widgets/user/phone` still cannot change country** | `views/phone` owner |
+| `StoreNux` does not exist | Finishing an onboarding contact-sync flow does not tick the onboarding step (`ContactSyncDependencies.onOnboardingCompleted`) | Wave 8 |
+| `utilities/analytics/AnalyticsTracker` does not exist | The whole contact-sync funnel is recorded through `ContactSyncAnalytics`, currently `None`. Six reference signatures are transcribed there | analytics wave |
+| `AndroidManifest.xml` still declares no `READ_CONTACTS` | `requestContacts` is auto-denied, so the flow correctly parks on its "needs permission" state and never uploads | Wave 5 (already tracked) |
+
+### Code placed here temporarily
+
+- **`widgets/contact_sync/ContactsProvider.kt`** is the port of the reference's
+  `utilities/contacts/ContactsProviderUtils`. Move it to `com/discord/utilities/contacts/` when
+  that package lands; keep the interface (it is what makes the flow testable).
+- **`widgets/contact_sync/ContactSyncLearnMore.kt`** is a **third** hook-swapping helper (see
+  "Third hook-formatting implementation" above). It additionally strips Discord's `$` hook marker,
+  which `I18nSpans` does not — `$[Learn More](learnMoreHook)` currently renders as `$Learn More`
+  anywhere else that pattern is used. Fold all three into `com.discord.i18n`.
+- **`widgets/phone/PhoneCountryCodes.kt`** duplicates `StorePhone`'s `assets/data/countries.json`
+  read so the picker works before the store is wired. Delete with the seam.
+
+### Reference bug reproduced — DECISION NEEDED
+
+**`PhoneUtils.getTranslatedStringForCountry` can never resolve a translation.** Verified at
+bytecode level: it looks up `country_name_<phoneCountryCode.lowercase()>`, i.e.
+`country_name_+1`, which is not a legal resource name, so `getIdentifier` always returns 0 and the
+English `name` is used. The 256 recovered `country_name_xx` strings are keyed on **alpha-2** and
+are dead in the reference. Reproduced for parity; changing the key to `data.alpha2` is a one-word
+fix that lights all 256 translations up.
+
+### Deliberate divergences (documented in code)
+
+- `ContactSyncFriendSuggestionListAdapter` detaches the checkbox listener before `setChecked`.
+  The reference reassigns it *after*, so a recycled row fires the **previous** row's callback and
+  selects the wrong user — that decides who receives a friend request.
+- `WidgetContactSync.getContactSyncModeFromIntent` defaults to `DEFAULT` instead of throwing.
+  The reference `Objects.requireNonNull`-casts the extra, which crashes when `ContactSyncUpsellSheet`
+  is shown from the friends list (no extra present).
+- The captcha retry uses `CaptchaHelper.tryShowCaptcha` directly; the reference's
+  `widgets/captcha/WidgetCaptcha` + `ActivityResultLauncher` screen does not exist here.
+
+### Privacy surface — where contact data is handled
+
+`ContactsProvider` is the only class that reads the address book. Its two failure paths log the
+exception *class name* and nothing else. Numbers flow provider → `WidgetContactSyncViewModel.onContactsFetched`
+→ `RestAPIParams.UploadContacts` (already redacted `toString`) and are never stored. `ViewState`,
+`StoreState` and `Item.FriendSuggestionItem` all override `toString` to redact the phone number,
+the typed name, the bulk-add token and the address-book nickname. `ContactSyncAnalytics.nameSubmitted`
+takes a word count and a character count, never the name.
+
+**Still leaking:** `api/friendsuggestions/FriendSuggestionReason` is a plain data class whose
+generated `toString` prints `name` — the contact-book nickname. Add a redacting `toString` there
+(file owned by the api wave).
+
+## Guild sidebar — inputs with no source yet
+
+`widgets/guilds/list/GuildsListStoreHooks` is the single seam the rebuilt sidebar reads these
+through. Every default is inert (empty stream / disabled feature / no-op), so the degradation is
+visible rather than wrong. Install each from app start-up and delete the field.
+
+| Hook | Real source | What is dead until it lands |
+| --- | --- | --- |
+| `lurkingGuildIds` | `StoreLurking.getLurkingGuildIds()` — **the store exists, `StoreStream` does not publish it** | Lurked guilds are indistinguishable from joined ones and are draggable |
+| `selectedVoiceChannelId` | `StoreVoiceChannelSelected.observeSelectedVoiceChannelId()` — **exists, not published** | No guild or folder ever shows the voice-connected ring or the stage glyph |
+| `guildJoinRequests`, `pendingGuilds`, `fetchPendingGuilds` | `StoreGuildJoinRequest` (does not exist) | No pending-guilds folder, no join-request badge on a guild icon |
+| `guildIdsWithActiveStageEvents` | `GuildIdsWithVisibleStageInstanceModel` | Stage indicator never lights |
+| `guildIdsWithActiveScheduledEvents` | `GuildIdsWithActiveEventsModel` | Scheduled-event dot never lights |
+| `applicationStreams` | `StreamContextService.getForAllStreamingUsers()` | Go Live indicator never lights |
+| `discordHubClicked`, `markDiscordHubClicked` | `StoreDirectories` | Hub sparkle |
+| `isHubDiscoveryEnabled`, `isHubDiscoverySparkleEnabled`, `isHubEnabled` | `GrowthTeamFeatures` | The student-hub sidebar row is never emitted |
+| `showMemberVerificationGate` | `MemberVerificationUtils.maybeShowVerificationGate(...)` — the object exists but only has `hasVerificationGate` | Tapping a guild that is still under membership review does nothing (deliberately — it must never open the guild) |
+
+**Shape divergence to fold back:** the hook is `applicationStreams: () -> Observable<List<GuildStream>>`
+(`guildId`, `channelId`) instead of the reference's `Map<Long, StreamContext>`, because the target's
+`utilities/streams/StreamContext` is a stub carrying neither the guild nor the channel. Restore the
+reference shape once `StreamContext` does.
+
+`widgets/guilds/list/GuildsListNavigation` and `widgets/guilds/contextmenu/ContextMenuNavigation`
+are the same pattern for destinations: `WidgetGuildTemplates` (the "+" row),
+`WidgetNavigationHelp` (the "?" row), `WidgetChannelsListItemChannelActions` (DM long-press),
+`WidgetLeaveGuildDialog`, `WidgetGuildProfileSheet`, `WidgetGuildFolderSettings`. The rows are shown
+and their clicks fire; they simply do not navigate yet.
+
+### Sidebar mismatches worth knowing
+
+- **Mention counts come from `StoreReadStates.getMentionCountsByChannel()`**, not the reference's
+  `StoreMentions.observeMentionCounts()` — `StoreMentions` exists but `StoreStream` does not publish
+  it. Same 500 ms leading-edge throttle either way.
+- **The reference never shows the pending-guilds folder.** `handleStoreState` gates it on
+  `emptyList().contains(entry.key)` — an R8-folded constant that is always false, so
+  `createPendingGuildsFolder`, `isPendingGuild`, the drag guards and the verification gate are all
+  dead code in 126.21. The reconstruction gates it on `pendingGuilds` instead, which is the only
+  reading that gives the surrounding code any effect. Documented in
+  `GuildListItemBuilder.hasReviewablePendingGuilds`.
+- **`BottomNavViewObserver` does not exist**, and `TabsHostBottomNavigationView` offers
+  `addHeightChangedListener` with **no matching remove**, so the sidebar samples the bar's height on
+  each resume rather than leaking a listener. Add `removeHeightChangedListener` (or the reference's
+  observer) and the trailing spacer becomes live.
+- **`AddGuildHint` (the first-server tip) is not reconstructed.** It needs `StoreNux`,
+  `AnalyticsTracker` and `WidgetHome.setOnGuildListAddHintCreate`, none of which exist.
+- **`RoleIconView.showRoleIconToast` names the role but does not render its icon** — the reference
+  builds an `EmojiNode` into the toast and `textprocessing/node/EmojiNode` is not reconstructed.
+- **`Guild.canUseRoleIcons` is inlined in `RoleIconView`**; it belongs in
+  `utilities/guilds/RoleIconUtils`, which does not exist.
+- `StoreStream.updateGuildFolders(...)` now has no caller: the sidebar persists through
+  `StoreGuildsSorted.setPositions` + `RestAPI.updateUserSettings`, exactly as the reference does.
+
+### Recovered from bytecode this wave — do not re-derive
+
+- **`WidgetGuildsListViewModel.handleStoreState` row order** (JADX: "instructions count: 1289";
+  Vineflower fails on the whole class). From `javap -c`: Friends → mentioned DMs → pending-guilds
+  folder → lurked guilds → **divider** → guilds/folders → outage row → "+" → hub → (divider + help,
+  new accounts only) → bottom-nav spacer. The audit's guessed order was wrong.
+- **`WidgetGuildListAdapter.onMove`** (JADX: "instructions count: 362") is fully recovered in the
+  Vineflower Kotlin decompile, including the hit zones
+  (`|selectedCenterY - targetCenterY| < sourceHeight * 0.2f` ⇒ CENTER, else TOP when the dragged row
+  is above the target) and the whole source×target validity matrix.
+- **`TargetPosition` ordinals are TOP=0, CENTER=1, BOTTOM=2** — from the `when (ordinal)` mapping to
+  `MoveAbove`/`TargetOperation`/`MoveBelow`. Vineflower prints the enum alphabetically.
+- **`GuildsDragAndDropCallback.getMovementFlags`** is `makeMovementFlags(UP or DOWN, 0)` gated on
+  `DraggableViewHolder.canDrag()`, as the audit inferred.
+- **`ChannelUtils.h` is `getSortByNameAndType`** and **`ChannelUtils.D` is `isStageVoiceChannel`**
+  (`javap -c`), so the sidebar's mentioned-DM list really is sorted by name/type, not by recency.
+
+## Chat input + bot UI kit — seams opened by the composer wave
+
+`WidgetChatInput` now renders `ChatInputViewModel.ViewState.Loaded` and shows the reference's
+guards. Everything below is inert-by-default and documented at the point of use.
+
+| Seam | Location | Stands in for | Consequence while unset |
+| --- | --- | --- | --- |
+| `ChatInputStoreBindings.isLurking` | `widgets/chat/input/` | `StoreLurking.isLurkingObs` — the store exists, `StoreStream` never constructs it | a lurked guild looks writable until the API rejects the send |
+| `ChatInputStoreBindings.threadDraftState` | same | `StoreThreadDraft.observeDraftState` | thread-creation composer sees an empty draft |
+| `ChatInputStoreBindings.chatEvents` / `slowModeCooldown` / `joinedThreads` | same | `StoreChat` / `StoreSlowMode` / `StoreThreadsActiveJoined` | no member-list mention insert, no slow-mode countdown, no `#thread` autocomplete |
+| `ChatInputGuardActions.{joinGuildAsMember, showFollowSheet, launchAccountVerification, showMemberVerificationGate}` | `widgets/chat/input/ChatInputGuardActions.kt` | `StoreLurking.postJoinGuildAsMember`, `WidgetChannelFollowSheet`, `WidgetUserEmailVerify`/`WidgetUserPhoneManage`, `MemberVerificationUtils.maybeShowVerificationGate` | the guard's **explanation** is shown; its button is **hidden** rather than dead |
+| `ChatInputAutocompletables.emojiSetSource` | `widgets/chat/input/autocomplete/` | `StoreEmoji` | falls back to `emoji/LocalEmojiSet` (bundled catalog + `StoreGuilds`), so `:name:` autocomplete works but has no favourites/recents |
+| `SelectComponentBottomSheet` fragment result | `widgets/botuikit/views/select/` | the reference sends the interaction inline via `StoreApplicationInteractions` + `StoreLocalActionComponentState` | the chat row performs the REST call instead; optimistic local selection is not recorded |
+
+**Fields deliberately absent from `ChatInputViewModel.ViewState.Loaded`** (present in the reference,
+no type in this project): `joinRequestStatus` (`api/guildjoinrequest/ApplicationStatus` +
+`StoreGuildJoinRequest`) — so only the "not applied yet" branch of the member-verification card is
+reachable, which is the reference's own default branch. `showCreateThreadOption` is hardcoded
+`false` pending `utilities/threads/ThreadUtils.canCreateThread`. `maxFileSizeMB` inlines the tier
+table that belongs in `utilities/premium/PremiumUtils`.
+
+**New shared utilities created outside `widgets/chat/input/**`** — they sit at their reference paths
+and nothing else owned them: `utilities/guilds/GuildVerificationLevelUtils`,
+`utilities/guilds/MemberVerificationUtils` (only `hasVerificationGate`),
+`utilities/duration/DurationUtils` (only `humanizeCountdownDuration`).
+
+**Proved this wave:** `replaceAutocompleteDataWithServerValues` applies its ranges
+**descending by start offset** — `javap -c` shows the synthetic comparator class
+`AutocompleteExtensionsKt$replaceAutocompleteDataWithServerValues$$inlined$sortedByDescending$1`.
+Ascending would corrupt any message containing two mentions whose replacement differs in length
+from the typed text. `IntRange.last` in that map is the **exclusive** end.
+
+### Still missing in `widgets/chat/input/**`
+`gifpicker` (17 reference classes — REST endpoints and DTOs exist under `models/gifpicker/**`, but
+`StoreGifPicker` does not), `expression` (8 classes — needs `StoreExpressionPickerNavigation`,
+`StoreGuildStickers`), `attachments/AttachmentBottomSheet`, `WidgetChatInputAttachments`,
+`WidgetChatInputEditText`, `WidgetChatInputTruncatedHint`, `WidgetChatInputMentionsTags`,
+`AppFlexInputViewModel`, `applicationcommands/**` and `autocomplete/commands/**` (need
+`StoreApplicationCommands`). The composer still hosts an emoji-only tray in place of the
+three-tab expression tray.
+
+## Settings / servers wave — store dependencies the integration agent must wire
+
+Every item below is a seam with a working, honest default. Each is one line to close.
+
+| Seam | Where | Consequence today |
+| --- | --- | --- |
+| `StoreStream.getGuildProfiles()` does not exist (`StoreGuildProfiles` is dead code) | `WidgetServerNotificationsViewModel.observeStoreState(guildProfileSource = …)` | `approximateMemberCount` is unknown, so `isAboveNotifyAllSize` / `isAboveHighlightsSize` are always `false`: the "All messages" radio never shows the `large_guild_notify_all_messages_description` subtext, and the highlights warning card never appears |
+| `StoreExperiments` / `GrowthTeamFeatures.isHighlightsSettingsEnabled()` do not exist | `WidgetServerNotificationsViewModel.observeStoreState(highlightsEnabledSource = …)` | The highlights section stays hidden — which is what an account outside the `2022-03_highlights_settings` bucket sees, so it is not a visible regression. `NotificationHighlightsSettingsView` now has a real caller and goes live the moment the flag does |
+| `GuildRoleSubscriptionsFeatureFlag` / `StoreGuildRoleSubscriptions` do not exist | `WidgetServerSettingsViewModel.observeStoreState(canManageGuildRoleSubscriptionsSource, hasGuildRoleSubscriptionsSource)` | The monetization section of server settings stays hidden |
+| `StoreExperiments` (`2020-12_guild_delete_feedback`) and `widgets/guild_delete_feedback` do not exist | `ServerDeleteViewModel` | Deleting a server dismisses the dialog without offering the feedback sheet |
+
+### Screens that exist but nothing navigates to
+
+Both have a working `launch(context, guildId)` built on `SettingsNavigation`; they just need a caller.
+
+- `WidgetServerNotifications.launch(context, guildId)` — the reference reaches it from the guild
+  profile sheet, which this project does not have (`widget_guild_profile_actions.xml` has no host).
+- `WidgetServerSettings.launch(context, guildId)` — same host in the reference. It is also the
+  destination of the `ChatListRowNavigation.launchGuildSettings` seam already recorded above, which
+  can now be pointed at it.
+
+### `WidgetServerSettings.IMPLEMENTED_OPTIONS` is the server-settings equivalent of `WidgetSettings.implementedRouteIds`
+
+The permission gating on every row matches the reference, but a row is only *shown* when its
+destination exists. Today that set contains only `server_settings_bans_option`. Add an id — and a
+`bindDestination` call — as each of Overview, Moderation, Audit Log, Channels, Integrations,
+Security, Vanity URL, Emoji, Community Overview, Enable Community, Members, Roles and Instant
+Invites lands, then delete the mechanism.
+
+### Local stand-ins introduced by this wave — move them when the real home exists
+
+| Stand-in | Current location | Belongs in |
+| --- | --- | --- |
+| `SwipeableItemTouchHelper` + `SwipeRevealConfiguration` (swipe-to-reveal background/icon) | bottom of `widgets/servers/WidgetServerNotifications.kt` | `utilities/views/SwipeableItemTouchHelper` — kept local so two concurrent slices could not both create it |
+| `GuildChannelsSort` (`getSortedCategories` / `getSortedVisibleChannels`) | `widgets/servers/GuildChannelsSort.kt` | `utilities/channel/GuildChannelsInfo`, which combines eight stores and is not reconstructed |
+| `SettingsNavigation.launch` | `widgets/settings/SettingsNavigation.kt` | Delete once `AppActivity` honours `AppScreenRouter.EXTRA_SCREEN`; it is the same `app_root` transaction `WidgetMedia` already makes |
+| `SettingsAppearanceViewModel.{USE_SYSTEM_FONT_SCALE, MIN_FONT_SCALING, MAX_FONT_SCALING, systemFontScalePercent}` | `widgets/settings/SettingsAppearanceViewModel.kt` | `utilities/font/FontUtils`, absent. `AppActivity.USE_SYSTEM_FONT_SCALE` duplicates the first constant |
+| `SettingsStrings` hook rendering (`$[label](hookName)`) | `widgets/settings/SettingsStrings.kt` | `com.discord.i18n` — this is the third markup construct the reference's `RenderContext`/`Hook` handles. `NotificationMuteSettingsView`'s literal `String.replace` copy is gone: it now renders through `SettingsStrings` and formats the end time with `TimeUtils.renderUtcDateTime` (MEDIUM/SHORT, matching the reference), styled with `colorControlBrandForeground` rather than the guessed `colorTextLink` |
+| `ViewCompat.setAccessibilityHeading` in place of `AccessibilityUtils.setViewIsHeading` | appearance/language screens | `utilities/accessibility/AccessibilityUtils`, absent |
+
+### Corrections to the settings/servers audit report
+
+Checked at bytecode level; do not "re-fix" these.
+
+- **`WidgetServerNotifications` gap #10 was wrong.** The audit said the muted push switch should
+  pass "a real message" to `setDisabledTooltip`. `javap` of `CheckedSetting.d(CheckedSetting,
+  CharSequence, int)` shows the synthetic default overload discards its argument and calls
+  `c(null)`, so the reference genuinely passes `null`: an empty toast and 0.3α, exactly what the
+  target already did.
+- **Gap #13 was half wrong.** `configureRadio` does not *disable* the "All messages" radio on a
+  large server. `CheckedSetting.h(CharSequence, Boolean)` is `setSubtext`, not a tooltip — the
+  reference sets `large_guild_notify_all_messages_description` as the row's subtext and leaves it
+  selectable. Reproduced as a subtext.
+- **`SwipeableItemTouchHelper`'s default `swipeDirs` is `START or END` (12), not 0.** The synthetic
+  default constructor pushes `bipush 12` for parameter 2, which is what makes the reference's
+  `super(…, mask = 3, …)` call produce a swipeable row at all.
+
+## Channels sidebar rebuild — store wiring still required
+
+The channel list is now the reference's model + 15-viewholder adapter
+(`widgets/channels/list/`). Two seam files carry everything `StoreStream` does not
+publish; each entry is a one-line change once the accessor exists.
+
+### `list/ChannelListSources.kt` — store inputs
+
+All of these stores **already exist** under `com/discord/stores`; only the
+`StoreStream.Companion` accessor is missing (several are private fields on
+`StoreStream` today).
+
+| Provider | Needs | Effect while inert |
+| --- | --- | --- |
+| `voiceUsers`, `selectedVoiceChannelId`, `streamingUserIds` | `VoiceStoreAccess.install(...)` — **already the documented seam**, nothing new needed | voice rows list no participants; joined channel not highlighted |
+| `joinedThreads`, `activeJoinedThreads`, `channelsWithActiveThreads` | `StoreStream.getThreadsJoined()`, `getThreadsActiveJoined()`, `getThreadsActive()` | **no thread rows at all**, and text channels never show the "has threads" icon |
+| `guildScheduledEvents`, `canCreateAnyEvent` | `StoreStream.getGuildScheduledEvents()` (store exists, not constructed) | no events row, no "happening now" banner |
+| `stageChannels` | `StoreStream.getStageChannels()` (store exists, not constructed) | stage rows show no speakers and no audience count |
+| `guildJoinRequest` | `StoreStream.getGuildJoinRequests()` (store exists, not constructed) | membership-screening card never appears |
+| `canSeeGuildRoleSubscriptions` | `GuildRoleSubscriptionsFeatureFlag` | role-subscription rows hidden |
+| `showPremiumGuildHint` | `StoreNux` | boost hint never shows, and dismissing it does not persist |
+| `directoryUnreadCounts`, `hubEnabled`/`hubStudyGroupEnabled`/`hubEventsEnabled` | `StoreDirectories`, `GrowthTeamFeatures` | hub guilds render as ordinary guilds |
+
+`WidgetChannelListModel.get()` reads everything else live from `StoreStream`
+(`channels`, `channelsSelected`, `guilds`, `permissions`, `userGuildSettings`,
+`readStates`, `presences`, `collapsedChannelCategories`, `stageInstances`,
+`users`, `guildSelected`).
+
+Two deliberate substitutions, both commented in place:
+- DM ordering uses `Channel.lastMessageId` because `StoreMessagesMostRecent` is not
+  published; identical ordering except while a DM is being read.
+- Mention counts come from `StoreReadStates.getMentionCountsByChannel()` rather than
+  `StoreMentions.observeMentionCounts()`.
+
+### `list/ChannelListNavigation.kt` — missing destinations
+
+Live now: `callChannel` (via `VoiceStoreAccess`), `addServerToHub`,
+`showChannelNotificationSettings`, `copyToClipboard`.
+
+Inert until the screen is rebuilt: `showGuildProfile` (`WidgetGuildProfileSheet`),
+`createChannel` (`WidgetCreateChannel`), `shareGuildInvite`
+(`WidgetGuildInviteShare`), `copyGuildInvite` (`StoreInstantInvites`),
+`showVoiceChannelSettings` (`WidgetVoiceChannelSettings`),
+`showTextChannelSettings` (`WidgetTextChannelSettings`), `showGroupDmSettings`
+(`WidgetChannelGroupDMSettings`), `showThreadBrowser` (`WidgetThreadBrowser`),
+`showThreadSettings` (`WidgetThreadSettings`), `showGuildRoleSubscriptions`,
+`showGuildScheduledEventList`, `showGuildScheduledEventDetails`,
+`showMemberVerification` (`MemberVerificationUtils`), `ackPremiumGuildHint`
+(`StoreNux`), `customStatusBackground` (`WidgetGlobalStatusIndicatorState`),
+`bottomNavHeight` (`BottomNavViewObserver`).
+
+### Now unblocked elsewhere
+`widgets/guilds/list/WidgetGuildsList.kt:246` documents a seam for
+`WidgetChannelsListItemChannelActions.show(fragmentManager, channelId)`. That class
+exists now — wire it.
+
+### Misplaced helpers introduced by this wave
+- `Context.themedDrawableRes` (in `WidgetChannelsListItemChannelActions.kt`) →
+  `utilities/drawable/DrawableCompat.getThemedDrawableRes`.
+- `Context.themedFont` (in `WidgetChannelsListAdapter.kt`) →
+  `utilities/font/FontUtils.getThemedFont`.
+- `VoiceState.isMutedByAnySource()` (in `WidgetChannelsListAdapter.kt`) →
+  `api/voice/state/VoiceStateUtils`. Verified at bytecode level:
+  `selfMute || mute || suppress`.
+- `WidgetChannelsListItemThreadActions.autoArchiveDurationName` duplicates the table in
+  `WidgetChatListAdapterItemThreadDraftForm`; both belong in `ThreadUtils`.
+- `WidgetThreadArchiveActions.computeThreadAutoArchiveTimeMs` → `ThreadUtils`.
+- Plural formatting goes through `com.discord.i18n.FormatUtils` with an explicit
+  `"#"` argument; the reference's `StringResourceUtilsKt.getI18nPluralString` does
+  not exist yet.
+
+### Known behavioural deltas vs the reference
+- The MFA notice renders `two_fa_guild_mfa_warning` without its tappable
+  `[Resolve](onClick)` hook — `com.discord.i18n` has no hook binding yet.
+- The channel sheet's "Browse threads" row is not gated on
+  `ThreadUtils.isThreadsEnabled(guildId)` (no `ThreadUtils`); it is gated on
+  channel type and NSFW only.
+- Voice participant names use the 2-arg `GuildMember.getNickOrUsername(member, user)`;
+  the reference's 4-arg overload (user, member, channel, guild) does not exist.
+
+## Wave: `widgets/user` + `widgets/status` state layer (user-sheet / rich-presence agent)
+
+### `StoreStream` accessors this wave needs — highest-value wiring in the report
+
+`StoreStream` constructs all of these but publishes none of them. Every one is a one-line
+`@JvmStatic fun getX() = requireInstance().x`, and each closes a *named* behavioural gap:
+
+| Missing accessor | What stays dead without it |
+| --- | --- |
+| `getVoiceStates()` | user sheet: server mute / deafen / move / disconnect never appear (`adminViewState` sees no voice state) |
+| `getVoiceChannelSelected()` | user sheet: `showVoiceSettings` is always false, so per-user volume and mute are unreachable; `PrivateCallLauncher` cannot join a channel |
+| `getMediaSettings()` | user sheet: `muted` / `selfMuted` / `selfDeafened` / `outputVolume` are defaults; `toggleMute`/`toggleDeafen`/`setUserOutputVolume` are no-ops |
+| `getCalls()` | `PrivateCallLauncher` cannot ring |
+| `getMediaEngine()` | `PrivateCallLauncher.launchVideoCall` cannot open the camera |
+| `getUserConnections()` | platform rich presence never offers "Connect Xbox/PlayStation/…" |
+| `getExperiments()` | PlayStation account-integration gate reads false |
+| `getApplication()` (`StoreApplication` does not exist at all) | `ModelRichPresence.primaryApplication` is always null → game cards fall back to presence assets only |
+
+Every consumer already takes the store as a constructor parameter with an inert default and a KDoc
+line naming the gap, so wiring is *only* the accessor plus passing it at the construction site
+(`WidgetUserSheetViewModelStoreState.observeStoreState`,
+`ViewHolderUserRichPresence.setRichPresence`, `PrivateCallLauncher`).
+
+### New shared code placed outside `widgets/user` (new files, no edits to others' files)
+
+- `utilities/platform/Platform.kt` — the 15-value connected-service enum. **`NONE` is declared last**,
+  not alphabetically: Vineflower prints the constants alphabetically but `getProfileUrl`'s ordinal
+  switch proves the `$VALUES` order. Same trap as `CallStatus`.
+- `utilities/presence/StageCallRichPresencePartyData.kt` — `StageCallRichPresencePartyData` plus
+  `Activity.stageChannelRichPresencePartyData`. The unpack is `stage:<guildId>:<channelId>:<flagsHex>:<stageInstanceId>`
+  with party size `[speakers, participants]`; flags `1`=speaker, `2`=partnered, `4`=verified. JADX
+  cannot decompile `unpackStageChannelParty` at all — reconstructed from Vineflower plus the
+  readable `packStageChannelPartyId`.
+- `utilities/integrations/SpotifyHelper.kt` — real implementation; **removes the stopgap** in
+  `WidgetChatListAdapterItemSpotifyListenTogether.launchSpotifyTrack`, which should now delegate.
+  `registerSpotifyBroadcastReceivers` is absent: `utilities/receiver/spotify/*` does not exist.
+- `utilities/user/UserProfileUtils.kt` — `getPremiumSince`, `getBoostingSince`,
+  `guildBoostMonthsSubscribed`, `isGuildBooster`, `mutualGuildsById`.
+
+### `utilities/streams/StreamContext` was widened (existing file edited)
+
+It was a two-member stub. The reference is a `data class` with eight fields; the interface now
+declares all eight (`guild`, `joinability`, `user`, `userNickname`, `isCurrentUserParticipating`,
+`isSelfStream` added). **Nothing in the project constructs one**, so this is source-compatible
+today — but it stays an interface only until `StreamContextService` is reconstructed, at which
+point it should become the reference's data class and `StoreVoiceParticipants.applicationStream`
+should switch from `StreamContext.ApplicationStream` to `ModelApplicationStream`.
+
+### `StoreStream` user-sheet wiring removed
+
+`WidgetUserSheet` no longer has `stateSource` / `onNoteSave` / `onRelationshipAction` /
+`State` / `NoteState` / `RelationshipAction`; it owns a real `WidgetUserSheetViewModel`.
+`StoreStream.observeUserSheet` and the four hook assignments were deleted. `StoreStream.blockUser`
+is now unreferenced — the sheet's overflow sheet (`onMore`) should call it.
+
+### Reconstructed from weak evidence — verify on device
+
+| Item | Why |
+| --- | --- |
+| `WidgetUserSheetViewModel.handleStoreState` | 782 instructions, "Method dump skipped" in JADX; whole class fails in Vineflower. Reconstructed from the `ViewState.Loaded` field semantics plus the readable `createAdminViewState`/`createConnectionsViewState`. |
+| `createAdminViewState`'s kick rule | JADX drops the outer negation on that branch, so it literally reads "show kick when you *cannot* kick". Implemented as the reading consistent with the other six flags: guild → `canKick`; group DM → `isGroupOwner && !isMe`. |
+| `WidgetUserSheet.configureProfileActionButtons` | 437 instructions, undecompilable in both tools. Derived from the layout's buttons and the relationship types. |
+| `ViewState.Loaded.guildSectionHeaderText` | No "Roles in {guild}" format string survives in the recovered resources; the sheet uses the guild name and falls back to `R.string.roles`. |
+
+### Still missing in these packages after this wave
+
+`WidgetPruneUsers(+ViewModel)`, `WidgetUserPasswordVerify`, all six of `user/account`,
+`user/email`, `user/phone`, `UserMutualGuildsManager`, `UserNameFormatterKt`,
+`DraweeSpanStringBuilderExtensionsKt`, `RightToLeftGridLayoutManager`,
+`WidgetUserProfileEmptyListItem`, `WidgetUserMentionsViewModel`,
+`WidgetUserSetCustomStatusViewModel`, `WidgetUserStatusSheetViewModel`,
+`WidgetForumPostStatusViewModel`, and everything in `widgets/friends` flagged by the audit.
+
+`user/presence` is complete except that the stage card's join button is inert: it takes an
+`onJoinStage` lambda standing in for `StageChannelJoinHelper.lurkAndJoinStage`
+(`widgets/stage` is unreconstructed). The sheet does not pass one yet.
+
+`WidgetUserSheetViewModel` omits two reference fields because their types do not exist:
+`StoreState.userStageRoles` / `myStageRoles` (`widgets.stage.StageRoles`) and
+`ViewState.Loaded.stageViewState` (`UserProfileStageActionsView.ViewState`). Both are commented
+in place.
+
+## Shared-utility packages now EXIST — collapse the stand-ins onto them
+
+Built this wave under `com/discord/utilities/`. Everything below is a mechanical
+substitution: delete the local copy, import the real one. None of the listed files
+were touched (14 agents writing concurrently); this is the convergence list.
+
+### New packages
+
+| Package | Contents |
+| --- | --- |
+| `utilities/color/` | `ColorCompat` (`getColor`, `getThemedColor`, `setStatusBarColor`, `setStatusBarColorResourceId`, `setStatusBarTranslucent`, `isColorDark`, `createDefaultColorStateList`, `getColorHexFromColorInt`, `removeAlphaComponent`) and `ColorCompatExtensions.kt` (`Fragment.getColor`, `Fragment.getThemedColor`, `TextView.setDrawableColor`, `Drawable.setTint`, `ImageView.tintWithColor`/`tintWithColorResource`) |
+| `utilities/dimen/` | `DimenUtils` — top-level `dpToPixels(Int)`, `dpToPixels(Float)`, `pixelsToDp(Int)` |
+| `utilities/drawable/` | `DrawableCompat` — `Context/View.getThemedDrawableRes`, `Context.getDrawable(res, tint, isGlobalTint)`, `TextView.setCompoundDrawablesCompat` (Int and Drawable overloads) |
+| `utilities/embed/` | `EmbedResourceUtils`, `FileType` |
+| `utilities/message/` | `MessageUtils` |
+| `utilities/premium/` | `PremiumUtils` (+ nested `BoostFeatureBadgeData`), `PremiumTierExtensions.kt` (`grantsAccessToPremiumStickers`, `grantsAccessToCustomTagAndAnimatedAvatarFeatures`) |
+| `utilities/gifting/` | `GiftStyle`, `ModelGift.getCustomStyle`/`hasCustomStyle`, `GiftingUtils` |
+| `utilities/spans/` | `QuoteSpan`, `BulletSpan`, `BlockBackgroundSpan`, `VerticalPaddingSpan`, `SpoilerSpan`, `TypefaceSpanCompat`, `FontColorSpan`, `SimpleRoundedBackgroundSpan` (joining the existing `ClickableSpan`) |
+| `utilities/systemlog/` | `SystemLogCapture`, `SystemLogUtils` (+ `Tombstone`) |
+| `utilities/extensions/` | `PendingIntentExtensions.kt` — `immutablePendingIntentFlag`, `mutablePendingIntentFlag` |
+| `utilities/SnowflakeUtils.kt` | `DISCORD_EPOCH`, `SNOWFLAKE_TIMESTAMP_SHIFT`, `toTimestamp`, `fromTimestamp`, `atPreviousMillisecond`, `Long.timestampPart`, `String.toSnowflake` |
+| `utilities/guilds/GuildUtils.kt` | `computeShortName`, `List<GuildMember>.asMap`, `getMaxFileSizeMB(guild)` |
+| `com/discord/primitives/Primitives.kt` | all 17 typealiases |
+
+**Package-name note.** The wave brief said `utilities/colors/`; the reference has
+`utilities/color/ColorCompat` — its `utilities/colors/` is `ColorPickerUtils` /
+`RepresentativeColors`, a different thing. `color/` was used. Files already written
+by the concurrent voice / announcements / debugging waves import
+`com.discord.utilities.color.ColorCompat` and `com.discord.utilities.dimen.dpToPixels`,
+which confirms it — those imports were dangling until now. `FontColorSpan` and
+`SimpleRoundedBackgroundSpan` sit in `utilities/textprocessing` in the reference;
+they were placed in `utilities/spans/` per the brief and to avoid colliding with the
+textprocessing owner.
+
+### Migration list — stand-in to replacement
+
+| Stand-in | Location | Replace with |
+| --- | --- | --- |
+| `internal object EmbedMedia` (~190 lines) | `widgets/chat/list/adapter/WidgetChatListAdapterItemEmbed.kt:715-904` | `EmbedResourceUtils` + `FileType`. `previewImage(e)` becomes `e.getPreviewImage()`, `isInlineEmbed(e)` becomes `e.isInlineEmbed()`, `externalOpenUrl(e)` becomes `e.getExternalOpenUrl()`; `isAnimated`, `previewUrls` (now `getPreviewUrls`), `computeMaximumImageWidthPx`, `calculateScaledSize`, `getFileDrawable` are same-named. The extensions are object members, so callers use `with(EmbedResourceUtils) { … }`. `EmbedMedia.dpToPixels` at `:865` rounds; `DimenUtils.dpToPixels` truncates, as the reference does — `MAX_EMBED_IMAGE_HEIGHT_PX` at `:667` shifts by at most 1px |
+| `private const val DISCORD_EPOCH`, 8 copies | `utilities/icon/IconUtils.kt:48`, `utilities/user/UserUtils.kt:43`, `utilities/time/TimeUtils.kt:35`, `utilities/messagesend/NonceGenerator.kt:7`, `models/domain/NonceGenerator.kt:30`, `stores/StoreAuditLog.kt:385`, `stores/StoreMessageAck.kt:412`, `stores/StoreNotifications.kt:247`, `stores/StoreReadStates.kt:534`, `widgets/channels/threads/browser/ThreadBrowserThreadView.kt:251` | `SnowflakeUtils.DISCORD_EPOCH`. The hand-rolled arithmetic at `StoreAuditLog.kt:392`, `StoreMessageAck.kt:424,427`, `StoreReadStates.kt:390,528,529`, `StoreNotifications.kt:240`, `ThreadBrowserThreadView.kt:257`, `UserUtils.kt:215`, `IconUtils.kt:320` is exactly `toTimestamp` / `fromTimestamp` / `atPreviousMillisecond` |
+| 29 private `themedColor(...)` helpers | `app/AppActivity.kt:515`, `dialogs/ImageUploadDialog.kt:104`, `utilities/textprocessing/TextProcessingResources.kt:23`, `views/ThemedColor.kt:18` plus its users `views/segmentedcontrol/CardSegment.kt:62`, `views/user/SettingsMemberView.kt:117`, `views/user/UserAvatarPresenceView.kt:165`; `views/calls/CallEventsButtonView.kt:73`, `views/guildboost/GuildBoostSubscriptionUpsellView.kt:110`, `views/permissions/ChannelPermissionOwnerView.kt:79`, `views/SearchInputView.kt:95`, `views/UsernameView.kt:130`, `views/VoiceUserLimitView.kt:68`, `widgets/botuikit/views/select/SelectComponentView.kt:99`, `widgets/channels/list/WidgetChannelsList.kt:449`, `widgets/channels/memberlist/ChannelMembersListAdapter.kt:148`, `widgets/channels/threads/browser/ThreadBrowserThreadView.kt:220`, `widgets/chat/input/autocomplete/adapter/AutocompleteItemViewHolder.kt:193`, `widgets/chat/input/autocomplete/adapter/CommandHeaderViewHolder.kt:52`, `widgets/chat/input/WidgetChatInput.kt:647`, `widgets/chat/list/ViewReplySpline.kt:101`, `widgets/forums/ForumBrowserPostView.kt:226`, `widgets/guildscheduledevent/buttonconfiguration/DirectoryButtonConfiguration.kt:50`, `widgets/guildscheduledevent/buttonconfiguration/GuildButtonConfiguration.kt:79`, `widgets/guildscheduledevent/GuildScheduledEventDateView.kt:74`, `widgets/guild_role_subscriptions/tier/create/GuildRoleSubscriptionMemberPreview.kt:49`, `widgets/servers/community/CommunityGetStartedInformationView.kt:76`, `widgets/stickers/WidgetGuildStickerSheet.kt:216`, `widgets/tabs/TabsHostBottomNavigationView.kt:176`, `widgets/user/profile/UserProfileHeaderView.kt:160` | `ColorCompat.getThemedColor(context, attr)` — identical `TypedValue` + `resolveAttribute(…, true)` + `.data`. **`views/ThemedColor.kt` should be deleted outright** |
+| 25 private `dpToPixels` / `dp(…)` / `Int.dp` helpers | `views/calls/StageCallSpeakerView.kt:65`, `views/calls/VideoCallParticipantView.kt:346`, `views/PileView.kt:128`, `views/stages/StageCardSpeakersView.kt:45`, `widgets/botuikit/views/ButtonComponentView.kt:85`, `widgets/botuikit/views/select/SelectComponentBottomSheetItemViewHolder.kt:76`, `widgets/changelog/WidgetChangeLogSpecial.kt:249`, `widgets/channels/list/WidgetChannelsList.kt:464`, `widgets/channels/UserAkaView.kt:68`, `widgets/chat/input/autocomplete/adapter/AutocompleteItemViewHolder.kt:191`, `widgets/chat/input/sticker/WidgetStickerPicker.kt:415`, `widgets/chat/list/actions/WidgetChatListActions.kt:140`, `widgets/chat/list/adapter/WidgetChatListAdapterItemEmbed.kt:865`, `widgets/chat/list/adapter/WidgetChatListAdapterItemReactions.kt:114`, `widgets/chat/list/adapter/WidgetChatListAdapterItemStart.kt:197`, `widgets/chat/list/ViewReplySpline.kt:99`, `widgets/forums/ForumBrowserPostView.kt:236`, `widgets/forums/ForumPostTagView.kt:39`, `widgets/guilds/list/WidgetGuildsList.kt:220`, `widgets/nux/WidgetNavigationHelp.kt:64`, `widgets/voice/fullscreen/grid/PrivateCallBlurredGridView.kt:69`, `widgets/voice/fullscreen/grid/PrivateCallGridView.kt:85`, `utilities/textprocessing/TextProcessingResources.kt:30,39`, `utilities/stickers/StickerUtils.kt:24` | `com.discord.utilities.dimen.dpToPixels`. Two behaviour deltas to expect: copies using `roundToInt` shift by up to 1px (the reference truncates), and copies keyed on a *view's* `resources` stop following a per-context density override (the reference resolves all of them off `Resources.getSystem()`) |
+| `internal object ThemedDrawable` | `widgets/chat/list/adapter/WidgetChatListAdapterItemInvite.kt:469`, used at `:325` and `WidgetChatListAdapterItemThreadEmbed.kt:226` | `Context.getThemedDrawableRes(attr)` / `View.getThemedDrawableRes(attr)` |
+| local themed-drawable resolvers | `widgets/channels/list/WidgetChannelsListAdapter.kt:1356`, `widgets/channels/list/WidgetChannelsListItemChannelActions.kt:261`, `widgets/user/presence/ViewHolderPlatformRichPresence.kt:155` | same |
+| inline null-safe id sign compare | `stores/StoreMessagesMostRecent.kt:175-191` | `MessageUtils.compareMessages` / `MessageUtils.SORT_BY_IDS_COMPARATOR` |
+| `ChatRowText.systemMessageUserJoin`, `.systemMessageRoleSubscriptionPurchase`, `WELCOME_MESSAGES` | `widgets/chat/list/adapter/WidgetChatListAdapterItemMessage.kt:978-1032, 1100-1115` | `MessageUtils.getSystemMessageUserJoin(context, messageId)` and `MessageUtils.getSystemMessageRoleSubscriptionPurchase(context, guildName, authorName, data, render)`. The `render` parameter exists precisely for `ChatRowText` — pass `{ ctx, res, args -> format(ctx, res, args, hooks) }` and the clickable tier name is preserved |
+| `internal fun computeShortName` | `widgets/directories/DirectoryUtils.kt:157`, used at `DirectoryEntryViewHolder.kt:27` | `com.discord.utilities.guilds.computeShortName` |
+| `internal fun computeGuildInitials` | `widgets/hubs/HubGuildText.kt:14` | same |
+| `PremiumUtils.getMaxFileSizeMB` stand-in | `widgets/chat/input/ChatInputViewModel.kt:269-271` | `PremiumUtils.getMaxFileSizeMB(user)` / `PremiumUtils.getGuildMaxFileSizeMB(tier)` |
+| boost badge hidden, upsell TODO | `widgets/chat/list/adapter/WidgetChatListAdapterItemThreadDraftForm.kt:156,166` | `PremiumUtils.getBoostFeatureBadgeDataForGuildFeature(guild, GuildFeature.PRIVATE_THREADS, context, onLockedClick = …)`, yielding `BoostFeatureBadgeData(onClickListener, iconColor, text, textColor)` |
+| inlined premium-sticker tier test | `utilities/permissions/PermissionUtils.kt` | `PremiumTier.grantsAccessToPremiumStickers()` |
+| gift art and expiry falling back to `IconUtils`/`TimeUtils` | `widgets/chat/list/adapter/WidgetChatListAdapterItemGift.kt` | `PremiumUtils.getNitroGiftIcon`, `PremiumUtils.getNitroGiftBackground`, `GiftingUtils.getTimeString`, `GiftingUtils.generateGiftUrl` |
+| `ColorCompat.setStatusBarColor` recorded as absent | `widgets/media/WidgetMedia.kt:763` | `ColorCompat.setStatusBarColor(activity, color, forceDarkUi)` |
+| plain tappable run instead of a chip | `widgets/chat/list/adapter/WidgetChatListAdapterItemAutoModSystemMessageEmbed.kt:89` | `SimpleRoundedBackgroundSpan` |
+| `textprocessing/spans/{QuoteSpan, BulletSpan, BlockBackgroundSpan, VerticalPaddingSpan, SpoilerSpan}` | `utilities/textprocessing/spans/` | the identical classes now in `utilities/spans/`. `SpoilerSpan`'s third constructor argument is now defaulted (`isRevealed = false`); everything else is source-compatible. **Delete `textprocessing/spans/` after re-pointing `Rules.kt` and `node/*`** |
+| `TextProcessingResources.kt` local `themedColor` and `dpToPixels` | `utilities/textprocessing/TextProcessingResources.kt:23,30,39,42` | `ColorCompat.getThemedColor`, `dimen.dpToPixels`. Its `toPunyCodeASCIIUrl` / `getMediaProxySize` / `getImageUri` copies belong to `string` / `IconUtils` / `ModelEmojiCustom`, as already recorded above |
+| raw `PendingIntent` flag arithmetic | `utilities/notifications/NotificationRenderer.kt:191,197` | `immutablePendingIntentFlag()` / `mutablePendingIntentFlag()` |
+| literal `"Spotify"` | `utilities/presence/ActivityUtils.kt:21` | `Platform.SPOTIFY.properName` — `utilities/platform/Platform` already exists, so this follow-up is stale |
+| duplicate `typealias ForumTagId` | `api/channel/Channel.kt:10`, imported by `widgets/chat/list/adapter/WidgetChatListAdapterItemStart.kt:12` and `widgets/chat/list/entries/StartEntries.kt:4` | `com.discord.primitives.ForumTagId`; delete the `api.channel` copy |
+
+Two follow-ups recorded earlier in this file are already closed:
+`utilities.platform.Platform` and `STATIC_IMAGE_EXTENSION` / `toPunyCodeASCIIUrl`
+(in `utilities/string/StringUtils.kt`) both exist.
+
+### Deliberately not built, and why
+
+- **`PremiumUtils.findPurchaseForSkuName`, `getPlanPriceText`, `getSkuPrice`** and
+  **`GiftingUtils.buyGift`** need `SkuDetails`/`Purchase` flows plus
+  `GooglePlayBillingManager`, `StoreGooglePlayPurchases` and `StoreGooglePlaySkuDetails`,
+  none of which exist. Everything non-billing in both objects is present.
+- **`SystemLogReport`** only forwards a recovered tombstone to `AnalyticsTracker` and
+  `FirebaseCrashlytics`. `SystemLogCapture` and `SystemLogUtils.fetchLastTombstone`,
+  which hold all the recovery logic, are present.
+- **`GiftingUtils.getTimeString`** formats `duration_hours` / `duration_mins` directly
+  because `utilities/resources/DurationUtils` and `DurationUnit` do not exist. Route it
+  through them when they land — it is the same two string/plural pairs.
+- **`EmbedResourceUtils.computeMaximumImageWidthPx`** uses
+  `resources.displayMetrics.widthPixels`; the reference uses
+  `DisplayUtils.getScreenSize(context).width()` from the absent `utilities/display`.
+  Equivalent for a full-screen activity, different in multi-window.
+- `GuildUtilsKt.createApiGuild`, `getGuildRole`, `getMaxVoiceBitrateKbps` and
+  `isFullyGatedGuildRoleSubscriptionGuild` need `StoreStream`, the 46-argument
+  `api.guild.Guild` constructor, and `utilities/voice/Bitrate`.
+- `utilities/media/{AppSound, AppSoundManager}`, `utilities/lazy/{requester, subscriptions}`,
+  `utilities/lazy/memberlist/{MemberList, MemberListRow, ThreadMemberList}` and
+  `utilities/extensions/SimpleDraweeViewExtensionsKt` remain absent. No stand-in points
+  at any of them, so they were left rather than built speculatively.
+
+### R8-emptied in these packages: none
+
+`javap -p` was run against `discord126.21-dex2jar.jar` for all 23 reference classes
+behind this slice — `EmbedResourceUtils`, `FileType`, `ColorCompat`, `ColorCompatKt`,
+`DrawableCompat`, `DimenUtils`, `SnowflakeUtils`, `MessageUtils`, `GuildUtilsKt`,
+`PremiumUtils`, `PremiumUtilsKt`, `GiftStyle`, `GiftingUtils`, `Platform`,
+`SystemLogUtils`, `SystemLogCapture`, the five `utilities/spans` classes,
+`SimpleRoundedBackgroundSpan` and `FontColorSpan`. Every one has real members;
+none is R8-emptied, so nothing in this slice is unrecoverable.
+
+The only pieces that resist decompilation are `FileType`'s and `Platform`'s enum
+initialisers (Vineflower prints "Failed to inline enum fields"). Both were resolved
+from the ordinal switches inside their own methods — `FileType.getFileDrawable` and
+`Platform.getProfileUrl` — which fixes constant order independently of the
+initialiser. `Platform.NONE` is last, not alphabetical, for that reason.
+
+One deliberate deviation: the reference `SpoilerSpan` (in `defpackage`, an
+obfuscation artifact) also has a Java-style no-arg constructor that builds a
+transparent, never-revealed span. The Kotlin reconstruction defaults only
+`isRevealed`; nothing constructs the all-zero form.
+
+## Analytics layer now exists — call sites to add, and how to turn the transport on
+
+Built: `utilities/analytics/**` (`AnalyticsSink`, `AnalyticsUtils` + `Tracker`, `AnalyticsTracker`,
+`AnalyticSuperProperties`, `AppStartAnalyticsTracker`, `Traits`, `SearchType`,
+`ChatInputComponentTypes`), `analytics/generated/traits` + `analytics/generated/events`
+(`network_action`, `impression`), `stores/StoreAnalytics.kt`, `stores/ChannelAnalyticsViewType.kt`,
+`stores/SelectedChannelAnalyticsLocation.kt`.
+
+### The transport is DISABLED by default — this is deliberate
+
+`AnalyticsSink.current` is `AnalyticsSink.Disabled` and **nothing in the repo installs another
+sink**. Every event is built, throttled, batched and then dropped. To enable:
+
+```kotlin
+AnalyticsSink.install(AnalyticsSink.LocalLog)                  // event names to AppLog, still local
+AnalyticsSink.install(AnalyticsSink.ScienceEndpoint(restApi))  // real POST /science
+```
+
+Do **not** install `ScienceEndpoint` against Discord's production backend — see `PLAN.md`
+"Live Backend Safety". No Adjust event tokens, Firebase identifiers or other recovered credentials
+were reconstructed; `AnalyticsTracker` documents which reference events were skipped for that reason.
+
+### `StoreStream` wiring required (owner: `StoreStream` agent)
+
+1. Construct `private val analytics = StoreAnalytics(StoreStreamAnalyticsStores(), dispatcher, clock)`
+   where the argument implements `StoreAnalytics.Stores`. That interface exists because every store
+   `StoreStream` owns is `private`; each member has an inert default, so wire the ones that exist and
+   leave the rest. `StoreAnalytics.None` is the all-defaults implementation.
+2. Add `@JvmStatic fun getAnalytics() = requireInstance().analytics`.
+3. Call `analytics.init(context)` from `deferredInit` — that call installs the `AppLogger` impression
+   tracker, `AnalyticsTracker.selectedChannelProperties`, `AnalyticsUtils.guildTraitResolver` and the
+   store-backed `AppStartAnalyticsTracker`. **Without it, screen impressions stay local-only.**
+4. `handlePreLogout()` must call `analytics.handlePreLogout()` (reference `StoreStream.java:2096`).
+5. Feed the session: `analytics.handleConnectionOpen(payload)`, `analytics.handleAuthToken(token)`,
+   `analytics.handleFingerprint(fp)`, `analytics.handleConnected(connected)`. Until one of
+   fingerprint-only or analytics-token applies, **every event stays queued** (reference behaviour).
+6. `StoreAccessibility` should call
+   `AnalyticSuperProperties.setAccessibilityProperties(enabled, features)` — the audit recorded this
+   as missing (`audit-stores-core.md:208`).
+
+### Call sites other agents must add (file → event)
+
+| File | Call |
+| --- | --- |
+| `stores/StoreGuildSelected.kt` | `analytics.trackGuildViewed(selectedGuildIds.last())` (`audit-stores-guilds.md:95`) |
+| `stores/StoreChannelsSelected.kt` | `analytics.trackChannelOpened(id, viewType, location)` and `analytics.trackTextInVoiceOpened(id, location)` once `ResolvedSelectedChannel` carries `peekParent`/`analyticsLocation` |
+| `stores/StoreAuthentication.kt` | `AnalyticsTracker.appFirstLogin()` on first login; `AnalyticsTracker.externalFingerprintDropped(old, new)` on fingerprint replacement |
+| `stores/StoreUserGuildSettings.kt` | `analytics.onNotificationSettingsUpdated(settings, channelId)` / `analytics.onThreadNotificationSettingsUpdated(...)` (`audit-stores-channels.md:408`) |
+| `stores/StoreNotifications.kt` | `AnalyticsTracker.updateNotifications(enabled)`, `AnalyticsTracker.updateNotificationsInApp(enabled)` (2-arg `setEnabledInApp(enabled, logToggle)`) |
+| `stores/StoreUserSettings.kt` | `AnalyticsTracker.overlayToggled(enabled)` in `setIsMobileOverlayEnabled` |
+| `stores/StoreMessageAck.kt` | `analytics.ackMessage(channelId)` |
+| `stores/StoreRtcConnection.kt` / voice stores | `analytics.trackVoiceConnectionSuccess/Failure/Disconnect`, `trackMediaSessionJoined`, `handleUserSpeaking`, `handleIsScreenSharingChanged`, `handleVideoInputDeviceSelected` |
+| `app/App.kt` | `AnalyticsTracker.appCrashed()` when the previous run crashed |
+| `app/AppActivity.kt` | `StoreStream.getAnalytics().appUiViewed(currentFragmentClass)` (reference `AppActivity.java:645`); `AppStartAnalyticsTracker.instance.appOpen(uri, canRoute, isNotification)` |
+| `widgets/auth/AuthFragments.kt` | `analytics.appLandingViewed()` on the landing screen; `AnalyticsTracker.openModal(...)` on register/age-verify |
+| `widgets/friends/**` | `AnalyticsTracker.friendsListViewed()`, `friendAddViewed(type)`, `friendRequestFailed(query, reason)` |
+| `widgets/guilds/list/**` | `AnalyticsTracker.showFirstServerTipTutorial()` / `closeFirstServerTipTutorial(acknowledged)` |
+| `widgets/share/WidgetIncomingShare.kt`, media picker, chat input | `AnalyticsTracker.addAttachment(ATTACHMENT_SOURCE_*, mimeType, total)` |
+| `widgets/hubs/WidgetHubAddServer.kt` | `loggingConfig = LoggingConfig { TrackImpressionHubExistingGuildChoose() }` |
+| `widgets/hubs/WidgetHubDescription.kt` | `TrackImpressionHubCreateGuildCustomize` / `TrackImpressionHubExistingGuildCustomize` |
+| `widgets/hubs/WidgetHubEmailFlow.kt` | `TrackImpressionHubEmailSignup(hasInvite)` |
+| `widgets/hubs/WidgetHubDescriptionViewModel.kt` | `logNetworkAction { TrackNetworkActionDirectoryGuildEntryCreate(channelId, guildId, categoryKey) }` |
+| `stores/utilities/RestCallState.kt` | **`logNetworkAction` still has to be written** — its blocker is gone: `TrackNetworkMetadata` / `TrackNetworkMetadataReceiver` now exist. Signature: `Observable<Response<T>>.logNetworkAction(provider: (T?) -> TrackNetworkMetadataReceiver?): Observable<T>`; fill `trackNetworkMetadata` from `Request.url.encodedPath` + method + code, then `AnalyticsTracker.tracker.track(schema)`. **Record the request path, never the full URL** — query strings on this API carry invite codes and tokens |
+
+### Reference behaviour NOT reproduced (deliberate, or blocked)
+
+- `AnalyticsTracker.friendRequestFailed` reports `query_length` instead of the raw query, username and
+  discriminator. That is another user's identity typed into a text field.
+- No Firebase-only events (`handle_ext_share`, `unhandled_uri`) and no Adjust login/register events.
+- Events whose parameter types do not exist in the target yet are absent from `AnalyticsTracker`:
+  `callReportProblem` (`PendingFeedback`, `VoiceConfiguration` audio device), `failedMessageResolved`
+  (`FailedMessageResolutionType`), `fileUploadAlertViewed` (`FileUploadAlertType`), `deepLinkReceived`
+  (`RouteHandlers.AnalyticsMetadata`), `quickSwitcherSelect`, the payment-flow and account-link
+  families. The `Traits.Payment` / `StoreSku` / `Subscription` groups they need **are** built.
+- `emojiPickerUpsellHeaderViewed` / `emojiPickerUpsellLockedItemClicked` take `isDmChannel: Boolean`
+  rather than `EmojiPickerContextType`, which does not exist yet.
+- `AnalyticsTracker.appLandingViewed` and `StoreAnalytics.handlePreLogout` read/write
+  `prefsSessionDurable`, which `SharedPreferencesProvider` has no test hook for
+  (`setInstanceForTesting` only covers the default prefs), so they are untested.
+- `TrackBase` / `TrackBaseReceiver` were **not** created. The reference's generated schemas all
+  declare `trackBase` with a private setter and never assign it, so it is always null on the client;
+  building the 74-field DTO would add nothing.
+
+### Reference bug found and reproduced: `SnowflakeUtils.atPreviousMillisecond`
+
+It computes `((id ushr 22) - 1 - DISCORD_EPOCH) shl 22` — subtracting the epoch from a
+value that is *already* epoch-relative — so it returns a large negative number, not
+"one millisecond earlier". Verified at bytecode level, `javap -c` of
+`com.discord.utilities.SnowflakeUtils`: `lushr 22; lconst_1 lsub; ldc 1420070400000
+lsub; lshl 22`. Reproduced verbatim and pinned by `SnowflakeUtilsTest`.
+
+This matters beyond the utility: `stores/StoreReadStates.kt:390` open-codes the same
+expression as the fallback for an oldest-unread boundary. Whatever that fallback was
+meant to bound, it is bounding on a negative id. The intended value is
+`fromTimestamp(toTimestamp(id) - 1)`. Flagged rather than fixed — the same
+parity-versus-correctness call as the other entries in "Reference bugs reproduced
+verbatim" above.

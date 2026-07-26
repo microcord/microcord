@@ -141,6 +141,12 @@ class WidgetStickerPicker : AppFragment(R.layout.widget_sticker_picker) {
         setUpStickerRecycler()
         setUpCategoryRecycler()
 
+        // Selecting a tab up front also stops the view model auto-scrolling to the pack it was
+        // opened on every time the store emits.
+        viewModel.setSelectedCategoryId(
+            args.getLong(EXTRA_STICKER_PACK_ID, StickerPickerViewModel.RECENT_SELECTED_ID),
+        )
+
         emptySubscribe.setIsLoading(false)
         emptySubscribe.setOnClickListener {
             StickerPremiumUpsellDialog.show(parentFragmentManager)
@@ -262,7 +268,7 @@ class WidgetStickerPicker : AppFragment(R.layout.widget_sticker_picker) {
                 showCategoryBottomBar(true)
                 categoryAdapter.setItems(viewState.categoryItems)
                 if (mode == StickerPickerMode.BOTTOM_SHEET) {
-                    // Clear the sheet's own search bar, which floats above the grid.
+                    // Leave room for the sheet's search bar, which floats over the top of the grid.
                     (stickerRecycler.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
                         params.topMargin = dpToPixels(SHEET_RECYCLER_TOP_MARGIN_DP)
                         stickerRecycler.layoutParams = params

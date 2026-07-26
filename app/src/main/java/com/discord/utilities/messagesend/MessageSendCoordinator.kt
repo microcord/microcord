@@ -6,6 +6,7 @@ import com.discord.api.message.allowedmentions.MessageAllowedMentions
 import com.discord.api.message.allowedmentions.MessageAllowedMentionsTypes
 import com.discord.api.user.User
 import com.discord.api.utcdatetime.UtcDateTime
+import com.discord.api.sticker.Sticker
 import com.discord.models.message.Message
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
@@ -59,6 +60,14 @@ class MessageSendCoordinator @JvmOverloads constructor(
         val reply: StorePendingReplies.PendingReply? = null,
         val captcha: CaptchaHelper.CaptchaPayload? = null,
         val attachments: List<UploadAttachment>? = null,
+        /**
+         * Stickers to send with the message.
+         *
+         * These ride on the optimistic message, which is also what [MessageQueue] serialises, so
+         * they reach both the local row and `sticker_ids` on the wire. Without this a sticker-only
+         * send posted as an empty message.
+         */
+        val stickers: List<Sticker>? = null,
     )
 
     sealed class Submission {
@@ -133,6 +142,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
             messageReference = reference?.let { MessageReference(it.guildId, input.channelId, it.messageId) },
             allowedMentions = allowedMentionsFor(input),
             captchaPayload = input.captcha,
+            stickers = input.stickers,
             hasLocalUploads = !input.attachments.isNullOrEmpty(),
             localAttachments = input.attachments?.map(UploadAttachment::toLocalAttachment),
             initialAttemptTimestamp = now(),

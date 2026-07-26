@@ -101,7 +101,11 @@ class DefaultSearchStore(
 
     override fun getHistory(): Observable<Collection<List<QueryNode>>> =
         searchTargetSubject.switchMap { target ->
-            if (target != null) historyCache.getHistory(target) else Observable.just(emptyList())
+            if (target != null) {
+                historyCache.getHistory(target)
+            } else {
+                Observable.just<Collection<List<QueryNode>>>(emptyList())
+            }
         }
 
     override fun loadInitial(queryString: String, searchStringProvider: SearchStringProvider) {
@@ -368,7 +372,7 @@ class DefaultSearchQueryStore(
                 SearchQuery.Builder().setIncludeNsfw(includeNsfw).buildFrom(nodes, searchData)
             }
             .take(1)
-            .map { it }
+            .map<SearchQuery?> { it }
 
         parsed
             .timeout(PARSE_TIMEOUT_SECONDS, TimeUnit.SECONDS, Observable.just<SearchQuery?>(null))
@@ -412,7 +416,7 @@ class DefaultSearchQueryStore(
         searchFetcher.makeQuery(searchTarget, oldestMessageId, query).appSubscribe(
             errorTag = "makeQuery",
             subscriptionHandler = { querySubscription = it },
-            errorHandler = { handleError() },
+            errorHandler = { _ -> handleError() },
         ) { response -> handleResponse(query, response, isInitialLoad) }
     }
 
@@ -436,7 +440,7 @@ class DefaultSearchQueryStore(
                 } else {
                     ArrayList(currentSearchState.hits.orEmpty())
                 }
-                hits += response.hits.map(::Message)
+                hits += response.hits.map { Message(it) }
                 SearchState(
                     queryFetchState = QueryFetchState.COMPLETED,
                     searchQuery = searchQuery,
