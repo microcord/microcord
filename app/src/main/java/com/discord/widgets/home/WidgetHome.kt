@@ -20,8 +20,10 @@ import com.discord.widgets.channels.WidgetChannelTopic
 import com.discord.widgets.channels.WidgetChannelSidebarActions
 import com.discord.widgets.guilds.list.WidgetGuildsList
 import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
+import com.discord.widgets.search.WidgetSearch
 import com.discord.models.message.Message
 import com.discord.api.channel.Channel
+import com.discord.api.channel.isPrivate
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import rx.Subscription
 
@@ -61,6 +63,20 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
         }
         WidgetChannelSidebarActions.onPins = ::openPins
         WidgetChannelSidebarActions.onNotifications = ::openMuteSettings
+        WidgetChannelSidebarActions.onSearch = ::openSearch
+    }
+
+    /**
+     * A DM searches only itself; a guild channel searches the whole guild, because that is the scope
+     * the search API indexes and the `in:` filter is how you narrow it back down.
+     */
+    private fun openSearch(channel: Channel) {
+        val context = context ?: return
+        if (channel.isPrivate()) {
+            WidgetSearch.launchForChannel(channel.id, context)
+        } else {
+            WidgetSearch.launchForGuild(channel.guildId, context)
+        }
     }
 
     override fun onStart() {
@@ -96,6 +112,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
     override fun onDestroyView() {
         WidgetChannelSidebarActions.onPins = null
         WidgetChannelSidebarActions.onNotifications = null
+        WidgetChannelSidebarActions.onSearch = null
         super.onDestroyView()
     }
 

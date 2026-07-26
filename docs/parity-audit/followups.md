@@ -69,6 +69,104 @@ first. Already resolved this way:
   reference** — `javap` shows zero members and their `@Metadata` `d2` arrays list
   no declarations. Nothing is recoverable; do not create stub files for them.
 
+## Chat rows — degraded because a dependency is absent
+
+Not shortcuts; each is documented in-code and closes when the named thing lands.
+
+| Row | Degradation | Blocked on |
+| --- | --- | --- |
+| Attachment | Opens via `UriHandler` for all types instead of the fullscreen viewer for images/videos | `widgets/media/WidgetMedia` |
+| Game invite, Spotify | Party avatar piles render empty/collapsed; everything else is real. **One-line fix** | `StoreGameParty` not exposed on `StoreStream` |
+| Gift, Guild template | Resolve their code directly via REST (real loading/resolved/invalid states) but with no cross-row caching | `StoreGifting`, `StoreGuildTemplates` |
+| Guild template | "Use template" button hidden rather than leading nowhere | `WidgetGuildClone` |
+| Gift | "Verify" button shown disabled | `WidgetSettingsAccount` |
+| Gift | Nitro art + humanised expiry fall back to `IconUtils`/`TimeUtils` | `PremiumUtils`, `GiftingUtils`, `GiftStyleKt` |
+| Spotify | Track tap fires the `spotify:track:` intent with no Play Store fallback; album tap unwired | `SpotifyHelper` |
+| AutoMod | Footer channel name is a plain tappable run, not a rounded chip | `SimpleRoundedBackgroundSpan`, `ChannelSelector` |
+| Sticker | Renders the partial sticker from the entry rather than hydrating it | `StickerUtils.getGuildOrStandardSticker` |
+
+### Seams introduced by the chat-row wave — all inert by default, all documented in code
+
+| Seam | Location | Stands in for |
+| --- | --- | --- |
+| `ChatListRowNavigation` (8 actions: `launchInviteShare`, `launchGuildSettings`, `joinInvite`, `showGuildScheduledEventDetails`, `showThreadArchiveDurationSheet`, `appendMention`, `toggleEventRsvp`, `updateThreadDraft`) | `WidgetChatListAdapterItemInvite.kt` | 5 missing screens (`WidgetGuildInviteShare`, `WidgetServerSettingsOverview`, `WidgetGuildScheduledEventDetailsBottomSheet`, `WidgetThreadDraftArchiveSheet`, `InviteJoinHelper`) + 3 stores that **exist but are not published by `StoreStream`** (`StoreChat`, `StoreThreadDraft`, `StoreGuildScheduledEvents`) |
+| `InviteEmbedStore` + `InviteState` | same file | `StoreInstantInvites`. Row-level counterpart of `entries/InviteEmbedResolver` — **merge when the store lands** |
+| `ThemedDrawable` | same file | belongs in `utilities/drawable/DrawableCompat` |
+| `voiceParticipants: (Long) -> Observable<Map<Long, VoiceUser>>` | `WidgetChatListAdapterItemCallMessage.kt` | `StoreVoiceParticipants` **exists but `StoreStream` has no accessor** |
+
+**Largest behavioural gap in that slice:** stage-invite speakers and listener count
+are always empty — `StoreStageChannels` / `StoreRequestedStageChannels` do not
+exist and `StoreVoiceStates` is unreachable via `StoreStream`. The speaker strip
+hides itself. Also: scheduled-event `isConnected` is always false
+(`StoreVoiceChannelSelected` unreachable); hub e-mail prompt permanently hidden
+(`GrowthTeamFeatures` unreconstructed); private-thread boost badge hidden
+(`PremiumUtils.BoostFeatureBadgeData` absent); select-menu interaction uses a
+`MaterialAlertDialogBuilder` chooser instead of the unreconstructed
+`SelectComponentBottomSheet` (honours `min`/`maxValues`, same callback).
+
+**Adapter-contract deviations** (adapter followed, reference deviated from):
+`ThreadDraftForm` is 1-arg not `(adapter, flexInputViewModel)` — `AppFlexInputViewModel`
+absent, so IME "Next" no longer hands focus to the composer;
+`GuildScheduledEventInvite` is 1-arg not `(adapter, store)`; `GuildWelcome` uses
+`@JvmOverloads` with `clock = adapter.clock`. `WidgetChatListAdapterItemInviteBase`
+was not created; `ChatListRowNavigation.joinInvite` takes its role.
+
+### Third hook-formatting implementation — now two, converge them
+`ChatRowText` (in `WidgetChatListAdapterItemMessage.kt`) is the shared one and
+absorbed the invite agent's `formatWithHooks`.
+`CharSequence.withClickableHook` in `WidgetChatListAdapterItemAutoModBlocked.kt`
+still solves it a third way. Fold both into `com.discord.i18n`.
+
+### Misplaced code from this wave
+- **`EmbedMedia`** (currently `internal object` at the bottom of
+  `WidgetChatListAdapterItemEmbed.kt`) is a port of the reference's
+  `utilities/embed/EmbedResourceUtils` + `FileType` — `previewImage`,
+  `isPlayable`, `isInlineEmbed`, `externalOpenUrl`, `isAnimated`, `previewUrls`,
+  `computeMaximumImageWidthPx`, `calculateScaledSize`, and the order-sensitive
+  file-type→icon table. **Move to `com/discord/utilities/embed/`.**
+- **Two independent hook-formatting helpers must converge**:
+  `withClickableHook` in `WidgetChatListAdapterItemAutoModBlocked.kt` and
+  `formatWithHooks` in `WidgetChatListAdapterItemApplicationCommand.kt`. Both
+  swap `I18nSpans`' `URLSpan` for a `ClickableSpan`. Fold into `com.discord.i18n`.
+
+### Unverified in this wave
+`WidgetChatListAdapterItemEmbed` **fails to decompile in Vineflower**
+(`NullPointerException` in `KotlinWriter`), and JADX emits `configureInlineEmbed`
+as "Method not decompiled" (234 instructions). The inline-embed branch was
+reconstructed from the sibling attachment path plus `InlineMediaView`'s own API —
+**check inline GIFV sizing on device.**
+
+## Chat list — inputs with no source yet
+
+Deliberately not built into `ChatListRows`, each because nothing produces its
+input. Every one is commented in place.
+
+| Row / field | Blocked on |
+| --- | --- |
+| Bot UI-kit component rows | `ComponentChatListState` |
+| Thread-embed cards, and `shouldShowThreadSpine` (so `ThreadSpineItemDecoration` currently draws nothing) | `StoreThreadMessages` metadata |
+| Collapsed blocked-message chunks | `StoreChat` blocked-group expansion |
+| `StartOfChatEntry.isTextInVoice`, `canAccessRedesignedForumChannels` | hardcoded `false` — experiment-gated, no `StoreExperiments` |
+| `StartOfChatEntry.threadCreatorName` | uses guild nickname only — no `StoreUser` in the builder |
+| `StartOfPrivateChatEntry.mutualGuilds` | empty — no `StoreUserMutualGuilds` |
+
+**`onInteractionStateUpdated` is inert.** `StoreStream` never constructs a
+`StoreChat`, so `StoreMessagesLoader.init(chat, …)` is never called and
+`handleChatInteraction` is unreachable. Interaction-driven pagination cannot
+work; a recycler-driven `loadBefore` is the documented stopgap. **Wiring
+`StoreChat` into `StoreStream` closes this.**
+
+**Reactions in DMs:** the reference calls `PermissionUtils.can(ADD_REACTIONS, …)`
+alone because its `StorePermissions` returns ALL for private channels; ours does
+not yet. An explicit `channel.isPrivate()` shortcut is in place and commented —
+without it the "+" button is dead in every DM. Remove it once `StorePermissions`
+gains the `isPrivate → ALL` branch.
+
+**Doc bug:** `WidgetChatListAdapter`'s KDoc claims
+`mentionMeMessageLevelHighlighting` is off "for surfaces such as pinned messages
+and search results". The only setter call site in the whole reference is
+`WidgetUserMentions.java:1408`. Correct the KDoc.
+
 ## Back-press handlers still to register (outside the back-nav agent's ownership)
 
 Both function again now that the activity no longer outranks them, but they use
@@ -83,6 +181,32 @@ Two `handleCenterPanelBack` branches are deliberately absent, not approximated:
 `StoreChannelsSelected.dismissCreateThread()` is `@StoreThread` with no
 dispatcher-scheduled public wrapper, and `WidgetCallFullscreen` /
 `WidgetCallPreviewFullscreen` do not exist yet.
+
+## CLOSED — audit findings now fixed
+
+- **Blocked-users row is no longer a dead end.** It is shown, and its callback
+  *is* invoked: `StoreStream.kt:904` installs `stateSource`, `:921` installs
+  `onUnblock`, `WidgetTabsHost.kt:110` installs `onProfile`, `:103` installs
+  `WidgetSettings.onBlockedUsers`. `WidgetSettingsBlockedUsers` is a real
+  `ListAdapter` + flipper screen.
+- **`WidgetChatStatus`'s "missing" ack gate, detached cap and 500 ms throttle
+  were already present and correct** — verified line-for-line against the
+  decompile. The audit finding was wrong.
+
+### Still open in the same area
+`ChatListRows` does not populate `MessageEntry.replyData`, so **the reply preview
+above a reply renders empty**. Needs `StoreMessageReplies`, which the row builder
+does not currently take. No test covers it.
+
+### Judgement call recorded: `settings → notifications` stays exposed
+`WidgetSettingsNotifications` navigates and renders the recovered layout with
+real default state, but `NotificationStore.resolver` is **assigned nowhere**
+(`StoreStream` neither constructs nor exposes `StoreNotifications`), so it
+honestly *disables* all six toggles rather than silently dropping writes. Kept
+exposed as a live route with visible degradation — hiding it would be the same
+mistake as the blocked-users row in reverse. **It becomes fully live the moment
+`StoreNotifications` is wired into `StoreStream`** (that store currently exists
+but is dead code).
 
 ## Corrections to earlier audit findings
 
@@ -118,6 +242,19 @@ The audit is evidence, not scripture. Where DEX contradicts it, DEX wins
   implemented. Net behavior is unchanged from the target, because at the default
   `LogLevel.NONE` (every construction site in this repo) exceptions still
   propagate.
+- **`ChannelUtils.getDisplayName` was already correct.** Verified against the
+  reference's `ChannelUtils.c()`: `if (isPrivate() && name.isNullOrEmpty())
+  → recipients?.joinToString { it.username } ?: ""`, else `name ?: ""`. A test
+  asserting the recipient fallback for a *named* group DM was wrong, not the code.
+  The gap the audit recorded is in `stores/StoreChannels.displayName()`, which
+  still has to be routed through this function.
+- **An unknown dispatch type yields no data at all.** The reference's streaming
+  `IncomingParser.assignField` ends its `when (type.hashCode())` chain with
+  `reader.skipValue(); return`, leaving the `data` field at its `null` initial
+  value — the raw `JsonElement` is never retained. The target's
+  `DISPATCH_UNPARSED` marker is behaviourally identical (`GatewaySocket` treats
+  it exactly like `null`) and only exists so "unknown type" is distinguishable
+  from "known type, empty body" in tests.
 - **`leadingEdgeThrottle` is not in `StoreUtilitiesKt`.** `StoreUtilitiesKt`
   contains only `snapshotDirtyKeys`; the operator lives in
   `utilities/rx/ObservableExtensionsKt` and lifts `utilities/rx/LeadingEdgeThrottle`.
@@ -241,6 +378,46 @@ affects every formatted string in the app, so a single owner matters.
 | Migrated screens now get `drawUnderSystemBars`, matching the reference | Real visual change — needs an on-device check | Wave 6 |
 | `RestCallState.Failure` uses `RestApiError` as a stand-in | The reference's `utilities/error/Error` does not exist in the target yet; switch `Failure` to it when built | Wave 2a |
 
+## Systemic: Gson never runs a Kotlin body-level property initialiser
+
+Two reference bugs share one root cause, and there are probably more.
+
+Gson allocates a DTO either via a Kotlin-emitted no-arg constructor (when every
+parameter is defaulted) or via `Unsafe` (when R8 has deleted the constructor
+entirely), then injects the parsed fields **afterwards**. Any `val x = <expr>`
+in the class body has therefore already run against nulls/zeroes. Only `by lazy`
+delegates escape, because they evaluate on first read.
+
+**Audit any first-party DTO with a body-level `val` computed from a constructor
+parameter.** Two found and FIXED as deliberate divergences (both computed on read
+now; `equals`/`hashCode`/`toString` unchanged):
+
+| DTO | Reference behaviour | Why we diverged |
+| --- | --- | --- |
+| `ForumTag.customEmojiId` | permanently `null` — forum tags with a **custom** emoji render without it | Restores intended behaviour; `widgets/forums/ForumPostModels.kt:44` feeds this into `MessageReactionEmoji` |
+| `ModelSearchResponse.retryMillis` | permanently `0` — `SearchFetcher` re-issues an indexing search after **0 ms** | Reproducing it means a zero-delay retry loop against the live backend, which the project's live-backend safety rules forbid |
+
+## Verified at bytecode level this wave
+
+- **`StoreMediaSettings.setSelfMuted`/`toggleSelfMuted` must call the PUBLIC
+  `isSelfMuted()` accessor, not the raw private field.** Vineflower renders
+  `this.voiceConfiguration.isSelfMuted`, which *reads as* the private field;
+  `javap -c` shows `invokevirtual VoiceConfiguration.isSelfMuted:()Z` — the
+  muted-or-deafened accessor. The target had invented an `isSelfMutedRaw`, so
+  `setSelfMuted(false)` while deafened early-returned and **never undeafened**.
+  Fixed; `isSelfMutedRaw` deleted. This is the second case where the Kotlin
+  decompile misled and only bytecode settled it (see also `CallStatus` ordinals).
+- **`StoreV2.assertStoreThread` only logs**, and `MarkChangedDelegate.setValue`
+  asserts nothing — confirmed at `out/com/discord/stores/StoreV2.kt:13-21`. It now
+  reports through `com.discord.app.AppLog` rather than `android.util.Log`, which
+  both matches the reference and gives tests a real seam (`android.util.Log` is a
+  silent no-op under `unitTests.isReturnDefaultValues = true`).
+
+- **`CallStatus` ordinal order is `ACTIVE_UNJOINED(0)`, `ACTIVE_JOINED(1)`,
+  `INACTIVE_UNJOINED(2)`, `INACTIVE_JOINED(3)`** — confirmed by `javap -c`. The
+  Vineflower source order is **alphabetical and misleading**; trusting it would
+  have silently swapped call states.
+
 ## Reference bugs reproduced verbatim — DECISION NEEDED
 
 Preserved for parity and commented in code, but these are genuine defects in the
@@ -251,6 +428,15 @@ argues for fixing them. Flagged for an explicit call rather than settled quietly
 | --- | --- | --- |
 | `SparseMutableList`'s iterator uses `nextIndex() < lastIndex`, so it **never visits the final element** | `utilities/collections/SparseMutableList` | Makes `contains`/`remove` unreliable for the last slot. The reference presumably survived because its callers never hit that path; our reconstruction's call sites may differ |
 | `Histogram.getReport` computes the running percentage with integer division | `utilities/collections/Histogram` | Wrong percentages in diagnostics only — low risk |
+| **Invite expiry test is inverted** — `getExpirationTime() lcmp currentTimeMillis(); ifge → Invalid`, so an invite is "Resolved" only when its expiry is in the **past**. Confirmed at bytecode level | `WidgetChatListAdapterItemInvite` | Harmless today: the invite endpoint returns no `created_at`/`max_age`, so expiry is 0. Would bite the moment the payload carries a real expiry |
+| **`ForumTag.customEmojiId` is always `null`.** It is a stored body-level property (`= emojiId?.toString()`), not a getter — `javap` shows a real backing field, excluded from `equals`/`hashCode`/`toString`, and R8 deleted the constructor entirely because nothing but Gson ever builds one. Gson allocates the class unsafely (no defaults ⇒ no no-arg ctor), so the initialiser never runs | `api/channel/Channel.kt` (`ForumTag`) | Forum tags with a **custom** emoji render without their emoji (`ForumPostModels.kt:44` passes the null id into `MessageReactionEmoji`). Unicode-emoji tags are unaffected. Pinned by `ReadyGuildChannelDtosTest` |
+| **`ModelSearchResponse.retryMillis` is always `0`.** Every constructor parameter is defaulted, so Kotlin emits a no-arg constructor; Gson uses it, computes `retryMillis` from a still-null `retryAfter`, and only then injects the parsed fields. (`hits` escapes this because it is `by lazy`.) | `models/domain/ModelSearchResponse.kt` | The reference's `SearchFetcher` re-issues an indexing search after **0 ms** instead of `retry_after` seconds. Bounded only by `indexingRetryCount`. Pinned by `NewModelContractsTest` |
+
+Both of the above are the same root cause — **Gson never runs a Kotlin body-level property
+initialiser** — and both are reproduced rather than fixed. If the decision is to fix them,
+the one-line change in each case is to make the property a computed `get()`; that changes
+no `equals`/`hashCode`/`toString`, and only removes the (always-null/zero) field from
+serialisation output.
 
 ## Reference oddities reproduced deliberately — pinned by tests, do not "fix"
 
@@ -457,3 +643,43 @@ grants trust and an **untrusted link is dropped rather than confirmed**. The
 | `ManageMessageContext.canAddReactions` | JADX reads `message.isLocal() && (...)`; implemented as `!message.isLocal()` since reacting to an unsent local message is impossible |
 | `RoleUtils.getHighestHoistedRole` hoist filter | Decompiled to `(role == null \|\| !role.hoist) ? false : false`; restored as `guildRoles[it]?.hoist == true` |
 | `getActivityHeader` platform naming | Reference routes `ActivityPlatform` through `Platform.from()`, which does not exist; PS4/PS5/XBOX/SAMSUNG/SPOTIFY mapped, desktop/android/ios/unknown fall back to "Playing a game" |
+
+## Animated stickers — root cause found and fixed (sticker/rlottie wave)
+
+**`StickerUtils.getCDNAssetUrl` had the wrong parameter defaults, and that alone stopped every
+APNG sticker from animating.** The reference signature is
+`getCDNAssetUrl(sticker, size = DEFAULT_STICKER_SIZE_PX, passthrough = true)` — proved from
+`javap -c` of `getCDNAssetUrl$default`: mask bit `2` substitutes `getDEFAULT_STICKER_SIZE_PX()`,
+mask bit `4` substitutes `iconst_1` (**true**). The target declared `size = null,
+passthrough = false`. `fetchSticker` calls the defaulted overload
+(`getCDNAssetUrl$default(..., 6, null)` in the reference), so the target was downloading
+`media.discordapp.net/stickers/<id>.png?passthrough=false`, which the media proxy serves as a
+**flattened single-frame PNG**. `ApngDrawable` then had nothing to animate.
+Only the two deliberate still-image call sites pass `passthrough = false` (reference
+`b/a/y/q0/d.java`, mask `2`); they now do.
+
+Consequences worth knowing:
+- `cacheDir/stickers/<id>.png` is keyed by id only, so **an install that already cached a
+  flattened PNG keeps showing it** until the app cache is cleared. Same scheme as the reference,
+  which never wrote a flattened file there — no migration was invented.
+- `DEFAULT_STICKER_SIZE_PX` is now a lazy val over `Resources.getSystem().displayMetrics.density`
+  (reference: `DimenUtils.dpToPixels(160)`). **`com.discord.utilities.dimen.DimenUtils` still does
+  not exist in the target** — move the constant there when that file lands.
+- `StickerUtils` now calls `IconUtils.getMediaProxySize` (one of the four duplicates listed above
+  is gone).
+
+**`stores/StickerAnimationSettingsStore.kt` is deleted.** It was a shadow store over a
+`SharedPreferences` file (`discord_user_settings`) that nothing else writes — `Persister` stores
+Kryo blobs in `filesDir`, not SharedPreferences — behind a one-shot `initialized` latch, so it
+returned the compiled-in default forever and the account's sticker-animation setting had no effect.
+`StickerView` now reads `StoreStream.getUserSettings().observeStickerAnimationSettings()`, which is
+what the reference does (`StickerView.kt:154,184`).
+
+**`libdsti.so` JNI contract is verified, not inferred.** `llvm-nm -D` on all four ABIs shows exactly
+seven exports, all short-form (no `__` descriptor suffix), so JNI binds by name only:
+`create`, `createCache`, `createWithJson`, `destroy`, `getFrame`, `replaceColors`, `setLayerColor`,
+all prefixed `Java_com_discord_rlottie_RLottieDrawable_00024Companion_`. There is no `JNI_OnLoad`.
+The reference declares only six — **`destroy` is exported by the library but the reference never
+declared or called it**; the target's `external fun destroy(ptr: Long)` is an addition, and its
+`(J)V` descriptor is now confirmed by disassembly (`x86_64/libdsti.so+0x49b3f`: null-checks `rdx`,
+calls `LottieInfo::~LottieInfo`, then `operator delete`). `createCache` likewise confirmed `(JII)V`.

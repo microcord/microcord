@@ -7,6 +7,7 @@ import android.os.Build
 import android.util.Log
 import com.discord.BuildConfig
 import com.discord.api.channel.Channel
+import com.discord.api.channel.isThread
 import com.discord.api.guild.Guild
 import com.discord.api.friendsuggestions.FriendSuggestion
 import com.discord.api.friendsuggestions.FriendSuggestionDelete
@@ -56,6 +57,12 @@ import com.discord.utilities.time.Clock
 import com.discord.utilities.websocket.OkHttpGatewayWebSocketFactory
 import com.discord.models.message.Message as DomainMessage
 import com.discord.utilities.messagesend.MessageSendCoordinator
+import com.discord.utilities.notifications.NotificationData
+import com.discord.utilities.notifications.NotificationKind
+import com.discord.utilities.notifications.NotificationRenderer
+import com.discord.utilities.notifications.NotificationSource
+import com.discord.widgets.settings.NotificationStore
+import com.discord.widgets.chat.list.adapter.WidgetChatListAdapterItemCallMessage
 import com.discord.widgets.chat.input.WidgetChatInput
 import com.discord.widgets.chat.list.WidgetChatList
 import com.discord.widgets.chat.overlay.WidgetChatOverlay
@@ -150,7 +157,18 @@ class StoreStream private constructor(
         observationDeck,
         isAuthenticated = { authentication.isAuthed() || users.getMeInternal().id != 0L },
     )
-    private val permissions = StorePermissions(users, channels, guilds, observationDeck)
+    // -- Threads --------------------------------------------------------------------------------
+    // Declared before `permissions` because StorePermissions takes `storeThreadsJoined` eagerly:
+    // private-thread permissions depend on whether the user is a member (StorePermissions.java:92-95).
+    private val threadsJoined = StoreThreadsJoined(users, observationDeck)
+    private val threadsActive = StoreThreadsActive(channels, observationDeck)
+    private val threadsActiveJoined = StoreThreadsActiveJoined(threadsActive, threadsJoined, observationDeck)
+    private val threadMembers = StoreThreadMembers(observationDeck, channels)
+    private val threadDraft = StoreThreadDraft(dispatcher)
+    private val permissions = StorePermissions(
+        users, channels, guilds, observationDeck,
+        storeThreadsJoined = threadsJoined,
+    )
     private val readyPayloadHydrator = ReadyPayloadHydrator(guilds, channels)
     private val guildSelected = StoreGuildSelected(dispatcher, observationDeck)
     private val channelsSelected = StoreChannelsSelected(
@@ -171,6 +189,8 @@ class StoreStream private constructor(
         clock,
         observationDeck,
         getChannel = channels::findChannelById,
+        getJoinedThreadFlags = { threadsJoined.getJoinedThread(it)?.flags ?: 0 },
+        canAccessRedesignedForumChannels = { guildId -> canAccessRedesignedForumChannels(guildId) },
     )
     private val stageInstances = StoreStageInstances(observationDeck)
     private val presences = StoreUserPresence(
@@ -224,7 +244,11 @@ class StoreStream private constructor(
                 restApi.getUserAffinities().subscribeOn(Schedulers.io()).subscribe(success, { failure() })
         },
     )
-    private val messagesMostRecent = StoreMessagesMostRecent(observationDeck)
+    private val messagesMostRecent = StoreMessagesMostRecent(
+        observationDeck,
+        storeChannels = channels,
+        forumChannelsEnabled = { guildId -> canAccessRedesignedForumChannels(guildId) },
+    )
     private val readStates = StoreReadStates(
         dispatcher, clock, observationDeck,
         ackRequest = { channelId, manual, _ ->
@@ -240,6 +264,67 @@ class StoreStream private constructor(
         },
     )
     private val messages = StoreMessages(observationDeck)
+    private val chat = StoreChat(
+        dispatcher,
+        observationDeck,
+        requestGuildMembers = { guildId, query -> gatewayConnection.requestGuildMembers(guildId, query) },
+    )
+    private val threadMessages = StoreThreadMessages(messages, channels, observationDeck)
+    private val messageReplies = StoreMessageReplies(dispatcher, messages, observationDeck)
+    private val messageReactions = StoreMessageReactions(dispatcher, users, observationDeck) {
+        if (::restApi.isInitialized) restApi else null
+    }
+    private val forumPostMessages = StoreForumPostMessages(dispatcher, users, observationDeck) {
+        if (::restApi.isInitialized) restApi else null
+    }
+    private val archivedThreads = ArchivedThreadsStore(
+        dispatcher,
+        forumPostMessages,
+        observationDeck,
+        restApi = { if (::restApi.isInitialized) restApi else null },
+        handleThreadCreateOrUpdate = { thread -> handleThreadCreateOrUpdateInternal(thread) },
+    )
+    /**
+     * Mention counting and the read-state ack ledger.
+     *
+     * [StoreMessageAck.ackRequest] is deliberately inert: this reconstruction's [StoreReadStates]
+     * owns the `POST /channels/{id}/messages/{id}/ack` call (see its `ackRequest` above), and
+     * posting from both stores would double-ack every channel. `StoreMessageAck` still tracks the
+     * ledger locally and feeds [StoreMentions], which is what the mention badges need.
+     */
+    private val messageAck = StoreMessageAck(
+        dispatcher,
+        observationDeck,
+        channels,
+        messages,
+        messagesMostRecent,
+        meId = { users.getMeInternal().id },
+        ackRequest = { _, _, _, _ -> },
+        threadAckState = { channelId ->
+            val channel = channels.findChannelByIdInternal(channelId)
+                ?: channels.getChannelsByIdInternal()[channelId]
+            when {
+                channel == null -> null
+                !channel.isThread() -> StoreMessageAck.ThreadAckState.NotThread
+                else -> StoreMessageAck.ThreadAckState.Thread(
+                    canAckThread = threadsActiveJoined.getActiveJoinedThreadsInternal().containsKey(channelId) ||
+                        threadsActive.getAllForumThreadsByIdInternal().containsKey(channelId),
+                )
+            }
+        },
+        hasUnavailableGuilds = { guilds.getUnavailableGuildsInternal().isNotEmpty() },
+        processMarkUnread = { channelId, messagesAfter -> mentions.processMarkUnread(channelId, messagesAfter) },
+    )
+    private val mentions = StoreMentions(
+        userRelationships,
+        permissions,
+        messageAck,
+        guildSettings,
+        channels,
+        observationDeck,
+        hasJoinedThread = threadsJoined::hasJoinedInternal,
+    )
+    private val slowMode = StoreSlowMode(clock, channels, permissions)
     private val messagesLoader = StoreMessagesLoader(loader = { request, callback ->
         val generation = authGeneration
         val source = when (request.direction) {
@@ -1754,6 +1839,15 @@ class StoreStream private constructor(
         private const val GATEWAY_TAG = "ManticordGateway"
         @Volatile private var instance: StoreStream? = null
 
+        /**
+         * Files directory the current test instance was built for.
+         *
+         * Test classes run in one JVM, so a second class calling [initializeForTesting] used to be
+         * handed the first class's graph — silently bound to another class's `SharedPreferences` and
+         * `Persister` directory, which made every persistence assertion read from the wrong place.
+         */
+        private var testFilesDir: File? = null
+
         @JvmStatic
         @Synchronized
         fun initialize(context: Context): StoreStream {
@@ -1783,7 +1877,10 @@ class StoreStream private constructor(
             scheduler: Scheduler,
             clock: Clock = Clock { 0 },
         ): StoreStream {
-            instance?.let { return it }
+            // Idempotent for the class that owns [filesDir]; a different fixture directory means a
+            // different test class, and it gets its own graph rather than the previous one's.
+            instance?.takeIf { testFilesDir == filesDir }?.let { return it }
+            testFilesDir = filesDir
             Persister.init(filesDir, Observable.never(), clock)
             return create(scheduler, clock, preferences, sessionDurablePreferences).also {
                 instance = it

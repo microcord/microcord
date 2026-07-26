@@ -18,6 +18,7 @@ class ServerDiscoveryItem(context: Context, attrs: AttributeSet?) :
     private val joinedButton: MaterialButton
     private val memberCount: ServerMemberCount
     private val description: TextView
+    private val image: GuildView
     private val title: TextView
 
     init {
@@ -28,12 +29,22 @@ class ServerDiscoveryItem(context: Context, attrs: AttributeSet?) :
         joinedButton = requireNotNull(findViewById(R.id.server_discovery_item_button_joined))
         memberCount = requireNotNull(findViewById(R.id.server_discovery_item_count_container))
         description = requireNotNull(findViewById(R.id.server_discovery_item_description))
-        requireNotNull<GuildView>(findViewById(R.id.server_discovery_item_image)).useGuildIconCorners()
+        image = requireNotNull<GuildView>(findViewById(R.id.server_discovery_item_image))
+            .apply { useGuildIconCorners() }
         title = requireNotNull(findViewById(R.id.server_discovery_item_title))
     }
 
     fun setTitle(title: CharSequence?) {
         this.title.text = title
+    }
+
+    /**
+     * Shows the listed server's icon, falling back to [fallbackText] (its initials) when it has
+     * none. The reference reaches the inner [GuildView] through its generated view binding; this
+     * exposes it as behaviour instead so the view stays the only thing that knows its own layout.
+     */
+    fun setGuild(iconUrl: String?, fallbackText: String?) {
+        image.configure(iconUrl, fallbackText)
     }
 
     fun setDescription(description: CharSequence?) {

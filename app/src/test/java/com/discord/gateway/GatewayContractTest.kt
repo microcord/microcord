@@ -19,11 +19,11 @@ import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.models.domain.ModelGateway
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
-import com.google.gson.JsonElement
 import com.google.gson.JsonParser
 import java.lang.reflect.Proxy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -70,7 +70,7 @@ class GatewayContractTest {
     }
 
     @Test
-    fun parserTypesReadyCoreEventsAndPreservesUnknownData() {
+    fun parserTypesReadyCoreEventsAndSkipsUnknownDispatches() {
         val parser = IncomingParser(gson)
         val ready = parser.parse(requireNotNull(javaClass.getResource("/fixtures/gateway/ready_core.json")).readText())
         val create = parser.parse(stageEvent("STAGE_INSTANCE_CREATE", "topic"))
@@ -94,15 +94,21 @@ class GatewayContractTest {
         val memberList = parser.parse("""{"op":0,"t":"GUILD_MEMBER_LIST_UPDATE","d":{"guild_id":2,"id":"everyone","groups":[{"id":"online","count":1}],"online_count":1,"member_count":1,"ops":[{"op":"SYNC","range":[0,1],"items":[{"group":{"id":"online","count":1}},{"member":{"guild_id":2,"user":{"id":7,"username":"me","discriminator":"0000"},"roles":[],"pending":false}}]}]}}""")
         assertTrue((memberList.data as ModelGuildMemberListUpdate).ops.single() is ModelGuildMemberListUpdate.Operation.Sync)
 
+        // The reference streams the frame and calls `reader.skipValue()` for a dispatch type it has
+        // no branch for, leaving `Incoming.data` untouched. It never retains the raw JSON, so an
+        // unknown event yields the "nothing to route" marker rather than a JsonElement.
         val unknown = parser.parse("{\"op\":0,\"s\":4,\"t\":\"FUTURE_EVENT\",\"d\":{\"value\":1}}")
-        assertTrue(unknown.data is JsonElement)
-        assertEquals(1, (unknown.data as JsonElement).asJsonObject["value"].asInt)
+        assertSame(IncomingParser.DISPATCH_UNPARSED, unknown.data)
+        assertEquals("FUTURE_EVENT", unknown.type)
 
         val incrementals = JsonParser.parseString(
             requireNotNull(javaClass.getResource("/fixtures/gateway/incremental_core.json")).readText(),
         ).asJsonArray.map { parser.parse(it.toString()) }
         assertTrue(incrementals.single { it.type == "THREAD_LIST_SYNC" }.data is ModelThreadListSync)
-        assertTrue(incrementals.single { it.type == "FUTURE_EVENT" }.data is JsonElement)
+        assertSame(
+            IncomingParser.DISPATCH_UNPARSED,
+            incrementals.single { it.type == "FUTURE_EVENT" }.data,
+        )
     }
 
     private fun stageEvent(type: String, topic: String) =

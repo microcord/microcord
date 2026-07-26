@@ -1,8 +1,10 @@
 package com.discord.stores
 
+import android.util.Log
+import com.discord.app.AppLog
 import com.discord.stores.updates.ObservationDeck
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import rx.schedulers.TestScheduler
 
@@ -76,10 +78,28 @@ class DispatcherStoreTest {
         assertEquals(1, overrideUpdates)
     }
 
+    /**
+     * The off-dispatcher guard *reports*; it does not throw.
+     *
+     * `StoreV2.assertStoreThread` in the reference is
+     * `Logger.e(AppLog, "markChanged() should be run from the Store Dispatcher", IllegalStateException(...))`
+     * — verified in the Vineflower decompile of `com/discord/stores/StoreV2`. Throwing here would
+     * crash the process on any off-thread `markChanged`, so the contract this pins is that the
+     * mutation still lands and an error is logged with the offending stack.
+     */
     @Test
-    fun mutationIsRejectedOutsideDispatcherAndRxDisconnects() {
+    fun mutationIsReportedOutsideDispatcherAndRxDisconnects() {
+        // Rebind the store thread to a thread that is not this one, so the guard trips regardless of
+        // what any previously executed test left in StoreThreadScheduler.
+        StoreThreadScheduler.newThread {}
         val store = TestStore()
-        assertThrows(IllegalStateException::class.java) { store.value = 1 }
+
+        val reported = reportedErrors { store.value = 1 }
+
+        assertEquals(1, reported.size)
+        assertEquals("markChanged() should be run from the Store Dispatcher", reported.single().message)
+        assertTrue(reported.single().throwable is IllegalStateException)
+        assertEquals(1, store.valueForTest)
 
         val scheduler = TestScheduler()
         val dispatcher = Dispatcher(scheduler)
@@ -92,6 +112,26 @@ class DispatcherStoreTest {
         scheduler.triggerActions()
 
         assertEquals(listOf(emptyList<Int>()), observed)
+    }
+
+    /**
+     * Captures what [com.discord.app.AppLog] recorded while [block] ran.
+     *
+     * `AppLog` is inert until the application initialises it, so the minimum priority has to be
+     * lowered for the duration and restored afterwards.
+     */
+    private fun reportedErrors(block: () -> Unit): List<AppLog.LoggedItem> {
+        val reported = mutableListOf<AppLog.LoggedItem>()
+        val previousPriority = AppLog.minimumPriority
+        AppLog.minimumPriority = Log.ERROR
+        val subscription = AppLog.observeLogs().subscribe { reported += it }
+        try {
+            block()
+        } finally {
+            subscription.unsubscribe()
+            AppLog.minimumPriority = previousPriority
+        }
+        return reported
     }
 
     private class TestStore : StoreV2() {

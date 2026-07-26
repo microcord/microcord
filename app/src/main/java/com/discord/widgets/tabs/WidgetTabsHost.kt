@@ -5,6 +5,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import com.discord.app.AppFragment
+import com.discord.app.AppScreenRouter
 import androidx.fragment.app.commit
 import com.discord.R
 import com.discord.panels.PanelState
@@ -21,6 +22,7 @@ import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.widgets.user.WidgetUserStatusSheet
 import com.discord.widgets.user.WidgetUserSetCustomStatus
 import com.discord.widgets.channels.memberlist.WidgetChannelMembersList
+import com.discord.widgets.directories.WidgetDirectoriesSearch
 import com.discord.widgets.user.WidgetUserMutualFriends
 import com.discord.widgets.user.WidgetUserMutualGuilds
 import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
@@ -168,6 +170,18 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
         val route = ((contract as? AppIntentContract.Link)?.result as? LinkParseResult.Internal)?.route ?: return
         if (route is DeepLinkRoute.User) {
             WidgetUserSheet.show(route.userId, childFragmentManager)
+            StoreStream.getNavigation().consumePendingIntent(contract)
+            return
+        }
+        if (route is DeepLinkRoute.Discovery) {
+            // `/discovery` opens directory search against the Discord-owned HQ directory channel.
+            // Without this branch the route fell through to `else -> return`, so the intent stayed
+            // queued forever and the app just showed the last-used tab.
+            AppScreenRouter.launch(
+                requireContext(),
+                WidgetDirectoriesSearch::class.java,
+                WidgetDirectoriesSearch.discoveryIntent(),
+            )
             StoreStream.getNavigation().consumePendingIntent(contract)
             return
         }

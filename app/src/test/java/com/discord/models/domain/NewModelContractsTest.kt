@@ -273,7 +273,14 @@ class NewModelContractsTest {
         )
 
         assertEquals(2, response.totalResults)
+        assertEquals(3, response.retryAfter)
+        // `hits` is a `by lazy` delegate, so it observes the fields Gson injected after construction.
         assertEquals(listOf(2L), response.hits.map { it.id })
+        // Deliberate divergence: every constructor parameter is defaulted, so Kotlin emits a no-arg
+        // constructor that Gson uses, and the reference's stored `retryMillis` is computed from a
+        // still-null `retryAfter` before the parsed fields are injected — leaving it permanently 0,
+        // so `SearchFetcher` re-issues an indexing search after 0ms. Reproducing that would mean a
+        // zero-delay retry loop against the live backend, which the project's safety rules forbid.
         assertEquals(3000L, response.retryMillis)
     }
 

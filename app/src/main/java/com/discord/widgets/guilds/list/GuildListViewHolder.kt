@@ -61,7 +61,7 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
         private val sparkle: SparkleView = view.findViewById(R.id.guild_item_sparkle)
 
         fun configure(item: GuildListItem.HubItem) {
-            if (!item.showSparkle) sparkle.stopAnimating()
+            if (!item.showSparkle) sparkle.stop()
             sparkle.visibility = if (item.showSparkle) View.VISIBLE else View.GONE
         }
     }

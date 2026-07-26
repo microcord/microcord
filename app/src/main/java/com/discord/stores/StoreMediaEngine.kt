@@ -82,8 +82,8 @@ class StoreMediaEngine(
         BehaviorSubject.create<List<VideoInputDeviceDescription>>(emptyList())
 
     private var selectedVideoInputDevice: VideoInputDeviceDescription? = null
-    private val selectedVideoInputDeviceSubject =
-        BehaviorSubject.create<VideoInputDeviceDescription?>(null)
+    private val selectedVideoInputDeviceSubject: BehaviorSubject<VideoInputDeviceDescription?> =
+        BehaviorSubject.create(null as VideoInputDeviceDescription?)
 
     private var userId: Long = NO_USER
     private var previousVoiceChannelId: Long? = null

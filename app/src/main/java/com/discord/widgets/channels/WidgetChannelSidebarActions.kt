@@ -33,13 +33,13 @@ class WidgetChannelSidebarActions : AppFragment(R.layout.widget_channel_sidebar_
                 onCallClicked = View.OnClickListener { onCall?.invoke(channel.id, false) },
                 onVideoClicked = View.OnClickListener { onCall?.invoke(channel.id, true) },
                 onNotificationsClicked = View.OnClickListener { onNotifications?.invoke(channel.id) },
-                onSearchClicked = View.OnClickListener { onSearch?.invoke(channel.id) },
+                onSearchClicked = View.OnClickListener { onSearch?.invoke(channel) },
             )
         }
         requireView().findViewById<GuildChannelSideBarActionsView>(R.id.widget_channel_sidebar_actions_guild_view).apply {
             visibility = if (privateChannel) View.GONE else View.VISIBLE
             if (!privateChannel) configure(
-                onSearchClicked = { onSearch?.invoke(channel.id) },
+                onSearchClicked = { onSearch?.invoke(channel) },
                 onNotificationsClicked = { onNotifications?.invoke(channel.id) },
                 onPinsClicked = { onPins?.invoke(channel.id) },
                 onSettingsClicked = { onSettings?.invoke(channel.id) },
@@ -49,7 +49,11 @@ class WidgetChannelSidebarActions : AppFragment(R.layout.widget_channel_sidebar_
     }
 
     companion object {
-        @JvmField var onSearch: ((Long) -> Unit)? = null
+        /**
+         * Takes the whole channel, not its id: a guild channel searches its *guild*, while a DM
+         * searches the channel itself, and the host cannot tell them apart from an id alone.
+         */
+        @JvmField var onSearch: ((Channel) -> Unit)? = null
         @JvmField var onNotifications: ((Long) -> Unit)? = null
         @JvmField var onPins: ((Long) -> Unit)? = null
         @JvmField var onSettings: ((Long) -> Unit)? = null

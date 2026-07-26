@@ -109,7 +109,8 @@ class StoreRtcConnection(
             .computationLatest()
             .distinctUntilChanged()
 
-    private val rtcConnectionMetadataSubject = BehaviorSubject.create<RtcConnection.Metadata?>(null)
+    private val rtcConnectionMetadataSubject: BehaviorSubject<RtcConnection.Metadata?> =
+        BehaviorSubject.create(null as RtcConnection.Metadata?)
     private var rtcConnectionMetadata: RtcConnection.Metadata? = null
 
     private val connectionStateSubject =

@@ -126,7 +126,7 @@ class ObservableExtensionsTest {
         val values = mutableListOf<String>()
 
         Observable.from(listOf<Any>(1, "two", 3.0, "four"))
-            .filterIs<Any, String>()
+            .filterIs<String>()
             .subscribe { values += it }
 
         assertEquals(listOf("two", "four"), values)

@@ -18,6 +18,8 @@ import okhttp3.mockwebserver.MockWebServer
 import java.lang.reflect.Proxy
 import java.nio.file.Files
 import java.util.concurrent.Executor
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.AfterClass
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -56,6 +58,14 @@ class StoreStreamTest {
         }
         dispatch("""{"op":0,"t":"CHANNEL_CREATE","d":{"id":100,"guild_id":0,"type":1,"name":"dm"}}""")
         StoreStream.selectChannel(0, 100)
+        // `selectChannel` only records the intent. `StoreChannelsSelected` resolves it on the
+        // computation scheduler (`computationLatest`, as the reference does) and resolves to
+        // `Uninitialized` until `StoreChannels.initializedForAuthedUser` flips, which needs an
+        // authenticated READY this fixture deliberately does not send. Marking the channel active
+        // here is exactly what the resolved selection would have done, and keeps the reconciliation
+        // below deterministic — `StoreMessagesHolder` drops messages for inactive channels, as the
+        // reference does (`StoreMessagesHolder.addMessages`).
+        stream.dispatcher.schedule { StoreStream.getMessages().handleChannelSelected(100) }
 
         dispatch("""{"op":0,"t":"MESSAGE_CREATE","d":{"id":200,"channel_id":100,"guild_id":1,"author":{"id":7,"username":"user","discriminator":"0000"},"content":"first","type":0}}""")
         assertEquals("first", StoreStream.getMessages().getMessage(100, 200)?.content)
@@ -305,7 +315,33 @@ class StoreStreamTest {
 
     companion object {
         private val directory = Files.createTempDirectory("store-stream-test")
-        private val scheduler = Schedulers.from(Executor { command -> Thread(command).apply { start(); join() } })
+
+        private val storeThread = AtomicReference<Thread>()
+        private val storeExecutor = Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "test-store-thread").apply { isDaemon = true }.also(storeThread::set)
+        }
+
+        /**
+         * Stands in for [StoreThreadScheduler.create]: one thread, reused by every dispatch.
+         *
+         * [Dispatcher.schedule] rebinds `StoreThreadScheduler.storeThreadId` on entry, so a
+         * thread-per-action executor lets a dispatch scheduled from elsewhere (the throttled
+         * `StoreGuildsSorted` rebuild, the `computationLatest` channel-selection resolution) steal
+         * the binding from the dispatch already in flight, which then dies on its next
+         * `assertCurrentThread()` — silently, because rx routes that to the uncaught-exception
+         * handler. Actions still run to completion before `schedule` returns, keeping the
+         * assertions below synchronous, and a re-entrant schedule from the store thread runs
+         * inline instead of deadlocking on the queue it is already draining.
+         */
+        private val scheduler = Schedulers.from(
+            Executor { command ->
+                if (Thread.currentThread() === storeThread.get()) {
+                    command.run()
+                } else {
+                    storeExecutor.submit(command).get()
+                }
+            },
+        )
         private val prefs = memoryPreferences()
         private val durablePrefs = memoryPreferences()
         private lateinit var stream: StoreStream
@@ -319,6 +355,8 @@ class StoreStreamTest {
         @JvmStatic
         @AfterClass
         fun cleanUp() {
+            // The executor's thread is a daemon and the singleton outlives this class, so it is
+            // deliberately left running: shutting it down would reject any late dispatch.
             directory.toFile().deleteRecursively()
         }
 

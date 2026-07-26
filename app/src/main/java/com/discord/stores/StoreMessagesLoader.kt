@@ -116,10 +116,11 @@ class StoreMessagesLoader @JvmOverloads constructor(
      * does not resolve for a nullable element type under this Kotlin/RxJava 1 pairing. It is not
      * needed either — every emission below happens inside this class's own monitor.
      */
-    private val channelMessageChunksSubject = BehaviorSubject.create<ChannelChunk?>(null)
+    private val channelMessageChunksSubject: BehaviorSubject<ChannelChunk?> =
+        BehaviorSubject.create(null as ChannelChunk?)
 
     /** Nullable so [clearScrollTo] can retract a pending scroll instruction. See above. */
-    private val scrollToSubject = BehaviorSubject.create<Long?>(null)
+    private val scrollToSubject: BehaviorSubject<Long?> = BehaviorSubject.create(null as Long?)
     private val channelMessagesLoadingSubject = BehaviorSubject.create(false).toSerialized()
 
     private var dependencies: Dependencies? = null

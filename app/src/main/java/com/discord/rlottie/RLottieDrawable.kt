@@ -357,7 +357,10 @@ class RLottieDrawable : BitmapDrawable, Animatable {
 
     private fun requestCacheGeneration() {
         if (nativePtr == 0L || cachePending) return
-        val queue = ensureCacheQueue()
+        // The queue only exists once some animation has asked to be pre-cached; a drawable built
+        // with `precache = false` never rasterises a cache, matching the reference's null check on
+        // its cache executor.
+        val queue = cacheQueue ?: return
         cachePending = true
         queue.execute {
             val ptr = nativePtr
@@ -404,6 +407,10 @@ class RLottieDrawable : BitmapDrawable, Animatable {
             }
         } else if (readyBitmap != null && (forceFrameSwap || (allowDecodeSingleFrame && elapsed >= threshold))) {
             swapBitmaps()
+            // A paused drawable has now shown the frame it was waiting for, so no further decode is
+            // scheduled — unless the swap was forced by a colour/progress change, which must show
+            // the frame after it too.
+            singleFrameDecoded = true
             if (forceFrameSwap) {
                 singleFrameDecoded = false
                 forceFrameSwap = false

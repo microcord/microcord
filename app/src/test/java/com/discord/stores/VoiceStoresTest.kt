@@ -1,5 +1,6 @@
 package com.discord.stores
 
+import android.content.SharedPreferences
 import com.discord.api.voice.state.VoiceState
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.models.domain.ModelCall
@@ -8,6 +9,7 @@ import com.discord.models.user.CoreUser
 import com.discord.stores.updates.ObservationDeck
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
+import java.lang.reflect.Proxy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -309,7 +311,7 @@ class VoiceStoresTest {
 
     @Test
     fun deafeningImpliesMuteAndUndeafeningOnUnmute() {
-        val store = StoreMediaSettings()
+        val store = mediaSettings()
         store.setSelfDeafen(true)
         assertTrue(store.getVoiceConfigurationBlocking().isSelfMuted())
 
@@ -321,7 +323,7 @@ class VoiceStoresTest {
     /** Without VAD permission the user is forced muted and cannot unmute until they switch mode. */
     @Test
     fun forcedMuteBlocksUnmuteUntilInputModeChanges() {
-        val store = StoreMediaSettings()
+        val store = mediaSettings()
         store.handleCanUseVad(false)
         assertTrue(store.getVoiceConfigurationBlocking().isSelfMuted())
         assertEquals(StoreMediaSettings.SelfMuteFailure.CANNOT_USE_VAD, store.setSelfMuted(false))
@@ -333,7 +335,7 @@ class VoiceStoresTest {
 
     @Test
     fun revertTemporaryDisableKrispOnlyUndoesTheTemporaryVariants() {
-        val store = StoreMediaSettings()
+        val store = mediaSettings()
         store.setVADUseKrisp(StoreMediaSettings.VadUseKrisp.TemporarilyDisabled)
         store.setNoiseProcessing(StoreMediaSettings.NoiseProcessing.CancellationTemporarilyDisabled)
         store.revertTemporaryDisableKrisp()
@@ -350,7 +352,7 @@ class VoiceStoresTest {
 
     @Test
     fun perUserVolumeAndMuteAreStoredIndependently() {
-        val store = StoreMediaSettings()
+        val store = mediaSettings()
         store.toggleUserMuted(7)
         store.setUserOutputVolume(7, 42f)
         store.setUserOffScreen(8, true)
@@ -369,6 +371,48 @@ class VoiceStoresTest {
 
     private val MediaEngineConnectionInputModePushToTalk
         get() = com.discord.rtcconnection.mediaengine.MediaEngineConnection.InputMode.PUSH_TO_TALK
+
+    /**
+     * [StoreMediaSettings] resolves its persistence handle in its default argument list, exactly as
+     * the reference does (`VoiceConfigurationCache(SharedPreferencesProvider.INSTANCE.get())`), so
+     * constructing one without an initialised [com.discord.utilities.cache.SharedPreferencesProvider]
+     * fails. Supplying the cache directly keeps the global provider untouched between tests.
+     */
+    private fun mediaSettings() =
+        StoreMediaSettings(voiceConfigurationCache = VoiceConfigurationCache(memoryPreferences()))
+
+    /** Minimal in-memory [SharedPreferences]; only the accessors the cache uses are backed. */
+    private fun memoryPreferences(): SharedPreferences {
+        val values = linkedMapOf<String, Any?>()
+        lateinit var editor: Any
+        editor = Proxy.newProxyInstance(
+            SharedPreferences.Editor::class.java.classLoader,
+            arrayOf(SharedPreferences.Editor::class.java),
+        ) { _, method, args ->
+            when (method.name) {
+                "putBoolean", "putInt", "putLong", "putFloat", "putString", "putStringSet" ->
+                    editor.also { values[args[0] as String] = args[1] }
+                "remove" -> editor.also { values.remove(args[0] as String) }
+                "clear" -> editor.also { values.clear() }
+                "commit" -> true
+                "apply" -> null
+                else -> editor
+            }
+        }
+        return Proxy.newProxyInstance(
+            SharedPreferences::class.java.classLoader,
+            arrayOf(SharedPreferences::class.java),
+        ) { _, method, args ->
+            when (method.name) {
+                "getAll" -> values.toMap()
+                "getBoolean", "getInt", "getLong", "getFloat", "getString", "getStringSet" ->
+                    values[args[0]] ?: args[1]
+                "contains" -> values.containsKey(args[0])
+                "edit" -> editor
+                else -> null
+            }
+        } as SharedPreferences
+    }
 
     private fun voiceUser(
         isMe: Boolean = false,

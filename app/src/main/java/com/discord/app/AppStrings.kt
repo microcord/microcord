@@ -20,4 +20,5 @@ internal fun Context.getNamedFormatString(@StringRes stringResId: Int, vararg va
     }
 }
 
-private val NAMED_PLACEHOLDER = Regex("""\{[A-Za-z0-9_]+}""")
+// Escaped `\}`: Android's ICU regex engine rejects a bare closing brace that the JVM accepts.
+private val NAMED_PLACEHOLDER = Regex("""\{[A-Za-z0-9_]+\}""")

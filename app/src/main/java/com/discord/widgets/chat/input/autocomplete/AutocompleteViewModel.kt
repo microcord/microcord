@@ -5,6 +5,7 @@ import androidx.annotation.VisibleForTesting
 import com.discord.app.AppViewModel
 import com.discord.utilities.rx.ui
 import com.discord.widgets.chat.input.AutocompleteStickerItem
+import com.discord.widgets.chat.input.models.ChatInputMentionsMap
 import com.discord.widgets.chat.input.models.MentionToken
 import rx.Observable
 import rx.Subscription
@@ -21,7 +22,7 @@ import rx.Subscription
  * costs a permission computation per member, and it changes on presence updates, not on typing.
  */
 class AutocompleteViewModel(
-    private val channelId: Long?,
+    channelId: Long? = null,
     private val autocompletablesSource: (Long) -> Observable<Map<LeadingIdentifier, Set<Autocompletable>>> =
         ChatInputAutocompletables::observeChannelAutocompletables,
     /**
@@ -36,7 +37,41 @@ class AutocompleteViewModel(
     private var currentToken: MentionToken? = null
     private var subscription: Subscription? = null
 
+    /**
+     * Where every recognised mention currently sits in the composer.
+     *
+     * Recomputed from scratch on each edit rather than shifted, because
+     * [AutocompleteModelUtils.mapInputToMentions] re-scans the text anyway and only consults the
+     * previous map to (a) keep a picked candidate alive after its source left the store and
+     * (b) preserve the exact candidate the user chose for an unchanged range.
+     */
+    private var inputMentionsMap: ChatInputMentionsMap = ChatInputMentionsMap("", emptyMap())
+
+    private var currentChannelId: Long? = null
+
     init {
+        setChannelId(channelId)
+    }
+
+    /**
+     * Points the model at a different channel.
+     *
+     * The reference scopes one `AutocompleteViewModel` to the activity and lets the channel arrive
+     * through `StoreChannelsSelected`; here the composer owns the model and re-targets it, which
+     * keeps the popup alive across a channel switch instead of tearing the whole controller down.
+     * Re-targeting clears the candidate set immediately so the popup can never offer a member of
+     * the channel the user just left.
+     */
+    @MainThread
+    fun setChannelId(channelId: Long?) {
+        if (channelId == currentChannelId) return
+        currentChannelId = channelId
+        subscription?.unsubscribe()
+        subscription = null
+        autocompletables = emptyMap()
+        currentToken = null
+        inputMentionsMap = ChatInputMentionsMap("", emptyMap())
+        updateViewState(AutocompleteViewState.Hidden)
         if (channelId != null) {
             subscription = autocompletablesSource(channelId)
                 .ui(this)
@@ -60,9 +95,33 @@ class AutocompleteViewModel(
      */
     @MainThread
     fun onInputChanged(input: CharSequence, selection: IntRange) {
+        val text = input.toString()
         currentToken = AutocompleteModelUtils.getMessageAutocompleteToken(input, selection)
+        inputMentionsMap = AutocompleteModelUtils.mapInputToMentions(
+            input = text,
+            autocompletables = autocompletables,
+            currentInputMentionMap = if (inputMentionsMap.input == text) inputMentionsMap.mentions else emptyMap(),
+            isCommand = currentToken?.let { it.isAtStart && it.leadingIdentifier == LeadingIdentifier.APP_COMMAND } == true,
+        )
         publish()
     }
+
+    /**
+     * The composer text as the API should receive it: every recognised mention swapped for its
+     * server form.
+     *
+     * Falls back to returning [input] unchanged when the map was built from different text, which
+     * happens if the user types while the send is in flight. Sending the literal `@name` is a far
+     * smaller failure than splicing a mention into the wrong offset.
+     *
+     * Reference: `AutocompleteViewModel.replaceAutocompletableDataWithServerValues`, which returns
+     * a `MessageContent` carrying the mentioned users alongside the text. `MessageContent` is not
+     * reconstructed in this project — the send pipeline takes a plain string — so only the text
+     * half is returned.
+     */
+    fun replaceAutocompletableDataWithServerValues(input: String): String =
+        if (inputMentionsMap.input != input) input
+        else input.replaceAutocompleteDataWithServerValues(inputMentionsMap.mentions)
 
     /** Closes the popup, e.g. after a candidate is picked or the composer loses focus. */
     @MainThread

@@ -74,6 +74,39 @@ class InputAutocomplete(
 
     fun dismiss() = viewModel.onAutocompleteDismissed()
 
+    /** Re-targets the candidate set when the composer moves to another channel. */
+    fun setChannelId(channelId: Long?) = viewModel.setChannelId(channelId)
+
+    /**
+     * The composer's text as the API should receive it.
+     *
+     * Whitespace-only input yields `""` rather than running the mention substitution — the
+     * reference makes the same short-circuit, and it matters because a blank composer still holds
+     * a mention map from before the user cleared it.
+     */
+    fun getInputContent(): String {
+        val raw = editText.text?.toString().orEmpty()
+        return if (raw.isBlank()) "" else viewModel.replaceAutocompletableDataWithServerValues(raw)
+    }
+
+    /**
+     * Inserts a mention for [autocompletable] at the caret, as the member list's "Mention" action
+     * does. Unlike [applySelection] there is no token to replace, so the text is only extended.
+     */
+    fun appendMention(autocompletable: Autocompletable) {
+        val editable = editText.editableText ?: return
+        val caret = editText.selectionStart.coerceIn(0, editable.length)
+        val replacement = autocompletable.getInputReplacement() + " "
+        applyingSelection = true
+        try {
+            editable.insert(caret, replacement)
+            editText.setSelection((caret + replacement.length).coerceAtMost(editable.length))
+        } finally {
+            applyingSelection = false
+        }
+        viewModel.onAutocompleteDismissed()
+    }
+
     private fun configureUI(viewState: AutocompleteViewState) = when (viewState) {
         is AutocompleteViewState.Autocomplete -> showAutocomplete(viewState)
         is AutocompleteViewState.LoadingItems -> showLoading(viewState)

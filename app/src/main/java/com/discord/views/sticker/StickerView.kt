@@ -17,7 +17,7 @@ import com.discord.api.sticker.StickerPartial
 import com.discord.i18n.i18nFormat
 import com.discord.rlottie.RLottieDrawable
 import com.discord.rlottie.RLottieImageView
-import com.discord.stores.StickerAnimationSettingsStore
+import com.discord.stores.StoreStream
 import com.discord.utilities.apng.ApngUtils
 import com.discord.utilities.file.DownloadUtils
 import com.discord.utilities.images.MGImages
@@ -58,7 +58,8 @@ class StickerView @JvmOverloads constructor(
             StickerFormatType.PNG -> showStatic(sticker)
             StickerFormatType.APNG, StickerFormatType.LOTTIE ->
                 loadAnimated(sticker, stickerAnimationSettings)
-            StickerFormatType.UNKNOWN -> Unit
+            StickerFormatType.UNKNOWN ->
+                Log.e(TAG, "Invalid sticker format passed to StickerView: ${sticker.formatType}")
         }
     }
 
@@ -85,7 +86,8 @@ class StickerView @JvmOverloads constructor(
         target.visibility = View.VISIBLE
         subscription = rx.Observable.combineLatest(
             StickerUtils.fetchSticker(context, sticker),
-            StickerAnimationSettingsStore.observe(context),
+            // The account setting, reduced-motion aware, straight from the store that owns it.
+            StoreStream.getUserSettings().observeStickerAnimationSettings(),
         ) { download, setting -> download to setting }
             .subscribeOn(Schedulers.io())
             .subscribe(
@@ -101,7 +103,7 @@ class StickerView @JvmOverloads constructor(
                 { error ->
                     // A sticker that cannot be downloaded must leave the placeholder
                     // visible rather than crash the surrounding list.
-                    Log.w("StickerView", "Failed to load sticker ${sticker.getStickerId()}", error)
+                    Log.w(TAG, "Failed to load sticker ${sticker.getStickerId()}", error)
                 },
             )
     }
@@ -112,8 +114,8 @@ class StickerView @JvmOverloads constructor(
             lottieView.contentDescription = contentDescription(sticker)
             val drawable = RLottieDrawable(
                 file,
-                StickerUtils.getDefaultStickerSizePx(context),
-                StickerUtils.getDefaultStickerSizePx(context),
+                StickerUtils.DEFAULT_STICKER_SIZE_PX,
+                StickerUtils.DEFAULT_STICKER_SIZE_PX,
                 precache = false,
                 limitFps = true,
                 displayRefreshRate = refreshRate(),
@@ -139,15 +141,17 @@ class StickerView @JvmOverloads constructor(
             imageView.hierarchy.actualImageScaleType = ScalingUtils.ScaleType.FIT_CENTER
             when (setting) {
                 StickerUtils.ALWAYS_ANIMATE -> renderApng(file)
+                // Not animating: ask the media proxy for the flattened still frame
+                // (`passthrough = false`) rather than the APNG the renderer would need.
                 StickerUtils.ANIMATE_ON_INTERACTION -> {
-                    MGImages.setImage(imageView, StickerUtils.getCDNAssetUrl(sticker), useSmallCache = true)
+                    MGImages.setImage(imageView, stillImageUrl(sticker), useSmallCache = true)
                     imageView.setOnLongClickListener {
                         renderApng(file)
                         true
                     }
                 }
                 StickerUtils.NEVER_ANIMATE -> {
-                    MGImages.setImage(imageView, StickerUtils.getCDNAssetUrl(sticker), useSmallCache = true)
+                    MGImages.setImage(imageView, stillImageUrl(sticker), useSmallCache = true)
                     imageView.setOnLongClickListener(null)
                 }
             }
@@ -159,11 +163,14 @@ class StickerView @JvmOverloads constructor(
         apngLoadingJob = ApngUtils.renderApngFromFile(
             file,
             imageView,
-            StickerUtils.getDefaultStickerSizePx(context),
-            StickerUtils.getDefaultStickerSizePx(context),
+            StickerUtils.DEFAULT_STICKER_SIZE_PX,
+            StickerUtils.DEFAULT_STICKER_SIZE_PX,
             true,
         )
     }
+
+    private fun stillImageUrl(sticker: BaseSticker) =
+        StickerUtils.getCDNAssetUrl(sticker, passthrough = false)
 
     private fun contentDescription(sticker: BaseSticker): String? {
         val value = when (sticker) {
@@ -211,5 +218,9 @@ class StickerView @JvmOverloads constructor(
         context.display?.refreshRate ?: 60f
     } else {
         (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.refreshRate
+    }
+
+    private companion object {
+        const val TAG = "StickerView"
     }
 }

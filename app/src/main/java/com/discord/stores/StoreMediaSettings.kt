@@ -77,9 +77,6 @@ class StoreMediaSettings(
          */
         fun isSelfMuted(): Boolean = isSelfMuted || isSelfDeafened
 
-        /** The raw toggle position, used only to decide what a mute toggle should do next. */
-        internal val isSelfMutedRaw: Boolean get() = isSelfMuted
-
         companion object {
             const val DEFAULT_OUTPUT_VOLUME = 100f
             const val DEFAULT_SENSITIVITY = -50f
@@ -185,7 +182,11 @@ class StoreMediaSettings(
      */
     @Synchronized
     fun setSelfMuted(isMuted: Boolean): SelfMuteFailure? {
-        if (voiceConfiguration.isSelfMutedRaw == isMuted) return null
+        // The comparison is against the *implied* mute value (`isSelfMuted()`, i.e. muted-or-
+        // deafened), not the raw toggle: a deafened user reads as muted, so asking to unmute is a
+        // real change and must fall through to the undeafen below. Verified at bytecode level —
+        // `StoreMediaSettings.setSelfMuted` invokes `VoiceConfiguration.isSelfMuted()Z`.
+        if (voiceConfiguration.isSelfMuted() == isMuted) return null
         forceSelfMuteReason?.let { return it }
         // Unmuting while deafened must also undeafen, otherwise `isSelfMuted()` would immediately
         // re-imply mute and the button would appear stuck.
@@ -198,7 +199,7 @@ class StoreMediaSettings(
     }
 
     @Synchronized
-    fun toggleSelfMuted(): SelfMuteFailure? = setSelfMuted(!voiceConfiguration.isSelfMutedRaw)
+    fun toggleSelfMuted(): SelfMuteFailure? = setSelfMuted(!voiceConfiguration.isSelfMuted())
 
     @Synchronized
     fun setSelfDeafen(isDeafened: Boolean) {

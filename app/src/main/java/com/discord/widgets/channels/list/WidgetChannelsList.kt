@@ -8,6 +8,8 @@ import android.widget.TextView
 import android.util.TypedValue
 import androidx.fragment.app.Fragment
 import com.discord.app.AppFragment
+import com.discord.app.AppScreenRouter
+import com.discord.widgets.directories.WidgetDirectoryChannel
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
@@ -196,6 +198,14 @@ private class ChannelAdapter(
             root.findViewById<View>(R.id.channels_item_category_arrow).rotation = if (row.collapsed) -90f else 0f
             root.findViewById<View>(R.id.channels_item_category_add).visibility = View.GONE
             root.contentDescription = "${row.name}, ${if (row.collapsed) "collapsed" else "expanded"}"
+        } else if (row is ChannelListRow.Directory) {
+            // A directory channel holds no messages: opening it in the chat surface lands the user
+            // on a permanently empty conversation. It gets its own screen instead.
+            root.isClickable = true
+            root.setOnClickListener {
+                click(row.channel.guildId, row.channel.id)
+                AppScreenRouter.launch(root.context, WidgetDirectoryChannel::class.java)
+            }
         } else {
             root.isClickable = canOpen
             root.setOnClickListener(if (canOpen) View.OnClickListener { click(row.channel.guildId, row.channel.id) } else null)

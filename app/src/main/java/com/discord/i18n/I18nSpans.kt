@@ -24,7 +24,9 @@ import androidx.annotation.StringRes
 object I18nSpans {
 
     /** `[label](target)` — the target may itself have been produced by a `{token}` substitution. */
-    private val MASKED_LINK = Regex("""\[([^\[\]]+)]\(([^()\s]+)\)""")
+    // The closing `]` is escaped for the same reason `}` is in FormatUtils: Android's ICU engine
+    // rejects a bare closing delimiter that the JVM accepts.
+    private val MASKED_LINK = Regex("""\[([^\[\]]+)\]\(([^()\s]+)\)""")
 
     /** `**bold**`, non greedy so two runs in one string do not merge. */
     private val BOLD = Regex("""\*\*(.+?)\*\*""", RegexOption.DOT_MATCHES_ALL)

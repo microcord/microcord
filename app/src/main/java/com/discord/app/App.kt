@@ -2,6 +2,7 @@ package com.discord.app
 
 import android.app.Application
 import androidx.appcompat.app.AppCompatDelegate
+import com.discord.dialogs.WidgetMaskedLinksDialog
 import com.discord.stores.StoreStream
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.lifecycle.ActivityProvider
@@ -28,6 +29,10 @@ class App : Application() {
         Backgrounded.init(this)
         PersisterConfig.init(this, ClockFactory.get())
         MGImagesConfig.init(this)
+        // The reference's UriHandler enqueues the masked-link notice itself; ours has no dependency
+        // on the widget tree, so the confirmation dialog installs itself here instead. Without this
+        // an untrusted masked link is dropped with no user-visible confirmation.
+        WidgetMaskedLinksDialog.installUntrustedLinkHandler()
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
         BootLog.record(BootLogEvent.PLATFORM_READY)
         System.loadLibrary("dsti")

@@ -10,21 +10,29 @@ import com.discord.api.user.User
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.message.Message
 import com.discord.stores.StoreMessagesLoader
-import com.discord.widgets.chat.list.adapter.WidgetChatListAdapter
+import com.discord.widgets.chat.list.entries.AttachmentEntry
 import com.discord.widgets.chat.list.entries.ChatListEntry
+import com.discord.widgets.chat.list.entries.LoadingEntry
+import com.discord.widgets.chat.list.entries.MessageEntry
+import com.discord.widgets.chat.list.entries.NewMessagesEntry
+import com.discord.widgets.chat.list.entries.ReactionsEntry
+import com.discord.widgets.chat.list.entries.SpacerEntry
+import com.discord.widgets.chat.list.entries.StartOfChatEntry
+import com.discord.widgets.chat.list.entries.TimestampEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ChatListRowsTest {
+
     @Test fun groupsAtMostFiveMessagesWithinSevenMinutes() {
         val messages = (1L..6L).map { message(it, it * 60_000) }
-        val rows = rows(messages)
+        val bodies = rows(messages).filterIsInstance<MessageEntry>()
 
-        assertEquals(2, rows.count { it is ChatListEntry.Header })
-        assertEquals(4, rows.count { it is ChatListEntry.Minimal })
-        assertEquals(6, rows.mapNotNull(ChatListEntry::messageId).distinct().size)
+        assertEquals(2, bodies.count { it.type == ChatListEntry.MESSAGE })
+        assertEquals(4, bodies.count { it.type == ChatListEntry.MESSAGE_MINIMAL })
+        assertEquals(6, bodies.map { it.message.id }.distinct().size)
     }
 
     @Test fun addsStableUnreadAndDayDividers() {
@@ -32,54 +40,63 @@ class ChatListRowsTest {
         val first = rows(listOf(message(1, day), message(2, day * 2)), unreadMessageId = 1)
         val second = rows(listOf(message(1, day), message(2, day * 2)), unreadMessageId = 1)
 
-        assertEquals(2, first.count { it is ChatListEntry.DayDivider })
-        assertEquals(1, first.count { it is ChatListEntry.UnreadDivider })
-        assertEquals(first.map(ChatListEntry::stableId), second.map(ChatListEntry::stableId))
-        assertEquals(first.size, first.map(ChatListEntry::stableId).distinct().size)
+        assertEquals(2, first.count { it is TimestampEntry })
+        assertEquals(1, first.count { it is NewMessagesEntry })
+        assertEquals(first.map(ChatListEntry::key), second.map(ChatListEntry::key))
+        assertEquals(first.size, first.map(ChatListEntry::key).distinct().size)
     }
 
-    @Test fun replyUsesDedicatedPreviewAndKeepsOriginalContent() {
+    @Test fun replyUsesDedicatedRowTypeAndKeepsOriginalContent() {
         val reply = ApiMessage(9, 1, User(2, "reply-author"), "quoted")
         val rich = message(10, 1000).copy(
             type = 19,
             content = "reply body",
             messageReference = com.discord.api.message.MessageReference(1, 1, 9),
             referencedMessage = reply,
-            attachments = listOf(MessageAttachment("https://cdn/file.bin", 4, 3, "https://proxy/file.bin", "file.bin", null, null)),
-            reactions = listOf(MessageReaction(2, MessageReactionEmoji(null, null, false), false)),
+            attachments = listOf(
+                MessageAttachment("https://cdn/file.bin", 4, 3, "https://proxy/file.bin", "file.bin", null, null),
+            ),
+            // A reaction emoji always carries either an id (custom) or a name (unicode); the
+            // reference derives its map key as `id ?: name!!`, so a fixture with both null is not a
+            // representable reaction. See MessageReactionEmoji.reactionKey.
+            reactions = listOf(MessageReaction(2, MessageReactionEmoji(null, "🎉", false), false)),
         )
         val rows = rows(listOf(rich))
 
-        assertTrue(rows.any { it is ChatListEntry.Header && it.text == "reply body" })
-        assertTrue(rows.none { it is ChatListEntry.Minimal })
-        assertTrue(rows.any { it is ChatListEntry.Attachment && it.attachment.filename == "file.bin" })
-        assertTrue(rows.any { it is ChatListEntry.Reactions && it.reactions.single().count == 2 })
+        val body = rows.filterIsInstance<MessageEntry>().single()
+        assertEquals(ChatListEntry.REPLY, body.type)
+        assertEquals("reply body", body.message.content)
+        assertTrue(rows.any { it is AttachmentEntry && it.attachment.filename == "file.bin" })
+        assertEquals(
+            2,
+            rows.filterIsInstance<ReactionsEntry>().single().message.reactions?.single()?.count,
+        )
     }
 
     @Test fun emptyLoadedChannelGetsRealStartRowWhileDetachedGetsLoading() {
-        assertTrue(rows(emptyList()).any { it is ChatListEntry.Start })
-        assertTrue(rows(emptyList(), detached = true).any { it is ChatListEntry.Loading })
+        assertTrue(rows(emptyList()).any { it is StartOfChatEntry })
+        assertTrue(rows(emptyList(), detached = true).any { it is LoadingEntry })
     }
 
-    @Test fun reactionRowCarriesReferencePermissionsAndLimit() {
+    @Test fun reactionRowCarriesReferencePermissions() {
         val reaction = MessageReaction(2, MessageReactionEmoji(null, "👍", false), true)
-        val row = rows(
+        val withPermission = rows(
             listOf(message(1, 1_000).copy(reactions = listOf(reaction))),
             permissions = Permission.ADD_REACTIONS,
-        )
-            .filterIsInstance<ChatListEntry.Reactions>().single()
+        ).filterIsInstance<ReactionsEntry>().single()
 
-        assertTrue(row.canAddReactions)
-        assertTrue(row.canCreateReactions)
-        assertFalse(rows(listOf(message(1, 1_000).copy(reactions = listOf(reaction))))
-            .filterIsInstance<ChatListEntry.Reactions>().single().canCreateReactions)
-        assertEquals(20, WidgetChatListAdapter.REACTION_LIMIT)
+        assertTrue(withPermission.canAddReactions)
+        assertTrue(withPermission.canCreateReactions)
+
+        val withoutPermission = rows(listOf(message(1, 1_000).copy(reactions = listOf(reaction))))
+            .filterIsInstance<ReactionsEntry>().single()
+        assertTrue(withoutPermission.canAddReactions)
+        assertFalse(withoutPermission.canCreateReactions)
     }
 
-    @Test fun adapterHasARecoveredLayoutForEveryBuiltRow() {
-        rows(listOf(message(1, 1_000))).forEach { row ->
-            assertTrue(WidgetChatListAdapter.layoutFor(WidgetChatListAdapter.viewType(row)) != 0)
-        }
+    /** The list is rendered by a reversed layout manager, so row 0 is the bottom of the screen. */
+    @Test fun spacerIsTheFirstRowSoTheNewestMessageClearsTheChatInput() {
+        assertTrue(rows(listOf(message(1, 1_000))).first() is SpacerEntry)
     }
 
     private fun rows(
@@ -87,17 +104,19 @@ class ChatListRowsTest {
         unreadMessageId: Long? = null,
         detached: Boolean = false,
         permissions: Long? = null,
-    ) = ChatListRows.build(ChatListRows.State(
-        channel(),
-        messages,
-        StoreMessagesLoader.ChannelLoadedState(
-            isInitialMessagesLoaded = true,
-            isOldestMessagesLoaded = true,
+    ) = ChatListRows.build(
+        ChatListRows.State(
+            channel = channel(),
+            messages = messages,
+            loaded = StoreMessagesLoader.ChannelLoadedState(
+                isInitialMessagesLoaded = true,
+                isOldestMessagesLoaded = true,
+            ),
+            detached = detached,
+            unreadMessageId = unreadMessageId,
+            permissions = permissions,
         ),
-        detached,
-        unreadMessageId,
-        permissions = permissions,
-    ))
+    )
 
     private fun message(id: Long, timestamp: Long) = Message(
         id = id,

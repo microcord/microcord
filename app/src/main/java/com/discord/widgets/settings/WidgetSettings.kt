@@ -24,6 +24,7 @@ import com.discord.views.StatusView
 import com.discord.widgets.settings.account.WidgetSettingsBlockedUsers
 import com.discord.widgets.user.WidgetUserStatusSheet
 import com.discord.widgets.user.profile.UserProfileHeaderView
+import com.discord.widgets.user.profile.UserProfileHeaderViewModel
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.shape.MaterialShapeDrawable
 import com.google.android.material.shape.ShapeAppearanceModel
@@ -45,7 +46,13 @@ import com.google.android.material.shape.ShapeAppearanceModel
  *    only `developer_options*`, `nitro_settings_container`, `role_subscriptions`,
  *    `nitro_gifting_badge` and `notification_upsell`. Rows here are hidden when their destination
  *    screen does not exist yet, so the screen has no dead taps; every id in [implementedRouteIds]
- *    is a route that really works. Delete the mechanism once the missing screens exist.
+ *    navigates to a reconstructed screen. Delete the mechanism once the missing screens exist.
+ *
+ *    One caveat, so the set is not read as stronger than it is: `notifications` reaches a complete
+ *    [WidgetSettingsNotifications], but that screen's toggles stay disabled until `StoreStream`
+ *    publishes `StoreNotifications` (see `NotificationStore`). The row is exposed anyway because the
+ *    destination exists and renders real state — hiding a finished screen is the mistake the parity
+ *    audit already caught on `blocked_users`.
  */
 class WidgetSettings : AppFragment(R.layout.widget_settings) {
 
@@ -126,8 +133,12 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         viewModel.refreshSubscriptions()
         viewModel.observeViewState().ui(this).subscribe(::configureUI)
         viewModel.observeProfileHeaderViewState().ui(this).subscribe { state ->
-            view?.findViewById<UserProfileHeaderView>(R.id.user_settings_profile_header_view)
-                ?.updateViewState(state)
+            // `UserProfileHeaderView` only renders the loaded state; there is nothing to show for
+            // any other one.
+            if (state is UserProfileHeaderViewModel.ViewState.Loaded) {
+                view?.findViewById<UserProfileHeaderView>(R.id.user_settings_profile_header_view)
+                    ?.updateViewState(state)
+            }
         }
     }
 
@@ -171,21 +182,20 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         root.findViewById<TextView>(R.id.role_subscriptions).visibility =
             if (model.showRoleSubscriptionsButton) View.VISIBLE else View.GONE
 
-        val badge = root.findViewById<TextView>(R.id.nitro_gifting_badge)
-        if (badge != null) {
-            if (model.promoCount > 0) {
-                badge.text = model.promoCount.toString()
-                badge.background = MaterialShapeDrawable(
-                    ShapeAppearanceModel.Builder().setAllCornerSizes(ShapeAppearanceModel.PILL).build(),
-                ).apply {
-                    fillColor = ColorStateList.valueOf(
-                        ContextCompat.getColor(requireContext(), R.color.status_red_500),
-                    )
-                }
-                badge.visibility = View.VISIBLE
-            } else {
-                badge.visibility = View.GONE
+        // The recovered layout names this view `nitroGiftingBadge`, not `nitro_gifting_badge`.
+        val badge = root.findViewById<TextView>(R.id.nitroGiftingBadge)
+        if (model.promoCount > 0) {
+            badge.text = model.promoCount.toString()
+            badge.background = MaterialShapeDrawable(
+                ShapeAppearanceModel.Builder().setAllCornerSizes(ShapeAppearanceModel.PILL).build(),
+            ).apply {
+                fillColor = ColorStateList.valueOf(
+                    ContextCompat.getColor(requireContext(), R.color.status_red_500),
+                )
             }
+            badge.visibility = View.VISIBLE
+        } else {
+            badge.visibility = View.GONE
         }
 
         val notificationsBlocked = !NotificationManagerCompat.from(requireContext()).areNotificationsEnabled()

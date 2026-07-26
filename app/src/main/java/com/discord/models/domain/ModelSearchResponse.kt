@@ -24,7 +24,20 @@ data class ModelSearchResponse(
     val documentIndexed: Int? = null,
     val retryAfter: Int? = null,
 ) {
-    val retryMillis: Long = (retryAfter ?: 0) * 1000L
+    /**
+     * DELIBERATE DIVERGENCE from the reference — computed, where the reference stores.
+     *
+     * Every constructor parameter here is defaulted, so Kotlin emits a no-arg constructor that
+     * Gson uses; the body initialiser therefore runs against a still-null [retryAfter] *before*
+     * the parsed fields are injected, and the reference's value is permanently `0`. (`hits`
+     * escapes this only because it is `by lazy`.)
+     *
+     * That means the reference re-issues an indexing search after 0 ms. Reproducing it would put
+     * this client in a zero-delay retry loop against the live backend, which the project's
+     * live-backend safety rules forbid — so this is computed on read and honours the
+     * server-supplied delay.
+     */
+    val retryMillis: Long get() = (retryAfter ?: 0) * 1000L
 
     val hits: List<Message> by lazy {
         messages?.mapNotNull { group -> group.firstOrNull { it.hit == true } } ?: emptyList()

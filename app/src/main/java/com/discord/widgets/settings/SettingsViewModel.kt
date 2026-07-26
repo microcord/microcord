@@ -11,6 +11,9 @@ import com.discord.widgets.user.profile.UserProfileHeaderViewModel
 import rx.Observable
 import rx.subjects.BehaviorSubject
 
+/** Shorthand so the explicit type arguments on the header combine below stay readable. */
+private typealias ViewStateOfHeader = UserProfileHeaderViewModel.ViewState
+
 /**
  * State for the user-settings root screen (`WidgetSettings`).
  *
@@ -80,7 +83,10 @@ class SettingsViewModel(
     }
 
     fun observeProfileHeaderViewState(): Observable<UserProfileHeaderViewModel.ViewState> =
-        Observable.combineLatest(
+        // The result type is pinned explicitly: the lambda only ever produces `ViewState.Loaded`,
+        // and `rx.Observable` is a Java type, so an inferred `Observable<Loaded>` would not be
+        // assignable to the declared `Observable<ViewState>`.
+        Observable.combineLatest<ViewStateOfHeader, Boolean, ViewStateOfHeader>(
             profileHeaderStateObservable,
             allowAnimationInReducedMotion,
         ) { state, allowAnimation ->

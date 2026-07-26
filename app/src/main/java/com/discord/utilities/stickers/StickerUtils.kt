@@ -1,9 +1,11 @@
 package com.discord.utilities.stickers
 
 import android.content.Context
+import android.content.res.Resources
 import com.discord.api.sticker.BaseSticker
 import com.discord.api.sticker.StickerFormatType
 import com.discord.utilities.file.DownloadUtils
+import com.discord.utilities.icon.IconUtils
 import java.io.File
 import rx.Observable
 
@@ -13,14 +15,29 @@ object StickerUtils {
     const val NEVER_ANIMATE = 2
     const val DEFAULT_STICKER_SIZE_DP = 160
 
-    fun getDefaultStickerSizePx(context: Context): Int =
-        (DEFAULT_STICKER_SIZE_DP * context.resources.displayMetrics.density).toInt()
+    /**
+     * `DimenUtils.dpToPixels(160)` in the reference — resolved off the *system* display metrics, so
+     * it needs no `Context` and can therefore be the default value of [getCDNAssetUrl]'s `size`,
+     * exactly as the reference declares it.
+     */
+    val DEFAULT_STICKER_SIZE_PX: Int by lazy {
+        (DEFAULT_STICKER_SIZE_DP * Resources.getSystem().displayMetrics.density).toInt()
+    }
 
+    /**
+     * Builds the CDN URL for [sticker].
+     *
+     * [passthrough] is load-bearing for animation: `media.discordapp.net` only serves the *original*
+     * APNG when `passthrough=true`. With `passthrough=false` the media proxy re-encodes the asset
+     * into a single still frame, so anything downloaded that way can never animate. The reference
+     * therefore defaults it to `true` (`StickerUtils.getCDNAssetUrl$default(..., mask 4)` →
+     * `iconst_1`) and only passes `false` at the call sites that deliberately want a still image.
+     */
     @JvmOverloads
     fun getCDNAssetUrl(
         sticker: BaseSticker,
-        size: Int? = null,
-        passthrough: Boolean = false,
+        size: Int? = DEFAULT_STICKER_SIZE_PX,
+        passthrough: Boolean = true,
     ): String = when (sticker.formatType) {
         StickerFormatType.PNG, StickerFormatType.APNG -> buildString {
             append("https://media.discordapp.net/stickers/")
@@ -28,13 +45,17 @@ object StickerUtils {
             append(sticker.getFileExtension())
             append("?passthrough=")
             append(passthrough)
-            size?.let { append("&size=${mediaProxySize(it)}") }
+            size?.let { append("&size=${IconUtils.getMediaProxySize(it)}") }
         }
         StickerFormatType.LOTTIE ->
             "https://discord.com/stickers/${sticker.getStickerId()}${sticker.getFileExtension()}"
         StickerFormatType.UNKNOWN -> ""
     }
 
+    /**
+     * Downloads the sticker asset that will be handed to the APNG/Lottie renderers, so it must use
+     * the pass-through URL — see [getCDNAssetUrl].
+     */
     fun fetchSticker(context: Context, sticker: BaseSticker): Observable<DownloadUtils.DownloadState> {
         val directory = File(context.cacheDir, "stickers")
         val fileName = "${sticker.getStickerId()}${sticker.getFileExtension()}"
@@ -45,16 +66,4 @@ object StickerUtils {
             DownloadUtils.downloadFile(context, getCDNAssetUrl(sticker), fileName, directory)
         }
     }
-
-    internal fun effectiveAnimationSetting(setting: Int, reducedMotion: Boolean): Int =
-        if (setting == ALWAYS_ANIMATE && reducedMotion) ANIMATE_ON_INTERACTION else setting
-
-    private fun mediaProxySize(size: Int): Int {
-        return MEDIA_PROXY_SIZES.first { it >= size }
-    }
-
-    private val MEDIA_PROXY_SIZES = intArrayOf(
-        16, 20, 22, 24, 28, 32, 40, 44, 48, 56, 60, 64, 80, 96, 100, 128,
-        160, 240, 256, 300, 320, 480, 512, 600, 640, 1024, 1280, 1536, 2048, 3072, 4096,
-    )
 }

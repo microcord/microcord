@@ -316,7 +316,7 @@ class ThreadStoresTest {
         private const val GUILD_JSON = """
         {
           "id": 1, "name": "Guild", "owner_id": 7, "unavailable": false, "features": [],
-          "members": [{"guild_id":1,"user":{"id":7,"username":"me"},"roles":[],"pending":false}],
+          "members": [{"guild_id":1,"user":{"id":7,"username":"me","discriminator":"0000"},"roles":[],"pending":false}],
           "channels": [
             {"id":10,"type":0,"guild_id":1,"name":"general"},
             {"id":30,"type":15,"guild_id":1,"name":"forum"}

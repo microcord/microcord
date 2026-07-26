@@ -22,7 +22,9 @@ import androidx.annotation.StringRes
  */
 object FormatUtils {
     /** Matches `{name}`; the token body may not contain whitespace. */
-    private val PLACEHOLDER = Regex("""\{(\S+?)}""")
+    // Both braces are escaped: Android's ICU regex engine rejects a bare `}` with
+    // PatternSyntaxException, where the JVM tolerates it. A JVM-only unit test cannot catch this.
+    private val PLACEHOLDER = Regex("""\{(\S+?)\}""")
 
     private const val HOOK_MARKER = "!!"
 

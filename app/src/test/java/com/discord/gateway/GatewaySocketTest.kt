@@ -1,6 +1,7 @@
 package com.discord.gateway
 
 import com.discord.api.presence.ClientStatus
+import com.discord.gateway.io.GuildSubscriptions
 import com.discord.gateway.io.IdentifyClientState
 import com.discord.models.domain.ModelGateway
 import com.discord.stores.GuildSubscriptionPayload
@@ -109,7 +110,7 @@ class GatewaySocketTest {
         val harness = Harness()
         harness.connectReady(sequence = 1, sessionId = "fixture-session")
 
-        harness.gateway.updateGuildSubscriptions(GuildSubscriptionPayload(2, mapOf(3L to listOf(listOf(0, 99)))))
+        harness.gateway.updateGuildSubscriptions(2L, GuildSubscriptions(mapOf(3L to listOf(listOf(0, 99))), null, null, null, null, null))
         harness.scheduler.runCurrent()
 
         val payload = harness.socket.lastPayload()

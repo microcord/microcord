@@ -1,6 +1,6 @@
 package com.discord.stores
 
-import android.util.Log
+import com.discord.app.AppLog
 import com.discord.stores.updates.ObservationDeck
 import kotlin.reflect.KProperty
 
@@ -14,12 +14,12 @@ abstract class StoreV2 : Store(), DispatchHandler, ObservationDeck.UpdateSource 
      *
      * Marking state changed off the dispatcher is a bug, yet failing the process for it is
      * worse than the inconsistent snapshot it produces, so this records the offending stack
-     * instead of throwing.
+     * instead of throwing. The reference does the same:
+     * `Logger.e(AppLog, "markChanged() should be run from the Store Dispatcher", IllegalStateException(...))`.
      */
     private fun assertStoreThread() {
         if (Thread.currentThread().id != StoreThreadScheduler.storeThreadId) {
-            Log.e(
-                javaClass.name,
+            AppLog.e(
                 "markChanged() should be run from the Store Dispatcher",
                 IllegalStateException("Dispatch not run on store thread"),
             )

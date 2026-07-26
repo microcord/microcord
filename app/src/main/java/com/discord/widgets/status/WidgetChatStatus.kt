@@ -93,7 +93,7 @@ class WidgetChatStatus : AppFragment(R.layout.widget_chat_status) {
 
                 return Observable.combineLatest(
                     unreadValid,
-                    StoreStream.getMessages().observeDetachedChannels(),
+                    StoreStream.getMessages().getAllDetached(),
                     StoreStream.getReadStates().getUnreadMarkerForSelectedChannel(),
                 ) { isUnreadValid, detachedChannels, unread ->
                     createModel(isUnreadValid, detachedChannels, unread)
