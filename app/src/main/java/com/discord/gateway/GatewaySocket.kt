@@ -3,6 +3,14 @@ package com.discord.gateway
 import android.util.Log
 import com.discord.api.activity.Activity
 import com.discord.api.presence.ClientStatus
+import com.discord.gateway.io.ApplicationCommandRequest
+import com.discord.gateway.io.CallConnect
+import com.discord.gateway.io.CreateStream
+import com.discord.gateway.io.DeleteStream
+import com.discord.gateway.io.ForumUnreadsRequest
+import com.discord.gateway.io.GuildMembersRequest
+import com.discord.gateway.io.GuildSubscriptions
+import com.discord.gateway.io.GuildSubscriptionsUpdate
 import com.discord.gateway.io.Hello
 import com.discord.gateway.io.Identify
 import com.discord.gateway.io.IdentifyClientState
@@ -11,9 +19,12 @@ import com.discord.gateway.io.IncomingParser
 import com.discord.gateway.io.Outgoing
 import com.discord.gateway.io.PresenceUpdate
 import com.discord.gateway.io.Resume
+import com.discord.gateway.io.StreamPing
+import com.discord.gateway.io.VoiceStateUpdate
+import com.discord.gateway.io.VoiceStateUpdateNoPreferredRegion
+import com.discord.gateway.io.WatchStream
 import com.discord.gateway.opcodes.Opcode
 import com.discord.models.domain.ModelPayload
-import com.discord.stores.GuildSubscriptionPayload
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
 import com.discord.utilities.websocket.GatewayWebSocket
@@ -81,6 +92,10 @@ class GatewaySocket(
         .serializeNulls()
         .registerDiscordApiTypeAdapters()
         .create()
+    private val gsonOmitNulls: Gson = GsonBuilder()
+        .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+        .registerDiscordApiTypeAdapters()
+        .create()
     private val incomingParser = IncomingParser(gson)
     private val decoder = ZlibStreamDecoder()
     private var state = State.DISCONNECTED
@@ -97,8 +112,6 @@ class GatewaySocket(
     private var reconnectTask: GatewayCancellable? = null
     private var failures = 0
     private var backoffMs = MIN_BACKOFF_MS
-
-    init { (eventHandler as? GatewayEventRouter)?.bind(this) }
 
     fun connect() {
         logInfo("connect requested")
@@ -120,10 +133,6 @@ class GatewaySocket(
         }
     }
 
-    fun updateGuildSubscriptions(payload: GuildSubscriptionPayload) {
-        scheduler.schedule(0) { if (state == State.CONNECTED) send(Opcode.GUILD_SUBSCRIPTIONS, payload) }
-    }
-
     fun presenceUpdate(
         status: ClientStatus?,
         since: Long? = null,
@@ -137,7 +146,88 @@ class GatewaySocket(
         }
     }
 
+    /**
+     * A null [channelId] leaves voice. [shouldIncludePreferredRegion] must be false when the caller
+     * has no opinion: sending an explicit null region asks the backend to *clear* the pinned region.
+     */
+    fun voiceStateUpdate(
+        guildId: Long?,
+        channelId: Long?,
+        selfMute: Boolean,
+        selfDeaf: Boolean,
+        selfVideo: Boolean,
+        preferredRegion: String? = null,
+        shouldIncludePreferredRegion: Boolean = true,
+    ) = scheduleSend {
+        if (shouldIncludePreferredRegion) {
+            send(Opcode.VOICE_STATE_UPDATE, VoiceStateUpdate(guildId, channelId, selfMute, selfDeaf, selfVideo, preferredRegion))
+        } else {
+            send(Opcode.VOICE_STATE_UPDATE, VoiceStateUpdateNoPreferredRegion(guildId, channelId, selfMute, selfDeaf, selfVideo))
+        }
+    }
+
+    fun voiceServerPing() = scheduleSend { send<Unit>(Opcode.VOICE_SERVER_PING, null) }
+
+    fun callConnect(channelId: Long) = scheduleSend {
+        send(Opcode.CALL_CONNECT, CallConnect(channelId))
+    }
+
+    fun requestGuildMembers(
+        guildIds: List<Long>,
+        query: String? = null,
+        userIds: List<Long>? = null,
+        limit: Int? = DEFAULT_MEMBER_REQUEST_LIMIT,
+    ) = scheduleSend {
+        send(Opcode.REQUEST_GUILD_MEMBERS, GuildMembersRequest(guildIds, query, userIds, limit), omitNulls = true)
+    }
+
+    fun updateGuildSubscriptions(guildId: Long, subscriptions: GuildSubscriptions) = scheduleSend {
+        send(
+            Opcode.GUILD_SUBSCRIPTIONS,
+            GuildSubscriptionsUpdate(
+                guildId = guildId,
+                typing = subscriptions.typing,
+                activities = subscriptions.activities,
+                members = subscriptions.members,
+                channels = subscriptions.channels,
+                threads = subscriptions.threads,
+                threadMemberLists = subscriptions.threadMemberLists,
+            ),
+            omitNulls = true,
+        )
+    }
+
+    fun streamCreate(streamType: String, channelId: Long, guildId: Long?, preferredRegion: String?) = scheduleSend {
+        send(Opcode.STREAM_CREATE, CreateStream(streamType, channelId, guildId, preferredRegion))
+    }
+
+    fun streamWatch(streamKey: String) = scheduleSend { send(Opcode.STREAM_WATCH, WatchStream(streamKey)) }
+
+    fun streamDelete(streamKey: String) = scheduleSend { send(Opcode.STREAM_DELETE, DeleteStream(streamKey)) }
+
+    fun streamPing(streamKey: String) = scheduleSend { send(Opcode.OPCODE_STREAM_PING, StreamPing(streamKey)) }
+
+    fun requestApplicationCommands(request: ApplicationCommandRequest) = scheduleSend {
+        send(Opcode.REQUEST_GUILD_APPLICATION_COMMANDS, request, omitNulls = true)
+    }
+
+    fun requestForumUnreads(request: ForumUnreadsRequest) = scheduleSend {
+        send(Opcode.REQUEST_FORUM_UNREADS, request, omitNulls = true)
+    }
+
+    fun resetOnError() {
+        scheduler.schedule(0) { reconnect("Reset on error", immediate = true) }
+    }
+
+    fun simulateReconnectForTesting() {
+        scheduler.schedule(0) { reconnect("Simulated reconnect", immediate = true) }
+    }
+
     fun isSessionEstablished(): Boolean = state == State.CONNECTED
+
+    private fun scheduleSend(action: () -> Unit) {
+        scheduler.schedule(0) { if (state == State.CONNECTED) action() }
+    }
 
     private fun discoverAndConnect(ignoreSticky: Boolean = failures > FAILURE_THRESHOLD) {
         state = State.DISCOVERING
@@ -290,10 +380,8 @@ class GatewaySocket(
             }
             "RESUMED" -> establishConnection()
         }
-        if (data != null) {
+        if (data != null && data !== IncomingParser.DISPATCH_UNPARSED) {
             eventHandler.handleDispatch(incoming.type, data)
-        } else if (incoming.type in EXPECTED_NULL_DATA_EVENTS) {
-            eventHandler.handleDispatch(incoming.type, Unit)
         }
     }
 
@@ -368,8 +456,13 @@ class GatewaySocket(
         sessionId = null
     }
 
-    private fun <T> send(opcode: Opcode, data: T?) {
-        socket?.send(gson.toJson(Outgoing(opcode.apiInt, data)))
+    /**
+     * @param omitNulls drops null members instead of serialising them. Several request opcodes treat
+     *   an explicit null as a meaningful "clear this" instruction, so absent and null differ.
+     */
+    private fun <T> send(opcode: Opcode, data: T?, omitNulls: Boolean = false) {
+        val serializer = if (omitNulls) gsonOmitNulls else gson
+        socket?.send(serializer.toJson(Outgoing(opcode.apiInt, data)))
     }
 
     private fun logInfo(message: String) { runCatching { Log.i(TAG, message) } }
@@ -384,6 +477,6 @@ class GatewaySocket(
         const val MIN_BACKOFF_MS = 1_000L
         const val MAX_BACKOFF_MS = 10_000L
         const val FAILURE_THRESHOLD = 4
-        val EXPECTED_NULL_DATA_EVENTS = setOf("USER_SUBSCRIPTIONS_UPDATE", "USER_PAYMENT_SOURCES_UPDATE")
+        const val DEFAULT_MEMBER_REQUEST_LIMIT = 100
     }
 }

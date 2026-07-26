@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
@@ -26,7 +27,7 @@ import rx.Observable
 import rx.Subscription
 import java.text.NumberFormat
 
-class WidgetGuildsList : Fragment(R.layout.widget_guilds_list) {
+class WidgetGuildsList : AppFragment(R.layout.widget_guilds_list) {
     private lateinit var adapter: GuildAdapter
     private var subscription: Subscription? = null
     private var selectedStore: StoreGuildSelected? = null

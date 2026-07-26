@@ -5,6 +5,7 @@ import android.text.format.DateUtils
 import android.view.View
 import android.widget.TextView
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.lifecycle.Lifecycle
 import com.discord.R
 import com.discord.stores.StoreReadStates
@@ -12,7 +13,7 @@ import com.discord.stores.StoreStream
 import rx.Observable
 import rx.Subscription
 
-class WidgetChatStatus : Fragment(R.layout.widget_chat_status) {
+class WidgetChatStatus : AppFragment(R.layout.widget_chat_status) {
     data class State(
         val channelId: Long = 0,
         val messageId: Long = 0,

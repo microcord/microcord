@@ -19,6 +19,7 @@ import android.view.inputmethod.InputMethodManager
 import androidx.activity.OnBackPressedCallback
 import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.lifecycle.Lifecycle
 import com.discord.R
 import com.discord.api.channel.Channel
@@ -44,7 +45,7 @@ import rx.Observable
 import rx.Subscription
 import rx.subjects.PublishSubject
 
-class WidgetChatInput : Fragment(R.layout.widget_chat_input), WidgetEmojiPicker.Host {
+class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPicker.Host {
     data class State(
         val channel: Channel? = null,
         val canSend: Boolean = false,

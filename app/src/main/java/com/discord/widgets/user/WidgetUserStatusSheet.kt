@@ -6,20 +6,19 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import com.discord.app.AppBottomSheet
 import com.discord.R
 import com.discord.api.presence.ClientStatus
 import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.widgets.user.profile.UserStatusPresenceCustomView
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import rx.Observable
 import rx.Subscription
 
-class WidgetUserStatusSheet : BottomSheetDialogFragment() {
+class WidgetUserStatusSheet : AppBottomSheet() {
     data class State(val customStatus: UserStatusPresenceCustomView.ViewState)
     private var subscription: Subscription? = null
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, state: Bundle?): View =
-        inflater.inflate(R.layout.widget_user_status_update, container, false)
+    override fun getContentViewResId() = R.layout.widget_user_status_update
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)

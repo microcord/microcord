@@ -48,10 +48,10 @@ class StreamPreviewView @JvmOverloads constructor(
         }
         setOverlay(
             when {
-                isAlreadyWatchingStream -> context.getString(R.string.watch_stream)
+                isAlreadyWatchingStream -> context.getString(R.string.watch_stream_watching)
                 joinability == Joinability.CAN_CONNECT -> context.getString(R.string.join_stream)
                 joinability == Joinability.VOICE_CHANNEL_FULL -> context.getString(R.string.unable_to_join_channel_full)
-                else -> context.getString(R.string.no_screenshare_permission_dialog_body)
+                else -> context.getString(R.string.channel_locked_short)
             },
         )
     }

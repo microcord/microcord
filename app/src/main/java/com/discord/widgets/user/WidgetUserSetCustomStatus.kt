@@ -6,6 +6,7 @@ import android.text.TextWatcher
 import android.view.View
 import android.widget.RadioGroup
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import com.discord.R
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.textfield.TextInputEditText
@@ -17,7 +18,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
-class WidgetUserSetCustomStatus : Fragment(R.layout.widget_user_set_custom_status) {
+class WidgetUserSetCustomStatus : AppFragment(R.layout.widget_user_set_custom_status) {
     enum class Expiration { NEVER, IN_30_MINUTES, IN_1_HOUR, IN_4_HOURS, TOMORROW }
     data class Form(val text: String = "", val expiration: Expiration = Expiration.TOMORROW, val emojiUri: String? = null)
     data class Submission(val text: String?, val expiresAtUtc: String?, val emojiUri: String?)

@@ -15,7 +15,7 @@ sealed class ModelApplicationStream(
         override val channelId: Long,
         override val ownerId: Long,
     ) : ModelApplicationStream(channelId, ownerId) {
-        override val type = "call"
+        override val type = StreamType.CALL.serializedRepresentation
         override fun encodeStreamKey() = "$type:$channelId:$ownerId"
     }
 
@@ -24,17 +24,16 @@ sealed class ModelApplicationStream(
         override val channelId: Long,
         override val ownerId: Long,
     ) : ModelApplicationStream(channelId, ownerId) {
-        override val type = "guild"
+        override val type = StreamType.GUILD.serializedRepresentation
         override fun encodeStreamKey() = "$type:$guildId:$channelId:$ownerId"
     }
 
     companion object {
         fun decodeStreamKey(streamKey: String): ModelApplicationStream {
-            val parts = streamKey.split(':')
-            return when (parts.firstOrNull()) {
-                "call" -> CallStream(parts[1].toLong(), parts[2].toLong())
-                "guild" -> GuildStream(parts[1].toLong(), parts[2].toLong(), parts[3].toLong())
-                else -> throw IllegalArgumentException("Unknown stream type")
+            val parts = streamKey.split(":")
+            return when (StreamType.fromString(parts[0])) {
+                StreamType.CALL -> CallStream(parts[1].toLong(), parts[2].toLong())
+                StreamType.GUILD -> GuildStream(parts[1].toLong(), parts[2].toLong(), parts[3].toLong())
             }
         }
     }

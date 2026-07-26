@@ -40,27 +40,23 @@ class CheckedSetting(context: Context, attrs: AttributeSet?) : RelativeLayout(co
     private var checkedListener: Action1<Boolean>? = null
 
     init {
-        val requestedType = if (attrs == null) 0 else context.obtainStyledAttributes(
+        // `cs_view_type` is an enum attribute, so it arrives as an int index; reading
+        // it as a string or dimension silently yields 0 and renders every switch and
+        // radio row as a checkbox.
+        val requestedType = if (attrs == null) DEFAULT_VIEW_TYPE else context.obtainStyledAttributes(
             attrs,
             R.styleable.CheckedSetting,
             0,
             0,
         ).run {
             try {
-                getInt(R.styleable.CheckedSetting_cs_view_type, 0)
+                getInt(R.styleable.CheckedSetting_cs_view_type, DEFAULT_VIEW_TYPE)
             } finally {
                 recycle()
             }
         }
-        viewType = ViewType.entries.getOrElse(requestedType) { ViewType.CHECK }
-        LayoutInflater.from(context).inflate(
-            when (viewType) {
-                ViewType.CHECK -> R.layout.view_setting_check
-                ViewType.RADIO -> R.layout.view_setting_radio
-                ViewType.SWITCH -> R.layout.view_setting_switch
-            },
-            this,
-        )
+        viewType = viewTypeOf(requestedType)
+        LayoutInflater.from(context).inflate(layoutFor(viewType), this)
         container = requireNotNull(findViewById(R.id.setting_container))
         button = requireNotNull(findViewById(R.id.setting_button))
         label = requireNotNull(findViewById(R.id.setting_label))
@@ -77,13 +73,7 @@ class CheckedSetting(context: Context, attrs: AttributeSet?) : RelativeLayout(co
                 super.onInitializeAccessibilityNodeInfo(host, info)
                 info.isCheckable = true
                 info.isChecked = isChecked
-                info.roleDescription = context.getString(
-                    when (viewType) {
-                        ViewType.CHECK -> R.string.a11y_role_checkbox
-                        ViewType.RADIO -> R.string.a11y_role_radio_button
-                        ViewType.SWITCH -> R.string.a11y_role_switch
-                    },
-                )
+                info.roleDescription = context.getString(accessibilityRoleFor(viewType))
             }
 
             override fun onInitializeAccessibilityEvent(host: View, event: AccessibilityEvent) {
@@ -240,8 +230,27 @@ class CheckedSetting(context: Context, attrs: AttributeSet?) : RelativeLayout(co
         }
     }
 
-    private companion object {
-        const val STATE_SUPER = "STATE_SUPER"
-        const val STATE_CHECKED = "STATE_CHECKED"
+    internal companion object {
+        private const val STATE_SUPER = "STATE_SUPER"
+        private const val STATE_CHECKED = "STATE_CHECKED"
+
+        /** Matches the `check` entry of the `cs_view_type` attribute enum. */
+        const val DEFAULT_VIEW_TYPE = 0
+
+        /** Maps the `cs_view_type` enum index onto a view type. */
+        fun viewTypeOf(attributeValue: Int): ViewType =
+            ViewType.values().getOrElse(attributeValue) { ViewType.CHECK }
+
+        fun layoutFor(viewType: ViewType) = when (viewType) {
+            ViewType.CHECK -> R.layout.view_setting_check
+            ViewType.RADIO -> R.layout.view_setting_radio
+            ViewType.SWITCH -> R.layout.view_setting_switch
+        }
+
+        fun accessibilityRoleFor(viewType: ViewType) = when (viewType) {
+            ViewType.CHECK -> R.string.a11y_role_checkbox
+            ViewType.RADIO -> R.string.a11y_role_radio_button
+            ViewType.SWITCH -> R.string.a11y_role_switch
+        }
     }
 }

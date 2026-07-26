@@ -6,6 +6,7 @@ import android.view.ViewGroup
 import androidx.appcompat.widget.Toolbar
 import androidx.activity.OnBackPressedCallback
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
@@ -16,7 +17,7 @@ import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.model.ChatListRows
 import rx.Subscription
 
-class WidgetChannelPinnedMessages : Fragment(R.layout.widget_channel_pinned_messages) {
+class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_messages) {
     interface Host {
         fun pinnedMessagesStore(): StorePinnedMessages
         fun channelForPins(channelId: Long): Channel?

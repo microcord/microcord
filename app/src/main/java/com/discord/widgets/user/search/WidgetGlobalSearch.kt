@@ -7,6 +7,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
@@ -17,7 +18,7 @@ import com.discord.widgets.tabs.NavigationTab
 import com.google.android.material.textfield.TextInputEditText
 import rx.subscriptions.CompositeSubscription
 
-class WidgetGlobalSearch : Fragment(R.layout.widget_global_search) {
+class WidgetGlobalSearch : AppFragment(R.layout.widget_global_search) {
     private val adapter = Adapter(::select)
     private var query = ""
     private var subscriptions = CompositeSubscription()

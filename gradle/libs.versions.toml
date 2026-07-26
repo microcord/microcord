@@ -28,6 +28,7 @@ flexinput = "0.10.9"
 ucrop = "2.2.6"
 zxingScanner = "1.9.8"
 rxjava = "1.3.8"
+rxandroid = "1.2.1"
 simpleast = "2.8.0"
 gson = "2.8.8"
 kryo = "4.0.2"
@@ -37,6 +38,7 @@ persistentCookieJar = "v1.0.1"
 retrofit = "2.9.0"
 realtimeBlurView = "82df3520b4"
 work = "2.9.1"
+kronos = "0.0.1-alpha11"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -69,6 +71,7 @@ flexinput = { group = "com.github.lytefast", name = "flex-input", version.ref = 
 ucrop = { group = "com.github.yalantis", name = "ucrop", version.ref = "ucrop" }
 zxing-scanner = { group = "me.dm7.barcodescanner", name = "zxing", version.ref = "zxingScanner" }
 rxjava = { group = "io.reactivex", name = "rxjava", version.ref = "rxjava" }
+rxandroid = { group = "io.reactivex", name = "rxandroid", version.ref = "rxandroid" }
 simpleast = { group = "com.github.discord", name = "SimpleAST", version.ref = "simpleast" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 kryo = { group = "com.esotericsoftware", name = "kryo", version.ref = "kryo" }
@@ -81,6 +84,7 @@ retrofit-adapter-rxjava = { group = "com.squareup.retrofit2", name = "adapter-rx
 retrofit-converter-gson = { group = "com.squareup.retrofit2", name = "converter-gson", version.ref = "retrofit" }
 realtime-blur-view = { group = "com.github.mmin18", name = "RealtimeBlurView", version.ref = "realtimeBlurView" }
 androidx-work-runtime = { group = "androidx.work", name = "work-runtime", version.ref = "work" }
+kronos-android = { group = "com.lyft.kronos", name = "kronos-android", version.ref = "kronos" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

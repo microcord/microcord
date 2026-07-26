@@ -3,7 +3,6 @@ package com.discord.views.user
 import android.content.Context
 import android.net.Uri
 import android.util.AttributeSet
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import androidx.appcompat.content.res.AppCompatResources
@@ -11,6 +10,7 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import com.discord.R
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
+import com.discord.views.ThemedColor
 import com.discord.views.UsernameView
 import com.facebook.drawee.backends.pipeline.Fresco
 import com.facebook.drawee.drawable.ScalingUtils
@@ -55,18 +55,20 @@ class SettingsMemberView constructor(
         val nickname = guildMember?.nick
         val hasNickname = !nickname.isNullOrBlank()
         val hasGuildAvatar = guildMember?.hasAvatar() == true
-        val avatarRequestSize = resources.getDimensionPixelSize(R.dimen.avatar_size_extra_large_account)
+        val avatarRequestSize = resources.getDimensionPixelSize(R.dimen.avatar_size_large)
         setAvatar(largeAvatar, avatarUrl(user, guildMember, avatarRequestSize), true, avatarRequestSize)
         memberTitle.configureUsername(nickname ?: user.username)
         memberTitle.configureTag(
             user.isBot,
-            if (user.isSystemUser) R.string.system_dm_tag_system else R.string.bot_tag_bot,
+            if (user.isSystemUser) R.string.system_dm_tag_system else R.string.bot_tag,
             (user.flags or user.publicFlags) and VERIFIED_BOT_FLAG == VERIFIED_BOT_FLAG ||
                 user.isSystemUser || user.id == -1L,
         )
         val subtitle = DraweeSpanStringBuilder()
         if (hasGuildAvatar) {
-            val inlineAvatarSize = resources.getDimensionPixelSize(R.dimen.avatar_size_huge)
+            // The subtitle avatar sits inline with the username text, so it is the
+            // small profile size rather than a full-size avatar.
+            val inlineAvatarSize = resources.getDimensionPixelSize(R.dimen.avatar_size_profile_small)
             subtitle.setAvatar(
                 avatarUrl(user, null, inlineAvatarSize, animate = false),
                 inlineAvatarSize,
@@ -107,11 +109,7 @@ class SettingsMemberView constructor(
         setImageSpan(context, hierarchy, controller, start, start, sizePx, sizePx, false, 2)
     }
 
-    private fun themedColor(attribute: Int): Int {
-        val value = TypedValue()
-        context.theme.resolveAttribute(attribute, value, true)
-        return value.data
-    }
+    private fun themedColor(attribute: Int): Int = ThemedColor.resolve(context, attribute)
 
     private companion object {
         const val VERIFIED_BOT_FLAG = 1 shl 16

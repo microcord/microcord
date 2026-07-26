@@ -9,6 +9,7 @@ import androidx.appcompat.widget.AppCompatImageView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
@@ -22,7 +23,7 @@ import com.facebook.drawee.view.SimpleDraweeView
 import rx.Observable
 import rx.Subscription
 
-class WidgetFriendsList : Fragment(R.layout.widget_friends_list) {
+class WidgetFriendsList : AppFragment(R.layout.widget_friends_list) {
     private var subscription: Subscription? = null
     private var latestInput = FriendsListInput()
     private var suggestionsExpanded = false

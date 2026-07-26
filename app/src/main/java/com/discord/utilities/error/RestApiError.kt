@@ -1,16 +1,56 @@
 package com.discord.utilities.error
 
+import android.content.Context
+import android.widget.Toast
+import com.discord.R
+import com.discord.utilities.captcha.CaptchaHelper
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import java.io.IOException
+import java.io.InterruptedIOException
 import java.net.NoRouteToHostException
 import java.net.SocketException
+import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.SSLException
 import retrofit2.HttpException
 
+/**
+ * Structured, classified failure for every REST and Rx call in the app.
+ *
+ * This is the reconstruction of the reference `com.discord.utilities.error.Error` (plus its nested
+ * `Error.Response`/`Error.SkemaError` model). The class is deliberately *not* named `Error` here:
+ * `kotlin.Error` is a default import, so a first-party `Error` would shadow it at every call site
+ * and force qualified imports throughout the app. The responsibility is unchanged, so the clearer
+ * name is kept and the reference field names are preserved:
+ *
+ * | reference                      | here                        |
+ * | ------------------------------ | --------------------------- |
+ * | `Error.type`                   | [type]                      |
+ * | `Error.throwable`              | [cause]                     |
+ * | `Error.response.code`          | [code]                      |
+ * | `Error.response.message`       | [message]                   |
+ * | `Error.response.messages`      | [messages]                  |
+ * | `Error.response.retryAfterMs`  | [retryAfterMs]              |
+ * | `Error.response.global`        | [global]                    |
+ * | `Error.response.isKnownResponse` | [isKnownResponse]         |
+ * | `Error.metadata`               | [metadata]                  |
+ * | `Error.showErrorToasts`        | [showErrorToasts]           |
+ * | `Error.shouldLog`              | [shouldLog]                 |
+ * | `Error.getDisplayString`       | [displayString]             |
+ * | `Error.showToasts`             | [showToasts]                |
+ * | `Error.handle`                 | [Companion.handle]          |
+ * | `Error.init`                   | [Companion.init]            |
+ *
+ * The reference's flat `Error.Response` sub-object is folded into this class because nothing in the
+ * app ever holds a `Response` without its owning error.
+ *
+ * [toString] redacts credentials and query strings even though the reference generated `toString`
+ * did not, per the project's secret-handling rule.
+ */
 class RestApiError private constructor(
     val type: Type,
     val statusCode: Int?,
@@ -23,23 +63,89 @@ class RestApiError private constructor(
     val captchaSitekey: String?,
     val captchaRqtoken: String?,
     val cause: Throwable,
+    val metadata: Map<String, String>? = null,
 ) {
     enum class Type {
-        INTERNAL_SERVER_ERROR,
-        INTERMITTENT_CLOUD_FLARE,
-        UNAUTHORIZED,
         FORBIDDEN_CLOUD_FLARE,
-        REQUEST_TOO_LARGE,
-        DISCORD_BAD_REQUEST,
         FORBIDDEN_DISCORD,
+        INTERMITTENT_CLOUD_FLARE,
         DISCORD_REQUEST_ERROR,
         DISCORD_REQUEST_RESOURCE_NOT_FOUND,
-        RATE_LIMITED,
+        DISCORD_BAD_REQUEST,
+        INTERNAL_SERVER_ERROR,
+        REQUEST_TOO_LARGE,
+        UNAUTHORIZED,
         DISCORD_REQUEST_ERROR_UNKNOWN,
+        RATE_LIMITED,
         NETWORK,
         SSL,
         TIMEOUT,
+        CAPTCHA_KNOWN_FAILURE,
+        IMAGE_NOT_FOUND,
+        AUTOMOD_MESSAGE_BLOCKED,
         OTHER,
+    }
+
+    private val showErrorToastsFlag = AtomicBoolean(true)
+    private val shouldLogFlag = AtomicBoolean(true)
+
+    /** When false, [showToasts] is a no-op. Screens that render the failure inline clear this. */
+    var showErrorToasts: Boolean
+        get() = showErrorToastsFlag.get()
+        set(value) = showErrorToastsFlag.set(value)
+
+    /** When false, [handle] will not report the failure to the unhandled-error sink. */
+    var shouldLog: Boolean
+        get() = shouldLogFlag.get()
+        set(value) = shouldLogFlag.set(value)
+
+    /** Mirrors `Error.Response.isKnownResponse`: the body carried a Discord error shape. */
+    val isKnownResponse: Boolean
+        get() = code > 0 || messages.isNotEmpty()
+
+    /** True when the API asked the client to solve a captcha before retrying. */
+    val isCaptchaRequired: Boolean
+        get() = captchaSitekey != null ||
+            CaptchaHelper.CAPTCHA_KEY in messages ||
+            CAPTCHA_RQTOKEN_KEY in messages
+
+    /**
+     * Reference `Error.Response.getMessageToast`: prefer the API's own message, then the first
+     * field-level validation message, then the supplied fallback.
+     */
+    private fun messageToast(context: Context, fallbackResId: Int): String =
+        message
+            ?: messages.values.firstNotNullOfOrNull { values -> values.firstOrNull() }
+            ?: context.getString(fallbackResId)
+
+    /** Reference `Error.getDisplayString` / `getToastMessages`. */
+    fun displayString(context: Context): String = when (type) {
+        Type.FORBIDDEN_CLOUD_FLARE -> context.getString(R.string.network_error_cloudflare_unauthorized)
+        Type.FORBIDDEN_DISCORD -> messageToast(context, R.string.network_error_forbidden)
+        Type.INTERMITTENT_CLOUD_FLARE -> context.getString(R.string.network_error_cloudflare_intermittent)
+        Type.DISCORD_REQUEST_ERROR,
+        Type.DISCORD_REQUEST_ERROR_UNKNOWN,
+        -> messageToast(context, R.string.network_error_rest_request)
+        Type.DISCORD_BAD_REQUEST -> messageToast(context, R.string.network_error_bad_request)
+        Type.INTERNAL_SERVER_ERROR -> context.getString(R.string.internal_server_error)
+        Type.REQUEST_TOO_LARGE -> context.getString(R.string.network_error_request_too_large)
+        Type.UNAUTHORIZED -> context.getString(R.string.network_error_unauthorized)
+        Type.RATE_LIMITED -> context.getString(R.string.rate_limited)
+        Type.NETWORK -> context.getString(R.string.network_error_connection)
+        Type.SSL -> context.getString(R.string.network_error_ssl)
+        Type.TIMEOUT -> context.getString(R.string.timeout_error)
+        Type.CAPTCHA_KNOWN_FAILURE -> context.getString(R.string.captcha_failed)
+        Type.DISCORD_REQUEST_RESOURCE_NOT_FOUND,
+        Type.IMAGE_NOT_FOUND,
+        Type.AUTOMOD_MESSAGE_BLOCKED,
+        Type.OTHER,
+        -> context.getString(R.string.network_error_unknown)
+    }
+
+    /** Reference `Error.showToasts`. Must be called on the main thread. */
+    fun showToasts(context: Context?) {
+        if (!showErrorToasts || context == null) return
+        Toast.makeText(context, displayString(context), Toast.LENGTH_SHORT).show()
     }
 
     override fun toString(): String = "RestApiError(type=$type, statusCode=$statusCode, " +
@@ -47,6 +153,55 @@ class RestApiError private constructor(
         "messages=${messages.mapValues { (_, values) -> values.map(::redact) }}, requestUrl=${safeUrl(requestUrl)})"
 
     companion object {
+        const val CAPTCHA_RQTOKEN_KEY = "captcha_rqtoken"
+
+        /**
+         * Process-wide sink for failures nobody handled, installed once during application startup.
+         * Mirrors the reference `Error.init(Action3<String, Throwable, Map<String, String>>)`.
+         */
+        @Volatile
+        private var onUnhandledError: ((tag: String, throwable: Throwable, metadata: Map<String, String>?) -> Unit)? = null
+
+        @JvmStatic
+        fun init(sink: (tag: String, throwable: Throwable, metadata: Map<String, String>?) -> Unit) {
+            onUnhandledError = sink
+        }
+
+        /**
+         * The error funnel used by `ObservableExtensionsKt.appSubscribe`.
+         *
+         * Classifies [throwable], gives [errorHandler] the first chance to consume it, reports
+         * anything unclassified to the unhandled sink, and finally shows the user-facing toast
+         * unless [suppressToasts] is set. A handler that itself throws is reported rather than
+         * propagated, exactly as in the reference, so one bad screen cannot kill the stream's
+         * thread.
+         */
+        @JvmStatic
+        @JvmOverloads
+        fun handle(
+            throwable: Throwable,
+            tag: String,
+            errorHandler: ((RestApiError) -> Unit)? = null,
+            context: Context? = null,
+            suppressToasts: Boolean = false,
+        ) {
+            val error = from(throwable)
+            if (errorHandler != null) {
+                try {
+                    errorHandler(error)
+                } catch (handlerFailure: Exception) {
+                    onUnhandledError?.invoke(
+                        tag,
+                        IllegalStateException("$tag / $error", handlerFailure),
+                        null,
+                    )
+                    return
+                }
+            }
+            error.log(tag)
+            if (!suppressToasts) error.showToasts(context)
+        }
+
         fun from(throwable: Throwable, gson: Gson = Gson()): RestApiError {
             if (throwable !is HttpException) return nonHttp(throwable)
             val response = throwable.response()
@@ -84,6 +239,7 @@ class RestApiError private constructor(
                 status == 429 -> Type.RATE_LIMITED
                 else -> Type.DISCORD_REQUEST_ERROR_UNKNOWN
             }
+            val requestUrl = response?.raw()?.request?.url?.toString()
             return RestApiError(
                 type,
                 status,
@@ -92,22 +248,52 @@ class RestApiError private constructor(
                 retryAfter,
                 json?.get("global")?.takeUnless(JsonElement::isJsonNull)?.asBoolean == true,
                 messages,
-                response?.raw()?.request?.url?.toString(),
+                requestUrl,
                 json?.get("captcha_sitekey")?.takeUnless(JsonElement::isJsonNull)?.asString,
-                json?.get("captcha_rqtoken")?.takeUnless(JsonElement::isJsonNull)?.asString,
+                json?.get(CAPTCHA_RQTOKEN_KEY)?.takeUnless(JsonElement::isJsonNull)?.asString,
                 throwable,
+                metadata = if (type == Type.DISCORD_REQUEST_ERROR_UNKNOWN) {
+                    metadataOf(requestUrl, status, contentType, response?.raw()?.header("CF-Ray"))
+                } else {
+                    null
+                },
             )
         }
 
         private fun nonHttp(throwable: Throwable): RestApiError {
-            val type = when (throwable) {
-                is SSLException -> Type.SSL
-                is UnknownHostException, is NoRouteToHostException, is SocketException -> Type.NETWORK
-                is TimeoutException -> Type.TIMEOUT
-                is IOException -> Type.NETWORK
+            val type = when {
+                throwable is CaptchaHelper.Failure -> Type.CAPTCHA_KNOWN_FAILURE
+                throwable is AppCancellationException -> Type.OTHER
+                throwable is SSLException -> Type.SSL
+                throwable is UnknownHostException -> Type.NETWORK
+                throwable is IOException -> if (isTransportInterruption(throwable)) Type.NETWORK else Type.OTHER
+                throwable is TimeoutException -> Type.TIMEOUT
                 else -> Type.OTHER
             }
             return RestApiError(type, null, 0, throwable.message, null, false, emptyMap(), null, null, null, throwable)
+        }
+
+        /**
+         * Reference `Error.create` treats cancelled/reset/interrupted IO as ordinary connectivity
+         * loss rather than a bug worth reporting.
+         */
+        private fun isTransportInterruption(throwable: IOException): Boolean {
+            val text = throwable.message.orEmpty()
+            return text.contains("Canceled") ||
+                text.contains("Connection reset by peer") ||
+                text.contains("stream was reset:") ||
+                throwable is NoRouteToHostException ||
+                throwable is SocketException ||
+                throwable is InterruptedIOException ||
+                throwable.cause is InterruptedException ||
+                throwable.cause is SocketTimeoutException
+        }
+
+        private fun metadataOf(url: String?, status: Int, contentType: String, cfRay: String?) = buildMap {
+            put("responseCode", status.toString())
+            safeUrl(url)?.let { put("requestUrl", it) }
+            put("content-type", contentType)
+            cfRay?.let { put("CF-Ray", it) }
         }
 
         private fun flattenErrors(node: JsonObject, path: String, output: MutableMap<String, List<String>>) {
@@ -128,5 +314,18 @@ class RestApiError private constructor(
         private fun redact(value: String?): String? = value
             ?.replace(Regex("(?i)bearer\\s+[^,;\\s)]+"), "Bearer <redacted>")
             ?.replace(Regex("(?i)(authorization|cookie|password|token)(\\s*[:=]?\\s*)[^,;\\s)]+"), "$1$2<redacted>")
+    }
+
+    /**
+     * Reference `Error.logError`: only unclassified failures and unknown Discord request errors
+     * reach the crash reporter; expected connectivity and validation failures stay quiet.
+     */
+    private fun log(tag: String) {
+        if (!shouldLog) return
+        when (type) {
+            Type.DISCORD_REQUEST_ERROR_UNKNOWN -> onUnhandledError?.invoke(type.name, cause, metadata)
+            Type.OTHER -> onUnhandledError?.invoke(tag, cause, metadata)
+            else -> Unit
+        }
     }
 }

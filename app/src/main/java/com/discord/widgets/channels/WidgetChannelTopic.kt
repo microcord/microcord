@@ -4,13 +4,14 @@ import android.os.Bundle
 import android.view.View
 import android.widget.TextView
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.stores.StoreStream
 import com.facebook.drawee.view.SimpleDraweeView
 import rx.Subscription
 
-class WidgetChannelTopic : Fragment(R.layout.widget_channel_topic) {
+class WidgetChannelTopic : AppFragment(R.layout.widget_channel_topic) {
     private var subscription: Subscription? = null
 
     override fun onStart() {

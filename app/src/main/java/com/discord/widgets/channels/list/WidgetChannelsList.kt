@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import android.util.TypedValue
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
@@ -21,7 +22,7 @@ import rx.Observable
 import rx.Subscription
 import java.text.NumberFormat
 
-class WidgetChannelsList : Fragment(R.layout.widget_channels_list) {
+class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
     private lateinit var adapter: ChannelAdapter
     private var subscription: Subscription? = null
 

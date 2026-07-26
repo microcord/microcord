@@ -5,6 +5,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.activity.OnBackPressedCallback
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.fragment.app.commit
 import com.discord.R
 import com.discord.panels.PanelState
@@ -42,7 +43,7 @@ internal val mainNavigationTabs = setOf(
     NavigationTab.SETTINGS,
 )
 
-class WidgetTabsHost : Fragment(R.layout.widget_tabs_host), BackHandler {
+class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host), BackHandler {
     private lateinit var bottomNavigation: TabsHostBottomNavigationView
     private var selectedTabSubscription: Subscription? = null
     private var pendingIntentSubscription: Subscription? = null

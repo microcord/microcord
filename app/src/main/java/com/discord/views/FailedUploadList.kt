@@ -10,6 +10,7 @@ import android.view.View
 import android.widget.LinearLayout
 import com.discord.R
 import com.discord.api.message.LocalAttachment
+import com.discord.i18n.i18nPlural
 import java.util.Locale
 import kotlin.math.ln
 import kotlin.math.pow
@@ -49,12 +50,13 @@ class FailedUploadList @JvmOverloads constructor(
         } else {
             uploadViews.first().apply {
                 visibility = View.VISIBLE
-                val title = resources.getQuantityString(
+                val title = i18nPlural(
                     R.plurals.uploading_files_failed_count,
                     uploads.size,
-                ).replace("{count}", uploads.size.toString())
+                    "count" to uploads.size,
+                )
                 val subtitle = sizeSubtitle(uploads.sumOf(Upload::sizeBytes))
-                configure(title, themedDrawable(R.attr.ic_uploads_file), subtitle)
+                configure(title, themedDrawable(R.attr.ic_uploads_generic), subtitle)
                 contentDescription = listOfNotNull(title, subtitle).joinToString(", ")
             }
         }
@@ -72,7 +74,7 @@ class FailedUploadList @JvmOverloads constructor(
         when {
             mimeType.startsWith("image") -> R.attr.ic_uploads_image
             mimeType.startsWith("video") -> R.attr.ic_uploads_video
-            else -> R.attr.ic_uploads_generic
+            else -> R.attr.ic_uploads_file
         },
     )
 

@@ -5,6 +5,7 @@ import android.view.View
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.lifecycle.Lifecycle
 import com.discord.R
 import com.discord.api.channel.Channel
@@ -15,7 +16,7 @@ import com.discord.widgets.forums.messageCountText
 import rx.Observable
 import rx.Subscription
 
-class WidgetForumPostStatus : Fragment(R.layout.widget_forum_post_status) {
+class WidgetForumPostStatus : AppFragment(R.layout.widget_forum_post_status) {
     data class State(
         val channel: Channel?,
         val followed: Boolean? = null,

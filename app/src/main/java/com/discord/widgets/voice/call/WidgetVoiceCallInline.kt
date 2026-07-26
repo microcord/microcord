@@ -4,12 +4,13 @@ import android.os.Bundle
 import android.view.MotionEvent
 import android.view.View
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.lifecycle.Lifecycle
 import com.discord.R
 import rx.Observable
 import rx.Subscription
 
-class WidgetVoiceCallInline : Fragment(R.layout.widget_voice_call_inline) {
+class WidgetVoiceCallInline : AppFragment(R.layout.widget_voice_call_inline) {
     data class State(val activeCall: Boolean = false, val pushToTalk: Boolean = false)
 
     private var subscription: Subscription? = null

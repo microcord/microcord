@@ -9,15 +9,15 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
+import com.discord.app.AppBottomSheet
 import com.discord.R
 import com.discord.models.notification.NotificationSettingsV2
 import com.discord.views.CheckedSetting
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import rx.Observable
 import rx.Subscription
 import rx.functions.Action1
 
-class WidgetSettingsNotificationsOs : BottomSheetDialogFragment() {
+class WidgetSettingsNotificationsOs : AppBottomSheet() {
     private var subscription: Subscription? = null
     private var latest = NotificationSettingsV2()
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -25,8 +25,7 @@ class WidgetSettingsNotificationsOs : BottomSheetDialogFragment() {
         if (granted) onSettingsChanged?.invoke(latest.copy(isEnabled = true)) else render(latest)
     }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, state: Bundle?): View =
-        inflater.inflate(R.layout.widget_settings_notification_os, container, false)
+    override fun getContentViewResId() = R.layout.widget_settings_notification_os
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         view.findViewById<View>(R.id.settings_notification_os).setOnClickListener {

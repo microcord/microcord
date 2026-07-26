@@ -3,6 +3,7 @@ package com.discord.widgets.channels
 import android.os.Bundle
 import android.view.View
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.stores.StoreStream
@@ -10,7 +11,7 @@ import com.discord.views.channelsidebar.GuildChannelSideBarActionsView
 import com.discord.views.channelsidebar.PrivateChannelSideBarActionsView
 import rx.Subscription
 
-class WidgetChannelSidebarActions : Fragment(R.layout.widget_channel_sidebar_actions) {
+class WidgetChannelSidebarActions : AppFragment(R.layout.widget_channel_sidebar_actions) {
     private var subscription: Subscription? = null
 
     override fun onStart() {

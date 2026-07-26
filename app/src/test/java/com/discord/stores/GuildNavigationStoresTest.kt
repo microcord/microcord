@@ -10,6 +10,7 @@ import com.discord.utilities.persister.Persister
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import java.nio.file.Files
+import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -54,8 +55,9 @@ class GuildNavigationStoresTest {
         val scheduler = TestScheduler()
         val dispatcher = Dispatcher(scheduler)
         val deck = ObservationDeck()
-        val store = StoreGuildsSorted(deck, dispatcher)
+        val store = StoreGuildsSorted(deck, dispatcher, scheduler)
         dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
+        store.subscribeToStores()
         val guilds = listOf(
             Guild(id = 1, name = "Alpha"), Guild(id = 2, name = "Beta"),
             Guild(id = 3, name = "Lurking"), Guild(id = 4, name = "Delta"),
@@ -76,7 +78,38 @@ class GuildNavigationStoresTest {
             store.update(guilds - 3L, emptySet(), emptySet(), emptyList(), setOf(2), mapOf(1L to 100L, 2L to 300L, 4L to 200L))
         }
         scheduler.triggerActions()
+        assertEquals(
+            "rebuilds are throttled to one per second, so the second update is still pending",
+            listOf(3L, 4L, 1L, 2L),
+            store.getOrderedGuilds().keys.toList(),
+        )
+
+        scheduler.advanceTimeBy(1, TimeUnit.SECONDS)
         assertEquals(listOf(4L, 1L, 2L), store.getOrderedGuilds().keys.toList())
+    }
+
+    @Test fun userReorderAppliesWithoutWaitingForTheRebuildThrottle() {
+        val scheduler = TestScheduler()
+        val dispatcher = Dispatcher(scheduler)
+        val deck = ObservationDeck()
+        val store = StoreGuildsSorted(deck, dispatcher, scheduler)
+        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
+        store.subscribeToStores()
+        val one = Guild(id = 1, name = "Alpha")
+        val two = Guild(id = 2, name = "Beta")
+
+        dispatcher.schedule {
+            store.update(mapOf(1L to one, 2L to two), emptySet(), emptySet(), emptyList(), emptySet(), emptyMap())
+        }
+        scheduler.triggerActions()
+        assertEquals(listOf(1L, 2L), store.getOrderedGuilds().keys.toList())
+
+        store.setPositions(
+            listOf(StoreGuildsSorted.Entry.SingletonGuild(two), StoreGuildsSorted.Entry.SingletonGuild(one)),
+        )
+        scheduler.triggerActions()
+
+        assertEquals(listOf(2L, 1L), store.getOrderedGuilds().keys.toList())
     }
 
     @Test fun expandedFoldersPersist() {

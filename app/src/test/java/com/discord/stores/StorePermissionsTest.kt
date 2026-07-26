@@ -35,10 +35,14 @@ class StorePermissionsTest {
         assertEquals(Permission.ALL, PermissionUtils.computeGuildPermissions(9, 1, 9, null, roles))
         assertEquals(Permission.ALL, PermissionUtils.computeGuildPermissions(8, 1, 9, member(8, 2), roles))
         assertEquals(Permission.VIEW_CHANNEL, PermissionUtils.computeGuildPermissions(7, 1, 9, member(7), roles))
-        assertEquals(Permission.NONE, PermissionUtils.computeGuildPermissions(7, 3, 9, member(7), roles))
+        // Guild 3 has no @everyone role loaded yet, so the client falls back to DEFAULT
+        // rather than locking the user out of a half-hydrated guild.
+        assertEquals(Permission.DEFAULT, PermissionUtils.computeGuildPermissions(7, 3, 9, member(7), roles))
     }
 
-    @Test fun overwritesAggregateRolesThenApplyMemberLastAndHonorTypes() {
+    // The client matches overwrites by id alone; role and member ids are both snowflakes
+    // and never collide, so PermissionOverwrite.type is not consulted.
+    @Test fun overwritesAggregateRolesThenApplyMemberLast() {
         val roles = mapOf(
             1L to role(1, Permission.VIEW_CHANNEL or Permission.SEND_MESSAGES),
             2L to role(2, 0),
@@ -82,7 +86,7 @@ class StorePermissionsTest {
         val permissions = StorePermissions(users, channels, guilds, deck, guildCache, channelCache)
         dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(users, guilds, channels, permissions), deck))
         val payload = gson.fromJson(
-            """{"user":{"id":7,"username":"me","discriminator":"0000"},"guilds":[{"id":1,"name":"Guild","owner_id":9,"unavailable":false,"roles":[{"id":1,"name":"@everyone","permissions":3072,"position":0,"color":0,"hoist":false,"managed":false,"mentionable":false}],"members":[{"guild_id":1,"user":{"id":7,"username":"me","discriminator":"0000"},"roles":[],"pending":false}],"channels":[{"id":10,"guild_id":1,"type":0,"name":"general"}],"features":[]}],"private_channels":[]}""",
+            """{"user":{"id":7,"username":"me","discriminator":"0000"},"guilds":[{"id":1,"name":"Guild","owner_id":9,"unavailable":false,"roles":[{"id":1,"name":"@everyone","permissions":3072,"position":0,"color":0,"hoist":false,"managed":false,"mentionable":false}],"members":[{"guild_id":1,"user":{"id":7,"username":"me","discriminator":"0000"},"roles":[],"pending":false,"joined_at":"2020-01-01T00:00:00"}],"channels":[{"id":10,"guild_id":1,"type":0,"name":"general"}],"features":[]}],"private_channels":[]}""",
             ModelPayload::class.java,
         )
         var guildCount = 0

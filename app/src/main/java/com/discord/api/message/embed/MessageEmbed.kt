@@ -19,20 +19,6 @@ data class MessageEmbed(
     val fields: List<EmbedField>?,
 )
 
-enum class EmbedType(val apiValue: String) {
-    ARTICLE("article"),
-    IMAGE("image"),
-    VIDEO("video"),
-    TWEET("tweet"),
-    LINK("link"),
-    HTML("html"),
-    FILE("file"),
-    GIFV("gifv"),
-    RICH("rich"),
-    APPLICATION_NEWS("application_news"),
-    UNKNOWN("unknown"),
-}
-
 data class EmbedImage(val url: String?, val proxyUrl: String?, val width: Int?, val height: Int?)
 data class EmbedThumbnail(val url: String?, val proxyUrl: String?, val height: Int?, val width: Int?)
 data class EmbedVideo(val url: String?, val proxyUrl: String?, val height: Int?, val width: Int?)

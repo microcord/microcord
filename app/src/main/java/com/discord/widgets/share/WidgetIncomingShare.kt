@@ -13,6 +13,7 @@ import android.widget.Toast
 import androidx.appcompat.widget.Toolbar
 import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
@@ -26,7 +27,7 @@ import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.textfield.TextInputLayout
 import com.lytefast.flexinput.model.Attachment
 
-class WidgetIncomingShare : Fragment(R.layout.widget_incoming_share) {
+class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
     data class Candidate(val channelId: Long, val title: String, val subtitle: String? = null)
 
     data class Callbacks(

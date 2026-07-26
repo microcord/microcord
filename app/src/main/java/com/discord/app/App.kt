@@ -9,9 +9,9 @@ import com.discord.utilities.lifecycle.ApplicationProvider
 import com.discord.utilities.lifecycle.Backgrounded
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
+import com.discord.utilities.images.MGImagesConfig
 import com.discord.utilities.persister.PersisterConfig
 import com.discord.utilities.time.ClockFactory
-import com.facebook.drawee.backends.pipeline.Fresco
 import java.util.concurrent.atomic.AtomicBoolean
 
 class App : Application() {
@@ -20,13 +20,14 @@ class App : Application() {
         if (!initialized.compareAndSet(false, true)) return
 
         BootLog.record(BootLogEvent.PROCESS_START)
+        AppLog.init(this)
         SharedPreferencesProvider.init(this)
         ApplicationProvider.init(this)
         ActivityProvider.init(this)
         ClockFactory.init()
         Backgrounded.init(this)
         PersisterConfig.init(this, ClockFactory.get())
-        Fresco.initialize(this)
+        MGImagesConfig.init(this)
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
         BootLog.record(BootLogEvent.PLATFORM_READY)
         System.loadLibrary("dsti")
@@ -36,9 +37,7 @@ class App : Application() {
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        if (level in intArrayOf(5, 10, 15, 40, 60, 80) && Fresco.hasBeenInitialized()) {
-            Fresco.getImagePipeline().clearMemoryCaches()
-        }
+        MGImagesConfig.onTrimMemory(level)
     }
 
     companion object {

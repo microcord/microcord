@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
@@ -21,7 +22,7 @@ import com.google.android.material.button.MaterialButton
 import rx.Observable
 import rx.Subscription
 
-class WidgetSettingsBlockedUsers : Fragment(R.layout.widget_settings_blocked_users) {
+class WidgetSettingsBlockedUsers : AppFragment(R.layout.widget_settings_blocked_users) {
     private var subscription: Subscription? = null
     private val listAdapter = Adapter()
 

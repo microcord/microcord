@@ -9,6 +9,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.lifecycle.Lifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -22,7 +23,7 @@ import com.facebook.drawee.view.SimpleDraweeView
 import rx.Observable
 import rx.Subscription
 
-class WidgetUserMutualFriends : Fragment(R.layout.widget_user_mutual_friends) {
+class WidgetUserMutualFriends : AppFragment(R.layout.widget_user_mutual_friends) {
     sealed class State {
         object Loading : State()
         data class Loaded(val username: String?, val friends: List<Friend>) : State()

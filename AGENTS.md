@@ -5,6 +5,21 @@
 Read `PLAN.md` before inspecting or changing code. It is the source of truth
 for architecture, fixed decisions, phase status, risks, and handoffs.
 
+Then read `docs/parity-audit/README.md` and the report covering your area. It is
+the measured gap list between this project and the reference, produced 2026-07-26,
+with `file:line` citations. Two rules come from it:
+
+- Every report lists the regions where JADX output is broken and the behavior is
+  therefore **unverified**. Never close one of those by guessing — inspect
+  DEX/smali or the call sites.
+- Coverage figures in `PLAN.md` are measured, not estimated. Do not mark a phase
+  `DONE` while its audit report still lists open blockers.
+
+When more than one agent is active, follow the concurrency protocol in the
+`PLAN.md` "Reconstruction Campaign" section: exclusive file ownership per agent,
+wait on the Gradle lock rather than disabling it, and defer cross-package
+cleanups to the owning wave through your handoff report.
+
 Target project:
 `C:\Users\manti\Desktop\projeler\manticordrebuild`
 

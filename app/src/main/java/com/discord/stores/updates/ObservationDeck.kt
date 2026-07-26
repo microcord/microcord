@@ -1,5 +1,6 @@
 package com.discord.stores.updates
 
+import android.util.Log
 import rx.Emitter
 import rx.Observable
 
@@ -32,8 +33,10 @@ class ObservationDeck(
     @Synchronized
     @JvmOverloads
     fun connect(observer: Observer, updateOnConnect: Boolean = true): Observer {
+        logBreadcrumb("connect START. observer: ${observer.name}")
         observers.add(observer)
         if (updateOnConnect) observer.onUpdate()
+        logBreadcrumb("connect END. observer: ${observer.name} -- isStale: ${observer.isStale}")
         return observer
     }
 
@@ -48,7 +51,7 @@ class ObservationDeck(
         object : Observer() {
             override val observingUpdates = updateSources.toSet()
             override var onUpdate = onUpdate
-            override val name = observerName
+            override val name = observerName ?: hashCode().toString()
         },
         updateOnConnect,
     )
@@ -87,24 +90,52 @@ class ObservationDeck(
 
     @Synchronized
     fun disconnect(observer: Observer) {
+        logBreadcrumb("disconnect START. observer: ${observer.name}")
         observer.markStale()
+        logBreadcrumb("disconnect END. observer: ${observer.name}")
     }
 
     @Synchronized
     fun notify(updates: Set<UpdateSource>) {
+        logBreadcrumb("notify START")
         try {
             var index = 0
             while (index < observers.size) {
                 val observer = observers[index]
                 if (observer.isStale) {
+                    logBreadcrumb("removing observer: ${observer.name}")
                     observers.removeAt(index)
-                } else {
-                    if (updates.any(observer.observingUpdates::contains)) observer.onUpdate()
-                    index++
+                    index--
+                } else if (updates.any(observer.observingUpdates::contains)) {
+                    observer.onUpdate()
                 }
+                index++
             }
         } catch (throwable: Throwable) {
-            if (logLevel == LogLevel.NONE) throw throwable
+            // Only a deck configured to report errors absorbs them; otherwise the failing
+            // observer must surface to the caller instead of being silently dropped.
+            if (logLevel >= LogLevel.ERROR) logNotifyError(throwable, updates) else throw throwable
+        } finally {
+            logBreadcrumb("notify END")
         }
+    }
+
+    private fun logBreadcrumb(message: String) {
+        if (logLevel == LogLevel.VERBOSE) Log.d(LOG_CATEGORY, message)
+    }
+
+    private fun logNotifyError(throwable: Throwable, updates: Set<UpdateSource>) {
+        val affected = observers.filter { observer -> updates.any(observer.observingUpdates::contains) }
+        Log.e(
+            LOG_CATEGORY,
+            "ObservationDeck notify error\n" +
+                "Update Sources: ${updates.joinToString()}\n" +
+                "Observers: ${affected.joinToString("\n", transform = Observer::toDebugLogString)}",
+            throwable,
+        )
+    }
+
+    private companion object {
+        private const val LOG_CATEGORY = "ObservationDeck"
     }
 }

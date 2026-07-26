@@ -1,13 +1,22 @@
 package com.discord.stores
 
+import android.content.Context
 import com.discord.models.domain.ModelGuildFolder
 import com.discord.models.guild.Guild
 import com.discord.stores.updates.ObservationDeck
+import com.discord.stores.utilities.leadingEdgeThrottle
 import rx.Observable
+import rx.Scheduler
+import rx.Subscription
+import rx.schedulers.Schedulers
+import rx.subjects.BehaviorSubject
+import rx.subjects.SerializedSubject
+import java.util.concurrent.TimeUnit
 
 class StoreGuildsSorted(
     private val observationDeck: ObservationDeck,
     private val dispatcher: Dispatcher,
+    private val throttleScheduler: Scheduler = Schedulers.computation(),
 ) : StoreV2() {
     sealed class Entry {
         abstract fun asModelGuildFolder(): ModelGuildFolder
@@ -34,6 +43,39 @@ class StoreGuildsSorted(
     private var lurkingGuildIds: Set<Long> = emptySet()
     private var mutedGuildIds: Set<Long> = emptySet()
     private var guildsJoinedAt: Map<Long, Long> = emptyMap()
+    private var userPositions: List<ModelGuildFolder> = emptyList()
+
+    /**
+     * Signals that the guild inputs changed. Sorting the whole guild list is expensive and its
+     * inputs change on nearly every dispatch, so rebuilds are throttled rather than run inline.
+     */
+    private val storeChanges = SerializedSubject<Unit, Unit>(BehaviorSubject.create())
+    private var storesSubscription: Subscription? = null
+
+    init {
+        subscribeToStores()
+    }
+
+    override fun init(context: Context) {
+        super.init(context)
+        subscribeToStores()
+    }
+
+    /**
+     * Rebuilds at most once per second, but repaints immediately on the leading edge so the
+     * first hydration is not delayed.
+     */
+    internal fun subscribeToStores() {
+        if (storesSubscription != null) return
+        storesSubscription = observeStores()
+            .onBackpressureLatest()
+            .subscribeOn(throttleScheduler)
+            .observeOn(throttleScheduler)
+            .leadingEdgeThrottle(REBUILD_THROTTLE_SECONDS, TimeUnit.SECONDS, throttleScheduler)
+            .subscribe { dispatcher.schedule { handleNewState() } }
+    }
+
+    private fun observeStores(): Observable<Unit> = storeChanges
 
     fun getEntries(): List<Entry> = entriesSnapshot
 
@@ -54,6 +96,10 @@ class StoreGuildsSorted(
 
     fun setPositions(guildPositions: List<Entry>) = dispatcher.schedule { handlePositions(guildPositions) }
 
+    /**
+     * A drag-and-drop reorder is a direct user action, so it applies within the current
+     * dispatch instead of waiting for the throttled rebuild.
+     */
     @StoreThread
     internal fun handlePositions(guildPositions: List<Entry>) {
         positions.clear()
@@ -61,6 +107,7 @@ class StoreGuildsSorted(
         validateAndRebuild()
     }
 
+    @StoreThread
     fun update(
         guilds: Map<Long, Guild>,
         unavailableGuildIds: Set<Long>,
@@ -74,6 +121,12 @@ class StoreGuildsSorted(
         this.lurkingGuildIds = lurkingGuildIds
         this.mutedGuildIds = mutedGuildIds
         this.guildsJoinedAt = guildsJoinedAt
+        this.userPositions = userPositions
+        storeChanges.onNext(Unit)
+    }
+
+    @StoreThread
+    internal fun handleNewState() {
         positions.clear()
         positions.addAll(if (userPositions.isEmpty()) fallbackPositions() else userPositions)
         validateAndRebuild()
@@ -123,5 +176,9 @@ class StoreGuildsSorted(
             }
         }
         markChanged()
+    }
+
+    private companion object {
+        private const val REBUILD_THROTTLE_SECONDS = 1L
     }
 }

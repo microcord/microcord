@@ -157,6 +157,33 @@ class ModelPayload() {
     class VersionedReadStates : VersionedModel<ModelReadState>()
     class VersionedUserGuildSettings : VersionedModel<ModelNotificationSettings>()
 
+    /**
+     * Opcode 10 payload. Parsed straight off the socket stream, so it stays a mutable [Model]
+     * rather than a Gson-mapped data class.
+     */
+    class Hello : Model {
+        var heartbeatInterval: Int = 0
+            internal set
+        var trace: List<String>? = null
+            internal set
+
+        override fun assignField(reader: Model.JsonReader) {
+            when (reader.nextName()) {
+                "heartbeat_interval" -> heartbeatInterval = reader.nextInt(heartbeatInterval)
+                "_trace" -> trace = reader.nextList { reader.nextString(null) }
+                else -> reader.skipValue()
+            }
+        }
+
+        override fun equals(other: Any?) = other is Hello &&
+            heartbeatInterval == other.heartbeatInterval && trace == other.trace
+
+        override fun hashCode() = 31 * heartbeatInterval + trace.hashCode()
+
+        override fun toString() =
+            "ModelPayload.Hello(heartbeatInterval=$heartbeatInterval, trace=$trace)"
+    }
+
     @JsonAdapter(MergedPresencesTypeAdapterFactory::class)
     data class MergedPresences(
         val friends: List<Presence>? = null,

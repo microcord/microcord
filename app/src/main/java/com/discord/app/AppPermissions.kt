@@ -1,0 +1,128 @@
+package com.discord.app
+
+import android.Manifest
+import android.os.Build
+import android.os.SystemClock
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.MainThread
+import androidx.annotation.StringRes
+import androidx.core.content.ContextCompat
+import com.discord.R
+
+/**
+ * Activity-scoped implementation of [AppPermissionsRequests].
+ *
+ * A single `RequestMultiplePermissions` launcher is registered while the activity is being created,
+ * which is the only point at which the Activity Result API allows registration. Requests are
+ * debounced so a double tap cannot enqueue two system dialogs.
+ */
+class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRequests {
+
+    private var onGranted: (() -> Unit)? = null
+    private var onDenied: ((Map<String, Boolean>) -> Unit)? = null
+    private var requestStartedAtMillis: Long = 0L
+
+    private val launcher = activity.registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { grantResults ->
+        if (grantResults.containsValue(false)) {
+            onDenied?.invoke(grantResults)
+        } else {
+            onGranted?.invoke()
+        }
+        onDenied = null
+        onGranted = null
+        requestStartedAtMillis = 0L
+    }
+
+    @MainThread
+    override fun hasMedia(): Boolean = hasPermissions(MEDIA)
+
+    @MainThread
+    override fun requestVideoCallPermissions(onSuccess: () -> Unit) {
+        request(VIDEO_CALL, onSuccess) { grantResults ->
+            when {
+                grantResults[Manifest.permission.RECORD_AUDIO] != true -> toast(R.string.permission_microphone_denied)
+                else -> toast(R.string.no_camera_access)
+            }
+        }
+    }
+
+    @MainThread
+    override fun requestMedia(onSuccess: () -> Unit) {
+        request(MEDIA, onSuccess) { toast(R.string.permission_media_denied) }
+    }
+
+    @MainThread
+    override fun requestMediaDownload(onSuccess: () -> Unit) {
+        request(MEDIA_DOWNLOAD, onSuccess) { toast(R.string.permission_media_download_denied) }
+    }
+
+    @MainThread
+    override fun requestMicrophone(onFailure: (() -> Unit)?, onSuccess: () -> Unit) {
+        request(MICROPHONE, onSuccess) {
+            if (onFailure == null) toast(R.string.permission_microphone_denied) else onFailure()
+        }
+    }
+
+    @MainThread
+    override fun requestCameraQRScanner(onSuccess: () -> Unit) = requestCameraQRScanner(onSuccess, null)
+
+    @MainThread
+    override fun requestCameraQRScanner(onSuccess: () -> Unit, onFailure: (() -> Unit)?) {
+        request(CAMERA, onSuccess) {
+            if (onFailure == null) toast(R.string.permission_qr_scanner_denied) else onFailure()
+        }
+    }
+
+    @MainThread
+    override fun requestContacts(onSuccess: () -> Unit, onFailure: () -> Unit) {
+        request(CONTACTS, onSuccess) { onFailure() }
+    }
+
+    private fun request(
+        permissions: Array<String>,
+        onSuccess: () -> Unit,
+        onFailure: (Map<String, Boolean>) -> Unit,
+    ) {
+        if (hasPermissions(permissions)) {
+            onSuccess()
+            return
+        }
+        if (SystemClock.elapsedRealtime() - requestStartedAtMillis < REQUEST_DEBOUNCE_MILLIS) return
+        onGranted = onSuccess
+        onDenied = onFailure
+        requestStartedAtMillis = SystemClock.elapsedRealtime()
+        launcher.launch(permissions)
+    }
+
+    private fun hasPermissions(permissions: Array<String>): Boolean = permissions.all { permission ->
+        // Legacy external storage writes stopped being a runtime permission with scoped storage.
+        if (permission == Manifest.permission.WRITE_EXTERNAL_STORAGE && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            return@all true
+        }
+        ContextCompat.checkSelfPermission(activity, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun toast(@StringRes messageResId: Int) {
+        Toast.makeText(activity, messageResId, Toast.LENGTH_SHORT).show()
+    }
+
+    private companion object {
+        /** Guards against a double tap enqueueing two system permission dialogs. */
+        const val REQUEST_DEBOUNCE_MILLIS = 350L
+
+        val MICROPHONE = arrayOf(Manifest.permission.RECORD_AUDIO)
+        val VIDEO_CALL = arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
+        val MEDIA = arrayOf(
+            Manifest.permission.CAMERA,
+            Manifest.permission.READ_EXTERNAL_STORAGE,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE,
+        )
+        val MEDIA_DOWNLOAD = arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        val CAMERA = arrayOf(Manifest.permission.CAMERA)
+        val CONTACTS = arrayOf(Manifest.permission.READ_CONTACTS)
+    }
+}

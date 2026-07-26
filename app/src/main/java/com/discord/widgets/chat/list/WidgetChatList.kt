@@ -3,6 +3,7 @@ package com.discord.widgets.chat.list
 import android.os.Bundle
 import android.view.View
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
@@ -27,7 +28,7 @@ import android.widget.Toast
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
 
-class WidgetChatList : Fragment(R.layout.widget_chat_list), WidgetChatListActions.Host {
+class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListActions.Host {
     private lateinit var chatAdapter: WidgetChatListAdapter
     private var subscriptions = CompositeSubscription()
     private var recycler: RecyclerView? = null

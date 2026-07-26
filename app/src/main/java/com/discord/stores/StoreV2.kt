@@ -1,5 +1,6 @@
 package com.discord.stores
 
+import android.util.Log
 import com.discord.stores.updates.ObservationDeck
 import kotlin.reflect.KProperty
 
@@ -8,18 +9,36 @@ abstract class StoreV2 : Store(), DispatchHandler, ObservationDeck.UpdateSource 
     val updateSources: Set<ObservationDeck.UpdateSource>
         get() = mutableUpdateSources
 
+    /**
+     * Reports, but does not enforce, that a mutation ran on the store thread.
+     *
+     * Marking state changed off the dispatcher is a bug, yet failing the process for it is
+     * worse than the inconsistent snapshot it produces, so this records the offending stack
+     * instead of throwing.
+     */
+    private fun assertStoreThread() {
+        if (Thread.currentThread().id != StoreThreadScheduler.storeThreadId) {
+            Log.e(
+                javaClass.name,
+                "markChanged() should be run from the Store Dispatcher",
+                IllegalStateException("Dispatch not run on store thread"),
+            )
+        }
+    }
+
     protected fun markChanged() {
-        StoreThreadScheduler.assertCurrentThread()
+        assertStoreThread()
         mutableUpdateSources.add(this)
     }
 
     protected fun markChanged(vararg updates: ObservationDeck.UpdateSource) {
+        assertStoreThread()
         markChanged()
         mutableUpdateSources.addAll(updates)
     }
 
     protected fun markUnchanged(updateSource: ObservationDeck.UpdateSource) {
-        StoreThreadScheduler.assertCurrentThread()
+        assertStoreThread()
         mutableUpdateSources.remove(updateSource)
     }
 
@@ -39,7 +58,6 @@ abstract class StoreV2 : Store(), DispatchHandler, ObservationDeck.UpdateSource 
 
         operator fun setValue(thisRef: StoreV2?, property: KProperty<*>, value: T) {
             if (this.value == value) return
-            if (thisRef != null) StoreThreadScheduler.assertCurrentThread()
             this.value = value
             if (thisRef != null) {
                 overrideUpdateSource?.let { thisRef.markChanged(it) } ?: thisRef.markChanged()

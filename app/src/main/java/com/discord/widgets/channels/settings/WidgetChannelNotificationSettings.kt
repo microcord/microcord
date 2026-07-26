@@ -5,6 +5,7 @@ import android.view.View
 import android.widget.Toast
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import com.discord.R
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.views.CheckedSetting
@@ -14,7 +15,7 @@ import rx.Observable
 import rx.Subscription
 import rx.functions.Action1
 
-class WidgetChannelNotificationSettings : Fragment(R.layout.widget_channel_notification_settings) {
+class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_notification_settings) {
     data class State(
         val channelId: Long,
         val channelName: String,

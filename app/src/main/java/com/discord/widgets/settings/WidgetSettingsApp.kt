@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.View
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import com.discord.R
 import com.discord.models.domain.ModelUserSettings
 import com.discord.stores.StoreStream
@@ -24,7 +25,7 @@ private fun CheckedSetting.bind(value: Boolean, update: (Boolean) -> Unit) {
     setOnCheckedListener(Action1(update))
 }
 
-class WidgetSettingsMedia : Fragment(R.layout.widget_settings_media) {
+class WidgetSettingsMedia : AppFragment(R.layout.widget_settings_media) {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         bindToolbar(view, R.string.text_and_images)
@@ -44,7 +45,7 @@ class WidgetSettingsMedia : Fragment(R.layout.widget_settings_media) {
     }
 }
 
-class WidgetSettingsBehavior : Fragment(R.layout.widget_settings_behavior) {
+class WidgetSettingsBehavior : AppFragment(R.layout.widget_settings_behavior) {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         bindToolbar(view, R.string.form_label_mobile_notifications_behavior)
@@ -58,7 +59,7 @@ class WidgetSettingsBehavior : Fragment(R.layout.widget_settings_behavior) {
     }
 }
 
-class WidgetSettingsAccessibility : Fragment(R.layout.widget_settings_accessibility) {
+class WidgetSettingsAccessibility : AppFragment(R.layout.widget_settings_accessibility) {
     private var subscription: Subscription? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -128,7 +129,7 @@ class WidgetSettingsAccessibility : Fragment(R.layout.widget_settings_accessibil
     }
 }
 
-class WidgetSettingsActivityStatus : Fragment(R.layout.widget_settings_activity_status) {
+class WidgetSettingsActivityStatus : AppFragment(R.layout.widget_settings_activity_status) {
     private var subscription: Subscription? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {

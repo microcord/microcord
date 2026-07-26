@@ -1,0 +1,593 @@
+package com.discord.stores
+
+import com.discord.api.activity.Activity
+import com.discord.api.channel.Channel
+import com.discord.api.channel.ChannelRecipient
+import com.discord.api.commands.ApplicationCommandAutocompleteResult
+import com.discord.api.commands.GuildApplicationCommands
+import com.discord.api.embeddedactivities.EmbeddedActivityInboundUpdate
+import com.discord.api.emoji.GuildEmojisUpdate
+import com.discord.api.forum.ForumUnreads
+import com.discord.api.friendsuggestions.FriendSuggestion
+import com.discord.api.friendsuggestions.FriendSuggestionDelete
+import com.discord.api.guild.Guild
+import com.discord.api.guildjoinrequest.GuildJoinRequestCreateOrUpdate
+import com.discord.api.guildjoinrequest.GuildJoinRequestDelete
+import com.discord.api.guildmember.GuildMember
+import com.discord.api.guildmember.GuildMemberRemove
+import com.discord.api.guildmember.GuildMembersChunk
+import com.discord.api.guildscheduledevent.GuildScheduledEvent
+import com.discord.api.guildscheduledevent.GuildScheduledEventUserUpdate
+import com.discord.api.interaction.InteractionModalCreate
+import com.discord.api.interaction.InteractionStateUpdate
+import com.discord.api.message.Message
+import com.discord.api.message.reaction.MessageReactionRemoveAll
+import com.discord.api.message.reaction.MessageReactionRemoveEmoji
+import com.discord.api.message.reaction.MessageReactionUpdate
+import com.discord.api.presence.ClientStatus
+import com.discord.api.presence.Presence
+import com.discord.api.requiredaction.UserRequiredActionUpdate
+import com.discord.api.role.GuildRoleCreate
+import com.discord.api.role.GuildRoleDelete
+import com.discord.api.role.GuildRoleUpdate
+import com.discord.api.stageinstance.StageInstance
+import com.discord.api.sticker.GuildStickersUpdate
+import com.discord.api.thread.ThreadMemberListUpdate
+import com.discord.api.thread.ThreadMemberUpdate
+import com.discord.api.thread.ThreadMembersUpdate
+import com.discord.api.user.TypingUser
+import com.discord.api.user.User
+import com.discord.api.voice.server.VoiceServer
+import com.discord.api.voice.state.VoiceState
+import com.discord.gateway.GatewayConnectionConsumers
+import com.discord.gateway.GatewayEventHandler
+import com.discord.gateway.GatewaySocket
+import com.discord.gateway.IdentifyData
+import com.discord.gateway.io.ApplicationCommandRequest
+import com.discord.gateway.io.ForumUnreadsRequest
+import com.discord.gateway.io.ForumUnreadsRequestThread
+import com.discord.gateway.io.GuildSubscriptions
+import com.discord.models.domain.ModelApplicationStream
+import com.discord.models.domain.ModelBan
+import com.discord.models.domain.ModelCall
+import com.discord.models.domain.ModelChannelUnreadUpdate
+import com.discord.models.domain.ModelGuildIntegration
+import com.discord.models.domain.ModelGuildMemberListUpdate
+import com.discord.models.domain.ModelMessageDelete
+import com.discord.models.domain.ModelNotificationSettings
+import com.discord.models.domain.ModelPayload
+import com.discord.models.domain.ModelReadState
+import com.discord.models.domain.ModelSession
+import com.discord.models.domain.ModelUserNote
+import com.discord.models.domain.ModelUserRelationship
+import com.discord.models.domain.ModelUserSettings
+import com.discord.models.domain.StreamCreateOrUpdate
+import com.discord.models.domain.StreamDelete
+import com.discord.models.domain.StreamServerUpdate
+import com.discord.models.thread.dto.ModelThreadListSync
+import com.discord.stores.utilities.BatchManager
+import com.discord.stores.utilities.Batched
+import com.discord.utilities.lifecycle.Backgrounded
+import com.discord.utilities.time.Clock
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import kotlinx.coroutines.ExecutorCoroutineDispatcher
+import kotlinx.coroutines.asCoroutineDispatcher
+import rx.Observable
+import rx.Scheduler
+import rx.Subscription
+import rx.schedulers.Schedulers
+import rx.subjects.BehaviorSubject
+import rx.subjects.PublishSubject
+import rx.subjects.SerializedSubject
+
+/**
+ * Owns the gateway socket and fans every dispatch out onto a typed subject.
+ *
+ * This is the only place that talks to [GatewaySocket]. Stores never see the socket; they subscribe
+ * to the subject for the event they care about (wired in `StoreStream.initGatewaySocketListeners`)
+ * and call the send API here to talk back.
+ *
+ * Subjects are `BehaviorSubject`-backed so a late subscriber still sees the most recent event of
+ * that type. The two exceptions ([guildBanAdd], [guildBanRemove], [guildIntegrationsUpdate]) are
+ * `PublishSubject`-backed because replaying them would re-apply a one-shot moderation action.
+ */
+class StoreGatewayConnection(
+    private val stream: StoreStream,
+    private val clock: Clock,
+    private val executor: ExecutorService = Executors.newFixedThreadPool(1),
+    private val scheduler: Scheduler = Schedulers.from(executor),
+) : GatewayEventHandler {
+
+    /**
+     * The inputs that decide whether the socket should be open, and with what identify payload.
+     *
+     * A backgrounded client with no voice channel and no registered consumer drops its token here,
+     * which closes the socket. [authed] stays true in that case so the close is not mistaken for a
+     * logout.
+     */
+    data class ClientState(
+        val tokenIfAvailable: String?,
+        val authed: Boolean,
+        val clientDataState: StoreClientDataState.ClientDataState,
+    ) {
+        fun getIdentifyData(): IdentifyData? =
+            tokenIfAvailable?.let { IdentifyData(it, clientDataState.toIdentifyData()) }
+
+        override fun toString(): String =
+            "ClientState(tokenIfAvailable=${if (tokenIfAvailable != null) "<redacted>" else "null"}, " +
+                "authed=$authed, clientDataState=$clientDataState)"
+
+        companion object {
+            fun create(
+                backgrounded: Boolean,
+                token: String?,
+                selectedVoiceChannelId: Long,
+                hasGatewayConnectionConsumers: Boolean,
+                clientDataState: StoreClientDataState.ClientDataState,
+            ): ClientState {
+                val authed = token != null
+                val effectiveToken =
+                    if (backgrounded && selectedVoiceChannelId <= 0L && !hasGatewayConnectionConsumers) null
+                    else token
+                return ClientState(effectiveToken, authed, clientDataState)
+            }
+        }
+    }
+
+    private val coroutineDispatcher: ExecutorCoroutineDispatcher = executor.asCoroutineDispatcher()
+    private val batches = BatchManager(coroutineDispatcher, clock)
+
+    private var socket: GatewaySocket? = null
+    private var clientState: ClientState? = null
+    private var clientStateSubscription: Subscription? = null
+    private var guildSubscriptionsSubscription: Subscription? = null
+
+    // Connection state
+    private val connected = behavior(false)
+    private val connectionReady = behavior(false)
+
+    // Session
+    val ready = behavior<ModelPayload>()
+
+    // Current user
+    val userUpdate = behavior<User>()
+    val userSettingsUpdate = behavior<ModelUserSettings>()
+    val userGuildSettingsUpdate = behavior<ModelNotificationSettings>()
+    val userNoteUpdate = behavior<ModelUserNote.Update>()
+    val userRequiredActionUpdate = behavior<UserRequiredActionUpdate>()
+    val userConnectionUpdate = behavior<Unit>()
+    val userSubscriptionsUpdate = behavior<Unit>()
+    val userPaymentSourcesUpdate = behavior<Unit>()
+    val sessionsReplace = behavior<List<ModelSession>>()
+
+    // Relationships
+    val relationshipAdd = behavior<ModelUserRelationship>()
+    val relationshipRemove = behavior<ModelUserRelationship>()
+    val friendSuggestionCreate = behavior<FriendSuggestion>()
+    val friendSuggestionDelete = behavior<FriendSuggestionDelete>()
+
+    // Guilds
+    val guildCreate = behavior<Guild>()
+    val guildUpdate = behavior<Guild>()
+    val guildDeleted = behavior<Guild>()
+    val guildEmojisUpdate = behavior<GuildEmojisUpdate>()
+    val guildStickersUpdate = behavior<GuildStickersUpdate>()
+    val guildApplicationCommands = behavior<GuildApplicationCommands>()
+    val applicationCommandAutocompleteResult = behavior<ApplicationCommandAutocompleteResult>()
+
+    /** One-shot moderation events: replaying them to a late subscriber would re-apply the action. */
+    val guildBanAdd = publish<ModelBan>()
+    val guildBanRemove = publish<ModelBan>()
+    val guildIntegrationsUpdate = publish<ModelGuildIntegration.Update>()
+
+    // Guild membership
+    val guildMembersAdd = behavior<GuildMember>()
+    val guildMemberRemove = behavior<GuildMemberRemove>()
+    val guildMembersChunk = behavior<GuildMembersChunk>()
+    val guildMemberListUpdate = behavior<ModelGuildMemberListUpdate>()
+    val guildJoinRequestCreateOrUpdate = behavior<GuildJoinRequestCreateOrUpdate>()
+    val guildJoinRequestDelete = behavior<GuildJoinRequestDelete>()
+
+    // Guild roles
+    val guildRoleCreate = behavior<GuildRoleCreate>()
+    val guildRoleUpdate = behavior<GuildRoleUpdate>()
+    val guildRoleDelete = behavior<GuildRoleDelete>()
+
+    // Guild scheduled events
+    val guildScheduledEventCreate = behavior<GuildScheduledEvent>()
+    val guildScheduledEventUpdate = behavior<GuildScheduledEvent>()
+    val guildScheduledEventDelete = behavior<GuildScheduledEvent>()
+    val guildScheduledEventUserAdd = behavior<GuildScheduledEventUserUpdate>()
+    val guildScheduledEventUserRemove = behavior<GuildScheduledEventUserUpdate>()
+
+    // Channels and threads
+    val channelCreateOrUpdate = behavior<Channel>()
+    val channelDeleted = behavior<Channel>()
+    val channelRecipientAdd = behavior<ChannelRecipient>()
+    val channelRecipientRemove = behavior<ChannelRecipient>()
+    val channelUnreadUpdate = behavior<ModelChannelUnreadUpdate>()
+    val threadCreateOrUpdate = behavior<Channel>()
+    val threadDelete = behavior<Channel>()
+    val threadListSync = behavior<ModelThreadListSync>()
+    val threadMemberUpdate = behavior<ThreadMemberUpdate>()
+    val threadMembersUpdate = behavior<ThreadMembersUpdate>()
+    val threadMemberListUpdate = behavior<ThreadMemberListUpdate>()
+    val forumUnreads = behavior<ForumUnreads>()
+
+    // Messages
+    val messageCreate = behavior<Message>()
+    val messageUpdate = behavior<Message>()
+    val messageDelete = behavior<ModelMessageDelete>()
+    val messageAck = behavior<ModelReadState>()
+    val messageReactionAdd = behavior<MessageReactionUpdate>()
+    val messageReactionRemove = behavior<MessageReactionUpdate>()
+    val messageReactionRemoveAll = behavior<MessageReactionRemoveAll>()
+    val messageReactionRemoveEmoji = behavior<MessageReactionRemoveEmoji>()
+
+    // Presence and typing
+    val presenceUpdate = behavior<Presence>()
+    val presenceReplace = behavior<List<Presence>>()
+    val typingStart = behavior<TypingUser>()
+
+    /**
+     * Coalesced: a large guild emits hundreds of voice states per second, and applying them one at
+     * a time would flood the store thread.
+     */
+    val voiceStateUpdate: Batched<VoiceState> = batches.createBatched(EVENT_VOICE_STATE_UPDATE)
+    val voiceServerUpdate = behavior<VoiceServer>()
+
+    // Calls and streams
+    val callCreateOrUpdate = behavior<ModelCall>()
+    val callDelete = behavior<ModelCall>()
+    val streamCreate = behavior<StreamCreateOrUpdate>()
+    val streamUpdate = behavior<StreamCreateOrUpdate>()
+    val streamDelete = behavior<StreamDelete>()
+    val streamServerUpdate = behavior<StreamServerUpdate>()
+
+    // Stage instances, interactions and embedded activities
+    val stageInstanceCreate = behavior<StageInstance>()
+    val stageInstanceUpdate = behavior<StageInstance>()
+    val stageInstanceDelete = behavior<StageInstance>()
+    val interactionCreate = behavior<InteractionStateUpdate>()
+    val interactionSuccess = behavior<InteractionStateUpdate>()
+    val interactionFailure = behavior<InteractionStateUpdate>()
+    val interactionModalCreate = behavior<InteractionModalCreate>()
+    val embeddedActivityInboundUpdate = behavior<EmbeddedActivityInboundUpdate>()
+
+    fun getCoroutineDispatcher(): ExecutorCoroutineDispatcher = coroutineDispatcher
+
+    fun getConnected(): Observable<Boolean> = connected.distinctUntilChanged()
+
+    fun getConnectionReady(): Observable<Boolean> = connectionReady.distinctUntilChanged()
+
+    /**
+     * Adopts [socket] and starts driving its lifetime from [ClientState].
+     *
+     * The socket is built by [StoreStream] because it needs REST for gateway discovery; everything
+     * after construction belongs to this store.
+     */
+    fun init(
+        socket: GatewaySocket,
+        observeSelectedVoiceChannelId: Observable<Long> = Observable.just(NO_VOICE_CHANNEL),
+    ) {
+        this.socket = socket
+        clientStateSubscription?.unsubscribe()
+        clientStateSubscription = Observable.combineLatest(
+            Backgrounded.observe(),
+            stream.getAuthenticationInternal().observeAuthState().map { it?.token },
+            observeSelectedVoiceChannelId,
+            GatewayConnectionConsumers.observeHasConsumers(),
+            stream.getClientDataStateInternal().observeClientState(),
+            ClientState::create,
+        )
+            .distinctUntilChanged()
+            .observeOn(scheduler)
+            .subscribe(::handleClientStateUpdate, {})
+
+        guildSubscriptionsSubscription?.unsubscribe()
+        guildSubscriptionsSubscription = stream.getGuildSubscriptionsInternal().observeSubscriptions()
+            .subscribe({ payload ->
+                socket.updateGuildSubscriptions(
+                    payload.guildId,
+                    GuildSubscriptions(
+                        channels = payload.channels,
+                        typing = true,
+                        activities = true,
+                        members = null,
+                        threads = null,
+                        threadMemberLists = null,
+                    ),
+                )
+            }, {})
+    }
+
+    fun getIdentifyData(): IdentifyData? = clientState?.getIdentifyData()
+
+    private fun handleClientStateUpdate(clientState: ClientState) {
+        this.clientState = clientState
+        if (clientState.tokenIfAvailable != null) {
+            socket?.connect()
+        } else {
+            // Keep the session when we still have a token overall: this is a background pause, not
+            // a logout, and a resumable session avoids a full READY when we come back.
+            socket?.close(resetSession = !clientState.authed)
+        }
+    }
+
+    // region Outgoing
+
+    private fun requestIfSessionEstablished(request: (GatewaySocket) -> Unit): Boolean {
+        val socket = this.socket ?: return false
+        val established = socket.isSessionEstablished()
+        if (established) request(socket)
+        return established
+    }
+
+    fun presenceUpdate(
+        status: ClientStatus?,
+        since: Long? = clock.currentTimeMillis(),
+        activities: List<Activity>? = null,
+        afk: Boolean? = null,
+    ): Boolean = requestIfSessionEstablished {
+        it.presenceUpdate(status, since, activities.orEmpty(), afk)
+    }
+
+    fun voiceStateUpdate(
+        guildId: Long?,
+        channelId: Long?,
+        selfMute: Boolean,
+        selfDeaf: Boolean,
+        selfVideo: Boolean,
+        preferredRegion: String? = null,
+        shouldIncludePreferredRegion: Boolean = true,
+    ): Boolean = requestIfSessionEstablished {
+        it.voiceStateUpdate(guildId, channelId, selfMute, selfDeaf, selfVideo, preferredRegion, shouldIncludePreferredRegion)
+    }
+
+    fun callConnect(channelId: Long): Boolean = requestIfSessionEstablished { it.callConnect(channelId) }
+
+    @JvmOverloads
+    fun requestGuildMembers(
+        guildId: Long,
+        query: String? = null,
+        userIds: List<Long>? = null,
+        limit: Int? = DEFAULT_MEMBER_REQUEST_LIMIT,
+    ): Boolean = requestIfSessionEstablished {
+        it.requestGuildMembers(listOf(guildId), query, userIds, limit)
+    }
+
+    fun updateGuildSubscriptions(guildId: Long, guildSubscriptions: GuildSubscriptions): Boolean =
+        requestIfSessionEstablished { it.updateGuildSubscriptions(guildId, guildSubscriptions) }
+
+    fun requestApplicationCommands(
+        guildId: Long,
+        nonce: String,
+        applications: Boolean,
+        query: String? = null,
+        offset: Int? = null,
+        commandLimit: Int,
+        commandIds: List<String>? = null,
+    ): Boolean = requestIfSessionEstablished {
+        it.requestApplicationCommands(
+            ApplicationCommandRequest(guildId, nonce, applications, commandLimit, query, offset, commandIds),
+        )
+    }
+
+    fun requestForumUnreads(guildId: Long, channelId: Long, threadMessagePairs: List<Pair<Long, Long>>): Boolean =
+        requestIfSessionEstablished {
+            it.requestForumUnreads(
+                ForumUnreadsRequest(
+                    guildId,
+                    channelId,
+                    threadMessagePairs.map { (threadId, ackMessageId) ->
+                        ForumUnreadsRequestThread(threadId, ackMessageId)
+                    },
+                ),
+            )
+        }
+
+    @StoreThread
+    fun streamCreate(streamKey: String, preferredRegion: String?) {
+        val stream = ModelApplicationStream.decodeStreamKey(streamKey)
+        requestIfSessionEstablished {
+            it.streamCreate(
+                stream.type,
+                stream.channelId,
+                (stream as? ModelApplicationStream.GuildStream)?.guildId,
+                preferredRegion,
+            )
+        }
+    }
+
+    @StoreThread
+    fun streamWatch(streamKey: String) {
+        requestIfSessionEstablished { it.streamWatch(streamKey) }
+    }
+
+    fun streamDelete(streamKey: String) {
+        requestIfSessionEstablished { it.streamDelete(streamKey) }
+    }
+
+    private fun streamPing(streamKey: String) = requestIfSessionEstablished { it.streamPing(streamKey) }
+
+    private fun voiceServerPing() = requestIfSessionEstablished(GatewaySocket::voiceServerPing)
+
+    /**
+     * Called when the RTC connection reports it is live. Pinging tells the backend which media
+     * server we actually landed on; a stream pings by key, plain voice pings the voice server.
+     */
+    fun handleRtcConnectionLive(streamKey: String?) {
+        if (streamKey != null) streamPing(streamKey) else voiceServerPing()
+    }
+
+    /** Leaves voice before the session is torn down so peers see us drop immediately. */
+    fun handlePreLogout() {
+        voiceStateUpdate(null, null, selfMute = false, selfDeaf = false, selfVideo = false, shouldIncludePreferredRegion = false)
+    }
+
+    fun resetOnError() {
+        socket?.resetOnError()
+    }
+
+    fun simulateReconnectForTesting() {
+        socket?.simulateReconnectForTesting()
+    }
+
+    fun dispose() {
+        clientStateSubscription?.unsubscribe()
+        clientStateSubscription = null
+        guildSubscriptionsSubscription?.unsubscribe()
+        guildSubscriptionsSubscription = null
+        batches.dispose()
+    }
+
+    // endregion
+
+    // region Incoming
+
+    override fun handleConnected(connected: Boolean) {
+        this.connected.onNext(connected)
+    }
+
+    override fun handleConnectionReady(connectionReady: Boolean) {
+        this.connectionReady.onNext(connectionReady)
+    }
+
+    override fun handleDisconnect(authenticationFailed: Boolean) {
+        if (authenticationFailed) stream.handleGatewayAuthenticationFailure()
+    }
+
+    /**
+     * Fans one dispatch out to its subject.
+     *
+     * Every batch except the one owning [type] is flushed first, so a coalesced burst is always
+     * applied before the event that followed it on the wire.
+     */
+    override fun handleDispatch(type: String?, data: Any) {
+        batches.flushBatches(type)
+        when (type) {
+            "READY" -> ready.emit(data)
+
+            // Current user
+            "USER_UPDATE" -> userUpdate.emit(data)
+            "USER_SETTINGS_UPDATE" -> userSettingsUpdate.emit(data)
+            "USER_GUILD_SETTINGS_UPDATE" -> userGuildSettingsUpdate.emit(data)
+            "USER_NOTE_UPDATE" -> userNoteUpdate.emit(data)
+            "USER_REQUIRED_ACTION_UPDATE" -> userRequiredActionUpdate.emit(data)
+            "USER_CONNECTIONS_UPDATE" -> userConnectionUpdate.emit(Unit)
+            "USER_SUBSCRIPTIONS_UPDATE" -> userSubscriptionsUpdate.emit(Unit)
+            "USER_PAYMENT_SOURCES_UPDATE" -> userPaymentSourcesUpdate.emit(Unit)
+            "SESSIONS_REPLACE" -> sessionsReplace.emit(data)
+
+            // Relationships
+            "RELATIONSHIP_ADD" -> relationshipAdd.emit(data)
+            "RELATIONSHIP_REMOVE" -> relationshipRemove.emit(data)
+            "FRIEND_SUGGESTION_CREATE" -> friendSuggestionCreate.emit(data)
+            "FRIEND_SUGGESTION_DELETE" -> friendSuggestionDelete.emit(data)
+
+            // Guilds
+            "GUILD_CREATE" -> guildCreate.emit(data)
+            "GUILD_UPDATE" -> guildUpdate.emit(data)
+            "GUILD_DELETE" -> guildDeleted.emit(data)
+            "GUILD_BAN_ADD" -> guildBanAdd.emit(data)
+            "GUILD_BAN_REMOVE" -> guildBanRemove.emit(data)
+            "GUILD_EMOJIS_UPDATE" -> guildEmojisUpdate.emit(data)
+            "GUILD_STICKERS_UPDATE" -> guildStickersUpdate.emit(data)
+            "GUILD_INTEGRATIONS_UPDATE" -> guildIntegrationsUpdate.emit(data)
+            "GUILD_APPLICATION_COMMANDS_UPDATE" -> guildApplicationCommands.emit(data)
+            "APPLICATION_COMMAND_AUTOCOMPLETE_RESPONSE" -> applicationCommandAutocompleteResult.emit(data)
+
+            // Guild membership. GUILD_MEMBER_UPDATE shares the add subject: the payload is a whole
+            // member row, so consumers upsert either way.
+            "GUILD_MEMBER_ADD", "GUILD_MEMBER_UPDATE" -> guildMembersAdd.emit(data)
+            "GUILD_MEMBER_REMOVE" -> guildMemberRemove.emit(data)
+            "GUILD_MEMBERS_CHUNK" -> guildMembersChunk.emit(data)
+            "GUILD_MEMBER_LIST_UPDATE" -> guildMemberListUpdate.emit(data)
+            "GUILD_JOIN_REQUEST_CREATE", "GUILD_JOIN_REQUEST_UPDATE" -> guildJoinRequestCreateOrUpdate.emit(data)
+            "GUILD_JOIN_REQUEST_DELETE" -> guildJoinRequestDelete.emit(data)
+
+            // Guild roles
+            "GUILD_ROLE_CREATE" -> guildRoleCreate.emit(data)
+            "GUILD_ROLE_UPDATE" -> guildRoleUpdate.emit(data)
+            "GUILD_ROLE_DELETE" -> guildRoleDelete.emit(data)
+
+            // Guild scheduled events
+            "GUILD_SCHEDULED_EVENT_CREATE" -> guildScheduledEventCreate.emit(data)
+            "GUILD_SCHEDULED_EVENT_UPDATE" -> guildScheduledEventUpdate.emit(data)
+            "GUILD_SCHEDULED_EVENT_DELETE" -> guildScheduledEventDelete.emit(data)
+            "GUILD_SCHEDULED_EVENT_USER_ADD" -> guildScheduledEventUserAdd.emit(data)
+            "GUILD_SCHEDULED_EVENT_USER_REMOVE" -> guildScheduledEventUserRemove.emit(data)
+
+            // Channels and threads
+            "CHANNEL_CREATE", "CHANNEL_UPDATE" -> channelCreateOrUpdate.emit(data)
+            "CHANNEL_DELETE" -> channelDeleted.emit(data)
+            "CHANNEL_RECIPIENT_ADD" -> channelRecipientAdd.emit(data)
+            "CHANNEL_RECIPIENT_REMOVE" -> channelRecipientRemove.emit(data)
+            "CHANNEL_UNREAD_UPDATE" -> channelUnreadUpdate.emit(data)
+            "THREAD_CREATE", "THREAD_UPDATE" -> threadCreateOrUpdate.emit(data)
+            "THREAD_DELETE" -> threadDelete.emit(data)
+            "THREAD_LIST_SYNC" -> threadListSync.emit(data)
+            "THREAD_MEMBER_UPDATE" -> threadMemberUpdate.emit(data)
+            "THREAD_MEMBERS_UPDATE" -> threadMembersUpdate.emit(data)
+            "THREAD_MEMBER_LIST_UPDATE" -> threadMemberListUpdate.emit(data)
+            "FORUM_UNREADS" -> forumUnreads.emit(data)
+
+            // Messages
+            "MESSAGE_CREATE" -> messageCreate.emit(data)
+            "MESSAGE_UPDATE" -> messageUpdate.emit(data)
+            "MESSAGE_DELETE", "MESSAGE_DELETE_BULK" -> messageDelete.emit(data)
+            "MESSAGE_ACK" -> messageAck.emit(data)
+            "MESSAGE_REACTION_ADD" -> messageReactionAdd.emit(data)
+            "MESSAGE_REACTION_REMOVE" -> messageReactionRemove.emit(data)
+            "MESSAGE_REACTION_REMOVE_ALL" -> messageReactionRemoveAll.emit(data)
+            "MESSAGE_REACTION_REMOVE_EMOJI" -> messageReactionRemoveEmoji.emit(data)
+
+            // Presence and typing
+            "PRESENCE_UPDATE" -> presenceUpdate.emit(data)
+            "PRESENCES_REPLACE" -> presenceReplace.emit(data)
+            "TYPING_START" -> typingStart.emit(data)
+
+            // Voice, calls and streams
+            EVENT_VOICE_STATE_UPDATE -> voiceStateUpdate.onNextAny(data)
+            "VOICE_SERVER_UPDATE" -> voiceServerUpdate.emit(data)
+            "CALL_CREATE", "CALL_UPDATE" -> callCreateOrUpdate.emit(data)
+            "CALL_DELETE" -> callDelete.emit(data)
+            "STREAM_CREATE" -> streamCreate.emit(data)
+            "STREAM_UPDATE" -> streamUpdate.emit(data)
+            "STREAM_DELETE" -> streamDelete.emit(data)
+            "STREAM_SERVER_UPDATE" -> streamServerUpdate.emit(data)
+
+            // Stage instances, interactions and embedded activities
+            "STAGE_INSTANCE_CREATE" -> stageInstanceCreate.emit(data)
+            "STAGE_INSTANCE_UPDATE" -> stageInstanceUpdate.emit(data)
+            "STAGE_INSTANCE_DELETE" -> stageInstanceDelete.emit(data)
+            "INTERACTION_CREATE" -> interactionCreate.emit(data)
+            "INTERACTION_SUCCESS" -> interactionSuccess.emit(data)
+            "INTERACTION_FAILURE" -> interactionFailure.emit(data)
+            "INTERACTION_MODAL_CREATE" -> interactionModalCreate.emit(data)
+            "EMBEDDED_ACTIVITY_UPDATE" -> embeddedActivityInboundUpdate.emit(data)
+        }
+    }
+
+    // endregion
+
+    private companion object {
+        const val EVENT_VOICE_STATE_UPDATE = "VOICE_STATE_UPDATE"
+        const val DEFAULT_MEMBER_REQUEST_LIMIT = 100
+        const val NO_VOICE_CHANNEL = 0L
+
+        fun <T> behavior(): SerializedSubject<T, T> = SerializedSubject(BehaviorSubject.create())
+        fun <T> behavior(initialValue: T): SerializedSubject<T, T> =
+            SerializedSubject(BehaviorSubject.create(initialValue))
+
+        fun <T> publish(): SerializedSubject<T, T> = SerializedSubject(PublishSubject.create())
+
+        /**
+         * The dispatch table only knows payloads as [Any]; the parser already produced the type this
+         * subject declares, so the cast is safe and keeps the table free of per-event casts.
+         */
+        @Suppress("UNCHECKED_CAST")
+        fun <T> SerializedSubject<T, T>.emit(data: Any) = (this as SerializedSubject<Any, Any>).onNext(data)
+    }
+}

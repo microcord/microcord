@@ -10,6 +10,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.lifecycle.Lifecycle
+import com.discord.app.AppBottomSheet
 import com.discord.R
 import com.discord.api.user.UserProfile
 import com.discord.models.domain.ModelUserRelationship
@@ -20,14 +21,13 @@ import com.discord.widgets.user.profile.UserProfileAdminView
 import com.discord.widgets.user.profile.UserProfileConnectionsView
 import com.discord.widgets.user.profile.UserProfileHeaderView
 import com.discord.widgets.user.profile.UserProfileHeaderViewModel
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import rx.Observable
 import rx.Subscription
 
-class WidgetUserSheet : BottomSheetDialogFragment() {
+class WidgetUserSheet : AppBottomSheet() {
     sealed class State {
         object Loading : State()
         data class Error(val message: String? = null) : State()
@@ -61,8 +61,7 @@ class WidgetUserSheet : BottomSheetDialogFragment() {
     private var settingNote = false
     private var errorText: TextView? = null
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, state: Bundle?): View =
-        inflater.inflate(R.layout.widget_user_sheet, container, false)
+    override fun getContentViewResId() = R.layout.widget_user_sheet
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)

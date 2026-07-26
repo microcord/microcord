@@ -7,6 +7,7 @@ import android.widget.TextView
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.ViewCompat
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.fragment.app.commit
 import androidx.lifecycle.Lifecycle
 import com.discord.R
@@ -22,7 +23,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import rx.Observable
 import rx.Subscription
 
-class WidgetSettings : Fragment(R.layout.widget_settings) {
+class WidgetSettings : AppFragment(R.layout.widget_settings) {
     data class State(val user: MeUser, val presence: Presence?)
 
     private var subscription: Subscription? = null

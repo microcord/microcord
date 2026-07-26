@@ -12,6 +12,7 @@ import android.widget.TextView
 import androidx.annotation.LayoutRes
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.fragment.app.viewModels
 import com.discord.R
 import com.discord.app.AppViewFlipper
@@ -31,7 +32,7 @@ import rx.Subscription
 abstract class AuthFragment(
     @LayoutRes layoutId: Int,
     private val route: AuthRoute,
-) : Fragment(layoutId) {
+) : AppFragment(layoutId) {
     var authUiActions: AuthUiActions? = null
     protected val model: AuthUiViewModel by viewModels()
     private var stateSubscription: Subscription? = null

@@ -6,6 +6,9 @@ import com.discord.api.thread.ThreadMember
 import com.discord.api.thread.ThreadMetadata
 import com.discord.api.user.User
 
+/** Identifier of a [ForumTag] within a forum channel. */
+typealias ForumTagId = Long
+
 data class Channel(
     val topic: String?,
     val type: Int,
@@ -31,9 +34,9 @@ data class Channel(
     val defaultAutoArchiveDuration: Int?,
     val rtcRegion: String?,
     val flags: Long?,
-    @Transient val guildHashes: GuildHashes?,
+    @Transient var guildHashes: GuildHashes?,
     val availableTags: List<ForumTag>?,
-    val appliedTags: List<Long>?,
+    val appliedTags: List<ForumTagId>?,
     val threadMetadata: ThreadMetadata?,
     var messageCount: Int?,
     @Transient val memberCount: Int?,
@@ -61,22 +64,15 @@ data class Channel(
 
 data class ChannelRecipientNick(val id: Long, val nick: String)
 
-class ForumTag(
-    val id: Long,
+data class ForumTag(
+    val id: ForumTagId,
     val name: String,
     val emojiId: Long?,
     val emojiName: String?,
 ) {
-    val customEmojiId: String? get() = emojiId?.toString()
-
-    override fun equals(other: Any?) = other is ForumTag &&
-        id == other.id && name == other.name && emojiId == other.emojiId && emojiName == other.emojiName
-
-    override fun hashCode(): Int {
-        var result = id.hashCode()
-        result = 31 * result + name.hashCode()
-        result = 31 * result + (emojiId?.hashCode() ?: 0)
-        return 31 * result + (emojiName?.hashCode() ?: 0)
-    }
-    override fun toString() = "ForumTag(id=$id, name=$name, emojiId=$emojiId, emojiName=$emojiName)"
+    /**
+     * Stored, not computed: the reference declares this as a body-level property so it is
+     * initialised once and excluded from `equals`/`hashCode`/`toString`.
+     */
+    val customEmojiId: String? = emojiId?.toString()
 }

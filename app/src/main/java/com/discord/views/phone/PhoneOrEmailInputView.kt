@@ -1,5 +1,6 @@
 package com.discord.views.phone
 
+import android.animation.LayoutTransition
 import android.content.Context
 import android.os.Build
 import android.text.Editable
@@ -19,6 +20,11 @@ import com.discord.utilities.phone.PhoneUtils
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 
+/**
+ * A single identifier field that accepts either an email address or a phone
+ * number. In phone mode a country-code field slides in beside it; that field is
+ * not typed into, it opens a country picker supplied by the host screen.
+ */
 class PhoneOrEmailInputView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -36,8 +42,22 @@ class PhoneOrEmailInputView @JvmOverloads constructor(
     val mainTextInputLayout: TextInputLayout
         get() = mainInputLayout
 
+    /**
+     * Invoked when the country-code field is tapped. The host screen shows the
+     * country picker and reports the choice back through [setCountryCode];
+     * without a callback the field stays pinned to its default country.
+     */
+    var onCountryCodeClicked: (() -> Unit)? = null
+        set(value) {
+            field = value
+            bindCountryCodeClick()
+        }
+
     init {
         orientation = HORIZONTAL
+        // The country-code field appears and disappears as the user types, so the
+        // remaining input animates to its new width instead of jumping.
+        layoutTransition = LayoutTransition()
         LayoutInflater.from(context).inflate(R.layout.view_phone_or_email_input, this, true)
         countryCodeLayout = requireNotNull(findViewById(R.id.phone_or_email_country_code_wrap))
         mainInputLayout = requireNotNull(findViewById(R.id.phone_or_email_main_input_wrap))
@@ -51,31 +71,32 @@ class PhoneOrEmailInputView @JvmOverloads constructor(
         ).run {
             try {
                 setHint(getText(R.styleable.PhoneOrEmailInputView_hint))
-                mode = when (getString(R.styleable.PhoneOrEmailInputView_force_mode)?.lowercase()) {
-                    "email", "1" -> Mode.EMAIL
-                    "phone", "2" -> Mode.PHONE
-                    else -> Mode.ADAPTIVE
-                }
+                // `force_mode` is an enum attribute and therefore arrives as an int
+                // index; reading it as a string always yields null, which silently
+                // leaves every phone-only screen in adaptive mode.
+                mode = modeOf(
+                    getInt(R.styleable.PhoneOrEmailInputView_force_mode, Mode.ADAPTIVE.ordinal),
+                )
                 getResourceId(R.styleable.PhoneOrEmailInputView_nextFocusForward, View.NO_ID)
                     .takeIf { it != View.NO_ID }?.let {
-                    mainInputLayout.nextFocusForwardId = it
-                    mainEditText.nextFocusForwardId = it
-                }
+                        mainInputLayout.nextFocusForwardId = it
+                        mainEditText.nextFocusForwardId = it
+                    }
             } finally {
                 recycle()
             }
         }
+        bindCountryCodeClick()
         updateModeAppearance()
     }
 
+    @JvmOverloads
     fun bind(
         fragment: Fragment,
         onAfterTextChanged: () -> Unit = {},
         onCountryCodeClick: (() -> Unit)? = null,
     ) {
-        onCountryCodeClick?.let { callback ->
-            countryCodeLayout.editText?.setOnClickListener { callback() }
-        }
+        onCountryCodeClick?.let { onCountryCodeClicked = it }
         addLifecycleTextWatcher(fragment, countryCodeLayout.editText) { onAfterTextChanged() }
         addLifecycleTextWatcher(fragment, mainEditText) {
             rememberCurrentText()
@@ -88,6 +109,8 @@ class PhoneOrEmailInputView @JvmOverloads constructor(
     fun setCountryCode(countryCode: PhoneCountryCode) {
         countryCodeLayout.editText?.setText(countryCode.phoneCountryCode)
     }
+
+    fun getCountryCode(): String = countryCodeLayout.editText?.text?.toString().orEmpty()
 
     fun setHint(hint: CharSequence?) {
         mainInputLayout.hint = hint
@@ -106,9 +129,21 @@ class PhoneOrEmailInputView @JvmOverloads constructor(
     }
 
     fun getTextOrEmpty(): String = if (isPhoneMode()) {
-        (countryCodeLayout.editText?.text?.toString() ?: "") + (mainEditText.text?.toString() ?: "")
+        getCountryCode() + (mainEditText.text?.toString() ?: "")
     } else {
         mainEditText.text?.toString() ?: ""
+    }
+
+    private fun bindCountryCodeClick() {
+        val editText = countryCodeLayout.editText ?: return
+        val callback = onCountryCodeClicked
+        if (callback == null) {
+            editText.setOnClickListener(null)
+            editText.isClickable = false
+        } else {
+            editText.isClickable = true
+            editText.setOnClickListener { callback() }
+        }
     }
 
     private fun updateCountryCodeVisibility() {
@@ -159,5 +194,11 @@ class PhoneOrEmailInputView @JvmOverloads constructor(
                 editText.removeTextChangedListener(watcher)
             }
         })
+    }
+
+    internal companion object {
+        /** Maps the `force_mode` enum index onto a mode. */
+        fun modeOf(attributeValue: Int): Mode =
+            Mode.values().getOrElse(attributeValue) { Mode.ADAPTIVE }
     }
 }

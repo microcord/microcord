@@ -11,8 +11,23 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import com.discord.R
+import com.discord.app.AppComponent
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.computationLatest
+import com.discord.utilities.rx.ui
+import rx.Observable
+import rx.subjects.PublishSubject
+import rx.subjects.Subject
 
-class OverlayMenuView(context: Context, attrs: AttributeSet?) : LinearLayout(context, attrs) {
+/**
+ * Call controls shown inside the floating voice overlay.
+ *
+ * The view observes call state itself rather than being pushed state by a host
+ * fragment, because the overlay lives in a window service with no fragment
+ * lifecycle. It is therefore its own [AppComponent]: the subscription starts when
+ * the view is attached and is torn down by the unsubscribe signal on detach.
+ */
+class OverlayMenuView(context: Context, attrs: AttributeSet?) : LinearLayout(context, attrs), AppComponent {
     enum class Quality { UNKNOWN, BAD, AVERAGE, FINE }
 
     data class ViewState(
@@ -35,6 +50,20 @@ class OverlayMenuView(context: Context, attrs: AttributeSet?) : LinearLayout(con
     private val sourceToggle: ImageView
     private val muteToggle: ImageView
     private val disconnect: ImageView
+
+    override val unsubscribeSignal: Subject<Void, Void> = PublishSubject.create()
+
+    /**
+     * Call state for the selected voice channel. The reference composes this from
+     * the selected voice channel, its permissions, the guild, the call model and
+     * the RTC connection quality; those stores arrive with the voice phase, so the
+     * host supplies the stream until then.
+     */
+    var viewStateSource: Observable<ViewState?>? = null
+        set(value) {
+            field = value
+            if (isAttachedToWindow) subscribeToState()
+        }
 
     private var state: ViewState? = null
     private var onDismissRequested: () -> Unit = {}
@@ -80,6 +109,26 @@ class OverlayMenuView(context: Context, attrs: AttributeSet?) : LinearLayout(con
             onDismissRequested()
             onDisconnectRequested()
         }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        subscribeToState()
+    }
+
+    override fun onDetachedFromWindow() {
+        // Fires before super so the observation ends while the view is still intact.
+        unsubscribeSignal.onNext(null)
+        super.onDetachedFromWindow()
+    }
+
+    private fun subscribeToState() {
+        val source = viewStateSource ?: return
+        source
+            .computationLatest()
+            .distinctUntilChanged()
+            .ui(this)
+            .appSubscribe(OverlayMenuView::class.java, context) { updateView(it) }
     }
 
     fun updateView(state: ViewState?) {

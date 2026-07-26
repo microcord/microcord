@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewStub
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.fragment.app.commitNow
 import androidx.fragment.app.commit
 import androidx.appcompat.widget.Toolbar
@@ -27,7 +28,7 @@ fun interface BackHandler {
     fun onBackPressed(): Boolean
 }
 
-class WidgetHome : Fragment(R.layout.widget_home), BackHandler, WidgetChannelPinnedMessages.Host {
+class WidgetHome : AppFragment(R.layout.widget_home), BackHandler, WidgetChannelPinnedMessages.Host {
     private lateinit var panels: HomePanelsLayout
     private var navigationSubscription: Subscription? = null
     private var selectedChannelSubscription: Subscription? = null

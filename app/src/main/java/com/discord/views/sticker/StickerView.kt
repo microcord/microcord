@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.util.AttributeSet
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
@@ -14,6 +15,7 @@ import com.discord.api.sticker.BaseSticker
 import com.discord.api.sticker.Sticker
 import com.discord.api.sticker.StickerFormatType
 import com.discord.api.sticker.StickerPartial
+import com.discord.i18n.i18nFormat
 import com.discord.rlottie.RLottieDrawable
 import com.discord.rlottie.RLottieImageView
 import com.discord.stores.StickerAnimationSettingsStore
@@ -85,15 +87,23 @@ class StickerView @JvmOverloads constructor(
             StickerUtils.fetchSticker(context, sticker),
             StickerAnimationSettingsStore.observe(context),
         ) { download, setting -> download to setting }
-            .subscribeOn(Schedulers.io()).subscribe { (download, globalSetting) ->
-                if (download is DownloadUtils.DownloadState.Completed) {
-                    post {
-                        if (this.sticker?.getStickerId() == sticker.getStickerId()) {
-                            showDownloaded(sticker, download.file, localSetting ?: globalSetting)
+            .subscribeOn(Schedulers.io())
+            .subscribe(
+                { (download, globalSetting) ->
+                    if (download is DownloadUtils.DownloadState.Completed) {
+                        post {
+                            if (this.sticker?.getStickerId() == sticker.getStickerId()) {
+                                showDownloaded(sticker, download.file, localSetting ?: globalSetting)
+                            }
                         }
                     }
-                }
-            }
+                },
+                { error ->
+                    // A sticker that cannot be downloaded must leave the placeholder
+                    // visible rather than crash the surrounding list.
+                    Log.w("StickerView", "Failed to load sticker ${sticker.getStickerId()}", error)
+                },
+            )
     }
 
     private fun showDownloaded(sticker: BaseSticker, file: java.io.File, setting: Int) {
@@ -104,11 +114,9 @@ class StickerView @JvmOverloads constructor(
                 file,
                 StickerUtils.getDefaultStickerSizePx(context),
                 StickerUtils.getDefaultStickerSizePx(context),
-                false,
-                true,
-                refreshRate(),
-                null,
-                0,
+                precache = false,
+                limitFps = true,
+                displayRefreshRate = refreshRate(),
             ).apply {
                 setPlaybackMode(
                     if (setting == StickerUtils.ALWAYS_ANIMATE) RLottieDrawable.PlaybackMode.LOOP
@@ -163,7 +171,7 @@ class StickerView @JvmOverloads constructor(
             is StickerPartial -> sticker.name
             else -> return null
         }
-        return context.getString(R.string.sticker_a11y_label).replace("!!{stickerName}!!", value)
+        return context.i18nFormat(R.string.sticker_a11y_label, "stickerName" to value)
     }
 
     private fun resetViews() {

@@ -4,15 +4,14 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import com.discord.app.AppBottomSheet
 import com.discord.R
 import com.discord.api.message.reaction.MessageReactionEmoji
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 
-class WidgetEmojiPickerSheet : BottomSheetDialogFragment() {
+class WidgetEmojiPickerSheet : AppBottomSheet() {
     private var listener: ((MessageReactionEmoji) -> Unit)? = null
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?) =
-        inflater.inflate(R.layout.widget_emoji_picker_sheet, container, false)
+    override fun getContentViewResId() = R.layout.widget_emoji_picker_sheet
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)

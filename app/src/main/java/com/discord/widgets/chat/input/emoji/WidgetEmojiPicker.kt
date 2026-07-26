@@ -11,6 +11,7 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -23,7 +24,7 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.gson.JsonParser
 import java.util.Locale
 
-class WidgetEmojiPicker : Fragment(R.layout.widget_emoji_picker) {
+class WidgetEmojiPicker : AppFragment(R.layout.widget_emoji_picker) {
     interface Host {
         fun onEmojiPicked(text: String)
         fun onEmojiBackspace()

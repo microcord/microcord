@@ -5,6 +5,7 @@ import android.view.View
 import android.widget.Toast
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import com.discord.R
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.views.CheckedSetting
@@ -13,7 +14,7 @@ import rx.Observable
 import rx.Subscription
 import rx.functions.Action1
 
-class WidgetServerNotifications : Fragment(R.layout.widget_server_notifications) {
+class WidgetServerNotifications : AppFragment(R.layout.widget_server_notifications) {
     data class State(
         val guildId: Long,
         val guildName: String,

@@ -16,13 +16,27 @@ data class UploadProgress(val bytesWritten: Long, val contentLength: Long) {
         get() = if (contentLength > 0) (bytesWritten.toDouble() / contentLength).coerceIn(0.0, 1.0).toFloat() else 0f
 }
 
+/**
+ * One multipart part plus a live byte counter for it.
+ *
+ * Mirrors the reference `SendUtils.FileUpload(name, contentLength, part, mimeType,
+ * bytesWrittenObservable)`. [progress] is a convenience projection of [bytesWrittenObservable] that
+ * the upload row binds to directly.
+ */
 data class FileUpload(
     val name: String,
     val contentLength: Long,
     val part: MultipartBody.Part,
     val mimeType: String,
-    val progress: Observable<UploadProgress>,
-)
+    val bytesWrittenObservable: Observable<Long>,
+) {
+    val progress: Observable<UploadProgress>
+        get() = bytesWrittenObservable.map { UploadProgress(it, contentLength) }
+
+    companion object {
+        const val SIZE_UNKNOWN = -1L
+    }
+}
 
 class MessageUploadPayload internal constructor(
     val body: MultipartBody,
@@ -40,6 +54,33 @@ class MessageUploadPayload internal constructor(
 }
 
 object MessageUploadPayloadBuilder {
+
+    /**
+     * Builds the multipart parts for [attachments] without wiring up an aggregate progress stream.
+     *
+     * This is what `SendUtils.getSendPayload` hands to `MessageQueue`, which passes the parts
+     * straight to the multipart send endpoint and reports per-file progress through
+     * `MessageRequest.Send.onProgress`.
+     */
+    fun buildUploads(
+        resolver: ContentResolver,
+        attachments: List<UploadAttachment>,
+    ): List<FileUpload> {
+        val names = uniqueUploadFileNames(attachments)
+        return attachments.mapIndexed { index, attachment ->
+            val counting = CountingRequestBody(
+                AttachmentRequestBody(resolver, attachment.uri, attachment.size, attachment.mimeType.toMediaType()),
+            )
+            FileUpload(
+                name = names[index],
+                contentLength = attachment.size,
+                part = MultipartBody.Part.createFormData("files[$index]", names[index], counting),
+                mimeType = attachment.mimeType,
+                bytesWrittenObservable = counting.bytesWrittenObservable,
+            )
+        }
+    }
+
     fun build(
         resolver: ContentResolver,
         payloadJson: String,
@@ -62,11 +103,11 @@ object MessageUploadPayloadBuilder {
         val uploads = attachments.mapIndexed { index, attachment ->
             val body = countingBodies[index]
             FileUpload(
-                names[index],
-                attachment.size,
-                MultipartBody.Part.createFormData("files[$index]", names[index], body),
-                attachment.mimeType,
-                body.bytesWrittenObservable.map { UploadProgress(it, attachment.size) },
+                name = names[index],
+                contentLength = attachment.size,
+                part = MultipartBody.Part.createFormData("files[$index]", names[index], body),
+                mimeType = attachment.mimeType,
+                bytesWrittenObservable = body.bytesWrittenObservable,
             )
         }
         val multipart = buildMultipartBody(payloadJson, uploads.map(FileUpload::part))

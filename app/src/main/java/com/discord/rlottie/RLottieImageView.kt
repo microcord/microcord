@@ -14,8 +14,14 @@ open class RLottieImageView(context: Context, attrs: AttributeSet?) : AppCompatI
     private var attachedToWindow = false
     private var playing = false
 
-    fun setAnimation(resId: Int, width: Int, height: Int) {
-        rlottieDrawable = RLottieDrawable(
+    @JvmOverloads
+    fun setAnimation(
+        resId: Int,
+        width: Int,
+        height: Int,
+        playbackMode: RLottieDrawable.PlaybackMode = RLottieDrawable.PlaybackMode.LOOP,
+    ) {
+        val drawable = RLottieDrawable(
             context,
             resId,
             resId.toString(),
@@ -25,14 +31,16 @@ open class RLottieImageView(context: Context, attrs: AttributeSet?) : AppCompatI
             false,
             null,
         ).also {
-            it.setPlaybackMode(RLottieDrawable.PlaybackMode.LOOP)
+            it.setPlaybackMode(playbackMode)
             it.setAllowDecodeSingleFrame(true)
         }
-        setImageDrawable(rlottieDrawable)
+        setRLottieDrawable(drawable)
     }
 
     fun setRLottieDrawable(drawable: RLottieDrawable) {
+        rlottieDrawable?.removeParentView(this)
         rlottieDrawable = drawable
+        if (attachedToWindow) drawable.addParentView(this)
         setImageDrawable(drawable)
     }
 
@@ -40,6 +48,11 @@ open class RLottieImageView(context: Context, attrs: AttributeSet?) : AppCompatI
         val drawable = rlottieDrawable ?: return
         playing = true
         if (attachedToWindow) drawable.start()
+    }
+
+    fun stopAnimation() {
+        playing = false
+        rlottieDrawable?.stop()
     }
 
     fun setPlaybackMode(mode: RLottieDrawable.PlaybackMode) {
@@ -53,13 +66,21 @@ open class RLottieImageView(context: Context, attrs: AttributeSet?) : AppCompatI
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         attachedToWindow = true
-        if (playing) rlottieDrawable?.start()
+        rlottieDrawable?.let {
+            it.addParentView(this)
+            if (playing) it.start()
+        }
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         attachedToWindow = false
-        rlottieDrawable?.stop()
+        // Unregistering lets the drawable stop itself instead of decoding frames
+        // for a view that is no longer on screen.
+        rlottieDrawable?.let {
+            it.stop()
+            it.removeParentView(this)
+        }
     }
 
     @SuppressLint("AnnotateVersionCheck")

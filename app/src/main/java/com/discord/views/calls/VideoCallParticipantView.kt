@@ -14,8 +14,10 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.core.view.DisplayCutoutCompat
 import com.discord.R
+import com.discord.i18n.i18nFormat
 import com.discord.stores.StoreApplicationStreamPreviews
 import com.discord.stores.StoreVoiceParticipants
+import com.discord.utilities.view.extensions.fadeBy
 import com.discord.views.VoiceUserView
 import com.facebook.drawee.view.SimpleDraweeView
 import org.webrtc.RendererCommon
@@ -68,8 +70,8 @@ class VideoCallParticipantView @JvmOverloads constructor(
         val isHighDefinition get() = this is Source || this is Fixed && value == 1080
 
         data class Fixed(val value: Int) : StreamResolution() {
-            override fun label(context: Context) = context.getString(R.string.screenshare_resolution_abbreviated)
-                .replace("{resolution}", value.toString())
+            override fun label(context: Context) =
+                context.i18nFormat(R.string.screenshare_resolution_abbreviated, "resolution" to value)
         }
 
         data object Source : StreamResolution() {
@@ -93,6 +95,7 @@ class VideoCallParticipantView @JvmOverloads constructor(
     private var showStreamQuality = false
     private var labelInitialized = false
     private var boundStreamId: Int? = null
+    private var matchVideoOrientation = false
 
     private val avatarBackground: View
     private val letterbox: View
@@ -137,14 +140,39 @@ class VideoCallParticipantView @JvmOverloads constructor(
         qualityContainer.setOnClickListener {
             data?.streamQuality?.let { onStreamQualityIndicatorClicked(it.resolution, it.fps) }
         }
+
+        // The overlay tile draws over other windows and the fullscreen tile rotates
+        // to follow the incoming video; both are declared per layout.
+        var isOverlay = false
+        if (attrs != null) {
+            context.obtainStyledAttributes(
+                attrs,
+                intArrayOf(R.attr.vcpv_is_overlay, R.attr.vcpv_match_video_orientation),
+            ).run {
+                try {
+                    isOverlay = getBoolean(0, false)
+                    matchVideoOrientation = getBoolean(1, false)
+                } finally {
+                    recycle()
+                }
+            }
+        }
+        renderer.setIsOverlay(isOverlay)
+        renderer.setMatchVideoOrientation(matchVideoOrientation)
     }
 
+    /**
+     * Every parameter but [data] defaults to the value already in effect, so a
+     * rebind from the grid keeps the cutout, row position, call insets and control
+     * visibility the host configured once.
+     */
+    @JvmOverloads
     fun configure(
         data: ParticipantData?,
-        displayCutout: DisplayCutoutCompat? = null,
-        isTopRow: Boolean = false,
-        callUiInsets: CallUiInsets = CallUiInsets(),
-        showStreamQuality: Boolean = false,
+        displayCutout: DisplayCutoutCompat? = this.displayCutout,
+        isTopRow: Boolean = this.isTopRow,
+        callUiInsets: CallUiInsets = this.callUiInsets,
+        showStreamQuality: Boolean = this.showStreamQuality,
     ) {
         this.displayCutout = displayCutout
         this.isTopRow = isTopRow
@@ -205,10 +233,21 @@ class VideoCallParticipantView @JvmOverloads constructor(
         }
         boundStreamId = data?.streamId
         renderer.configure(data?.streamId, data?.scalingType, data?.insetScalingType, data?.mirror == true)
-        renderer.onFrameRenderedListener = { _: Point ->
+        renderer.onFrameRenderedListener = { frame: Point ->
             renderer.visibility = VISIBLE
             loading.visibility = GONE
             letterbox.visibility = visible(preview.visibility != VISIBLE)
+            preview.visibility = GONE
+            previewText.visibility = GONE
+            if (matchVideoOrientation && (frame.x > frame.y) != (width > height)) {
+                // A portrait tile showing landscape video (or the reverse) swaps its
+                // own dimensions so the frame is not letterboxed to nothing.
+                layoutParams = layoutParams.apply {
+                    val previousWidth = width
+                    width = height
+                    height = previousWidth
+                }
+            }
         }
 
         configureQuality(data)
@@ -232,16 +271,19 @@ class VideoCallParticipantView @JvmOverloads constructor(
                 ParticipantData.ApplicationStreamState.ACTIVE,
                 ParticipantData.ApplicationStreamState.PAUSED,
             )
-        qualityContainer.visibility = visible(shown)
-        if (!shown || quality == null) return
+        if (!shown || quality == null) {
+            qualityContainer.fadeBy(false, FADE_DURATION_MS)
+            return
+        }
         qualityContainer.translationX = -callUiInsets.right.toFloat()
         qualityContainer.translationY = callUiInsets.top.toFloat()
         qualityIcon.visibility = visible(quality.isPremium)
         qualityInfo.text = listOfNotNull(
             quality.resolution.label(context).toString().takeIf(String::isNotBlank),
-            quality.fps?.let { context.getString(R.string.stream_fps_option).replace("{value}", it.value.toString()) },
+            quality.fps?.let { context.i18nFormat(R.string.stream_fps_option, "value" to it.value) },
         ).joinToString(" ")
         qualityInfo.visibility = visible(qualityInfo.text.isNotEmpty())
+        qualityContainer.fadeBy(true, FADE_DURATION_MS)
         qualityLive.setTextColor(
             androidx.core.content.ContextCompat.getColor(
                 context,
@@ -261,9 +303,11 @@ class VideoCallParticipantView @JvmOverloads constructor(
             0,
         )
         contentDescription = if (data.type == ParticipantData.Type.APPLICATION_STREAMING) {
-            context.getString(R.string.watch_user_stream).replace("!!{streamerName}!!", participant.displayName)
+            context.i18nFormat(R.string.watch_user_stream, "streamerName" to participant.displayName)
         } else participant.displayName
-        if (labelInitialized) label.animate().alpha(if (data.showLabel) 1f else 0f).setDuration(200).start()
+        // The first bind sets the label outright; only later changes cross-fade, so
+        // a freshly attached tile does not flash its label in.
+        if (labelInitialized) label.fadeBy(data.showLabel, FADE_DURATION_MS)
         else label.visibility = visible(data.showLabel)
         labelInitialized = true
     }
@@ -271,12 +315,18 @@ class VideoCallParticipantView @JvmOverloads constructor(
     private fun configureCutout() {
         val insetTop = displayCutout?.safeInsetTop ?: 0
         val set = ConstraintSet().apply { clone(this@VideoCallParticipantView) }
-        val topSide = if (insetTop > 0 && isTopRow && indicators.visibility != VISIBLE) {
-            ConstraintSet.BOTTOM
-        } else ConstraintSet.TOP
-        set.connect(live.id, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START, 8.dp)
-        set.connect(live.id, topSide, ConstraintSet.PARENT_ID, topSide, 8.dp)
-        set.clear(live.id, if (topSide == ConstraintSet.TOP) ConstraintSet.BOTTOM else ConstraintSet.TOP)
+        // A top-row tile on a device with a notch moves the LIVE pill to the bottom
+        // so it is not hidden by the cutout, unless the mute/deafen row already
+        // occupies that corner.
+        val moveToBottom = insetTop > 0 && isTopRow && indicators.visibility != VISIBLE
+        set.connect(live.id, ConstraintSet.RIGHT, ConstraintSet.PARENT_ID, ConstraintSet.RIGHT, 8.dp)
+        if (moveToBottom) {
+            set.connect(live.id, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM, 8.dp)
+            set.clear(live.id, ConstraintSet.TOP)
+        } else {
+            set.connect(live.id, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP, 8.dp)
+            set.clear(live.id, ConstraintSet.BOTTOM)
+        }
         set.applyTo(this)
     }
 
@@ -313,4 +363,8 @@ class VideoCallParticipantView @JvmOverloads constructor(
     }
 
     data class CallUiInsets(val left: Int = 0, val top: Int = 0, val right: Int = 0, val bottom: Int = 0)
+
+    private companion object {
+        const val FADE_DURATION_MS = 200L
+    }
 }

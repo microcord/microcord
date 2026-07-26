@@ -1,25 +1,50 @@
 package com.discord.utilities.messagesend
 
+import android.content.ContentResolver
 import com.discord.api.message.MessageReference
+import com.discord.api.message.allowedmentions.MessageAllowedMentions
+import com.discord.api.message.allowedmentions.MessageAllowedMentionsTypes
 import com.discord.api.user.User
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.message.Message
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StorePendingReplies
+import com.discord.utilities.attachments.UploadAttachment
 import com.discord.utilities.captcha.CaptchaHelper
-import com.discord.utilities.error.RestApiError
+import com.discord.utilities.rest.FileUpload
+import com.discord.utilities.rest.SendUtils
+import com.discord.utilities.time.Clock
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import rx.Observable
-import rx.Single
-import rx.subjects.PublishSubject
+import rx.Scheduler
 import rx.schedulers.Schedulers
+import rx.subjects.PublishSubject
 
-class MessageSendCoordinator(
+/**
+ * Owns the optimistic-message lifecycle around [MessageQueue].
+ *
+ * The split follows the reference: `MessageQueue` only knows how to serialise and execute one
+ * channel's requests, while the caller (`StoreMessages` there, this class here) owns nonces, the
+ * optimistic local message, retry/captcha bookkeeping and the projection into store state.
+ *
+ * There is one [MessageQueue] per channel, all sharing [queueExecutor], exactly as
+ * `StoreMessages.getOrCreateMessageQueue` does — two channels can send in parallel, but a single
+ * channel stays strictly ordered.
+ */
+class MessageSendCoordinator @JvmOverloads constructor(
     private val api: RestAPIInterface,
     private val now: () -> Long = System::currentTimeMillis,
     private val nonceGenerator: NonceGenerator = NonceGenerator(now),
-    private val queueScheduler: MessageQueueScheduler = ExecutorMessageQueueScheduler(),
+    private val contentResolver: ContentResolver? = null,
+    private val queueExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "MessageQueue").apply { isDaemon = true }
+    },
+    private val retryScheduler: Scheduler = Schedulers.computation(),
     private val characterLimit: Int = DEFAULT_CHARACTER_LIMIT,
 ) {
     data class Send(
@@ -33,6 +58,7 @@ class MessageSendCoordinator(
         val allowedMentions: RestAPIParams.Message.AllowedMentions? = null,
         val reply: StorePendingReplies.PendingReply? = null,
         val captcha: CaptchaHelper.CaptchaPayload? = null,
+        val attachments: List<UploadAttachment>? = null,
     )
 
     sealed class Submission {
@@ -42,18 +68,29 @@ class MessageSendCoordinator(
 
     sealed class Update {
         abstract val requestId: String
+
         data class Optimistic(override val requestId: String, val message: Message) : Update()
         data class Reconciled(override val requestId: String, val message: Message) : Update()
         data class Failed(override val requestId: String, val message: Message, val result: MessageResult) : Update()
         data class Cancelled(override val requestId: String) : Update()
+
+        /** Attachment count is known and files are about to be read. */
+        data class Preprocessing(
+            override val requestId: String,
+            val preprocessing: SendUtils.SendPayload.Preprocessing,
+        ) : Update()
+
+        /** Multipart parts exist; [uploads] carry the live per-file byte counters. */
+        data class Progress(override val requestId: String, val uploads: List<FileUpload>) : Update()
     }
 
-    private data class Operation(
+    private class Operation(
         val channelId: Long,
-        val messageId: Long?,
-        var body: RestAPIParams.Message,
+        val queueRequestId: String,
         var optimistic: Message,
         val original: Message? = null,
+        val isEdit: Boolean = false,
+        val attachments: List<UploadAttachment>? = null,
     )
 
     private val operations = ConcurrentHashMap<String, Operation>()
@@ -67,107 +104,142 @@ class MessageSendCoordinator(
         validate(input)?.let { return Submission.Rejected(it) }
         val nonce = nonceGenerator.nonce().toString()
         val reference = input.reply?.messageReference
-        val mentions = input.allowedMentions.withReplyMention(input.reply)
-        val body = RestAPIParams.Message(
-            content = input.content,
-            nonce = nonce,
-            messageReference = reference?.let {
-                RestAPIParams.Message.MessageReference(it.guildId, input.channelId, it.messageId)
-            },
-            allowedMentions = mentions,
-            captchaKey = input.captcha?.captchaKey,
-            captchaRqtoken = input.captcha?.captchaRqtoken,
-            enforceNonce = true,
-        )
         val optimistic = Message(
-            id = nonce.toLong(), channelId = input.channelId, guildId = input.guildId,
-            author = input.author, content = input.content, timestamp = UtcDateTime(now()),
-            nonce = nonce, type = TYPE_SENDING,
-            messageReference = reference?.let { MessageReference(it.guildId, it.channelId, it.messageId) },
+            id = nonce.toLong(),
+            channelId = input.channelId,
+            guildId = input.guildId,
+            author = input.author,
+            content = input.content,
+            timestamp = UtcDateTime(now()),
+            nonce = nonce,
+            type = TYPE_SENDING,
+            messageReference = reference?.let { MessageReference(it.guildId, input.channelId, it.messageId) },
+            allowedMentions = allowedMentionsFor(input),
             captchaPayload = input.captcha,
+            hasLocalUploads = !input.attachments.isNullOrEmpty(),
+            localAttachments = input.attachments?.map(UploadAttachment::toLocalAttachment),
+            initialAttemptTimestamp = now(),
         )
-        return enqueue(nonce, Operation(input.channelId, null, body, optimistic))
+        val operation = Operation(
+            channelId = input.channelId,
+            queueRequestId = nonce,
+            optimistic = optimistic,
+            attachments = input.attachments,
+        )
+        operations[nonce] = operation
+        updates.onNext(Update.Optimistic(nonce, optimistic))
+        enqueueSend(nonce, operation)
+        return Submission.Accepted(nonce, optimistic)
     }
 
-    fun edit(message: Message, content: String, allowedMentions: RestAPIParams.Message.AllowedMentions? = null): Submission {
+    fun edit(
+        message: Message,
+        content: String,
+        allowedMentions: RestAPIParams.Message.AllowedMentions? = null,
+    ): Submission {
         if (message.id <= 0 || message.channelId <= 0) return Submission.Rejected(MessageResult.NoValidContent)
         validateContent(content)?.let { return Submission.Rejected(it) }
         val requestId = "edit:${message.channelId}:${message.id}:${nonceGenerator.nonce()}"
-        return enqueue(requestId, Operation(
-            message.channelId,
-            message.id,
-            RestAPIParams.Message(content = content, allowedMentions = allowedMentions),
-            message.copy(content = content, type = TYPE_SENDING),
-            message,
-        ))
+        val operation = Operation(
+            channelId = message.channelId,
+            queueRequestId = message.id.toString(),
+            optimistic = message.copy(content = content, type = TYPE_SENDING),
+            original = message,
+            isEdit = true,
+        )
+        operations[requestId] = operation
+        updates.onNext(Update.Optimistic(requestId, operation.optimistic))
+        queue(operation.channelId).enqueue(
+            MessageRequest.Edit(
+                channelId = message.channelId,
+                content = content,
+                messageId = message.id,
+                allowedMentions = allowedMentions?.toApiModel(),
+                attemptTimestamp = now(),
+                requestId = operation.queueRequestId,
+                onCompleted = { result, _ -> settle(requestId, result) },
+            ),
+        )
+        return Submission.Accepted(requestId, operation.optimistic)
     }
 
+    /** Re-sends a previously failed request, optionally attaching a freshly solved captcha. */
     fun retry(requestId: String, captcha: CaptchaHelper.CaptchaPayload? = null): Boolean {
         val operation = operations[requestId] ?: return false
-        operation.body = operation.body.copy(
-            captchaKey = captcha?.captchaKey ?: operation.body.captchaKey,
-            captchaRqtoken = captcha?.captchaRqtoken ?: operation.body.captchaRqtoken,
+        if (operation.isEdit) return false
+        operation.optimistic = operation.optimistic.copy(
+            type = TYPE_SENDING,
+            captchaPayload = captcha ?: operation.optimistic.captchaPayload,
+            numRetries = (operation.optimistic.numRetries ?: 0) + 1,
+            lastManualAttemptTimestamp = now(),
         )
-        operation.optimistic = operation.optimistic.copy(type = TYPE_SENDING, captchaPayload = captcha)
         updates.onNext(Update.Optimistic(requestId, operation.optimistic))
-        queue(operation.channelId).enqueue(boundRequest(operation, requestId))
+        enqueueSend(requestId, operation)
         return true
     }
 
+    /** Re-queues a local message recovered from persistence after a restart. */
     fun resume(message: Message): Boolean {
         val nonce = message.nonce ?: return false
         if (!message.isLocal() || message.channelId <= 0) return false
-        val reference = message.messageReference
-        val body = RestAPIParams.Message(
-            content = message.content,
-            nonce = nonce,
-            messageReference = reference?.let {
-                RestAPIParams.Message.MessageReference(it.guildId, message.channelId, it.messageId)
-            },
-            captchaKey = message.captchaPayload?.captchaKey,
-            captchaRqtoken = message.captchaPayload?.captchaRqtoken,
+        val operation = Operation(
+            channelId = message.channelId,
+            queueRequestId = nonce,
+            optimistic = message.copy(type = TYPE_SENDING),
         )
-        operations[nonce] = Operation(message.channelId, null, body, message.copy(type = TYPE_SENDING))
-        queue(message.channelId).enqueue(boundRequest(operations.getValue(nonce), nonce))
+        operations[nonce] = operation
+        enqueueSend(nonce, operation)
         return true
     }
 
     fun cancel(requestId: String) {
-        operations.remove(requestId)?.let {
+        operations.remove(requestId)?.let { operation ->
             updates.onNext(Update.Cancelled(requestId))
-            queues[it.channelId]?.cancel(requestId)
+            queues[operation.channelId]?.cancel(operation.queueRequestId)
         }
     }
+
+    /** The gateway already delivered this message, so the queued attempt is redundant. */
     fun reconcileFromGateway(requestId: String) {
-        operations.remove(requestId)?.let { queues[it.channelId]?.cancel(requestId) }
+        operations.remove(requestId)?.let { queues[it.channelId]?.cancel(it.queueRequestId) }
     }
+
     fun handleConnected() = queues.values.forEach(MessageQueue::handleConnected)
+
     fun cancelAll() {
         queues.values.forEach(MessageQueue::cancelAll)
         operations.keys.toList().forEach { updates.onNext(Update.Cancelled(it)) }
         operations.clear()
     }
 
+    /**
+     * Re-queues [messages] and blocks until each settles or [timeoutMs] elapses.
+     *
+     * Used by the background send worker, which must report success or failure synchronously.
+     */
     fun resumeAndWait(messages: List<Message>, timeoutMs: Long = 60_000L): Boolean {
         val ids = messages.mapNotNull(Message::nonce).toSet()
         if (ids.isEmpty()) return true
         val remaining = java.util.Collections.synchronizedSet(HashSet(ids))
         var failed = false
-        val latch = java.util.concurrent.CountDownLatch(ids.size)
+        val latch = CountDownLatch(ids.size)
         val subscription = observeUpdates().subscribe { update ->
             if (update.requestId !in remaining) return@subscribe
             when (update) {
                 is Update.Reconciled -> Unit
                 is Update.Failed, is Update.Cancelled -> failed = true
-                is Update.Optimistic -> return@subscribe
+                is Update.Optimistic, is Update.Preprocessing, is Update.Progress -> return@subscribe
             }
             if (remaining.remove(update.requestId)) latch.countDown()
         }
         messages.forEach { message ->
             val nonce = message.nonce ?: return@forEach
-            if (!resume(message) && remaining.remove(nonce)) { failed = true; latch.countDown() }
+            if (!resume(message) && remaining.remove(nonce)) {
+                failed = true
+                latch.countDown()
+            }
         }
-        val completed = latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        val completed = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
         subscription.unsubscribe()
         return completed && !failed
     }
@@ -178,53 +250,69 @@ class MessageSendCoordinator(
         val previous = typingAt[channelId]
         if (previous != null && timestamp - previous < TYPING_INTERVAL_MS) return
         typingAt[channelId] = timestamp
-        api.setUserTyping(channelId).subscribeOn(Schedulers.io()).subscribe({}, {})
+        api.setUserTyping(channelId)
+            .subscribeOn(Schedulers.io())
+            .appSubscribeQuietly()
     }
 
-    private fun enqueue(requestId: String, operation: Operation): Submission.Accepted {
-        operations[requestId] = operation
-        updates.onNext(Update.Optimistic(requestId, operation.optimistic))
-        queue(operation.channelId).enqueue(boundRequest(operation, requestId))
-        return Submission.Accepted(requestId, operation.optimistic)
+    private fun enqueueSend(requestId: String, operation: Operation) {
+        queue(operation.channelId).enqueue(
+            MessageRequest.Send(
+                message = operation.optimistic,
+                activity = null,
+                attachments = operation.attachments,
+                onCompleted = { result, _ -> settle(requestId, result) },
+                onPreprocessing = { updates.onNext(Update.Preprocessing(requestId, it)) },
+                onProgress = { updates.onNext(Update.Progress(requestId, it)) },
+                attemptTimestamp = operation.optimistic.lastManualAttemptTimestamp
+                    ?: operation.optimistic.initialAttemptTimestamp
+                    ?: now(),
+            ),
+        )
     }
 
-    private fun execute(request: MessageRequest): Single<MessageResult> = operations[request.requestId]?.let { operation ->
-        val call = operation.messageId?.let { api.editMessage(operation.channelId, it, operation.body) }
-            ?: api.sendMessage(operation.channelId, operation.body)
-        call.map { apiMessage ->
-            val message = Message(apiMessage)
-            operation.optimistic = message
-            updates.onNext(Update.Reconciled(request.requestId, message))
-            MessageResult.Success as MessageResult
-        }.onErrorReturn { classify(it) }.toSingle()
-    } ?: Single.just(MessageResult.UserCancelled)
-
-    private fun completed(requestId: String, result: MessageResult) {
+    private fun settle(requestId: String, result: MessageResult) {
         val operation = operations[requestId] ?: return
         when (result) {
-            MessageResult.Success -> operations.remove(requestId)
-            MessageResult.UserCancelled -> updates.onNext(Update.Cancelled(requestId))
+            is MessageResult.Success -> {
+                operations.remove(requestId)
+                updates.onNext(Update.Reconciled(requestId, Message(result.message)))
+            }
+
+            MessageResult.UserCancelled -> {
+                operations.remove(requestId)
+                updates.onNext(Update.Cancelled(requestId))
+            }
+
             else -> {
-                operation.optimistic = operation.original ?: operation.optimistic.copy(type = when (result) {
-                    is MessageResult.CaptchaRequired -> TYPE_CAPTCHA
-                    MessageResult.AutoModBlock -> TYPE_AUTOMOD
-                    else -> TYPE_FAILED
-                })
+                operation.optimistic = operation.original
+                    ?: operation.optimistic.copy(type = failedTypeFor(result))
                 updates.onNext(Update.Failed(requestId, operation.optimistic, result))
             }
         }
     }
 
-    private fun boundRequest(operation: Operation, requestId: String): MessageRequest =
-        if (operation.messageId == null) MessageRequest.Send(requestId, now()) { result, _ -> completed(requestId, result) }
-        else MessageRequest.Edit(requestId, now()) { result, _ -> completed(requestId, result) }
+    private fun failedTypeFor(result: MessageResult) = when (result) {
+        is MessageResult.CaptchaRequired -> TYPE_CAPTCHA
+        is MessageResult.AutoModBlock -> TYPE_AUTOMOD
+        else -> TYPE_FAILED
+    }
 
-    private fun queue(channelId: Long) = queues.getOrPut(channelId) { MessageQueue(::execute, queueScheduler) }
+    private fun queue(channelId: Long) = queues.getOrPut(channelId) {
+        MessageQueue(
+            contentResolver = contentResolver,
+            executorService = queueExecutor,
+            clock = Clock { now() },
+            api = api,
+            retryScheduler = retryScheduler,
+        )
+    }
 
     private fun validate(input: Send): MessageResult? = when {
         input.channelId <= 0 || input.systemDm -> MessageResult.NoValidContent
         !input.canSend -> MessageResult.ValidationError("Missing send permission")
         input.communicationDisabled -> MessageResult.ValidationError("Communication disabled")
+        !input.attachments.isNullOrEmpty() -> null
         else -> validateContent(input.content)
     }
 
@@ -234,33 +322,42 @@ class MessageSendCoordinator(
         else -> null
     }
 
-    private fun classify(throwable: Throwable): MessageResult {
-        val error = RestApiError.from(throwable)
-        return when {
-            error.type == RestApiError.Type.NETWORK || error.type == RestApiError.Type.TIMEOUT -> MessageResult.NetworkFailure
-            error.statusCode == 429 -> MessageResult.RateLimited(error.retryAfterMs ?: 1_000L)
-            error.code == 20016 -> MessageResult.Slowmode(error.retryAfterMs ?: 1_000L)
-            error.captchaSitekey != null || "captcha_key" in error.messages || "captcha_rqtoken" in error.messages ->
-                MessageResult.CaptchaRequired(error.captchaSitekey, error.captchaRqtoken)
-            error.code == AUTOMOD_BLOCK_CODE -> MessageResult.AutoModBlock
-            error.type == RestApiError.Type.DISCORD_BAD_REQUEST -> MessageResult.ValidationError(error.message ?: "Invalid message")
-            else -> MessageResult.UnknownFailure(throwable)
-        }
-    }
-
-    private fun RestAPIParams.Message.AllowedMentions?.withReplyMention(reply: StorePendingReplies.PendingReply?) = when {
-        reply == null -> this
-        this == null -> RestAPIParams.Message.AllowedMentions(repliedUser = reply.shouldMention)
-        else -> copy(repliedUser = reply.shouldMention)
+    /**
+     * The reference stores allowed mentions on the local message and lets `MessageQueue.doSend`
+     * translate them into the request body, so the reply's "ping the author" toggle has to be folded
+     * in here rather than at send time.
+     */
+    private fun allowedMentionsFor(input: Send): MessageAllowedMentions? {
+        val base = input.allowedMentions?.toApiModel()
+        val reply = input.reply ?: return base
+        return base?.copy(repliedUser = reply.shouldMention)
+            ?: MessageAllowedMentions(repliedUser = reply.shouldMention)
     }
 
     private companion object {
         const val DEFAULT_CHARACTER_LIMIT = 2_000
         const val TYPING_INTERVAL_MS = 9_000L
-        const val AUTOMOD_BLOCK_CODE = 200000
         const val TYPE_SENDING = -1
         const val TYPE_FAILED = -2
         const val TYPE_CAPTCHA = -6
         const val TYPE_AUTOMOD = -8
     }
 }
+
+private fun RestAPIParams.Message.AllowedMentions.toApiModel() = MessageAllowedMentions(
+    parse = parse?.mapNotNull { value ->
+        MessageAllowedMentionsTypes.entries.firstOrNull { it.apiStringRepresentation == value }
+    },
+    users = users,
+    roles = roles,
+    repliedUser = repliedUser,
+)
+
+/**
+ * Fire-and-forget subscription for a call whose failure is genuinely not actionable.
+ *
+ * Typing indicators expire on their own, so a lost one needs no user-facing error. This is kept as a
+ * named helper so it is obvious that the empty error handler is deliberate rather than the
+ * `subscribe({}, {})` pattern that hides real failures.
+ */
+private fun <T> Observable<T>.appSubscribeQuietly() = subscribe({ }, { })

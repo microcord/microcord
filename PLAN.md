@@ -370,7 +370,28 @@ activity creation, and inflation of `activity_app.xml`.
 
 ### Phase 1: Resource Foundation
 
-Status: **DONE**
+Status: **IN PROGRESS** (reopened 2026-07-26 by parity audit)
+
+Reopened because the 2026-07-26 audit found two structural resource defects that
+inflation success had masked. See `docs/parity-audit/audit-views.md`.
+
+- [ ] Restore the stripped `<enum>`/`<flag>` children in `res/values/attrs.xml`.
+      The reference declares 518 `<enum>` and 130 `<flag>` children; the target
+      has 34 and 0. AAPT therefore stores the layout value as a raw string and
+      `TypedArray.getInt()` returns the default. `cs_view_type` is dead across
+      **39 layouts**, so every settings radio/switch renders as a checkbox with
+      the wrong accessibility role; `cvv_character_input_type`, `cutout_style`,
+      `format_type`, `image_style`, and `cap_style` are also dead.
+- [ ] Reconstruct the 7 missing first-party view classes: `ToolbarTitleLayout`,
+      `TooltipManager`, `DefaultTooltipCreator`, `RadioManager`,
+      `OverlayMenuBubbleDialog`, `OAuthPermissionViews`,
+      `UserAvatarPresenceViewController`.
+- [ ] Drive the 32 custom views that are inflated by XML but never driven from
+      Kotlin, and fix the 13 confirmed view behavior defects.
+
+Confirmed good: all 134 distinct `com.discord.*` element names across every
+layout qualifier resolve to a target class with an `AttributeSet` constructor.
+There is no inflation crash in the view surface.
 
 - [x] Import all assets.
 - [x] Import values and resource qualifiers.
@@ -431,7 +452,33 @@ initialization, audio subsystem and input/output enumeration, and disposal.
 
 ### Phase 3: Core Runtime and Stores
 
-Status: **DONE**
+Status: **IN PROGRESS** (reopened 2026-07-26 by parity audit)
+
+Reopened because the store graph is a quarter of the reference and the shared
+store infrastructure is missing. See `docs/parity-audit/audit-stores-core.md`
+and `docs/parity-audit/audit-stores-gap-inventory.md`.
+
+- [ ] `StoreStream` constructs **36 of 145** reference stores; `storesV2` holds
+      **29 of 106**. 99 reference stores are MISSING and 37 are PARTIAL.
+- [ ] `StoreStream.deferredInit(Application)` has no equivalent: ~57 `init(ctx)`
+      calls, `NetworkMonitor`, the initialization timer, and the backgrounded
+      subscription are all absent.
+- [ ] `stores/utilities/` is **100% missing** (9 classes): `RestCallState` and
+      its operators, `BatchManager`/`Batched`, and `leadingEdgeThrottle`. Every
+      REST-backed store hand-rolls its own loading/error enum, and store
+      observables are unthrottled.
+- [ ] `StoreV2` thread assertion **throws** where the reference only logs,
+      including inside `MarkChangedDelegate.setValue` where the reference asserts
+      nothing. Off-thread `markChanged` crashes the app.
+- [ ] `ObservationDeck` lost `logger`/`logBreadcrumb`/`logNotifyError` and added
+      a try/catch that swallows observer exceptions the reference propagates.
+- [ ] `ReadyPayloadHydrator` drops the `HydrateResult` error branch, carries 5 of
+      22+ cached guild scalars across re-READY, and has no per-channel merge, so
+      `lastMessageId` is lost and unread state is wrong after reconnect.
+- [ ] `resetForLogout()` and the `reset()` methods on `StoreAccessibility` /
+      `StoreUserSettingsSystem` are target inventions with no reference
+      counterpart; `handlePreLogoutInternal` conflates pre-logout with a full
+      cache reset the reference does not perform.
 
 - [x] Implement application initialization.
 - [x] Implement providers for application/activity context and preferences.
@@ -447,7 +494,36 @@ post-dispatch state, persistence survives restart, and logout clears user data.
 
 ### Phase 4: REST and Gateway
 
-Status: **DONE**
+Status: **IN PROGRESS** (reopened 2026-07-26 by parity audit)
+
+Reopened because the transport surface is a sixth of the reference and 44
+gateway events are parsed as untyped JSON. See
+`docs/parity-audit/audit-models-api.md` and
+`docs/parity-audit/audit-stores-voice-gateway.md`.
+
+- [ ] REST: **42 of 264** unique verb+path endpoints (15.9%). 222 missing —
+      guild/channel/role/member CRUD, threads, forums, interactions, commands,
+      stage instances, scheduled events, MFA, billing, connections, hubs,
+      reporting. Full list in `docs/parity-audit/missing_endpoints.txt`.
+- [ ] `RestAPIParams`: **17 of 107** request bodies.
+- [ ] Gateway: **44 of 83** dispatch events routed. `IncomingParser.kt:91` has an
+      `else -> data.deepCopy()` fallback delivering the other 39 as raw
+      `JsonElement`; the reference has no untyped fallback. Voice, threads,
+      calls, interactions, streams, bans, scheduled events, and required-action
+      updates all arrive and are discarded.
+- [ ] `OutgoingPayload` (16 nested types) is missing entirely; 13 `GatewaySocket`
+      send methods absent, so 9 of 21 opcodes are dead.
+- [ ] No `StoreGatewayConnection` store wrapper: no observable connection state,
+      no `ClientState` backgrounded socket closing, no `BatchManager` voice-state
+      coalescing, and `dispatchSubscribe` lost `onBackpressureBuffer`.
+- [ ] `StoreConnectivity` is absent entirely — there is no network state source
+      anywhere in the target.
+- [ ] `StoreClientDataState` absent; `StoreStream.kt:442` hardcodes
+      `IdentifyClientState(emptyMap(), 0, -1, -1)`, permanently disabling
+      guild-hash resume.
+- [ ] `TypeAdapterRegistrar` registers 20 of 39 reference adapters. `EmbedType`
+      is unregistered, so **every embed's `type` deserialises to `null`**.
+- [x] Add fixture-based REST and Gateway contract tests.
 
 - [x] Implement common API models and JSON adapters.
 - [x] Implement REST builder and endpoint interface.
@@ -465,7 +541,45 @@ deterministic in tests, and an opt-in test account can authenticate and receive
 
 ### Phase 5: Authentication and Navigation
 
-Status: **DONE**
+Status: **IN PROGRESS** (reopened 2026-07-26 by parity audit)
+
+Reopened because only token login actually reaches the store, and the four base
+classes every screen should inherit from do not exist. See
+`docs/parity-audit/audit-widgets-shell-auth.md` and
+`docs/parity-audit/audit-stores-auth-nav.md`.
+
+- [ ] **All non-token authentication is dead.** `AppActivity.kt:188-204` handles
+      only `TokenLogin`; every other path returns "Authentication is not
+      initialized.". `StoreAuthentication.login/register/authMFA/forgotPassword/
+      resendVerificationEmail` have **zero production callers** — `authSubmitter`
+      is assigned only by an instrumentation test.
+- [ ] `AppFragment`, `AppBottomSheet`, `AppDialog`, `AppLog`/`AppLogger`, the
+      screen router, and the priority back-press dispatcher **do not exist**.
+      Lost contracts: `onViewBound`, unsubscribe-on-pause, the action bar API,
+      keyboard show/hide, priority back handling, permission delegates, and the
+      media-picker `onActivityResult` demux. `AppComponent` has zero implementors.
+- [ ] `WidgetTos` does not exist, but `AppActivity.kt:152` routes the
+      `AGREEMENTS` / `TOS_UPDATE_ACKNOWLEDGMENT` required actions to it by class
+      name — **any affected account crashes on the main route transaction**.
+- [ ] `StoreUserRequiredActions` absent; `StoreNavigation.kt:78` derives the
+      required action from `isUpdatePasswordRequired` only, so TOS, agreements,
+      verified email/phone, and captcha gates are unreachable.
+- [ ] MFA challenge is treated as a successful login (`StoreAuthentication.kt:83`
+      dispatches unconditionally; the reference short-circuits on
+      `loginResult.getMfa()`). `StoreMFA` and `StorePhone` are missing.
+- [ ] Logout does not wipe prior-account state (`StoreAuthentication.kt:171-174`
+      omits the reference's `Persister.reset()` + `prefs.edit().clear()`).
+- [ ] Age gate can never fire: `getShouldShowAgeGate()` is absent and
+      `AuthNavigationState.ageGate` is `null` at every call site.
+- [ ] `StoreNavigation` is missing `ModelGlobalNavigation` (14 fields), the
+      activity lifecycle callbacks, `init(Application)`, `launchNotice`, and 9 of
+      its 12 navigation handlers.
+- [ ] OAuth authorize, remote-auth/QR login, and the real captcha widgets are
+      missing. `/ra/<fingerprint>` is parsed by `DeepLinkParser.kt:63` and dropped.
+- [ ] `utilities/uri/UriHandler` absent — "safe external URI handling" is
+      currently a raw `ACTION_VIEW` at `AppActivity.kt:134`, and the Chrome
+      Custom Tabs user setting is read by nothing.
+- [ ] `widgets/tos` (5 classes) is at 0%.
 
 - [x] Landing, login, registration, MFA, verification, and logout flows.
 - [x] Authentication state persistence and invalidation.
@@ -494,6 +608,59 @@ effective permissions, unread/mention projection, typed member/role/member-list
 Gateway updates, lazy member subscriptions, guild/channel/DM/member fragments,
 panel lifecycle, and authenticated production Gateway bootstrap.
 
+The 2026-07-26 audit un-ticked the boxes above. Measured coverage:
+`widgets/channels` **31 of 114** reference classes (8 substantially complete),
+`widgets/guilds` **7 of 75**. Evidence:
+`docs/parity-audit/audit-widgets-channels.md`,
+`docs/parity-audit/audit-widgets-guilds.md`,
+`docs/parity-audit/audit-stores-guilds.md`,
+`docs/parity-audit/audit-stores-channels.md`.
+
+Store-side blockers:
+- [ ] `StoreChannelsSelected` is a 107-line rewrite of a 917-line store. Both
+      sealed hierarchies (`ResolvedSelectedChannel`, `UserChannelSelection`) are
+      absent, so thread drafts, channel peeking, and `Uninitialized`/`Unavailable`
+      are unrepresentable. `validateSelectedChannel()` and the reactive
+      re-validation pipeline are gone.
+- [ ] Four of ten `StoreReadStates.Inputs` fields are never populated
+      (`StoreStream.kt:1584-1593`), so **all thread and voice unreads are
+      silently discarded**.
+- [ ] `markUnread` is inverted: it discards the passed message id and acks
+      `mostRecentId`, telling the server the channel is fully read.
+- [ ] All 8 `StoreUserGuildSettings` setters are dead no-ops — mute, frequency,
+      and suppress-@everyone never reach the API.
+- [ ] `StoreMentions` pipeline absent; badges are server-snapshot-only and DMs
+      contribute zero mentions.
+- [ ] `StorePermissions` uses the wrong algorithm — no stage-instance or
+      joined-thread inputs, so stage speakers and private-thread members get
+      wrong permissions. 6 gateway handlers missing.
+- [ ] `StoreGuildSubscriptions` is a rewrite: typing/activities/threads/member
+      subscription state absent, so typing indicators and presence for the
+      selected guild are never requested.
+- [ ] `StoreLurking`, `StoreGuildMemberRequester`, `StoreGuildMemberCounts`,
+      `StoreGuildsNsfw`, `StoreThreadsJoined`, `StoreThreadMembers`,
+      `StoreThreadMessages`, `ArchivedThreadsStore`, `StoreVoiceChannelSelected`,
+      and `StoreSlowMode` are MISSING.
+- [ ] `com.discord.api.channel.ChannelUtils` does not exist; stores re-invent its
+      predicates and disagree in at least 4 places.
+- [ ] `StoreGuilds.handleGuildMember` preserve flag is INVERTED, clobbering
+      member `bio`/`banner`; `initClearCommunicationDisabledObserver` is missing
+      so timed-out members stay muted forever.
+
+UI-side blockers:
+- [ ] 13 of 20 channel-list row types are never produced; all 14 of their layouts
+      already exist unused.
+- [ ] Zero long-press handlers in the channel list (reference wires 7), so both
+      action bottom sheets are unreachable.
+- [ ] 6 of 10 guild-sidebar item types absent, including **create-server**; no
+      guild/folder context menus; folder reorder is never persisted.
+- [ ] Entire clusters missing: channel settings (6), channel permissions (18),
+      thread browser (9), channel-list unreads (1), guild creation (10), join
+      guild (13), invite share (22), guild profile sheet (10).
+- [ ] No ViewModels anywhere in the slice; store wiring is inlined and routed
+      through process-global mutable `@JvmField` callbacks that default to
+      `null`, leaving several screens no-ops out of the box.
+
 Exit criteria: users can navigate guilds, channels, and DMs with correct
 permissions, unread state, persisted selection, and responsive panel behavior.
 
@@ -510,6 +677,53 @@ Status: **IN PROGRESS**
 - [x] Slow mode, rate limits, captcha, AutoMod, and retry behavior.
 - [x] Background send/ACK workers.
 
+The 2026-07-26 audit un-ticked the boxes above. `widgets/chat` covers **40 of
+277** reference classes (14.4%). Evidence:
+`docs/parity-audit/audit-widgets-chat.md`,
+`docs/parity-audit/audit-stores-messages.md`.
+
+Store-side blockers:
+- [ ] `StoreMessages` has **no send/edit/resend/delete pipeline**: `sendMessage`,
+      `resendMessage`, `resendAllLocalMessages`, `markMessageFailed`,
+      `editMessage`, `deleteMessage`, `cancelMessageSend`, `enqueueRequest`,
+      `getOrCreateMessageQueue`, and `messageQueues` are all absent.
+- [ ] `StoreMessagesLoader.init()` never subscribes to chat interaction, so
+      `loadBefore`/`loadAfter` have zero callers and **infinite scroll is
+      unreachable**. `jumpToMessage` is reduced to a single AROUND fetch.
+- [ ] `StoreChat` is missing: `InteractionState`, `appendMention`,
+      `replaceChatText`, the chat event bus, and blocked-message-group expansion.
+      The target's `StoreChatInputEditing` reconstructs ~8% of it.
+- [ ] `StoreMessageReactions` (438 lines), `StoreMessageReplies` (374 lines, so
+      inline reply previews cannot render), and `StoreSlowMode` (232 lines) have
+      no counterparts.
+- [ ] `MessageResult.Success` drops the created message; `CaptchaRequired`'s
+      payload shape is incompatible with the target's own `resendMessageWithCaptcha`.
+- [ ] Attachment sends bypass `MessageQueue` entirely and run from
+      `StoreStream.kt:1119-1215` with an uncapped `retryWhen` that never handles
+      slow-mode error code 20016.
+- [ ] Holder cache persists on every mutation instead of the reference's 60s
+      throttled+deduped persist.
+- [ ] Own-reaction echoes double-count (missing me-guard on add and removal).
+- [ ] `StorePinnedMessages.handlePinsUpdate` mutates the published snapshot
+      outside `snapshotData()`, breaking StoreV2 confinement.
+
+UI-side blockers:
+- [ ] **33 of 46 row types unimplemented** — embeds, stickers, invites, bot
+      components, threads, calls, blocked, AutoMod, search, and ephemeral
+      messages never render. `ChatListRows.kt:98-112` invents English literals
+      (`"[Embed: ...]"`, `"[Interactive content]"`) that mask the gap.
+- [ ] `bindAttachment` is a stub that hides `InlineMediaView` and prints
+      `"<size> bytes"`, making `InlineMediaView.kt` dead code.
+- [ ] Autocomplete/mentions/slash commands (64 classes), sticker picker (23),
+      GIF picker (17), and the expression tray (8) are entirely absent.
+- [ ] 9 of 17 message-action rows are force-hidden; the quick-reaction emoji
+      strip is replaced by a single "Add Reaction" TextView; pinned-message
+      long-press opens nothing.
+- [ ] Chat-input guards hardcoded — member verification, lurker mode, follow, and
+      verification level are all absent.
+- [ ] Author rendering loses nickname, role colour, bot tag, role icon, and
+      timeout icon; timestamps show a bare clock instead of "Today at 3:42 PM".
+
 Exit criteria: ordinary text and attachment messaging works reliably through
 offline/reconnect/rate-limit cases without duplicate or lost local messages.
 
@@ -522,6 +736,38 @@ Status: **IN PROGRESS**
 - [x] Presence, activities, typing, and status controls.
 - [x] Friend suggestions and affinity-dependent UI where observable.
 - [x] User sheet, profile, friend list, and add-friend screens.
+
+The 2026-07-26 audit un-ticked the boxes above. `widgets/user` + `widgets/friends`
+cover **28 of 68** reference classes, with only 6 at parity. Evidence:
+`docs/parity-audit/audit-widgets-user-friends.md`,
+`docs/parity-audit/audit-stores-users.md`.
+
+- [ ] `StoreUserSettings` has **no server-write half**: every `setIsXxx` REST
+      tail, `updateCustomStatus`, `expireCustomStatus`, `observeConsents`,
+      `setExplicitContentFilter`, `setFriendSourceFlags`, and the restricted-guild
+      setters are absent. Settings changes never reach Discord.
+- [ ] `setUserTyping(channelId)` is missing — **the local user never sends typing
+      indicators**; the `restAPI` dependency is not even wired.
+- [ ] Custom-status emoji resolution is stubbed and expiry is computed from
+      `ModelMuteConfig.endTimeMs` instead of `TimeUtils.parseUTCDate`.
+- [ ] `WidgetUserSheetViewModel` (2,272 lines) and its `StoreState` do not exist;
+      the sheet is driven by nullable static lambdas and is inert by default,
+      with 6 sections forced `GONE`.
+- [ ] Roles are never bound into the user sheet; rich presence (all 9 classes) is
+      absent; badges have no tooltips and the boost badge is pinned to level 1.
+- [ ] `PrivateCallLauncher` missing — every call/video button in both packages is
+      a no-op. `WidgetBanUser`/`WidgetKickUser` missing, so the admin view's
+      ban/kick have no destination.
+- [ ] Quick switcher sorts alphabetically, ignores channel permissions, and has
+      no scoring or frecency (`ScoreStrategy`, `ChannelFrecencyTracker` absent).
+- [ ] Account/email/phone verification (6 classes) and `StoreMaskedLinks`
+      (phishing warnings — security relevant) are missing.
+- [ ] `StoreUserConnections`, `StoreContactSync`, `StoreSpotify`,
+      `StoreGameParty`, and `StoreUserSurvey` are missing; `widgets/contact_sync`
+      (9 classes) is at 0% and is unclaimed scope for this phase.
+- [ ] `PresenceUtils` and `UserUtils` do not exist, so there is no status text,
+      custom-status emoji, mobile indicator, badge predicate, or
+      username+discriminator formatting.
 
 Exit criteria: social state remains consistent across REST mutations, gateway
 updates, persistence, and logout.
@@ -622,24 +868,132 @@ and debug/release APKs install and run on representative devices.
 Agents should split rows only when implementation begins. Do not pre-create a
 large issue hierarchy without work attached.
 
-| Area | Status | Reference evidence | Tests/evidence | Notes |
-| --- | --- | --- | --- | --- |
-| Build/XML shell | DONE | `App`, `AppActivity`, manifest | Build, unit, lint, and Android 13 connected smoke test pass | Minimal Phase 0 XML loading shell; recovered resources remain Phase 1 |
-| Resources/themes | IN PROGRESS | `res/**`, `assets/**` | Assets and all resource families imported; AAPT/resource link pass | 134 first-party custom views block binding compilation |
-| Native media load | DONE | `lib/**`, `Discord.java` | Native lifecycle tests | ARM64 runtime waived |
-| Dispatcher/stores | DONE | `stores/**` | Unit store tests | Serialized mutation preserved |
-| REST | DONE | `restapi/**` | MockWebServer contracts | Live backend fixture-first |
-| Gateway | DONE | `gateway/**` | Gateway fixture tests | v9 + zlib-stream |
-| Authentication | DONE | `StoreAuthentication`, `widgets/auth` | Auth runtime/UI tests | Includes token/MFA/required actions |
-| Navigation/deep links | DONE | `StoreNavigation`, intent utilities | Route/device tests | Safe intents and panels |
-| Guilds/channels | IN PROGRESS | guild/channel stores and widgets | Store/UI/device tests incomplete | Runtime visual/behavior parity audit required |
-| Messages/uploads | IN PROGRESS | message stores/queue/chat widgets | Unit/build coverage only | Runtime visual/behavior parity audit required |
-| Users/relationships | IN PROGRESS | user/profile/note/relationship/social stores and widgets | Unit/build coverage only | Runtime visual/behavior parity audit required |
-| Notifications | NOT STARTED | FCM utilities/store/workers | None | Use owned Firebase config |
-| Settings | NOT STARTED | settings widgets/stores | None | Local and synced settings |
-| Voice/calls/video | NOT STARTED | RTC/media stores/widgets/native | None | Native binary contract |
-| Extended guild features | NOT STARTED | server settings widgets | None | Large final parity surface |
-| Billing/integrations | NOT STARTED | billing stores/widgets | None | Cannot reuse official products |
+Coverage figures are measured, from the 2026-07-26 audit in
+`docs/parity-audit/`. A row is not `DONE` until its coverage is complete and its
+listed defects are cleared — compiling and inflating is not parity.
+
+| Area | Status | Measured coverage | Notes |
+| --- | --- | --- | --- |
+| Build/XML shell | DONE | — | Phase 0 baseline holds |
+| Native media load | DONE | — | ARM64 runtime waived by user decision |
+| Resources/themes | IN PROGRESS | 134/134 layout classes resolve; **34 of 518 `<enum>` and 0 of 130 `<flag>` attr children** | `cs_view_type` dead across 39 layouts |
+| Custom views | IN PROGRESS | 69/76 classes present; **32 inert**, 13 behavior defects | No inflation crash |
+| Dispatcher/stores | IN PROGRESS | **51 of 187** stores; `StoreStream` wires **36 of 145**; `stores/utilities` **0 of 9** | 99 missing, 37 partial |
+| REST | IN PROGRESS | **42 of 264** endpoints; **17 of 107** request bodies | `missing_endpoints.txt` |
+| Gateway | IN PROGRESS | **44 of 83** events; opcodes 21/21; `OutgoingPayload` 0 of 16 | 39 events discarded as raw JSON |
+| Models/DTOs | IN PROGRESS | `api/**` **158 of 286**; `models/**` **59 of 149**; adapters **20 of 39** | Core DTOs verified field-exact |
+| Utilities | IN PROGRESS | **57 files vs 416** classes; ~62 of 108 subpackages at 0% | `IconUtils`, textprocessing, `mg_recycler` absent |
+| App framework | IN PROGRESS | `AppFragment`/`AppBottomSheet`/`AppDialog`/router **absent** | Every screen hand-rolls the base contract |
+| Authentication | IN PROGRESS | `widgets/auth` **3 of 21** files | Only token login reaches the store |
+| Navigation/deep links | IN PROGRESS | 9 of 12 nav handlers absent | `WidgetTos` route crashes; 4 live dead-ends |
+| Guilds/channels | IN PROGRESS | channels **31 of 114**; guilds **7 of 75** | 13 of 20 row types never produced |
+| Messages/uploads | IN PROGRESS | chat **40 of 277** | 33 of 46 row types unimplemented; no send pipeline in the store |
+| Users/relationships | IN PROGRESS | user+friends **28 of 68** | Sheet inert; typing never sent; settings never persisted |
+| Settings/servers | NOT STARTED | settings **10 of 69**; servers **9 of 108** | 4 target files are inert placeholders |
+| Voice/calls/video | NOT STARTED | voice **13 of 66**; stage **2 of 31** | 8 voice stores absent; existing views are shells |
+| Notifications | NOT STARTED | `StoreNotifications` exists but is **dead code** | Never constructed, never reset on logout |
+| Extended guild features | NOT STARTED | scheduled events **9 of 47**; role subs **4 of 42**; hubs **0 of 54**; directories **0 of 16** | 24 widget packages at 0% |
+| Billing/integrations | NOT STARTED | 0% | Cannot reuse official products |
+
+## Parity Audit (2026-07-26)
+
+A 16-agent read-only audit compared every reconstructed store, widget, view,
+model, and utility against the reference. The full reports are committed at
+`docs/parity-audit/`, indexed by `docs/parity-audit/README.md`. Read the report
+for your area before starting work in it — each finding cites `file:line` in the
+target and the reference class/method, and each report lists the regions where
+JADX output is broken and the behavior is therefore **unverified**. Do not close
+a finding by guessing at an unverified region; inspect DEX/smali instead.
+
+Headline result: the target is roughly **11% of the reference widget surface**,
+**27% of stores**, **16% of REST**, and **53% of gateway events**. Several phases
+previously marked `DONE` were closed on compile/inflate evidence rather than
+behavior, and have been reopened above with their specific defects.
+
+### Cross-cutting defects
+
+These are correctness bugs live in shipping surfaces, not missing features. The
+full list with locations is in `docs/parity-audit/README.md`. The most damaging:
+
+| Defect | Effect |
+| --- | --- |
+| `WidgetTos` route target does not exist (`AppActivity.kt:152`) | Crash for any account with a pending TOS/agreements action |
+| `EmbedType` unregistered with Gson | Every embed's `type` deserialises to `null` |
+| `IncomingParser.kt:91` untyped fallback | 39 gateway events arrive and are discarded |
+| `<enum>`/`<flag>` stripped from `attrs.xml` | Settings radios/switches render as checkboxes across 39 layouts |
+| `markUnread` acks `mostRecentId` | Mark-unread marks the channel fully read |
+| 4 of 10 `StoreReadStates.Inputs` unpopulated | All thread and voice unreads discarded |
+| `ACTIVE_STATES` has `ENDED` not `PAUSED` | `isStreamActive()` inverted both ways |
+| @everyone permission fallback returns `NONE` not `DEFAULT` | Channel list can empty during partial hydration |
+| MFA challenge dispatched as successful login | Account state corrupted on MFA accounts |
+| Logout omits `Persister.reset()` + `prefs.clear()` | Prior-account state survives logout |
+| Off-thread `markChanged` throws | Crash where the reference only logs |
+
+### Live dead-ends
+
+User-reachable paths that lead nowhere: the channel sidebar **Search** button
+(`onSearch` never assigned), `Channel.DIRECTORY` rows (open the ordinary chat
+surface), the **Blocked users** settings row (force-hidden, callback never
+invoked), and the `/template/`, `discord.new`, `/discovery`, `/query/` deep links
+(parsed, consumed, then dropped). `res/xml/shortcuts.xml` and
+`res/xml/actions.xml` exist but are never referenced from the manifest, so Direct
+Share and all Google App Actions are dead.
+
+## Reconstruction Campaign
+
+Parity is being closed in dependency-ordered waves. Each wave is a set of agents
+with **disjoint file ownership** running in parallel; the build must be green at
+every wave boundary. Work bottom-up: rebuilding widgets before the utilities and
+stores beneath them means writing them twice.
+
+### Concurrency protocol
+
+Mandatory when more than one agent is active:
+
+1. Every agent gets an explicit exclusive file-ownership list and touches nothing
+   outside it.
+2. An agent that needs an API another agent is currently building codes against
+   the agreed fully-qualified name and waits for it, rather than defining a
+   duplicate or substituting `Any`.
+3. Gradle holds a single lock. Agents wait and retry; they never disable it.
+4. Cross-package cleanups an agent cannot make (because another agent owns the
+   file) go in that agent's handoff report as an explicit item for the next wave.
+5. `PLAN.md` and `docs/parity-audit/**` are owned by the coordinating agent only.
+
+### Wave status
+
+| Wave | Scope | Status |
+| --- | --- | --- |
+| 1 | App framework base classes; `stores/utilities`; gateway 83-event surface + `StoreGatewayConnection`/`StoreConnectivity`/`StoreConnectionOpen`/`StoreClientDataState` | IN PROGRESS |
+| 2a | `textprocessing`; `IconUtils`/images/Fresco; permissions + `RoleUtils`/`UserUtils`/`PresenceUtils`/`ChannelUtils`; `messagesend`/`Backoff`/`rx`/`error`; `mg_recycler`/`collections`/`view`/`uri`/`time` | IN PROGRESS |
+| 2b | `attrs.xml` enum restoration; 7 missing view classes; 13 view behavior defects | IN PROGRESS |
+| 2c | REST 264 endpoints + 107 bodies; `api/**` subpackages + 19 missing type adapters; `models/**` subpackages + streaming parse | IN PROGRESS |
+| 3 | Store graph: 99 missing stores, 37 partial stores, `StoreStream.deferredInit`, `ReadyPayloadHydrator` merge semantics, logout/reset correctness | NOT STARTED |
+| 4 | Widgets with their ViewModels: chat, channels, guilds, user/friends, settings/servers, voice/stage, auth/home/tabs | NOT STARTED |
+| 5 | The 24 zero-coverage widget packages; manifest components and permissions; notifications and FCM; shortcuts/actions wiring | NOT STARTED |
+| 6 | Re-audit against the reference, full verification sweep, release hardening | NOT STARTED |
+
+### Wave file-ownership map
+
+Recorded so a resumed or replacement agent can pick up an unfinished wave without
+re-deriving the partition.
+
+| Owner | Paths |
+| --- | --- |
+| App framework | `com/discord/app/**`, `com/discord/panels/**` |
+| Store utilities | `stores/utilities/**`, `stores/updates/**`, `StoreV2.kt`, `StoreGuildsSorted.kt`, `StoreUser.kt` |
+| Gateway | `gateway/**`, `StoreStream.kt`, `StoreGatewayConnection.kt`, `StoreConnectivity.kt`, `StoreConnectionOpen.kt`, `StoreClientDataState.kt` |
+| Text processing | `utilities/textprocessing/**` |
+| Icons/images | `utilities/icon/**`, `utilities/images/**`, `utilities/fresco/**` |
+| Permissions/entities | `utilities/permissions/**`, `utilities/guilds/**`, `utilities/user/**`, `utilities/presence/**`, `utilities/guildmember/**`, `utilities/channel/**`, `api/permission/Permission.kt`, `api/channel/ChannelUtils.kt` |
+| Send pipeline | `utilities/messagesend/**`, `utilities/networking/**`, `utilities/rest/**`, `utilities/error/**`, `utilities/rx/**`, `utilities/captcha/**` |
+| Recycler/view utils | `utilities/mg_recycler/**`, `utilities/recycler/**`, `utilities/collections/**`, `utilities/view/**`, `utilities/uri/**`, `utilities/string/**`, `utilities/time/**`, `utilities/locale/**` |
+| Resources | `res/values/attrs.xml` |
+| New views | the 7 new files under `views/**` and `tooltips/**` |
+| Existing views | pre-existing files under `views/**`, `rlottie/**` |
+| REST | `restapi/**` |
+| API DTOs | `api/**` except `Permission.kt` and `ChannelUtils.kt` |
+| Domain models | `models/**` |
 
 ## Verification Commands
 
@@ -716,6 +1070,10 @@ or observable behavior. Small implementation details do not belong here.
 | 2026-07-24 | Use Kryo `4.0.2` for reference-shaped persisted store payloads | Recovered metadata and API contracts require Kryo while persistence must remain atomic and path-confined | Persistence uses the public artifact and disables Android application backup before authentication data exists |
 | 2026-07-24 | Use OkHttp `4.8.0`, Okio `2.7.0`, Retrofit `2.9.0`, and PersistentCookieJar `v1.0.1` for Phase 4 | OkHttp/Okio versions are recovered; Retrofit and cookie-jar versions are the compatible public artifacts matching the retained API surface | REST/Gateway fixture tests pin headers, cookies, errors, rate limits, and socket behavior without live backend access |
 | 2026-07-24 | Add a Manticord-only token login entry point | The user explicitly requested direct token authentication | Tokens use password-style transient input, never enter saved UI state or logs, and persist only through the existing redacted auth-state cache |
+| 2026-07-26 | Reopen Phases 1, 3, 4, and 5 | A full structural audit proved they were closed on compile/inflate evidence rather than behavior; each has BLOCKER-severity gaps listed in its phase section | Phase status now tracks measured coverage; no phase closes while its audit report lists open blockers |
+| 2026-07-26 | Commit the parity audit to `docs/parity-audit/` and link it from `PLAN.md` | The evidence is far too large for the plan but must survive agent handoffs and session boundaries | `PLAN.md` stays the single roadmap; the audit is linked supporting evidence, not a competing status document |
+| 2026-07-26 | Close parity in dependency-ordered waves with disjoint per-agent file ownership | Rebuilding widgets before the utilities, models, and stores beneath them would mean writing them twice, and parallel agents editing shared files corrupt each other's work | Every agent gets an explicit ownership list; cross-package cleanups are deferred to the owning wave via handoff reports |
+| 2026-07-26 | Keep `toString()` redaction on `Message`, `User`, `MeUser`, and `ActivitySecrets` even though the reference does not redact | The project's security contract requires redacting secrets regardless of what the generated reference output printed | A deliberate, documented divergence from the reference; must not be "corrected" by a later parity pass |
 
 ## Progress Journal
 
@@ -758,6 +1116,8 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-07-25 | OpenCode | Restored ExoPlayer resource enums to stop attachment-row inflation crashes, connected chat author profile clicks, and connected the sidebar notification action to channel mute state | Full unit suite and `assembleDebug` pass; `lintDebug` is blocked by 873 existing baseline/resource errors beginning with `manticord_app_name` missing translations; runtime retest pending | Retest attachment rows and profile/mute actions, then implement the reference channel search flow and permission-gated channel settings |
 | 2026-07-25 | OpenCode | Fixed mutual-detail Back dispatch, keyed bottom navigation visibility to the left-panel state like the reference, and made guild icons/acronyms mutually exclusive | Full unit suite and `assembleDebug` pass; focused bottom-nav unit test passes; 12/14 connected tests pass, with existing auth-state and manifest-route tests failing independently | Runtime-check mutual-guild Back, guild icon fallback, and bottom navigation on the attached device |
 | 2026-07-25 | OpenCode | Restored username click-to-mention, rebuilt pinned messages from standard chat rows, added live DM presence/activity and selected styling, and wired DM search/new-DM selectors | Full unit suite and `assembleDebug` pass; APK installs and launches on the attached device without a fatal log | Runtime-check the five corrected interactions; extend New DM to group-recipient multi-select after single-recipient behavior is verified |
+| 2026-07-26 | Claude Code | Ran a 16-agent structural parity audit over every store, widget, view, model, and utility; committed 19 reports to `docs/parity-audit/`; reopened Phases 1/3/4/5 and replaced the parity ledger with measured coverage | Read-only audit; every finding cites `file:line` in the target and the reference class/method; JADX-broken regions are marked unverified rather than guessed | Execute the reconstruction campaign wave by wave, bottom-up |
+| 2026-07-26 | Claude Code | Launched Waves 1, 2a, 2b, 2c (14 parallel implementation agents, disjoint file ownership): app framework base classes, store utilities, the 83-event gateway surface, textprocessing, icons/Fresco, permissions/entity utils, send pipeline, recycler/view utils, `attrs.xml` enums, 7 missing view classes, 13 view defects, REST endpoints, `api/**` and `models/**` subpackages | Each agent runs `compileDebugKotlin` + `testDebugUnitTest` and must leave the build green | Verify the wave boundary build, then start Wave 3 (store graph) |
 
 ## Agent Handoff Template
 
@@ -777,9 +1137,51 @@ Recommended next action:
 
 ## Immediate Next Work
 
-Continue the Phase 6-8 runtime parity audit:
+Execute the reconstruction campaign. Read `docs/parity-audit/README.md` and the
+report for your area before touching code, and follow the concurrency protocol
+above whenever more than one agent is active.
 
-1. Verify attachment rows, mutual-guild Back, guild icon fallback, bottom navigation, username mentions, pinned rows, DM activity/selection, DM search/new DM, profile clicks, and channel mute on-device.
-2. Extend New DM from single-recipient creation to the reference group-recipient multi-select flow.
-3. Reconstruct channel/guild message search and permission-gated text/thread channel settings/private calls.
-4. Resolve the lint baseline drift and the two existing connected-test failures, then rerun all checks.
+**Now — finish Waves 1, 2a, 2b, 2c** (in flight; see the wave table above).
+Verify the wave boundary with `assembleDebug`, `testDebugUnitTest`, and
+`lintDebug` before starting Wave 3.
+
+**Next — Wave 3, the store graph.** This is the last layer beneath the widgets,
+so nothing in Wave 4 should start before it. In dependency order:
+
+1. `StoreStream`: implement `deferredInit(Application)`, the ~57 store `init`
+   calls, `NetworkMonitor`, the initialization timer, and the backgrounded
+   subscription. Grow the graph from 36 toward 145 stores.
+2. Fix the reset/logout semantics: remove the invented `resetForLogout()` and
+   the `reset()` methods on `StoreAccessibility`/`StoreUserSettingsSystem`, and
+   stop `handlePreLogoutInternal` conflating pre-logout with a full cache reset.
+3. `ReadyPayloadHydrator`: restore the `HydrateResult`/`HydrateGuildResult` error
+   branch so `handleHydrateError` can fire, carry all 22+ cached guild scalars
+   across re-READY, and add the per-channel merge that preserves `lastMessageId`.
+4. Clear the cross-cutting store defects listed in the audit table above —
+   `markUnread`, `StoreReadStates.Inputs`, the inverted guild-member preserve
+   flag, `ACTIVE_STATES`, the MFA login short-circuit, and the logout wipe.
+5. Build the missing stores that shipping surfaces already depend on, highest
+   leverage first: `StoreUserRequiredActions` (unblocks the `WidgetTos` crash),
+   `StoreExperiments` (nothing currently evaluates already-parsed experiment
+   DTOs, so every experiment-gated reference behavior diverges silently),
+   `StoreLurking`, `StoreGuildMemberRequester`, `StoreMentions`, `StoreChat`,
+   `StoreMessageReactions`, `StoreMessageReplies`, `StoreSlowMode`, the
+   `StoreThread*` family, and `StoreMFA`/`StorePhone`.
+6. Move the attachment upload path out of `StoreStream.kt:1119-1215` onto the
+   rebuilt `MessageQueue`, and implement the `StoreMessages` send/edit/resend/
+   delete pipeline.
+
+**Then — Wave 4, widgets.** Build the ViewModel for each screen before its view;
+the audit found the slice has no ViewModels at all and routes store state through
+process-global mutable callbacks that default to `null`. Order by user-visible
+impact: chat rows and input, channel list, guild sidebar, user sheet, then
+settings/servers.
+
+**Then — Wave 5**, the 24 zero-coverage packages, manifest components and
+permissions, notifications/FCM with project-owned configuration, and the
+shortcuts/actions wiring.
+
+**Standing constraints.** Do not mark any phase `DONE` while its audit report
+lists open blockers. Do not resolve a JADX-broken region by guessing — the
+reports name every such region; inspect DEX/smali. Do not copy decompiled Java or
+carry obfuscated names into the target; reconstruct readable Kotlin.

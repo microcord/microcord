@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.TextView
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.lifecycle.Lifecycle
 import com.discord.R
 import com.discord.api.channel.Channel
@@ -12,7 +13,7 @@ import com.discord.views.LoadingButton
 import rx.Observable
 import rx.Subscription
 
-class WidgetThreadStatus : Fragment(R.layout.widget_thread_status) {
+class WidgetThreadStatus : AppFragment(R.layout.widget_thread_status) {
     data class State(val channel: Channel?, val joined: Boolean? = null, val loading: Boolean = false)
 
     private var subscription: Subscription? = null

@@ -6,6 +6,7 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.lifecycle.Lifecycle
 import com.discord.R
 import com.discord.stores.StoreStream
@@ -13,7 +14,7 @@ import com.discord.views.typing.TypingDots
 import rx.Observable
 import rx.Subscription
 
-class WidgetChatOverlay : Fragment(R.layout.widget_chat_overlay) {
+class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
     data class State(
         val channelId: Long = 0,
         val viewingOldMessages: Boolean = false,

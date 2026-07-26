@@ -8,6 +8,8 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import com.discord.R
+import com.discord.i18n.i18nFormat
+import com.discord.i18n.i18nPlural
 
 class ServerMemberCount(context: Context, attrs: AttributeSet?) : FrameLayout(context, attrs, 0) {
     private val onlineDot: ImageView
@@ -35,8 +37,7 @@ class ServerMemberCount(context: Context, attrs: AttributeSet?) : FrameLayout(co
     fun setOnline(active: Int?) {
         onlineDot.visibility = if (active == null) View.GONE else View.VISIBLE
         onlineText.text = active?.let {
-            context.getString(R.string.instant_invite_guild_members_online)
-                .replace("{membersOnline}", it.toString())
+            i18nFormat(R.string.instant_invite_guild_members_online, "membersOnline" to it)
         }
         onlineText.visibility = if (active == null) View.GONE else View.VISIBLE
     }
@@ -44,7 +45,7 @@ class ServerMemberCount(context: Context, attrs: AttributeSet?) : FrameLayout(co
     fun setMembers(members: Int?) {
         totalDot.visibility = if (members == null) View.GONE else View.VISIBLE
         totalText.text = members?.let {
-            resources.getQuantityString(R.plurals.members_header_members, it, it)
+            i18nPlural(R.plurals.members_header_members, it, "members" to it)
         }
         totalText.visibility = if (members == null) View.GONE else View.VISIBLE
     }

@@ -1,142 +1,376 @@
 package com.discord.utilities.messagesend
 
+import android.content.ContentResolver
+import com.discord.models.message.Message
+import com.discord.restapi.PayloadJSON
+import com.discord.restapi.RestAPIInterface
+import com.discord.restapi.RestAPIParams
+import com.discord.utilities.error.RestApiError
+import com.discord.utilities.networking.Backoff
+import com.discord.utilities.rest.FileUpload
+import com.discord.utilities.rest.SendUtils
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.filterIs
+import com.discord.utilities.rx.restSubscribeOn
+import com.discord.utilities.time.Clock
 import java.util.ArrayDeque
-import rx.Single
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import rx.Observable
+import rx.Scheduler
 import rx.Subscription
+import rx.schedulers.Schedulers
 
-class MessageQueue(
-    private val sender: (MessageRequest) -> Single<MessageResult>,
-    private val scheduler: MessageQueueScheduler = ExecutorMessageQueueScheduler(),
+/**
+ * Serialises message sends and edits for one channel.
+ *
+ * Reconstruction of the reference `com.discord.utilities.messagesend.MessageQueue`. The reference
+ * keeps one instance per channel id in `StoreMessages.messageQueues`, all sharing a single
+ * single-threaded executor: each channel gets its own ordering, backoff and in-flight slot, while
+ * every queue's bookkeeping runs on one thread so no locking is needed around [queue],
+ * [inFlightRequest], [isDraining] or [retrySubscription].
+ *
+ * Ordering guarantees:
+ * - At most one request is in flight at a time ([isDraining]).
+ * - Requests drain FIFO; a request that must be retried is pushed back to the **front** so it keeps
+ *   its place ahead of anything queued behind it.
+ * - A request older than [MESSAGE_TIMEOUT_MS] is completed as [MessageResult.Timeout] without ever
+ *   being sent, so work queued while offline does not resurface hours later.
+ *
+ * Retry policy, matching the reference exactly:
+ * - [MessageResult.RateLimited] re-queues at the front after the server's `retry_after`.
+ * - [MessageResult.NetworkFailure] re-queues at the front and arms [networkBackoff]. While that
+ *   backoff [Backoff.isPending], [processNextRequest] refuses to start anything, so a dead
+ *   connection is probed once rather than once per queued message. [handleConnected] cancels the
+ *   pending backoff and drains immediately when connectivity returns.
+ * - Every other result is terminal: it reaches the request's `onCompleted` and resets the backoff.
+ */
+class MessageQueue @JvmOverloads constructor(
+    private val contentResolver: ContentResolver?,
+    private val executorService: ExecutorService,
+    private val clock: Clock,
+    private val api: RestAPIInterface,
+    private val networkBackoff: Backoff = Backoff(
+        minBackoffMs = NETWORK_INITIAL_FAILURE_RETRY_MS,
+        maxBackoffMs = MESSAGE_TIMEOUT_MS,
+    ),
+    private val retryScheduler: Scheduler = Schedulers.computation(),
 ) {
+
     private val queue = ArrayDeque<MessageRequest>()
-    private var current: MessageRequest? = null
-    private var sendSubscription: Subscription? = null
-    private var retry: MessageQueueCancellable? = null
-    private var retryIsNetwork = false
-    private var networkRetryMs = NETWORK_INITIAL_RETRY_MS
-    private var attempt = 0L
+    private var inFlightRequest: InflightRequest? = null
+    private var isDraining = false
+    private var retrySubscription: Subscription? = null
 
+    /** Adds [request] to the tail of this channel's queue and drains if nothing is in flight. */
     fun enqueue(request: MessageRequest) {
-        scheduler.schedule { queue.addLast(request); drain() }
+        executorService.submit {
+            queue.add(request)
+            processNextRequest()
+        }
     }
 
+    /**
+     * Cancels the queued or in-flight request identified by [requestId].
+     *
+     * A cancelled in-flight request has its network subscription torn down; [DrainListener] makes
+     * the completion idempotent, so a response that was already on the wire cannot also complete it.
+     */
     fun cancel(requestId: String) {
-        scheduler.schedule {
-            val active = current
-            if (active?.requestId == requestId) {
-                finish(active, MessageResult.UserCancelled)
-                return@schedule
+        executorService.submit {
+            val inFlight = inFlightRequest
+            if (inFlight != null && inFlight.baseRequest.requestId == requestId) {
+                inFlight.networkSubscription.unsubscribe()
+                inFlight.drainListener.complete(MessageResult.UserCancelled)
+                return@submit
             }
-
-            val queued = queue.firstOrNull { it.requestId == requestId } ?: return@schedule
+            val queued = queue.firstOrNull { it.requestId == requestId } ?: return@submit
             queue.remove(queued)
-            queued.onCompleted(MessageResult.UserCancelled, queue.isEmpty() && current == null)
+            queued.onCompleted(MessageResult.UserCancelled, queue.isEmpty())
         }
     }
 
+    /** Called when the gateway reconnects: drops the network backoff and resumes draining. */
     fun handleConnected() {
-        scheduler.schedule {
-            if (current != null && retryIsNetwork && retry != null) {
-                retry?.cancel()
-                retry = null
-                retryIsNetwork = false
-                sendCurrent()
-            } else {
-                drain()
+        executorService.submit {
+            if (networkBackoff.isPending) {
+                networkBackoff.cancel()
+                processNextRequest()
             }
         }
     }
 
+    /** Cancels everything, completing each request as [MessageResult.UserCancelled]. */
     fun cancelAll() {
-        scheduler.schedule {
-            retry?.cancel()
-            retry = null
-            sendSubscription?.unsubscribe()
-            sendSubscription = null
-            current?.let { active ->
-                current = null
-                active.onCompleted(MessageResult.UserCancelled, queue.isEmpty())
+        executorService.submit {
+            retrySubscription?.unsubscribe()
+            retrySubscription = null
+            networkBackoff.cancel()
+            inFlightRequest?.let { inFlight ->
+                inFlight.networkSubscription.unsubscribe()
+                inFlight.drainListener.complete(MessageResult.UserCancelled)
             }
             while (queue.isNotEmpty()) {
-                queue.removeFirst().onCompleted(MessageResult.UserCancelled, queue.isEmpty())
+                queue.remove().onCompleted(MessageResult.UserCancelled, queue.isEmpty())
             }
         }
     }
 
-    private fun drain() {
-        if (current != null) return
-        while (queue.isNotEmpty()) {
-            val request = queue.removeFirst()
-            if (scheduler.now() - request.attemptTimestamp >= MESSAGE_TIMEOUT_MS) {
-                request.onCompleted(MessageResult.Timeout, queue.isEmpty())
-                networkRetryMs = NETWORK_INITIAL_RETRY_MS
-            } else {
-                current = request
-                sendCurrent()
-                return
-            }
-        }
-    }
+    private fun processNextRequest() {
+        if (queue.isEmpty() || retrySubscription != null || networkBackoff.isPending || isDraining) return
+        val request = queue.remove() ?: return
 
-    private fun sendCurrent() {
-        val request = current ?: return
-        if (scheduler.now() - request.attemptTimestamp >= MESSAGE_TIMEOUT_MS) {
-            finish(request, MessageResult.Timeout)
+        if (clock.currentTimeMillis() - request.attemptTimestamp > MESSAGE_TIMEOUT_MS) {
+            request.onCompleted(MessageResult.Timeout, queue.isEmpty())
+            networkBackoff.succeed()
+            processNextRequest()
             return
         }
-        retry = null
-        val thisAttempt = ++attempt
-        sendSubscription = try {
-            sender(request).subscribe(
-                { result -> scheduler.schedule { handleResult(request, thisAttempt, result) } },
-                { error -> scheduler.schedule { handleResult(request, thisAttempt, MessageResult.UnknownFailure(error)) } },
-            )
-        } catch (error: Throwable) {
-            scheduler.schedule { handleResult(request, thisAttempt, MessageResult.UnknownFailure(error)) }
-            null
+
+        isDraining = true
+        val drainListener = DrainListener { result -> onRequestSettled(request, result) }
+        when (request) {
+            is MessageRequest.Send -> doSend(request, drainListener)
+            is MessageRequest.Edit -> doEdit(request, drainListener)
         }
     }
 
-    private fun handleResult(request: MessageRequest, thisAttempt: Long, result: MessageResult) {
-        if (current !== request || attempt != thisAttempt) return
-        sendSubscription = null
+    /**
+     * The queue's reaction to a settled request.
+     *
+     * Rate limits and network failures are absorbed here and never surface to the caller; everything
+     * else completes the request and clears the backoff.
+     */
+    private fun onRequestSettled(request: MessageRequest, result: MessageResult) {
         when (result) {
-            is MessageResult.RateLimited -> scheduleRetry(result.retryAfterMs, false)
-            MessageResult.NetworkFailure -> {
-                val delay = networkRetryMs
-                networkRetryMs = (networkRetryMs * 2).coerceAtMost(MAX_NETWORK_RETRY_MS)
-                scheduleRetry(delay, true)
+            is MessageResult.RateLimited ->
+                Observable.timer(result.retryAfterMs, TimeUnit.MILLISECONDS, retryScheduler)
+                    .appSubscribe(
+                        errorClass = MessageQueue::class.java,
+                        subscriptionHandler = { retrySubscription = it },
+                        onNext = {
+                            executorService.submit {
+                                queue.addFirst(request)
+                                retrySubscription = null
+                                onDrainingCompleted()
+                                processNextRequest()
+                            }
+                        },
+                    )
+
+            MessageResult.NetworkFailure -> executorService.submit {
+                onDrainingCompleted()
+                queue.addFirst(request)
+                networkBackoff.fail { executorService.submit { processNextRequest() } }
             }
-            else -> finish(request, result)
+
+            else -> executorService.submit {
+                onDrainingCompleted()
+                request.onCompleted(result, queue.isEmpty())
+                networkBackoff.succeed()
+                processNextRequest()
+            }
         }
     }
 
-    private fun scheduleRetry(delayMs: Long, network: Boolean) {
-        retryIsNetwork = network
-        retry = scheduler.schedule(delayMs.coerceAtLeast(0)) {
-            retry = null
-            retryIsNetwork = false
-            if (current != null) sendCurrent()
+    private fun onDrainingCompleted() {
+        isDraining = false
+        inFlightRequest = null
+    }
+
+    /**
+     * Sends a message, uploading its attachments first when it has any.
+     *
+     * Order of operations is taken from the DEX for
+     * `MessageQueue.doSend(MessageRequest$Send, MessageQueue$DrainListener)` because JADX could not
+     * decompile the method body:
+     *
+     * 1. `validateMessage()` runs **first** and short-circuits — an invalid request never reaches
+     *    preprocessing, so no attachment is read and no progress callback fires.
+     * 2. The `RestAPIParams.Message` body is built from the local message.
+     * 3. `SendUtils.getSendPayload(...)` is subscribed with a `doOnNext` that forwards
+     *    `Preprocessing` to `onPreprocessing` and a non-empty `ReadyToSend.uploads` to `onProgress`.
+     * 4. `filterIs<ReadyToSend>().take(1)` then flat-maps into the REST call.
+     * 5. `restSubscribeOn(retry = message.nonce != null)` — transport retries are only safe when the
+     *    message carries a nonce the server can de-duplicate on.
+     * 6. `appSubscribe` records the subscription as the in-flight request, funnels failures through
+     *    [handleError] and successes through [handleSuccess].
+     */
+    private fun doSend(request: MessageRequest.Send, drainListener: DrainListener) {
+        val validationError = request.validateMessage()
+        if (validationError != null) {
+            drainListener.complete(validationError)
+            return
+        }
+
+        val message = request.message
+        val body = RestAPIParams.Message(
+            content = message.content,
+            nonce = message.nonce,
+            applicationId = message.application?.id,
+            activity = sendActivity(request),
+            stickerIds = message.stickerItems?.map { it.id } ?: message.stickers?.map { it.id },
+            messageReference = message.messageReference?.let { reference ->
+                RestAPIParams.Message.MessageReference(
+                    guildId = reference.guildId,
+                    channelId = requireNotNull(reference.channelId) { "A message reference needs a channel" },
+                    messageId = reference.messageId,
+                )
+            },
+            allowedMentions = message.allowedMentions?.toRestApiParam(),
+            captchaKey = message.captchaPayload?.captchaKey,
+            captchaRqtoken = message.captchaPayload?.captchaRqtoken,
+        )
+
+        SendUtils.getSendPayload(contentResolver, body, request.attachments)
+            .doOnNext { payload ->
+                when (payload) {
+                    is SendUtils.SendPayload.Preprocessing -> request.onPreprocessing(payload)
+                    is SendUtils.SendPayload.ReadyToSend ->
+                        if (payload.uploads.isNotEmpty()) request.onProgress(payload.uploads)
+                }
+            }
+            .filterIs<SendUtils.SendPayload.ReadyToSend>()
+            .take(1)
+            .flatMap { ready -> sendReadyPayload(message.channelId, ready) }
+            .restSubscribeOn(retry = message.nonce != null)
+            .appSubscribe(
+                errorClass = MessageQueue::class.java,
+                subscriptionHandler = { subscription ->
+                    inFlightRequest = InflightRequest(request, subscription, drainListener)
+                },
+                errorHandler = { error -> handleError(error, drainListener, message) },
+                onNext = { resultMessage -> handleSuccess(resultMessage, drainListener) },
+            )
+    }
+
+    private fun sendReadyPayload(
+        channelId: Long,
+        ready: SendUtils.SendPayload.ReadyToSend,
+    ): Observable<com.discord.api.message.Message> {
+        val parts = ready.uploads.map(FileUpload::part)
+        return if (parts.isEmpty()) {
+            api.sendMessage(channelId, ready.message)
+        } else {
+            api.sendMessage(channelId, PayloadJSON(ready.message), parts.toTypedArray())
         }
     }
 
-    private fun finish(request: MessageRequest, result: MessageResult) {
-        if (current !== request) return
-        attempt++
-        sendSubscription?.unsubscribe()
-        sendSubscription = null
-        retry?.cancel()
-        retry = null
-        retryIsNetwork = false
-        current = null
-        networkRetryMs = NETWORK_INITIAL_RETRY_MS
-        request.onCompleted(result, queue.isEmpty())
-        drain()
+    /**
+     * Edits a message.
+     *
+     * Edits are never retried at the transport level (`restSubscribeOn(retry = false)` in the
+     * reference) because there is no nonce to de-duplicate a repeated PATCH, and no client message
+     * is handed to [handleError] — which is why an edit can never produce
+     * [MessageResult.CaptchaRequired].
+     */
+    private fun doEdit(request: MessageRequest.Edit, drainListener: DrainListener) {
+        api.editMessage(
+            request.channelId,
+            request.messageId,
+            RestAPIParams.Message(
+                content = request.content,
+                allowedMentions = request.allowedMentions?.toRestApiParam(),
+            ),
+        )
+            .restSubscribeOn(retry = false)
+            .appSubscribe(
+                errorClass = MessageQueue::class.java,
+                subscriptionHandler = { subscription ->
+                    inFlightRequest = InflightRequest(request, subscription, drainListener)
+                },
+                errorHandler = { error -> handleError(error, drainListener) },
+                onNext = { resultMessage -> handleSuccess(resultMessage, drainListener) },
+            )
     }
 
-    private companion object {
-        const val MESSAGE_TIMEOUT_MS = 60 * 60 * 1000L
-        const val NETWORK_INITIAL_RETRY_MS = 5_000L
-        const val MAX_NETWORK_RETRY_MS = MESSAGE_TIMEOUT_MS
+    private fun handleSuccess(message: com.discord.api.message.Message, drainListener: DrainListener) {
+        drainListener.complete(MessageResult.Success(message))
+    }
+
+    /**
+     * Classifies a REST failure into a [MessageResult].
+     *
+     * [clientMessage] is only available for sends; edits pass null, so their AutoMod block carries
+     * no message and they can never produce a captcha challenge.
+     */
+    private fun handleError(
+        error: RestApiError,
+        drainListener: DrainListener,
+        clientMessage: Message? = null,
+    ) {
+        val result = when {
+            error.code == SLOW_MODE_ERROR_CODE ->
+                MessageResult.Slowmode(error.retryAfterMs ?: DEFAULT_RETRY_MS)
+
+            error.type == RestApiError.Type.RATE_LIMITED ->
+                MessageResult.RateLimited(error.retryAfterMs ?: DEFAULT_RETRY_MS)
+
+            error.type == RestApiError.Type.NETWORK -> MessageResult.NetworkFailure
+
+            error.type == RestApiError.Type.DISCORD_BAD_REQUEST &&
+                error.isCaptchaRequired &&
+                clientMessage != null ->
+                MessageResult.CaptchaRequired(error, clientMessage.channelId, clientMessage.nonce)
+
+            error.code == AUTOMOD_BLOCK_ERROR_CODE -> MessageResult.AutoModBlock(error, clientMessage)
+
+            else -> MessageResult.UnknownFailure(error)
+        }
+        drainListener.complete(result)
+    }
+
+    private fun sendActivity(request: MessageRequest.Send): RestAPIParams.Message.Activity? {
+        val messageActivity = request.message.activity ?: return null
+        val sessionId = request.activity?.sessionId ?: return null
+        return RestAPIParams.Message.Activity(messageActivity.type, messageActivity.partyId, sessionId)
+    }
+
+    /**
+     * Guarantees a request settles exactly once.
+     *
+     * Both the network callbacks and [cancel] can race to finish the same request; the reference
+     * uses this same compare-and-set so a cancelled request is not also completed by a late
+     * response.
+     */
+    class DrainListener(private val onCompleted: (MessageResult) -> Unit) {
+        private val isCompleted = AtomicBoolean(false)
+
+        @Synchronized
+        fun complete(result: MessageResult) {
+            if (!isCompleted.getAndSet(true)) onCompleted(result)
+        }
+    }
+
+    private class InflightRequest(
+        val baseRequest: MessageRequest,
+        val networkSubscription: Subscription,
+        val drainListener: DrainListener,
+    )
+
+    companion object {
+        /** Requests older than an hour are dropped rather than sent. */
+        const val MESSAGE_TIMEOUT_MS = 3_600_000L
+
+        /** First network-failure backoff step; grows jittered up to [MESSAGE_TIMEOUT_MS]. */
+        const val NETWORK_INITIAL_FAILURE_RETRY_MS = 5_000L
+
+        /** Fallback delay when the API reports a limit without a `retry_after`. */
+        const val DEFAULT_RETRY_MS = 100L
+
+        /** API error code for "this channel is in slow mode". */
+        const val SLOW_MODE_ERROR_CODE = 20016
+
+        /** API error code for "AutoMod blocked this message". */
+        const val AUTOMOD_BLOCK_ERROR_CODE = 200000
     }
 }
+
+private fun com.discord.api.message.allowedmentions.MessageAllowedMentions.toRestApiParam() =
+    RestAPIParams.Message.AllowedMentions(
+        parse = parse?.map { it.serialize() },
+        users = users,
+        roles = roles,
+        repliedUser = repliedUser,
+    )

@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.View
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import com.discord.R
 import com.discord.models.notification.NotificationSettingsV2
 import com.discord.views.CheckedSetting
@@ -11,7 +12,7 @@ import rx.Observable
 import rx.Subscription
 import rx.functions.Action1
 
-class WidgetSettingsNotifications : Fragment(R.layout.widget_settings_notifications) {
+class WidgetSettingsNotifications : AppFragment(R.layout.widget_settings_notifications) {
     private var subscription: Subscription? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {

@@ -139,8 +139,10 @@ class StoreUser(
     }
 
     override fun snapshotData() {
-        if (UsersUpdate in updateSources || this in updateSources) usersSnapshot = LinkedHashMap(users)
-        if (MeUpdate in updateSources || this in updateSources) {
+        // Only the specific update sources gate these copies. `this` is always present once
+        // markChanged() ran, so testing for it would copy the whole user map every dispatch.
+        if (UsersUpdate in updateSources) usersSnapshot = LinkedHashMap(users)
+        if (MeUpdate in updateSources) {
             meSnapshot = me
             meCache.set(me)
         }

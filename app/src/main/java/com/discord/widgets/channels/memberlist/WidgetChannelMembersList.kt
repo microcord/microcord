@@ -3,6 +3,7 @@ package com.discord.widgets.channels.memberlist
 import android.os.Bundle
 import android.view.View
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
@@ -13,7 +14,7 @@ import com.discord.panels.PanelState
 import rx.Observable
 import rx.Subscription
 
-class WidgetChannelMembersList : Fragment(R.layout.widget_channel_members_list) {
+class WidgetChannelMembersList : AppFragment(R.layout.widget_channel_members_list) {
     data class State(
         val channel: Channel?,
         val panelOpen: Boolean,

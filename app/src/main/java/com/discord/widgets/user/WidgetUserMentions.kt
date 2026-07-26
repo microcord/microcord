@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.View
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
@@ -15,7 +16,7 @@ import com.discord.widgets.chat.list.entries.ChatListEntry
 import rx.Subscription
 import rx.schedulers.Schedulers
 
-class WidgetUserMentions : Fragment(R.layout.widget_user_mentions) {
+class WidgetUserMentions : AppFragment(R.layout.widget_user_mentions) {
     private val adapter = WidgetChatListAdapter(onClick = ::openMessage)
     private val messages = ArrayList<Message>()
     private var request: Subscription? = null

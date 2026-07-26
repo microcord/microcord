@@ -9,12 +9,13 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import com.discord.R
 import com.discord.utilities.simple_pager.SimplePager
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputLayout
 
-class WidgetFriendsAdd : Fragment(R.layout.widget_friends_add) {
+class WidgetFriendsAdd : AppFragment(R.layout.widget_friends_add) {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         (activity as? AppCompatActivity)?.supportActionBar?.title = getString(R.string.friends_section_add_friend)
@@ -29,7 +30,7 @@ class WidgetFriendsAdd : Fragment(R.layout.widget_friends_add) {
     }
 }
 
-class WidgetFriendsAddById : Fragment(R.layout.widget_friends_add_by_id) {
+class WidgetFriendsAddById : AppFragment(R.layout.widget_friends_add_by_id) {
     private var loading = false
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -94,7 +95,7 @@ class WidgetFriendsAddById : Fragment(R.layout.widget_friends_add_by_id) {
     }
 }
 
-class WidgetFriendsFindNearby : Fragment(R.layout.widget_friends_nearby) {
+class WidgetFriendsFindNearby : AppFragment(R.layout.widget_friends_nearby) {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         view.findViewById<View>(R.id.nearby_friends_searching_lottie).visibility = View.GONE
