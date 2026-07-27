@@ -350,7 +350,11 @@ class GuildStoreGraphTest {
         scheduler.triggerActions()
         assertEquals("Guild", selected?.name)
 
-        Persister.persistAll()
+        // Deliberately NOT `Persister.persistAll()`. `snapshotData` already wrote this store's set
+        // with `persist = true`, and `persistAll` walks the process-wide persister registry — which
+        // still holds `StoreStream`'s singleton `StoreGuildSelected` from another test class. That
+        // one carries an empty set under the same cache key, so it would overwrite this file in the
+        // current `filesDir` and the restore below would come back as just `[UNSELECTED]`.
         Persister.init(directory)
         val restored = StoreGuildSelected(dispatcher, deck)
         register(restored)

@@ -262,7 +262,9 @@ class StageAndEventStoresTest {
         val channels = StoreChannels(dispatcher, deck)
         val permissions = StorePermissions(users, channels, guilds, deck)
         val stageInstances = StoreStageInstances(deck)
-        val voiceStates = StoreVoiceStates(
+        // Explicitly typed: this store and [stageChannels] reference each other, so inference
+        // cannot resolve either declaration on its own.
+        val voiceStates: StoreVoiceStates = StoreVoiceStates(
             notifyVoiceStatesUpdated = { guildId, channelId, userId ->
                 stageChannels.handleVoiceStatesUpdated(guildId, channelId, userId)
             },
@@ -356,18 +358,6 @@ class StageAndEventStoresTest {
         ModelInvite::class.java,
     )
 
-    private fun readyPayload(): ModelPayload = gson.fromJson(
-        """
-        {
-          "user": {"id":7,"username":"me","discriminator":"0000"},
-          "session_id": "s7",
-          "private_channels": [],
-          "guilds": [$GUILD_JSON]
-        }
-        """.trimIndent(),
-        ModelPayload::class.java,
-    )
-
     companion object {
         private const val GUILD_ID = 1L
         private const val STAGE_CHANNEL_ID = 20L
@@ -393,6 +383,19 @@ class StageAndEventStoresTest {
             .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
             .registerDiscordApiTypeAdapters()
             .create()
+
+        /** In the companion so the nested [Fixture] can reach it as well as the tests. */
+        private fun readyPayload(): ModelPayload = gson.fromJson(
+            """
+            {
+              "user": {"id":7,"username":"me","discriminator":"0000"},
+              "session_id": "s7",
+              "private_channels": [],
+              "guilds": [$GUILD_JSON]
+            }
+            """.trimIndent(),
+            ModelPayload::class.java,
+        )
 
         private val directory = Files.createTempDirectory("stage-event-stores")
 

@@ -34,7 +34,6 @@ import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import java.lang.reflect.Proxy
 import java.nio.file.Files
-import java.util.concurrent.Executor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -42,7 +41,6 @@ import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
 import org.junit.Test
 import rx.Observable
-import rx.schedulers.Schedulers
 
 /**
  * Covers the dispatch families that were previously unparsed and unrouted: every fixture is parsed
@@ -454,11 +452,15 @@ class GatewayDispatchRoutingTest {
 
         private lateinit var gateway: StoreGatewayConnection
 
+        private val scheduler = storeTestScheduler("gateway-routing-store-thread")
+
         @JvmStatic
         @BeforeClass
         fun initialize() {
             val directory = Files.createTempDirectory("gateway-dispatch-routing-test").toFile()
-            val scheduler = Schedulers.from(Executor { command -> Thread(command).apply { start(); join() } })
+            // This used to be a thread-per-action executor that blocked on `join()`. It deadlocked
+            // the moment a dispatch was scheduled from inside `ObservationDeck.connect`: the fresh
+            // thread's `onDispatchEnded` needs the deck monitor its blocked caller still holds.
             val stream = StoreStream.initializeForTesting(
                 directory,
                 memoryPreferences(),

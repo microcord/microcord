@@ -1,7 +1,6 @@
 package com.discord.views
 
 import android.content.Context
-import android.content.res.Resources
 import android.net.Uri
 import android.util.AttributeSet
 import android.util.TypedValue
@@ -12,6 +11,8 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.widget.TextViewCompat
 import com.discord.R
+import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.icon.IconUtils
 import com.facebook.drawee.backends.pipeline.Fresco
 import com.facebook.drawee.drawable.ScalingUtils
 import com.facebook.drawee.generic.GenericDraweeHierarchyBuilder
@@ -50,7 +51,7 @@ class UsernameView @JvmOverloads constructor(
                     usernameText.setTextColor(
                         getColor(
                             R.styleable.UsernameView_username_text_color,
-                            themedColor(R.attr.colorInteractiveActive),
+                            ColorCompat.getThemedColor(context, R.attr.colorInteractiveActive),
                         ),
                     )
                 } finally {
@@ -106,7 +107,7 @@ class UsernameView @JvmOverloads constructor(
         append('#')
         append(spaceCharacter)
         val size = avatarSizePx ?: (16 * resources.displayMetrics.density).toInt()
-        val proxySize = MEDIA_PROXY_SIZES.first { it >= size }
+        val proxySize = IconUtils.getMediaProxySize(size)
         val request = ImageRequestBuilder.newBuilderWithSource(Uri.parse(avatarUrl))
             .setResizeOptions(ResizeOptions(proxySize, proxySize))
             .build()
@@ -125,19 +126,5 @@ class UsernameView @JvmOverloads constructor(
             .setActualImageScaleType(ScalingUtils.ScaleType.CENTER_CROP)
             .build()
         setImageSpan(context, hierarchy, controller, start, start, size, size, false, 2)
-    }
-
-    private fun themedColor(attribute: Int): Int {
-        val value = TypedValue()
-        context.theme.resolveAttribute(attribute, value, true)
-        return value.data
-    }
-
-    private companion object {
-        val MEDIA_PROXY_SIZES = intArrayOf(
-            16, 20, 22, 24, 28, 32, 40, 44, 48, 56, 60, 64, 80, 96, 100, 128,
-            160, 240, 256, 300, 320, 480, 512, 600, 640, 1024, 1280, 1536, 2048,
-            3072, 4096,
-        )
     }
 }

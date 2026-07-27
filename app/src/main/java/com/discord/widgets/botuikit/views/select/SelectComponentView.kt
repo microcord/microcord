@@ -2,7 +2,6 @@ package com.discord.widgets.botuikit.views.select
 
 import android.content.Context
 import android.util.AttributeSet
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -12,6 +11,7 @@ import com.discord.R
 import com.discord.api.botuikit.ComponentType
 import com.discord.models.botuikit.ActionInteractionComponentState
 import com.discord.models.botuikit.SelectMessageComponent
+import com.discord.utilities.color.ColorCompat
 import com.discord.views.typing.TypingDots
 import com.discord.widgets.botuikit.ComponentProvider
 import com.discord.widgets.botuikit.views.ComponentActionListener
@@ -44,14 +44,14 @@ class SelectComponentView @JvmOverloads constructor(
                 text.visibility = View.VISIBLE
                 selectionRoot.visibility = View.GONE
                 icon.visibility = View.GONE
-                text.setTextColor(themedColor(R.attr.colorInteractiveMuted))
+                text.setTextColor(ColorCompat.getThemedColor(context, R.attr.colorInteractiveMuted))
                 text.text = placeholder
             }
             component.maxValues == 1 -> {
                 val selected = component.selectedOptions.first()
                 text.visibility = View.VISIBLE
                 selectionRoot.visibility = View.GONE
-                text.setTextColor(themedColor(R.attr.colorInteractiveNormal))
+                text.setTextColor(ColorCompat.getThemedColor(context, R.attr.colorInteractiveNormal))
                 text.text = selected.label
                 icon.setEmojiOrHide(selected.emoji, component.emojiAnimationsEnabled)
             }
@@ -95,12 +95,6 @@ class SelectComponentView @JvmOverloads constructor(
     }
 
     override fun type() = ComponentType.SELECT
-
-    private fun themedColor(attribute: Int): Int {
-        val value = TypedValue()
-        context.theme.resolveAttribute(attribute, value, true)
-        return value.data
-    }
 
     companion object {
         fun inflateComponent(context: Context, root: ViewGroup): SelectComponentView =

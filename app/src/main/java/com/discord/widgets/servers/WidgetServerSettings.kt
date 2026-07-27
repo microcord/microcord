@@ -11,6 +11,9 @@ import com.discord.app.AppFragment
 import com.discord.app.appViewModels
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.rx.ui
+import com.discord.widgets.servers.auditlog.WidgetServerSettingsAuditLog
+import com.discord.widgets.servers.settings.invites.WidgetServerSettingsInstantInvites
+import com.discord.widgets.servers.settings.members.WidgetServerSettingsMembers
 import com.discord.widgets.settings.SettingsNavigation
 
 /**
@@ -135,6 +138,33 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
         bindDestination(R.id.server_settings_bans_option) {
             WidgetServerSettingsBans.launch(it.context, guildId)
         }
+        bindDestination(R.id.server_settings_option_audit_log) {
+            WidgetServerSettingsAuditLog.launch(it.context, guildId, model.guild.name)
+        }
+        bindDestination(R.id.server_settings_members_option) {
+            WidgetServerSettingsMembers.launch(it.context, guildId)
+        }
+        bindDestination(R.id.server_settings_option_overview) {
+            WidgetServerSettingsOverview.launch(it.context, guildId)
+        }
+        bindDestination(R.id.server_settings_option_moderation) {
+            WidgetServerSettingsModeration.launch(it.context, guildId)
+        }
+        bindDestination(R.id.server_settings_option_security) {
+            WidgetServerSettingsSecurity.launch(it.context, guildId)
+        }
+        bindDestination(R.id.server_settings_option_vanity_url) {
+            WidgetServerSettingsVanityUrl.launch(it.context, guildId)
+        }
+        bindDestination(R.id.server_settings_option_integrations) {
+            WidgetServerSettingsIntegrations.launch(it.context, guildId)
+        }
+        bindDestination(R.id.server_settings_instant_invites_option) {
+            WidgetServerSettingsInstantInvites.launch(it.context, guildId)
+        }
+        bindDestination(R.id.server_settings_emojis_option) {
+            WidgetServerSettingsEmojis.launch(it.context, guildId)
+        }
     }
 
     /** Shows the row when [allowed] *and* its destination exists; hides it otherwise. */
@@ -170,6 +200,15 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
          */
         private val IMPLEMENTED_OPTIONS = setOf(
             R.id.server_settings_bans_option,
+            R.id.server_settings_option_audit_log,
+            R.id.server_settings_members_option,
+            R.id.server_settings_option_overview,
+            R.id.server_settings_option_moderation,
+            R.id.server_settings_option_security,
+            R.id.server_settings_option_vanity_url,
+            R.id.server_settings_option_integrations,
+            R.id.server_settings_instant_invites_option,
+            R.id.server_settings_emojis_option,
         )
 
         /** Section container → the option rows inside it. */

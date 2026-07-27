@@ -4,6 +4,7 @@ import android.content.Context
 import com.discord.api.channel.Channel
 import com.discord.api.voice.state.StageRequestToSpeakState
 import com.discord.api.voice.state.VoiceState
+import com.discord.models.domain.ModelApplicationStream
 import com.discord.models.member.GuildMember
 import com.discord.models.user.CoreUser
 import com.discord.models.user.MeUser
@@ -88,14 +89,8 @@ class StoreVoiceParticipants(
         val nickname: String? = guildMember?.nick
         val callStreamId: Int? = streams?.callStreamId
         val applicationStreamId: Int? = streams?.applicationStreamId
-        /**
-         * The stream this user is broadcasting.
-         *
-         * The reference types this `ModelApplicationStream`; `StreamContext.stream` in this project
-         * is still the narrower `StreamContext.ApplicationStream`, so the field follows that type
-         * until `utilities/streams` is reconstructed.
-         */
-        val applicationStream: StreamContext.ApplicationStream? = streamContext?.stream
+        /** The stream this user is broadcasting. */
+        val applicationStream: ModelApplicationStream? = streamContext?.stream
 
         val isServerMuted: Boolean = voiceState?.mute == true
         val isSelfMuted: Boolean =

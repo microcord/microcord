@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat
 import com.discord.R
 import com.discord.api.role.GuildRole
 import com.discord.utilities.view.text.LinkifiedTextView
+import com.discord.views.ThemedColor
 import com.discord.widgets.roles.RoleIconView
 import com.facebook.drawee.view.SimpleDraweeView
 
@@ -36,7 +37,7 @@ class GuildRoleSubscriptionMemberPreview @JvmOverloads constructor(
             .setPadding(0, 0, 0, 0)
         avatar.setActualImageResource(R.drawable.img_guild_role_subscription_default_avatar_40dp)
         name.setText(R.string.wumpus)
-        setBackgroundColor(themedColor(R.attr.colorBackgroundAccent))
+        setBackgroundColor(ThemedColor.resolve(context, R.attr.colorBackgroundAccent))
         roleIcon.setRoleIconPreview(null as GuildRole?)
     }
 
@@ -46,9 +47,4 @@ class GuildRoleSubscriptionMemberPreview @JvmOverloads constructor(
         else roleIcon.setRoleIconPreview(icon)
     }
 
-    private fun themedColor(attribute: Int): Int {
-        val value = android.util.TypedValue()
-        context.theme.resolveAttribute(attribute, value, true)
-        return if (value.resourceId != 0) ContextCompat.getColor(context, value.resourceId) else value.data
-    }
 }

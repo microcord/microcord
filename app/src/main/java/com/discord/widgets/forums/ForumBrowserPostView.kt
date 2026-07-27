@@ -3,6 +3,7 @@ package com.discord.widgets.forums
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.os.Build
 import android.text.SpannableString
 import android.text.Spanned
@@ -21,6 +22,9 @@ import com.discord.R
 import com.discord.api.message.attachment.MessageAttachmentType
 import com.discord.api.message.reaction.MessageReaction
 import com.discord.models.member.GuildMember
+import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.dimen.dpToPixels
+import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.ReactionView
 import com.discord.views.typing.TypingDots
@@ -51,8 +55,8 @@ class ForumBrowserPostView @JvmOverloads constructor(
     private val typingDots: TypingDots
     private val typingUsers: UserSummaryView
     private val unreadCount: TextView
-    private val avatarSizePx = dp(16)
-    private val overlapAmountPx = dp(4)
+    private val avatarSizePx = dpToPixels(16)
+    private val overlapAmountPx = dpToPixels(4)
 
     init {
         inflate(context, R.layout.forum_browser_post_view, this)
@@ -119,7 +123,7 @@ class ForumBrowserPostView @JvmOverloads constructor(
         if (owner == null) return
         val member = post.guildMembers[owner.id]
         ownerName.text = member?.nick ?: owner.username
-        ownerName.setTextColor(GuildMember.getColor(member, themedColor(R.attr.colorInteractiveNormal)))
+        ownerName.setTextColor(GuildMember.getColor(member, ColorCompat.getThemedColor(context, R.attr.colorInteractiveNormal)))
         ownerAvatar.setImageURI(avatarUrl(owner, member))
     }
 
@@ -134,7 +138,7 @@ class ForumBrowserPostView @JvmOverloads constructor(
             imagePreview.setImageResource(fileDrawable(attachment.filename))
             return
         }
-        val size = dp(64)
+        val size = dpToPixels(64)
         val resized = "${attachment.proxyUrl}?width=$size&height=$size"
         val extension = if (Build.VERSION.SDK_INT == 28 || Build.VERSION.SDK_INT == 29) "png" else "webp"
         val requests = arrayOf(
@@ -170,7 +174,7 @@ class ForumBrowserPostView @JvmOverloads constructor(
             if (isDefault) {
                 requireNotNull(ContextCompat.getColorStateList(context, R.color.status_red_500))
             } else {
-                ColorStateList.valueOf(themedColor(R.attr.colorHeaderPrimary))
+                ColorStateList.valueOf(ColorCompat.getThemedColor(context, R.attr.colorHeaderPrimary))
             },
         )
         reaction.visibility = if (value != null && messageId != null) View.VISIBLE else View.GONE
@@ -194,10 +198,10 @@ class ForumBrowserPostView @JvmOverloads constructor(
         ownerAvatar.alpha = alpha
         ownerName.alpha = alpha
         title.setTextColor(
-            themedColor(if (post.readState.hasUnread) R.attr.colorHeaderPrimary else R.attr.colorInteractiveNormal),
+            ColorCompat.getThemedColor(context, if (post.readState.hasUnread) R.attr.colorHeaderPrimary else R.attr.colorInteractiveNormal),
         )
         description.setTextColor(
-            themedColor(if (post.readState.hasUnread) R.attr.colorHeaderSecondary else R.attr.colorInteractiveNormal),
+            ColorCompat.getThemedColor(context, if (post.readState.hasUnread) R.attr.colorHeaderSecondary else R.attr.colorInteractiveNormal),
         )
     }
 
@@ -206,7 +210,7 @@ class ForumBrowserPostView @JvmOverloads constructor(
         typingDots.start()
         val shown = minOf(post.typingUsers.size, 3)
         val params = typingDots.layoutParams as ViewGroup.MarginLayoutParams
-        params.marginStart = max(0, (avatarSizePx - overlapAmountPx) * shown - dp(8))
+        params.marginStart = max(0, (avatarSizePx - overlapAmountPx) * shown - dpToPixels(8))
         typingDots.layoutParams = params
     }
 
@@ -223,17 +227,10 @@ class ForumBrowserPostView @JvmOverloads constructor(
         return context.getString(resource).replace("{count}", count.toString())
     }
 
-    private fun themedColor(attribute: Int): Int = TypedValue().let {
-        context.theme.resolveAttribute(attribute, it, true)
-        it.data
-    }
+    private fun themedDrawable(attribute: Int): Drawable? =
+        context.getThemedDrawableRes(attribute).takeIf { it != 0 }
+            ?.let { AppCompatResources.getDrawable(context, it) }
 
-    private fun themedDrawable(attribute: Int) = TypedValue().let {
-        if (!context.theme.resolveAttribute(attribute, it, true)) null
-        else AppCompatResources.getDrawable(context, it.resourceId)
-    }
-
-    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     private companion object {
         const val MINUTE = 60_000L

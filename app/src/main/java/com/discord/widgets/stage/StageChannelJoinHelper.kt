@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.annotation.MainThread
 import androidx.fragment.app.FragmentManager
 import com.discord.R
+import com.discord.app.AppLog
 import com.discord.app.AppToast
 import com.discord.stores.StoreChannels
 import com.discord.stores.StoreGuilds
@@ -109,6 +110,10 @@ object StageChannelJoinHelper {
      * The reference implements this as a suspend function; the sequencing is identical here, done
      * with rx because this project has no `RxCoroutineUtils`. A second call cancels the first, so
      * tapping two stage cards in a row does not race two lurk joins against each other.
+     *
+     * `StoreStream` does not publish a [StoreLurking] yet, so [lurkingStore] is `null` by default
+     * and the whole flow reports "you must join this server first" rather than half-joining. See
+     * [StageStoreAccess].
      */
     @Suppress("LongParameterList")
     @MainThread
@@ -120,10 +125,20 @@ object StageChannelJoinHelper {
         channelId: Long,
         launchFullscreen: Boolean = false,
         guildsStore: StoreGuilds = StoreStream.getGuilds(),
-        lurkingStore: StoreLurking = StageStoreAccess.requireLurking(),
+        lurkingStore: StoreLurking? = StageStoreAccess.lurkingOrNull(),
         selectedVoiceChannelStore: StoreVoiceChannelSelected =
             StoreStream.getVoiceChannelSelected(),
     ) {
+        if (lurkingStore == null) {
+            // No toast: the recovered strings have no "could not lurk" message and inventing one —
+            // or borrowing a differently-meaning one — would be worse than doing nothing visible.
+            AppLog.w(
+                "StageChannelJoinHelper",
+                "lurkAndJoinStage ignored: StoreStream publishes no StoreLurking",
+            )
+            return
+        }
+
         lurkSubscription?.unsubscribe()
         lurkSubscription = null
 

@@ -127,7 +127,10 @@ class ApplicationCommandStoresTest {
         }
         fixture.scheduler.triggerActions()
 
-        assertEquals(listOf("shrug-ish"), fixture.store.getQueryCommands().map(ApplicationCommand::name))
+        // The server's match plus every built-in whose name starts with the query — `handleQueryCommandsUpdate`
+        // in the reference appends `getBuiltInCommands().filter { it.name.startsWith(query, true) }`,
+        // so `/sh` also carries `shrug`.
+        assertEquals(listOf("shrug-ish", "shrug"), fixture.store.getQueryCommands().map(ApplicationCommand::name))
         // Discover was never asked for, so it is still the default empty window.
         assertTrue(fixture.store.getDiscoverCommands().commands.isEmpty())
 
@@ -138,7 +141,7 @@ class ApplicationCommandStoresTest {
             )
         }
         fixture.scheduler.triggerActions()
-        assertEquals(listOf("shrug-ish"), fixture.store.getQueryCommands().map(ApplicationCommand::name))
+        assertEquals(listOf("shrug-ish", "shrug"), fixture.store.getQueryCommands().map(ApplicationCommand::name))
     }
 
     /**

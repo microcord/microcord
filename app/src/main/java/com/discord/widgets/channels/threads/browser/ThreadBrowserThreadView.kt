@@ -11,7 +11,6 @@ import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
 import android.util.AttributeSet
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageView
@@ -24,7 +23,9 @@ import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
 import com.discord.models.user.CoreUser
 import com.discord.models.user.User
+import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
+import com.discord.views.ThemedColor
 import com.discord.views.user.avatarUrl
 import com.facebook.drawee.span.DraweeSpanStringBuilder
 import com.facebook.drawee.view.SimpleDraweeView
@@ -184,7 +185,7 @@ class ThreadBrowserThreadView @JvmOverloads constructor(
         text.setSpan(StyleSpan(Typeface.BOLD), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         if (member != null) {
             text.setSpan(
-                ForegroundColorSpan(GuildMember.getColor(member, themedColor(R.attr.colorHeaderPrimary))),
+                ForegroundColorSpan(GuildMember.getColor(member, ThemedColor.resolve(context, R.attr.colorHeaderPrimary, Color.WHITE))),
                 start,
                 end,
                 Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
@@ -217,10 +218,6 @@ class ThreadBrowserThreadView @JvmOverloads constructor(
         }
     }
 
-    private fun themedColor(attribute: Int): Int = TypedValue().let {
-        if (context.theme.resolveAttribute(attribute, it, true)) it.data else Color.WHITE
-    }
-
     sealed class ThreadData(
         open val channel: Channel,
         open val owner: User?,
@@ -248,13 +245,12 @@ class ThreadBrowserThreadView @JvmOverloads constructor(
     enum class TimestampMode { ArchivedAt, CreatedAt }
 
     private companion object {
-        const val DISCORD_EPOCH = 1_420_070_400_000L
         const val MINUTE = 60_000L
         const val HOUR = 60 * MINUTE
         const val DAY = 24 * HOUR
         const val MONTH = 30 * DAY
 
-        fun snowflakeTimestamp(id: Long) = (id ushr 22) + DISCORD_EPOCH
+        fun snowflakeTimestamp(id: Long) = SnowflakeUtils.toTimestamp(id)
 
         fun parseUtcDate(value: String?): Long? {
             if (value == null) return null

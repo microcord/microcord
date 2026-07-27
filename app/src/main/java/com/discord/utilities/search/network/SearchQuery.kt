@@ -24,6 +24,12 @@ class SearchQuery(val params: Map<String, List<String>>, val includeNsfw: Boolea
      * An answer contributes its parameter only when it follows a filter it actually answers;
      * otherwise it degrades to free text, so typing `has:` and then a username searches for the
      * username rather than silently dropping it.
+     *
+     * A filter binds to exactly one node: the filter is cleared again as soon as any answer or
+     * content node has been consumed, so `from: alice#0001 bob#0002` searches for messages by alice
+     * containing the text `bob#0002`, not for messages by either user. Confirmed at bytecode level —
+     * the `FilterNode` branch of `SearchQuery$Builder.buildFrom` jumps to the loop head while both
+     * consuming branches jump one instruction earlier, to the `filterType = null` store.
      */
     class Builder {
         private val contentBuilder = StringBuilder()
@@ -43,12 +49,22 @@ class SearchQuery(val params: Map<String, List<String>>, val includeNsfw: Boolea
         fun buildFrom(queryNodes: List<QueryNode>, searchData: SearchData): SearchQuery {
             var currentFilter: FilterType? = null
             queryNodes.forEach { node ->
-                when {
-                    node is FilterNode -> currentFilter = node.filterType
-                    node is AnswerNode && currentFilter in node.validFilters ->
-                        node.updateQuery(this, searchData, currentFilter)
-                    node is AnswerNode -> appendContent(node.text)
-                    node is ContentNode -> appendContent(node.text)
+                when (node) {
+                    is FilterNode -> currentFilter = node.filterType
+                    is AnswerNode -> {
+                        if (currentFilter in node.validFilters) {
+                            node.updateQuery(this, searchData, currentFilter)
+                        } else {
+                            appendContent(node.text)
+                        }
+                        currentFilter = null
+                    }
+                    is ContentNode -> {
+                        appendContent(node.text)
+                        currentFilter = null
+                    }
+                    // Any other node kind leaves the pending filter in place.
+                    else -> Unit
                 }
             }
             val content = contentBuilder.toString().trim()

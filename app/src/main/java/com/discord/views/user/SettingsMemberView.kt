@@ -29,7 +29,7 @@ class SettingsMemberView constructor(
     private val largeAvatar: SimpleDraweeView
     private val memberSubtitle: SimpleDraweeSpanTextView
     private val memberTitle: UsernameView
-    private var avatarBackgroundColor = themedColor(R.attr.colorBackgroundPrimary)
+    private var avatarBackgroundColor = ThemedColor.resolve(context, R.attr.colorBackgroundPrimary)
     private var user: User? = null
     private var guildMember: GuildMember? = null
 
@@ -113,8 +113,6 @@ class SettingsMemberView constructor(
             .build()
         setImageSpan(context, hierarchy, controller, start, start, sizePx, sizePx, false, 2)
     }
-
-    private fun themedColor(attribute: Int): Int = ThemedColor.resolve(context, attribute)
 
     private companion object {
         const val VERIFIED_BOT_FLAG = 1 shl 16

@@ -11,6 +11,7 @@ import com.discord.api.role.GuildRole
 import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
+import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.images.MGImages
 import com.facebook.imagepipeline.request.ImageRequestBuilder
 
@@ -27,7 +28,6 @@ import com.facebook.imagepipeline.request.ImageRequestBuilder
  *   friends) is dead code in 126.21 Stable and is not reproduced here.
  * - `STATIC_IMAGE_EXTENSION` lives in `utilities/string/StringUtilsKt` in the reference. That file
  *   has not been reconstructed yet, so the value is exposed here as [staticImageExtension].
- * - `DISCORD_EPOCH` comes from `utilities/SnowflakeUtils`, also not yet reconstructed.
  */
 object IconUtils {
 
@@ -43,9 +43,6 @@ object IconUtils {
     private val UNRESTRICTED = R.dimen.avatar_size_unrestricted
 
     private const val IMAGE_SIZE_ASSET_DEFAULT_PX = 160
-
-    /** `SnowflakeUtils.DISCORD_EPOCH`. */
-    private const val DISCORD_EPOCH = 1420070400000L
 
     /** Number of default avatar variants keyed off the user discriminator. */
     private const val DEFAULT_AVATAR_COUNT = 5
@@ -317,7 +314,7 @@ object IconUtils {
      * timestamp encoded in the channel snowflake.
      */
     fun getDefaultForGroupDM(channelId: Long): String {
-        val createdAtMillis = (channelId ushr 22) + DISCORD_EPOCH
+        val createdAtMillis = SnowflakeUtils.toTimestamp(channelId)
         return GROUP_DM_DEFAULT_ICONS[(createdAtMillis % GROUP_DM_DEFAULT_ICONS.size).toInt()]
     }
 

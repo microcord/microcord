@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.os.Bundle
 import android.util.AttributeSet
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.widget.ImageView
@@ -18,6 +17,7 @@ import androidx.core.widget.TextViewCompat
 import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.api.guildscheduledevent.GuildScheduledEvent
+import com.discord.views.ThemedColor
 import com.discord.widgets.guildscheduledevent.ScheduledEventUi
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
@@ -54,7 +54,7 @@ class CallEventsButtonView @JvmOverloads constructor(
             val count = resources.getQuantityString(R.plurals.guild_events_plural_number, events.size)
                 .replace("{#}", events.size.toString())
             text.text = context.getString(R.string.guild_events_list_action_sheet_header).replace("{count}", count)
-            setContentColor(themedColor(R.attr.colorInteractiveNormal))
+            setContentColor(ThemedColor.resolve(context, R.attr.colorInteractiveNormal))
         }
     }
 
@@ -68,12 +68,6 @@ class CallEventsButtonView @JvmOverloads constructor(
     private fun setContentColor(color: Int) {
         text.setTextColor(color)
         ImageViewCompat.setImageTintList(icon, ColorStateList.valueOf(color))
-    }
-
-    private fun themedColor(attr: Int): Int {
-        val value = TypedValue()
-        context.theme.resolveAttribute(attr, value, true)
-        return if (value.resourceId != 0) ContextCompat.getColor(context, value.resourceId) else value.data
     }
 
     private class EventListSheet : BottomSheetDialogFragment() {

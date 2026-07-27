@@ -1,13 +1,13 @@
 package com.discord.widgets.guildscheduledevent.buttonconfiguration
 
 import android.content.Context
-import android.util.TypedValue
 import android.view.View
 import androidx.core.content.ContextCompat
 import com.discord.R
 import com.discord.api.guildscheduledevent.GuildScheduledEvent
 import com.discord.api.guildscheduledevent.GuildScheduledEventEntityType
 import com.discord.api.guildscheduledevent.GuildScheduledEventStatus
+import com.discord.views.ThemedColor
 import com.discord.widgets.guildscheduledevent.GuildScheduledEventTiming
 import com.discord.widgets.guildscheduledevent.ScheduledEventUi
 
@@ -72,13 +72,8 @@ data class GuildButtonConfiguration(
 
     override fun secondaryButtonTextColor(context: Context): Int {
         if (!secondaryButtonEnabled) return ContextCompat.getColor(context, R.color.white_alpha_40)
-        if (isRsvped && !isActive && !isComplete) return themedColor(context, R.attr.color_brand)
+        if (isRsvped && !isActive && !isComplete) return ThemedColor.resolve(context, R.attr.color_brand)
         return ContextCompat.getColor(context, R.color.white)
     }
 
-    private fun themedColor(context: Context, attr: Int): Int {
-        val value = TypedValue()
-        context.theme.resolveAttribute(attr, value, true)
-        return if (value.resourceId != 0) ContextCompat.getColor(context, value.resourceId) else value.data
-    }
 }

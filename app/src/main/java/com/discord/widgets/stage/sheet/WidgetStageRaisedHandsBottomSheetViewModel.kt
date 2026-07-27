@@ -159,7 +159,7 @@ class WidgetStageRaisedHandsBottomSheetViewModel(
             voiceParticipants: StoreVoiceParticipants = StoreStream.getVoiceParticipants(),
             channelsStore: StoreChannels = StoreStream.getChannels(),
             guildsStore: StoreGuilds = StoreStream.getGuilds(),
-            stageChannelsStore: StoreStageChannels = StageStoreAccess.requireStageChannels(),
+            stageChannelsStore: StoreStageChannels = StageStoreAccess.stageChannels(),
             clock: Clock = ClockFactory.get(),
         ): Observable<StoreState> = channelsStore.observeChannel(channelId)
             .filter { it != null }

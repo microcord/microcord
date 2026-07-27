@@ -5,9 +5,7 @@ import com.discord.api.permission.PermissionOverwrite
 import com.discord.api.thread.ThreadMember
 import com.discord.api.thread.ThreadMetadata
 import com.discord.api.user.User
-
-/** Identifier of a [ForumTag] within a forum channel. */
-typealias ForumTagId = Long
+import com.discord.primitives.ForumTagId
 
 data class Channel(
     val topic: String?,

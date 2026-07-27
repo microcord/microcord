@@ -13,6 +13,7 @@ import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
 import com.discord.stores.StoreMessageState
 import com.discord.stores.StoreMessagesLoader
+import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.widgets.chat.list.entries.ChatListEntry
@@ -252,7 +253,7 @@ object ChatListRows {
         message.timestamp?.dateTimeMillis ?: snowflakeTimestamp(message.id)
 
     private fun snowflakeTimestamp(id: Long) =
-        if (id > 4_194_304L) (id ushr 22) + 1_420_070_400_000L else 0L
+        if (id > 4_194_304L) SnowflakeUtils.toTimestamp(id) else 0L
 
     private fun sameDay(first: Long, second: Long): Boolean {
         val a = Calendar.getInstance().apply { timeInMillis = first }

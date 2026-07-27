@@ -1,9 +1,9 @@
 package com.discord.utilities.stickers
 
 import android.content.Context
-import android.content.res.Resources
 import com.discord.api.sticker.BaseSticker
 import com.discord.api.sticker.StickerFormatType
+import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.file.DownloadUtils
 import com.discord.utilities.icon.IconUtils
 import java.io.File
@@ -20,9 +20,7 @@ object StickerUtils {
      * it needs no `Context` and can therefore be the default value of [getCDNAssetUrl]'s `size`,
      * exactly as the reference declares it.
      */
-    val DEFAULT_STICKER_SIZE_PX: Int by lazy {
-        (DEFAULT_STICKER_SIZE_DP * Resources.getSystem().displayMetrics.density).toInt()
-    }
+    val DEFAULT_STICKER_SIZE_PX: Int by lazy { dpToPixels(DEFAULT_STICKER_SIZE_DP) }
 
     /**
      * Builds the CDN URL for [sticker].
@@ -58,6 +56,12 @@ object StickerUtils {
      */
     fun fetchSticker(context: Context, sticker: BaseSticker): Observable<DownloadUtils.DownloadState> {
         val directory = File(context.cacheDir, "stickers")
+        // The reference creates this directory here and it is load-bearing: FileOutputStream will
+        // not create a missing parent, so without it every download fails and the sticker is left
+        // showing its placeholder forever (the failure is only logged at warn level). PNG stickers
+        // still render because they go through the media proxy rather than this download path, so
+        // the symptom presents as "animated stickers don't work" rather than as stickers breaking.
+        if (!directory.exists()) directory.mkdirs()
         val fileName = "${sticker.getStickerId()}${sticker.getFileExtension()}"
         val file = File(directory, fileName)
         return if (file.isFile && file.length() > 0L) {

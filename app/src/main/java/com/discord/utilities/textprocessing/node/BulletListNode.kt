@@ -6,9 +6,9 @@ import android.text.Spanned
 import android.text.style.LeadingMarginSpan
 import com.discord.R
 import com.discord.simpleast.core.node.Node
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.textprocessing.spans.BulletSpan
 import com.discord.utilities.textprocessing.spans.VerticalPaddingSpan
-import com.discord.utilities.textprocessing.themedColor
 
 /**
  * `- item` / `* item` markdown list entry.
@@ -37,7 +37,7 @@ class BulletListNode<T : BasicRenderContext>(
             LeadingMarginSpan.Standard(leadingMargin),
             BulletSpan(
                 gapWidth = gapWidth,
-                color = themedColor(context, R.attr.primary_400),
+                color = ColorCompat.getThemedColor(context, R.attr.primary_400),
                 bulletRadius = MARKDOWN_BULLET_RADIUS,
                 style = bulletStyle,
             ),

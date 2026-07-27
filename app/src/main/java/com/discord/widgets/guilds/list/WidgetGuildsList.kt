@@ -20,6 +20,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.i18n.i18nPlural
+import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.widgets.channels.list.WidgetChannelListUnreads
@@ -168,9 +169,8 @@ class WidgetGuildsList : AppFragment(R.layout.widget_guilds_list), WidgetGuildLi
     }
 
     private fun themedDrawable(@AttrRes attribute: Int): Drawable {
-        val value = TypedValue()
-        requireContext().theme.resolveAttribute(attribute, value, true)
-        return requireNotNull(ContextCompat.getDrawable(requireContext(), value.resourceId)) {
+        val resourceId = requireContext().getThemedDrawableRes(attribute)
+        return requireNotNull(ContextCompat.getDrawable(requireContext(), resourceId)) {
             "no drawable for attribute ${resources.getResourceName(attribute)}"
         }
     }

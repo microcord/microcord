@@ -9,7 +9,7 @@ import com.discord.api.commands.ApplicationCommandPermission
  * [permissions] is the flattened `id -> allowed` view of the API's permission overwrites; it is
  * consulted by [hasPermission] together with [defaultPermissions].
  */
-abstract class ApplicationCommand protected constructor(
+sealed class ApplicationCommand(
     val id: String,
     val applicationId: Long,
     val name: String,

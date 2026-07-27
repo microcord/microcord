@@ -105,6 +105,10 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         bindRoute(view, R.id.behavior, ::WidgetSettingsBehavior)
         bindRoute(view, R.id.activity_status, ::WidgetSettingsActivityStatus)
         bindRoute(view, R.id.notifications, ::WidgetSettingsNotifications)
+        bindRoute(view, R.id.privacy, ::WidgetSettingsPrivacy)
+        // Voice persists every setting `StoreMediaSettings` backs; the OpenSL ES section and the
+        // microphone test are hidden inside it because `StoreStream` publishes no media engine yet.
+        bindRoute(view, R.id.voice, ::WidgetSettingsVoice)
 
         view.findViewById<View>(R.id.support).setOnClickListener {
             UriHandler.handle(it.context, SUPPORT_URL)
@@ -269,6 +273,8 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
             R.id.behavior,
             R.id.activity_status,
             R.id.notifications,
+            R.id.privacy,
+            R.id.voice,
         )
 
         /**

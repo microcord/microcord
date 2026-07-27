@@ -28,7 +28,17 @@ class OAuthScopeTypeAdapter : TypeAdapter<OAuthScope>() {
         if (value == null) writer.nullValue() else writer.value(value.scopeName)
     }
 
-    private companion object {
+    companion object {
+        /**
+         * Resolves a wire scope name.
+         *
+         * Returns [OAuthScope.Invalid] carrying the raw name for anything this build predates, so
+         * the caller decides whether an unknown scope is fatal — the authorize screen treats it as
+         * fatal, the settings list as a row it cannot describe.
+         */
+        fun scopeOf(scopeName: String): OAuthScope =
+            NAME_TO_SCOPE[scopeName] ?: OAuthScope.Invalid(scopeName)
+
         private val NAME_TO_SCOPE: Map<String, OAuthScope> = listOf(
             OAuthScope.Identify,
             OAuthScope.Email,

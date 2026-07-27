@@ -18,6 +18,7 @@ import com.discord.models.domain.ModelInvite
 import com.discord.models.user.User
 import com.discord.stores.StoreStream
 import com.discord.stores.updates.ObservationDeckProvider
+import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
@@ -322,7 +323,7 @@ class WidgetChatListAdapterItemInvite(
     private fun configureForVocalChannel(channel: Channel, context: Context) {
         memberCount.visibility = View.GONE
         val iconRes = when (channel.type) {
-            Channel.GUILD_VOICE -> ThemedDrawable.resolve(context, R.attr.ic_volume_up)
+            Channel.GUILD_VOICE -> context.getThemedDrawableRes(R.attr.ic_volume_up)
             Channel.GUILD_STAGE_VOICE -> R.drawable.ic_channel_stage_24dp
             else -> 0
         }
@@ -462,14 +463,5 @@ internal interface InviteEmbedStore {
         }
 
         var installed: InviteEmbedStore = UNAVAILABLE
-    }
-}
-
-/** Resolves a themed drawable attribute to the drawable resource behind it. */
-internal object ThemedDrawable {
-    fun resolve(context: Context, attribute: Int): Int {
-        val value = android.util.TypedValue()
-        if (!context.theme.resolveAttribute(attribute, value, true)) return 0
-        return value.resourceId
     }
 }

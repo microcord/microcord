@@ -144,9 +144,13 @@ class EmojiPickerViewModel(
          */
         @VisibleForTesting
         fun filter(items: List<Item>, query: String): List<Item> {
-            val normalized = query.lowercase(Locale.getDefault())
+            // Locale.ROOT, not the device locale: emoji names are ASCII identifiers, and in
+            // Turkish `"GRIN".lowercase()` is "grın" — a dotless i that matches no emoji name, so
+            // the picker's search silently returns nothing. The reference folds emoji names with
+            // `Locale.ROOT` for the same reason (`StoreEmoji.kt:207-217` in the decompile).
+            val normalized = query.lowercase(Locale.ROOT)
             return items.filterIsInstance<Item.EmojiItem>()
-                .filter { item -> item.emoji.names.any { normalized in it.lowercase(Locale.getDefault()) } }
+                .filter { item -> item.emoji.names.any { normalized in it.lowercase(Locale.ROOT) } }
         }
 
         /**

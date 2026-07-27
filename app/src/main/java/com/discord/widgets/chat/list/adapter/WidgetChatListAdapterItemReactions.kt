@@ -8,6 +8,8 @@ import android.widget.ImageView
 import androidx.core.content.ContextCompat
 import com.discord.R
 import com.discord.api.message.reaction.MessageReaction
+import com.discord.utilities.dimen.dpToPixels
+import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
 import com.discord.views.ReactionView
 import com.discord.widgets.chat.list.entries.ChatListEntry
@@ -89,12 +91,12 @@ class WidgetChatListAdapterItemReactions(
     private fun createReactionView(): ReactionView {
         val context = reactionsContainer.context
         val view = ReactionView(context)
-        val horizontalPadding = dp(REACTION_HORIZONTAL_PADDING_DP)
+        val horizontalPadding = dpToPixels(REACTION_HORIZONTAL_PADDING_DP)
         view.setPadding(horizontalPadding, view.paddingTop, horizontalPadding, view.paddingBottom)
-        view.background = ContextCompat.getDrawable(context, themedDrawable(R.attr.theme_chat_reaction_background))
+        view.background = ContextCompat.getDrawable(context, itemView.context.getThemedDrawableRes(R.attr.theme_chat_reaction_background))
         view.gravity = Gravity.CENTER
         reactionsContainer.addView(view)
-        view.layoutParams.height = dp(REACTION_VIEW_HEIGHT_DP)
+        view.layoutParams.height = dpToPixels(REACTION_VIEW_HEIGHT_DP)
         return view
     }
 
@@ -111,13 +113,6 @@ class WidgetChatListAdapterItemReactions(
         }
     }
 
-    private fun dp(value: Int): Int =
-        (value * itemView.resources.displayMetrics.density).toInt()
-
-    private fun themedDrawable(attribute: Int): Int = TypedValue().let {
-        itemView.context.theme.resolveAttribute(attribute, it, true)
-        it.resourceId
-    }
 
     private companion object {
         /** Discord stops offering the "+" chip once a message carries this many distinct emoji. */

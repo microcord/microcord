@@ -9,7 +9,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.discord.R
 import com.discord.panels.OverlappingPanelsLayout
-import com.discord.models.user.CoreUser
 import com.discord.widgets.tabs.NavigationTab
 import com.discord.widgets.tabs.TabsHostBottomNavigationView
 import org.junit.Assert.assertEquals
@@ -59,8 +58,9 @@ class HomePanelsAndTabsTest {
                 NavigationTab.MENTIONS,
                 { selected = it },
                 true,
-                CoreUser(42L),
-                null,
+                // The avatar is now driven by a store-backed controller keyed on the user id, so the
+                // view takes an id rather than a User/Presence snapshot.
+                42L,
                 setOf(NavigationTab.HOME, NavigationTab.MENTIONS, NavigationTab.SETTINGS),
                 3,
                 0,

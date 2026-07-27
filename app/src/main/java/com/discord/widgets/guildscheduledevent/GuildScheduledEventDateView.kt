@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.text.TextUtils
 import android.util.AttributeSet
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.widget.ImageView
 import android.widget.TextView
@@ -15,6 +14,7 @@ import com.discord.R
 import com.discord.api.guildscheduledevent.GuildScheduledEvent
 import com.discord.api.guildscheduledevent.GuildScheduledEventEntityType
 import com.discord.api.guildscheduledevent.GuildScheduledEventStatus
+import com.discord.views.ThemedColor
 
 class GuildScheduledEventDateView @JvmOverloads constructor(
     context: Context,
@@ -53,8 +53,8 @@ class GuildScheduledEventDateView @JvmOverloads constructor(
         icon.setImageResource(if (live) R.drawable.ic_event_20dp else R.drawable.ic_calendar_white_24dp)
         val color = when {
             live -> ContextCompat.getColor(context, R.color.status_green_500)
-            done || timing == GuildScheduledEventTiming.SOON || timing == GuildScheduledEventTiming.NOW || timing == GuildScheduledEventTiming.EXPIRED -> themedColor(R.attr.colorInteractiveNormal)
-            else -> themedColor(R.attr.colorHeaderSecondary)
+            done || timing == GuildScheduledEventTiming.SOON || timing == GuildScheduledEventTiming.NOW || timing == GuildScheduledEventTiming.EXPIRED -> ThemedColor.resolve(context, R.attr.colorInteractiveNormal)
+            else -> ThemedColor.resolve(context, R.attr.colorHeaderSecondary)
         }
         ImageViewCompat.setImageTintList(icon, ColorStateList.valueOf(color))
 
@@ -71,9 +71,4 @@ class GuildScheduledEventDateView @JvmOverloads constructor(
         }
     }
 
-    private fun themedColor(attr: Int): Int {
-        val value = TypedValue()
-        context.theme.resolveAttribute(attr, value, true)
-        return if (value.resourceId != 0) ContextCompat.getColor(context, value.resourceId) else value.data
-    }
 }

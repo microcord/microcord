@@ -9,6 +9,7 @@ import androidx.core.graphics.ColorUtils
 import com.discord.R
 import com.discord.stores.StoreVoiceParticipants
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.icon.IconUtils
 import com.facebook.drawee.view.SimpleDraweeView
 import com.github.mmin18.widget.RealtimeBlurView
@@ -28,7 +29,7 @@ class PrivateCallBlurredGridView @JvmOverloads constructor(
         addView(grid)
         addView(RealtimeBlurView(context, null).apply {
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
-            setBlurRadius(64.dp.toFloat())
+            setBlurRadius(dpToPixels(64).toFloat())
             setOverlayColor(
                 ColorUtils.setAlphaComponent(
                     ColorCompat.getColor(context, R.color.primary_dark_600),
@@ -66,7 +67,6 @@ class PrivateCallBlurredGridView @JvmOverloads constructor(
     private fun columns() = if (isLandscape) 3 else 2
     private fun maxShownParticipants() = if (isLandscape) 6 else 4
     private val isLandscape get() = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-    private val Int.dp get() = (this * resources.displayMetrics.density).toInt()
 
     private companion object {
         /** 80 % opaque, so the blurred avatars read as a backdrop rather than as content. */

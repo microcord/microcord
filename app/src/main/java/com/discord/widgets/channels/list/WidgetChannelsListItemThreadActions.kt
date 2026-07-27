@@ -17,6 +17,7 @@ import com.discord.models.guild.Guild
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreThreadsJoined.JoinedThread
+import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
@@ -167,7 +168,7 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
         }
 
     @DrawableRes
-    private fun muteIconResId(isMuted: Boolean, context: Context): Int = context.themedDrawableRes(
+    private fun muteIconResId(isMuted: Boolean, context: Context): Int = context.getThemedDrawableRes(
         if (isMuted) R.attr.ic_channel_muted else R.attr.ic_channel_mute,
     )
 

@@ -8,23 +8,20 @@ import android.text.SpannableStringBuilder
 import android.text.method.LinkMovementMethod
 import android.text.style.LeadingMarginSpan
 import android.text.style.StyleSpan
-import android.text.style.URLSpan
 import android.text.util.Linkify
 import android.util.Log
 import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
-import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import androidx.core.text.BidiFormatter
 import androidx.core.view.AccessibilityDelegateCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import com.discord.R
-import com.discord.api.message.role_subscription.RoleSubscriptionData
 import com.discord.api.permission.Permission
-import com.discord.i18n.FormatUtils
-import com.discord.i18n.I18nSpans
+import com.discord.i18n.Hook
+import com.discord.i18n.I18nHooks
 import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
 import com.discord.models.user.CoreUser
@@ -33,7 +30,7 @@ import com.discord.stores.StoreMessageReplies
 import com.discord.stores.StoreMessageState
 import com.discord.stores.StoreStream
 import com.discord.utilities.icon.IconUtils
-import com.discord.utilities.locale.LocaleManager
+import com.discord.utilities.message.MessageUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.spans.ClickableSpan
 import com.discord.utilities.textprocessing.DiscordParser
@@ -452,7 +449,7 @@ class WidgetChatListAdapterItemMessage(
 
         when {
             message.isLocalApplicationCommand() && message.isLoading() -> {
-                itemLoadingText?.text = ChatRowText.format(
+                itemLoadingText?.text = I18nHooks.format(
                     itemText.context,
                     R.string.application_command_waiting,
                     mapOf("applicationName" to entry.authorDisplayName()),
@@ -630,12 +627,12 @@ class WidgetChatListAdapterItemMessage(
             ThemedColor.resolve(replyText.context, R.attr.colorTextLink),
             underline = false,
         ) { onCommandClicked(message, interaction.id, interactionUser.id) }
-        val text = ChatRowText.format(
+        val text = I18nHooks.format(
             replyText.context,
             R.string.system_message_application_command_reply,
             mapOf("commandName" to interaction.name),
             mapOf(
-                "commandNameOnClick" to ChatRowText.Hook(
+                "commandNameOnClick" to Hook(
                     spans = listOf(StyleSpan(Typeface.BOLD), commandSpan),
                 ),
             ),
@@ -722,9 +719,9 @@ class WidgetChatListAdapterItemMessage(
         configureReplyName("", 0, false)
 
         val context = replyText.context
-        val text = ChatRowText.format(
+        val text = I18nHooks.format(
             context,
-            ChatRowText.systemMessageUserJoin(context, repliedEntry.message.id),
+            MessageUtils.getSystemMessageUserJoin(context, repliedEntry.message.id),
             mapOf("username" to repliedEntry.authorDisplayName()),
         )
         configureReplyText(SpannableString(text.toString()), REPLY_SYSTEM_MESSAGE_ALPHA)
@@ -736,11 +733,15 @@ class WidgetChatListAdapterItemMessage(
         configureReplyName("", 0, false)
         val context = replyText.context
         val guildName = StoreStream.getGuilds().getGuild(adapter.data.guildId)?.name
-        val text = ChatRowText.systemMessageRoleSubscriptionPurchase(
+        val text = MessageUtils.getSystemMessageRoleSubscriptionPurchase(
             context,
             guildName,
             repliedEntry.authorDisplayName(),
             repliedEntry.message.roleSubscriptionData,
+            // The reply preview binds no hooks, but it still needs the hook-aware renderer: the
+            // default one does not strip the `$[](hookName)` form, and this text is flattened to a
+            // plain string immediately below.
+            render = { ctx, res, args -> I18nHooks.format(ctx, res, args) },
         )
         configureReplyText(SpannableString(text.toString()), REPLY_SYSTEM_MESSAGE_ALPHA)
     }
@@ -922,194 +923,3 @@ class WidgetChatListAdapterItemMessage(
  */
 internal fun MessageEntry.authorDisplayName(): String? =
     message.author?.id?.let(nickOrUsernames::get)
-
-/**
- * Binds the *hooks* in one of Discord's translated strings to the styling and click behaviour a
- * chat row wants.
- *
- * [com.discord.i18n.I18nSpans] already resolves `{name}` placeholders, `!!…!!` markers, `**bold**`
- * runs and `[label](target)` links. What it cannot do on its own is the reference's hook form: the
- * target names a hook (`usernameOnClick`, `autoArchiveDurationHook`) that the screen is expected to
- * fill in, and some of those strings ship an empty label (`$[](usernameHook)`) whose text comes from
- * the hook too. This adds exactly that layer and delegates everything else.
- *
- * It is for Discord's own copy only — message content goes through
- * [com.discord.utilities.textprocessing.DiscordParser], never through here. Fold this into
- * `com.discord.i18n` once that package grows the reference's `RenderContext`.
- */
-internal object ChatRowText {
-
-    /**
-     * One `(hookName)` target. [text] overrides the label written inside the brackets, which is
-     * only needed for the strings that ship an empty label.
-     */
-    data class Hook(
-        val text: CharSequence? = null,
-        val spans: List<Any> = emptyList(),
-        val onClick: ((View) -> Unit)? = null,
-    )
-
-    /** As `I18nSpans`' masked-link pattern, but allowing the empty label and the `$` prefix. */
-    private val HOOK = Regex("""\$?\[([^\[\]]*)]\(([^()\s]*)\)""")
-
-    /** A hook wrapped in a bold run, e.g. `**$[!!{webhookName}!!](webhookNameHook)**`. */
-    private val BOLD_HOOK = Regex("""\*\*(\$?\[[^\[\]]*]\(([^()\s]*)\))\*\*""")
-
-    fun format(
-        context: Context,
-        @StringRes stringRes: Int,
-        args: Map<String, Any?> = emptyMap(),
-        hooks: Map<String, Hook> = emptyMap(),
-    ): CharSequence {
-        val boldHooks = mutableSetOf<String>()
-        val template = fillHookLabels(context.getString(stringRes), hooks, boldHooks)
-        val rendered = I18nSpans.render(template, *args.map { it.key to it.value }.toTypedArray())
-        return bindHooks(rendered, hooks, boldHooks)
-    }
-
-    /** Discord's plurals use `{count}` or the bare `{#}` token for the quantity. */
-    fun plural(context: Context, @PluralsRes pluralRes: Int, quantity: Int): String =
-        FormatUtils.format(
-            context.resources.getQuantityString(pluralRes, quantity),
-            mapOf("count" to quantity, "#" to quantity),
-        )
-
-    /**
-     * Reference: `MessageUtils.getSystemMessageUserJoin`, not yet reconstructed.
-     *
-     * The thirteen join greetings only exist in English, so any other locale always gets the first
-     * (neutral) one. English clients get one chosen from the message's own creation time, so the
-     * same message keeps the same greeting forever.
-     */
-    fun systemMessageUserJoin(context: Context, messageId: Long): Int {
-        if (LocaleManager().getPrimaryLocale(context).language != "en") return WELCOME_MESSAGES[0]
-        val index = (TimeUtils.parseSnowflake(messageId) % WELCOME_MESSAGES.size).toInt()
-        return WELCOME_MESSAGES[index]
-    }
-
-    /**
-     * Reference: `MessageUtils.getSystemMessageRoleSubscriptionPurchase`, not yet reconstructed.
-     *
-     * Four variants, chosen by whether this is a renewal and whether the member has accrued months
-     * worth mentioning. Like the join greetings these are English-only.
-     */
-    fun systemMessageRoleSubscriptionPurchase(
-        context: Context,
-        guildName: String?,
-        authorName: String?,
-        roleSubscriptionData: RoleSubscriptionData?,
-        hooks: Map<String, Hook> = emptyMap(),
-    ): CharSequence {
-        if (roleSubscriptionData == null ||
-            LocaleManager().getPrimaryLocale(context).language != "en"
-        ) {
-            return context.getString(R.string.reply_quote_message_not_loaded)
-        }
-
-        val args = mutableMapOf<String, Any?>(
-            "username" to authorName,
-            "tierName" to roleSubscriptionData.tierName,
-            "guildName" to guildName,
-        )
-        if (roleSubscriptionData.totalMonthsSubscribed > 0) {
-            args["months"] = plural(
-                context,
-                R.plurals.system_message_role_subscription_join_with_duration_mobile_months,
-                roleSubscriptionData.totalMonthsSubscribed,
-            )
-            val stringRes = if (roleSubscriptionData.isRenewal) {
-                R.string.system_message_role_subscription_renew_with_duration_mobile
-            } else {
-                R.string.system_message_role_subscription_join_with_duration_mobile
-            }
-            return format(context, stringRes, args, hooks)
-        }
-        val stringRes = if (roleSubscriptionData.isRenewal) {
-            R.string.system_message_role_subscription_renew_mobile
-        } else {
-            R.string.system_message_role_subscription_join_mobile
-        }
-        return format(context, stringRes, args, hooks)
-    }
-
-    /**
-     * Rewrites every hook into the plain `[label](hookName)` form `I18nSpans` understands: the `$`
-     * prefix is dropped and an empty label is filled from the hook. A hook with neither a label nor
-     * a text disappears entirely rather than leaving stray brackets in the sentence.
-     *
-     * A bold run wrapped *around* a hook is unwrapped and its name collected into [boldHooks]:
-     * `I18nSpans` rewrites the link before the bold run, and replacing the surrounding `**…**`
-     * afterwards would drop the link span sitting inside it. The bold is re-applied in [bindHooks].
-     */
-    private fun fillHookLabels(
-        template: String,
-        hooks: Map<String, Hook>,
-        boldHooks: MutableSet<String>,
-    ): String {
-        val unwrapped = BOLD_HOOK.replace(template) { match ->
-            val hookName = match.groupValues[2]
-            if (!hooks.containsKey(hookName)) return@replace match.value
-            boldHooks.add(hookName)
-            match.groupValues[1]
-        }
-        return HOOK.replace(unwrapped) { match ->
-            val hookName = match.groupValues[2]
-            val label = hooks[hookName]?.text?.toString()?.takeIf(String::isNotEmpty)
-                ?: match.groupValues[1]
-            if (label.isEmpty()) "" else "[$label]($hookName)"
-        }
-    }
-
-    /**
-     * Swaps the [URLSpan]s `I18nSpans` produced for hook targets with what the row actually wants.
-     * A target that is a real url is left alone, so a string mixing both still works.
-     */
-    private fun bindHooks(
-        rendered: CharSequence,
-        hooks: Map<String, Hook>,
-        boldHooks: Set<String>,
-    ): CharSequence {
-        if (hooks.isEmpty()) return rendered
-        val builder = SpannableStringBuilder(rendered)
-        builder.getSpans(0, builder.length, URLSpan::class.java).forEach { span ->
-            val hook = hooks[span.url] ?: return@forEach
-            val start = builder.getSpanStart(span)
-            val end = builder.getSpanEnd(span)
-            builder.removeSpan(span)
-            if (span.url in boldHooks) {
-                builder.setSpan(
-                    StyleSpan(Typeface.BOLD),
-                    start,
-                    end,
-                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
-                )
-            }
-            hook.spans.forEach { builder.setSpan(it, start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE) }
-            hook.onClick?.let { onClick ->
-                builder.setSpan(
-                    ClickableSpan(null, underline = false, onClickListener = onClick),
-                    start,
-                    end,
-                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
-                )
-            }
-        }
-        return builder
-    }
-
-    private val WELCOME_MESSAGES = intArrayOf(
-        R.string.system_message_guild_member_join_001,
-        R.string.system_message_guild_member_join_002,
-        R.string.system_message_guild_member_join_003,
-        R.string.system_message_guild_member_join_004,
-        R.string.system_message_guild_member_join_005,
-        R.string.system_message_guild_member_join_006,
-        R.string.system_message_guild_member_join_007,
-        R.string.system_message_guild_member_join_008,
-        R.string.system_message_guild_member_join_009,
-        R.string.system_message_guild_member_join_010,
-        R.string.system_message_guild_member_join_011,
-        R.string.system_message_guild_member_join_012,
-        R.string.system_message_guild_member_join_013,
-    )
-}

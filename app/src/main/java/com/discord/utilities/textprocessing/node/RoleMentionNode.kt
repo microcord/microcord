@@ -11,7 +11,7 @@ import androidx.core.graphics.ColorUtils
 import com.discord.R
 import com.discord.api.role.GuildRole
 import com.discord.simpleast.core.node.Node
-import com.discord.utilities.textprocessing.themedColor
+import com.discord.utilities.color.ColorCompat
 
 /**
  * `<@&id>` role mention.
@@ -40,12 +40,12 @@ class RoleMentionNode<T : RoleMentionNode.RenderContext>(
         val foreground = if (hasCustomColor) {
             ColorUtils.setAlphaComponent(role.color, OPAQUE_ALPHA)
         } else {
-            themedColor(renderContext.context, R.attr.theme_chat_mention_foreground)
+            ColorCompat.getThemedColor(renderContext.context, R.attr.theme_chat_mention_foreground)
         }
         val background = if (hasCustomColor) {
             ColorUtils.setAlphaComponent(role.color, MENTION_BACKGROUND_ALPHA)
         } else {
-            themedColor(renderContext.context, R.attr.theme_chat_mention_background)
+            ColorCompat.getThemedColor(renderContext.context, R.attr.theme_chat_mention_background)
         }
 
         builder.append(MENTION_PREFIX).append(role.name)

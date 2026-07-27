@@ -18,6 +18,7 @@ import com.discord.api.botuikit.ButtonStyle
 import com.discord.api.botuikit.ComponentType
 import com.discord.models.botuikit.ActionInteractionComponentState
 import com.discord.models.botuikit.ButtonMessageComponent
+import com.discord.utilities.dimen.dpToPixels
 import com.discord.views.typing.TypingDots
 import com.discord.widgets.botuikit.ComponentProvider
 import com.facebook.drawee.view.SimpleDraweeView
@@ -47,7 +48,7 @@ class ButtonComponentView @JvmOverloads constructor(
         else emoji.setEmojiOrHide(component.emoji, component.emojiAnimationsEnabled)
         linkIcon.visibility = if (component.style == ButtonStyle.LINK) View.VISIBLE else View.GONE
         val (start, end) = buttonLabelPaddingDp(component.label != null, component.emoji != null, component.style == ButtonStyle.LINK)
-        label.setPadding(start.dp, 0, end.dp, 0)
+        label.setPadding(dpToPixels(start), 0, dpToPixels(end), 0)
         label.text = component.label
         label.visibility = if (loading) View.INVISIBLE else View.VISIBLE
         label.setEnabledAlpha(enabled)
@@ -82,7 +83,6 @@ class ButtonComponentView @JvmOverloads constructor(
         context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
-    private val Int.dp get() = (this * resources.displayMetrics.density).toInt()
 
     companion object {
         fun inflateComponent(context: Context, root: ViewGroup): ButtonComponentView =

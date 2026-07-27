@@ -12,6 +12,8 @@ import android.widget.ImageView
 import android.widget.TextView
 import com.discord.R
 import com.discord.api.channel.isGuildForumChannel
+import com.discord.i18n.Hook
+import com.discord.i18n.I18nHooks
 import com.discord.utilities.view.extensions.clear
 import com.discord.views.ThemedColor
 import com.discord.widgets.chat.list.entries.ChatListEntry
@@ -102,11 +104,11 @@ class WidgetChatListAdapterItemThreadDraftForm(
             ChatListRowNavigation.showThreadArchiveDurationSheet
                 ?.invoke(adapter.fragmentManager, entry.guildId)
         }
-        autoArchiveDuration.text = ChatRowText.format(
+        autoArchiveDuration.text = I18nHooks.format(
             autoArchiveDuration.context,
             R.string.create_thread_header_2,
             hooks = mapOf(
-                "durationHook" to ChatRowText.Hook(
+                "durationHook" to Hook(
                     text = autoArchiveDurationName(autoArchiveDuration.context, duration)
                         .lowercase(Locale.getDefault()),
                     spans = listOf(

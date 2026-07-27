@@ -29,10 +29,10 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isDM
+import com.discord.api.channel.isDMStatusVisible
 import com.discord.api.channel.isGroup
 import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.channel.isHQDirectoryChannel
-import com.discord.api.channel.isDMStatusVisible
 import com.discord.api.channel.isMultiUserDM
 import com.discord.api.channel.isSystemDM
 import com.discord.api.guild.GuildMaxVideoChannelUsers
@@ -45,6 +45,7 @@ import com.discord.models.guild.Guild
 import com.discord.models.guild.UserGuildMember
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
+import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
@@ -213,7 +214,7 @@ class WidgetChannelsListAdapter(
                 R.attr.drawable_overlay_channels
             }
             setBackgroundAndKeepPadding(
-                ContextCompat.getDrawable(context, context.themedDrawableRes(attribute)),
+                ContextCompat.getDrawable(context, context.getThemedDrawableRes(attribute)),
             )
         }
     }
@@ -1133,7 +1134,7 @@ class WidgetChannelsListAdapter(
             root.setBackgroundAndKeepPadding(
                 ContextCompat.getDrawable(
                     root.context,
-                    root.context.themedDrawableRes(R.attr.drawable_overlay_channels),
+                    root.context.getThemedDrawableRes(R.attr.drawable_overlay_channels),
                 ),
             )
             name.setText(R.string.guild_role_subscriptions_channel_label)
@@ -1158,7 +1159,7 @@ class WidgetChannelsListAdapter(
             root.setBackgroundAndKeepPadding(
                 ContextCompat.getDrawable(
                     root.context,
-                    root.context.themedDrawableRes(R.attr.drawable_overlay_channels),
+                    root.context.getThemedDrawableRes(R.attr.drawable_overlay_channels),
                 ),
             )
             root.setOnClickListener { adapter.onViewGuildScheduledEvents(item.guild) }

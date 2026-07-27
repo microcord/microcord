@@ -51,13 +51,12 @@ class CardSegment(context: Context, attrs: AttributeSet?) : CardView(context, at
 
     override fun setSegmentSelected(selected: Boolean) {
         setCardBackgroundColor(
-            if (selected) themedColor(R.attr.colorBackgroundAccent) else ContextCompat.getColor(context, R.color.transparent),
+            if (selected) ThemedColor.resolve(context, R.attr.colorBackgroundAccent) else ContextCompat.getColor(context, R.color.transparent),
         )
         textView.setTextColor(
             if (selected) ContextCompat.getColor(context, R.color.white)
-            else themedColor(R.attr.colorInteractiveMuted),
+            else ThemedColor.resolve(context, R.attr.colorInteractiveMuted),
         )
     }
 
-    private fun themedColor(attribute: Int): Int = ThemedColor.resolve(context, attribute)
 }

@@ -24,6 +24,3 @@ data class ApplicationCommandOption(
     val minValue: Number? = null,
     val maxValue: Number? = null,
 )
-
-/** Marker for the per-component state a message's interactive components can be in. */
-sealed class ComponentState

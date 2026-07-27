@@ -15,6 +15,7 @@ import com.discord.R
 import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
 import com.discord.models.user.CoreUser
+import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.textprocessing.DiscordParser
 import com.discord.utilities.textprocessing.MessagePreprocessor
@@ -223,7 +224,7 @@ class WidgetChatListAdapterItemThreadEmbed(
     }
 
     private fun themedDrawable(context: Context, attribute: Int): Drawable? {
-        val resourceId = ThemedDrawable.resolve(context, attribute)
+        val resourceId = context.getThemedDrawableRes(attribute)
         return if (resourceId == 0) null else ContextCompat.getDrawable(context, resourceId)
     }
 

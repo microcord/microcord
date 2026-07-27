@@ -96,9 +96,11 @@ class ReportIssueWithAutoModViewModel(
         private const val DECISION_ID_FIELD = "decision_id"
 
         /**
-         * Reference: `AnalyticsTracker.trackReportIssueWithAutoMod`.
-         * `com.discord.utilities.analytics.AnalyticsTracker` is not reconstructed, so the assembled
-         * report is dropped here instead of being invented into some other transport.
+         * Reference: `AnalyticsTracker.trackReportIssueWithAutoMod(decisionId, messageId,
+         * feedbackType, content)` → `track(TrackGuildAutomodFeedback(…))`.
+         * `AnalyticsTracker` exists in this project but does **not** declare that method, and it is
+         * outside this agent's file ownership, so the assembled report is handed here instead of
+         * being invented into some other transport. **Point this at the tracker when it lands.**
          */
         @JvmStatic
         var reportSink: (Report) -> Unit = { }

@@ -3,7 +3,6 @@ package com.discord.widgets.chat.list.adapter
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.res.Resources
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -20,16 +19,15 @@ import com.discord.api.message.embed.EmbedFooter
 import com.discord.api.message.embed.EmbedImage
 import com.discord.api.message.embed.EmbedThumbnail
 import com.discord.api.message.embed.EmbedType
-import com.discord.api.message.embed.EmbedVideo
 import com.discord.api.message.embed.MessageEmbed
 import com.discord.api.role.GuildRole
 import com.discord.api.utcdatetime.UtcDateTime
-import com.discord.embed.RenderableEmbedMedia
 import com.discord.models.member.GuildMember
 import com.discord.simpleast.core.node.Node
 import com.discord.simpleast.core.parser.Parser
 import com.discord.stores.StoreStream
-import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.dimen.dpToPixels
+import com.discord.utilities.embed.EmbedResourceUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
@@ -60,8 +58,6 @@ import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.card.MaterialCardView
 import rx.Observable
 import rx.Subscription
-import kotlin.math.min
-import kotlin.math.roundToInt
 
 /**
  * A rich embed: link preview, article card, bot embed, or a bare image/video that renders as inline
@@ -109,7 +105,7 @@ class WidgetChatListAdapterItemEmbed(
     private val embedTinyIconSize = itemView.resources.getDimensionPixelSize(R.dimen.embed_tiny_icon_size)
     private val embedThumbnailMaxSize =
         itemView.resources.getDimensionPixelSize(R.dimen.embed_thumbnail_max_size)
-    private val maxEmbedImageWidth = EmbedMedia.computeMaximumImageWidthPx(itemView.context)
+    private val maxEmbedImageWidth = EmbedResourceUtils.computeMaximumImageWidthPx(itemView.context)
 
     /**
      * One detector for the whole row, so rebinding an unchanged embed does not re-issue four image
@@ -182,7 +178,7 @@ class WidgetChatListAdapterItemEmbed(
         }
 
         try {
-            if (EmbedMedia.isInlineEmbed(embed)) {
+            if (with(EmbedResourceUtils) { embed.isInlineEmbed() }) {
                 content.visibility = View.GONE
                 divider.visibility = View.GONE
                 thumbnail.visibility = View.GONE
@@ -220,11 +216,11 @@ class WidgetChatListAdapterItemEmbed(
     }
 
     private fun configureInlineEmbed(embed: MessageEmbed, autoPlayGifs: Boolean) {
-        val preview = EmbedMedia.previewImage(embed)
+        val preview = with(EmbedResourceUtils) { embed.getPreviewImage() }
         val width = preview?.width ?: 0
         val height = preview?.height ?: 0
         if (width > 0 && height > 0) {
-            val (scaledWidth, scaledHeight) = EmbedMedia.calculateScaledSize(
+            val (scaledWidth, scaledHeight) = EmbedResourceUtils.calculateScaledSize(
                 actualWidth = width,
                 actualHeight = height,
                 maxWidth = maxEmbedImageWidth,
@@ -399,7 +395,7 @@ class WidgetChatListAdapterItemEmbed(
     }
 
     private fun configureEmbedImage(embed: MessageEmbed) {
-        val preview = EmbedMedia.previewImage(embed)
+        val preview = with(EmbedResourceUtils) { embed.getPreviewImage() }
         if (preview == null) {
             imageContainer.visibility = View.GONE
             return
@@ -420,10 +416,17 @@ class WidgetChatListAdapterItemEmbed(
             imageContainer.visibility = View.GONE
         }
         imageIcons.visibility =
-            if (EmbedMedia.isPlayable(embed) && renderMedia) View.VISIBLE else View.GONE
+            if (with(EmbedResourceUtils) { embed.isPlayable() } && renderMedia) View.VISIBLE else View.GONE
         image.setOnClickListener { view ->
-            val externalUrl = EmbedMedia.externalOpenUrl(embed)
-            if (externalUrl != null) UriHandler.handleOrUntrusted(view.context, externalUrl, embed.title)
+            val externalUrl = with(EmbedResourceUtils) { embed.getExternalOpenUrl() }
+            if (externalUrl != null) {
+                UriHandler.handleOrUntrusted(view.context, externalUrl, embed.title)
+            } else {
+                // getExternalOpenUrl is non-null only for VIDEO and FILE embeds, so without this
+                // branch every actual image — a pasted image link, GIFV, RICH, LINK, ARTICLE —
+                // fell through to an empty lambda and tapping it did nothing at all.
+                WidgetMedia.launch(view.context, embed)
+            }
         }
     }
 
@@ -463,7 +466,7 @@ class WidgetChatListAdapterItemEmbed(
     ) {
         if (imageProxyUrl == null) return
         view.visibility = View.VISIBLE
-        val (scaledWidth, scaledHeight) = EmbedMedia.calculateScaledSize(
+        val (scaledWidth, scaledHeight) = EmbedResourceUtils.calculateScaledSize(
             actualWidth = width,
             actualHeight = height,
             maxWidth = maxWidth,
@@ -479,7 +482,7 @@ class WidgetChatListAdapterItemEmbed(
         }
         MGImages.setImage(
             view,
-            EmbedMedia.previewUrls(imageProxyUrl, scaledWidth, scaledHeight),
+            EmbedResourceUtils.getPreviewUrls(imageProxyUrl, scaledWidth, scaledHeight),
             changeDetector = imageChangeDetector,
         )
     }
@@ -664,7 +667,7 @@ private const val SPOILER_FADE_IN_MS = 50L
 private const val SPOILER_FADE_OUT_MS = 200L
 
 /** Embed images are never drawn taller than this, however tall the source is. */
-private val MAX_EMBED_IMAGE_HEIGHT_PX = EmbedMedia.dpToPixels(360)
+private val MAX_EMBED_IMAGE_HEIGHT_PX = dpToPixels(360)
 
 /**
  * Titles, field names and the message body: no masked links (a bot could otherwise disguise a link
@@ -701,204 +704,4 @@ private fun View.bindUrlOnClick(url: String?, mask: String?) {
         return
     }
     setOnClickListener { UriHandler.handleOrUntrusted(it.context, url, mask) }
-}
-
-/**
- * The embed/attachment media rules shared by the embed and attachment rows: which picture an embed
- * previews with, whether it plays, how large it may be drawn, and which CDN variants to request.
- *
- * The reference keeps these in `com.discord.utilities.embed.EmbedResourceUtils` alongside a
- * `FileType` enum. That package has not been reconstructed yet and is outside this change's
- * ownership, so the rules live here next to their only two callers; they should move when it lands.
- * See `docs/parity-audit/followups.md`.
- */
-internal object EmbedMedia {
-
-    /** Widest image the CDN is asked for, regardless of screen size. */
-    private const val MAX_IMAGE_SIZE = 1440
-
-    /** Embed and attachment media never grows taller than this, however tall the source is. */
-    val MAX_IMAGE_VIEW_HEIGHT_PX: Int by lazy { dpToPixels(320) }
-
-    private val PLAYABLE_EMBED_TYPES = listOf(EmbedType.VIDEO, EmbedType.GIFV)
-
-    /**
-     * Which of an embed's three media slots supplies its still preview.
-     *
-     * Videos and GIFVs preview from their thumbnail and fall back to the video itself; articles,
-     * images and tweets only ever preview from the thumbnail; link and HTML embeds have no preview
-     * at all; everything else previews from the image slot.
-     */
-    fun previewImage(embed: MessageEmbed): RenderableEmbedMedia? = when (embed.type) {
-        EmbedType.ARTICLE, EmbedType.IMAGE, EmbedType.TWEET -> embed.thumbnail?.toRenderable()
-        EmbedType.VIDEO, EmbedType.GIFV ->
-            embed.thumbnail?.toRenderable() ?: embed.video?.toRenderable()
-        EmbedType.LINK, EmbedType.HTML -> null
-        else -> embed.image?.toRenderable()
-    }
-
-    fun isPlayable(embed: MessageEmbed): Boolean = embed.type in PLAYABLE_EMBED_TYPES
-
-    /**
-     * Whether the embed is nothing but media, and so renders without a card.
-     *
-     * A GIFV always qualifies. An image or video qualifies only when it carries neither an author
-     * nor a title — anything with those has text to show and needs the card.
-     */
-    fun isInlineEmbed(embed: MessageEmbed): Boolean {
-        if (previewImage(embed) == null && embed.video == null) return false
-        return when (embed.type) {
-            EmbedType.IMAGE, EmbedType.VIDEO -> embed.author == null && embed.title == null
-            EmbedType.GIFV -> true
-            else -> false
-        }
-    }
-
-    /**
-     * Where tapping the embed's picture should take the user, or null to open the media viewer.
-     *
-     * Video embeds open the source video; file embeds open the provider that served them.
-     */
-    fun externalOpenUrl(embed: MessageEmbed): String? = when (embed.type) {
-        EmbedType.VIDEO -> embed.video?.url
-        EmbedType.FILE -> embed.provider?.url
-        else -> null
-    }
-
-    /** True for media that moves: a GIFV, or an image whose URL is a `.gif`. */
-    fun isAnimated(embedType: EmbedType?, previewImageUri: String?): Boolean = when (embedType) {
-        EmbedType.GIFV -> true
-        EmbedType.IMAGE -> previewImageUri?.lowercase()?.contains(".gif") == true
-        else -> false
-    }
-
-    /**
-     * The CDN variants to try for a preview, best first.
-     *
-     * A still request is preferred because it is far smaller, but a URL that is already a local
-     * resource or an animating `.gif` is requested as-is; the unsized original is always kept as the
-     * fallback in case the media proxy declines the resize.
-     */
-    fun previewUrls(
-        originalUrl: String,
-        width: Int,
-        height: Int,
-        shouldAnimate: Boolean = true,
-    ): List<String> {
-        val sized = "$originalUrl?width=$width&height=$height"
-        val keepAnimated = shouldAnimate &&
-            (originalUrl.startsWith(FILE_SCHEME) || originalUrl.endsWith(".gif"))
-        return if (keepAnimated) {
-            listOf(sized)
-        } else {
-            listOf("$sized&format=${IconUtils.staticImageExtension}", sized)
-        }
-    }
-
-    /** How wide media may be drawn: the chat column, capped at the largest size the CDN serves. */
-    fun computeMaximumImageWidthPx(context: Context): Int {
-        val resources = context.resources
-        val gutters = resources.getDimensionPixelSize(R.dimen.uikit_guideline_chat) +
-            resources.getDimensionPixelSize(R.dimen.chat_cell_horizontal_spacing_total)
-        return min(MAX_IMAGE_SIZE, resources.displayMetrics.widthPixels - gutters)
-    }
-
-    /**
-     * Fits an image of [actualWidth] x [actualHeight] into the [maxWidth] x [maxHeight] box while
-     * preserving its aspect ratio.
-     *
-     * Three outcomes. An image that would occupy more than half the box in either direction is
-     * scaled *down* to fit it exactly, with the longer side pinned to the box and the other side
-     * clamped afterwards. A narrow image, when a [minWidth] is given, is scaled *up* to that width
-     * and then clamped to the height. Anything else is drawn at its intrinsic size in density pixels
-     * — a small image is not stretched to fill the column.
-     */
-    fun calculateScaledSize(
-        actualWidth: Int,
-        actualHeight: Int,
-        maxWidth: Int,
-        maxHeight: Int,
-        resources: Resources,
-        minWidth: Int = 0,
-    ): Pair<Int, Int> {
-        val density = resources.displayMetrics.density
-        val densityWidth = density * actualWidth
-        val densityHeight = density * actualHeight
-        val aspectRatio = if (actualHeight > 0) actualWidth.toFloat() / actualHeight else 0f
-
-        val needsDownscale = densityWidth > maxWidth / 2f || densityHeight > maxHeight / 2f
-        val needsUpscale = minWidth > 0 && actualWidth < minWidth
-
-        return when {
-            needsDownscale -> {
-                val isLandscape = actualWidth > actualHeight
-                var width = if (isLandscape) maxWidth.toFloat() else maxHeight * aspectRatio
-                var height = if (isLandscape) maxWidth / aspectRatio else maxHeight.toFloat()
-                if (isLandscape && height > maxHeight) {
-                    width *= maxHeight / height
-                    height = maxHeight.toFloat()
-                } else if (!isLandscape && width > maxWidth) {
-                    height *= maxWidth / width
-                    width = maxWidth.toFloat()
-                }
-                width.roundToInt() to height.roundToInt()
-            }
-            needsUpscale -> {
-                var width = minWidth.toFloat()
-                var height = minWidth.toFloat() / actualWidth * actualHeight
-                if (height > maxHeight) {
-                    width *= maxHeight / height
-                    height = maxHeight.toFloat()
-                }
-                width.roundToInt() to height.roundToInt()
-            }
-            else -> densityWidth.roundToInt() to densityHeight.roundToInt()
-        }
-    }
-
-    /** The icon shown for a non-previewable attachment, chosen from its filename extension. */
-    fun getFileDrawable(filename: String?): Int {
-        val extension = filename?.substringAfterLast('.', "").orEmpty()
-        return FileType.fromExtension(extension)?.drawableRes ?: R.drawable.ic_file_unknown
-    }
-
-    fun dpToPixels(dp: Int): Int = (dp * Resources.getSystem().displayMetrics.density).roundToInt()
-
-    private const val FILE_SCHEME = "res:///"
-
-    private fun EmbedImage.toRenderable() = RenderableEmbedMedia(proxyUrl ?: url, width, height)
-    private fun EmbedThumbnail.toRenderable() = RenderableEmbedMedia(proxyUrl ?: url, width, height)
-    private fun EmbedVideo.toRenderable() = RenderableEmbedMedia(proxyUrl ?: url, width, height)
-
-    /**
-     * Attachment kinds that get their own icon in the file card.
-     *
-     * Declaration order is the matching order and it is load-bearing: `js` is code before it is web
-     * code, and `xls` is a spreadsheet before it is web code.
-     */
-    private enum class FileType(pattern: String, val drawableRes: Int) {
-        VIDEO("(?:avi|flv|wmv|mov|mp4)$", R.drawable.ic_file_video),
-        ACROBAT("pdf$", R.drawable.ic_file_acrobat),
-        AE("ae$", R.drawable.ic_file_ae),
-        SKETCH("sketch$", R.drawable.ic_file_sketch),
-        AI("ai$", R.drawable.ic_file_ai),
-        ARCHIVE("(?:rar|zip|7z|tar|tar\\.gz)$", R.drawable.ic_file_archive),
-        CODE(
-            "(?:c\\+\\+|cpp|cc|c|h|hpp|mm|m|json|js|rb|rake|py|asm|fs|pyc|dtd|cgi|bat|rss|" +
-                "java|graphml|idb|lua|o|gml|prl|sls|conf|cmake|make|sln|vbe|cxx|wbf|vbs|" +
-                "r|wml|php|bash|applescript|fcgi|yaml|ex|exs|sh|ml|actionscript)$",
-            R.drawable.ic_file_code,
-        ),
-        DOCUMENT("(?:txt|rtf|doc|docx|md|pages|ppt|pptx|pptm|key|log)$", R.drawable.ic_file_document),
-        SPREADSHEET("(?:xls|xlsx|numbers|csv|xliff)$", R.drawable.ic_file_spreadsheet),
-        WEBCODE("(?:html|xhtml|htm|js|xml|xls|xsd|css|styl)$", R.drawable.ic_file_webcode),
-        ;
-
-        private val regex = Regex(pattern)
-
-        companion object {
-            fun fromExtension(extension: String): FileType? =
-                values().firstOrNull { it.regex.containsMatchIn(extension) }
-        }
-    }
 }

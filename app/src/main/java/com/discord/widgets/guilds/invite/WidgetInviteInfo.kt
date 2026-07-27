@@ -15,8 +15,14 @@ import androidx.core.widget.TextViewCompat
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.guild.GuildFeature
+import com.discord.i18n.setI18nText
 import com.discord.models.domain.ModelInvite
 import com.discord.models.user.CoreUser
+import com.discord.stores.StoreStream
+import com.discord.utilities.drawable.getThemedDrawableRes
+import com.discord.utilities.guilds.computeShortName
+import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.user.UserUtils.isPremiumTier2
 import com.discord.views.GuildView
 import com.discord.views.guilds.ServerMemberCount
 import com.facebook.drawee.view.SimpleDraweeView
@@ -27,7 +33,12 @@ class WidgetInviteInfo @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
 ) : ConstraintLayout(context, attrs, defStyleAttr) {
-    data class Failure(val code: Int? = null, val guildLimit: Int = 100)
+    /**
+     * Why the invite could not be shown. Only `30001` (guild limit reached) gets bespoke copy;
+     * every other code — expired, revoked, unknown — falls through to the generic "expired" state,
+     * which is what the reference does too.
+     */
+    data class Failure(val code: Int? = null)
 
     private val accept: MaterialButton
     private val avatar: GuildView
@@ -64,18 +75,24 @@ class WidgetInviteInfo @JvmOverloads constructor(
         title.setText(R.string.instant_invite_expired)
         message.setText(R.string.invite_button_expired)
         accept.visibility = View.GONE
-        if (failure?.code == 30001) {
-            title.text = context.getString(R.string.too_many_user_guilds_alert_description)
-                .replace("{quantity}", failure.guildLimit.toString())
-            message.text = context.getString(R.string.too_many_user_guilds_description)
-                .replace("{quantity}", failure.guildLimit.toString())
-            message.setTextSize(TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.uikit_textsize_large))
+        if (failure?.code == ERROR_MAX_GUILDS) {
+            // The limit is a property of the *viewer*, not of the error payload: Nitro doubles it.
+            val guildLimit = if (StoreStream.getUsers().getMe().isPremiumTier2) 200 else 100
+            title.setI18nText(
+                R.string.too_many_user_guilds_alert_description,
+                "quantity" to guildLimit,
+            )
+            message.setText(R.string.too_many_user_guilds_description)
+            message.setTextSize(
+                TypedValue.COMPLEX_UNIT_PX,
+                resources.getDimension(R.dimen.uikit_textsize_medium),
+            )
         }
         message.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, 0, 0)
         memberCount.visibility = View.GONE
         avatar.configure(null, null)
         val image = requireNotNull<SimpleDraweeView>(avatar.findViewById(R.id.guild_avatar))
-        image.setActualImageResource(R.drawable.img_poop_dark)
+        image.setActualImageResource(context.getThemedDrawableRes(R.attr.img_poop, R.drawable.img_poop_dark))
         requireNotNull<TextView>(avatar.findViewById(R.id.guild_text)).visibility = View.GONE
         smallAvatar.visibility = View.GONE
     }
@@ -86,10 +103,10 @@ class WidgetInviteInfo @JvmOverloads constructor(
         avatar.configure(userAvatarUrl(inviter?.let(::CoreUser)), null)
         smallAvatar.visibility = View.GONE
         memberCount.visibility = View.GONE
-        title.text = markedText(R.string.instant_invite_you_have_been_invited_to_chat, username)
+        title.setI18nText(R.string.instant_invite_you_have_been_invited_to_chat, "username" to username)
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
         val tag = "$username#${inviter?.discriminator.orEmpty()}"
-        message.text = markedText(R.string.instant_invite_direct_friend_description, tag)
+        message.setI18nText(R.string.instant_invite_direct_friend_description, "username" to tag)
         message.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
     }
 
@@ -102,10 +119,10 @@ class WidgetInviteInfo @JvmOverloads constructor(
         smallAvatar.visibility = if (named) View.VISIBLE else View.GONE
         val channelName = channel.name.orEmpty().ifBlank { inviter?.username.orEmpty() }
         message.text = bold(channelName)
-        title.text = if (channel.name.isNullOrEmpty()) {
-            context.getText(R.string.instant_invite_you_have_been_invited_to_join_group_dm)
+        if (channel.name.isNullOrEmpty()) {
+            title.setText(R.string.instant_invite_you_have_been_invited_to_join_group_dm)
         } else {
-            markedText(R.string.auth_message_invited_by, inviter?.username.orEmpty())
+            title.setI18nText(R.string.auth_message_invited_by, "username" to inviter?.username.orEmpty())
         }
         memberCount.visibility = View.VISIBLE
         memberCount.setOnline(null)
@@ -114,7 +131,7 @@ class WidgetInviteInfo @JvmOverloads constructor(
 
     private fun configureForGuild(model: ModelInvite) {
         val guild = model.guild ?: return
-        avatar.configure(guild.icon?.let { "https://cdn.discordapp.com/icons/${guild.id}/$it.webp?size=128" }, initials(guild.name))
+        avatar.configure(IconUtils.getForGuild(guild.id, guild.icon), computeShortName(guild.name))
         val showInviter = model.getInviter() != null && model.getApproximateMemberCount() < 200
         smallAvatar.visibility = if (showInviter) View.VISIBLE else View.GONE
         if (showInviter) smallAvatar.setImageURI(userAvatarUrl(model.getInviter()?.let(::CoreUser)))
@@ -130,20 +147,12 @@ class WidgetInviteInfo @JvmOverloads constructor(
                 message, R.drawable.ic_partnered_badge, 0, 0, 0,
             )
         }
-        title.text = model.getInviter()?.username?.let {
-            markedText(R.string.auth_message_invited_by, it)
-        } ?: context.getText(R.string.instant_invite_you_have_been_invited_to_join)
-    }
-
-    private fun markedText(resource: Int, value: String): CharSequence {
-        val raw = context.getString(resource)
-        val marker = when {
-            "!!{username}!!" in raw -> "!!{username}!!"
-            "{username}" in raw -> "{username}"
-            else -> return raw
+        val inviterName = model.getInviter()?.username
+        if (inviterName != null) {
+            title.setI18nText(R.string.auth_message_invited_by, "username" to inviterName)
+        } else {
+            title.setText(R.string.instant_invite_you_have_been_invited_to_join)
         }
-        val text = raw.replace(marker, value).replace("**", "")
-        return bold(text, value)
     }
 
     private fun bold(text: String, value: String = text): CharSequence = SpannableString(text).apply {
@@ -153,17 +162,12 @@ class WidgetInviteInfo @JvmOverloads constructor(
         }
     }
 
-    private fun userAvatarUrl(user: CoreUser?): String? = user?.avatar?.let {
-        val extension = if (it.startsWith("a_")) "gif" else "webp"
-        "https://cdn.discordapp.com/avatars/${user.id}/$it.$extension?size=128"
+    private fun userAvatarUrl(user: CoreUser?): String? = IconUtils.getForUser(user)
+
+    private fun groupDmIconUrl(channel: Channel): String? = IconUtils.getForChannel(channel)
+
+    private companion object {
+        /** `MAX_GUILDS` — the viewer is already in as many servers as their tier allows. */
+        private const val ERROR_MAX_GUILDS = 30001
     }
-
-    private fun groupDmIconUrl(channel: Channel): String = channel.icon?.let {
-        "https://cdn.discordapp.com/channel-icons/${channel.id}/$it.webp?size=128"
-    } ?: "asset:///images/group_dm_icon_${Math.floorMod(channel.id, 8).toInt()}.png"
-
-    private fun initials(name: String) = name.replace(Regex("'s "), " ")
-        .split(Regex("\\s+"))
-        .filter(String::isNotEmpty)
-        .joinToString("") { it.take(1) }
 }

@@ -11,6 +11,7 @@ import com.discord.utilities.lifecycle.Backgrounded
 import com.discord.utilities.images.MGImagesConfig
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
+import com.discord.utilities.notices.NoticeBuilders
 import com.discord.utilities.persister.PersisterConfig
 import com.discord.utilities.time.ClockFactory
 import java.util.concurrent.atomic.AtomicBoolean
@@ -33,6 +34,9 @@ class App : Application() {
         // on the widget tree, so the confirmation dialog installs itself here instead. Without this
         // an untrusted masked link is dropped with no user-visible confirmation.
         WidgetMaskedLinksDialog.installUntrustedLinkHandler()
+        // Without this `StoreNotices.dialogPresenter` stays null, every dialog-backed notice
+        // reports "did not show", and it stays queued forever with nothing user-visible.
+        NoticeBuilders.install()
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
         BootLog.record(BootLogEvent.PLATFORM_READY)
         System.loadLibrary("dsti")

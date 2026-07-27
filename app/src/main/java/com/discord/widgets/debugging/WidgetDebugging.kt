@@ -46,6 +46,13 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
     private data class Model(val logs: List<LogRow>, val isFiltered: Boolean)
 
     override fun onViewBound(view: View) {
+        // Second half of the gate. [launch] refuses to start this screen in a release build, but a
+        // synthetic intent or a fragment restored from saved state never goes through it, so the
+        // screen has to refuse for itself too.
+        if (!DebugScreenGate.isEnabled) {
+            requireActivity().finish()
+            return
+        }
         super.onViewBound(view)
         val recycler: RecyclerView = view.findViewById(R.id.debugging_logs)
         logsAdapter = MGRecyclerAdapter.configure(Adapter(recycler))
@@ -146,7 +153,7 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
                 super.onConfigure(position, data)
                 val item = data.item
                 logMessage.setTextColor(getColor(logMessage.context, item.priority))
-                logMessage.text = item.message + (item.throwable?.let { "\n$it" } ?: "")
+                logMessage.text = logRowText(item)
                 logMessage.maxLines = COLLAPSED_MAX_LINES
 
                 itemView.setOnLongClickListenerConsumeClick {
@@ -182,7 +189,25 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
         private const val LOG_BUFFER_MS = 200L
 
         fun launch(context: Context) {
+            if (!DebugScreenGate.isEnabled) return
             AppScreenRouter.launch(context, WidgetDebugging::class.java)
         }
     }
 }
+
+/**
+ * The exact text a log row renders — and, because long-press copies `logMessage.text` verbatim, the
+ * exact text this screen can put on the clipboard.
+ *
+ * **Deliberate divergence from the reference.** [AppLog] redacts the *message* before recording it
+ * but stores the [Throwable] as-is, and the reference appends `"\n$throwable"` raw.
+ * `Throwable.toString()` is `ClassName: message`, so an exception carrying a token in its message
+ * (a REST failure quoting the request, say) would be rendered — and copied — in the clear. Per the
+ * project's "redact secrets even where the reference did not" rule the throwable goes through the
+ * same [AppLog.redactSecrets] pass as the message.
+ *
+ * Top-level rather than a companion member so it stays reachable from a plain JVM unit test without
+ * initialising the fragment.
+ */
+internal fun logRowText(item: AppLog.LoggedItem): String =
+    item.message + (item.throwable?.let { "\n${AppLog.redactSecrets(it.toString())}" } ?: "")

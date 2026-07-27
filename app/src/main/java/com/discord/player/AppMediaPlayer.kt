@@ -198,11 +198,11 @@ class AppMediaPlayer(
          * defaults so an inline GIF starts almost immediately; the 10 s / 30 s buffer window is what
          * keeps memory bounded when a dozen of them are on screen.
          */
-        private const val MIN_BUFFER_MS = 10_000
-        private const val MAX_BUFFER_MS = 30_000
-        private const val BUFFER_FOR_PLAYBACK_MS = 2_500
-        private const val BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 5_000
-        private const val ALLOCATION_SIZE_BYTES = 64 * 1024
+        internal const val MIN_BUFFER_MS = 10_000
+        internal const val MAX_BUFFER_MS = 30_000
+        internal const val BUFFER_FOR_PLAYBACK_MS = 2_500
+        internal const val BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 5_000
+        internal const val ALLOCATION_SIZE_BYTES = 64 * 1024
 
         /**
          * Builds a player with the app's cache and buffer configuration.

@@ -11,11 +11,13 @@ import com.discord.models.user.User
 import com.discord.restapi.RestAPIInterface
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
+import com.discord.utilities.SnowflakeUtils
+import com.discord.utilities.auditlogs.AuditLogChangeUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
-import rx.Observable
 import kotlin.math.abs
+import rx.Observable
 
 /**
  * The guild-settings audit log: one guild at a time, paged, filtered and post-processed.
@@ -40,15 +42,17 @@ class StoreAuditLog(
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
     private val restApi: () -> RestAPIInterface? = { RestAPI.apiOrNull },
     /**
-     * Reference: `AuditLogChangeUtils.transformPermissionChange` — splits a `permissions` bitfield
-     * change into one `allow` and one `deny` change. `com.discord.utilities.auditlogs` does not
-     * exist in this target yet, so the default keeps the raw change rather than dropping it.
+     * Splits a `permissions` bitfield change into one `allow` and one `deny` change, so the UI can
+     * render "granted X, Y" and "denied Z" instead of two opaque numbers.
+     *
+     * Injected rather than called directly so a store test can assert the merge/rewrite pipeline
+     * without a `Context`.
      */
     private val transformPermissionChange: (ModelAuditLogEntry.Change) -> List<ModelAuditLogEntry.Change> =
-        { listOf(it) },
-    /** Reference: `AuditLogChangeUtils.transformPermissionOverride`. Same seam as above. */
+        AuditLogChangeUtils::transformPermissionChange,
+    /** The channel-overwrite counterpart: `allow`/`deny` are kept, and cleared bits become `reset`. */
     private val transformPermissionOverride: (ModelAuditLogEntry.Change) -> List<ModelAuditLogEntry.Change> =
-        { listOf(it) },
+        AuditLogChangeUtils::transformPermissionOverride,
 ) : StoreV2() {
 
     data class AuditLogFilter(val userFilter: Long, val actionFilter: Int) {
@@ -382,13 +386,11 @@ class StoreAuditLog(
         private const val KEY_TYPE = "type"
         private const val KEY_PRUNE_DELETE_DAYS = "prune_delete_days"
 
-        private const val DISCORD_EPOCH = 1_420_070_400_000L
-
         /**
          * Reference: `AuditLogUtils.getTimestampStart`. Inlined because
          * `com.discord.utilities.auditlogs` has not been reconstructed; move it there when it is.
          */
         private fun timestampStart(entry: ModelAuditLogEntry): Long =
-            (entry.id ushr 22) + DISCORD_EPOCH
+            SnowflakeUtils.toTimestamp(entry.id)
     }
 }

@@ -12,9 +12,9 @@ import androidx.viewpager2.widget.ViewPager2
 import com.discord.R
 import com.discord.app.AppDialog
 import com.discord.app.AppFragment
+import com.discord.utilities.dimen.dpToPixels
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
-import kotlin.math.roundToInt
 
 /**
  * The three-page "here is how the app is laid out" overlay shown to new users.
@@ -61,7 +61,6 @@ class WidgetNavigationHelp : AppDialog(R.layout.widget_navigation_help) {
         }
     }
 
-    private fun dpToPixels(dp: Int): Int = (dp * resources.displayMetrics.density).roundToInt()
 
     /** Page 1: the guild rail. */
     class NuxGuildsPageFragment : AppFragment(R.layout.widget_navigation_help_nux_guilds)

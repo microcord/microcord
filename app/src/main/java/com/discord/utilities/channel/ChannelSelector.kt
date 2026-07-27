@@ -1,0 +1,300 @@
+package com.discord.utilities.channel
+
+import android.content.Context
+import androidx.fragment.app.FragmentManager
+import com.discord.R
+import com.discord.api.channel.Channel
+import com.discord.api.channel.isStageVoiceChannel
+import com.discord.api.channel.isVoiceChannel
+import com.discord.stores.Dispatcher
+import com.discord.stores.SelectedChannelAnalyticsLocation
+import com.discord.stores.StoreNavigation
+import com.discord.stores.StoreStream
+import com.discord.stores.updates.ObservationDeck
+import com.discord.utilities.accessibility.AccessibilityUtils
+import com.discord.utilities.analytics.AnalyticsTracker
+import com.discord.utilities.permissions.PermissionUtils
+import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.computationBuffered
+import com.discord.utilities.rx.computationLatest
+import com.discord.utilities.rx.filterNull
+import com.discord.utilities.rx.takeSingleUntilTimeout
+import com.discord.utilities.rx.ui
+import com.discord.widgets.chat.list.TextInVoiceFeatureFlag
+import com.discord.widgets.voice.sheet.WidgetVoiceBottomSheet
+import java.lang.ref.WeakReference
+
+/**
+ * The single owner of "open this channel".
+ *
+ * Every navigation into a channel goes through here — taps in the channel list, channel mentions
+ * in chat, deep links, invites, notifications and the previous-channel fallback. Centralising it
+ * is what makes the awkward cases consistent:
+ *
+ * * **A channel that has not been fetched yet.** [findAndSet] subscribes to the channel and
+ *   permission stores and waits for the channel to appear *with* access before selecting it, so a
+ *   deep link that arrives before `READY` still lands. If it never appears, the user gets a
+ *   screen-reader announcement rather than a silent no-op.
+ * * **Vocal channels are not text selections.** Selecting a voice (or stage) channel joins the
+ *   voice channel and leaves the text selection alone; see [selectChannel].
+ * * **Panel state.** Selecting anything closes the navigation drawer, which is what makes the
+ *   channel list slide away on tap.
+ *
+ * Reference: `com.discord.utilities.channel.ChannelSelector`.
+ *
+ * **Deviation from the reference constructor.** The reference takes `(stream, dispatcher,
+ * observationDeck)` and reaches into `stream`'s package-private store fields. This project's
+ * `StoreStream` publishes its stores only through the companion accessors, so the `stream`
+ * parameter would be dead weight and is omitted; store access below is via `StoreStream.getX()`,
+ * which resolves to the same singletons.
+ */
+class ChannelSelector(
+    private val dispatcher: Dispatcher,
+    private val observationDeck: ObservationDeck,
+) {
+
+    /**
+     * Commit a selection on the store thread.
+     *
+     * The guild is selected first so that `StoreChannelsSelected` validates the channel against
+     * the right guild; both run in the same dispatch in the reference, and `Dispatcher` is FIFO on
+     * a single store thread here, so scheduling them back to back is equivalent.
+     */
+    private fun gotoChannel(
+        guildId: Long,
+        channelId: Long,
+        peekParent: Long?,
+        analyticsLocation: SelectedChannelAnalyticsLocation?,
+    ) {
+        StoreStream.selectGuild(guildId)
+        dispatcher.schedule {
+            StoreStream.getChannelsSelected()
+                .trySelectChannel(guildId, channelId, peekParent, analyticsLocation)
+        }
+    }
+
+    /** Close the thread composer without creating a thread. */
+    fun dismissCreateThread() {
+        dispatcher.schedule {
+            StoreStream.getChannelsSelected().dismissCreateThread()
+        }
+    }
+
+    /**
+     * Select [channelId] once it exists and the viewer can see it.
+     *
+     * This is the deep-link path: the channel may not be in the store yet, and the permission
+     * computation for it may not have run. The observation is re-evaluated on every channel or
+     * permission change and gives up after the shared `takeSingleUntilTimeout` window, at which
+     * point the announcement below is the only feedback.
+     *
+     * A non-positive [channelId] is ignored, matching the reference.
+     */
+    fun findAndSet(context: Context?, channelId: Long) {
+        if (channelId <= 0L) return
+
+        observationDeck.connectRx(
+            StoreStream.getChannels(),
+            StoreStream.getPermissions(),
+        ) {
+            val channel = StoreStream.getChannels().findChannelById(channelId)
+            val accessible = channel != null && PermissionUtils.hasAccess(
+                channel,
+                StoreStream.getPermissions().getPermissionsByChannel()[channelId],
+            )
+            if (accessible) {
+                channel
+            } else {
+                context?.let {
+                    AccessibilityUtils.sendAnnouncement(
+                        it,
+                        it.getString(R.string.inaccessible_channel_link_title),
+                    )
+                }
+                null
+            }
+        }
+            .filterNull()
+            .takeSingleUntilTimeout()
+            .computationLatest()
+            .appSubscribe(ChannelSelector::class.java) { channel ->
+                selectChannel(channel)
+            }
+    }
+
+    /**
+     * Open the DM with [userId], creating it if the viewer has never messaged them.
+     *
+     * **Deviation:** the reference calls `RestAPI.createOrFetchDM`, which reuses an existing 1:1 DM
+     * from the store and otherwise POSTs and pushes the result through the gateway subject. That
+     * ingest seam is private to this project's `StoreStream`, so the create is delegated to
+     * `StoreStream.createPrivateChannel`, which performs the same POST and the same store insert.
+     * The endpoint is idempotent for a 1:1 DM, so the only difference is one extra request when the
+     * DM already exists.
+     */
+    fun findAndSetDirectMessage(context: Context, userId: Long) {
+        if (userId <= 0L) return
+        StoreStream.createPrivateChannel(listOf(userId)) { result ->
+            result.getOrNull()?.let { channel -> findAndSet(context, channel.id) }
+        }
+    }
+
+    /**
+     * Fetch [channelId] as a thread, ingest it, then select it.
+     *
+     * Threads are not delivered by `READY`, so a link to one has to be fetched before it can be
+     * selected; [findAndSet] alone would wait forever.
+     */
+    fun findAndSetThread(context: Context?, channelId: Long) {
+        RestAPI.api.getChannel(channelId)
+            .computationBuffered()
+            .ui()
+            .appSubscribe(ChannelSelector::class.java, context) { channel ->
+                StoreStream.handleThreadCreateOrUpdate(channel)
+                findAndSet(context, channelId)
+            }
+    }
+
+    /** Open the thread composer under [channelId], optionally seeded from [parentMessageId]. */
+    @JvmOverloads
+    fun openCreateThread(
+        guildId: Long,
+        channelId: Long,
+        parentMessageId: Long? = null,
+        startThreadLocation: String?,
+    ) {
+        dispatcher.schedule {
+            StoreStream.getThreadDraft().clearDraftState()
+            StoreStream.getChannelsSelected()
+                .openCreateThread(guildId, channelId, parentMessageId, startThreadLocation)
+            AnalyticsTracker.threadCreationStarted(channelId, guildId, startThreadLocation)
+        }
+    }
+
+    /**
+     * Show the voice-channel sheet for [channelId] without joining it.
+     *
+     * The fragment manager is held weakly because the observation can outlive the screen that
+     * started it — the sheet is simply not shown if the screen went away first.
+     */
+    fun previewVoiceChannel(fragmentManager: FragmentManager, channelId: Long) {
+        val fragmentManagerRef = WeakReference(fragmentManager)
+        observationDeck.connectRx(
+            StoreStream.getChannels(),
+            StoreStream.getPermissions(),
+        ) {
+            StoreStream.getChannels().findChannelById(channelId)?.takeIf { channel ->
+                PermissionUtils.hasAccess(
+                    channel,
+                    StoreStream.getPermissions().getPermissionsByChannel()[channelId],
+                )
+            }
+        }
+            .filterNull()
+            .takeSingleUntilTimeout()
+            .ui()
+            .appSubscribe(ChannelSelector::class.java) { channel ->
+                val manager = fragmentManagerRef.get() ?: return@appSubscribe
+                StoreStream.getGuildSelected().set(channel.guildId)
+                WidgetVoiceBottomSheet.show(
+                    manager,
+                    channelId,
+                    true,
+                    WidgetVoiceBottomSheet.FeatureContext.HOME,
+                )
+            }
+    }
+
+    /**
+     * Select [channelId] in [guildId].
+     *
+     * The channel is resolved first because the decision depends on its type:
+     *
+     * * a **stage** channel, or a **voice** channel while text-in-voice is off for the guild, is a
+     *   *vocal* selection — the voice channel is joined and the text selection is set to the guild
+     *   id rather than the channel id, which `StoreChannelsSelected` resolves back to the guild's
+     *   last text channel;
+     * * anything else is an ordinary text selection.
+     *
+     * A zero guild or channel id skips resolution entirely and goes straight through, which is how
+     * "close the current channel" (`0, 0`) and DM selection (`guildId == 0`) are expressed.
+     */
+    @JvmOverloads
+    fun selectChannel(
+        guildId: Long,
+        channelId: Long,
+        peekParent: Long? = null,
+        analyticsLocation: SelectedChannelAnalyticsLocation? = null,
+    ) {
+        StoreStream.getNavigation().setNavigationPanelAction(StoreNavigation.PanelAction.CLOSE)
+
+        if (guildId == 0L || channelId == 0L) {
+            gotoChannel(guildId, channelId, peekParent, analyticsLocation)
+            return
+        }
+
+        StoreStream.getChannels().observeChannel(channelId)
+            .filterNull()
+            .takeSingleUntilTimeout()
+            .appSubscribe(ChannelSelector::class.java) { channel ->
+                val isVocalSelection =
+                    (!TextInVoiceFeatureFlag.isEnabled(channel.guildId) && channel.isVoiceChannel()) ||
+                        channel.isStageVoiceChannel()
+                val textChannelId = if (isVocalSelection) guildId else channelId
+                gotoChannel(guildId, textChannelId, peekParent, analyticsLocation)
+                if (isVocalSelection) {
+                    StoreStream.getVoiceChannelSelected().selectVoiceChannel(channelId)
+                }
+            }
+    }
+
+    /** [selectChannel] for a channel that is already in hand. A `null` channel is a no-op. */
+    @JvmOverloads
+    fun selectChannel(
+        channel: Channel?,
+        peekParent: Long? = null,
+        analyticsLocation: SelectedChannelAnalyticsLocation? = null,
+    ) {
+        channel ?: return
+        selectChannel(channel.guildId, channel.id, peekParent, analyticsLocation)
+    }
+
+    /**
+     * Return to the channel that was open before the current one.
+     *
+     * A vocal previous channel is skipped (selecting it would re-join voice), and so is a
+     * previous channel that no longer exists — both fall back to `0`, which selects the guild's
+     * default channel.
+     */
+    fun selectPreviousChannel(guildId: Long) {
+        StoreStream.getChannelsSelected().observePreviousId()
+            .switchMap { previousChannelId ->
+                StoreStream.getChannels().observeChannel(previousChannelId)
+            }
+            .takeSingleUntilTimeout()
+            .appSubscribe(ChannelSelector::class.java) { previousChannel ->
+                val channelId = previousChannel
+                    ?.takeUnless { it.isVoiceChannel() }
+                    ?.id
+                    ?.takeIf { it >= 0L }
+                    ?: 0L
+                selectChannel(guildId, channelId)
+            }
+    }
+
+    companion object {
+        @Volatile
+        private var instance: ChannelSelector? = null
+
+        @JvmStatic
+        fun init(dispatcher: Dispatcher, observationDeck: ObservationDeck) {
+            instance = ChannelSelector(dispatcher, observationDeck)
+        }
+
+        @JvmStatic
+        fun getInstance(): ChannelSelector = checkNotNull(instance) {
+            "ChannelSelector.init() must be called from StoreStream before any navigation."
+        }
+    }
+}

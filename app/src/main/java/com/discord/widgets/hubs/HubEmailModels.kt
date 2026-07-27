@@ -72,4 +72,13 @@ data class HubEmailState(
     val hasMultipleDomains: Boolean by lazy {
         verifyEmailAsync()?.guildsInfo?.isNotEmpty() == true
     }
+
+    /**
+     * Redacts [email]. A `data class` would otherwise print the user's address, and view state is
+     * exactly what ends up in a crash report or a state-transition log.
+     */
+    override fun toString(): String =
+        "HubEmailState(email=${if (email == null) "null" else "REDACTED"}, " +
+            "selectedGuildId=$selectedGuildId, waitlistResult=$waitlistResult, " +
+            "verifyEmailAsync=$verifyEmailAsync)"
 }

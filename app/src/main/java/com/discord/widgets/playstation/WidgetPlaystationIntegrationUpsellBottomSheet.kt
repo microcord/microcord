@@ -61,13 +61,17 @@ class WidgetPlaystationIntegrationUpsellBottomSheet : AppBottomSheet() {
         private const val DISMISSIBLE_CONTENT_KEY = "PLAYSTATION_CONNECT_UPSELL"
 
         /**
-         * Reference: `AnalyticsTracker.trackAccountLinkStep(platformId, location)`.
-         * `com.discord.utilities.analytics.AnalyticsTracker` is not reconstructed yet.
+         * Reference: `AnalyticsTracker.trackAccountLinkStep(platformType, previousStep)`.
+         * `AnalyticsTracker` exists in this project but does **not** declare that method, and it is
+         * outside this agent's file ownership. **Point this at the tracker when it lands.**
          */
         @JvmStatic
         var onConfirmed: (platformId: String, location: String) -> Unit = { _, _ -> }
 
-        /** Reference: `AnalyticsTracker.trackDismissibleContentDismissed(key)`. */
+        /**
+         * Reference: `AnalyticsTracker.trackDismissibleContentDismissed(type)` — also absent from
+         * the reconstructed tracker. @see onConfirmed
+         */
         @JvmStatic
         var onDismissed: (dismissibleContentKey: String) -> Unit = { }
 

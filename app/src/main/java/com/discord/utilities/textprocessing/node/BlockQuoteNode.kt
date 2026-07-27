@@ -6,9 +6,9 @@ import android.text.Spanned
 import android.text.style.AbsoluteSizeSpan
 import com.discord.R
 import com.discord.simpleast.core.node.Node
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.textprocessing.dpToPixels
 import com.discord.utilities.textprocessing.spans.QuoteSpan
-import com.discord.utilities.textprocessing.themedColor
 
 /**
  * `> quoted` / `>>> quoted block`.
@@ -39,7 +39,7 @@ class BlockQuoteNode<T : BasicRenderContext> : Node<T>() {
 
         builder.setSpan(
             QuoteSpan(
-                themedColor(context, R.attr.theme_chat_block_quote_divider),
+                ColorCompat.getThemedColor(context, R.attr.theme_chat_block_quote_divider),
                 stripeWidth(context),
                 gapWidth(context),
             ),

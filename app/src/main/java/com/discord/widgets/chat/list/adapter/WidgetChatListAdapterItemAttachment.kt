@@ -12,6 +12,7 @@ import com.discord.R
 import com.discord.api.message.attachment.MessageAttachment
 import com.discord.api.message.attachment.MessageAttachmentType
 import com.discord.stores.StoreStream
+import com.discord.utilities.embed.EmbedResourceUtils
 import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.view.extensions.fadeIn
 import com.discord.utilities.view.extensions.fadeOut
@@ -56,7 +57,7 @@ class WidgetChatListAdapterItemAttachment(
     private val spoilerCover: View = itemView.findViewById(R.id.chat_list_item_attachment_spoiler)
 
     private val userSettings = StoreStream.getUserSettings()
-    private val maxAttachmentImageWidth = EmbedMedia.computeMaximumImageWidthPx(itemView.context)
+    private val maxAttachmentImageWidth = EmbedResourceUtils.computeMaximumImageWidthPx(itemView.context)
 
     override fun onConfigure(position: Int, data: ChatListEntry) {
         super.onConfigure(position, data)
@@ -143,11 +144,11 @@ class WidgetChatListAdapterItemAttachment(
             return
         }
 
-        val (scaledWidth, scaledHeight) = EmbedMedia.calculateScaledSize(
+        val (scaledWidth, scaledHeight) = EmbedResourceUtils.calculateScaledSize(
             actualWidth = width,
             actualHeight = height,
             maxWidth = maxAttachmentImageWidth,
-            maxHeight = EmbedMedia.MAX_IMAGE_VIEW_HEIGHT_PX,
+            maxHeight = EmbedResourceUtils.MAX_IMAGE_VIEW_HEIGHT_PX,
             resources = inlineMedia.resources,
         )
         card.visibility = View.GONE
@@ -169,7 +170,7 @@ class WidgetChatListAdapterItemAttachment(
             clipboard?.setPrimaryClip(ClipData.newPlainText(attachment.filename, attachment.filename))
         }
         description.text = Formatter.formatFileSize(description.context, attachment.size)
-        icon.setImageResource(EmbedMedia.getFileDrawable(attachment.filename))
+        icon.setImageResource(EmbedResourceUtils.getFileDrawable(attachment.filename))
 
         download.isEnabled = true
         download.alpha = 1f

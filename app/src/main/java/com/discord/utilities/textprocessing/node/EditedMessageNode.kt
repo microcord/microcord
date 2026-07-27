@@ -7,13 +7,13 @@ import android.text.style.RelativeSizeSpan
 import com.discord.R
 import com.discord.simpleast.core.node.StyleNode
 import com.discord.simpleast.core.node.TextNode
-import com.discord.utilities.textprocessing.themedColor
+import com.discord.utilities.color.ColorCompat
 
 /** Trailing ` (edited)` marker appended to the body of an edited message. */
 class EditedMessageNode<RC>(context: Context) : StyleNode<RC, CharacterStyle>(
     listOf<CharacterStyle>(
         RelativeSizeSpan(EDITED_TEXT_SCALE),
-        ForegroundColorSpan(themedColor(context, R.attr.colorTextMuted)),
+        ForegroundColorSpan(ColorCompat.getThemedColor(context, R.attr.colorTextMuted)),
     ),
 ) {
     init {

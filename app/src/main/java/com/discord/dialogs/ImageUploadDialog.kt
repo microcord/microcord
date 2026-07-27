@@ -9,6 +9,7 @@ import com.discord.R
 import com.discord.app.AppDialog
 import com.discord.media_picker.MediaPicker
 import com.discord.utilities.images.MGImages
+import com.discord.views.ThemedColor
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.button.MaterialButton
 
@@ -81,7 +82,7 @@ class ImageUploadDialog : AppDialog(R.layout.image_upload_dialog) {
                 view = preview,
                 cornerRadius = previewSize.toFloat(),
                 circle = true,
-                overlayColor = themedColor(R.attr.primary_600),
+                overlayColor = ThemedColor.resolve(requireContext(), R.attr.primary_600),
             )
         }
         MGImages.setImage(preview, uri.toString(), previewSize, previewSize)
@@ -92,23 +93,13 @@ class ImageUploadDialog : AppDialog(R.layout.image_upload_dialog) {
             provider = provider,
             inputUri = uri,
             theme = MediaPicker.CropTheme(
-                toolbarColor = themedColor(R.attr.color_brand_500),
-                statusBarColor = themedColor(R.attr.color_brand_630),
+                toolbarColor = ThemedColor.resolve(requireContext(), R.attr.color_brand_500),
+                statusBarColor = ThemedColor.resolve(requireContext(), R.attr.color_brand_630),
                 toolbarWidgetColor = androidx.core.content.ContextCompat.getColor(requireContext(), R.color.white),
-                activeControlsColor = themedColor(R.attr.color_brand_500),
+                activeControlsColor = ThemedColor.resolve(requireContext(), R.attr.color_brand_500),
             ),
         )
         dismiss()
-    }
-
-    private fun themedColor(attributeResId: Int): Int {
-        val typedValue = android.util.TypedValue()
-        requireContext().theme.resolveAttribute(attributeResId, typedValue, true)
-        return if (typedValue.resourceId != 0) {
-            androidx.core.content.ContextCompat.getColor(requireContext(), typedValue.resourceId)
-        } else {
-            typedValue.data
-        }
     }
 
     companion object {

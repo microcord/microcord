@@ -1,82 +1,312 @@
 package com.discord.widgets.tabs
 
-import android.os.Bundle
+import android.animation.ValueAnimator
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.children
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.commit
+import androidx.interpolator.view.animation.FastOutSlowInInterpolator
+import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
-import androidx.fragment.app.commit
-import com.discord.R
-import com.discord.panels.PanelState
+import com.discord.app.appViewModels
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
+import com.discord.utilities.analytics.AnalyticsTracker
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.intent.AppIntentContract
 import com.discord.utilities.intent.DeepLinkRoute
 import com.discord.utilities.intent.LinkParseResult
-import com.discord.widgets.home.WidgetHome
-import com.discord.widgets.friends.WidgetFriendsList
-import com.discord.widgets.friends.WidgetFriendsAdd
-import com.discord.widgets.friends.WidgetFriendsAddById
-import com.discord.widgets.user.usersheet.WidgetUserSheet
-import com.discord.widgets.user.WidgetUserStatusSheet
-import com.discord.widgets.user.WidgetUserSetCustomStatus
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.bindToComponentLifecycle
+import com.discord.utilities.rx.ui
+import com.discord.utilities.view.extensions.setForwardingWindowInsetsListener
+import com.discord.widgets.auth.WidgetOauth2Authorize
+import com.discord.widgets.auth.WidgetRemoteAuth
 import com.discord.widgets.channels.memberlist.WidgetChannelMembersList
 import com.discord.widgets.directories.WidgetDirectoriesSearch
-import com.discord.widgets.user.WidgetUserMutualFriends
-import com.discord.widgets.user.WidgetUserMutualGuilds
-import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
+import com.discord.widgets.friends.WidgetFriendsAdd
+import com.discord.widgets.friends.WidgetFriendsAddById
+import com.discord.widgets.friends.WidgetFriendsList
+import com.discord.widgets.home.WidgetHome
 import com.discord.widgets.settings.WidgetSettings
 import com.discord.widgets.settings.account.WidgetSettingsBlockedUsers
+import com.discord.widgets.status.WidgetGlobalStatusIndicatorState
 import com.discord.widgets.user.WidgetUserMentions
-import com.discord.widgets.user.search.WidgetGlobalSearch
+import com.discord.widgets.user.WidgetUserMutualFriends
+import com.discord.widgets.user.WidgetUserMutualGuilds
+import com.discord.widgets.user.WidgetUserSetCustomStatus
+import com.discord.widgets.user.WidgetUserStatusSheet
 import com.discord.widgets.user.search.WidgetGlobalSearchDialog
+import com.discord.widgets.user.usersheet.WidgetUserSheet
 import rx.Subscription
 
-internal fun shouldShowBottomNavigation(tab: NavigationTab, leftPanelState: PanelState) =
-    tab != NavigationTab.HOME || leftPanelState == PanelState.Open || leftPanelState == PanelState.Opening
-
-internal val mainNavigationTabs = setOf(
-    NavigationTab.HOME,
-    NavigationTab.FRIENDS,
-    NavigationTab.SEARCH,
-    NavigationTab.MENTIONS,
-    NavigationTab.SETTINGS,
-)
-
+/**
+ * The signed-in shell: one fragment per tab, all kept alive, plus the bottom navigation bar.
+ *
+ * Tabs are shown and hidden rather than replaced, because the home surface owns the guild list, the
+ * channel list and the chat, and re-creating it on every tab switch would lose all three scroll
+ * positions. That is also why [OnTabSelectedListener] exists — a hidden-then-shown fragment gets no
+ * lifecycle callback of its own.
+ *
+ * Search is deliberately not a fragment destination: tapping the search tab — or long-pressing the
+ * mentions tab — opens [WidgetGlobalSearchDialog] over whichever tab is showing, which is what the
+ * reference does. `R.id.widget_tabs_host_search` exists in the recovered layout but the reference
+ * never populates it.
+ */
 class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
-    private lateinit var bottomNavigation: TabsHostBottomNavigationView
-    private var selectedTabSubscription: Subscription? = null
-    private var pendingIntentSubscription: Subscription? = null
-    private var leftPanelSubscription: Subscription? = null
-    private var profileSubscription: Subscription? = null
-    private var restoredTab: NavigationTab? = null
-    private var leftPanelState: PanelState = PanelState.Closed
-    private val destinations = mapOf(
-        NavigationTab.FRIENDS to Destination(R.id.widget_tabs_host_friends, "com.discord.widgets.friends.WidgetFriendsList"),
-        NavigationTab.SEARCH to Destination(R.id.widget_tabs_host_search, "com.discord.widgets.user.search.WidgetGlobalSearch"),
-        NavigationTab.MENTIONS to Destination(R.id.widget_tabs_host_mentions, "com.discord.widgets.user.WidgetUserMentions"),
-        NavigationTab.SETTINGS to Destination(R.id.widget_tabs_host_user_settings, "com.discord.widgets.settings.WidgetSettings"),
-    )
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
+    private val viewModel: TabsHostViewModel by appViewModels { TabsHostViewModel() }
+
+    private val globalStatusIndicatorStateObserver = WidgetGlobalStatusIndicatorState.Provider.get()
+    private val tabToTabSelectionListenerMap = mutableMapOf<NavigationTab, OnTabSelectedListener>()
+
+    private lateinit var container: ViewGroup
+    private lateinit var navHost: FrameLayout
+    private lateinit var nonFullscreenNavHost: FrameLayout
+    private lateinit var homeContainer: View
+    private lateinit var bottomNavigation: TabsHostBottomNavigationView
+
+    private var bottomNavAnimator: ValueAnimator? = null
+    private var previousShowBottomNav: Boolean? = null
+    private var previousBottomNavHeight = 0
+    private var viewState: TabsHostViewModel.ViewState? = null
+    private var pendingIntentSubscription: Subscription? = null
+
+    override fun onViewBound(view: View) {
+        super.onViewBound(view)
+        container = view.findViewById(R.id.widget_tabs_host_container)
+        navHost = view.findViewById(R.id.widget_tabs_host_nav_host)
+        nonFullscreenNavHost = view.findViewById(R.id.widget_tabs_host_non_fullscreen_nav_host)
+        homeContainer = view.findViewById(R.id.widget_tabs_host_home)
         bottomNavigation = view.findViewById(R.id.widget_tabs_host_bottom_navigation_view)
-        // Registered before the home fragment is committed below so the tabs host keeps the first
-        // look at every back press; see BackPressHandlerRegistry for why that order matters.
-        setOnBackPressed(::handleBackPress)
-        WidgetFriendsList.onAddFriend = {
-            childFragmentManager.commit {
-                replace(R.id.widget_tabs_host_friends, WidgetFriendsAdd())
-                addToBackStack("add_friend")
+        // `widget_tabs_host_search` is a full-bleed container that the reference never fills —
+        // search is a dialog, not a tab — so it is hidden once and left alone. Were it left visible
+        // it would sit empty on top of whichever tab is actually selected.
+        view.findViewById<View>(R.id.widget_tabs_host_search).visibility = View.GONE
+        bottomNavigation.addHeightChangedListener(BottomNavViewObserver.INSTANCE)
+        setPanelWindowInsetsListeners()
+        // Registered before any child fragment is committed so the tabs host keeps the first look at
+        // every back press. WidgetHome consumes every press it is offered, so it has to sort after
+        // us or a back press on another tab would drive the hidden home panels instead.
+        setOnBackPressed(viewModel::handleBackPress)
+        installCrossScreenNavigation()
+        installTabFragments()
+    }
+
+    override fun onViewBoundOrOnResume() {
+        super.onViewBoundOrOnResume()
+        viewModel.observeViewState()
+            .distinctUntilChanged()
+            .bindToComponentLifecycle(this)
+            .appSubscribe(WidgetTabsHost::class.java) { updateViews(it) }
+        viewModel.observeEvents()
+            .bindToComponentLifecycle(this)
+            .appSubscribe(WidgetTabsHost::class.java) { handleEvent(it) }
+        configureSystemStatusBar()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        pendingIntentSubscription = StoreStream.getNavigation().observePendingIntent()
+            .ui(this)
+            .subscribe({ consumeOwnedRoute(it) }, {})
+    }
+
+    override fun onStop() {
+        pendingIntentSubscription?.unsubscribe()
+        pendingIntentSubscription = null
+        super.onStop()
+    }
+
+    override fun onDestroyView() {
+        bottomNavAnimator?.cancel()
+        bottomNavAnimator = null
+        super.onDestroyView()
+    }
+
+    /**
+     * Lets a tab's root fragment be told when its tab is selected. Called from the child's
+     * `onViewBound`, which runs after ours, so the currently selected tab is replayed immediately —
+     * otherwise a listener registered after the first render would stay silent until the user
+     * switched away and back.
+     */
+    fun registerTabSelectionListener(navigationTab: NavigationTab, listener: OnTabSelectedListener) {
+        tabToTabSelectionListenerMap[navigationTab] = listener
+        viewState?.selectedTab?.let(::navigateToTab)
+    }
+
+    private fun updateViews(viewState: TabsHostViewModel.ViewState) {
+        this.viewState = viewState
+        navigateToTab(viewState.selectedTab)
+        bottomNavigation.updateView(
+            viewState.selectedTab,
+            viewModel::selectTab,
+            viewState.showBottomNav,
+            viewState.myUserId,
+            viewState.visibleTabs,
+            viewState.numHomeNotifications,
+            viewState.numFriendsNotifications,
+            ::onSearchClick,
+            ::onSettingsLongPress,
+            // Long-pressing mentions opens the quick switcher, same as tapping search.
+            ::onSearchClick,
+        )
+        updateNavHostMargins(viewState)
+        animateBottomNav(viewState)
+    }
+
+    /**
+     * The bar is drawn over the content, so every tab but home needs a bottom margin the height of
+     * the bar. Home does not: its chat surface is full bleed and the bar floats over the panels.
+     */
+    private fun updateNavHostMargins(viewState: TabsHostViewModel.ViewState) {
+        val layoutParams = navHost.layoutParams as ViewGroup.MarginLayoutParams
+        layoutParams.bottomMargin =
+            if (viewState.selectedTab == NavigationTab.HOME) 0 else viewState.bottomNavHeight
+        navHost.layoutParams = layoutParams
+    }
+
+    private fun animateBottomNav(viewState: TabsHostViewModel.ViewState) {
+        val showBottomNav = viewState.showBottomNav
+        val bottomNavHeight = viewState.bottomNavHeight
+        if (showBottomNav != previousShowBottomNav || bottomNavHeight != previousBottomNavHeight) {
+            bottomNavAnimator?.cancel()
+            val fromTranslationY = bottomNavigation.translationY
+            bottomNavAnimator = when {
+                showBottomNav -> {
+                    bottomNavigation.visibility = View.VISIBLE
+                    slideBottomNav(fromTranslationY, 0f, UPWARD_ANIMATION_DURATION_MS)
+                }
+                // Before the bar has been measured there is no distance to slide, so it is hidden
+                // outright rather than animated to an unknown offset.
+                bottomNavHeight > 0 ->
+                    slideBottomNav(fromTranslationY, bottomNavHeight.toFloat(), DOWNWARD_ANIMATION_DURATION_MS)
+                else -> {
+                    bottomNavigation.visibility = View.INVISIBLE
+                    null
+                }
             }
         }
-        WidgetFriendsList.onProfile = { WidgetUserSheet.show(it.id, childFragmentManager) }
-        WidgetFriendsAddById.onCaptcha = { siteKey, rqtoken, done ->
-            WidgetCaptchaBottomSheet.show(
-                childFragmentManager, "friend:${System.nanoTime()}", siteKey, rqtoken,
-            ) { token, _ -> done(token) }
+        previousBottomNavHeight = bottomNavHeight
+        previousShowBottomNav = showBottomNav
+    }
+
+    private fun slideBottomNav(from: Float, to: Float, durationMs: Long): ValueAnimator =
+        ValueAnimator.ofFloat(from, to).apply {
+            interpolator = FastOutSlowInInterpolator()
+            duration = durationMs
+            addUpdateListener { bottomNavigation.translationY = it.animatedValue as Float }
+            start()
         }
+
+    private fun navigateToTab(navigationTab: NavigationTab) {
+        TAB_CONTAINER_IDS.forEach { (tab, containerId) ->
+            requireView().findViewById<View>(containerId).visibility =
+                if (navigationTab == tab) View.VISIBLE else View.GONE
+        }
+        tabToTabSelectionListenerMap[navigationTab]?.onTabSelected()
+    }
+
+    private fun handleEvent(event: TabsHostViewModel.Event) = when (event) {
+        TabsHostViewModel.Event.TrackFriendsListShown -> AnalyticsTracker.friendsListViewed()
+        TabsHostViewModel.Event.DismissSearchDialog -> WidgetGlobalSearchDialog.dismiss(parentFragmentManager)
+    }
+
+    private fun onSearchClick() = WidgetGlobalSearchDialog.show(parentFragmentManager)
+
+    private fun onSettingsLongPress() = WidgetUserStatusSheet.show(childFragmentManager)
+
+    /**
+     * The status bar matches the tertiary background that sits behind the tab content — except while
+     * a call/stream indicator is showing, when the indicator paints its own colour all the way up
+     * behind the status bar and must not be overwritten.
+     */
+    private fun configureSystemStatusBar() {
+        val themedColor = ColorCompat.getThemedColor(this, R.attr.colorBackgroundTertiary)
+        ColorCompat.setStatusBarColor(this, themedColor)
+        globalStatusIndicatorStateObserver.observeState()
+            .bindToComponentLifecycle(this)
+            .appSubscribe(WidgetTabsHost::class.java) { state ->
+                if (!state.isCustomBackground) ColorCompat.setStatusBarColor(this, themedColor)
+            }
+    }
+
+    /**
+     * The tab content draws under the system bars, so the insets are split by hand: horizontal
+     * insets stay on the container, the vertical ones are forwarded to whichever child needs them,
+     * and the bottom navigation bar takes the navigation-bar inset as padding.
+     */
+    private fun setPanelWindowInsetsListeners() {
+        ViewCompat.setOnApplyWindowInsetsListener(container) { view, insets ->
+            view.setPadding(
+                insets.systemWindowInsetLeft,
+                view.paddingTop,
+                insets.systemWindowInsetRight,
+                view.paddingBottom,
+            )
+            val forwarded = WindowInsetsCompat.Builder()
+                .setSystemWindowInsets(Insets.of(0, insets.systemWindowInsetTop, 0, insets.systemWindowInsetBottom))
+                .build()
+            (view as? ViewGroup)?.children?.forEach { ViewCompat.dispatchApplyWindowInsets(it, forwarded) }
+            forwarded
+        }
+        navHost.setForwardingWindowInsetsListener()
+        // The home surface is padded down by the status bar here and then handed insets with the
+        // top removed, so its panels only ever see the side and bottom insets.
+        ViewCompat.setOnApplyWindowInsetsListener(homeContainer) { view, insets ->
+            view.setPadding(view.paddingLeft, insets.systemWindowInsetTop, view.paddingRight, view.paddingBottom)
+            val forwarded = WindowInsetsCompat.Builder()
+                .setSystemWindowInsets(
+                    Insets.of(
+                        insets.systemWindowInsetLeft,
+                        0,
+                        insets.systemWindowInsetRight,
+                        insets.systemWindowInsetBottom,
+                    ),
+                )
+                .build()
+            (view as? ViewGroup)?.children?.forEach { ViewCompat.dispatchApplyWindowInsets(it, forwarded) }
+            forwarded
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(nonFullscreenNavHost) { view, insets ->
+            view.setPadding(view.paddingLeft, insets.systemWindowInsetTop, view.paddingRight, view.paddingBottom)
+            insets.consumeSystemWindowInsets()
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(bottomNavigation) { view, insets ->
+            view.setPadding(view.paddingLeft, view.paddingTop, view.paddingRight, insets.systemWindowInsetBottom)
+            insets.consumeSystemWindowInsets()
+        }
+        container.requestApplyInsets()
+    }
+
+    private fun installTabFragments() {
+        if (childFragmentManager.findFragmentById(R.id.widget_tabs_host_home) != null) return
+        childFragmentManager.commit {
+            replace(R.id.widget_tabs_host_home, homeFragmentFactory?.invoke() ?: WidgetHome(), NavigationTab.HOME.name)
+            replace(R.id.widget_tabs_host_friends, WidgetFriendsList(), NavigationTab.FRIENDS.name)
+            replace(R.id.widget_tabs_host_mentions, WidgetUserMentions(), NavigationTab.MENTIONS.name)
+            replace(R.id.widget_tabs_host_user_settings, WidgetSettings(), NavigationTab.SETTINGS.name)
+        }
+    }
+
+    /**
+     * Cross-screen navigation callbacks.
+     *
+     * These have no reference analogue: the reference launches each of these screens as its own
+     * activity through its screen router. Until every screen is routable that way, the tabs host —
+     * the one fragment that outlives all of them — owns the wiring.
+     */
+    private fun installCrossScreenNavigation() {
+        // `WidgetFriendsList` owns its own navigation now: `FriendsListViewModel` drives it, the
+        // toolbar's add-friend item goes through `WidgetFriendsAdd.show` (which also emits the
+        // "Add Friend Modal" analytics event), rows open `WidgetUserSheet` directly, and
+        // `WidgetFriendsAddById` registers its own `WidgetCaptcha.registerForResult` launcher.
         WidgetChannelMembersList.onUserClicked = { WidgetUserSheet.show(it, childFragmentManager) }
         WidgetUserStatusSheet.onCustomStatus = {
             childFragmentManager.commit {
@@ -111,207 +341,55 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
         }
         WidgetSettings.onLogout = { StoreStream.getAuthentication().logout() }
         WidgetSettingsBlockedUsers.onProfile = { WidgetUserSheet.show(it.id, childFragmentManager) }
-        if (childFragmentManager.findFragmentByTag(NavigationTab.HOME.name) == null) {
-            childFragmentManager.commit {
-                replace(R.id.widget_tabs_host_home, homeFragmentFactory?.invoke() ?: WidgetHome(), NavigationTab.HOME.name)
-            }
-        }
-        restoredTab = savedInstanceState?.getString(STATE_SELECTED_TAB)?.let {
-            runCatching { NavigationTab.valueOf(it) }.getOrNull()
-        }
-        restoredTab?.let {
-            showTab(it)
-            StoreStream.getTabsNavigation().selectTab(it)
-        }
     }
 
-    override fun onStart() {
-        super.onStart()
-        selectedTabSubscription = StoreStream.getTabsNavigation().observeSelectedTab().subscribe { tab ->
-            activity?.runOnUiThread {
-                if (restoredTab == null || restoredTab == tab) {
-                    restoredTab = null
-                    showTab(tab)
-                }
-            }
-        }
-        pendingIntentSubscription = StoreStream.getNavigation().observePendingIntent().subscribe { contract ->
-            activity?.runOnUiThread { consumeOwnedRoute(contract) }
-        }
-        leftPanelSubscription = StoreStream.getNavigation().observeLeftPanelState().subscribe { state ->
-            leftPanelState = state
-            activity?.runOnUiThread { updateBottomNavigationVisibility() }
-        }
-        profileSubscription = rx.Observable.combineLatest(
-            StoreStream.getUsers().observeMe(),
-            StoreStream.getPresences().observeAllPresences(),
-        ) { user, presences -> user to presences[user.id] }.subscribe {
-            activity?.runOnUiThread { updateBottomNavigation() }
-        }
-    }
+    private fun activeTabContainerId(): Int =
+        TAB_CONTAINER_IDS[StoreStream.getTabsNavigation().getSelectedTab()] ?: R.id.widget_tabs_host_home
 
-    override fun onStop() {
-        selectedTabSubscription?.unsubscribe()
-        selectedTabSubscription = null
-        pendingIntentSubscription?.unsubscribe()
-        pendingIntentSubscription = null
-        leftPanelSubscription?.unsubscribe()
-        leftPanelSubscription = null
-        profileSubscription?.unsubscribe()
-        profileSubscription = null
-        super.onStop()
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        outState.putString(STATE_SELECTED_TAB, StoreStream.getTabsNavigation().getSelectedTab().name)
-        super.onSaveInstanceState(outState)
-    }
-
+    /** Deep links whose destination is a tab, a profile, or a dialog this host owns. */
     private fun consumeOwnedRoute(contract: AppIntentContract) {
         val route = ((contract as? AppIntentContract.Link)?.result as? LinkParseResult.Internal)?.route ?: return
-        if (route is DeepLinkRoute.User) {
-            WidgetUserSheet.show(route.userId, childFragmentManager)
-            StoreStream.getNavigation().consumePendingIntent(contract)
-            return
-        }
-        // A `/query/` App Action names a destination rather than identifying one; the quick switcher
-        // is what resolves a name, so the link opens it pre-filled.
-        if (route is DeepLinkRoute.Query) {
-            if (WidgetGlobalSearchDialog.showForQuery(childFragmentManager, route)) {
-                StoreStream.getNavigation().consumePendingIntent(contract)
-            }
-            return
-        }
-        if (route is DeepLinkRoute.Discovery) {
+        when (route) {
+            is DeepLinkRoute.User -> WidgetUserSheet.show(route.userId, childFragmentManager)
+            // A `/query/` App Action names a destination rather than identifying one; the quick
+            // switcher is what resolves a name, so the link opens it pre-filled.
+            is DeepLinkRoute.Query ->
+                if (!WidgetGlobalSearchDialog.showForQuery(childFragmentManager, route)) return
             // `/discovery` opens directory search against the Discord-owned HQ directory channel.
-            // Without this branch the route fell through to `else -> return`, so the intent stayed
-            // queued forever and the app just showed the last-used tab.
-            AppScreenRouter.launch(
+            is DeepLinkRoute.Discovery -> AppScreenRouter.launch(
                 requireContext(),
                 WidgetDirectoriesSearch::class.java,
                 WidgetDirectoriesSearch.discoveryIntent(),
             )
-            StoreStream.getNavigation().consumePendingIntent(contract)
-            return
-        }
-        val tab = when (route) {
-            DeepLinkRoute.Home -> NavigationTab.HOME
-            DeepLinkRoute.Friends -> NavigationTab.FRIENDS
-            is DeepLinkRoute.Settings -> NavigationTab.SETTINGS
+            // A `/ra/<fingerprint>` link is a login waiting on another device; it opens the
+            // remote-auth confirmation screen.
+            is DeepLinkRoute.RemoteAuth -> WidgetRemoteAuth.launch(requireContext(), route.fingerprint)
+            // `/oauth2/authorize` and `/connect/authorize` open the app-authorization screen.
+            is DeepLinkRoute.Authorization -> WidgetOauth2Authorize.launch(
+                requireContext(),
+                WidgetOauth2Authorize.authorizeUri(route.parameters),
+            )
+            DeepLinkRoute.Home ->
+                StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE, true)
+            DeepLinkRoute.Friends -> StoreStream.getTabsNavigation().selectTab(NavigationTab.FRIENDS, true)
+            is DeepLinkRoute.Settings -> StoreStream.getTabsNavigation().selectTab(NavigationTab.SETTINGS, true)
             else -> return
-        }
-        if (tab == NavigationTab.HOME) {
-            StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE, true)
-        } else {
-            StoreStream.getTabsNavigation().selectTab(tab, true)
         }
         StoreStream.getNavigation().consumePendingIntent(contract)
     }
 
-    private fun showTab(requestedTab: NavigationTab) {
-        val visibleTabs = mainNavigationTabs
-        val tab = requestedTab.takeIf { it in visibleTabs } ?: NavigationTab.HOME
-        if (tab != requestedTab) StoreStream.getTabsNavigation().selectTab(tab)
-
-        requireView().findViewById<View>(R.id.widget_tabs_host_home).visibility =
-            if (tab == NavigationTab.HOME) View.VISIBLE else View.GONE
-        destinations.forEach { (destinationTab, destination) ->
-            val container = requireView().findViewById<ViewGroup>(destination.containerId)
-            container.visibility = if (tab == destinationTab) View.VISIBLE else View.GONE
-            if (tab == destinationTab && childFragmentManager.findFragmentByTag(tab.name) == null) {
-                childFragmentManager.commit {
-                    replace(
-                        destination.containerId,
-                        when (tab) {
-                            NavigationTab.FRIENDS -> WidgetFriendsList()
-                            NavigationTab.SEARCH -> WidgetGlobalSearch()
-                            NavigationTab.MENTIONS -> WidgetUserMentions()
-                            NavigationTab.SETTINGS -> WidgetSettings()
-                            else -> instantiate(destination.className)
-                        },
-                        tab.name,
-                    )
-                }
-            }
-        }
-
-        updateBottomNavigationVisibility(tab)
-        updateBottomNavigation(tab)
-    }
-
-    private fun updateBottomNavigation(tab: NavigationTab = StoreStream.getTabsNavigation().getSelectedTab()) {
-        val user = StoreStream.getUsers().getMe()
-        bottomNavigation.updateView(
-            tab,
-            ::selectTab,
-            true,
-            user,
-            StoreStream.getPresences().getPresences()[user.id],
-            mainNavigationTabs,
-            0,
-            0,
-            { selectTab(NavigationTab.SEARCH) },
-            { WidgetUserStatusSheet.show(childFragmentManager) },
-            {},
-        )
-    }
-
-    private fun updateBottomNavigationVisibility(tab: NavigationTab = StoreStream.getTabsNavigation().getSelectedTab()) {
-        bottomNavigation.visibility = if (shouldShowBottomNavigation(tab, leftPanelState)) View.VISIBLE else View.INVISIBLE
-    }
-
-    private fun activeTabContainerId() = when (StoreStream.getTabsNavigation().getSelectedTab()) {
-        NavigationTab.FRIENDS -> R.id.widget_tabs_host_friends
-        NavigationTab.SEARCH -> R.id.widget_tabs_host_search
-        NavigationTab.SETTINGS -> R.id.widget_tabs_host_user_settings
-        NavigationTab.MENTIONS -> R.id.widget_tabs_host_mentions
-        else -> R.id.widget_tabs_host_home
-    }
-
-    /**
-     * Selecting home always moves the panels: it closes them only when the user re-taps home while
-     * the left panel is already open, and otherwise opens the left panel. That is what makes both
-     * "tap home from another tab" and "press back from another tab" land on the guild/channel list
-     * rather than on whatever chat was last open.
-     */
-    private fun selectTab(tab: NavigationTab) {
-        if (tab != NavigationTab.HOME) {
-            StoreStream.getTabsNavigation().selectTab(tab, true)
-            return
-        }
-        val wasOnHome = StoreStream.getTabsNavigation().getSelectedTab() == NavigationTab.HOME
-        val panelAction = if (wasOnHome && leftPanelState == PanelState.Open) {
-            StoreNavigation.PanelAction.CLOSE
-        } else {
-            StoreNavigation.PanelAction.OPEN
-        }
-        StoreStream.getTabsNavigation().selectHomeTab(panelAction, true)
-    }
-
-    private fun instantiate(className: String) = childFragmentManager.fragmentFactory
-        .instantiate(requireContext().classLoader, className)
-
-    /**
-     * The tabs host gets the first look at every back press.
-     *
-     * It consumes the press only while the user is somewhere it can step back from: an in-tab
-     * screen pushed onto its child back stack, or any tab other than home. On the home tab it
-     * declines, which hands the press to [com.discord.widgets.home.WidgetHome] and its panels.
-     */
-    private fun handleBackPress(): Boolean {
-        if (childFragmentManager.backStackEntryCount > 0) {
-            childFragmentManager.popBackStack()
-            return true
-        }
-        if (StoreStream.getTabsNavigation().getSelectedTab() == NavigationTab.HOME) return false
-        selectTab(NavigationTab.HOME)
-        return true
-    }
-
-    private data class Destination(val containerId: Int, val className: String)
-
     companion object {
-        private const val STATE_SELECTED_TAB = "selected_tab"
+        private const val UPWARD_ANIMATION_DURATION_MS = 250L
+        private const val DOWNWARD_ANIMATION_DURATION_MS = 200L
+
+        private val TAB_CONTAINER_IDS = mapOf(
+            NavigationTab.HOME to R.id.widget_tabs_host_home,
+            NavigationTab.FRIENDS to R.id.widget_tabs_host_friends,
+            NavigationTab.MENTIONS to R.id.widget_tabs_host_mentions,
+            NavigationTab.SETTINGS to R.id.widget_tabs_host_user_settings,
+        )
+
+        /** Test seam: lets an instrumentation test host a stand-in for the home surface. */
         internal var homeFragmentFactory: (() -> Fragment)? = null
     }
 }

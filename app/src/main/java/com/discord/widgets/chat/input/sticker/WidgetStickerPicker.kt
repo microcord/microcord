@@ -16,6 +16,7 @@ import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.AppViewFlipper
 import com.discord.app.appActivityViewModels
+import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.locale.LocaleManager
 import com.discord.utilities.recycler.SelfHealingLinearLayoutManager
 import com.discord.utilities.recycler.SpeedOnScrollListener
@@ -412,7 +413,6 @@ class WidgetStickerPicker : AppFragment(R.layout.widget_sticker_picker) {
      * Belongs in `utilities/dimen/DimenUtils.dpToPixels`, which has not been reconstructed. Delete
      * this when it lands.
      */
-    private fun dpToPixels(dp: Int): Int = (dp * resources.displayMetrics.density).toInt()
 
     companion object {
         const val ARG_MODE = "MODE"

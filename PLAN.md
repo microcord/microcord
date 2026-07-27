@@ -1243,3 +1243,108 @@ shortcuts/actions wiring.
 lists open blockers. Do not resolve a JADX-broken region by guessing — the
 reports name every such region; inspect DEX/smali. Do not copy decompiled Java or
 carry obfuscated names into the target; reconstruct readable Kotlin.
+
+---
+
+# Session record — 2026-07-26/27 (overnight parallel wave)
+
+## How to resume
+
+**Do not read this conversation.** Everything durable is in files:
+
+- `docs/parity-audit/followups.md` (~2400 lines) — per-cluster handoffs, each with an ordered
+  per-file remaining-work list giving target path, Vineflower reference path, and what it needs.
+  This is the work queue. Start here.
+- `docs/parity-audit/security-review.md` — the security audit, with a resume list.
+- `AGENTS.md` § *Interruption Discipline* — the working rules every agent must follow.
+
+## First job tomorrow: get a compile
+
+**The tree does not currently compile.** ~35 agents ran concurrently and several clusters were
+left mid-reconstruction by design (finish-the-file-then-stop), so the breaks are known and
+localised, not mysterious. Run `assembleDebug`, then work the list. Reported breaks, some of
+which later agents may already have closed:
+
+- `widgets/guild_role_subscriptions/**` — 25 of 42 classes exist. `GuildRoleSubscriptionTierAdapter`
+  and the whole `tier/create/**` subtree are referenced but unwritten. The owning agent's report
+  lists all 17 in dependency order.
+- `widgets/guildscheduledevent/**` — three bottom sheets reference `WidgetPreviewGuildScheduledEvent`
+  and `WidgetGuildScheduledEventLocationSelect`, neither written. Building the first unblocks the rest.
+- `WidgetServerSettings.kt` — two agents edited it concurrently; verify both sets of additions
+  survived, and that `WidgetServerSettingsMembers` (built late in the session) resolves.
+- `CheckedSetting.isChecked` — property form vs `isChecked()` call form is genuinely unresolved and
+  one Gradle run settles it. Both forms exist in committed code. Prefer the call form.
+
+## Applied this session (coordinator)
+
+- **SECURITY H-1, high severity.** `AppScreenRouter.createScreenIntent` targeted the *exported*
+  `AppActivity$Main`, and `consumeIntent` honoured `EXTRA_SCREEN` unconditionally — so any installed
+  app could display any fragment with attacker-chosen arguments, and via `WidgetIncomingShare`'s
+  unvalidated `uris` argument, exfiltrate the auth token from shared_prefs. Router intents now target
+  the non-exported base `AppActivity`; `consumeIntent` refuses the extra when running as `Main`.
+  **Not fully closed** — see the four open items in `followups.md`; item 1 (the exported
+  `ACTION_SEND` path into the same code) is the one that matters.
+- **The "back button closes the app" bug — root cause found and fixed.** `OverlappingPanelsLayout`
+  initialised its opened-position sentinels to `0f`; the reference `<init>` bytecode uses
+  `Float.MIN_VALUE`/`Float.MAX_VALUE`. Since `centerPanel.x` is also `0f` on first layout, the
+  re-open guard fired every time, the start panel auto-opened, `selectedPanel` became `START`, and
+  `WidgetHome` answered the next back press with `moveTaskToBack(true)`.
+  **Falsifiable in one step:** log `getSelectedPanel()` at the top of `WidgetHome.handleBackPressed`;
+  on a fresh launch with a channel selected it must now report `CENTER`, not `START`.
+  Two follow-ups remain, both in `WidgetHome` (not the panels file): the target checks the child
+  back stack *before* the panel branch and the reference has no such check at all — that ordering is
+  inverted; and panel position is not restored after rotation. Precise edits are in `followups.md`.
+- `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=40` in `.claude/settings.local.json`.
+
+## Reference bugs found this session — decisions taken
+
+Reproduced deliberately (do not "fix" without changing the ledger): `GuildChannelsInfo.unelevated`
+is a dead conjunction always false; `getSortedVisibleChannels` drops any group of exactly one;
+`hasUnreadPins` is a literal `false`; `getChannelType` calls `isGuildForumPost(parent = null)` which
+can never be true; `StoreAuditLog.recordDeletedTarget` compares Long to boxed Integer so a deleted
+text channel loses its `#`; `QueryNode.Preprocessor.preprocess` discards its mapped list;
+`Benefit.equals` ignores most of the emoji.
+
+Deliberately **not** reproduced, each documented in code: `StoreGifPicker`'s two loading sentinels are
+both `emptyList()`, so the identity check also rejects a real zero-hit result and a failed search
+spins forever — distinct instances used instead. `WidgetOauth2Authorize` logs the full redirect URL
+including the OAuth `code` — only scheme+host is logged here.
+
+## Real bugs found and fixed in our own code
+
+- `GuildScheduledEventTypeAdapters` called `reader.nextInt()` *inside* a `firstOrNull` predicate,
+  advancing the reader once per enum constant — every real `GuildScheduledEvent` failed to parse.
+- `EmojiPickerViewModel` folded case with `Locale.getDefault()`. In Turkish `"GRIN"` → `"grın"`, so
+  emoji search returned nothing. Reference uses `Locale.ROOT`.
+- `AppLog` redacted log messages but printed throwables raw, so a token quoted in an exception
+  message bypassed redaction entirely.
+- `StageStoreAccess` gated on an `install()` nothing ever called, so every stage screen threw.
+- `StageAudienceBlockedBottomSheetAdapter` never attached itself to its recycler.
+- `VoiceUtils.handleCallChannel` sent stage channels to the plain voice sheet.
+- `PhoneOrEmailInputView.bind` left `onCountryCodeClick` null, pinning auth screens to +1.
+
+## Evidence-hierarchy notes worth keeping
+
+- **JADX was actively wrong** about `SearchQuery.Builder.buildFrom`'s filter reset; Vineflower's
+  awkward `continue@label53` was correct. Settled from bytecode.
+- **Vineflower inverted a loop** in `calculatePermissionChange` (`while(true){if(i<=63)break;}`),
+  which would have made permission rendering dead code. Distrust every
+  `$VF: Unable to resugar Kotlin loop` block.
+- Vineflower fails outright (KotlinWriter NPE) on `WidgetPruneUsersViewModel`,
+  `WidgetAuthLandingViewModel`, `WidgetAgeVerifyViewModel`, `PriceTierPickerBottomSheetViewModel`,
+  `CreateGuildRoleSubscriptionTierViewModel`, `GuildRoleSubscriptionReviewViewModel`,
+  `WidgetChannelTopicViewModel`, `WidgetGuildScheduledEventLocationSelectViewModel`. Use `javap -p -c`.
+- Enum ordinals recovered from `<clinit>` this session are recorded per-cluster in `followups.md`.
+  Decompilers print enum constants alphabetically; that trap bit three separate agents.
+
+## Still dead / still blocking
+
+- `StoreAnalytics` — constructed nowhere. A 28-row member→backing-call table is in the StoreStream
+  agent's handoff, ready to implement.
+- `VoiceTransport` — not installed; voice is blocked on exactly this. Note the
+  `VoiceTransport`↔`StoreRtcRegion` construction cycle and the lambda that breaks it.
+- `StoreLurking` — not exposed; three cascade seams are fed `emptySet()`. The literal at
+  `StoreStream.kt:2495` is the highest-value single line in the file.
+- `StoreNotices` — `NoticeBuilders.install()` is never called from `App.onCreate`, so every notice
+  reports "did not show" and stays queued forever, silently.
+- All 7 gateway TODOs at `StoreStream.kt:1116-1123` still open.

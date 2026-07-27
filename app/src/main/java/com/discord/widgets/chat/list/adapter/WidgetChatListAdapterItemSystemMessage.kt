@@ -10,11 +10,14 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import com.discord.R
+import com.discord.i18n.Hook
+import com.discord.i18n.I18nHooks
 import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
 import com.discord.models.user.CoreUser
 import com.discord.stores.StoreStream
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.message.MessageUtils
 import com.discord.utilities.time.TimeUtils
 import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
 import com.discord.utilities.view.text.LinkifiedTextView
@@ -190,11 +193,11 @@ class WidgetChatListAdapterItemSystemMessage(
     ): CharSequence {
         // Hooks take their display text from the template itself (`[!!{username}!!](usernameOnClick)`),
         // so only the styling and the click target have to be supplied here.
-        val authorHook = ChatRowText.Hook(
+        val authorHook = Hook(
             spans = listOf(StyleSpan(Typeface.BOLD), ForegroundColorSpan(authorRoleColor)),
             onClick = { adapter.eventHandler.onMessageAuthorNameClicked(message, adapter.data.guildId) },
         )
-        val otherHook = ChatRowText.Hook(
+        val otherHook = Hook(
             spans = listOf(StyleSpan(Typeface.BOLD), ForegroundColorSpan(otherRoleColor)),
             onClick = firstMentionedUserId?.let { userId ->
                 {
@@ -209,7 +212,7 @@ class WidgetChatListAdapterItemSystemMessage(
         val nameHooks = mapOf("usernameOnClick" to authorHook, "otherUsernameOnClick" to otherHook)
 
         return when (message.type) {
-            TYPE_RECIPIENT_ADD -> ChatRowText.format(
+            TYPE_RECIPIENT_ADD -> I18nHooks.format(
                 context,
                 R.string.system_message_recipient_add,
                 mapOf("username" to authorName, "otherUsername" to firstMentionedUserName),
@@ -218,14 +221,14 @@ class WidgetChatListAdapterItemSystemMessage(
 
             TYPE_RECIPIENT_REMOVE ->
                 if (firstMentionedUserId == message.author?.id) {
-                    ChatRowText.format(
+                    I18nHooks.format(
                         context,
                         R.string.system_message_recipient_remove_self,
                         mapOf("username" to authorName),
                         nameHooks,
                     )
                 } else {
-                    ChatRowText.format(
+                    I18nHooks.format(
                         context,
                         R.string.system_message_recipient_remove,
                         mapOf("username" to authorName, "otherUsername" to firstMentionedUserName),
@@ -233,30 +236,30 @@ class WidgetChatListAdapterItemSystemMessage(
                     )
                 }
 
-            TYPE_CHANNEL_NAME_CHANGE -> ChatRowText.format(
+            TYPE_CHANNEL_NAME_CHANGE -> I18nHooks.format(
                 context,
                 R.string.system_message_channel_name_change,
                 mapOf("username" to authorName, "channelName" to message.content),
                 nameHooks,
             )
 
-            TYPE_CHANNEL_ICON_CHANGE -> ChatRowText.format(
+            TYPE_CHANNEL_ICON_CHANGE -> I18nHooks.format(
                 context,
                 R.string.system_message_channel_icon_change,
                 mapOf("username" to authorName),
                 nameHooks,
             )
 
-            TYPE_CHANNEL_PINNED_MESSAGE -> ChatRowText.format(
+            TYPE_CHANNEL_PINNED_MESSAGE -> I18nHooks.format(
                 context,
                 R.string.system_message_pinned_message_no_cta,
                 mapOf("username" to authorName),
                 nameHooks,
             )
 
-            TYPE_GUILD_MEMBER_JOIN -> ChatRowText.format(
+            TYPE_GUILD_MEMBER_JOIN -> I18nHooks.format(
                 context,
-                ChatRowText.systemMessageUserJoin(context, message.id),
+                MessageUtils.getSystemMessageUserJoin(context, message.id),
                 mapOf("username" to authorName),
                 nameHooks,
             )
@@ -265,14 +268,14 @@ class WidgetChatListAdapterItemSystemMessage(
                 // The boost count travels in the message body as a bare integer.
                 val boostCount = message.content?.toIntOrNull() ?: 1
                 if (boostCount > 1) {
-                    ChatRowText.format(
+                    I18nHooks.format(
                         context,
                         R.string.system_message_guild_member_subscribed_many,
                         mapOf("username" to authorName, "numSubscriptions" to boostCount),
                         nameHooks,
                     )
                 } else {
-                    ChatRowText.format(
+                    I18nHooks.format(
                         context,
                         R.string.system_message_guild_member_subscribed,
                         mapOf("username" to authorName),
@@ -284,7 +287,7 @@ class WidgetChatListAdapterItemSystemMessage(
             TYPE_GUILD_MEMBER_SUBSCRIBED_TIER_1,
             TYPE_GUILD_MEMBER_SUBSCRIBED_TIER_2,
             TYPE_GUILD_MEMBER_SUBSCRIBED_TIER_3,
-            -> ChatRowText.format(
+            -> I18nHooks.format(
                 context,
                 R.string.system_message_guild_member_subscribed_achieved_tier,
                 mapOf(
@@ -295,11 +298,11 @@ class WidgetChatListAdapterItemSystemMessage(
                 nameHooks,
             )
 
-            TYPE_CHANNEL_FOLLOW_ADD -> ChatRowText.format(
+            TYPE_CHANNEL_FOLLOW_ADD -> I18nHooks.format(
                 context,
                 R.string.system_message_channel_follow_add,
                 mapOf("username" to authorName, "webhookName" to message.content),
-                nameHooks + ("webhookNameHook" to ChatRowText.Hook(
+                nameHooks + ("webhookNameHook" to Hook(
                     spans = listOf(StyleSpan(Typeface.BOLD)),
                 )),
             )
@@ -316,13 +319,13 @@ class WidgetChatListAdapterItemSystemMessage(
             TYPE_GUILD_DISCOVERY_GRACE_PERIOD_FINAL_WARNING ->
                 context.getString(R.string.system_message_guild_discovery_grace_period_final_warning)
 
-            TYPE_THREAD_CREATED -> ChatRowText.format(
+            TYPE_THREAD_CREATED -> I18nHooks.format(
                 context,
                 R.string.system_message_thread_created_mobile,
                 mapOf("actorName" to authorName, "threadName" to message.content),
                 mapOf(
                     "actorHook" to authorHook,
-                    "threadOnClick" to ChatRowText.Hook(
+                    "threadOnClick" to Hook(
                         spans = listOf(StyleSpan(Typeface.BOLD)),
                         onClick = {
                             message.messageReference?.channelId?.let { channelId ->
@@ -336,7 +339,7 @@ class WidgetChatListAdapterItemSystemMessage(
             TYPE_THREAD_STARTER_NOT_LOADED ->
                 context.getString(R.string.thread_starter_message_not_loaded)
 
-            TYPE_AUTO_MODERATION_ACTION -> ChatRowText.format(
+            TYPE_AUTO_MODERATION_ACTION -> I18nHooks.format(
                 context,
                 if (isFlagged) {
                     R.string.guild_automod_system_message_text_flagged
@@ -344,8 +347,8 @@ class WidgetChatListAdapterItemSystemMessage(
                     R.string.guild_automod_system_message_text
                 },
                 hooks = mapOf(
-                    "autoModHook" to ChatRowText.Hook(spans = listOf(StyleSpan(Typeface.BOLD))),
-                    "systemHook" to ChatRowText.Hook(spans = listOf(StyleSpan(Typeface.BOLD))),
+                    "autoModHook" to Hook(spans = listOf(StyleSpan(Typeface.BOLD))),
+                    "systemHook" to Hook(spans = listOf(StyleSpan(Typeface.BOLD))),
                 ),
             )
 
@@ -369,15 +372,11 @@ class WidgetChatListAdapterItemSystemMessage(
         authorName: String?,
         guildName: String?,
         roleSubscriptionListingId: Long?,
-        authorHook: ChatRowText.Hook,
-    ): CharSequence = ChatRowText.systemMessageRoleSubscriptionPurchase(
-        context,
-        guildName,
-        authorName,
-        message.roleSubscriptionData,
-        mapOf(
+        authorHook: Hook,
+    ): CharSequence {
+        val hooks = mapOf(
             "usernameOnClick" to authorHook,
-            "roleSubscriptionOnClick" to ChatRowText.Hook(
+            "roleSubscriptionOnClick" to Hook(
                 spans = listOf(ForegroundColorSpan(ThemedColor.resolve(context, R.attr.colorTextLink))),
                 onClick = roleSubscriptionListingId?.let { listingId ->
                     {
@@ -385,8 +384,17 @@ class WidgetChatListAdapterItemSystemMessage(
                     }
                 },
             ),
-        ),
-    )
+        )
+        // `render` is the seam `MessageUtils` provides for exactly this: it keeps the clickable tier
+        // name and author name, which the default plain-substitution renderer cannot express.
+        return MessageUtils.getSystemMessageRoleSubscriptionPurchase(
+            context,
+            guildName,
+            authorName,
+            message.roleSubscriptionData,
+            render = { ctx, res, args -> I18nHooks.format(ctx, res, args, hooks) },
+        )
+    }
 
     private fun tierNameFor(messageType: Int?): Int = when (messageType) {
         TYPE_GUILD_MEMBER_SUBSCRIBED_TIER_2 -> R.string.premium_guild_tier_2

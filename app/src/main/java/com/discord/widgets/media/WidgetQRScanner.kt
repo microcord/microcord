@@ -10,6 +10,7 @@ import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.view.ToastManager
+import com.discord.widgets.auth.WidgetRemoteAuth
 import com.google.android.material.chip.Chip
 import com.google.zxing.Result
 import me.dm7.barcodescanner.zxing.ZXingScannerView
@@ -81,13 +82,28 @@ class WidgetQRScanner : AppFragment(R.layout.widget_qr_scanner), ZXingScannerVie
             return
         }
 
-        // The reference splits here: a `/ra/<fingerprint>` path opens `WidgetRemoteAuth` directly
-        // with the captured fingerprint, and everything else goes through UriHandler. That screen
-        // has not been reconstructed, so remote-auth codes currently take the same route — the app's
-        // own `/ra/` deep-link filter is the only consumer that exists. Restore the direct launch
-        // when `widgets/auth/WidgetRemoteAuth` lands.
-        UriHandler.handle(requireContext(), text)
+        // A `/ra/<fingerprint>` code is a login waiting on another device: it opens the remote-auth
+        // confirmation screen directly with the captured fingerprint. Everything else is an
+        // ordinary Discord link and goes through UriHandler.
+        val remoteAuthFingerprint = remoteAuthFingerprintOf(uri)
+        if (remoteAuthFingerprint != null) {
+            WidgetRemoteAuth.launch(requireContext(), remoteAuthFingerprint)
+        } else {
+            UriHandler.handle(requireContext(), text)
+        }
         requireActivity().finish()
+    }
+
+    /**
+     * The fingerprint of a `/ra/<fingerprint>` remote-auth code, or `null` for any other link.
+     *
+     * Only called after [isDiscordLink] has already vouched for the host, so this is a shape test,
+     * not a trust test.
+     */
+    private fun remoteAuthFingerprintOf(uri: Uri): String? {
+        val segments = uri.pathSegments ?: return null
+        if (segments.size != 2 || segments[0] != REMOTE_AUTH_PATH) return null
+        return segments[1].takeIf { it.isNotEmpty() }
     }
 
     /**
@@ -111,6 +127,9 @@ class WidgetQRScanner : AppFragment(R.layout.widget_qr_scanner), ZXingScannerVie
 
         /** ZXing's camera index for the rear camera, which is the only one worth scanning with. */
         private const val MAIN_BACK_CAMERA = 0
+
+        /** First path segment of a remote-auth (QR login) link. */
+        private const val REMOTE_AUTH_PATH = "ra"
 
         private const val APP_SCHEME = "discord"
         private val APP_SCHEME_HOSTS = setOf("app", "action")

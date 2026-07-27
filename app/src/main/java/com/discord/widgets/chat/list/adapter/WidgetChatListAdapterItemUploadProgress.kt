@@ -8,6 +8,7 @@ import com.discord.R
 import com.discord.i18n.i18nPlural
 import com.discord.stores.StoreMessageUploads
 import com.discord.stores.StoreStream
+import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.rest.FileUpload
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.leadingEdgeThrottle
@@ -105,7 +106,7 @@ class WidgetChatListAdapterItemUploadProgress(
         when (uploadState) {
             Model.None -> {
                 view.configure(context.getString(R.string.upload_queued), 0, null)
-                view.setIcon(themedDrawable(context, R.attr.ic_uploads_generic))
+                view.setIcon(context.getThemedDrawableRes(R.attr.ic_uploads_generic))
             }
             is Model.Preprocessing -> {
                 val title = uploadState.displayName ?: view.i18nPlural(
@@ -116,7 +117,7 @@ class WidgetChatListAdapterItemUploadProgress(
                 view.configure(title, Model.PROGRESS_INDETERMINATE, null)
                 view.setIcon(
                     uploadState.mimeType?.let { iconForFiletype(context, it) }
-                        ?: themedDrawable(context, R.attr.ic_uploads_generic),
+                        ?: context.getThemedDrawableRes(R.attr.ic_uploads_generic),
                 )
             }
             is Model.Single -> {
@@ -134,7 +135,7 @@ class WidgetChatListAdapterItemUploadProgress(
                     "count" to uploadState.numFiles,
                 )
                 view.configure(title, uploadState.progress, FailedUploadList.sizeSubtitle(uploadState.sizeBytes))
-                view.setIcon(themedDrawable(context, R.attr.ic_uploads_generic))
+                view.setIcon(context.getThemedDrawableRes(R.attr.ic_uploads_generic))
             }
             is Model.Few -> Unit // Never nested; handled by configureUI.
         }
@@ -144,19 +145,13 @@ class WidgetChatListAdapterItemUploadProgress(
      * Reference: `FileUtilsKt.getIconForFiletype`. That utility has not been reconstructed yet, so
      * the same three-way mime split `FailedUploadList` uses is applied here.
      */
-    private fun iconForFiletype(context: Context, mimeType: String): Int = themedDrawable(
-        context,
+    private fun iconForFiletype(context: Context, mimeType: String): Int = context.getThemedDrawableRes(
         when {
             mimeType.startsWith("image") -> R.attr.ic_uploads_image
             mimeType.startsWith("video") -> R.attr.ic_uploads_video
             else -> R.attr.ic_uploads_file
         },
     )
-
-    private fun themedDrawable(context: Context, attribute: Int): Int = TypedValue().let {
-        context.theme.resolveAttribute(attribute, it, true)
-        it.resourceId
-    }
 
     /** What the card is showing right now. */
     sealed class Model {

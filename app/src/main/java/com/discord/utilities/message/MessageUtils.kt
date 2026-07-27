@@ -9,6 +9,7 @@ import com.discord.api.message.role_subscription.RoleSubscriptionData
 import com.discord.api.sticker.StickerFormatType
 import com.discord.api.sticker.StickerPartial
 import com.discord.api.user.User
+import com.discord.i18n.I18nHooks
 import com.discord.i18n.i18nRender
 import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
@@ -162,9 +163,12 @@ object MessageUtils {
         )
 
         if (roleSubscriptionData.totalMonthsSubscribed > 0) {
-            args["months"] = context.resources.getQuantityString(
+            // The recovered plurals carry Discord's `{#}` / `{count}` token, not `%d`, so the
+            // positional `getQuantityString(res, quantity, quantity)` overload would leave the
+            // token visible. `I18nHooks.plural` substitutes both spellings.
+            args["months"] = I18nHooks.plural(
+                context,
                 R.plurals.system_message_role_subscription_join_with_duration_mobile_months,
-                roleSubscriptionData.totalMonthsSubscribed,
                 roleSubscriptionData.totalMonthsSubscribed,
             )
             val stringRes = if (roleSubscriptionData.isRenewal) {

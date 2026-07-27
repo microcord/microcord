@@ -1,5 +1,6 @@
 package com.discord.models.domain
 
+import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.time.Clock
 import com.discord.utilities.time.ClockFactory
 
@@ -21,13 +22,11 @@ class NonceGenerator {
         @JvmOverloads
         @Synchronized
         fun computeNonce(clock: Clock = ClockFactory.get()): Long {
-            var nonce = (clock.currentTimeMillis() + MILLIS_OFFSET - DISCORD_EPOCH) shl 22
+            var nonce = SnowflakeUtils.fromTimestamp(clock.currentTimeMillis() + MILLIS_OFFSET)
             if (nonce <= previousNonce) nonce = previousNonce + 1
             previousNonce = nonce
             return nonce
         }
-
-        private const val DISCORD_EPOCH = 1_420_070_400_000L
 
         /** Keeps generated nonces clear of real snowflakes so they can never collide. */
         private const val MILLIS_OFFSET = 1_471_228_928L

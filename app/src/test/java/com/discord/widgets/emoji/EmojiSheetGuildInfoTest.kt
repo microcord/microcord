@@ -1,0 +1,101 @@
+package com.discord.widgets.emoji
+
+import com.discord.models.guild.Guild
+import com.discord.widgets.emoji.EmojiSheetViewModel.Companion.CustomEmojiGuildInfo
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import rx.Observable
+
+/**
+ * A custom emoji can come from a server the viewer is not in, so the popout has to describe the
+ * source guild along two independent axes: is it *discoverable* (can we show its public profile and
+ * offer "Join"?) and are we *in* it (can we favourite the emoji?).
+ *
+ * The four resolutions the view model produces map onto these two flags, and two different surfaces
+ * read them — the guild card and the analytics event — so the pairing is pinned here.
+ */
+class EmojiSheetGuildInfoTest {
+
+    private fun guild(id: Long = 1L) = Guild(id = id, name = "Wumpus HQ")
+
+    /** In one of my guilds, and that guild is discoverable: everything is available. */
+    @Test
+    fun `a discoverable guild I am in is public and joinable-from`() {
+        val info = CustomEmojiGuildInfo.Known(guild(), isPublic = true, isUserInGuild = true, approximateOnline = 12)
+        assertTrue(info.isPublic)
+        assertTrue(info.isUserInGuild)
+        assertEquals(12, requireNotNull(info.approximateOnline))
+    }
+
+    /**
+     * In one of my guilds but it is not discoverable — or it 404'd out of discovery since. The
+     * public profile is dropped (no online count) but favouriting still works.
+     */
+    @Test
+    fun `a private guild I am in keeps membership and loses the public profile`() {
+        val info = CustomEmojiGuildInfo.Known(guild(), isPublic = false, isUserInGuild = true, approximateOnline = null)
+        assertFalse(info.isPublic)
+        assertTrue(info.isUserInGuild)
+        assertNull(info.approximateOnline)
+    }
+
+    /** Resolved only through `GET /emojis/{id}/guild`: public, but not mine. */
+    @Test
+    fun `a guild I am not in is public and not joined`() {
+        val info = CustomEmojiGuildInfo.Known(guild(), isPublic = true, isUserInGuild = false, approximateOnline = 900)
+        assertTrue(info.isPublic)
+        assertFalse(info.isUserInGuild)
+    }
+
+    /**
+     * Nothing resolved. Both flags are false, which is what makes the guild card hide itself and
+     * the favourite star unavailable — the emoji renders alone rather than under an empty card.
+     */
+    @Test
+    fun `Unknown is neither public nor joined`() {
+        assertFalse(CustomEmojiGuildInfo.Unknown.isPublic)
+        assertFalse(CustomEmojiGuildInfo.Unknown.isUserInGuild)
+    }
+
+    /**
+     * `StoreMediaFavorites` is not reconstructed, so favourites go through a pair of seams. The
+     * defaults must be inert rather than absent: the star renders unfilled and tapping it is a
+     * no-op, instead of the sheet failing to build. **Remove this test when the store lands.**
+     */
+    @Test
+    fun `the favourites seam defaults to an empty, inert implementation`() {
+        var observed: Set<String>? = null
+        EmojiSheetViewModel.observeFavoriteEmojiKeys().subscribe { observed = it }
+        assertEquals(emptySet<String>(), observed)
+
+        // Must not throw, and must not be observable through the default read seam.
+        EmojiSheetViewModel.setFavoriteEmoji("41", true)
+        EmojiSheetViewModel.observeFavoriteEmojiKeys().subscribe { observed = it }
+        assertEquals(emptySet<String>(), observed)
+    }
+
+    /** The seams are process-wide `var`s; installing one must fully replace the default. */
+    @Test
+    fun `installing a favourites implementation replaces the default`() {
+        val written = mutableListOf<Pair<String, Boolean>>()
+        EmojiSheetViewModel.observeFavoriteEmojiKeys = { Observable.just(setOf("41")) }
+        EmojiSheetViewModel.setFavoriteEmoji = { key, favorite -> written += key to favorite }
+
+        var observed: Set<String>? = null
+        EmojiSheetViewModel.observeFavoriteEmojiKeys().subscribe { observed = it }
+        EmojiSheetViewModel.setFavoriteEmoji("41", false)
+
+        assertEquals(setOf("41"), observed)
+        assertEquals(listOf("41" to false), written)
+    }
+
+    @After
+    fun restoreSeams() {
+        EmojiSheetViewModel.observeFavoriteEmojiKeys = { Observable.just(emptySet()) }
+        EmojiSheetViewModel.setFavoriteEmoji = { _, _ -> }
+    }
+}

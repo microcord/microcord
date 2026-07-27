@@ -119,17 +119,26 @@ class DispatcherStoreTest {
      *
      * `AppLog` is inert until the application initialises it, so the minimum priority has to be
      * lowered for the duration and restored afterwards.
+     *
+     * The sink has to be installed too. Without it `AppLog` falls through to logcat, where
+     * `Log.getStackTraceString` returns `null` under `unitTests.isReturnDefaultValues` and the
+     * non-null `println(priority, message)` parameter then throws NPE — so every error carrying a
+     * throwable failed the test rather than being recorded. That is exactly what `AppLog.sink`
+     * exists for.
      */
     private fun reportedErrors(block: () -> Unit): List<AppLog.LoggedItem> {
         val reported = mutableListOf<AppLog.LoggedItem>()
         val previousPriority = AppLog.minimumPriority
+        val previousSink = AppLog.sink
         AppLog.minimumPriority = Log.ERROR
+        AppLog.sink = { _, _, _, _ -> }
         val subscription = AppLog.observeLogs().subscribe { reported += it }
         try {
             block()
         } finally {
             subscription.unsubscribe()
             AppLog.minimumPriority = previousPriority
+            AppLog.sink = previousSink
         }
         return reported
     }

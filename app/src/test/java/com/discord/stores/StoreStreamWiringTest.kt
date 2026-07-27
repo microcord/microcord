@@ -11,14 +11,10 @@ import com.google.gson.GsonBuilder
 import java.lang.reflect.Modifier
 import java.lang.reflect.Proxy
 import java.nio.file.Files
-import java.util.concurrent.Executor
-import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicReference
 import org.junit.AfterClass
 import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
 import org.junit.Test
-import rx.schedulers.Schedulers
 
 /**
  * Proves the two wirings the parity audit found missing in `StoreStream` itself, end to end
@@ -153,18 +149,8 @@ class StoreStreamWiringTest {
 
         private val directory = Files.createTempDirectory("store-stream-wiring")
 
-        private val storeThread = AtomicReference<Thread>()
-        private val storeExecutor = Executors.newSingleThreadExecutor { runnable ->
-            Thread(runnable, "wiring-store-thread").apply { isDaemon = true }.also(storeThread::set)
-        }
-
         /** Same single-threaded, run-to-completion scheduler `StoreStreamTest` uses. */
-        private val scheduler = Schedulers.from(
-            Executor { command ->
-                if (Thread.currentThread() === storeThread.get()) command.run()
-                else storeExecutor.submit(command).get()
-            },
-        )
+        private val scheduler = storeTestScheduler("wiring-store-thread")
 
         private val prefs = memoryPreferences()
         private val durablePrefs = memoryPreferences()

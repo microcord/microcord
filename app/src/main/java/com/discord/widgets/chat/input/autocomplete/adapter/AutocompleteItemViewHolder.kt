@@ -2,7 +2,6 @@ package com.discord.widgets.chat.input.autocomplete.adapter
 
 import android.content.Context
 import android.graphics.PorterDuff
-import android.util.TypedValue
 import android.view.View
 import android.widget.TextView
 import androidx.core.content.ContextCompat
@@ -13,6 +12,8 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.isGuildTextyChannel
 import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.channel.isThread
+import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
@@ -113,7 +114,7 @@ class AutocompleteItemViewHolder(
         val padding = dpToPixels(CHANNEL_ICON_PADDING_DP)
         avatar.setPadding(padding, padding, padding, padding)
         MGImages.setImage(avatar, channelIcon(channel))
-        avatar.setColorFilter(themedColor(R.attr.colorTextMuted), PorterDuff.Mode.SRC_ATOP)
+        avatar.setColorFilter(ColorCompat.getThemedColor(context, R.attr.colorTextMuted), PorterDuff.Mode.SRC_ATOP)
     }
 
     private fun bindEmoji(item: EmojiAutocompletable) {
@@ -148,7 +149,7 @@ class AutocompleteItemViewHolder(
         if (item.showAvatar) {
             avatar.visibility = View.VISIBLE
             MGImages.setImage(avatar, R.drawable.ic_slash_command_24dp)
-            avatar.setColorFilter(themedColor(R.attr.colorTextMuted), PorterDuff.Mode.SRC_ATOP)
+            avatar.setColorFilter(ColorCompat.getThemedColor(context, R.attr.colorTextMuted), PorterDuff.Mode.SRC_ATOP)
         }
     }
 
@@ -188,12 +189,6 @@ class AutocompleteItemViewHolder(
 
     private val context: Context get() = itemView.context
 
-    private fun dpToPixels(dp: Int): Int = (dp * itemView.resources.displayMetrics.density).toInt()
-
-    private fun themedColor(attribute: Int): Int = TypedValue().let {
-        context.theme.resolveAttribute(attribute, it, true)
-        it.data
-    }
 
     /** Minimal [EmojiNode.RenderContext]; the autocomplete row has no emoji click behaviour. */
     private class EmojiRenderContext(

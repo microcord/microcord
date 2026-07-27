@@ -189,7 +189,7 @@ class WidgetServerNotifications : AppFragment(R.layout.widget_server_notificatio
             SettingsStrings.render(everyoneSwitch.context, R.string.form_label_suppress_everyone),
         )
         everyoneSwitch.setOnCheckedListener(null)
-        everyoneSwitch.isChecked = model.guildSettings.isSuppressEveryone
+        everyoneSwitch.setChecked(model.guildSettings.isSuppressEveryone, false)
         everyoneSwitch.setOnCheckedListener(
             Action1 { viewModel.toggleSuppressEveryone(everyoneSwitch.context.applicationContext) },
         )
@@ -198,12 +198,12 @@ class WidgetServerNotifications : AppFragment(R.layout.widget_server_notificatio
             SettingsStrings.render(rolesSwitch.context, R.string.form_label_suppress_roles),
         )
         rolesSwitch.setOnCheckedListener(null)
-        rolesSwitch.isChecked = model.guildSettings.isSuppressRoles
+        rolesSwitch.setChecked(model.guildSettings.isSuppressRoles, false)
         rolesSwitch.setOnCheckedListener(
             Action1 { viewModel.toggleSuppressRoles(rolesSwitch.context.applicationContext) },
         )
 
-        pushSwitch.isChecked = model.guildSettings.isMobilePush && !model.isMuted
+        pushSwitch.setChecked(model.guildSettings.isMobilePush && !model.isMuted, false)
         if (model.isMuted) {
             // Muted means no push regardless, so the row is greyed out and inert. The reference
             // passes no message either, so the tap is silent rather than explanatory.

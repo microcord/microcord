@@ -1,7 +1,7 @@
 package com.discord.widgets.chat.list.entries
 
 import com.discord.api.channel.ForumTag
-import com.discord.api.channel.ForumTagId
+import com.discord.primitives.ForumTagId
 import com.discord.api.sticker.Sticker
 import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember

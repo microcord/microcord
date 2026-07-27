@@ -10,6 +10,7 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
 import com.discord.R
+import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.facebook.drawee.view.SimpleDraweeView
@@ -25,13 +26,13 @@ class PileView(context: Context, attrs: AttributeSet?) : FrameLayout(context, at
     private var maxItems = 3
     private var roundImage = true
     private var roundBackground = true
-    private var itemSizePx = dp(16)
+    private var itemSizePx = dpToPixels(16)
     private var overlapPx = 0
     private var itemBackgroundColor = 0
     private var itemPaddingPx = 0
     private var itemTextColor = 0
-    private var cutoutThicknessPx = dp(2)
-    private var overflowTextSizePx = dp(14)
+    private var cutoutThicknessPx = dpToPixels(2)
+    private var overflowTextSizePx = dpToPixels(14)
     @Suppress("unused")
     private var showOverflowItem = false
     private var overflowBackgroundColor = 0
@@ -125,5 +126,4 @@ class PileView(context: Context, attrs: AttributeSet?) : FrameLayout(context, at
         addView(root)
     }
 
-    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }

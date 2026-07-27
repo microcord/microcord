@@ -62,6 +62,10 @@ class RestApiError private constructor(
     val requestUrl: String?,
     val captchaSitekey: String?,
     val captchaRqtoken: String?,
+    /** hCaptcha enterprise `rqdata` blob, passed through to the challenge unchanged. */
+    val captchaRqdata: String?,
+    /** Raw `captcha_service` name; resolved by `CaptchaService.fromWireName`. */
+    val captchaService: String?,
     val cause: Throwable,
     val metadata: Map<String, String>? = null,
 ) {
@@ -251,6 +255,8 @@ class RestApiError private constructor(
                 requestUrl,
                 json?.get("captcha_sitekey")?.takeUnless(JsonElement::isJsonNull)?.asString,
                 json?.get(CAPTCHA_RQTOKEN_KEY)?.takeUnless(JsonElement::isJsonNull)?.asString,
+                json?.get("captcha_rqdata")?.takeUnless(JsonElement::isJsonNull)?.asString,
+                json?.get("captcha_service")?.takeUnless(JsonElement::isJsonNull)?.asString,
                 throwable,
                 metadata = if (type == Type.DISCORD_REQUEST_ERROR_UNKNOWN) {
                     metadataOf(requestUrl, status, contentType, response?.raw()?.header("CF-Ray"))
@@ -270,7 +276,10 @@ class RestApiError private constructor(
                 throwable is TimeoutException -> Type.TIMEOUT
                 else -> Type.OTHER
             }
-            return RestApiError(type, null, 0, throwable.message, null, false, emptyMap(), null, null, null, throwable)
+            return RestApiError(
+                type, null, 0, throwable.message, null, false, emptyMap(),
+                null, null, null, null, null, throwable,
+            )
         }
 
         /**

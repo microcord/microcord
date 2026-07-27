@@ -6,6 +6,8 @@ import android.view.View
 import android.widget.TextView
 import com.discord.BuildConfig
 import com.discord.R
+import com.discord.i18n.FormatUtils
+import com.discord.i18n.i18nFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -32,11 +34,26 @@ object AppFatalCrash {
         val view = activity.layoutInflater.inflate(R.layout.widget_fatal_crash, null)
         activity.setContentView(view)
 
-        view.setText(R.id.fatal_crash_source, R.string.crash_source, crashSource)
-        view.setText(R.id.fatal_crash_time, R.string.crash_timestamp, gmtTimestamp())
-        view.setText(R.id.fatal_crash_app_version, R.string.crash_app_version, BuildConfig.VERSION_NAME)
-        view.setText(R.id.fatal_crash_device, R.string.crash_device, "${Build.MODEL} ${Build.PRODUCT}")
-        view.setText(R.id.fatal_crash_os_version, R.string.crash_device_version, Build.VERSION.SDK_INT.toString())
+        view.setText(R.id.fatal_crash_source, R.string.crash_source, "source", crashSource)
+        view.setText(R.id.fatal_crash_time, R.string.crash_timestamp, "timestamp", gmtTimestamp())
+        view.setText(
+            R.id.fatal_crash_app_version,
+            R.string.crash_app_version,
+            "version",
+            BuildConfig.VERSION_NAME,
+        )
+        view.setText(
+            R.id.fatal_crash_device,
+            R.string.crash_device,
+            "device",
+            "${Build.MODEL} ${Build.PRODUCT}",
+        )
+        view.setText(
+            R.id.fatal_crash_os_version,
+            R.string.crash_device_version,
+            "version",
+            Build.VERSION.SDK_INT.toString(),
+        )
     }
 
     private fun gmtTimestamp(): String {
@@ -45,7 +62,12 @@ object AppFatalCrash {
         return "${format.format(Date())} GMT"
     }
 
-    private fun View.setText(viewId: Int, stringResId: Int, argument: String) {
-        findViewById<TextView>(viewId)?.text = context.getNamedFormatString(stringResId, argument)
+    /**
+     * Each of these strings carries a differently-named `{token}` (`{source}`, `{timestamp}`,
+     * `{version}`, `{device}`), so the name has to travel with the value: [FormatUtils] substitutes
+     * by name, not by position.
+     */
+    private fun View.setText(viewId: Int, stringResId: Int, placeholder: String, argument: String) {
+        findViewById<TextView>(viewId)?.text = context.i18nFormat(stringResId, placeholder to argument)
     }
 }

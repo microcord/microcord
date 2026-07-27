@@ -27,11 +27,25 @@ object AppScreenRouter {
     /** Marks an intent as an activity restart triggered by a settings change, not by the user. */
     const val EXTRA_RECREATE = "com.discord.intent.extra.EXTRA_RECREATE"
 
-    /** Builds the intent that opens [screen] inside [AppActivity]. */
+    /**
+     * Builds the intent that opens [screen] inside [AppActivity].
+     *
+     * Targets the **base** [AppActivity], never [AppActivity.Main]. `Main` is exported, and
+     * [EXTRA_SCREEN] names a fragment that the receiver instantiates with the sending intent's own
+     * extras as its arguments — so honouring it on an exported component would let any installed
+     * app show any fragment with attacker-chosen arguments. `WidgetIncomingShare` makes that
+     * concretely exploitable: it reads a `uris` argument and opens each one with our own
+     * `contentResolver`, which turns the primitive into private-file exfiltration.
+     *
+     * The base activity is declared `exported="false"`, so only this process can address it, and
+     * [AppActivity.consumeIntent] additionally refuses to read [EXTRA_SCREEN] when it is running as
+     * `Main`. Both halves are needed: the manifest stops the intent arriving, the guard stops it
+     * mattering if a future change re-exports something.
+     */
     fun createScreenIntent(context: Context, screen: Class<out Fragment>, extras: Intent? = null): Intent {
         AppLog.recordNavigation(context.javaClass.simpleName, screen.simpleName)
         return Intent(extras ?: Intent())
-            .setClass(context, AppActivity.Main::class.java)
+            .setClass(context, AppActivity::class.java)
             .putExtra(EXTRA_SCREEN, screen)
     }
 

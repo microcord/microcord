@@ -5,10 +5,10 @@ import android.text.Spanned
 import android.text.style.LeadingMarginSpan
 import com.discord.R
 import com.discord.simpleast.core.node.Node
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.textprocessing.dpToPixels
 import com.discord.utilities.textprocessing.spans.BlockBackgroundSpan
 import com.discord.utilities.textprocessing.spans.VerticalPaddingSpan
-import com.discord.utilities.textprocessing.themedColor
 
 /**
  * Card-like background used by fenced code blocks.
@@ -31,15 +31,15 @@ class BlockBackgroundNode<RC : BasicRenderContext>(
 
         val context = renderContext.context
         val backgroundColor = when {
-            isRevealed -> themedColor(context, R.attr.theme_chat_code)
+            isRevealed -> ColorCompat.getThemedColor(context, R.attr.theme_chat_code)
             else -> (renderContext as? SpoilerNode.RenderContext)?.spoilerColorRes
-                ?: themedColor(context, R.attr.theme_chat_spoiler_bg)
+                ?: ColorCompat.getThemedColor(context, R.attr.theme_chat_spoiler_bg)
         }
 
         builder.setSpan(
             BlockBackgroundSpan(
                 fillColor = backgroundColor,
-                borderColor = themedColor(context, R.attr.theme_chat_codeblock_border),
+                borderColor = ColorCompat.getThemedColor(context, R.attr.theme_chat_codeblock_border),
                 borderWidth = dpToPixels(context, BORDER_WIDTH_DP),
                 cornerRadius = dpToPixels(context, CORNER_RADIUS_DP),
                 leftMargin = if (inQuote) BlockQuoteNode.totalLeftMargin(context) else 0,

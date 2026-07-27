@@ -6,11 +6,11 @@ import android.animation.ValueAnimator
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
-import android.os.Bundle
 import android.graphics.PointF
 import android.graphics.Rect
 import android.graphics.drawable.Animatable
 import android.net.Uri
+import android.os.Bundle
 import android.view.GestureDetector
 import android.view.MenuItem
 import android.view.MotionEvent
@@ -31,6 +31,7 @@ import com.discord.app.appViewModels
 import com.discord.i18n.i18nFormat
 import com.discord.player.MediaSource
 import com.discord.player.MediaType
+import com.discord.utilities.embed.EmbedResourceUtils
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.io.UserDownloadManager
@@ -42,7 +43,6 @@ import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.view.ToastManager
 import com.discord.utilities.view.extensions.addOnHeightChangedListener
 import com.discord.views.ThemedColor
-import com.discord.widgets.chat.list.adapter.EmbedMedia
 import com.facebook.drawee.controller.BaseControllerListener
 import com.facebook.drawee.drawable.ScalingUtils
 import com.facebook.imagepipeline.image.ImageInfo
@@ -740,7 +740,7 @@ internal fun launchArgs(attachment: MessageAttachment): MediaLaunchArgs {
 }
 
 internal fun launchArgs(embed: MessageEmbed): MediaLaunchArgs {
-    val preview = EmbedMedia.previewImage(embed)
+    val preview = with(EmbedResourceUtils) { embed.getPreviewImage() }
     return MediaLaunchArgs(
         title = embed.title,
         uri = embed.url,

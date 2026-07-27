@@ -38,10 +38,19 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <!-- Voice audio routing; from API 31 the runtime equivalent is BLUETOOTH_CONNECT (Phase 11). -->
+    <!--
+      Voice audio routing.
+
+      BLUETOOTH is install-time and was removed in API 31, hence maxSdkVersion. On its own that
+      leaves Bluetooth routing dead on every device this build actually targets (targetSdk 36), so
+      BLUETOOTH_CONNECT — its runtime replacement — is declared alongside it. `AudioPermissions`
+      accepts either, and every Bluetooth call in DiscordAudioManager degrades safely when neither
+      is granted. The runtime request itself still needs adding to AppPermissions.
+    -->
     <uses-permission
         android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <!-- Runtime permissions requested by com.discord.app.AppPermissions. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />

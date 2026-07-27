@@ -193,6 +193,52 @@ when a check was not run or no device was available.
 - Fix shared root causes rather than adding guards to individual screens.
 - Keep the project buildable at each handoff.
 
+## Interruption Discipline
+
+Agents in this project are routinely killed mid-task by session limits. Assume you
+will be interrupted without warning and work so that an interruption costs nothing.
+
+- **One file at a time.** Finish a file and make it self-consistent before opening
+  the next. Never leave two files half-written.
+- **Stop between files, never inside one.** A truncated file is worse than a missing
+  one: it breaks the build for every other agent, not just your own work. A single
+  stray `}` in `CallModel.kt` once produced 22 cascading errors across the tree.
+- **Deliver the highest-value slice first**, verify it, and report. Do not spread
+  effort thinly across a whole cluster hoping to finish it. Finishing one third of
+  an assignment properly beats starting all of it.
+- **Refuse work that can only produce a placeholder.** If a class's collaborators do
+  not exist yet, say so and build the collaborators, or hand back a spec. An inert
+  stub reads as progress and is worse than an honest gap.
+- **End every report with a resumable task list** — one line per remaining file,
+  naming the target path, the reference source path, and what it needs. It must be
+  actionable by a fresh agent that has none of your context, because that is exactly
+  who will pick it up.
+
+## Recurring Traps
+
+Every one of these has cost this project a build or a device crash at least once. They are cheap
+to avoid and expensive to diagnose, because none of them looks wrong when you read it back.
+
+- **Kotlin block comments nest.** A slash-star anywhere inside a KDoc block — including in prose,
+  e.g. writing an endpoint path with a wildcard — opens a second comment, and the closing delimiter
+  then closes only the inner one. The file runs unterminated to EOF and the compiler reports the
+  error hundreds of lines away. Equally, a KDoc containing a star-slash *terminates early*; that
+  once produced 43 syntax errors from one comment.
+- **Android's ICU regex engine rejects patterns the JVM accepts.** A bare `}` is the usual one —
+  escape both braces. A JVM unit test structurally cannot catch this; only a device/instrumentation
+  test can. This has caused a fatal crash on device.
+- **`BehaviorSubject.create<T?>(null)` silently binds to the wrong inherited overload** —
+  `Observable.create(OnSubscribe)` — and then `onNext` is unresolved. Write `create(null as T?)`.
+- **Decompilers print enum constants alphabetically.** Ordinals are wire values in this codebase;
+  an ordinal read from decompiled source rather than `<clinit>` bytecode is a guess. This has bitten
+  several separate reconstructions.
+- **Gson never runs Kotlin body initialisers.** A `val x = expr` in a model body is null or zero
+  after deserialisation. Use `get()` and document it as a deliberate divergence.
+- **Store state must be mutated on the dispatcher thread.** Route through `dispatcher.schedule { }`.
+  Violating this caused a fatal crash in `App.onCreate`.
+- **Hiding a UI entry point is not gating it.** If a screen must not ship, gate the screen itself,
+  not the menu row that opens it.
+
 ## Documentation Discipline
 
 Update `PLAN.md` when any of these change:

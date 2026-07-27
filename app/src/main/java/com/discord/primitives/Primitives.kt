@@ -38,6 +38,7 @@ typealias SkuId = Long
 /** Subscription plan id. */
 typealias PlanId = Long
 
+/** Identifier of a `Channel.ForumTag` within a forum channel. */
 typealias ForumTagId = Long
 
 typealias GuildBoostSlotId = Long

@@ -14,6 +14,7 @@ import com.discord.models.user.CoreUser
 import com.discord.models.user.MeUser
 import com.discord.models.user.User
 import com.discord.nullserializable.NullSerializable
+import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.time.Clock
 import com.discord.utilities.time.ClockFactory
 import java.security.MessageDigest
@@ -39,10 +40,6 @@ object UserUtils {
 
     /** Accounts younger than this are flagged as new in safety surfaces. */
     private const val NEW_USER_THRESHOLD_MS = 604_800_000L
-
-    private const val DISCORD_EPOCH = 1_420_070_400_000L
-
-    private const val SNOWFLAKE_TIMESTAMP_SHIFT = 22
 
     // User flag bits, in the order the reference declares the predicates.
     private const val FLAG_STAFF = 1
@@ -212,7 +209,7 @@ object UserUtils {
         UtcDateTime(createdAtMs) <= date
 
     private val User.createdAtMs: Long
-        get() = (id ushr SNOWFLAKE_TIMESTAMP_SHIFT) + DISCORD_EPOCH
+        get() = SnowflakeUtils.toTimestamp(id)
 
     // endregion
 

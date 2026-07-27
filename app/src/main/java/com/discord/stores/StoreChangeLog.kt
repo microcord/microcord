@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
 import com.discord.R
+import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.string.getStringByLocale
 import com.discord.utilities.time.Clock
 
@@ -171,7 +172,7 @@ class StoreChangeLog(
 
     /** True while *either* the account or this install is younger than five days. */
     private fun isTooYoung(userId: Long): Boolean {
-        val accountCreatedAt = (userId ushr 22) + DISCORD_EPOCH
+        val accountCreatedAt = SnowflakeUtils.toTimestamp(userId)
         val now = clock.currentTimeMillis()
         return now < accountCreatedAt + MIN_VIEW_AGE_MS ||
             now < notices.firstUseTimestamp + MIN_VIEW_AGE_MS
@@ -184,7 +185,6 @@ class StoreChangeLog(
         private const val MIN_VIEW_AGE_MS = 432_000_000L
         private const val SINCE_LAST_PERIOD_MS = 604_800_000L
         private const val FIXED_REQUEST_TIMESTAMP = 1337L
-        private const val DISCORD_EPOCH = 1_420_070_400_000L
         private const val EXPERIMENT_BODY_RESOURCE = "change_log_md_experiment_body"
         private const val EXPERIMENT_DATE_RESOURCE = "change_log_md_experiment_date"
     }

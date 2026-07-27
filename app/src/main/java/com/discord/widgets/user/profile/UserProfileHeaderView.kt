@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Color
 import android.net.Uri
 import android.util.AttributeSet
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -16,6 +15,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.UsernameView
@@ -56,7 +56,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         secondaryName = requireNotNull(findViewById(R.id.user_profile_header_secondary_name))
         backgroundColor = context.obtainStyledAttributes(attrs, intArrayOf(R.attr.user_profile_header_background_color)).run {
             try {
-                getColor(0, themedColor(R.attr.colorBackgroundTertiary))
+                getColor(0, ColorCompat.getThemedColor(context, R.attr.colorBackgroundTertiary))
             } finally {
                 recycle()
             }
@@ -157,5 +157,4 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
 
     private class BadgeHolder(val image: ImageView) : RecyclerView.ViewHolder(image)
 
-    private fun themedColor(attr: Int) = TypedValue().also { context.theme.resolveAttribute(attr, it, true) }.data
 }

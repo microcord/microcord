@@ -7,14 +7,13 @@ import android.text.SpannableStringBuilder
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.util.AttributeSet
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.cardview.widget.CardView
-import androidx.core.content.ContextCompat
 import com.discord.R
+import com.discord.views.ThemedColor
 
 class CommunityGetStartedInformationView @JvmOverloads constructor(
     context: Context,
@@ -63,7 +62,7 @@ class CommunityGetStartedInformationView @JvmOverloads constructor(
             output.append(match.groups[1]?.value ?: match.groups[2]!!.value)
             output.setSpan(StyleSpan(Typeface.BOLD), start, output.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
             output.setSpan(
-                ForegroundColorSpan(themedColor(R.attr.colorTextLink)),
+                ForegroundColorSpan(ThemedColor.resolve(context, R.attr.colorTextLink)),
                 start,
                 output.length,
                 Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
@@ -71,11 +70,6 @@ class CommunityGetStartedInformationView @JvmOverloads constructor(
             end = match.range.last + 1
         }
         return output.append(source, end, source.length)
-    }
-
-    private fun themedColor(attribute: Int): Int = TypedValue().let { value ->
-        context.theme.resolveAttribute(attribute, value, true)
-        if (value.resourceId != 0) ContextCompat.getColor(context, value.resourceId) else value.data
     }
 
     private companion object {

@@ -19,6 +19,7 @@ import com.discord.app.AppFragment
 import com.discord.app.AppLog
 import com.discord.app.AppScreenRouter
 import com.discord.i18n.setI18nText
+import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.view.extensions.fadeIn
@@ -35,7 +36,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.max
-import kotlin.math.roundToInt
 
 /**
  * The branded, full-bleed variant of the changelog, used for a headline feature launch.
@@ -246,7 +246,6 @@ class WidgetChangeLogSpecial : AppFragment(R.layout.widget_change_log_special) {
         }
     }
 
-    private fun dpToPixels(dp: Int): Int = (dp * resources.displayMetrics.density).roundToInt()
 
     private fun track(
         event: String,

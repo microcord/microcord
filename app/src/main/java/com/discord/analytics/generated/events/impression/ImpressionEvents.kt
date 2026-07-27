@@ -93,3 +93,22 @@ data class TrackImpressionHubEmailSignup(
 
     override val trackImpressionMetadata: TrackImpressionMetadata? = null
 }
+
+/** `impression_user_verify_phone` — `WidgetUserPhoneVerify.loggingConfig`. */
+class TrackImpressionUserVerifyPhone :
+    AnalyticsSchema,
+    TrackGuildReceiver,
+    TrackChannelReceiver,
+    TrackLocationMetadataReceiver,
+    TrackImpressionMetadataReceiver {
+
+    override val analyticsSchemaTypeName: String = "impression_user_verify_phone"
+
+    override var trackGuild: TrackGuild? = null
+
+    override val trackChannel: TrackChannel? = null
+
+    override val trackLocationMetadata: TrackLocationMetadata? = null
+
+    override val trackImpressionMetadata: TrackImpressionMetadata? = null
+}

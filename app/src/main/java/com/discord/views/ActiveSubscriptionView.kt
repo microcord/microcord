@@ -15,6 +15,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import com.discord.R
 import com.discord.models.domain.ModelSubscription
+import com.discord.utilities.drawable.getThemedDrawableRes
 import com.google.android.material.button.MaterialButton
 
 class ActiveSubscriptionView(context: Context, attrs: AttributeSet?) : FrameLayout(context, attrs, 0) {
@@ -59,7 +60,7 @@ class ActiveSubscriptionView(context: Context, attrs: AttributeSet?) : FrameLayo
         }
         headerBackground.setImageResource(activeSubscriptionType.background(visualState))
         headerIcon.setImageResource(activeSubscriptionType.image(visualState))
-        headerLogo.setImageResource(themedDrawable(activeSubscriptionType.headerLogo))
+        headerLogo.setImageResource(context.getThemedDrawableRes(activeSubscriptionType.headerLogo))
         headerLogo.contentDescription = context.getString(activeSubscriptionType.label)
         headerText.text = description(activeSubscriptionType, status, priceText, guildBoostCount)
 
@@ -165,11 +166,6 @@ class ActiveSubscriptionView(context: Context, attrs: AttributeSet?) : FrameLayo
             result.setSpan(StyleSpan(Typeface.BOLD), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
         return result
-    }
-
-    private fun themedDrawable(attribute: Int) = TypedValue().let {
-        context.theme.resolveAttribute(attribute, it, true)
-        it.resourceId
     }
 
     enum class ActiveSubscriptionType(

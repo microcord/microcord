@@ -79,9 +79,11 @@ class GuildDeleteFeedbackSubmitter(
         private const val REPORT_TYPE = "Guild Deletion"
 
         /**
-         * Reference: `AnalyticsTracker.userReportSubmitted`.
-         * `com.discord.utilities.analytics.AnalyticsTracker` is not reconstructed, so the report is
-         * assembled and handed here rather than invented onto another transport.
+         * Reference: `AnalyticsTracker.userReportSubmitted(reportName, guildId, reason, feedback,
+         * skipped)` → `track("user_report_submitted", …)` with the null dimensions filtered out.
+         * `AnalyticsTracker` exists in this project but does **not** declare that method, and it is
+         * outside this agent's file ownership, so the report is assembled and handed here rather
+         * than invented onto another transport. **Point this at the tracker when the method lands.**
          */
         @JvmStatic
         var reportSink: (Report) -> Unit = { }

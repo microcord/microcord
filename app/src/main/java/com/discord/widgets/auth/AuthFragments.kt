@@ -16,6 +16,8 @@ import com.discord.app.AppFragment
 import androidx.fragment.app.viewModels
 import com.discord.R
 import com.discord.app.AppViewFlipper
+import com.discord.utilities.captcha.CaptchaHelper
+import com.discord.utilities.uri.UriHandler
 import com.discord.views.CodeVerificationView
 import com.discord.views.LoadingButton
 import com.discord.views.ScreenTitleView
@@ -69,9 +71,25 @@ abstract class AuthFragment(
     protected open fun captureState() = Unit
     protected open fun render(state: AuthUiState) = Unit
 
-    protected fun submit(action: AuthAction) {
+    /**
+     * The action a captcha is currently blocking, replayed once the challenge is solved.
+     *
+     * Deliberately in memory only: it can hold a password, so it must never reach saved instance
+     * state or a log. If the process dies mid-challenge the user re-enters the form, which is the
+     * correct trade.
+     */
+    private var captchaBlockedAction: AuthAction? = null
+
+    private val captchaLauncher = WidgetAuthCaptcha.registerForResult(this) { payload ->
+        captchaBlockedAction?.let { blocked ->
+            captchaBlockedAction = null
+            submit(blocked, payload)
+        }
+    }
+
+    protected fun submit(action: AuthAction, captcha: CaptchaHelper.CaptchaPayload? = null) {
         model.update { it.copy(loading = true, fieldErrors = emptyMap(), message = null) }
-        actions.submit(action) { result ->
+        actions.submit(action, captcha) { result ->
             if (!isAdded) return@submit
             requireActivity().runOnUiThread {
                 when (result) {
@@ -85,6 +103,13 @@ abstract class AuthFragment(
                     is AuthResult.Challenge -> {
                         model.update { it.copy(loading = false) }
                         actions.navigate(result.route, result.state.copy(route = result.route))
+                    }
+                    // Hold the action, run the challenge, and re-submit it verbatim afterwards so
+                    // the user never re-types the form.
+                    is AuthResult.CaptchaRequired -> {
+                        model.update { it.copy(loading = false) }
+                        captchaBlockedAction = action
+                        WidgetAuthCaptcha.launch(requireContext(), captchaLauncher, result.error)
                     }
                 }
             }
@@ -441,10 +466,46 @@ class WidgetAuthForceChangePassword : AuthFragment(R.layout.widget_settings_acco
     override fun render(state: AuthUiState) = requireView().findViewById<LoadingButton>(R.id.change_password_save).setIsLoading(state.loading)
 }
 
+/**
+ * Landing screen for a `discord.com/reset?token=…` link.
+ *
+ * The app never takes the new password itself: the reference hands the reset token straight to the
+ * web flow, which is also where the password-strength rules and the session invalidation live.
+ * Both buttons therefore finish the screen — one after opening the web page, one without.
+ *
+ * The token is a single-use credential. It is read from the launch intent, kept only in memory for
+ * the lifetime of this screen, appended to the reset URL, and never logged or persisted.
+ */
 class WidgetAuthResetPassword : AuthFragment(R.layout.widget_auth_reset_password, AuthRoute.RESET_PASSWORD) {
+
+    private val token: String
+        get() = model.state.resetToken
+            ?: arguments?.getString(EXTRA_TOKEN)
+            ?: mostRecentIntent.getStringExtra(EXTRA_TOKEN)
+            ?: ""
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        view.findViewById<MaterialButton>(R.id.auth_reset_password_submit).setOnClickListener { submit(AuthAction.ResetPassword(model.state.resetToken.orEmpty())) }
-        view.findViewById<MaterialButton>(R.id.auth_reset_password_back).setOnClickListener { actions.navigate(AuthRoute.LOGIN) }
+        view.findViewById<MaterialButton>(R.id.auth_reset_password_submit).setOnClickListener {
+            val resetToken = token
+            if (resetToken.isEmpty()) return@setOnClickListener
+            UriHandler.handle(requireContext(), AuthRequests.PASSWORD_RESET_URL + resetToken)
+            actions.close()
+        }
+        view.findViewById<MaterialButton>(R.id.auth_reset_password_back).setOnClickListener { actions.close() }
+    }
+
+    override fun render(state: AuthUiState) {
+        // Nothing on this screen is token-derived: showing the token would put a live credential
+        // on screen (and into screenshots). The message slot is only used for the expiry notice.
+        val submit = requireView().findViewById<MaterialButton>(R.id.auth_reset_password_submit)
+        submit.isEnabled = token.isNotEmpty()
+    }
+
+    companion object {
+        const val EXTRA_TOKEN = "INTENT_EXTRA_TOKEN"
+
+        /** Builds the arguments for a reset link opened from outside the app. */
+        fun arguments(token: String) = Bundle().apply { putString(EXTRA_TOKEN, token) }
     }
 }
 

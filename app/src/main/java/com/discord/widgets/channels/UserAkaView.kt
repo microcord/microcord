@@ -13,6 +13,7 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.view.doOnPreDraw
 import com.discord.R
 import com.discord.models.member.GuildMember
+import com.discord.utilities.dimen.dpToPixels
 import com.discord.views.PileView
 import com.discord.views.user.mediaProxySize
 
@@ -65,7 +66,6 @@ class UserAkaView @JvmOverloads constructor(
         }
     }
 
-    private fun dpToPixels(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
 
 internal fun akaNicknames(guildMembers: List<GuildMember>): List<String> =

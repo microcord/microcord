@@ -5,6 +5,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.botuikit.SelectItem
+import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.view.extensions.setEnabledAlpha
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.widgets.botuikit.views.setEmojiOrHide
@@ -60,21 +61,19 @@ class SelectComponentBottomSheetItemViewHolder(
 
         icon.setEmojiOrHide(data.selectItem.emoji, emojiAnimationsEnabled)
 
-        val verticalPadding = dp(12)
-        val bottomPadding = if (data.selectItem.description == null) dp(12) else 0
+        val verticalPadding = dpToPixels(12)
+        val bottomPadding = if (data.selectItem.description == null) dpToPixels(12) else 0
         // A row with no emoji in an icon-bearing list is indented to the icon column instead.
-        val startPadding = if (hasIcons && data.selectItem.emoji == null) dp(40) else 0
+        val startPadding = if (hasIcons && data.selectItem.emoji == null) dpToPixels(40) else 0
         title.setPadding(startPadding, verticalPadding, 0, bottomPadding)
-        description.setPadding(startPadding, 0, 0, dp(12))
+        description.setPadding(startPadding, 0, 0, dpToPixels(12))
 
         dividerIcon.visibility = if (hasIcons && !lastItem) View.VISIBLE else View.GONE
         divider.visibility = if (!hasIcons && !lastItem) View.VISIBLE else View.GONE
 
-        itemView.minimumHeight = dp(if (hasDescriptions) 62 else 46)
+        itemView.minimumHeight = dpToPixels(if (hasDescriptions) 62 else 46)
     }
 
-    private fun dp(value: Int): Int =
-        (value * itemView.resources.displayMetrics.density + 0.5f).toInt()
 
     private companion object {
         private const val DISABLED_ALPHA = 0.3f

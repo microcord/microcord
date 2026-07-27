@@ -17,9 +17,9 @@ import com.discord.i18n.i18nFormat
 import com.discord.i18n.i18nPlural
 import com.discord.models.guild.Guild
 import com.discord.tooltips.SparkleView
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
-import com.discord.utilities.textprocessing.themedColor
 import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
 import com.discord.views.ServerFolderView
 import com.facebook.drawee.view.SimpleDraweeView
@@ -85,10 +85,10 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
             } else {
                 avatarWrap.setBackgroundResource(R.drawable.drawable_circle_black)
                 avatarWrap.backgroundTintList = ColorStateList.valueOf(
-                    themedColor(avatarWrap.context, R.attr.colorBackgroundSecondary),
+                    ColorCompat.getThemedColor(avatarWrap.context, R.attr.colorBackgroundSecondary),
                 )
                 avatar.imageTintList = ColorStateList.valueOf(
-                    themedColor(itemView.context, R.attr.primary_300),
+                    ColorCompat.getThemedColor(itemView.context, R.attr.primary_300),
                 )
             }
         }
@@ -224,7 +224,7 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
             if (data.isOpen) {
                 if (shouldAnimate) folderView.animateState(R.anim.anim_folder_slide_in_down)
                 else folderView.showCurrentState()
-                val tint = data.color ?: themedColor(folderView.context, R.attr.color_brand_500)
+                val tint = data.color ?: ColorCompat.getThemedColor(folderView.context, R.attr.color_brand_500)
                 folderView.folderImage.imageTintList =
                     ColorStateList.valueOf(tint or ALPHA_OPAQUE)
             } else {
@@ -332,7 +332,7 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
             if (selectionChanged) {
                 avatarText.setTextColor(
                     if (data.isSelected) ContextCompat.getColor(avatarText.context, R.color.white)
-                    else themedColor(avatarText.context, R.attr.colorHeaderPrimary),
+                    else ColorCompat.getThemedColor(avatarText.context, R.attr.colorHeaderPrimary),
                 )
             }
 
@@ -385,7 +385,7 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
                 return
             }
             applicationStatus.backgroundTintList = ColorStateList.valueOf(
-                themedColor(
+                ColorCompat.getThemedColor(
                     applicationStatus.context,
                     if (isInFolder) R.attr.colorBackgroundSecondary else R.attr.colorBackgroundTertiary,
                 ),
@@ -436,7 +436,7 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
                 else -> {
                     avatarWrap.setBackgroundResource(R.drawable.drawable_circle_black)
                     avatarWrap.backgroundTintList = ColorStateList.valueOf(
-                        themedColor(
+                        ColorCompat.getThemedColor(
                             avatarWrap.context,
                             if (isInFolder) R.attr.colorBackgroundSecondary
                             else R.attr.colorBackgroundPrimary,

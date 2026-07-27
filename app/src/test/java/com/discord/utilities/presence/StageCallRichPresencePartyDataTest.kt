@@ -53,13 +53,15 @@ class StageCallRichPresencePartyDataTest {
 
     @Test
     fun `flags are read as hexadecimal`() {
-        // "a" is 10 == verified|speaker, and is a different value read as decimal.
+        // "a" is 0xa == 10 == 8|2, so only the partnered bit (2) is set. Read as decimal it does
+        // not parse at all, which is what makes it a proof of the radix — the reference packs and
+        // unpacks this field with `Long.toString(flags, 16)` / `Long.parseLong(s, 16)`.
         val party = activityWithParty("stage:1:2:a:3", listOf(0L, 0L))
             .stageChannelRichPresencePartyData
 
-        assertEquals(true, party?.userIsSpeaker)
-        assertEquals(false, party?.guildIsPartnered)
-        assertEquals(true, party?.guildIsVerified)
+        assertEquals(false, party?.userIsSpeaker)
+        assertEquals(true, party?.guildIsPartnered)
+        assertEquals(false, party?.guildIsVerified)
     }
 
     @Test

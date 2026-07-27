@@ -31,9 +31,20 @@ sealed class GuildScheduledEventLocationInfo {
         }
 
     companion object {
-        fun buildLocationInfo(event: GuildScheduledEvent, channel: Channel?) =
+        fun buildLocationInfo(event: GuildScheduledEvent, channel: Channel?): GuildScheduledEventLocationInfo =
             if (event.entityType == GuildScheduledEventEntityType.EXTERNAL) {
                 ExternalLocation(event.entityMetadata?.location.orEmpty())
+            } else {
+                ChannelLocation(channel)
+            }
+
+        /** The unsaved-form counterpart, used by the create/edit preview. */
+        fun buildLocationInfo(
+            guildScheduledEventModel: GuildScheduledEventModel,
+            channel: Channel?,
+        ): GuildScheduledEventLocationInfo =
+            if (guildScheduledEventModel.entityType == GuildScheduledEventEntityType.EXTERNAL) {
+                ExternalLocation(guildScheduledEventModel.entityMetadata?.location.orEmpty())
             } else {
                 ChannelLocation(channel)
             }

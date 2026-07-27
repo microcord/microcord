@@ -6,8 +6,8 @@ import android.text.format.DateUtils
 import android.text.style.BackgroundColorSpan
 import com.discord.R
 import com.discord.simpleast.core.node.Node
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.spans.ClickableSpan
-import com.discord.utilities.textprocessing.themedColor
 import java.text.DateFormat
 import java.util.Date
 
@@ -51,7 +51,7 @@ class TimestampNode<T : TimestampNode.RenderContext>(
     override fun render(builder: SpannableStringBuilder, renderContext: T) {
         val styles = listOf(
             ClickableSpan(null, false) { renderContext.onTimestampClicked(full) },
-            BackgroundColorSpan(themedColor(renderContext.context, R.attr.colorBackgroundModifierAccent)),
+            BackgroundColorSpan(ColorCompat.getThemedColor(renderContext.context, R.attr.colorBackgroundModifierAccent)),
         )
         val start = builder.length
         builder.append(formatted)

@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
+import com.discord.utilities.dimen.dpToPixels
 import com.discord.views.user.avatarUrl
 import com.discord.views.user.setAvatar
 import com.facebook.drawee.view.SimpleDraweeView
@@ -30,7 +31,7 @@ class StageCardSpeakersView @JvmOverloads constructor(
         val recycler = requireNotNull<SpeakersRecyclerView>(findViewById(R.id.discovery_speakers_recycler))
         recycler.adapter = adapter
         recycler.layoutManager = GridLayoutManager(recycler.context, 2)
-        recycler.addItemDecoration(SpeakerSpacingDecoration(dp(4), dp(8)))
+        recycler.addItemDecoration(SpeakerSpacingDecoration(dpToPixels(4), dpToPixels(8)))
         recycler.setHasFixedSize(false)
     }
 
@@ -42,7 +43,6 @@ class StageCardSpeakersView @JvmOverloads constructor(
         }
     }
 
-    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     private inner class SpeakersAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         var items: List<Item> = emptyList()

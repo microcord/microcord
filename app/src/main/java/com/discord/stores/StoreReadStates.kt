@@ -15,6 +15,7 @@ import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreThreadsActiveJoined.ActiveJoinedThread
 import com.discord.stores.updates.ObservationDeck
+import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.rx.appSubscribe
@@ -386,8 +387,13 @@ class StoreReadStates(
         dispatcher.schedule {
             val loaded = getLoadedMessageIds(channelId)
             val newestOlder = loaded.filter { it < messageId }.maxOrNull()
-            val ackMessageId = newestOlder
-                ?: (((messageId ushr 22) - 1L - DISCORD_EPOCH) shl 22)
+            // Reproduces a reference bug verbatim: `atPreviousMillisecond` subtracts the epoch
+            // from a value that is already epoch-relative, so this fallback bound is a large
+            // negative id, not "one millisecond before the message". Verified at bytecode level
+            // (`javap -c` of `SnowflakeUtils`); the intended value is
+            // `fromTimestamp(toTimestamp(messageId) - 1)`. Not fixed here — see
+            // `docs/parity-audit/followups.md`, "Reference bugs reproduced verbatim".
+            val ackMessageId = newestOlder ?: SnowflakeUtils.atPreviousMillisecond(messageId)
             val ack = Ack(ackMessageId, viewed = false, isLockedAck = true)
             updateAck(channelId, ack)
             val mentionCount = loaded.count { it >= messageId }
@@ -525,12 +531,14 @@ class StoreReadStates(
         timestamp == null || messageId == null || snowflakeTimestamp(messageId) >= timestamp.dateTimeMillis
 
     private fun isNewer(messageId: Long, other: Long?) = other == null || messageId > other
-    private fun timestampToSnowflake(timestamp: Long) = (timestamp - DISCORD_EPOCH).coerceAtLeast(0) shl 22
-    private fun snowflakeTimestamp(id: Long) = (id ushr 22) + DISCORD_EPOCH
+    // Clamping the timestamp rather than the result keeps this identical to the open-coded
+    // `(t - EPOCH).coerceAtLeast(0) shl 22`: below the epoch both yield 0.
+    private fun timestampToSnowflake(timestamp: Long) =
+        SnowflakeUtils.fromTimestamp(timestamp.coerceAtLeast(SnowflakeUtils.DISCORD_EPOCH))
+    private fun snowflakeTimestamp(id: Long) = SnowflakeUtils.toTimestamp(id)
 
     companion object {
         const val UNREAD_MARKER_CACHE_KEY = "UNREAD_MESSAGE_MARKER_V3"
         const val ACKS_CACHE_KEY = "MOST_RECENT_ACKS_V3"
-        private const val DISCORD_EPOCH = 1_420_070_400_000L
     }
 }

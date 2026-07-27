@@ -16,6 +16,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.activity.ActivityType
 import com.discord.api.presence.ClientStatus
+import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.views.StatusView
 import com.discord.views.UsernameView
 import com.discord.views.user.avatarUrl
@@ -62,7 +64,7 @@ internal class ChannelMembersListAdapter(
                 is ChannelMemberListRow.AddMember -> bindAction(row.title, R.drawable.ic_add_person_16dp, onAddMemberClicked)
                 is ChannelMemberListRow.JoinLeaveThread -> bindAction(
                     if (row.joined) R.string.leave_thread else R.string.join_thread,
-                    if (row.joined) themedDrawable(R.attr.ic_exit_to_app) else themedDrawable(R.attr.ic_person_add),
+                    if (row.joined) itemView.context.getThemedDrawableRes(R.attr.ic_exit_to_app) else itemView.context.getThemedDrawableRes(R.attr.ic_person_add),
                     onJoinLeaveThreadClicked,
                     if (row.joined) R.attr.colorTextDanger else R.attr.colorInteractiveNormal,
                 )
@@ -84,7 +86,7 @@ internal class ChannelMembersListAdapter(
             avatar.setImageURI(avatarUrl(row.user, row.guildMember, itemView.resources.getDimensionPixelSize(R.dimen.avatar_size_standard)))
             name.configureUsername(row.displayName)
             name.configureTag(row.user.isBot, R.string.bot_tag_bot, row.user.publicFlags and VERIFIED_BOT_FLAG != 0)
-            name.setUsernameColor(row.guildMember?.color?.takeUnless { it == Color.BLACK || it == 0 } ?: themedColor(R.attr.primary_000))
+            name.setUsernameColor(row.guildMember?.color?.takeUnless { it == Color.BLACK || it == 0 } ?: ColorCompat.getThemedColor(itemView.context, R.attr.primary_000))
             status.setPresence(row.presence)
             status.visibility = if (row.presence == null) View.GONE else View.VISIBLE
             status.contentDescription = statusDescription(row.presence?.status)
@@ -131,7 +133,7 @@ internal class ChannelMembersListAdapter(
             text.setText(title)
             itemView.findViewById<ImageView>(R.id.channel_members_list_item_add_or_leave).apply {
                 setImageResource(icon)
-                imageTintList = ColorStateList.valueOf(themedColor(tint))
+                imageTintList = ColorStateList.valueOf(ColorCompat.getThemedColor(itemView.context, tint))
             }
             itemView.contentDescription = text.text
             itemView.isClickable = callback != null
@@ -145,15 +147,6 @@ internal class ChannelMembersListAdapter(
             else -> R.string.status_offline
         })
 
-        private fun themedColor(attribute: Int): Int = TypedValue().let {
-            itemView.context.theme.resolveAttribute(attribute, it, true)
-            it.data
-        }
-
-        private fun themedDrawable(attribute: Int): Int = TypedValue().let {
-            itemView.context.theme.resolveAttribute(attribute, it, true)
-            it.resourceId
-        }
     }
 
     private companion object {

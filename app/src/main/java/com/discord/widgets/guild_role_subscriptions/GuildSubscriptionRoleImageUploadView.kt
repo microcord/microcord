@@ -10,6 +10,7 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import com.discord.R
 import com.discord.api.role.GuildRole
 import com.discord.models.domain.emoji.toCodePoints
+import com.discord.utilities.icon.IconUtils
 import com.facebook.drawee.drawable.ScalingUtils
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.button.MaterialButton
@@ -94,7 +95,7 @@ class GuildSubscriptionRoleImageUploadView @JvmOverloads constructor(
     private fun roleIconUri(role: GuildRole?): String? = when {
         !role?.icon.isNullOrBlank() ->
             "https://cdn.discordapp.com/role-icons/${role!!.id}/${role.icon}.webp?size=${
-                mediaProxySize(resources.getDimensionPixelSize(R.dimen.avatar_size_huge))
+                IconUtils.getMediaProxySize(resources.getDimensionPixelSize(R.dimen.avatar_size_huge))
             }"
         !role?.unicodeEmoji.isNullOrBlank() -> unicodeEmojiUri(role!!.unicodeEmoji!!)
         else -> null
@@ -113,17 +114,10 @@ class GuildSubscriptionRoleImageUploadView @JvmOverloads constructor(
     }
 
     companion object {
-        private val MEDIA_PROXY_SIZES = intArrayOf(
-            16, 20, 22, 24, 28, 32, 40, 44, 48, 56, 60, 64, 80, 96, 100, 128,
-            160, 240, 256, 300, 320, 480, 512, 600, 640, 1024, 1280, 1536, 2048,
-            3072, 4096,
-        )
-
-        internal fun mediaProxySize(size: Int) = MEDIA_PROXY_SIZES.firstOrNull { it >= size } ?: 4096
 
         internal fun storeAssetImage(applicationId: Long?, imageAssetId: Long, size: Int): String? =
             applicationId?.let {
-                "https://cdn.discordapp.com/app-assets/$it/store/$imageAssetId.jpg?size=${mediaProxySize(size)}"
+                "https://cdn.discordapp.com/app-assets/$it/store/$imageAssetId.jpg?size=${IconUtils.getMediaProxySize(size)}"
             }
     }
 }

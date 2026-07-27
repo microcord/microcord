@@ -1,14 +1,12 @@
 package com.discord.widgets.friends
 
 import android.content.Context
-import android.content.Intent
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import com.discord.R
-import com.discord.app.AppActivity
 import com.google.android.material.button.MaterialButton
 
 class EmptyFriendsStateView : ConstraintLayout {
@@ -46,26 +44,20 @@ class EmptyFriendsStateView : ConstraintLayout {
         title.setTextSize(TypedValue.COMPLEX_UNIT_PX, resources.getDimension(textSize))
     }
 
+    /**
+     * Points the button at the add-friend screen, tagging the analytics event with where the empty
+     * state was shown ("Friends" from the friends tab, "Direct Messages" from the DM list).
+     *
+     * Delegates to [WidgetFriendsAdd.show] rather than building the routing intent by hand, so the
+     * "Add Friend Modal" analytics event cannot be skipped by this entry point.
+     */
     fun updateView(addFriendSource: String) {
-        addFriend.setOnClickListener { WidgetFriendsAddContract.show(context, addFriendSource) }
+        addFriend.setOnClickListener {
+            WidgetFriendsAdd.show(context, source = addFriendSource)
+        }
     }
 
     fun setOnAddFriendClicked(callback: () -> Unit) {
         addFriend.setOnClickListener { callback() }
-    }
-}
-
-internal object WidgetFriendsAddContract {
-    const val EXTRA_SCREEN = "com.discord.intent.extra.EXTRA_SCREEN"
-    const val EXTRA_SOURCE = "com.discord.intent.extra.ADD_FRIEND_SOURCE"
-    const val SCREEN = "com.discord.widgets.friends.WidgetFriendsAdd"
-
-    fun show(context: Context, source: String) {
-        context.startActivity(
-            Intent(context, AppActivity.Main::class.java)
-                .putExtra(EXTRA_SCREEN, SCREEN)
-                .putExtra(Intent.EXTRA_TEXT, null as String?)
-                .putExtra(EXTRA_SOURCE, source),
-        )
     }
 }

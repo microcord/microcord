@@ -11,7 +11,10 @@ class GuildScheduledEventStatusTypeAdapter : TypeAdapter<GuildScheduledEventStat
             reader.nextNull()
             return GuildScheduledEventStatus.UNKNOWN
         }
-        return GuildScheduledEventStatus.entries.firstOrNull { it.apiValue == reader.nextInt() }
+        // Read once. Inside the predicate this consumed a token per enum constant, so anything
+        // but the first constant's value ran off the end of the value and into the next name.
+        val apiValue = reader.nextInt()
+        return GuildScheduledEventStatus.entries.firstOrNull { it.apiValue == apiValue }
             ?: GuildScheduledEventStatus.UNKNOWN
     }
 
@@ -26,7 +29,9 @@ class GuildScheduledEventEntityTypeTypeAdapter : TypeAdapter<GuildScheduledEvent
             reader.nextNull()
             return GuildScheduledEventEntityType.UNKNOWN
         }
-        return GuildScheduledEventEntityType.entries.firstOrNull { it.apiValue == reader.nextInt() }
+        // Read once; see [GuildScheduledEventStatusTypeAdapter].
+        val apiValue = reader.nextInt()
+        return GuildScheduledEventEntityType.entries.firstOrNull { it.apiValue == apiValue }
             ?: GuildScheduledEventEntityType.UNKNOWN
     }
 

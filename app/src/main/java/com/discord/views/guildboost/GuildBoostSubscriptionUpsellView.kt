@@ -8,13 +8,13 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
 import android.util.AttributeSet
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
 import com.discord.R
 import com.discord.api.premium.PremiumTier
+import com.discord.utilities.color.ColorCompat
 import java.text.NumberFormat
 import java.util.Currency
 
@@ -85,7 +85,7 @@ class GuildBoostSubscriptionUpsellView @JvmOverloads constructor(
         )
         applyMarkup(text, Regex("\\*\\*(.+?)\\*\\*")) { StyleSpan(Typeface.BOLD) }
         applyMarkup(text, Regex("~~(.+?)~~")) {
-            arrayOf(StrikethroughSpan(), ForegroundColorSpan(themedColor(R.attr.colorHeaderSecondary)))
+            arrayOf(StrikethroughSpan(), ForegroundColorSpan(ColorCompat.getThemedColor(context, R.attr.colorHeaderSecondary)))
         }
         return text
     }
@@ -105,12 +105,6 @@ class GuildBoostSubscriptionUpsellView @JvmOverloads constructor(
                 )
             }
         }
-    }
-
-    private fun themedColor(attribute: Int): Int {
-        val value = TypedValue()
-        context.theme.resolveAttribute(attribute, value, true)
-        return value.data
     }
 
     private companion object {

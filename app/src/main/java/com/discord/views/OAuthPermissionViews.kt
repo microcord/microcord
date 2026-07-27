@@ -6,6 +6,7 @@ import android.widget.TextView
 import androidx.annotation.StringRes
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.api.auth.OAuthScope
 
 /**
  * Rendering for the OAuth2 scope rows shown on the authorization screen and on the authorized
@@ -15,9 +16,10 @@ import com.discord.R
  * rather than a silently skipped row: the authorization screen catches [InvalidScopeException] and
  * refuses to authorize an application whose permissions it cannot describe.
  *
- * Scopes are addressed by their wire name (`identify`, `guilds.join`, ...). The reference passes a
- * `com.discord.api.auth.OAuthScope` sealed type, which has not been reconstructed in this project
- * yet; once it exists, callers pass `scope.scopeName` and the mapping below is unchanged.
+ * Scopes are addressed by their wire name (`identify`, `guilds.join`, ...); the [OAuthScope]
+ * overloads below are the type-safe entry point and simply unwrap `scopeName`, matching the
+ * reference's own signature. [OAuthScope.Invalid] is rejected using the raw value it carries, not
+ * the literal `"invalid"` its `scopeName` reports, so the error names the scope the server sent.
  */
 object OAuthPermissionViews {
 
@@ -31,6 +33,18 @@ object OAuthPermissionViews {
      */
     fun setScopePermissionText(textView: TextView, scopeName: String) {
         textView.setText(scopePermissionStringRes(scopeName))
+    }
+
+    /** @throws InvalidScopeException when the scope is not one this client version knows about. */
+    fun setScopePermissionText(textView: TextView, scope: OAuthScope) {
+        textView.setText(scopePermissionStringRes(scope))
+    }
+
+    /** @throws InvalidScopeException when the scope is not one this client version knows about. */
+    @StringRes
+    fun scopePermissionStringRes(scope: OAuthScope): Int = when (scope) {
+        is OAuthScope.Invalid -> throw InvalidScopeException(scope.rawValue)
+        else -> scopePermissionStringRes(scope.scopeName)
     }
 
     /**
@@ -75,6 +89,9 @@ object OAuthPermissionViews {
 
         fun bind(scopeName: String) =
             OAuthPermissionViews.setScopePermissionText(scopeText, scopeName)
+
+        fun bind(scope: OAuthScope) =
+            OAuthPermissionViews.setScopePermissionText(scopeText, scope)
 
         companion object {
             fun create(inflater: LayoutInflater, parent: ViewGroup): ScopeViewHolder =

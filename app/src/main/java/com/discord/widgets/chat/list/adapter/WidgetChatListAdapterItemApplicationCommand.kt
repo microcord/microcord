@@ -14,6 +14,8 @@ import android.widget.Toast
 import androidx.cardview.widget.CardView
 import com.discord.R
 import com.discord.i18n.FormatUtils
+import com.discord.i18n.Hook
+import com.discord.i18n.I18nHooks
 import com.discord.models.member.GuildMember
 import com.discord.utilities.time.TimeUtils
 import com.discord.views.ThemedColor
@@ -52,12 +54,12 @@ class WidgetChatListAdapterItemApplicationCommand(
         val commandColor = ThemedColor.resolve(itemView.context, R.attr.color_brand_500)
 
         name.movementMethod = LinkMovementMethod.getInstance()
-        name.text = ChatRowText.format(
+        name.text = I18nHooks.format(
             itemView.context,
             R.string.system_message_application_command_used_short_mobile,
             mapOf("username" to authorName, "commandName" to commandName),
             mapOf(
-                "usernameOnClick" to ChatRowText.Hook(
+                "usernameOnClick" to Hook(
                     spans = listOf(StyleSpan(Typeface.BOLD), ForegroundColorSpan(authorColor)),
                     onClick = {
                         adapter.eventHandler.onMessageAuthorNameClicked(message, adapter.data.guildId)
@@ -65,7 +67,7 @@ class WidgetChatListAdapterItemApplicationCommand(
                 ),
                 // The command name is styled like a link but the reference deliberately makes it
                 // inert: there is no "run this command again" surface on mobile.
-                "commandNameOnClick" to ChatRowText.Hook(
+                "commandNameOnClick" to Hook(
                     spans = listOf(StyleSpan(Typeface.BOLD), ForegroundColorSpan(commandColor)),
                     onClick = {},
                 ),

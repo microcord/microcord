@@ -7,6 +7,8 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import com.discord.R
+import com.discord.i18n.Hook
+import com.discord.i18n.I18nHooks
 import com.discord.utilities.uri.UriHandler
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.EphemeralMessageEntry
@@ -41,7 +43,7 @@ class WidgetChatListAdapterItemEphemeralMessage(
         // quantity of one; they exist as plurals because the desktop client groups them.
         val resources = dismiss.resources
         dismiss.movementMethod = LinkMovementMethod.getInstance()
-        dismiss.text = ChatRowText.format(
+        dismiss.text = I18nHooks.format(
             dismiss.context,
             R.string.only_you_can_see_and_delete_these,
             mapOf(
@@ -52,7 +54,7 @@ class WidgetChatListAdapterItemEphemeralMessage(
                 ),
             ),
             mapOf(
-                "handleDelete" to ChatRowText.Hook(
+                "handleDelete" to Hook(
                     spans = listOf(
                         ForegroundColorSpan(ContextCompat.getColor(itemView.context, R.color.brand)),
                     ),

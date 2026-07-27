@@ -1,44 +1,34 @@
 package com.discord.utilities.streams
 
+import com.discord.models.domain.ModelApplicationStream
 import com.discord.models.guild.Guild
 import com.discord.models.user.User
-import com.discord.stores.StoreApplicationStreamPreviews
+import com.discord.stores.StoreApplicationStreamPreviews.StreamPreview
 
 /**
  * Everything a surface needs to render somebody's Go Live stream: who is streaming, where, whether
  * the viewer may join, and the last thumbnail we fetched.
  *
- * The reference is a `data class` assembled by `StreamContextService`. That service has not been
- * reconstructed yet, so this stays an interface — nothing in the project constructs one, and the
- * members below are the reference's fields verbatim so the eventual data class is a drop-in
- * replacement. Until it lands, every stream-driven surface reads `null` and hides itself.
+ * Produced by [StreamContextService]; there is deliberately no other constructor call site, so
+ * every stream surface sees the same joinability decision.
+ *
+ * Reference: `com.discord.utilities.streams.StreamContext`.
  */
-interface StreamContext {
-    val stream: ApplicationStream
-
+data class StreamContext(
+    val stream: ModelApplicationStream,
     /** The guild the stream is being broadcast in; `null` for a private-call stream. */
-    val guild: Guild?
-
-    val preview: StoreApplicationStreamPreviews.StreamPreview?
-
+    val guild: Guild?,
+    val preview: StreamPreview?,
     /** Whether the viewer may join the stream's voice channel, and if not, why. */
-    val joinability: Joinability
-
-    val user: User
-
+    val joinability: Joinability,
+    val user: User,
     /** The streamer's per-guild nickname, when they have one. */
-    val userNickname: String?
-
-    /** The viewer is already in the stream's voice channel. */
-    val isCurrentUserParticipating: Boolean
-
+    val userNickname: String?,
+    /** The viewer is already watching this stream. */
+    val isCurrentUserParticipating: Boolean,
     /** The stream belongs to the viewer. */
-    val isSelfStream: Boolean
-
-    interface ApplicationStream {
-        val encodedStreamKey: String
-    }
-
+    val isSelfStream: Boolean,
+) {
     enum class Joinability {
         CAN_CONNECT,
         VOICE_CHANNEL_FULL,

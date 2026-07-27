@@ -8,11 +8,12 @@ import android.text.Spanned
 import com.discord.R
 import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.simpleast.core.node.TextNode
+import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.spans.ClickableSpan
 import com.discord.utilities.textprocessing.EmojiImages
 import com.discord.utilities.textprocessing.Rules
 import com.discord.utilities.textprocessing.dpToPixels
-import com.discord.utilities.textprocessing.themedColor
 import com.facebook.drawee.backends.pipeline.Fresco
 import com.facebook.drawee.drawable.ScalingUtils
 import com.facebook.drawee.generic.GenericDraweeHierarchyBuilder
@@ -70,7 +71,7 @@ class EmojiNode<T : EmojiNode.RenderContext>(
         if (draweeBuilder != null) {
             val url = urlProvider(
                 renderContext.isAnimationEnabled,
-                EmojiImages.mediaProxySize(renderWidth),
+                IconUtils.getMediaProxySize(renderWidth),
                 context,
             )
             val controller = Fresco.newDraweeControllerBuilder()
@@ -83,7 +84,7 @@ class EmojiNode<T : EmojiNode.RenderContext>(
                 .apply {
                     if (!isRevealed) {
                         val spoilerColor = (renderContext as? SpoilerNode.RenderContext)?.spoilerColorRes
-                            ?: themedColor(context, R.attr.theme_chat_spoiler_bg)
+                            ?: ColorCompat.getThemedColor(context, R.attr.theme_chat_spoiler_bg)
                         setOverlay(ColorDrawable(spoilerColor))
                     }
                 }
@@ -102,7 +103,7 @@ class EmojiNode<T : EmojiNode.RenderContext>(
         }
 
         if (content.isEmpty() || start > end) return
-        val clickableSpan = ClickableSpan(themedColor(context, R.attr.color_brand), false) {
+        val clickableSpan = ClickableSpan(ColorCompat.getThemedColor(context, R.attr.color_brand), false) {
             renderContext.onEmojiClicked(emojiIdAndType)
         }
         builder.setSpan(clickableSpan, start, end + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)

@@ -2,6 +2,7 @@ package com.discord.utilities.time
 
 import android.content.Context
 import android.text.format.DateUtils
+import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.locale.LocaleManager
 import java.text.DateFormat
 import java.text.DateFormatSymbols
@@ -31,8 +32,6 @@ object TimeUtils {
 
     private const val DATE_FORMAT_DISCORD_API = UTCFormat.LONG
 
-    /** Discord's snowflake epoch: 2015-01-01T00:00:00Z. */
-    private const val DISCORD_EPOCH = 1_420_070_400_000L
 
     private const val MILLIS_PER_SECOND = 1_000L
     private const val MILLIS_PER_MINUTE = 60_000L
@@ -76,13 +75,22 @@ object TimeUtils {
     fun toCalendar(unixTimeMillis: Long): Calendar =
         Calendar.getInstance(Locale.ROOT).apply { timeInMillis = unixTimeMillis }
 
-    /** @return the creation time of a snowflake in epoch millis. */
+    /**
+     * @return the creation time of a snowflake in epoch millis.
+     *
+     * Deliberately **not** [SnowflakeUtils.toTimestamp]. The reference has both, and they are not the
+     * same function: `javap -c` shows `TimeUtils.parseSnowflake` emitting `lshr` (signed) where
+     * `SnowflakeUtils.toTimestamp` emits `lushr`. The two agree for every real snowflake and differ
+     * only for a negative id — which `SnowflakeUtils.atPreviousMillisecond` can produce. Only the
+     * epoch constant is shared.
+     */
     @JvmStatic
-    fun parseSnowflake(snowflake: Long?): Long = ((snowflake ?: 0L) shr 22) + DISCORD_EPOCH
+    fun parseSnowflake(snowflake: Long?): Long =
+        ((snowflake ?: 0L) shr 22) + SnowflakeUtils.DISCORD_EPOCH
 
     /** @return the lowest snowflake that could have been created at [millis]. */
     @JvmStatic
-    fun millisToSnowflake(millis: Long): Long = (millis - DISCORD_EPOCH) shl 22
+    fun millisToSnowflake(millis: Long): Long = SnowflakeUtils.fromTimestamp(millis)
 
     // endregion
 

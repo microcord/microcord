@@ -4,7 +4,6 @@ import android.content.Context
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.AttributeSet
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageView
@@ -16,6 +15,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.discord.R
+import com.discord.views.ThemedColor
 import com.google.android.material.textfield.TextInputEditText
 
 class SearchInputView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) :
@@ -32,7 +32,7 @@ class SearchInputView @JvmOverloads constructor(context: Context, attrs: Attribu
         onClearClicked = { editText.setText("") }
 
         background = ContextCompat.getDrawable(context, R.drawable.drawable_bg_corners_4dp)?.mutate()?.also {
-            DrawableCompat.setTint(it, themedColor(R.attr.colorBackgroundTertiary))
+            DrawableCompat.setTint(it, ThemedColor.resolve(context, R.attr.colorBackgroundTertiary))
         }
         if (attrs != null) {
             context.obtainStyledAttributes(attrs, R.styleable.SearchInputView).run {
@@ -83,7 +83,7 @@ class SearchInputView @JvmOverloads constructor(context: Context, attrs: Attribu
         ImageViewCompat.setImageTintList(
             clearView,
             android.content.res.ColorStateList.valueOf(
-                themedColor(if (empty) R.attr.colorTextMuted else R.attr.colorTextNormal),
+                ThemedColor.resolve(context, if (empty) R.attr.colorTextMuted else R.attr.colorTextNormal),
             ),
         )
         clearView.contentDescription = if (empty) searchContentDescription else context.getText(R.string.reset)
@@ -92,9 +92,4 @@ class SearchInputView @JvmOverloads constructor(context: Context, attrs: Attribu
         clearView.setOnClickListener { if (query.isNotEmpty()) onClearClicked() }
     }
 
-    private fun themedColor(attribute: Int): Int {
-        val value = TypedValue()
-        context.theme.resolveAttribute(attribute, value, true)
-        return if (value.resourceId != 0) ContextCompat.getColor(context, value.resourceId) else value.data
-    }
 }

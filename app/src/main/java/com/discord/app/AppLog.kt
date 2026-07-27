@@ -108,7 +108,10 @@ object AppLog {
             ?.entries
             ?.joinToString(separator = "\n\t") { "${it.key}=${redactSecrets(it.value)}" }
             ?.let { println(priority, "Metadata: $it") }
-        throwable?.let { println(priority, Log.getStackTraceString(it)) }
+        // The stack trace goes through the same redaction pass as the message. An exception's own
+        // message routinely quotes what failed — a malformed auth response, a request URL with a
+        // token query parameter — so printing it raw would have defeated [redactSecrets].
+        throwable?.let { println(priority, redactSecrets(Log.getStackTraceString(it))) }
     }
 
     private fun println(priority: Int, message: String) {

@@ -1,20 +1,17 @@
 package com.discord.widgets.chat.list.adapter
 
 import android.content.Context
-import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.style.URLSpan
 import android.view.View
 import android.widget.TextView
 import com.discord.R
 import com.discord.i18n.I18nSpans
+import com.discord.i18n.withClickableHook
 import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
 import com.discord.models.user.CoreUser
 import com.discord.stores.StoreMessageState
 import com.discord.stores.StoreStream
 import com.discord.utilities.icon.IconUtils
-import com.discord.utilities.spans.ClickableSpan
 import com.discord.utilities.textprocessing.DiscordParser
 import com.discord.utilities.textprocessing.MessagePreprocessor
 import com.discord.utilities.textprocessing.MessageRenderContext
@@ -133,30 +130,4 @@ class WidgetChatListAdapterItemAutoModBlocked(
     private companion object {
         private const val DISMISS_HOOK = "onClick"
     }
-}
-
-/**
- * Turns the placeholder link a Discord string uses to mark an action — `[label](hookName)` — into a
- * real click handler.
- *
- * `I18nSpans` renders those as [URLSpan]s because most of them really are links; the AutoMod strings
- * instead name a hook the screen is expected to bind. Swapping the span keeps the string's wording
- * and position authoritative rather than splitting the sentence in code.
- */
-internal fun CharSequence.withClickableHook(hookName: String, onClick: () -> Unit): CharSequence {
-    val builder = SpannableStringBuilder(this)
-    builder.getSpans(0, builder.length, URLSpan::class.java)
-        .filter { it.url == hookName }
-        .forEach { span ->
-            val start = builder.getSpanStart(span)
-            val end = builder.getSpanEnd(span)
-            builder.removeSpan(span)
-            builder.setSpan(
-                ClickableSpan(null, false) { onClick() },
-                start,
-                end,
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-            )
-        }
-    return builder
 }

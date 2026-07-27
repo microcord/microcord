@@ -29,7 +29,9 @@ class StoreNotificationsClientConfigTest {
     private val dispatcher = Dispatcher(scheduler)
     private val deck = ObservationDeck()
 
-    private val token = BehaviorSubject.create<String?>(null)
+    // `create<String?>(null)` would bind the inherited static `Observable.create(OnSubscribe)`
+    // overload instead of `BehaviorSubject.create(T)`; casting the argument pins the right one.
+    private val token = BehaviorSubject.create(null as String?)
     private val locale = BehaviorSubject.create("en-US")
 
     /**

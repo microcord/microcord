@@ -6,7 +6,8 @@ import android.net.Uri
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.FragmentActivity
 import com.discord.R
-import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
+import com.discord.widgets.captcha.HCaptchaWebDialog
+import java.util.Locale
 import java.util.UUID
 import rx.Emitter
 import rx.Observable
@@ -19,9 +20,10 @@ import rx.Observable
  *
  * - [CaptchaRequest.HCaptcha] — the normal path. The reference drives the hCaptcha Android SDK's
  *   WebView dialog with `siteKey`, the user's locale and an optional `rqdata` blob. This project has
- *   no hCaptcha SDK dependency, so the equivalent WebView challenge already recovered as
- *   `WidgetCaptchaBottomSheet` is driven instead. Observable semantics are unchanged: emit the
- *   token, then complete.
+ *   no hCaptcha SDK *artifact*, but the SDK's own recovered page and layout are in the app
+ *   (`assets/hcaptcha-form.html`, `res/layout/hcaptcha_fragment.xml`), so
+ *   [com.discord.widgets.captcha.HCaptchaWebDialog] hosts them and implements the same bridge.
+ *   Observable semantics are unchanged: emit the token, then complete.
  * - [CaptchaRequest.ReCaptcha] — the reference fallback, which requires SafetyNet from Google Play
  *   Services. That dependency is not installed in this project, so the request resolves to the same
  *   [Failure] the reference produces on a device without usable Play Services rather than silently
@@ -39,6 +41,7 @@ object CaptchaHelper {
     private const val FAILED_CAPTCHA_EXPIRED = "expired"
     private const val FAILED_DEVICE_UNSUPPORTED = "unsupported_device"
     private const val FAILED_MISSING_DEPS = "missing_dependencies"
+    private const val FAILED_NETWORK = "network"
 
     private const val CAPTCHA_HELP_URL = "https://support.discord.com/hc/en-us/articles/360045138471"
 
@@ -86,13 +89,9 @@ object CaptchaHelper {
      * Shows the challenge and emits the solved token, then completes.
      *
      * Emits [Failure] through `onError` when the challenge itself fails. Matching the reference, a
-     * challenge the user simply closed completes without emitting a token — callers must treat
-     * "completed with no value" as "user declined", not as success.
-     *
-     * Known gap: `WidgetCaptchaBottomSheet` exposes no dismissal callback, so the "user closed the
-     * challenge" completion currently only happens when the subscriber unsubscribes. Restoring the
-     * reference's `CHALLENGE_CLOSED` completion needs a dismissal hook on that sheet, which is owned
-     * by the widget layer.
+     * challenge the user simply **closed** completes without emitting a token — callers must treat
+     * "completed with no value" as "user declined", not as success. That is what lets a queued
+     * message send finish instead of waiting forever on a challenge nobody is going to solve.
      */
     fun tryShowCaptcha(captchaRequest: CaptchaRequest): Observable<String> = Observable.create<String>(
         { emitter: Emitter<String> ->
@@ -113,19 +112,30 @@ object CaptchaHelper {
             return
         }
         val challengeId = UUID.randomUUID().toString()
+        // A subscriber that gives up must not leave a handler parked in the dialog's map.
+        emitter.setCancellation { HCaptchaWebDialog.cancel(challengeId) }
         activity.runOnUiThread {
             runCatching {
-                WidgetCaptchaBottomSheet.show(
-                    activity.supportFragmentManager,
-                    challengeId,
-                    request.siteKey,
-                    request.rqdata,
-                ) { token, _ ->
-                    if (token.isBlank()) {
-                        emitter.onError(Failure(R.string.captcha_failed, FAILED_CAPTCHA_EXPIRED))
-                    } else {
-                        emitter.onNext(token)
-                        emitter.onCompleted()
+                HCaptchaWebDialog.show(
+                    fragmentManager = activity.supportFragmentManager,
+                    challengeId = challengeId,
+                    siteKey = request.siteKey,
+                    rqdata = request.rqdata,
+                    locale = Locale.getDefault().language,
+                ) { outcome ->
+                    when (outcome) {
+                        is HCaptchaWebDialog.Outcome.Solved -> {
+                            emitter.onNext(outcome.token)
+                            emitter.onCompleted()
+                        }
+                        // "User closed the challenge" is not an error: complete with no value so
+                        // the caller can quietly abandon whatever the captcha was gating.
+                        is HCaptchaWebDialog.Outcome.Failed -> when {
+                            outcome.isUserClosed -> emitter.onCompleted()
+                            outcome.errorCode == HCaptchaWebDialog.NETWORK_ERROR ->
+                                emitter.onError(Failure(R.string.captcha_failed, FAILED_NETWORK))
+                            else -> emitter.onError(Failure(R.string.captcha_failed, FAILED_CAPTCHA_EXPIRED))
+                        }
                     }
                 }
             }.onFailure {

@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.util.AttributeSet
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageView
@@ -13,6 +12,7 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import com.discord.R
+import com.discord.utilities.color.ColorCompat
 import com.discord.widgets.channels.permissions.PermissionOwner
 import com.facebook.drawee.backends.pipeline.Fresco
 import com.facebook.drawee.view.SimpleDraweeView
@@ -44,7 +44,7 @@ class ChannelPermissionOwnerView(context: Context, attrs: AttributeSet) :
     private fun configureRole(owner: PermissionOwner.Role) {
         val role = owner.role
         val shield = requireNotNull(ContextCompat.getDrawable(context, R.drawable.ic_person_shield_24dp)).mutate()
-        DrawableCompat.setTint(shield, role.color.takeIf { it != 0 } ?: themedColor(R.attr.colorInteractiveNormal))
+        DrawableCompat.setTint(shield, role.color.takeIf { it != 0 } ?: ColorCompat.getThemedColor(context, R.attr.colorInteractiveNormal))
         image.controller = null
         image.hierarchy.setPlaceholderImage(shield)
         name.text = role.name
@@ -76,9 +76,4 @@ class ChannelPermissionOwnerView(context: Context, attrs: AttributeSet) :
         crown.visibility = if (owner.isOwner) View.VISIBLE else View.GONE
     }
 
-    private fun themedColor(attribute: Int): Int {
-        val value = TypedValue()
-        context.theme.resolveAttribute(attribute, value, true)
-        return value.data
-    }
 }

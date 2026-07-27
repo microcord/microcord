@@ -32,9 +32,20 @@ import com.google.android.material.button.MaterialButton
  */
 class WidgetTos : AppFragment(R.layout.widget_tos) {
 
-    /** `true` for the "heads up, these policies change soon" variant. */
+    /**
+     * `true` for the "heads up, these policies change soon" variant.
+     *
+     * The reference only ever reads the activity intent, because it always arrives through
+     * [show] — a fresh activity carrying the extra. This screen is *also* reached as the
+     * `AGREEMENTS` / `TOS_UPDATE_ACKNOWLEDGMENT` required action, where the host instantiates the
+     * fragment directly and has nowhere to put an intent extra, so the fragment arguments are
+     * checked first. When neither is set the answer is `false`, which is the agreement variant —
+     * the safe default, since it asks for consent rather than assuming it.
+     */
     private val isAcknowledgement: Boolean by lazy {
-        mostRecentIntent.getBooleanExtra(INTENT_EXTRA_IS_ACKNOWLEDGEMENT, false)
+        arguments?.takeIf { it.containsKey(INTENT_EXTRA_IS_ACKNOWLEDGEMENT) }
+            ?.getBoolean(INTENT_EXTRA_IS_ACKNOWLEDGEMENT)
+            ?: mostRecentIntent.getBooleanExtra(INTENT_EXTRA_IS_ACKNOWLEDGEMENT, false)
     }
 
     private val continueButton: MaterialButton
@@ -124,7 +135,11 @@ class WidgetTos : AppFragment(R.layout.widget_tos) {
     }
 
     companion object {
-        private const val INTENT_EXTRA_IS_ACKNOWLEDGEMENT = "intent_args_key"
+        /**
+         * Selects the acknowledgement variant. Public because the required-action route builds this
+         * fragment by class name and has to set it as an argument rather than an intent extra.
+         */
+        const val INTENT_EXTRA_IS_ACKNOWLEDGEMENT = "intent_args_key"
 
         /** Opens the screen outside the required-action route, used by settings deep links. */
         fun show(context: Context, isAcknowledgement: Boolean) {

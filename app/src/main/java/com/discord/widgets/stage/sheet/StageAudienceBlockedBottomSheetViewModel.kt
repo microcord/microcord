@@ -30,7 +30,7 @@ class StageAudienceBlockedBottomSheetViewModel(
         fun observeStores(
             channelId: Long,
             userRelationshipsStore: StoreUserRelationships = StoreStream.getUserRelationships(),
-            stageChannelsStore: StoreStageChannels = StageStoreAccess.requireStageChannels(),
+            stageChannelsStore: StoreStageChannels = StageStoreAccess.stageChannels(),
         ): Observable<StoreState> = Observable.combineLatest(
             CallModel.get(channelId),
             userRelationshipsStore.observeForType(RELATIONSHIP_TYPE_BLOCKED),

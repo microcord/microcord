@@ -104,16 +104,19 @@ class EmbedResourceUtilsTest {
 
     @Test
     fun `an image embed with an author or a title needs its card`() {
-        val image = EmbedImage("i", "pi", 1, 1)
-        assertTrue(inline(embed(EmbedType.IMAGE, image = image)))
+        // An `IMAGE` embed previews from its *thumbnail*, exactly like `ARTICLE` and `TWEET` —
+        // giving it only an `image` leaves it with no preview and so never inline. Verified
+        // against the reference `getPreviewImage`, whose ordinal-0/1/3 branch reads `thumbnail`.
+        val thumbnail = EmbedThumbnail("t", "pt", 1, 1)
+        assertTrue(inline(embed(EmbedType.IMAGE, thumbnail = thumbnail)))
         assertFalse(
-            inline(embed(EmbedType.IMAGE, image = image, title = "Titled")),
+            inline(embed(EmbedType.IMAGE, thumbnail = thumbnail, title = "Titled")),
         )
         assertFalse(
             inline(
                 embed(
                     EmbedType.IMAGE,
-                    image = image,
+                    thumbnail = thumbnail,
                     author = EmbedAuthor("a", null, null, null),
                 ),
             ),

@@ -47,8 +47,19 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
     private val endPanelStateListeners = arrayListOf<PanelStateListener>()
     private var childGestureRegions: List<Rect> = emptyList()
     private var useFullWidthForStartPanel = false
-    private var startPanelOpenedCenterPanelX = 0f
-    private var endPanelOpenedCenterPanelX = 0f
+    /*
+     * Sentinels, not zeroes. Confirmed in the reference's <init> bytecode, which loads
+     * FloatCompanionObject.MIN_VALUE and MAX_VALUE into exactly these two fields.
+     *
+     * They record where the centre panel sits while each side panel is open, and updatePanelWidths
+     * compares centerPanel.x against the *previous* value to decide whether an already-open panel
+     * should be re-opened at its new width. centerPanel.x is 0f on the first layout, so initialising
+     * these to 0f makes that comparison true every time: the start panel auto-opens, selectedPanel
+     * becomes START, and WidgetHome answers the next back press with moveTaskToBack(true) — which
+     * is indistinguishable from the app closing. That was the reported "back button closes the app".
+     */
+    private var startPanelOpenedCenterPanelX = Float.MIN_VALUE
+    private var endPanelOpenedCenterPanelX = Float.MAX_VALUE
     private var centerPanelAnimationEndX = 0f
     private var centerPanelXAnimator: ValueAnimator? = null
     private var pendingUpdate: (() -> Unit)? = null

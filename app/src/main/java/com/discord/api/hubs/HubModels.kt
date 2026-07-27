@@ -26,4 +26,11 @@ data class WaitlistSignup(
     val email: String,
     val emailDomain: String,
     val school: String,
-)
+) {
+    /**
+     * Redacts [email]. The domain and school are kept: they are not personally identifying on their
+     * own and they are what makes a failed signup diagnosable.
+     */
+    override fun toString(): String =
+        "WaitlistSignup(email=REDACTED, emailDomain=$emailDomain, school=$school)"
+}

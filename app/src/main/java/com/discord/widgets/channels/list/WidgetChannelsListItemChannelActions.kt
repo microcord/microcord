@@ -2,10 +2,8 @@ package com.discord.widgets.channels.list
 
 import android.content.Context
 import android.os.Bundle
-import android.util.TypedValue
 import android.view.View
 import android.widget.TextView
-import androidx.annotation.AttrRes
 import androidx.annotation.DrawableRes
 import androidx.fragment.app.FragmentManager
 import com.discord.R
@@ -25,6 +23,7 @@ import com.discord.api.permission.Permission
 import com.discord.app.AppBottomSheet
 import com.discord.models.guild.Guild
 import com.discord.stores.StoreStream
+import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rx.appSubscribe
@@ -215,7 +214,7 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
         )
 
         @DrawableRes
-        fun muteIconResId(context: Context): Int = context.themedDrawableRes(
+        fun muteIconResId(context: Context): Int = context.getThemedDrawableRes(
             if (isMuted) R.attr.ic_channel_muted else R.attr.ic_channel_mute,
         )
 
@@ -257,11 +256,4 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
                 .show(fragmentManager, WidgetChannelsListItemChannelActions::class.java.name)
         }
     }
-}
-
-/** Resolves a themed drawable *reference* attribute. See `DrawableCompat.getThemedDrawableRes`. */
-@DrawableRes
-internal fun Context.themedDrawableRes(@AttrRes attribute: Int): Int {
-    val value = TypedValue()
-    return if (theme.resolveAttribute(attribute, value, true)) value.resourceId else 0
 }

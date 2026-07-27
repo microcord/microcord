@@ -1,62 +1,158 @@
 package com.discord.widgets.channels
 
-import android.os.Bundle
 import android.view.View
-import androidx.fragment.app.Fragment
-import com.discord.app.AppFragment
+import androidx.core.view.isVisible
 import com.discord.R
 import com.discord.api.channel.Channel
-import com.discord.stores.StoreStream
+import com.discord.app.AppFragment
+import com.discord.app.appViewModels
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.views.channelsidebar.GuildChannelSideBarActionsView
 import com.discord.views.channelsidebar.PrivateChannelSideBarActionsView
-import rx.Subscription
+import com.discord.widgets.channels.WidgetChannelSidebarActionsViewModel.ViewState
+import com.discord.widgets.search.WidgetSearch
+import com.discord.widgets.settings.WidgetMuteSettingsSheet
+import com.discord.widgets.user.calls.PrivateCallLauncher
 
+/**
+ * The action row at the top of the right-hand panel.
+ *
+ * Guild channels and private channels get two different views, only one of which is ever visible.
+ * On a wide screen a guild channel offers Threads in the first slot and Search moves into the
+ * toolbar; on a narrow screen — and always for forum channels and forum posts, which have no thread
+ * browser of their own — the first slot is Search.
+ */
 class WidgetChannelSidebarActions : AppFragment(R.layout.widget_channel_sidebar_actions) {
-    private var subscription: Subscription? = null
 
-    override fun onStart() {
-        super.onStart()
-        subscription = StoreStream.getChannelsSelected().observeSelectedChannel().subscribe { channel ->
-            view?.post { if (view != null) bind(channel) }
+    private val viewModel: WidgetChannelSidebarActionsViewModel by appViewModels {
+        WidgetChannelSidebarActionsViewModel()
+    }
+
+    private lateinit var guildView: GuildChannelSideBarActionsView
+    private lateinit var privateView: PrivateChannelSideBarActionsView
+
+    override fun onViewBound(view: View) {
+        super.onViewBound(view)
+        guildView = view.findViewById(R.id.widget_channel_sidebar_actions_guild_view)
+        privateView = view.findViewById(R.id.widget_channel_sidebar_actions_private_view)
+    }
+
+    override fun onViewBoundOrOnResume() {
+        super.onViewBoundOrOnResume()
+        viewModel.observeViewState()
+            .bindToComponentLifecycle(this)
+            .appSubscribe(WidgetChannelSidebarActions::class.java) { configureUI(it) }
+    }
+
+    private fun configureUI(viewState: ViewState) {
+        when (viewState) {
+            ViewState.Uninitialized -> view?.isVisible = false
+
+            is ViewState.Private -> {
+                view?.isVisible = true
+                guildView.visibility = View.GONE
+                privateView.visibility = View.VISIBLE
+                privateView.configure(
+                    onCallClicked = View.OnClickListener {
+                        startPrivateCall(viewState.channelId, useVideo = false)
+                    },
+                    onVideoClicked = View.OnClickListener {
+                        startPrivateCall(viewState.channelId, useVideo = true)
+                    },
+                    onNotificationsClicked = View.OnClickListener {
+                        openNotificationSettings(viewState.channelId)
+                    },
+                    onSearchClicked = View.OnClickListener {
+                        WidgetSearch.launchForChannel(viewState.channelId, requireContext())
+                    },
+                    channelIsMuted = viewState.isMuted,
+                )
+            }
+
+            is ViewState.Guild -> {
+                view?.isVisible = true
+                privateView.visibility = View.GONE
+                guildView.isVisible = !viewState.shouldHideChannelSidebar
+                guildView.configure(
+                    onSearchClicked = { WidgetSearch.launchForGuild(viewState.guildId, requireContext()) },
+                    // TODO(channels-wave): route to WidgetThreadBrowser.show(context, guildId,
+                    //  channelId, THREAD_BROWSER_SOURCE) once that screen exists.
+                    onThreadBrowserClicked = { onThreadBrowser?.invoke(viewState.guildId, viewState.channelId) },
+                    onNotificationsClicked = { openNotificationSettings(viewState.channelId) },
+                    onPinsClicked = { openPins(viewState.channelId) },
+                    // TODO(channels-wave): route to WidgetThreadSettings.launch /
+                    //  WidgetTextChannelSettings.launch once those screens exist.
+                    onSettingsClicked = { onChannelSettings?.invoke(viewState.channelId, viewState.isThread) },
+                    hasUnseenPins = viewState.hasUnreadPins,
+                    channelIsMuted = viewState.isMuted,
+                    disablePins = viewState.disablePins,
+                    // Forums have no thread browser, so they always keep Search in the first slot.
+                    showSearch = isSmallScreen() || viewState.isGuildForumPost || viewState.isGuildForumChannel,
+                )
+            }
         }
     }
 
-    override fun onStop() { subscription?.unsubscribe(); subscription = null; super.onStop() }
+    /**
+     * The pinned-messages list has to be hosted by the home surface (it implements
+     * `WidgetChannelPinnedMessages.Host`), so it is reached through [onPins] rather than launched
+     * here.
+     */
+    private fun openPins(channelId: Long) {
+        onPins?.invoke(channelId)
+    }
 
-    private fun bind(channel: Channel?) {
-        requireView().visibility = if (channel == null) View.GONE else View.VISIBLE
-        if (channel == null) return
-        val privateChannel = channel.type == Channel.DM || channel.type == Channel.GROUP_DM
-        requireView().findViewById<PrivateChannelSideBarActionsView>(R.id.widget_channel_sidebar_actions_private_view).apply {
-            visibility = if (privateChannel) View.VISIBLE else View.GONE
-            if (privateChannel) configure(
-                onCallClicked = View.OnClickListener { onCall?.invoke(channel.id, false) },
-                onVideoClicked = View.OnClickListener { onCall?.invoke(channel.id, true) },
-                onNotificationsClicked = View.OnClickListener { onNotifications?.invoke(channel.id) },
-                onSearchClicked = View.OnClickListener { onSearch?.invoke(channel) },
-            )
-        }
-        requireView().findViewById<GuildChannelSideBarActionsView>(R.id.widget_channel_sidebar_actions_guild_view).apply {
-            visibility = if (privateChannel) View.GONE else View.VISIBLE
-            if (!privateChannel) configure(
-                onSearchClicked = { onSearch?.invoke(channel) },
-                onNotificationsClicked = { onNotifications?.invoke(channel.id) },
-                onPinsClicked = { onPins?.invoke(channel.id) },
-                onSettingsClicked = { onSettings?.invoke(channel.id) },
-                disablePins = false,
-            )
-        }
+    private fun openNotificationSettings(channelId: Long) {
+        val installed = onNotifications
+        if (installed != null) installed(channelId)
+        else WidgetMuteSettingsSheet.showForChannel(channelId, parentFragmentManager)
+    }
+
+    private fun startPrivateCall(channelId: Long, useVideo: Boolean) {
+        val launcher = PrivateCallLauncher(this, this, requireContext(), parentFragmentManager)
+        if (useVideo) launcher.launchVideoCall(channelId) else launcher.launchVoiceCall(channelId)
+    }
+
+    /**
+     * Reproduces `DeviceUtils.isSmallScreen`, which has not been reconstructed: a screen at most
+     * 360dp wide.
+     */
+    private fun isSmallScreen(): Boolean = with(resources.displayMetrics) {
+        widthPixels <= SMALL_SCREEN_WIDTH_DP * density
     }
 
     companion object {
+        private const val SMALL_SCREEN_WIDTH_DP = 360
+
         /**
-         * Takes the whole channel, not its id: a guild channel searches its *guild*, while a DM
-         * searches the channel itself, and the host cannot tell them apart from an id alone.
+         * Analytics source the reference passes to the thread browser from this row. Kept so the
+         * value is not re-derived when `WidgetThreadBrowser` lands.
+         */
+        const val THREAD_BROWSER_SOURCE = "Channel Side Bar"
+
+        /**
+         * Temporary seams for the two screens this row should launch directly.
+         *
+         * `WidgetThreadBrowser`, `WidgetThreadSettings` and `WidgetTextChannelSettings` do not
+         * exist yet; when they do, replace these with
+         * `WidgetThreadBrowser.show(context, guildId, channelId, THREAD_BROWSER_SOURCE)` and
+         * `WidgetThreadSettings.launch` / `WidgetTextChannelSettings.launch`, and delete the fields.
+         */
+        @JvmField var onThreadBrowser: ((Long, Long) -> Unit)? = null
+
+        /** `(channelId, isThread)`; see [onThreadBrowser]. */
+        @JvmField var onChannelSettings: ((Long, Boolean) -> Unit)? = null
+
+        /**
+         * Host-supplied navigation seams, installed by `WidgetHome`.
+         *
+         * Only [onPins] is load-bearing — everything else this row does is launched directly, as
+         * the reference does. [onSearch] and [onNotifications] remain so a host can override the
+         * default route.
          */
         @JvmField var onSearch: ((Channel) -> Unit)? = null
         @JvmField var onNotifications: ((Long) -> Unit)? = null
         @JvmField var onPins: ((Long) -> Unit)? = null
-        @JvmField var onSettings: ((Long) -> Unit)? = null
-        @JvmField var onCall: ((Long, Boolean) -> Unit)? = null
     }
 }

@@ -105,12 +105,40 @@ class EmojiSheetViewModel(
     private fun handleStoreState(storeState: StoreState) {
         when (storeState.emoji) {
             is EmojiNode.EmojiIdAndType.Unicode -> {
-                storeState.currentChannel?.let { storeAnalytics?.openUnicodeEmojiPopout(it) }
+                standardPopoutAnalytics(storeState)
                 handleStoreStateUnicode(storeState, storeState.emoji)
             }
 
-            is EmojiNode.EmojiIdAndType.Custom -> handleStoreStateCustom(storeState, storeState.emoji)
+            is EmojiNode.EmojiIdAndType.Custom -> {
+                customPopoutAnalytics(storeState, storeState.emoji)
+                handleStoreStateCustom(storeState, storeState.emoji)
+            }
         }
+    }
+
+    /** Popout impression for a unicode emoji. No channel means no impression, as in the reference. */
+    private fun standardPopoutAnalytics(storeState: StoreState) {
+        val channel = storeState.currentChannel ?: return
+        storeAnalytics?.openUnicodeEmojiPopout(channel)
+    }
+
+    /**
+     * Popout impression for a custom emoji.
+     *
+     * The last dimension is `sourceGuildPrivate`, which the reference computes as `!isPublic`
+     * (`javap -c`: `isPublic ... iconst_1 ixor`) — not as a stored field. Reproduced so the
+     * analytics dimension does not silently invert.
+     */
+    private fun customPopoutAnalytics(storeState: StoreState, custom: EmojiNode.EmojiIdAndType.Custom) {
+        val channel = storeState.currentChannel ?: return
+        val guildInfo = storeState.customEmojiGuildInfo ?: return
+        storeAnalytics?.openCustomEmojiPopout(
+            channel = channel,
+            emojiId = custom.id,
+            isPremium = storeState.meUserIsPremium,
+            joinedSourceGuild = guildInfo.isUserInGuild,
+            sourceGuildPrivate = !guildInfo.isPublic,
+        )
     }
 
     private fun handleStoreStateCustom(

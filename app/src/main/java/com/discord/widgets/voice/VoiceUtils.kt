@@ -5,11 +5,17 @@ import androidx.fragment.app.FragmentManager
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.channel.isPrivate
+import com.discord.api.channel.isStageVoiceChannel
+import com.discord.api.permission.Permission
+import com.discord.api.stageinstance.StageInstancePrivacyLevel
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppComponent
 import com.discord.app.AppFragment
 import com.discord.app.AppPermissionsRequests
 import com.discord.stores.StoreStream
+import com.discord.utilities.permissions.PermissionUtils
+import com.discord.widgets.stage.StageChannelJoinHelper
+import com.discord.widgets.stage.start.WidgetModeratorStartStage
 import com.discord.widgets.voice.call.callAndLaunch
 import com.discord.widgets.voice.sheet.WidgetVoiceBottomSheet
 
@@ -57,8 +63,8 @@ object VoiceUtils {
         // `MemberVerificationUtils.hasVerificationGate` is reconstructed — there is no sheet to
         // show yet — so a gated lurker falls through to the join attempt and is refused by
         // `VoiceChannelJoinabilityUtils` instead of being offered the gate.
-        if (channel.isPrivate()) {
-            callAndLaunch(
+        when {
+            channel.isPrivate() -> callAndLaunch(
                 channelId = channel.id,
                 isVideo = false,
                 appPermissionsRequests = appPermissionsRequests,
@@ -66,12 +72,44 @@ object VoiceUtils {
                 appComponent = appComponent,
                 fragmentManager = fragmentManager,
             )
-        } else {
-            // Stage channels take the same path: connecting puts the user in the audience, and the
-            // sheet renders the stage-specific controls off `StageRoles`.
-            appPermissionsRequests.requestMicrophone(onFailure = null) {
+            channel.isStageVoiceChannel() -> handleStageChannel(channel, context, fragmentManager)
+            else -> appPermissionsRequests.requestMicrophone(onFailure = null) {
                 connectAndShowControls(channel, fragmentManager)
             }
+        }
+    }
+
+    /**
+     * A stage channel is not simply joined: what a tap means depends on whether a stage is running
+     * and on whether the user could start one.
+     *
+     * The reference keeps this in `utilities/stage/StageChannelUtils.connectToStageChannel`, which
+     * this project has not reconstructed; the branch structure is the same.
+     */
+    private fun handleStageChannel(
+        channel: Channel,
+        context: Context,
+        fragmentManager: FragmentManager,
+    ) {
+        val stageInstance = StoreStream.getStageInstances().getStageInstanceForChannel(channel.id)
+        val myPermissions = StoreStream.getPermissions().getPermissionsByChannel()[channel.id]
+
+        when {
+            // A public stage is open to anyone, so there is nothing to gate on.
+            stageInstance != null && stageInstance.privacyLevel == StageInstancePrivacyLevel.PUBLIC ->
+                StageChannelJoinHelper.connectToStage(context, fragmentManager, channel.id)
+
+            // Nothing is running and this user could start it, so offer the start menu instead of
+            // dropping them into an empty room.
+            stageInstance == null &&
+                PermissionUtils.can(Permission.MODERATE_STAGE_CHANNEL, myPermissions) ->
+                WidgetModeratorStartStage.launch(context, channel.id, channel.guildId)
+
+            // The reference interposes `MemberVerificationUtils.maybeShowVerificationGate` here.
+            // Only `hasVerificationGate` is reconstructed — there is no sheet to show — so a gated
+            // lurker falls through to the join attempt and is refused by
+            // `VoiceChannelJoinabilityUtils` instead of being offered the gate.
+            else -> StageChannelJoinHelper.connectToStage(context, fragmentManager, channel.id)
         }
     }
 

@@ -9,11 +9,12 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
 import com.discord.R
+import com.discord.utilities.icon.IconUtils
+import com.facebook.drawee.backends.pipeline.Fresco
 import com.facebook.drawee.generic.RoundingParams
 import com.facebook.drawee.view.SimpleDraweeView
 import com.facebook.imagepipeline.common.ResizeOptions
 import com.facebook.imagepipeline.request.ImageRequestBuilder
-import com.facebook.drawee.backends.pipeline.Fresco
 
 class GuildView(context: Context, attrs: AttributeSet?) : FrameLayout(context, attrs, 0) {
     private val avatar: SimpleDraweeView
@@ -47,7 +48,7 @@ class GuildView(context: Context, attrs: AttributeSet?) : FrameLayout(context, a
         if (requestUrl.isBlank()) {
             avatar.controller = null
         } else {
-            val size = if (targetImageSize == -1) 0 else MEDIA_PROXY_SIZES.first { it >= targetImageSize }
+            val size = if (targetImageSize == -1) 0 else IconUtils.getMediaProxySize(targetImageSize)
             val request = ImageRequestBuilder.newBuilderWithSource(Uri.parse(requestUrl)).apply {
                 if (size > 0) resizeOptions = ResizeOptions(size, size)
             }.build()
@@ -64,14 +65,6 @@ class GuildView(context: Context, attrs: AttributeSet?) : FrameLayout(context, a
     fun useGuildIconCorners() {
         avatar.hierarchy.roundingParams = RoundingParams.fromCornersRadius(
             resources.getDimensionPixelSize(R.dimen.guild_icon_radius).toFloat(),
-        )
-    }
-
-    private companion object {
-        val MEDIA_PROXY_SIZES = intArrayOf(
-            16, 20, 22, 24, 28, 32, 40, 44, 48, 56, 60, 64, 80, 96, 100, 128,
-            160, 240, 256, 300, 320, 480, 512, 600, 640, 1024, 1280, 1536, 2048, 3072,
-            4096,
         )
     }
 }

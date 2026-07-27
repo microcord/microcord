@@ -20,13 +20,13 @@ import com.discord.i18n.i18nFormat
 import com.discord.models.domain.ModelUserRelationship
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUserNotes
-import com.discord.utilities.textprocessing.themedColor
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
-import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.textprocessing.AstRenderer
 import com.discord.utilities.textprocessing.MessageRenderContext
+import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.view.text.LinkifiedTextView
 import com.discord.widgets.roles.RolesListView
 import com.discord.widgets.user.Badge
@@ -306,7 +306,7 @@ class WidgetUserSheet : AppBottomSheet() {
                 state.guildSectionHeaderText ?: getString(R.string.roles)
             root.findViewById<RolesListView>(R.id.user_sheet_roles_list).updateView(
                 state.roleItems,
-                themedColor(requireContext(), R.attr.primary_300),
+                ColorCompat.getThemedColor(requireContext(), R.attr.primary_300),
                 state.currentGuildId ?: 0L,
             )
         }

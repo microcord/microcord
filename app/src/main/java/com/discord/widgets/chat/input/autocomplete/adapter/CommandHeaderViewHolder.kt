@@ -1,11 +1,11 @@
 package com.discord.widgets.chat.input.autocomplete.adapter
 
-import android.util.TypedValue
 import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.widgets.chat.input.autocomplete.ApplicationPlaceholder
@@ -31,7 +31,7 @@ class CommandHeaderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView
         val application = item.application
         name.text = application.bot?.username ?: application.name
 
-        val tint = themedColor(R.attr.colorTextMuted)
+        val tint = ColorCompat.getThemedColor(itemView.context, R.attr.colorTextMuted)
         val iconRes = application.iconRes
         if (iconRes != null) {
             avatar.setImageResource(iconRes)
@@ -49,8 +49,4 @@ class CommandHeaderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView
         }
     }
 
-    private fun themedColor(attribute: Int): Int = TypedValue().let {
-        itemView.context.theme.resolveAttribute(attribute, it, true)
-        it.data
-    }
 }

@@ -3,6 +3,7 @@ package com.discord.views.user
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
+import android.net.Uri
 import android.provider.Settings
 import android.util.AttributeSet
 import android.view.LayoutInflater
@@ -23,7 +24,6 @@ import com.facebook.drawee.backends.pipeline.Fresco
 import com.facebook.drawee.view.SimpleDraweeView
 import com.facebook.imagepipeline.request.BasePostprocessor
 import com.facebook.imagepipeline.request.ImageRequestBuilder
-import android.net.Uri
 import kotlin.math.max
 
 class UserAvatarPresenceView @JvmOverloads constructor(
@@ -64,7 +64,7 @@ class UserAvatarPresenceView @JvmOverloads constructor(
                 setAvatarBackgroundColor(
                     getColor(
                         R.styleable.UserAvatarPresenceView_user_avatar_background_color,
-                        themedColor(R.attr.colorBackgroundTertiary),
+                        ThemedColor.resolve(context, R.attr.colorBackgroundTertiary),
                     ),
                 )
                 cutoutSpacePx = getDimensionPixelSize(
@@ -161,8 +161,6 @@ class UserAvatarPresenceView @JvmOverloads constructor(
             height = size
         }
     }
-
-    private fun themedColor(attribute: Int): Int = ThemedColor.resolve(context, attribute)
 
     private companion object {
         const val INVISIBLE_STATUS_FLAG = 1 shl 19

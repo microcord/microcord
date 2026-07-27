@@ -17,6 +17,7 @@ import com.discord.R
 import com.discord.i18n.i18nFormat
 import com.discord.stores.StoreApplicationStreamPreviews
 import com.discord.stores.StoreVoiceParticipants
+import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.view.extensions.fadeBy
 import com.discord.views.VoiceUserView
 import com.facebook.drawee.view.SimpleDraweeView
@@ -319,12 +320,12 @@ class VideoCallParticipantView @JvmOverloads constructor(
         // so it is not hidden by the cutout, unless the mute/deafen row already
         // occupies that corner.
         val moveToBottom = insetTop > 0 && isTopRow && indicators.visibility != VISIBLE
-        set.connect(live.id, ConstraintSet.RIGHT, ConstraintSet.PARENT_ID, ConstraintSet.RIGHT, 8.dp)
+        set.connect(live.id, ConstraintSet.RIGHT, ConstraintSet.PARENT_ID, ConstraintSet.RIGHT, dpToPixels(8))
         if (moveToBottom) {
-            set.connect(live.id, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM, 8.dp)
+            set.connect(live.id, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM, dpToPixels(8))
             set.clear(live.id, ConstraintSet.TOP)
         } else {
-            set.connect(live.id, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP, 8.dp)
+            set.connect(live.id, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP, dpToPixels(8))
             set.clear(live.id, ConstraintSet.BOTTOM)
         }
         set.applyTo(this)
@@ -343,7 +344,6 @@ class VideoCallParticipantView @JvmOverloads constructor(
     }
 
     private fun visible(show: Boolean) = if (show) VISIBLE else GONE
-    private val Int.dp get() = (this * resources.displayMetrics.density).toInt()
 
     private fun Bitmap.averageColor(): Int {
         var red = 0L

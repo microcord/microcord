@@ -10,8 +10,8 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import com.discord.R
 import com.discord.simpleast.core.node.Node
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.spans.ClickableSpan
-import com.discord.utilities.textprocessing.themedColor
 
 /**
  * `<@id>` / `<@!id>` user mention plus the two broadcast mentions `@everyone` and `@here`.
@@ -43,8 +43,8 @@ class UserMentionNode<T : UserMentionNode.RenderContext>(
         builder.append(if (type == Type.HERE) HERE_MENTION else EVERYONE_MENTION)
         listOf(
             StyleSpan(Typeface.BOLD),
-            BackgroundColorSpan(themedColor(renderContext.context, R.attr.theme_chat_mention_background)),
-            ForegroundColorSpan(themedColor(renderContext.context, R.attr.theme_chat_mention_foreground)),
+            BackgroundColorSpan(ColorCompat.getThemedColor(renderContext.context, R.attr.theme_chat_mention_background)),
+            ForegroundColorSpan(ColorCompat.getThemedColor(renderContext.context, R.attr.theme_chat_mention_foreground)),
         ).forEach { builder.setSpan(it, start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
     }
 
@@ -57,13 +57,13 @@ class UserMentionNode<T : UserMentionNode.RenderContext>(
 
         val spans = mutableListOf<CharacterStyle>(
             StyleSpan(Typeface.BOLD),
-            BackgroundColorSpan(themedColor(context, R.attr.theme_chat_mention_background)),
+            BackgroundColorSpan(ColorCompat.getThemedColor(context, R.attr.theme_chat_mention_background)),
         )
         val onClick = renderContext.userMentionOnClick
         spans += if (isKnownUser && onClick != null) {
-            ClickableSpan(themedColor(context, R.attr.theme_chat_mention_foreground), false) { onClick(userId) }
+            ClickableSpan(ColorCompat.getThemedColor(context, R.attr.theme_chat_mention_foreground), false) { onClick(userId) }
         } else {
-            ForegroundColorSpan(themedColor(context, R.attr.theme_chat_mention_foreground))
+            ForegroundColorSpan(ColorCompat.getThemedColor(context, R.attr.theme_chat_mention_foreground))
         }
 
         builder.append(MENTION_PREFIX).append(displayName)

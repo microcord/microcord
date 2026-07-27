@@ -236,7 +236,7 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
             null -> {
                 controls.visibility = View.GONE
                 connectContainer.visibility = View.GONE
-                root.setBackgroundColor(themedColor(R.attr.colorBackgroundPrimary))
+                root.setBackgroundColor(ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundPrimary))
             }
             is BottomContent.Controls -> {
                 controls.visibility = View.VISIBLE
@@ -261,7 +261,7 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
                     forwardToFullscreenIfVideoActivated = forwardToFullscreenIfVideoActivated,
                     featureContext = featureContext,
                 )
-                root.setBackgroundColor(themedColor(R.attr.colorBackgroundSecondary))
+                root.setBackgroundColor(ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundSecondary))
             }
             is BottomContent.Connect -> {
                 // INVISIBLE, not GONE: the controls row reserves the height the connect row
@@ -283,7 +283,7 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
                 joinVideoButton.setOnClickListener {
                     requestVideoCallPermissions { viewModel.tryConnectToVoice(true) }
                 }
-                root.setBackgroundColor(themedColor(R.attr.colorBackgroundPrimary))
+                root.setBackgroundColor(ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundPrimary))
             }
         }
     }
@@ -403,9 +403,6 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
             okText = getString(R.string.okay),
         )
     }
-
-    private fun themedColor(attributeResourceId: Int): Int =
-        ColorCompat.getThemedColor(requireContext(), attributeResourceId)
 
     /**
      * Navigation this sheet needs but cannot reach: several screens and one service that are either

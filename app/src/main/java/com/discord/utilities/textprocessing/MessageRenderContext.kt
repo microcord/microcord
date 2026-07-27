@@ -5,6 +5,7 @@ import androidx.annotation.AttrRes
 import androidx.annotation.ColorInt
 import com.discord.R
 import com.discord.api.role.GuildRole
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.textprocessing.node.BasicRenderContext
 import com.discord.utilities.textprocessing.node.ChannelMentionNode
 import com.discord.utilities.textprocessing.node.EmojiNode
@@ -40,9 +41,9 @@ data class MessageRenderContext(
     override val onClickUrl: (Context, String, String?) -> Unit = DEFAULT_URL_CLICK,
     override val onLongPressUrl: (String) -> Unit = DEFAULT_URL_LONG_PRESS,
 
-    @ColorInt override val spoilerColorRes: Int = themedColor(context, R.attr.theme_chat_spoiler_bg),
+    @ColorInt override val spoilerColorRes: Int = ColorCompat.getThemedColor(context, R.attr.theme_chat_spoiler_bg),
     @ColorInt override val spoilerRevealedColorRes: Int =
-        themedColor(context, R.attr.theme_chat_spoiler_bg_visible),
+        ColorCompat.getThemedColor(context, R.attr.theme_chat_spoiler_bg_visible),
 
     override val spoilerOnClick: ((SpoilerNode<*>) -> Unit)? = null,
     override val userMentionOnClick: ((Long) -> Unit)? = null,

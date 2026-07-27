@@ -11,6 +11,7 @@ import android.widget.TableRow
 import android.widget.TextView
 import com.discord.R
 import com.discord.stores.StoreVoiceParticipants
+import com.discord.utilities.dimen.dpToPixels
 import com.discord.views.VoiceUserView
 
 class PrivateCallGridView @JvmOverloads constructor(
@@ -46,13 +47,13 @@ class PrivateCallGridView @JvmOverloads constructor(
         callUserViews.getOrPut(user.user.id) {
             VoiceUserView(context, null).apply {
                 layoutParams = TableRow.LayoutParams().apply {
-                    val margin = 2.dp
+                    val margin = dpToPixels(2)
                     setMargins(margin, margin, margin, margin)
                 }
                 setAnimateAvatarWhenRinging(true)
                 setFadeWhenDisconnected(true)
-                setAvatarSize(92.dp)
-                setRingMargin(6.dp)
+                setAvatarSize(dpToPixels(92))
+                setRingMargin(dpToPixels(6))
             }
         }.also {
             // `avatar_size_unrestricted` is 0dp: the tile has already been sized to 92dp above, so
@@ -67,8 +68,8 @@ class PrivateCallGridView @JvmOverloads constructor(
         }
         return (LayoutInflater.from(context)
             .inflate(R.layout.view_private_call_grid_overflow, this, false) as TextView).apply {
-            layoutParams = TableRow.LayoutParams(92.dp, 92.dp).apply {
-                val margin = 8.dp
+            layoutParams = TableRow.LayoutParams(dpToPixels(92), dpToPixels(92)).apply {
+                val margin = dpToPixels(8)
                 setMargins(margin, margin, margin, margin)
             }
             text = "+${users.size - maxShownParticipants()}"
@@ -82,7 +83,6 @@ class PrivateCallGridView @JvmOverloads constructor(
     private fun columnCount() = columnCount(isLandscape)
     private fun maxShownParticipants() = maxShownParticipants(isLandscape)
     private val isLandscape get() = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-    private val Int.dp get() = (this * resources.displayMetrics.density).toInt()
 
     internal companion object {
         fun columnCount(landscape: Boolean) = if (landscape) 6 else 3

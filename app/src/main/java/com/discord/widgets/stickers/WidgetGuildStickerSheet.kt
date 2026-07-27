@@ -1,9 +1,7 @@
 package com.discord.widgets.stickers
 
-import android.content.Context
 import android.content.res.ColorStateList
 import android.os.Bundle
-import android.util.TypedValue
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -18,6 +16,7 @@ import com.discord.app.AppViewFlipper
 import com.discord.app.appViewModels
 import com.discord.i18n.i18nFormat
 import com.discord.models.guild.Guild
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.locale.LocaleManager
 import com.discord.utilities.rx.ui
@@ -160,7 +159,7 @@ class WidgetGuildStickerSheet : AppBottomSheet() {
         } else {
             guildIconWrapper.setBackgroundResource(R.drawable.drawable_circle_black)
             guildIconWrapper.backgroundTintList =
-                ColorStateList.valueOf(themedColor(requireContext(), R.attr.colorBackgroundSecondary))
+                ColorStateList.valueOf(ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundSecondary))
             guildIconText.text = guild.shortName
         }
 
@@ -207,16 +206,6 @@ class WidgetGuildStickerSheet : AppBottomSheet() {
         isPublic && !isUserPremium -> R.string.sticker_popout_unjoined_discoverable_guild_description
         isPublic -> R.string.sticker_popout_premium_unjoined_discoverable_guild_description
         else -> R.string.sticker_popout_premium_unjoined_private_guild_description
-    }
-
-    /**
-     * Belongs in `utilities/color/ColorCompat.getThemedColor`, which does not exist in this project.
-     * Delete this when it does.
-     */
-    private fun themedColor(context: Context, attributeResId: Int): Int {
-        val value = TypedValue()
-        context.theme.resolveAttribute(attributeResId, value, true)
-        return value.data
     }
 
     companion object {

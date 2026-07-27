@@ -63,7 +63,6 @@ data class StageCallModel(
                 when {
                     channel == null -> Observable.just(null)
                     !channel.isStageVoiceChannel() -> Observable.just(null)
-                    !StageStoreAccess.isInstalled -> Observable.just(null)
                     else -> observeForStageChannel(channelId, channel)
                 }
             }
@@ -79,7 +78,8 @@ data class StageCallModel(
             StoreStream.getGuilds().observeGuild(channel.guildId),
             StoreStream.getUserRelationships().observeForType(RELATIONSHIP_TYPE_BLOCKED),
             StoreStream.getStageInstances().observeStageInstanceForChannel(channelId),
-            StageStoreAccess.requireLurking().isLurkingObs(channel.guildId),
+            // `false` while `StoreStream` publishes no `StoreLurking` — see [StageStoreAccess].
+            StageStoreAccess.observeIsLurking(channel.guildId),
         ) { participants, guildMembers, guildRoles, guild, blockedUsers, stageInstance, isLurking ->
             create(
                 channel = channel,
@@ -112,7 +112,7 @@ data class StageCallModel(
             blockedUsers: Set<Long>,
             stageInstance: StageInstance?,
             isLurking: Boolean,
-            stagesStore: StoreStageChannels = StageStoreAccess.requireStageChannels(),
+            stagesStore: StoreStageChannels = StageStoreAccess.stageChannels(),
         ): StageCallModel {
             val connected = participants.values.filter { it.isConnected }
             val rolesByUser = connected.associate { voiceUser ->

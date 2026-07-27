@@ -4,6 +4,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.i18n.i18nFormat
@@ -24,7 +25,20 @@ import com.facebook.drawee.view.SimpleDraweeView
  */
 class StageAudienceBlockedBottomSheetAdapter(
     recycler: RecyclerView,
-) : MGRecyclerAdapterSimple<StageAudienceBlockedBottomSheetAdapter.ListItem>(recycler) {
+) : MGRecyclerAdapterSimple<StageAudienceBlockedBottomSheetAdapter.ListItem>(
+    recycler,
+    // The list is short and fully known before the sheet opens, so diffing it on a background
+    // scheduler would only delay the first frame. The reference makes the same choice.
+    deferredDiffs = false,
+) {
+
+    init {
+        // Unlike its siblings this adapter is not passed through `MGRecyclerAdapter.configure`;
+        // the reference attaches itself here instead, and without this the recycler never gets an
+        // adapter and the sheet lists nobody.
+        recycler.layoutManager = LinearLayoutManager(recycler.context)
+        recycler.adapter = this
+    }
 
     sealed class ListItem : MGRecyclerDataPayload {
 

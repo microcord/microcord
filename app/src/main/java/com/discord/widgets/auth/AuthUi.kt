@@ -1,6 +1,8 @@
 package com.discord.widgets.auth
 
 import androidx.lifecycle.ViewModel
+import com.discord.utilities.captcha.CaptchaErrorBody
+import com.discord.utilities.captcha.CaptchaHelper
 import java.io.Serializable
 import rx.subjects.BehaviorSubject
 
@@ -55,7 +57,26 @@ data class AuthUiState(
     val underageMessage: String? = null,
     val disabledAccount: Boolean = false,
     val landingContent: AuthLandingContent? = null,
-) : Serializable
+) : Serializable {
+    /**
+     * Redacted rendering.
+     *
+     * [ticket], [phoneToken] and [resetToken] are server-issued bearer credentials that complete an
+     * authentication — an MFA challenge, a phone-verified registration, a password reset. The
+     * generated `toString` would print all three, so it is replaced: this object is passed around
+     * the UI layer freely and must stay safe to log.
+     *
+     * No password, MFA code or backup code is ever stored on this state; those are read straight
+     * off their password-style inputs at submit time and are never held here.
+     */
+    override fun toString(): String = "AuthUiState(route=$route, loading=$loading, " +
+        "fieldErrorKeys=${fieldErrors.keys}, identifier=<redacted>, username=$username, " +
+        "email=<redacted>, phone=<redacted>, phoneToken=<redacted>, ticket=<redacted>, " +
+        "resetToken=<redacted>, birthday=$birthday, identityMode=$identityMode, " +
+        "consentRequired=$consentRequired, consented=$consented, requiredAction=$requiredAction, " +
+        "allowEmail=$allowEmail, allowPhone=$allowPhone, ageStep=$ageStep, " +
+        "disabledAccount=$disabledAccount, landingContent=$landingContent)"
+}
 
 sealed class AuthAction {
     class Login(val identifier: String, val password: String) : AuthAction() {
@@ -109,14 +130,37 @@ sealed class AuthResult {
     data class Success(val nextRoute: AuthRoute? = null, val message: String? = null) : AuthResult()
     data class Failure(val fieldErrors: Map<String, String> = emptyMap(), val message: String? = null) : AuthResult()
     data class Challenge(val route: AuthRoute, val state: AuthUiState) : AuthResult()
+
+    /**
+     * The API refused the request until a captcha is solved.
+     *
+     * The screen opens [com.discord.widgets.auth.WidgetAuthCaptcha] and re-submits the same action
+     * with the solved payload; nothing about the original input is lost or re-typed.
+     */
+    data class CaptchaRequired(val error: CaptchaErrorBody?) : AuthResult()
 }
 
 interface AuthUiActions {
     fun navigate(route: AuthRoute, state: AuthUiState = AuthUiState(route = route))
-    fun submit(action: AuthAction, callback: (AuthResult) -> Unit)
+
+    /**
+     * Performs [action].
+     *
+     * @param captcha payload from a challenge the user just solved, replayed with the retry.
+     */
+    fun submit(
+        action: AuthAction,
+        captcha: CaptchaHelper.CaptchaPayload? = null,
+        callback: (AuthResult) -> Unit,
+    )
+
     fun close()
-    fun openPasswordManager() = Unit
-    fun openSupport() = Unit
+
+    /** Opens the platform credential/password manager so the user can look up their password. */
+    fun openPasswordManager()
+
+    /** Opens Discord support, for an account the user cannot recover in-app. */
+    fun openSupport()
 }
 
 class AuthUiViewModel : ViewModel() {

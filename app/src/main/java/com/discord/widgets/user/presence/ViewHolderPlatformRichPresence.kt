@@ -1,11 +1,9 @@
 package com.discord.widgets.user.presence
 
 import android.content.Context
-import android.util.TypedValue
 import android.view.View
 import android.widget.Button
 import android.widget.TextView
-import androidx.annotation.AttrRes
 import androidx.annotation.MainThread
 import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.FragmentManager
@@ -14,6 +12,7 @@ import com.discord.api.activity.Activity
 import com.discord.i18n.i18nFormat
 import com.discord.models.user.User
 import com.discord.stores.StoreUserConnections
+import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.platform.Platform
@@ -126,7 +125,7 @@ class ViewHolderPlatformRichPresence(
 
         val themedImage = platform.themedPlatformImage
         if (platform == Platform.XBOX && themedImage != null) {
-            MGImages.setImage(richPresenceImageLarge, richPresenceImageLarge.themedDrawableRes(themedImage))
+            MGImages.setImage(richPresenceImageLarge, richPresenceImageLarge.getThemedDrawableRes(themedImage))
             richPresenceImageLarge.visibility = View.VISIBLE
             return
         }
@@ -147,17 +146,5 @@ class ViewHolderPlatformRichPresence(
             richPresenceImageLarge.visibility = View.VISIBLE
             MGImages.setImage(richPresenceImageLarge, iconUrl)
         }
-    }
-
-    /**
-     * Resolves a theme attribute to the drawable it points at for this view's theme.
-     *
-     * The reference calls `utilities/drawable/DrawableCompat.getThemedDrawableRes`, which has not
-     * been reconstructed; several other views in this project inline the same three lines.
-     */
-    private fun View.themedDrawableRes(@AttrRes attribute: Int): Int {
-        val value = TypedValue()
-        context.theme.resolveAttribute(attribute, value, true)
-        return value.resourceId
     }
 }

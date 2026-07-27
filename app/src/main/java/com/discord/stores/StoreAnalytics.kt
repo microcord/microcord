@@ -21,6 +21,7 @@ import com.discord.rtcconnection.RtcConnection
 import com.discord.rtcconnection.audio.DiscordAudioManager
 import com.discord.rtcconnection.mediaengine.MediaEngine
 import com.discord.rtcconnection.mediaengine.MediaEngineConnection
+import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.analytics.AnalyticsUtils
 import com.discord.utilities.analytics.AppStartAnalyticsTracker
@@ -31,9 +32,9 @@ import com.discord.utilities.collections.filterNonNullValues
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationBuffered
 import com.discord.utilities.time.Clock
+import java.util.concurrent.atomic.AtomicBoolean
 import rx.Observable
 import rx.subjects.PublishSubject
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Raises every analytics event that needs store state to describe itself.
@@ -797,16 +798,11 @@ class StoreAnalytics(
         "thread_archived" to (channel.threadMetadata?.archived == true),
         "thread_locked" to (channel.threadMetadata?.locked == true),
         "thread_auto_archive_duration_minutes" to channel.threadMetadata?.autoArchiveDuration,
-        "thread_approximate_creation_date" to ((channel.id ushr SNOWFLAKE_TIMESTAMP_SHIFT) + DISCORD_EPOCH),
+        "thread_approximate_creation_date" to SnowflakeUtils.toTimestamp(channel.id),
     )
 
     companion object {
         private const val CACHE_KEY_LOGOUT_TS = "CACHE_KEY_LOGOUT_TS"
         private const val MAX_REPORTED_THREAD_MESSAGES = 50
-
-        // Snowflake timestamp extraction; duplicated from the reference rather than from
-        // utilities/SnowflakeUtils, which does not exist yet.
-        private const val SNOWFLAKE_TIMESTAMP_SHIFT = 22
-        private const val DISCORD_EPOCH = 1_420_070_400_000L
     }
 }

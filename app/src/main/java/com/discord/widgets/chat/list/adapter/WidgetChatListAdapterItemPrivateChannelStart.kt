@@ -5,6 +5,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.annotation.StringRes
 import com.discord.R
+import com.discord.i18n.I18nHooks
 import com.discord.i18n.i18nFormat
 import com.discord.i18n.i18nPlural
 import com.discord.utilities.icon.IconUtils
@@ -50,7 +51,7 @@ class WidgetChatListAdapterItemPrivateChannelStart(
         } else {
             // `beginning_dm` and `beginning_group_dm` name their placeholder differently, so both
             // tokens are supplied and the unused one is simply never matched.
-            channelText.text = ChatRowText.format(
+            channelText.text = I18nHooks.format(
                 channelText.context,
                 startResId(entry.channelType),
                 mapOf("username" to channelName, "name" to channelName),

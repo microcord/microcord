@@ -7,17 +7,17 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.util.AttributeSet
-import android.util.TypedValue
 import android.view.View
 import com.discord.R
-import kotlin.math.roundToInt
+import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.dimen.dpToPixels
 
 class ViewReplySpline(context: Context, attrs: AttributeSet?) : View(context, attrs) {
     private val paint = Paint().apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         strokeWidth = 6f
-        color = themedColor(R.attr.colorBackgroundAccent)
+        color = ColorCompat.getThemedColor(context, R.attr.colorBackgroundAccent)
     }
     private val path = Path()
     private val pathRect = RectF(0f, 0f, 1f, 1f)
@@ -96,11 +96,5 @@ class ViewReplySpline(context: Context, attrs: AttributeSet?) : View(context, at
         createPath()
     }
 
-    private fun dpToPixels(value: Float) = (value * resources.displayMetrics.density).roundToInt()
 
-    private fun themedColor(attribute: Int): Int {
-        val value = TypedValue()
-        context.theme.resolveAttribute(attribute, value, true)
-        return value.data
-    }
 }

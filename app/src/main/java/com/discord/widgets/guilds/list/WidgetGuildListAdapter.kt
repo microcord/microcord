@@ -8,7 +8,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
-import com.discord.utilities.textprocessing.themedColor
+import com.discord.utilities.color.ColorCompat
 import kotlin.math.abs
 
 /**
@@ -79,8 +79,8 @@ class WidgetGuildListAdapter(
                 val itemView = inflate(R.layout.widget_guilds_list_item_guild_vertical)
                 GuildListViewHolder.GuildViewHolder(
                     itemView,
-                    overlayColor = themedColor(parent.context, R.attr.colorBackgroundTertiary),
-                    overlayColorInFolder = themedColor(parent.context, R.attr.primary_600),
+                    overlayColor = ColorCompat.getThemedColor(parent.context, R.attr.colorBackgroundTertiary),
+                    overlayColorInFolder = ColorCompat.getThemedColor(parent.context, R.attr.primary_600),
                     onClicked = { interactionListener.onItemClicked(itemView, it) },
                     onLongPressed = { interactionListener.onItemLongPressed(itemView, it) },
                 )

@@ -8,6 +8,7 @@ import com.discord.api.permission.Permission
 import com.discord.models.message.Message
 import com.discord.models.notification.NotificationSettingsV2
 import com.discord.stores.updates.ObservationDeck
+import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.fcm.NotificationClient
 import com.discord.utilities.lifecycle.Backgrounded
 import com.discord.utilities.permissions.PermissionUtils
@@ -233,13 +234,12 @@ class StoreNotifications(
 
     private fun isFresh(message: Message): Boolean {
         val sentAt = message.timestamp?.dateTimeMillis
-            ?: if (message.id > 4_194_304L) (message.id ushr 22) + DISCORD_EPOCH else 0L
+            ?: if (message.id > 4_194_304L) SnowflakeUtils.toTimestamp(message.id) else 0L
         return sentAt > 0L && sentAt + MESSAGE_WINDOW_MS > clock.currentTimeMillis()
     }
 
     companion object {
         const val SETTINGS_CACHE_KEY = "STORE_NOTIFICATIONS_SETTINGS_V2"
         const val MESSAGE_WINDOW_MS = 10_000L
-        private const val DISCORD_EPOCH = 1_420_070_400_000L
     }
 }

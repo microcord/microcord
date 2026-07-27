@@ -7,6 +7,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.content.res.AppCompatResources
 import com.discord.R
+import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.renderReactionEmoji
 
@@ -22,8 +23,8 @@ class ForumPostTagView @JvmOverloads constructor(
         inflate(context, R.layout.forum_post_tag_view, this)
         tagEmoji = requireNotNull(findViewById(R.id.tag_emoji))
         tagName = requireNotNull(findViewById(R.id.tag_name))
-        val horizontal = dp(8)
-        val vertical = dp(2)
+        val horizontal = dpToPixels(8)
+        val vertical = dpToPixels(2)
         setPadding(horizontal, vertical, horizontal, vertical)
         val value = TypedValue()
         if (context.theme.resolveAttribute(R.attr.theme_forum_post_tag_background, value, true)) {
@@ -32,9 +33,8 @@ class ForumPostTagView @JvmOverloads constructor(
     }
 
     fun configureTag(tag: PostTagData) {
-        renderReactionEmoji(tagEmoji, tag.messageReactionEmoji, true, dp(12))
+        renderReactionEmoji(tagEmoji, tag.messageReactionEmoji, true, dpToPixels(12))
         tagName.text = tag.tagName
     }
 
-    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }

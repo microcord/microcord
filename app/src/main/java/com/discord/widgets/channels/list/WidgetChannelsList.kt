@@ -2,14 +2,12 @@ package com.discord.widgets.channels.list
 
 import android.content.Context
 import android.graphics.Color
-import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
 import android.widget.FrameLayout
 import android.widget.TextView
-import androidx.annotation.AttrRes
 import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
 import androidx.appcompat.widget.Toolbar
@@ -27,6 +25,7 @@ import com.discord.app.AppScreenRouter
 import com.discord.models.guild.Guild
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
+import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
@@ -35,6 +34,7 @@ import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.rx.ui
 import com.discord.utilities.view.rounded.RoundedCoordinatorLayout
 import com.discord.views.CustomAppBarLayout
+import com.discord.views.ThemedColor
 import com.discord.widgets.directories.WidgetDirectoryChannel
 import com.discord.widgets.friends.EmptyFriendsStateView
 import com.discord.widgets.hubs.events.WidgetHubEventsPage
@@ -382,7 +382,7 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
             if (hasBanner && !isCollapsed) {
                 ContextCompat.getColor(requireContext(), R.color.black_alpha_80)
             } else {
-                themedColor(requireContext(), R.attr.colorBackgroundSecondary)
+                ThemedColor.resolve(requireContext(), R.attr.colorBackgroundSecondary, Color.WHITE)
             },
         )
         bannerForeground.visibility = if (hasBanner && !isCollapsed) View.VISIBLE else View.GONE
@@ -393,7 +393,7 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
         val badge = guildBadge(guild, appBarLayout.isCollapsed)
         val badgeDrawable =
             if (badge == 0) null else ContextCompat.getDrawable(requireContext(), badge)
-        val moreRes = themedDrawableRes(requireContext(), R.attr.ic_more)
+        val moreRes = requireContext().getThemedDrawableRes(R.attr.ic_more)
         val moreDrawable = if (moreRes == 0) {
             null
         } else {
@@ -445,24 +445,8 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
         if (guild?.banner != null && !isCollapsed) {
             ContextCompat.getColor(context, R.color.white)
         } else {
-            themedColor(context, R.attr.colorInteractiveActive)
+            ThemedColor.resolve(context, R.attr.colorInteractiveActive, Color.WHITE)
         }
-
-    @ColorInt
-    private fun themedColor(context: Context, @AttrRes attribute: Int): Int {
-        val value = TypedValue()
-        if (!context.theme.resolveAttribute(attribute, value, true)) return Color.WHITE
-        return if (value.type in TypedValue.TYPE_FIRST_COLOR_INT..TypedValue.TYPE_LAST_COLOR_INT) {
-            value.data
-        } else {
-            ContextCompat.getColor(context, value.resourceId)
-        }
-    }
-
-    private fun themedDrawableRes(context: Context, @AttrRes attribute: Int): Int {
-        val value = TypedValue()
-        return if (context.theme.resolveAttribute(attribute, value, true)) value.resourceId else 0
-    }
 
     private fun dpToPx(dp: Float): Float = dp * resources.displayMetrics.density
 

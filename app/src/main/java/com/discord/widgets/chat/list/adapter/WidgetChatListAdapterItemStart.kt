@@ -9,8 +9,11 @@ import android.widget.ImageView
 import android.widget.TextView
 import com.discord.R
 import com.discord.api.channel.ForumTag
-import com.discord.api.channel.ForumTagId
+import com.discord.i18n.Hook
+import com.discord.i18n.I18nHooks
 import com.discord.models.member.GuildMember
+import com.discord.primitives.ForumTagId
+import com.discord.utilities.dimen.dpToPixels
 import com.discord.views.ThemedColor
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.StartOfChatEntry
@@ -51,7 +54,7 @@ class WidgetChatListAdapterItemStart(
     }
 
     private fun configureChannel(entry: StartOfChatEntry) {
-        header.text = ChatRowText.format(
+        header.text = I18nHooks.format(
             header.context,
             R.string.android_welcome_message_title_channel,
             mapOf("channelName" to entry.channelName),
@@ -75,7 +78,7 @@ class WidgetChatListAdapterItemStart(
             R.string.beginning_channel_no_history
         }
         subheader2.visibility = View.VISIBLE
-        subheader2.text = ChatRowText.format(
+        subheader2.text = I18nHooks.format(
             subheader2.context,
             subtitle,
             mapOf("channelName" to entry.channelName),
@@ -97,11 +100,11 @@ class WidgetChatListAdapterItemStart(
         tags.visibility = View.GONE
         headerIcon.setImageResource(R.drawable.ic_thread)
 
-        subheader1.text = ChatRowText.format(
+        subheader1.text = I18nHooks.format(
             context,
             R.string.thread_started_by,
             hooks = mapOf(
-                "usernameHook" to ChatRowText.Hook(
+                "usernameHook" to Hook(
                     text = entry.threadCreatorName,
                     spans = listOf(
                         StyleSpan(Typeface.BOLD),
@@ -112,11 +115,11 @@ class WidgetChatListAdapterItemStart(
         )
 
         subheader2.text = if (entry.canReadMessageHistory) {
-            ChatRowText.format(
+            I18nHooks.format(
                 context,
                 R.string.beginning_thread_archive_description,
                 hooks = mapOf(
-                    "autoArchiveDurationHook" to ChatRowText.Hook(
+                    "autoArchiveDurationHook" to Hook(
                         text = autoArchiveDurationName(entry.threadAutoArchiveDuration ?: 0),
                         spans = listOf(
                             ForegroundColorSpan(
@@ -127,7 +130,7 @@ class WidgetChatListAdapterItemStart(
                 ),
             )
         } else {
-            ChatRowText.format(
+            I18nHooks.format(
                 context,
                 R.string.beginning_channel_no_history,
                 mapOf("channelName" to entry.channelName),
@@ -169,7 +172,7 @@ class WidgetChatListAdapterItemStart(
             }
             tagView.visibility = View.VISIBLE
             (tagView.layoutParams as? ViewGroup.MarginLayoutParams)?.let { params ->
-                params.setMargins(params.leftMargin, params.topMargin, dp(TAG_SPACING_DP), dp(TAG_SPACING_DP))
+                params.setMargins(params.leftMargin, params.topMargin, dpToPixels(TAG_SPACING_DP), dpToPixels(TAG_SPACING_DP))
                 tagView.layoutParams = params
             }
             tagView.configureTag(PostTagData.fromTag(tag, animated = false))
@@ -194,7 +197,6 @@ class WidgetChatListAdapterItemStart(
         else -> ""
     }
 
-    private fun dp(value: Int): Int = (value * itemView.resources.displayMetrics.density).toInt()
 
     private companion object {
         private const val TAG_SPACING_DP = 6

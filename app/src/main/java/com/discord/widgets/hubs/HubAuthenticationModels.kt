@@ -70,4 +70,12 @@ data class HubAuthenticationState(
     val email: String? = null,
     val resendEmailAsync: RestCallState<EmailVerification> = Default,
     val authenticationAsync: RestCallState<EmailVerificationCode> = Default,
-)
+) {
+    /**
+     * Redacts [email]. A `data class` would otherwise print the user's address, and view state is
+     * exactly what ends up in a crash report or a state-transition log.
+     */
+    override fun toString(): String =
+        "HubAuthenticationState(email=${if (email == null) "null" else "REDACTED"}, " +
+            "resendEmailAsync=$resendEmailAsync, authenticationAsync=$authenticationAsync)"
+}

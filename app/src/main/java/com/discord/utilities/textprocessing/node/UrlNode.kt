@@ -5,8 +5,8 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import androidx.annotation.AttrRes
 import com.discord.simpleast.core.node.Node
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.spans.ClickableSpan
-import com.discord.utilities.textprocessing.themedColor
 import com.discord.utilities.textprocessing.toPunyCodeAsciiUrl
 
 /**
@@ -38,7 +38,7 @@ class UrlNode<T : UrlNode.RenderContext>(
         }
 
         val style = ClickableSpan(
-            themedColor(renderContext.context, renderContext.linkColorAttrResId),
+            ColorCompat.getThemedColor(renderContext.context, renderContext.linkColorAttrResId),
             false,
             onLongPress = { renderContext.onLongPressUrl(safeUrl) },
         ) { view -> renderContext.onClickUrl(view.context, safeUrl, mask) }

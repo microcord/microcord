@@ -15,6 +15,7 @@ import androidx.annotation.StringRes
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
 import com.discord.R
+import com.discord.i18n.i18nFormat
 import com.discord.utilities.view.ToastManager
 import com.discord.views.ToolbarTitleLayout
 import java.io.File
@@ -288,7 +289,10 @@ abstract class AppFragment : Fragment, AppComponent, AppPermissionsRequests, App
     private fun onMediaPickerFailed(cause: Exception) {
         AppLog.w("Media picker failed in ${javaClass.simpleName}", cause)
         val context = context ?: return
-        toastManager.show(context, context.getNamedFormatString(R.string.upload_open_file_failed, cause.message.orEmpty()))
+        toastManager.show(
+            context,
+            context.i18nFormat(R.string.upload_open_file_failed, "file" to cause.message.orEmpty()),
+        )
     }
 
     // endregion

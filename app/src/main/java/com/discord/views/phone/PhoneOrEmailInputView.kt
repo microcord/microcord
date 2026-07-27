@@ -17,6 +17,7 @@ import androidx.lifecycle.LifecycleOwner
 import com.discord.R
 import com.discord.models.phone.PhoneCountryCode
 import com.discord.utilities.phone.PhoneUtils
+import com.discord.widgets.phone.WidgetPhoneCountryCodeBottomSheet
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 
@@ -43,9 +44,12 @@ class PhoneOrEmailInputView @JvmOverloads constructor(
         get() = mainInputLayout
 
     /**
-     * Invoked when the country-code field is tapped. The host screen shows the
-     * country picker and reports the choice back through [setCountryCode];
-     * without a callback the field stays pinned to its default country.
+     * Invoked when the country-code field is tapped.
+     *
+     * [bind] installs the country picker here by default, matching the reference
+     * (`PhoneOrEmailInputView.b(fragment)` wires `WidgetPhoneCountryCodeBottomSheet` itself), so a
+     * host screen only sets this when it wants a different destination. A view that was never
+     * bound has no callback and its country field stays pinned to the default country.
      */
     var onCountryCodeClicked: (() -> Unit)? = null
         set(value) {
@@ -90,13 +94,31 @@ class PhoneOrEmailInputView @JvmOverloads constructor(
         updateModeAppearance()
     }
 
+    /**
+     * Attaches the view to [fragment]: text watchers, and the country picker.
+     *
+     * The reference splits this across two methods — `a(fragment, onAfterTextChanged)` adds the
+     * watchers and `b(fragment)` opens `WidgetPhoneCountryCodeBottomSheet` from the country field —
+     * and every phone screen calls both. Here they are one call, and the picker is the *default*
+     * destination rather than something each caller has to remember to pass. Leaving it null by
+     * default meant `widgets/auth` and the phone screens were pinned to the default country code,
+     * which is not a behaviour the reference has.
+     *
+     * The picker reports its choice through `StorePhone`; the listener passed here only fires while
+     * that store is unpublished (see `PhoneCountryCodes.select`), so screens that observe the store
+     * are not double-notified.
+     */
     @JvmOverloads
     fun bind(
         fragment: Fragment,
         onAfterTextChanged: () -> Unit = {},
         onCountryCodeClick: (() -> Unit)? = null,
     ) {
-        onCountryCodeClick?.let { onCountryCodeClicked = it }
+        onCountryCodeClicked = onCountryCodeClick ?: {
+            WidgetPhoneCountryCodeBottomSheet.show(fragment.parentFragmentManager) { countryCode ->
+                setCountryCode(countryCode)
+            }
+        }
         addLifecycleTextWatcher(fragment, countryCodeLayout.editText) { onAfterTextChanged() }
         addLifecycleTextWatcher(fragment, mainEditText) {
             rememberCurrentText()

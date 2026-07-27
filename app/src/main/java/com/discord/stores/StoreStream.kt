@@ -14,7 +14,6 @@ import com.discord.api.channel.isThread
 import com.discord.api.guild.Guild
 import com.discord.api.guild.GuildMaxVideoChannelUsers
 import com.discord.api.friendsuggestions.FriendSuggestion
-import com.discord.api.friendsuggestions.FriendSuggestionDelete
 import com.discord.api.guildmember.GuildMember
 import com.discord.api.guildmember.GuildMemberRemove
 import com.discord.api.guildmember.GuildMembersChunk
@@ -52,6 +51,10 @@ import com.discord.restapi.RestAPIParams
 import com.discord.restapi.cookie.CookieJars
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.utilities.Batched
+import com.discord.utilities.channel.ChannelSelector
+import com.discord.utilities.streams.StreamContextService
+import com.discord.utilities.media.AppSound
+import com.discord.utilities.media.AppSoundManager
 import com.discord.utilities.networking.NetworkMonitor
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.logging.BootLog
@@ -71,15 +74,9 @@ import com.discord.widgets.chat.input.WidgetChatInput
 import com.discord.widgets.chat.list.WidgetChatList
 import com.discord.widgets.chat.overlay.WidgetChatOverlay
 import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
-import com.discord.widgets.friends.WidgetFriendsList
-import com.discord.widgets.friends.FriendsListInput
 import com.discord.widgets.friends.FriendRelationshipUi
 import com.discord.widgets.friends.FriendRelationship
-import com.discord.widgets.friends.FriendPresence
-import com.discord.widgets.friends.FriendSuggestionUi
 import com.discord.widgets.friends.FriendUserUi
-import com.discord.widgets.friends.WidgetFriendsAddById
-import com.discord.widgets.friends.AddFriendResult
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.widgets.user.WidgetUserStatusSheet
 import com.discord.widgets.user.WidgetUserSetCustomStatus
@@ -423,6 +420,16 @@ class StoreStream private constructor(
     private lateinit var messageActionCoordinator: MessageActionCoordinator
     private val uploadNonceGenerator = NonceGenerator(System::currentTimeMillis)
     private lateinit var applicationContext: Context
+
+    /**
+     * Play a feedback sound, unless the process has no Application yet.
+     *
+     * `AppSoundManager` needs one, and unit tests build the store graph without it — the guard is
+     * what keeps a mute toggle from throwing in a test.
+     */
+    private fun playAppSound(sound: AppSound) {
+        if (::applicationContext.isInitialized) AppSoundManager.Provider.get().play(sound)
+    }
     private val clientDataState = StoreClientDataState(observationDeck)
     private val connectionOpen = StoreConnectionOpen(observationDeck)
     private val connectivity = StoreConnectivity(dispatcher, clock, observationDeck)
@@ -507,6 +514,16 @@ class StoreStream private constructor(
     private val mediaSettings = StoreMediaSettings(
         findChannel = channels::findChannelByIdInternal,
         voiceConfigurationCache = VoiceConfigurationCache(preferences),
+        playSound = { sound ->
+            playAppSound(
+                when (sound) {
+                    StoreMediaSettings.VoiceSound.MUTE -> AppSound.SOUND_MUTE
+                    StoreMediaSettings.VoiceSound.UNMUTE -> AppSound.SOUND_UNMUTE
+                    StoreMediaSettings.VoiceSound.DEAFEN -> AppSound.SOUND_DEAFEN
+                    StoreMediaSettings.VoiceSound.UNDEAFEN -> AppSound.SOUND_UNDEAFEN
+                },
+            )
+        },
     )
     private val callsIncoming = StoreCallsIncoming(dispatcher, users, observationDeck)
     private val calls = StoreCalls(
@@ -536,9 +553,17 @@ class StoreStream private constructor(
         voiceStates,
         permissions,
         getMeId = { users.getMeInternal().id },
-        // `utilities/media/AppSoundManager` and `StoreMediaEngine.setAudioInputEnabled` belong to
-        // Phase 11; joining is silent and a stage join does not pre-mute until they land.
-        playSound = {},
+        // `StoreMediaEngine.setAudioInputEnabled` still belongs to Phase 11, so a stage join does
+        // not pre-mute; the join/leave/move sounds are live.
+        playSound = { sound ->
+            playAppSound(
+                when (sound) {
+                    StoreVoiceChannelSelected.Sound.JOINED -> AppSound.SOUND_USER_JOINED
+                    StoreVoiceChannelSelected.Sound.LEFT -> AppSound.SOUND_USER_LEFT
+                    StoreVoiceChannelSelected.Sound.MOVED -> AppSound.SOUND_USER_MOVED
+                },
+            )
+        },
         setAudioInputEnabled = {},
         getMaxVideoChannelUsers = { guildId ->
             (guilds.getGuildsInternal()[guildId]?.maxVideoChannelUsers as? GuildMaxVideoChannelUsers.Limited)?.limit
@@ -562,9 +587,24 @@ class StoreStream private constructor(
         applicationStreaming,
         mediaSettings,
         observeSelectedVoiceChannelId = { voiceChannelSelected.observeSelectedVoiceChannelId() },
-        // `utilities/streams/StreamContextService` is not reconstructed; participants carry no
-        // stream context, so the go-live overlay stays hidden.
+        streamContextForUser = { userId -> streamContextService.getForUser(userId, true) },
     )
+
+    /**
+     * `by lazy` because it takes the stores declared above it and is only touched once a voice
+     * tile subscribes — building it eagerly here would depend on property initialisation order.
+     */
+    private val streamContextService by lazy {
+        StreamContextService(
+            applicationStreamingStore = applicationStreaming,
+            guildStore = guilds,
+            permissionsStore = permissions,
+            userStore = users,
+            voiceChannelSelectedStore = voiceChannelSelected,
+            voiceStateStore = voiceStates,
+            channelStore = channels,
+        )
+    }
     private val storesV2 = listOf(
         accessibility,
         userSettingsSystem,
@@ -769,6 +809,12 @@ class StoreStream private constructor(
                 retryCaptchaUpload(requestId, CaptchaHelper.CaptchaPayload(token, rqtoken))
             }
         }
+        // A challenge the user closed is a real outcome: without this the captcha-blocked send sits
+        // in the queue forever and the composer stays stuck on "sending".
+        WidgetCaptchaBottomSheet.onAbandoned = { requestId ->
+            messageSendCoordinator.cancel(requestId)
+            if (failedUploads.containsKey(requestId)) cancelUpload(requestId)
+        }
         WidgetChatOverlay.onJumpToPresent = { messagesLoader.requestNewestMessages() }
         WidgetChatOverlay.stateSource = {
             channelsSelected.observeSelectedChannel().switchMap { channel ->
@@ -875,7 +921,16 @@ class StoreStream private constructor(
         userSettingsSystem.restore()
         accessibility.initForTesting()
         userSettings.initForTesting()
-        installChatStoreWiring()
+        dispatcher.schedule {
+            // On the store thread, unlike [initialize]. `installChatStoreWiring` subscribes to
+            // `observeSelectedVoiceChannelId`, and `ObservationDeck.connect` invokes the new
+            // observer's `onUpdate` while holding the deck monitor — which reaches
+            // `dispatcher.schedule`. The test dispatcher is synchronous, so from any other thread
+            // that hands the action to the store thread and waits, while the store thread's
+            // `onDispatchEnded` needs the deck monitor the waiter is holding: a deadlock. Scheduled
+            // here the whole chain runs on one thread, where the monitor is simply re-entered.
+            installChatStoreWiring()
+        }
         dispatcher.schedule {
             users.restore()
             userRelationships.init()
@@ -1523,48 +1578,8 @@ class StoreStream private constructor(
     }
 
     private fun configureSocialUi() {
-        WidgetFriendsList.stateSource = {
-            Observable.combineLatest(
-                users.observeAllUsers(),
-                presences.observeAllPresences(),
-                userRelationships.observeUserRelationshipsState(),
-                friendSuggestions.observeFriendSuggestions(),
-                userAffinities.observeAffinityUserIds(),
-            ) { allUsers, allPresences, relationshipState, suggestions, affinityIds ->
-                val relationships = (relationshipState as? StoreUserRelationships.UserRelationshipsState.Loaded)
-                val rows = relationships?.relationships.orEmpty().mapNotNull { (userId, type) ->
-                    val user = allUsers[userId] ?: return@mapNotNull null
-                    FriendRelationshipUi(
-                        friendUser(user),
-                        when (type) {
-                            ModelUserRelationship.TYPE_FRIEND -> FriendRelationship.FRIEND
-                            ModelUserRelationship.TYPE_BLOCKED -> FriendRelationship.BLOCKED
-                            ModelUserRelationship.TYPE_INVITE_INCOMING -> FriendRelationship.INCOMING
-                            ModelUserRelationship.TYPE_INVITE_OUTGOING -> FriendRelationship.OUTGOING
-                            else -> return@mapNotNull null
-                        },
-                        when (allPresences[userId]?.status) {
-                            ClientStatus.ONLINE -> FriendPresence.ONLINE
-                            ClientStatus.IDLE -> FriendPresence.IDLE
-                            ClientStatus.DND -> FriendPresence.DND
-                            else -> FriendPresence.OFFLINE
-                        },
-                        allPresences[userId]?.activities?.firstOrNull()?.name,
-                    )
-                }
-                FriendsListInput(
-                    loading = relationshipState is StoreUserRelationships.UserRelationshipsState.Unloaded,
-                    relationships = rows,
-                    suggestions = suggestions.values.map {
-                        FriendSuggestionUi(friendUser(it.user), it.publicName, affinityIds.indexOf(it.user.id).takeIf { rank -> rank >= 0 } ?: Int.MAX_VALUE)
-                    },
-                )
-            }
-        }
-        WidgetFriendsList.onAccept = { user -> addOrAcceptFriend(user.id) }
-        WidgetFriendsList.onDecline = { user -> declineOrIgnoreFriend(user.id) }
-        WidgetFriendsList.onCancel = { user -> removeRelationship(user.id) }
-        WidgetFriendsList.onMessage = { user -> openDmInternal(user.id) }
+        // The friends list and the add-friend screens own their own state and REST calls now
+        // (`FriendsListViewModel`, `WidgetFriendsAddById`), so nothing is installed for them here.
         WidgetSettingsBlockedUsers.stateSource = {
             Observable.combineLatest(users.observeAllUsers(), userRelationships.observe()) { allUsers, relationships ->
                 BlockedUsersBuilder.build(relationships.mapNotNull { (userId, type) ->
@@ -1583,23 +1598,6 @@ class StoreStream private constructor(
             }
         }
         WidgetSettingsBlockedUsers.onUnblock = { removeRelationship(it.id) }
-
-        WidgetFriendsAddById.ownUsername = users.getMe().username
-        WidgetFriendsAddById.submitRequest = { tag, captcha, completed ->
-            restApi.sendRelationshipRequest(
-                RestAPIParams.UserRelationship.Add(tag.username, tag.discriminator, captchaKey = captcha),
-                relationshipContext("Add Friend"),
-            ).subscribeOn(Schedulers.io()).subscribe(
-                {},
-                { error ->
-                    val restError = RestApiError.from(error)
-                    completed(if (restError.captchaSitekey != null) {
-                        AddFriendResult.Captcha(requireNotNull(restError.captchaSitekey), restError.captchaRqtoken)
-                    } else AddFriendResult.Error(restError.message ?: "Unable to send friend request."))
-                },
-                { completed(AddFriendResult.Success) },
-            )
-        }
 
         // The user sheet now owns its own state and REST calls through `WidgetUserSheetViewModel`;
         // only the navigation it cannot perform itself is installed here.
@@ -1690,27 +1688,6 @@ class StoreStream private constructor(
         user.discriminator,
         user.avatar?.let { "https://cdn.discordapp.com/avatars/${user.id}/$it.webp?size=96" },
     )
-
-    private fun addOrAcceptFriend(userId: Long) {
-        val incoming = userRelationships.getRelationships()[userId] == ModelUserRelationship.TYPE_INVITE_INCOMING
-        restApi.addRelationship(
-            userId,
-            RestAPIParams.UserRelationship(type = if (incoming) ModelUserRelationship.TYPE_FRIEND else null),
-            relationshipContext(if (incoming) "Accept Friend Request" else "Friends"),
-        ).subscribeOn(Schedulers.io()).subscribe({}, {}, {
-            dispatcher.schedule { userRelationships.handleRelationshipAdd(
-                ModelUserRelationship(userId, if (incoming) ModelUserRelationship.TYPE_FRIEND else ModelUserRelationship.TYPE_INVITE_OUTGOING),
-            ) }
-        })
-    }
-
-    private fun declineOrIgnoreFriend(userId: Long) {
-        if (userId in friendSuggestions.getFriendSuggestions()) {
-            restApi.ignoreFriendSuggestion(userId).subscribeOn(Schedulers.io()).subscribe({}, {}, {
-                dispatcher.schedule { friendSuggestions.handleFriendSuggestionDelete(FriendSuggestionDelete(userId)) }
-            })
-        } else removeRelationship(userId)
-    }
 
     private fun blockUser(userId: Long) {
         restApi.addRelationship(
@@ -2584,8 +2561,13 @@ class StoreStream private constructor(
             sessionDurablePreferences: SharedPreferences,
         ): StoreStream {
             val deck = ObservationDeck()
+            val dispatcher = Dispatcher(scheduler)
+            // `ChannelSelector` is the single owner of "open this channel" and is reachable from
+            // widgets as a singleton, exactly as in the reference; it only needs the dispatcher and
+            // the deck, so it can be published before the store graph finishes constructing.
+            ChannelSelector.init(dispatcher, deck)
             return StoreStream(
-                Dispatcher(scheduler),
+                dispatcher,
                 scheduler,
                 clock,
                 deck,
@@ -2721,5 +2703,15 @@ class StoreStream private constructor(
         @JvmStatic fun updateMemberRange(channel: Channel, range: IntRange) = requireInstance().updateMemberRangeInternal(channel, range)
         @JvmStatic fun updateGuildFolders(entries: List<StoreGuildsSorted.Entry>) = requireInstance().updateGuildFoldersInternal(entries)
         @JvmStatic fun cancelMessageSend(nonce: String) = requireInstance().cancelMessageSendInternal(nonce)
+
+        /**
+         * Ingest a thread fetched over REST rather than received over the gateway.
+         *
+         * `ChannelSelector.findAndSetThread` needs this: a link to a thread has to be fetched and
+         * inserted before it can be selected, and `THREAD_CREATE` will never arrive for it.
+         */
+        @JvmStatic fun handleThreadCreateOrUpdate(thread: Channel) = requireInstance().let { stream ->
+            stream.dispatcher.schedule { stream.handleThreadCreateOrUpdateInternal(thread) }
+        }
     }
 }

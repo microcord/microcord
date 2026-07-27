@@ -1,6 +1,5 @@
 package com.discord.widgets.search.suggestions
 
-import android.content.Context
 import android.graphics.Typeface
 import android.text.SpannableStringBuilder
 import android.text.Spanned

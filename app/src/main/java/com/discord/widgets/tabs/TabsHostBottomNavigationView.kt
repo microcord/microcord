@@ -5,7 +5,6 @@ import android.content.res.ColorStateList
 import android.os.Parcel
 import android.os.Parcelable
 import android.util.AttributeSet
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageView
@@ -13,11 +12,9 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.widget.ImageViewCompat
 import com.discord.R
-import com.discord.models.presence.Presence
-import com.discord.models.user.User
+import com.discord.utilities.color.ColorCompat
 import com.discord.views.user.UserAvatarPresenceView
-
-enum class NavigationTab { HOME, FRIENDS, SEARCH, MENTIONS, SETTINGS, DISCOVERY }
+import com.discord.views.user.UserAvatarPresenceViewController
 
 class TabsHostBottomNavigationView @JvmOverloads constructor(
     context: Context,
@@ -34,10 +31,15 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
     private val iconToNavigationTabMap: Map<View, NavigationTab>
     private val tintableIconToNavigationTabMap: Map<ImageView, NavigationTab>
     private val heightChangedListeners = linkedSetOf<HeightChangedListener>()
+
+    /**
+     * Drives the settings-tab avatar from the stores rather than from a snapshot, so the picture and
+     * the presence dot follow the user's own status changes without the host re-rendering.
+     */
+    private val userAvatarPresenceViewController: UserAvatarPresenceViewController
+
     private var selectedTab = NavigationTab.HOME
     private var visibleTabs: Set<NavigationTab> = NavigationTab.entries.toSet()
-    private var myUser: User? = null
-    private var myPresence: Presence? = null
     private var homeNotificationsCount = 0
     private var friendsNotificationsCount = 0
 
@@ -77,6 +79,7 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
             NavigationTab.MENTIONS to mentionsItem,
             NavigationTab.SETTINGS to settingsItem,
         )
+        userAvatarPresenceViewController = UserAvatarPresenceViewController(avatar)
         isSaveEnabled = true
     }
 
@@ -84,8 +87,7 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
         selectedTab: NavigationTab,
         onTabSelected: (NavigationTab) -> Unit,
         buttonsEnabled: Boolean,
-        myUser: User,
-        myPresence: Presence?,
+        myUserId: Long,
         visibleTabs: Set<NavigationTab>,
         homeNotificationsCount: Int,
         friendsNotificationsCount: Int,
@@ -99,9 +101,11 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
         this.friendsNotificationsCount = friendsNotificationsCount
         tabsContainer.weightSum = visibleTabs.size.toFloat()
         applyVisualState()
-        this.myUser = myUser
-        this.myPresence = myPresence
-        configureAvatar()
+        // Re-binding on every render would restart the subscription for no reason; only an actual
+        // change of user needs one.
+        val previousUserId = userAvatarPresenceViewController.userId
+        userAvatarPresenceViewController.userId = myUserId
+        if (previousUserId != myUserId) userAvatarPresenceViewController.bind()
         updateNotificationBadges(homeNotificationsCount, friendsNotificationsCount)
         val noClick: (View) -> Unit = {}
         navigationTabToViewMap[NavigationTab.HOME]!!.setOnClickListener(
@@ -142,8 +146,8 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
             view.visibility = if (tab in visibleTabs) View.VISIBLE else View.GONE
             view.isSelected = tab == selectedTab
         }
-        val activeColor = themedColor(R.attr.colorTabsIconActive)
-        val normalColor = themedColor(R.attr.colorInteractiveNormal)
+        val activeColor = ColorCompat.getThemedColor(context, R.attr.colorTabsIconActive)
+        val normalColor = ColorCompat.getThemedColor(context, R.attr.colorInteractiveNormal)
         tintableIconToNavigationTabMap.forEach { (icon, tab) ->
             ImageViewCompat.setImageTintList(
                 icon,
@@ -153,17 +157,6 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
         iconToNavigationTabMap.forEach { (icon, tab) -> icon.alpha = if (tab == selectedTab) 1f else 0.5f }
     }
 
-    private fun configureAvatar() {
-        val user = myUser ?: return
-        avatar.configure(
-            UserAvatarPresenceView.ViewState(
-                user,
-                presence = myPresence,
-                showPresence = true,
-            ),
-        )
-    }
-
     fun addHeightChangedListener(heightChangedListener: HeightChangedListener) {
         heightChangedListeners += heightChangedListener
     }
@@ -171,11 +164,6 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         heightChangedListeners.forEach { it.onHeightChanged(h) }
-    }
-
-    private fun themedColor(attribute: Int): Int = TypedValue().let {
-        context.theme.resolveAttribute(attribute, it, true)
-        it.data
     }
 
     override fun onSaveInstanceState(): Parcelable = SavedState(super.onSaveInstanceState()).also {

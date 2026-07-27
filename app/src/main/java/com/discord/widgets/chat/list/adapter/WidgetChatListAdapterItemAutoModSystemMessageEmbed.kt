@@ -7,6 +7,7 @@ import com.discord.R
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.message.embed.MessageEmbed
 import com.discord.i18n.I18nSpans
+import com.discord.i18n.withClickableHook
 import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
 import com.discord.models.user.CoreUser

@@ -17,20 +17,15 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import java.lang.reflect.Proxy
 import java.nio.file.Files
-import java.util.concurrent.Executor
-import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicReference
 import org.junit.AfterClass
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
-import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.BeforeClass
 import org.junit.Test
-import rx.schedulers.Schedulers
 
 class StoreStreamTest {
     @Before
@@ -38,10 +33,16 @@ class StoreStreamTest {
         stream.resetForLogout()
     }
 
+    /**
+     * The off-dispatcher guard reports rather than throws — the reference `StoreV2` calls
+     * `Logger.e(AppLog, "markChanged() should be run from the Store Dispatcher", IllegalStateException(...))`
+     * and nothing else. What is actually enforced is the *snapshot* boundary: only a dispatch runs
+     * `snapshotData()`, so an off-thread mutation is invisible to every reader until one does.
+     */
     @Test
     fun mutationsRunOnlyOnDispatcher() {
         val store = StoreStream.getStageInstances()
-        assertThrows(IllegalStateException::class.java) { store.handleStageInstanceCreate(stage(1)) }
+        store.handleStageInstanceCreate(stage(1))
         assertEquals(emptyMap<Long, StageInstance>(), store.getStageInstances())
 
         stream.dispatcher.schedule { store.handleStageInstanceCreate(stage(1)) }
@@ -316,32 +317,8 @@ class StoreStreamTest {
     companion object {
         private val directory = Files.createTempDirectory("store-stream-test")
 
-        private val storeThread = AtomicReference<Thread>()
-        private val storeExecutor = Executors.newSingleThreadExecutor { runnable ->
-            Thread(runnable, "test-store-thread").apply { isDaemon = true }.also(storeThread::set)
-        }
-
-        /**
-         * Stands in for [StoreThreadScheduler.create]: one thread, reused by every dispatch.
-         *
-         * [Dispatcher.schedule] rebinds `StoreThreadScheduler.storeThreadId` on entry, so a
-         * thread-per-action executor lets a dispatch scheduled from elsewhere (the throttled
-         * `StoreGuildsSorted` rebuild, the `computationLatest` channel-selection resolution) steal
-         * the binding from the dispatch already in flight, which then dies on its next
-         * `assertCurrentThread()` — silently, because rx routes that to the uncaught-exception
-         * handler. Actions still run to completion before `schedule` returns, keeping the
-         * assertions below synchronous, and a re-entrant schedule from the store thread runs
-         * inline instead of deadlocking on the queue it is already draining.
-         */
-        private val scheduler = Schedulers.from(
-            Executor { command ->
-                if (Thread.currentThread() === storeThread.get()) {
-                    command.run()
-                } else {
-                    storeExecutor.submit(command).get()
-                }
-            },
-        )
+        /** Stands in for [StoreThreadScheduler.create]; see [storeTestScheduler]. */
+        private val scheduler = storeTestScheduler("test-store-thread")
         private val prefs = memoryPreferences()
         private val durablePrefs = memoryPreferences()
         private lateinit var stream: StoreStream

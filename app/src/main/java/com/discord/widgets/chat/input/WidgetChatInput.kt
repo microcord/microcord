@@ -7,7 +7,6 @@ import android.text.SpannableString
 import android.text.Spanned
 import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
-import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.InputMethodManager
@@ -23,12 +22,14 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayName
 import com.discord.api.guild.GuildVerificationLevel
 import com.discord.app.AppFragment
+import com.discord.app.appActivityViewModels
 import com.discord.i18n.FormatUtils
 import com.discord.models.domain.emoji.Emoji
 import com.discord.models.member.GuildMember
 import com.discord.stores.StoreChatInputEditing
 import com.discord.stores.StorePendingReplies
 import com.discord.stores.StoreStream
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.duration.humanizeCountdownDuration
 import com.discord.utilities.messagesend.MessageResult
 import com.discord.utilities.messagesend.MessageSendCoordinator
@@ -80,6 +81,15 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     private var input: FlexEditText? = null
     private var expressionTray: View? = null
     private var autocomplete: InputAutocomplete? = null
+    private var attachments: WidgetChatInputAttachments? = null
+
+    /**
+     * Owns whether the expression tray is open. Activity-scoped so the tray and its child pickers
+     * — which live inside FlexInput's own fragment manager — address the same instance.
+     */
+    private val flexInputViewModel: AppFlexInputViewModel by appActivityViewModels {
+        AppFlexInputViewModel()
+    }
 
     private var state: ChatInputViewModel.ViewState.Loaded? = null
 
@@ -133,10 +143,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                     autocomplete?.dismiss()
                     true
                 }
-                expressionTray?.visibility == View.VISIBLE -> {
-                    hideExpressionTray(true)
-                    true
-                }
+                flexInputViewModel.hideExpressionTray() -> true
                 else -> false
             }
         })
@@ -197,6 +204,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         autocomplete = null
         input = null
         expressionTray = null
+        attachments = null
         super.onDestroyView()
     }
 
@@ -225,7 +233,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val editText = flex.requireView().findViewById<FlexEditText>(com.lytefast.flexinput.R.id.text_input)
         input = editText
         editText.addTextChangedListener(watcher)
-        editText.setOnClickListener { hideExpressionTray(false) }
+        editText.setOnClickListener { flexInputViewModel.hideExpressionTray() }
         editText.setOnEditorActionListener { _, actionId, _ ->
             if (actionId and 0xff == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) {
                 flex.onSend()
@@ -237,7 +245,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 submit(attachments)
         })
         bindAutocomplete(editText)
-        bindEmojiPicker(flex)
+        bindExpressionTray(flex)
         // The composer is bound from a `post`, so the first view state usually arrives before this
         // point and found no EditText to write into. Restore explicitly rather than relying on
         // configureLoaded, whose "channel changed" test is false when re-rendering the same state.
@@ -263,37 +271,52 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         }
     }
 
-    private fun bindEmojiPicker(flex: FlexInputFragment) {
+    /**
+     * Installs the full expression tray — emoji, GIF and sticker pickers behind one segmented
+     * control — into FlexInput's emoji slot, and makes the emoji button toggle it.
+     *
+     * Visibility is not toggled here: [AppFlexInputViewModel] owns "is the tray open", because the
+     * tray's own children (a sticker sheet dismissing, a GIF being picked) have to close it and
+     * have no reference to this fragment.
+     */
+    private fun bindExpressionTray(flex: FlexInputFragment) {
         val flexView = flex.requireView()
-        val tray = flexView.findViewById<View>(R.id.emoji_container)
+        expressionTray = flexView.findViewById(R.id.emoji_container)
         val button = flexView.findViewById<View>(R.id.emoji_btn)
-        expressionTray = tray
-        if (flex.childFragmentManager.findFragmentById(R.id.emoji_container) == null) {
-            flex.childFragmentManager.beginTransaction()
-                .replace(R.id.emoji_container, WidgetEmojiPicker.create(EmojiPickerContextType.Chat))
-                .commitNow()
-        }
-        button.visibility = View.VISIBLE
-        button.setOnClickListener {
-            if (tray.visibility == View.VISIBLE) {
-                hideExpressionTray(true)
-            } else {
-                tray.visibility = View.VISIBLE
-                button.isSelected = true
-                val token = activity?.currentFocus?.windowToken ?: view?.windowToken
-                if (token != null) inputMethodManager().hideSoftInputFromWindow(token, 0)
-            }
-        }
-    }
 
-    private fun hideExpressionTray(showKeyboard: Boolean) {
-        val tray = expressionTray ?: return
-        tray.visibility = View.GONE
-        view?.findViewById<View>(R.id.emoji_btn)?.isSelected = false
-        if (showKeyboard) {
-            input?.requestFocus()
-            inputMethodManager().showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
-        }
+        attachments = WidgetChatInputAttachments(
+            flexInputFragment = flex,
+            flexInputViewModel = flexInputViewModel,
+            emojiPickerListener = object : com.discord.widgets.chat.input.emoji.EmojiPickerListener {
+                override fun onEmojiPicked(emoji: Emoji) = this@WidgetChatInput.onEmojiPicked(emoji)
+            },
+            onBackspacePressed = ::onEmojiBackspace,
+        ).also { it.configureFlexInputFragment(this) }
+
+        button.visibility = View.VISIBLE
+        button.setOnClickListener { flexInputViewModel.toggleExpressionTray() }
+
+        flexInputViewModel.observeViewState()
+            .ui(this)
+            .subscribe({ button.isSelected = it.expressionTrayShown }, { /* leave the button as-is */ })
+        flexInputViewModel.observeEvents()
+            .ui(this)
+            .subscribe(
+                { event ->
+                    when (event) {
+                        AppFlexInputViewModel.Event.ShowKeyboard -> {
+                            input?.requestFocus()
+                            inputMethodManager().showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+                        }
+
+                        AppFlexInputViewModel.Event.HideKeyboard -> {
+                            val token = activity?.currentFocus?.windowToken ?: view?.windowToken
+                            if (token != null) inputMethodManager().hideSoftInputFromWindow(token, 0)
+                        }
+                    }
+                },
+                { /* keyboard state is best-effort */ },
+            )
     }
 
     override fun onEmojiPicked(emoji: Emoji) {
@@ -614,7 +637,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             val start = text.indexOf(username)
             if (start >= 0) {
                 setSpan(
-                    ForegroundColorSpan(GuildMember.getColor(member, themedColor(R.attr.colorHeaderPrimary))),
+                    ForegroundColorSpan(GuildMember.getColor(member, ColorCompat.getThemedColor(requireContext(), R.attr.colorHeaderPrimary))),
                     start,
                     start + username.length,
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
@@ -631,7 +654,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         }
         mention.visibility = if (pending.showMentionToggle) View.VISIBLE else View.GONE
         val mentionColor =
-            themedColor(if (pending.shouldMention) R.attr.colorControlBrandForeground else R.attr.colorTextMuted)
+            ColorCompat.getThemedColor(requireContext(), if (pending.shouldMention) R.attr.colorControlBrandForeground else R.attr.colorTextMuted)
         requireView().findViewById<ImageView>(R.id.chat_input_context_reply_mention_button_image).imageTintList =
             ColorStateList.valueOf(mentionColor)
         requireView().findViewById<TextView>(R.id.chat_input_context_reply_mention_button_text).apply {
@@ -644,11 +667,6 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
 
     private fun inputMethodManager(): InputMethodManager =
         requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-
-    private fun themedColor(attribute: Int) = TypedValue().let {
-        requireContext().theme.resolveAttribute(attribute, it, true)
-        it.data
-    }
 
     private fun validationMessage(result: MessageResult): String = when (result) {
         is MessageResult.ValidationError -> result.message

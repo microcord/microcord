@@ -1,13 +1,12 @@
 package com.discord.utilities.uri
 
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.util.Log
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import androidx.appcompat.app.AlertDialog
@@ -16,6 +15,7 @@ import androidx.browser.customtabs.CustomTabsIntent
 import com.discord.R
 import com.discord.databinding.LayoutUnhandledUriBinding
 import com.discord.stores.StoreStream
+import com.discord.utilities.color.ColorCompat
 
 /**
  * The single entry point for opening a URI that came from outside the app.
@@ -229,7 +229,7 @@ object UriHandler {
             !forceExternal || candidate != context.packageName
         } ?: return fallback()
 
-        val themedColor = resolveThemedColor(context)
+        val themedColor = ColorCompat.getThemedColor(context, R.attr.colorPrimary)
         val colorScheme = CustomTabColorSchemeParams.Builder()
             .setToolbarColor(themedColor)
             .setSecondaryToolbarColor(themedColor)
@@ -306,12 +306,6 @@ object UriHandler {
     private fun isChromeCustomTabsEnabled(): Boolean = runCatching {
         StoreStream.getUserSettings().getIsChromeCustomTabsEnabled()
     }.getOrDefault(true)
-
-    private fun resolveThemedColor(context: Context): Int {
-        val typedValue = TypedValue()
-        context.theme.resolveAttribute(R.attr.colorPrimary, typedValue, true)
-        return typedValue.data
-    }
 
     /**
      * Extracts the host, lower-cased, without `android.net.Uri` so trust decisions stay a pure

@@ -11,6 +11,7 @@ import android.widget.LinearLayout
 import com.discord.R
 import com.discord.api.message.LocalAttachment
 import com.discord.i18n.i18nPlural
+import com.discord.utilities.drawable.getThemedDrawableRes
 import java.util.Locale
 import kotlin.math.ln
 import kotlin.math.pow
@@ -56,7 +57,7 @@ class FailedUploadList @JvmOverloads constructor(
                     "count" to uploads.size,
                 )
                 val subtitle = sizeSubtitle(uploads.sumOf(Upload::sizeBytes))
-                configure(title, themedDrawable(R.attr.ic_uploads_generic), subtitle)
+                configure(title, context.getThemedDrawableRes(R.attr.ic_uploads_generic), subtitle)
                 contentDescription = listOfNotNull(title, subtitle).joinToString(", ")
             }
         }
@@ -70,18 +71,13 @@ class FailedUploadList @JvmOverloads constructor(
         -1L
     }
 
-    private fun iconFor(mimeType: String) = themedDrawable(
+    private fun iconFor(mimeType: String) = context.getThemedDrawableRes(
         when {
             mimeType.startsWith("image") -> R.attr.ic_uploads_image
             mimeType.startsWith("video") -> R.attr.ic_uploads_video
             else -> R.attr.ic_uploads_file
         },
     )
-
-    private fun themedDrawable(attribute: Int): Int = TypedValue().let {
-        context.theme.resolveAttribute(attribute, it, true)
-        it.resourceId
-    }
 
     internal data class Upload(val displayName: String, val sizeBytes: Long, val mimeType: String)
 

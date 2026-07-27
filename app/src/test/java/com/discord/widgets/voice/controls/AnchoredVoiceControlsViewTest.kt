@@ -21,7 +21,11 @@ class AnchoredVoiceControlsViewTest {
         assertTrue(active.showPtt)
         assertTrue(active.showCamera)
         assertTrue(active.cameraActive)
-        assertEquals(R.string.camera_off, active.cameraDescription)
+        // Deliberately inverted, matching the reference. `AnchoredVoiceControlsView` in the
+        // decompile announces string `0x7f120520` (`camera_on`, "Turn On Camera") on the
+        // CAMERA_ON branch and `0x7f12051f` (`camera_off`) otherwise — the opposite of every
+        // sibling control, and reproduced in `anchoredVoiceControlsPresentation`.
+        assertEquals(R.string.camera_on, active.cameraDescription)
         assertEquals(R.drawable.ic_audio_output_bluetooth_white_24dp, active.speakerIcon)
         assertTrue(active.speakerActive)
         assertFalse(active.speakerActivated)
@@ -37,7 +41,7 @@ class AnchoredVoiceControlsViewTest {
         assertFalse(inactive.showPtt)
         assertFalse(inactive.showCamera)
         assertFalse(inactive.cameraActive)
-        assertEquals(R.string.camera_on, inactive.cameraDescription)
+        assertEquals(R.string.camera_off, inactive.cameraDescription)
         assertFalse(inactive.speakerActive)
         assertFalse(inactive.speakerActivated)
         assertEquals(R.drawable.ic_mobile_screenshare_24dp, inactive.screenShareIcon)

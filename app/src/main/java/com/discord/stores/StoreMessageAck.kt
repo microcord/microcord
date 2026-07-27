@@ -6,6 +6,7 @@ import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelReadState
 import com.discord.models.message.Message
 import com.discord.stores.updates.ObservationDeck
+import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.takeSingleUntilTimeout
@@ -409,7 +410,6 @@ class StoreMessageAck @JvmOverloads constructor(
         /** Persistence key; a version bump discards incompatible ledgers. */
         const val ACKS_CACHE_KEY = "MOST_RECENT_ACKS_V3"
 
-        private const val DISCORD_EPOCH = 1_420_070_400_000L
         private const val AUTO_ACK_DEBOUNCE_MS = 500L
         private const val MARK_UNREAD_TIMEOUT_MS = 10L
 
@@ -421,10 +421,12 @@ class StoreMessageAck @JvmOverloads constructor(
         fun ThreadAckState?.isThreadAndUnableToAck(): Boolean =
             this is ThreadAckState.Thread && !canAckThread
 
-        private fun snowflakeTimestamp(snowflake: Long) = (snowflake ushr 22) + DISCORD_EPOCH
+        private fun snowflakeTimestamp(snowflake: Long) = SnowflakeUtils.toTimestamp(snowflake)
 
+        // The clamp is expressed as a clamp on the *timestamp* so that `fromTimestamp` can be
+        // reused unchanged: below the epoch both forms yield 0.
         private fun timestampToSnowflake(timestampMs: Long) =
-            (timestampMs - DISCORD_EPOCH).coerceAtLeast(0L) shl 22
+            SnowflakeUtils.fromTimestamp(timestampMs.coerceAtLeast(SnowflakeUtils.DISCORD_EPOCH))
 
         /** The largest snowflake that sorts strictly before [snowflake]'s millisecond. */
         private fun previousSnowflake(snowflake: Long) = ((snowflake ushr 22) - 1L).coerceAtLeast(0L) shl 22

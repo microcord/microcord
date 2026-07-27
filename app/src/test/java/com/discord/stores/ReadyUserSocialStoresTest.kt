@@ -1,5 +1,6 @@
 package com.discord.stores
 
+import android.util.Log
 import com.discord.api.activity.Activity
 import com.discord.api.activity.ActivityAssets
 import com.discord.api.activity.ActivityParty
@@ -7,6 +8,7 @@ import com.discord.api.activity.ActivityType
 import com.discord.api.presence.ClientStatus
 import com.discord.api.presence.ClientStatuses
 import com.discord.api.user.User as ApiUser
+import com.discord.app.AppLog
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelCustomStatusSetting
@@ -24,7 +26,8 @@ import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertThrows
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
 import org.junit.Test
 import rx.Observable
@@ -254,16 +257,42 @@ class ReadyUserSocialStoresTest {
         assertEquals(richValues.map(Activity::name).reversed() + "plain", store.getPresences()[91]?.activities?.map(Activity::name))
     }
 
+    /**
+     * The off-dispatcher guard *reports*; it does not throw.
+     *
+     * `StoreV2.assertStoreThread` in the reference is
+     * `Logger.e(AppLog, "markChanged() should be run from the Store Dispatcher", IllegalStateException(...))`
+     * — read straight out of the Vineflower decompile of `com/discord/stores/StoreV2`. So the
+     * contract is: no exception reaches the caller, an error carrying the offending stack is
+     * logged, and nothing reaches the *published* snapshot, because only `snapshotData()` — which
+     * a dispatch runs — republishes it.
+     */
     @Test
-    fun mutationFromAnotherThreadIsRejectedBeforeStateChanges() {
+    fun mutationFromAnotherThreadIsReportedAndNeverPublished() {
         val deck = ObservationDeck()
         val store = StoreUserRelationships(deck, Persister("test-thread-${System.nanoTime()}", mapOf(-1L to -1)))
         val failure = AtomicReference<Throwable>()
-        Thread {
-            failure.set(runCatching { store.handleRelationshipAdd(ModelUserRelationship(1, 1)) }.exceptionOrNull())
-        }.apply { start(); join() }
+        val reported = mutableListOf<AppLog.LoggedItem>()
 
-        assertEquals(IllegalStateException::class.java, failure.get()?.javaClass)
+        val previousPriority = AppLog.minimumPriority
+        val previousSink = AppLog.sink
+        AppLog.minimumPriority = Log.ERROR
+        // Without a sink `AppLog` falls through to logcat, where `Log.getStackTraceString` returns
+        // null under `unitTests.isReturnDefaultValues` and the logger itself throws NPE.
+        AppLog.sink = { _, _, _, _ -> }
+        val subscription = AppLog.observeLogs().subscribe { reported += it }
+        try {
+            Thread {
+                failure.set(runCatching { store.handleRelationshipAdd(ModelUserRelationship(1, 1)) }.exceptionOrNull())
+            }.apply { start(); join() }
+        } finally {
+            subscription.unsubscribe()
+            AppLog.minimumPriority = previousPriority
+            AppLog.sink = previousSink
+        }
+
+        assertNull(failure.get())
+        assertTrue(reported.any { it.throwable is IllegalStateException })
         assertEquals(StoreUserRelationships.UserRelationshipsState.Unloaded, store.getRelationshipsState())
     }
 

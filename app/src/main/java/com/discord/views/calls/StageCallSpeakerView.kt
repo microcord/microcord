@@ -11,6 +11,7 @@ import android.widget.TextView
 import androidx.cardview.widget.CardView
 import com.discord.R
 import com.discord.stores.StoreVoiceParticipants
+import com.discord.utilities.dimen.dpToPixels
 import com.discord.views.VoiceUserView
 
 class StageCallSpeakerView(context: Context, attrs: AttributeSet?) : CardView(context, attrs, 0) {
@@ -43,7 +44,7 @@ class StageCallSpeakerView(context: Context, attrs: AttributeSet?) : CardView(co
         }
         pulse.setPulsing(voiceUser.isSpeaking)
         speaker.setVoiceUser(voiceUser, R.dimen.avatar_size_hero)
-        speaker.setRingMargin(dp(2))
+        speaker.setRingMargin(dpToPixels(2))
 
         val indicators = stageSpeakerIndicators(voiceUser.isMuted, voiceUser.isDeafened, isModerator, isBlocked)
         muteIndicator.visibleIf(indicators.showMute)
@@ -62,7 +63,6 @@ class StageCallSpeakerView(context: Context, attrs: AttributeSet?) : CardView(co
         visibility = if (visible) View.VISIBLE else View.GONE
     }
 
-    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     private fun representativeColor(bitmap: Bitmap): Int {
         if (bitmap.isRecycled || bitmap.width == 0 || bitmap.height == 0) return Color.rgb(88, 101, 242)

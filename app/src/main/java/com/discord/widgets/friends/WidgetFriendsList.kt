@@ -1,243 +1,253 @@
 package com.discord.widgets.friends
 
+import android.content.Context
 import android.os.Bundle
-import android.view.LayoutInflater
+import android.view.ContextThemeWrapper
+import android.view.Menu
 import android.view.View
-import android.view.ViewGroup
-import android.widget.TextView
-import androidx.appcompat.widget.AppCompatImageView
-import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.Toolbar
-import androidx.fragment.app.Fragment
-import com.discord.app.AppFragment
-import androidx.recyclerview.widget.DiffUtil
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.ListAdapter
+import android.widget.PopupMenu
+import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
-import com.discord.api.presence.ClientStatus
+import com.discord.app.AppFragment
 import com.discord.app.AppViewFlipper
-import com.discord.models.presence.Presence
-import com.discord.views.StatusView
-import com.facebook.drawee.view.SimpleDraweeView
-import rx.Observable
-import rx.Subscription
+import com.discord.stores.StoreNavigation
+import com.discord.stores.StoreStream
+import com.discord.utilities.analytics.AnalyticsTracker
+import com.discord.utilities.analytics.Traits
+import com.discord.utilities.mg_recycler.MGRecyclerAdapter
+import com.discord.utilities.rest.RestAPIAbortMessages
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.bindToComponentLifecycle
+import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
+import com.discord.widgets.contact_sync.ContactSyncFlowAnalytics
+import com.discord.widgets.contact_sync.WidgetContactSync
+import com.discord.widgets.tabs.NavigationTab
+import com.discord.widgets.user.calls.PrivateCallLauncher
+import com.discord.widgets.user.usersheet.WidgetUserSheet
 
+/**
+ * The Friends tab.
+ *
+ * All state comes from [FriendsListViewModel]; this class only renders it, routes row callbacks
+ * back into the view model, and performs the navigation the view model cannot do itself (opening a
+ * profile sheet, launching a call, starting the contact-sync flow, showing a captcha).
+ *
+ * The three-child flipper is the reference's: recycler, empty state, loading skeleton.
+ */
 class WidgetFriendsList : AppFragment(R.layout.widget_friends_list) {
-    private var subscription: Subscription? = null
-    private var latestInput = FriendsListInput()
-    private var suggestionsExpanded = false
-    private var pendingExpanded = false
-    private val listAdapter = FriendsAdapter()
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        (activity as? AppCompatActivity)?.supportActionBar?.title = getString(R.string.friends)
-        view.findDescendant(Toolbar::class.java)?.apply {
-            setTitle(R.string.friends)
-            menu.clear()
-            inflateMenu(R.menu.menu_friends)
-            menu.findItem(R.id.menu_friends_contact_sync).isVisible = onContactSync != null
-            menu.findItem(R.id.menu_friends_start_group).isVisible = onStartGroup != null
-            setOnMenuItemClickListener { item -> when (item.itemId) {
-                R.id.menu_friends_add_friend -> true.also { onAddFriend() }
-                R.id.menu_friends_contact_sync -> true.also { onContactSync?.invoke() }
-                R.id.menu_friends_start_group -> true.also { onStartGroup?.invoke() }
-                else -> false
-            } }
-        }
-        view.findViewById<EmptyFriendsStateView>(R.id.friends_list_empty_friends_state_view).setOnAddFriendClicked {
-            onAddFriend()
-        }
-        view.findViewById<RecyclerView>(R.id.friends_list_recycler).apply {
-            layoutManager = LinearLayoutManager(context)
-            adapter = listAdapter
-        }
-        view.findViewById<RecyclerView>(R.id.friends_list_loading).apply {
-            layoutManager = LinearLayoutManager(context)
-            adapter = LoadingAdapter()
-        }
-        listAdapter.onHeader = { section ->
-            when (section) {
-                FriendSection.SUGGESTIONS -> suggestionsExpanded = !suggestionsExpanded
-                FriendSection.PENDING -> pendingExpanded = !pendingExpanded
-                else -> Unit
-            }
-            if (section == FriendSection.SUGGESTIONS || section == FriendSection.PENDING) {
-                show(FriendsListBuilder.build(latestInput.copy(suggestionsExpanded = suggestionsExpanded, pendingExpanded = pendingExpanded)))
-            }
-        }
+    private val viewModel: FriendsListViewModel by viewModels()
+
+    private lateinit var adapter: WidgetFriendsListAdapter
+    private lateinit var loadingAdapter: WidgetFriendsListLoadingAdapter
+    private lateinit var privateCallLauncher: PrivateCallLauncher
+
+    /**
+     * Mirrors the current view state so [configureToolbar] can be re-run on tab selection, when no
+     * view state is being delivered.
+     */
+    private var showContactSyncIcon = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        privateCallLauncher = PrivateCallLauncher(this, this, requireContext(), parentFragmentManager)
     }
 
-    override fun onStart() {
-        super.onStart()
-        subscription = (stateSource?.invoke() ?: Observable.just(FriendsListInput()))
-            .distinctUntilChanged()
-            .subscribe { input ->
-                latestInput = input
-                view?.post {
-                    if (view != null) show(
-                        FriendsListBuilder.build(input.copy(suggestionsExpanded = suggestionsExpanded, pendingExpanded = pendingExpanded)),
-                    )
-                }
-            }
-    }
+    override fun onViewBound(view: View) {
+        super.onViewBound(view)
 
-    override fun onStop() {
-        subscription?.unsubscribe()
-        subscription = null
-        super.onStop()
-    }
+        view.findViewById<EmptyFriendsStateView>(R.id.friends_list_empty_friends_state_view)
+            .updateView(ANALYTICS_SOURCE)
 
-    private fun show(state: FriendsListState) {
-        val flipper = requireView().findViewById<AppViewFlipper>(R.id.friends_list_flipper)
-        flipper.displayedChild = when (state) {
-            FriendsListState.Loading -> 2
-            FriendsListState.Empty -> 1
-            is FriendsListState.Loaded -> 0
-        }
-        if (state is FriendsListState.Loaded) listAdapter.submitList(state.rows)
-    }
-
-    private class LoadingAdapter : RecyclerView.Adapter<Holder>() {
-        override fun getItemCount() = 8
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = Holder(
-            LayoutInflater.from(parent.context).inflate(R.layout.widget_friends_list_adapter_item_loading, parent, false),
+        adapter = MGRecyclerAdapter.configure(
+            WidgetFriendsListAdapter(view.findViewById(R.id.friends_list_recycler)),
         )
-        override fun onBindViewHolder(holder: Holder, position: Int) = Unit
+        adapter.onClickUserProfile = { _, user ->
+            WidgetUserSheet.show(parentFragmentManager, user.id)
+        }
+        adapter.onClickPendingHeaderExpand = { viewModel.handleClickPendingHeader() }
+        adapter.onClickSuggestedHeaderExpandCollapse = { viewModel.handleClickSuggestedHeader() }
+        adapter.onClickCall = { user -> viewModel.launchVoiceCall(user.id) }
+        adapter.onClickChat = { user ->
+            StoreStream.openDm(user.id)
+            StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE)
+        }
+        adapter.onClickAcceptFriend = { user ->
+            viewModel.acceptFriendRequest(user.id, user.username)
+        }
+        adapter.onClickDeclineFriend = { user, relationshipType ->
+            viewModel.removeFriendRequest(user.id, relationshipType)
+        }
+        adapter.onClickApproveSuggestion = { user ->
+            viewModel.acceptFriendSuggestion(user.username, user.discriminator)
+        }
+        adapter.onClickRemoveSuggestion = { userId -> viewModel.ignoreSuggestion(userId) }
+        adapter.onClickContactSyncUpsell = {
+            launchContactSync(requireContext(), LOCATION_UPSELL)
+        }
+        adapter.onClickContactSyncUpsellLongClick = { upsellView -> showUpsellDismissMenu(upsellView) }
+
+        loadingAdapter = WidgetFriendsListLoadingAdapter()
+        view.findViewById<RecyclerView>(R.id.friends_list_loading).adapter = loadingAdapter
     }
 
-    private class FriendsAdapter : ListAdapter<FriendRow, Holder>(DIFF) {
-        var onHeader: (FriendSection) -> Unit = {}
+    override fun onViewBoundOrOnResume() {
+        super.onViewBoundOrOnResume()
+        viewModel.observeViewState()
+            .bindToComponentLifecycle(this)
+            .appSubscribe(WidgetFriendsList::class.java) { configureUI(it) }
+        viewModel.observeEvents()
+            .bindToComponentLifecycle(this)
+            .appSubscribe(WidgetFriendsList::class.java) { handleEvent(it) }
 
-        init { setHasStableIds(true) }
+        // The reference registers an `OnTabSelectedListener` with `WidgetTabsHost`. That interface
+        // does not exist here and the host keeps every tab's fragment resumed, only toggling
+        // container visibility — so nothing would re-run when the user comes back to this tab. The
+        // selection is observed directly instead, which produces the same single call per switch.
+        StoreStream.getTabsNavigation().observeSelectedTab()
+            .distinctUntilChanged()
+            .bindToComponentLifecycle(this)
+            .appSubscribe(WidgetFriendsList::class.java) { tab ->
+                if (tab == NavigationTab.FRIENDS) onTabSelected()
+            }
+    }
 
-        override fun getItemId(position: Int) = getItem(position).stableId
-        override fun getItemViewType(position: Int) = when (getItem(position)) {
-            is FriendRow.Header -> if ((getItem(position) as FriendRow.Header).section in setOf(FriendSection.ONLINE, FriendSection.OFFLINE)) 4 else 0
-            is FriendRow.Friend -> 1
-            is FriendRow.Pending -> 2
-            is FriendRow.Suggestion -> 3
+    /**
+     * Runs when the Friends tab becomes the visible one. The toolbar is shared between tabs, so it
+     * has to be re-inflated here rather than only on bind.
+     */
+    fun onTabSelected() {
+        configureToolbar()
+        AnalyticsTracker.friendsListViewed()
+        setActionBarTitleAccessibilityViewFocused()
+    }
+
+    // region rendering
+
+    private fun configureUI(viewState: FriendsListViewModel.ViewState) = when (viewState) {
+        is FriendsListViewModel.ViewState.Uninitialized -> displayFlipperChild(VIEW_INDEX_LOADING)
+        is FriendsListViewModel.ViewState.Empty -> {
+            displayFlipperChild(VIEW_INDEX_EMPTY)
+            showContactSyncIcon = viewState.showContactSyncIcon
+            configureToolbar()
         }
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
-            val layout = when (viewType) {
-                0 -> R.layout.widget_friends_list_expandable_header
-                1 -> R.layout.widget_friends_list_adapter_item_friend
-                2 -> R.layout.widget_friends_list_adapter_item_pending
-                4 -> R.layout.widget_friends_list_adapter_item_header
-                else -> R.layout.widget_friends_list_adapter_suggested_friend
-            }
-            return Holder(LayoutInflater.from(parent.context).inflate(layout, parent, false))
+        is FriendsListViewModel.ViewState.Loaded -> {
+            displayFlipperChild(VIEW_INDEX_RECYCLER)
+            adapter.setData(viewState.items)
+            showContactSyncIcon = viewState.showContactSyncIcon
+            configureToolbar()
         }
+    }
 
-        override fun onBindViewHolder(holder: Holder, position: Int) {
-            when (val row = getItem(position)) {
-                is FriendRow.Header -> bindHeader(holder.itemView, row)
-                is FriendRow.Friend -> bindFriend(holder.itemView, row.value)
-                is FriendRow.Pending -> bindPending(holder.itemView, row.value)
-                is FriendRow.Suggestion -> bindSuggestion(holder.itemView as SuggestedFriendView, row.value)
-            }
-        }
+    private fun displayFlipperChild(index: Int) {
+        val flipper = view?.findViewById<AppViewFlipper>(R.id.friends_list_flipper) ?: return
+        flipper.visibility = View.VISIBLE
+        flipper.displayedChild = index
+    }
 
-        private fun bindHeader(root: View, row: FriendRow.Header) {
-            val title = when (row.section) {
-                FriendSection.SUGGESTIONS -> root.context.getString(R.string.friends_friend_suggestions_header).replace("{count}", row.count.toString())
-                FriendSection.PENDING -> root.context.getString(R.string.friends_pending_request_header).replace("{pendingRequestNumber}", row.count.toString())
-                FriendSection.ONLINE -> root.context.getString(R.string.friends_online_header).replace("{online}", row.count.toString())
-                FriendSection.OFFLINE -> root.context.getString(R.string.friends_offline_header).replace("{offline}", row.count.toString())
-            }
-            root.findViewById<TextView>(R.id.friends_list_item_header_text)?.text = title
-            root.findViewById<TextView>(R.id.friends_list_pending_item_header_text)?.text = title
-            root.findViewById<TextView>(R.id.friends_list_expandable_header_button)?.apply {
-                visibility = if (row.expandable) View.VISIBLE else View.GONE
-                text = context.getString(if (row.expanded) R.string.friends_pending_request_expand_collapse else R.string.friends_pending_request_expand)
-                setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, if (row.expanded) R.drawable.ic_arrow_up_24dp else R.drawable.ic_arrow_right_24dp, 0)
-                contentDescription = "$text, $title"
-                setOnClickListener { onHeader(row.section) }
-            }
-        }
+    private fun configureToolbar() {
+        bindToolbar()
+        setActionBarTitle(R.string.friends)
+        setActionBarTitleLayoutMinimumTappableArea()
+        setActionBarOptionsMenu(
+            R.menu.menu_friends,
+            onSelected = { menuItem ->
+                when (menuItem.itemId) {
+                    R.id.menu_friends_add_friend ->
+                        WidgetFriendsAdd.show(requireContext(), source = ANALYTICS_SOURCE)
+                    R.id.menu_friends_contact_sync ->
+                        launchContactSync(requireContext(), LOCATION_ICON)
+                    else -> Unit
+                }
+            },
+            onConfigured = { menu: Menu ->
+                menu.findItem(R.id.menu_friends_contact_sync)?.isVisible = showContactSyncIcon
+                // The reference offers "start a group DM" here. Its two destinations
+                // (`WidgetGroupInviteFriends` and `GroupInviteFriendsSheet`) are not reconstructed
+                // yet, so the item is hidden rather than left as a button that leads nowhere.
+                menu.findItem(R.id.menu_friends_start_group)?.isVisible = false
+            },
+        )
+    }
 
-        private fun bindFriend(root: View, value: FriendRelationshipUi) {
-            bindUser(root, value)
-            root.findViewById<AppCompatImageView>(R.id.friends_list_item_chat_button).setOnClickListener { onMessage(value.user) }
-            root.findViewById<AppCompatImageView>(R.id.friends_list_item_call_button).setOnClickListener { onCall(value.user) }
-        }
+    // endregion
 
-        private fun bindPending(root: View, value: FriendRelationshipUi) {
-            bindUser(root, value)
-            val incoming = value.relationship == FriendRelationship.INCOMING
-            root.findViewById<TextView>(R.id.friends_list_item_activity).setText(
-                if (incoming) R.string.incoming_friend_request else R.string.outgoing_friend_request,
-            )
-            root.findViewById<AppCompatImageView>(R.id.friends_list_item_accept_button).apply {
-                visibility = if (incoming) View.VISIBLE else View.GONE
-                contentDescription = context.getString(R.string.accept)
-                setOnClickListener { onAccept(value.user) }
-            }
-            root.findViewById<AppCompatImageView>(R.id.friends_list_item_decline_button).apply {
-                contentDescription = context.getString(if (incoming) R.string.decline else R.string.cancel)
-                setOnClickListener { if (incoming) onDecline(value.user) else onCancel(value.user) }
-            }
-        }
+    // region events
 
-        private fun bindUser(root: View, value: FriendRelationshipUi) {
-            root.contentDescription = value.user.username
-            root.setOnClickListener { onProfile(value.user) }
-            root.findViewById<TextView>(R.id.friends_list_item_name).text = value.user.username
-            root.findViewById<TextView>(R.id.friends_list_item_activity).apply {
-                text = value.activity.orEmpty()
-                visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
-            }
-            root.findViewById<SimpleDraweeView>(R.id.friends_list_item_avatar).setImageURI(value.user.avatarUrl)
-            root.findViewById<StatusView>(R.id.friends_list_item_status).setPresence(
-                Presence(
-                    when (value.presence) {
-                        FriendPresence.ONLINE -> ClientStatus.ONLINE
-                        FriendPresence.IDLE -> ClientStatus.IDLE
-                        FriendPresence.DND -> ClientStatus.DND
-                        FriendPresence.OFFLINE -> ClientStatus.OFFLINE
-                    },
-                    null,
-                    null,
+    private fun handleEvent(event: FriendsListViewModel.Event) = when (event) {
+        is FriendsListViewModel.Event.ShowToast ->
+            showToast(getString(event.stringRes))
+        is FriendsListViewModel.Event.ShowFriendRequestErrorToast ->
+            showToast(
+                RestAPIAbortMessages.ResponseResolver.getRelationshipResponse(
+                    context,
+                    event.abortCode,
+                    event.username,
                 ),
             )
-        }
-
-        private fun bindSuggestion(root: SuggestedFriendView, value: FriendSuggestionUi) {
-            root.setUser(value.user, value.publicName)
-            root.setOnClickListener { onProfile(value.user) }
-            root.setOnSendClicked { onAccept(value.user) }
-            root.setOnDeclineClicked { onDecline(value.user) }
-        }
-
-        companion object {
-            val DIFF = object : DiffUtil.ItemCallback<FriendRow>() {
-                override fun areItemsTheSame(oldItem: FriendRow, newItem: FriendRow) = oldItem.stableId == newItem.stableId
-                override fun areContentsTheSame(oldItem: FriendRow, newItem: FriendRow) = oldItem == newItem
-            }
-        }
+        is FriendsListViewModel.Event.LaunchVoiceCall ->
+            privateCallLauncher.launchVoiceCall(event.channelId)
+        is FriendsListViewModel.Event.CaptchaError -> handleCaptchaError(event)
     }
 
-    private class Holder(view: View) : RecyclerView.ViewHolder(view)
+    private fun showToast(text: CharSequence?) {
+        val context = context ?: return
+        if (text.isNullOrBlank()) return
+        android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
+    }
 
-    private fun <T : View> View.findDescendant(type: Class<T>): T? {
-        if (type.isInstance(this)) return type.cast(this)
-        if (this !is ViewGroup) return null
-        for (index in 0 until childCount) getChildAt(index).findDescendant(type)?.let { return it }
-        return null
+    /**
+     * Re-runs the friend request behind a captcha challenge.
+     *
+     * The reference queues this through `StoreNotices`. Here the sheet is shown directly and the
+     * result listener is installed on *this* fragment: the queued path resolves the listener target
+     * from [WidgetCaptchaBottomSheet]'s `resolvableFragments`, which names the tab host rather than
+     * this screen, so the payload would never come back to us.
+     */
+    private fun handleCaptchaError(event: FriendsListViewModel.Event.CaptchaError) {
+        WidgetCaptchaBottomSheet.registerForResult(this, CAPTCHA_REQUEST_KEY) { _, payload ->
+            viewModel.acceptFriendSuggestion(event.username, event.discriminator, payload)
+        }
+        WidgetCaptchaBottomSheet.show(
+            parentFragmentManager,
+            CAPTCHA_REQUEST_KEY,
+            WidgetCaptchaBottomSheet.errorBodyOf(event.error),
+        )
+    }
+
+    // endregion
+
+    private fun launchContactSync(context: Context, locationPage: String) {
+        ContactSyncFlowAnalytics.trackStart(
+            additionalProps = mapOf("location_page" to locationPage),
+        )
+        AnalyticsTracker.openModal("Contact Sync", Traits.Location(page = locationPage))
+        WidgetContactSync.launch(context)
+    }
+
+    private fun showUpsellDismissMenu(upsellView: View) {
+        val popupMenu = PopupMenu(
+            ContextThemeWrapper(upsellView.context, R.style.AppTheme_Dark),
+            upsellView,
+        )
+        popupMenu.menuInflater.inflate(R.menu.menu_contact_sync_upsell, popupMenu.menu)
+        popupMenu.menu.findItem(R.id.menu_contact_sync_upsell_dismiss)
+            .setOnMenuItemClickListener {
+                viewModel.dismissContactSyncUpsell()
+                true
+            }
+        popupMenu.show()
     }
 
     companion object {
-        @JvmField var stateSource: (() -> Observable<FriendsListInput>)? = null
-        @JvmField var onAddFriend: () -> Unit = {}
-        @JvmField var onAccept: (FriendUserUi) -> Unit = {}
-        @JvmField var onDecline: (FriendUserUi) -> Unit = {}
-        @JvmField var onCancel: (FriendUserUi) -> Unit = {}
-        @JvmField var onMessage: (FriendUserUi) -> Unit = {}
-        @JvmField var onCall: (FriendUserUi) -> Unit = {}
-        @JvmField var onProfile: (FriendUserUi) -> Unit = {}
-        @JvmField var onContactSync: (() -> Unit)? = null
-        @JvmField var onStartGroup: (() -> Unit)? = null
+        private const val ANALYTICS_SOURCE = "Friends"
+        private const val LOCATION_ICON = "Friends List Icon"
+        private const val LOCATION_UPSELL = "Friends List Upsell"
+        private const val CAPTCHA_REQUEST_KEY = "Add Friend Captcha"
+
+        private const val VIEW_INDEX_RECYCLER = 0
+        private const val VIEW_INDEX_EMPTY = 1
+        private const val VIEW_INDEX_LOADING = 2
     }
 }

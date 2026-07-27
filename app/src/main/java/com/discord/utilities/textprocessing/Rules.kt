@@ -24,6 +24,7 @@ import com.discord.simpleast.core.parser.Parser
 import com.discord.simpleast.core.parser.Rule
 import com.discord.simpleast.core.simple.SimpleMarkdownRules
 import com.discord.simpleast.markdown.MarkdownRules
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.textprocessing.node.BasicRenderContext
 import com.discord.utilities.textprocessing.node.BlockBackgroundNode
 import com.discord.utilities.textprocessing.node.BlockQuoteNode
@@ -202,7 +203,7 @@ object Rules {
                         val start = builder.length
                         super.render(builder, renderContext)
                         builder.setSpan(
-                            BackgroundColorSpan(themedColor(renderContext.context, R.attr.theme_chat_code)),
+                            BackgroundColorSpan(ColorCompat.getThemedColor(renderContext.context, R.attr.theme_chat_code)),
                             start,
                             builder.length,
                             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
@@ -218,7 +219,7 @@ object Rules {
         CodeRules.createInlineCodeRule(
             spanProvider { context -> listOf(codeTextAppearance(context), RelativeSizeSpan(CODE_TEXT_SCALE)) },
             spanProvider { renderContext ->
-                listOf(BackgroundColorSpan(themedColor(renderContext.context, R.attr.theme_chat_code)))
+                listOf(BackgroundColorSpan(ColorCompat.getThemedColor(renderContext.context, R.attr.theme_chat_code)))
             },
         )
 

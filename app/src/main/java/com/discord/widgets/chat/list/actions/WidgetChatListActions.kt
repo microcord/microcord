@@ -15,9 +15,10 @@ import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.models.message.Message
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.discord.utilities.dimen.dpToPixels
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class WidgetChatListActions : BottomSheetDialogFragment() {
     interface Host {
@@ -80,7 +81,7 @@ class WidgetChatListActions : BottomSheetDialogFragment() {
         val cancel = TextView(requireContext()).apply {
             setText(R.string.cancel)
             contentDescription = getString(R.string.cancel)
-            setPadding(dp(16), dp(16), dp(16), dp(16))
+            setPadding(dpToPixels(16), dpToPixels(16), dpToPixels(16), dpToPixels(16))
             val state = availability.getValue(MessageActions.Action.CANCEL)
             isVisible = state.visible
             isEnabled = state.enabled
@@ -137,7 +138,6 @@ class WidgetChatListActions : BottomSheetDialogFragment() {
             .setPositiveButton(positive) { _, _ -> action() }
             .show()
     }
-    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     private class ActionAdapter(
         private val label: String,

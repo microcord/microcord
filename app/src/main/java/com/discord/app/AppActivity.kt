@@ -22,24 +22,24 @@ import androidx.fragment.app.Fragment
 import com.discord.R
 import com.discord.databinding.ActivityAppBinding
 import com.discord.models.domain.ModelUserSettings
+import com.discord.stores.IntentRouteResult
 import com.discord.stores.MainRoute
 import com.discord.stores.RequiredAction
 import com.discord.stores.StoreStream
-import com.discord.utilities.uri.UriHandler
-import com.discord.stores.IntentRouteResult
 import com.discord.utilities.intent.AppIntentParser
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
 import com.discord.utilities.rx.bindToComponentLifecycle
+import com.discord.utilities.uri.UriHandler
+import com.discord.views.ThemedColor
 import com.discord.views.ToolbarTitleLayout
-import com.discord.widgets.tabs.WidgetTabsHost
 import com.discord.widgets.auth.AuthAction
 import com.discord.widgets.auth.AuthFragment
+import com.discord.widgets.auth.AuthRequests
 import com.discord.widgets.auth.AuthResult
 import com.discord.widgets.auth.AuthRoute
 import com.discord.widgets.auth.AuthUiActions
 import com.discord.widgets.auth.AuthUiState
-import com.discord.widgets.auth.AuthUiRules
 import com.discord.widgets.auth.WidgetAgeVerify
 import com.discord.widgets.auth.WidgetAuthAgeGated
 import com.discord.widgets.auth.WidgetAuthBirthday
@@ -54,6 +54,7 @@ import com.discord.widgets.auth.WidgetAuthRegisterIdentity
 import com.discord.widgets.auth.WidgetAuthRequiredAction
 import com.discord.widgets.auth.WidgetAuthResetPassword
 import com.discord.widgets.auth.WidgetAuthUndeleteAccount
+import com.discord.widgets.tabs.WidgetTabsHost
 import java.util.Locale
 import kotlin.math.roundToInt
 import rx.Subscription
@@ -301,7 +302,7 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
         if (showHomeAsUp) {
             val drawableRes = iconRes ?: themedResourceId(R.attr.ic_action_bar_back)
             icon = ContextCompat.getDrawable(toolbar.context, drawableRes)?.also { drawable ->
-                DrawableCompat.setTint(drawable, themedColor(R.attr.colorInteractiveActive))
+                DrawableCompat.setTint(drawable, ThemedColor.resolve(this, R.attr.colorInteractiveActive))
             }
             toolbar.navigationContentDescription = getString(R.string.back)
         }
@@ -404,9 +405,18 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
         // A screen intent addresses one fragment directly and bypasses MainRoute entirely. Without
         // this branch `AppScreenRouter.launch` silently re-entered the tab host, which left every
         // router-launched screen (media viewer, QR scanner, TOS report) unreachable.
-        AppScreenRouter.screenOf(intent)?.let { screen ->
-            showScreen(screen, intent)
-            return
+        //
+        // Never on `Main`. `Main` is the exported launcher/deep-link component, and EXTRA_SCREEN
+        // names a fragment that `showScreen` instantiates with this intent's extras as arguments.
+        // Reading it here would let any installed app display any fragment with arguments it chose
+        // — including `WidgetIncomingShare`, whose unvalidated `uris` argument is opened with our
+        // own contentResolver and would exfiltrate the token from shared_prefs. Router launches go
+        // to the non-exported base activity instead; see `AppScreenRouter.createScreenIntent`.
+        if (this !is Main) {
+            AppScreenRouter.screenOf(intent)?.let { screen ->
+                showScreen(screen, intent)
+                return
+            }
         }
         when (val result = StoreStream.getNavigation().routeIntent(AppIntentParser.parse(intent))) {
             is IntentRouteResult.External -> UriHandler.handle(this, result.uri)
@@ -484,27 +494,50 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
             .commit()
     }
 
-    override fun submit(action: AuthAction, callback: (AuthResult) -> Unit) {
+    override fun submit(
+        action: AuthAction,
+        captcha: com.discord.utilities.captcha.CaptchaHelper.CaptchaPayload?,
+        callback: (AuthResult) -> Unit,
+    ) {
         authSubmitter?.let {
             it(action, callback)
             return
         }
-        if (action is AuthAction.TokenLogin) {
-            val errors = AuthUiRules.token(action.token)
-            if (errors.isEmpty()) {
-                StoreStream.getAuthentication().loginWithToken(action.token)
-                callback(AuthResult.Success())
-            } else {
-                callback(AuthResult.Failure(fieldErrors = errors))
-            }
-        } else {
-            callback(AuthResult.Failure(message = "Authentication is not initialized."))
-        }
+        AuthRequests.submit(action, captcha, callback)
     }
 
     override fun close() {
         if (!supportFragmentManager.popBackStackImmediate()) moveTaskToBack(true)
     }
+
+    /**
+     * Opens the system credential manager so the user can look up the password they are being
+     * asked for.
+     *
+     * The reference uses Google Smart Lock, which is a Play Services dependency this project does
+     * not carry; the platform's own autofill/password settings screen is the closest equivalent
+     * that exists on every device. Falling back to Discord's account-recovery page keeps the link
+     * from being a dead end on a device without that settings activity.
+     */
+    override fun openPasswordManager() {
+        val intents = buildList {
+            // The autofill settings screen only exists from API 26; below that the account-sync
+            // screen is the closest a device offers.
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                add(Intent(ACTION_REQUEST_SET_AUTOFILL_SERVICE))
+            }
+            add(Intent(Settings.ACTION_SYNC_SETTINGS))
+        }
+        for (intent in intents) {
+            if (intent.resolveActivity(packageManager) != null) {
+                runCatching { startActivity(intent) }.onSuccess { return }
+            }
+        }
+        UriHandler.handle(this, PASSWORD_HELP_URL)
+    }
+
+    /** Opens Discord support for an account the user cannot recover from inside the app. */
+    override fun openSupport() = UriHandler.handle(this, SUPPORT_URL)
 
     // endregion
 
@@ -512,16 +545,20 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
         .also { theme.resolveAttribute(attributeResId, it, true) }
         .resourceId
 
-    private fun themedColor(attributeResId: Int): Int {
-        val typedValue = TypedValue()
-        theme.resolveAttribute(attributeResId, typedValue, true)
-        return if (typedValue.resourceId != 0) ContextCompat.getColor(this, typedValue.resourceId) else typedValue.data
-    }
-
     class Main : AppActivity()
 
     companion object {
         private const val STATE_PENDING_INTENT = "pending_launch_intent"
+
+        /** Discord's own "I forgot my password" help article. */
+        private const val PASSWORD_HELP_URL =
+            "https://support.discord.com/hc/en-us/articles/218498068"
+
+        private const val SUPPORT_URL = "https://support.discord.com/hc/en-us/requests/new"
+
+        /** `Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE`, spelled out because minSdk is 21. */
+        private const val ACTION_REQUEST_SET_AUTOFILL_SERVICE =
+            "android.settings.REQUEST_SET_AUTOFILL_SERVICE"
 
         /** Font scale sentinel meaning "follow the system setting". */
         const val USE_SYSTEM_FONT_SCALE = -1

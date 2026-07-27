@@ -9,6 +9,7 @@ import com.discord.api.interaction.InteractionModalCreate
 import com.discord.api.interaction.InteractionStateUpdate
 import com.discord.app.AppLog
 import com.discord.models.commands.ApplicationCommandLocalSendData
+import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.NonceGenerator
 import com.discord.models.message.Message
@@ -22,6 +23,7 @@ import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
 import rx.Observable
 import rx.subjects.PublishSubject
@@ -57,7 +59,18 @@ class StoreApplicationInteractions(
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
     private val restApi: () -> RestAPIInterface? = { RestAPI.apiOrNull },
     private val nonceGenerator: NonceGenerator = NonceGenerator(),
-    private val gson: Gson = Gson(),
+    /**
+     * Must carry the API type adapters. The persisted ledger contains
+     * `api.user.User.avatar: NullSerializable<String>?`, a sealed class that a bare [Gson] cannot
+     * reconstruct — the restore would throw, [loadCachedApplicationCommandSendDataSet]'s `catch`
+     * would clear the cache, and every pending slash-command send would be dropped on every cold
+     * start, silently.
+     *
+     * Deliberately **no** [com.google.gson.FieldNamingPolicy]: the reference sets none, so the
+     * persisted keys are the raw Kotlin field names. Adding one would invalidate every ledger
+     * already on disk.
+     */
+    private val gson: Gson = GsonBuilder().registerDiscordApiTypeAdapters().create(),
 ) : StoreV2() {
 
     /** Where a component lives, so a nonce can be mapped back to a row. */
