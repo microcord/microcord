@@ -2,6 +2,7 @@ package com.discord.utilities.messagesend
 
 import com.discord.api.message.Message as ApiMessage
 import com.discord.api.message.MessageReference
+import com.discord.api.user.User
 import com.discord.models.commands.Application
 import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.models.message.Message
@@ -51,13 +52,16 @@ class MessageSendCoordinatorTest {
 
     @Test
     fun sendEmitsAnOptimisticMessageKeyedByNonceAndReconcilesWithTheServerCopy() {
-        val submission = coordinator.send(MessageSendCoordinator.Send(channelId = CHANNEL_ID, content = "hi"))
+        val submission = coordinator.send(
+            MessageSendCoordinator.Send(channelId = CHANNEL_ID, content = "hi", author = User(7L, "me")),
+        )
 
         assertTrue(submission is MessageSendCoordinator.Submission.Accepted)
         val accepted = submission as MessageSendCoordinator.Submission.Accepted
         val nonce = accepted.requestId
         assertEquals(nonce, accepted.optimistic.nonce)
         assertEquals(-1, accepted.optimistic.type)
+        assertEquals("me", accepted.optimistic.author?.username)
         assertEquals(nonce, restApi.sendCalls.single().body?.nonce)
 
         restApi.respondSuccess(ApiMessage(id = 5_000L, channelId = CHANNEL_ID, content = "hi", nonce = nonce))

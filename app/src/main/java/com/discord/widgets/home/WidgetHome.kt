@@ -3,6 +3,7 @@ package com.discord.widgets.home
 import android.os.Bundle
 import android.view.View
 import android.view.ViewStub
+import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.Fragment
@@ -33,6 +34,7 @@ import com.discord.api.channel.isGuildTextChannel
 import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isSystemDM
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.toolbar.positionUnreadCountView
 import com.discord.widgets.user.calls.PrivateCallLauncher
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import rx.Subscription
@@ -42,6 +44,9 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
     private var navigationSubscription: Subscription? = null
     private var selectedChannelSubscription: Subscription? = null
     private var voiceChannelSubscription: Subscription? = null
+    private var mentionSubscription: Subscription? = null
+    private var unreadCount = 0
+    private var initialChannelShown = false
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -107,12 +112,24 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
                 if (channel != null) ensureChatInflated()
                 view?.findViewById<View>(R.id.widget_home_panel_center_chat)?.visibility =
                     if (channel == null) View.GONE else View.VISIBLE
-                if (channel != null) configureToolbar(channel)
+                if (channel != null) {
+                    configureToolbar(channel)
+                    if (!initialChannelShown) {
+                        initialChannelShown = true
+                        panels.closePanels()
+                    }
+                }
             }
         }
         voiceChannelSubscription = StoreStream.getVoiceChannelSelected().observeSelectedVoiceChannelId().subscribe {
             activity?.runOnUiThread {
                 StoreStream.getChannelsSelected().getSelectedChannel()?.let(::configureToolbar)
+            }
+        }
+        mentionSubscription = StoreStream.getMentions().observeTotalMentions().subscribe { count ->
+            activity?.runOnUiThread {
+                unreadCount = count
+                updateUnreadCount()
             }
         }
     }
@@ -124,6 +141,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
         selectedChannelSubscription = null
         voiceChannelSubscription?.unsubscribe()
         voiceChannelSubscription = null
+        mentionSubscription?.unsubscribe()
+        mentionSubscription = null
         super.onStop()
     }
 
@@ -199,6 +218,9 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
             channel.isGuildTextChannel() || channel.isAnnouncementChannel() -> "# ${channel.getDisplayName()}"
             else -> channel.getDisplayNameOrDefault(requireContext(), includePrefix = false)
         }
+        toolbar.setNavigationIcon(R.drawable.ic_menu_24dp)
+        toolbar.setNavigationContentDescription(R.string.toggle_drawer)
+        toolbar.setNavigationOnClickListener { handleCenterPanelBack() }
         if (toolbar.menu.size() == 0) {
             toolbar.inflateMenu(R.menu.menu_chat_toolbar)
             val pin = ContextCompat.getDrawable(requireContext(), R.drawable.ic_pin_24dp)?.mutate()?.also {
@@ -228,6 +250,17 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
                 else -> false
             }
         }
+        updateUnreadCount()
+    }
+
+    private fun updateUnreadCount() {
+        val center = view?.findViewById<View>(R.id.widget_home_panel_center_chat) ?: return
+        val count = center.findViewById<TextView>(R.id.home_toolbar_unread_count)
+            ?: center.findViewById(R.id.unread)
+            ?: return
+        count.text = unreadCount.takeIf { it > 0 }?.toString()
+        count.visibility = if (unreadCount > 0) View.VISIBLE else View.GONE
+        center.findDescendant(Toolbar::class.java)?.positionUnreadCountView(count)
     }
 
     private fun privateCallLauncher() = PrivateCallLauncher(

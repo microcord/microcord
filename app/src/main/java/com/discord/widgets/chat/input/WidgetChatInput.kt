@@ -34,6 +34,7 @@ import com.discord.utilities.duration.humanizeCountdownDuration
 import com.discord.utilities.messagesend.MessageResult
 import com.discord.utilities.messagesend.MessageSendCoordinator
 import com.discord.utilities.rx.ui
+import com.discord.utilities.user.UserUtils.synthesizeApiUser
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
 import com.discord.widgets.chat.input.autocomplete.AutocompleteViewModel
@@ -370,6 +371,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 channelId = loaded.channelId,
                 guildId = loaded.channel.guildId.takeUnless { it == 0L },
                 content = content,
+                author = loaded.me.synthesizeApiUser(),
                 canSend = loaded.ableToSendMessage,
                 communicationDisabled = loaded.isCommunicationDisabled,
                 systemDm = loaded.isSystemDM,

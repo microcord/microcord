@@ -3,6 +3,7 @@ package com.discord.widgets.home
 import android.content.Intent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.appcompat.widget.Toolbar
 import com.discord.R
 import com.discord.app.AppActivity
 import com.discord.panels.OverlappingPanelsLayout
@@ -10,6 +11,7 @@ import com.discord.stores.AuthNavigationState
 import com.discord.stores.StoreStream
 import com.discord.widgets.tabs.NavigationTab
 import com.discord.widgets.tabs.WidgetTabsHost
+import com.discord.utilities.toolbar.getNavigationIconView
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -51,6 +53,26 @@ class HomeBackPressTest {
 
         awaitPanel(panels, OverlappingPanelsLayout.Panel.START)
         assertFalse("Back from the chat panel must not finish the activity", activity.isFinishing)
+        instrumentation.runOnMainSync(activity::finish)
+    }
+
+    @Test
+    fun toolbarNavigationButtonOpensTheChannelList() {
+        val activity = launchLoggedInShell()
+        val home = homeFragment(activity)
+        val panels = home.requireView().findViewById<HomePanelsLayout>(R.id.overlapping_panels)
+        instrumentation.runOnMainSync {
+            panels.setStartPanelLockState(OverlappingPanelsLayout.LockState.UNLOCKED)
+            panels.closePanels()
+        }
+        awaitPanel(panels, OverlappingPanelsLayout.Panel.CENTER)
+        val toolbar = home.requireView()
+            .findViewById<com.google.android.material.appbar.AppBarLayout>(R.id.action_bar_toolbar_layout)
+            .getChildAt(0) as Toolbar
+
+        instrumentation.runOnMainSync { requireNotNull(toolbar.getNavigationIconView()).performClick() }
+
+        awaitPanel(panels, OverlappingPanelsLayout.Panel.START)
         instrumentation.runOnMainSync(activity::finish)
     }
 
@@ -103,10 +125,13 @@ class HomeBackPressTest {
     }
 
     private fun homePanels(activity: AppActivity): HomePanelsLayout {
+        return homeFragment(activity).requireView().findViewById(R.id.overlapping_panels)
+    }
+
+    private fun homeFragment(activity: AppActivity): WidgetHome {
         val tabs = activity.supportFragmentManager.findFragmentById(R.id.app_root) as WidgetTabsHost
         instrumentation.runOnMainSync { tabs.childFragmentManager.executePendingTransactions() }
-        val home = tabs.childFragmentManager.findFragmentByTag(NavigationTab.HOME.name) as WidgetHome
-        return home.requireView().findViewById(R.id.overlapping_panels)
+        return tabs.childFragmentManager.findFragmentByTag(NavigationTab.HOME.name) as WidgetHome
     }
 
     private fun awaitPanel(panels: HomePanelsLayout, expected: OverlappingPanelsLayout.Panel) {

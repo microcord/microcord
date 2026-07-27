@@ -41,6 +41,9 @@ internal fun inlineMediaPlayerListener(
     }
 } as Player.Listener
 
+internal fun inlineMediaRepeatMode(embedType: EmbedType?): Int =
+    if (embedType == EmbedType.GIFV) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+
 class InlineMediaView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -175,6 +178,7 @@ class InlineMediaView @JvmOverloads constructor(
         player = ExoPlayer.Builder(context).build().also { exoPlayer ->
             playerView.player = exoPlayer
             exoPlayer.volume = if (muted) 0f else 1f
+            exoPlayer.repeatMode = inlineMediaRepeatMode(viewParams?.embedType)
             configureVolume(exoPlayer)
             exoPlayer.addListener(
                 inlineMediaPlayerListener(

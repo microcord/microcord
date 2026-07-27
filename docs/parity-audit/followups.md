@@ -4749,10 +4749,12 @@ setters. Exact 126.21 producers are now restored:
   usage by clock ticks, elapsed time and available cores, converts RSS bytes to KiB, and publishes
   `client_performance_cpu`, `client_performance_memory`, and `cpu_core_count`.
 
-`device_advertiser_id` remains deliberately absent. The reference receives GAID from Adjust; the
-target has no approved Adjust integration or `AD_ID` permission. Substituting `ANDROID_ID`, a random
-UUID, or a recovered official identifier would not match the reference contract and would violate the
-project privacy/security decisions.
+`device_advertiser_id` is now supplied from the legitimate Google Advertising ID API. Recovered APK
+metadata pins `com.google.android.gms:play-services-ads-identifier:17.0.0`; the target uses that exact
+artifact and declares `com.google.android.gms.permission.AD_ID`. Retrieval runs off-main during app
+startup. Blank IDs, the standard all-zero ID, limited-ad-tracking results, and Play Services failures
+all leave the property absent. No `ANDROID_ID`, random production UUID, or recovered identifier is
+used.
 
 Offline transport fixtures may inject a generated UUID through `setAdvertiserId`; a focused test
 verifies the generated value survives JSON/Base64 encoding into `X-Super-Properties`. This test-only
@@ -4760,3 +4762,11 @@ value is never installed by production startup and is never sent to Discord.
 
 Verification: focused device-resource/accessibility tests, full unit suite, `assembleDebug`, and
 `lintDebug` pass. No live request was made.
+
+### Optimistic self-author correction
+
+`WidgetChatInput.submit` constructed `MessageSendCoordinator.Send` without `Loaded.me`, so the local
+optimistic message had a null author and rendered a broken sender name until the gateway echo replaced
+it. The reference local-message creator always carries the current user. The target now passes
+`Loaded.me.synthesizeApiUser()`; coordinator coverage asserts the optimistic username before
+reconciliation.
