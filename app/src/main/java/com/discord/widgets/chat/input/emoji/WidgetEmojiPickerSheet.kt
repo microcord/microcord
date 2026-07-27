@@ -24,7 +24,10 @@ class WidgetEmojiPickerSheet : AppBottomSheet() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        val picker = WidgetEmojiPicker.create(EmojiPickerContextType.Chat).apply {
+        val picker = WidgetEmojiPicker.create(
+            EmojiPickerContextType.Chat,
+            EmojiPickerMode.BOTTOM_SHEET,
+        ).apply {
             onPicked = { emoji ->
                 listener?.invoke(emoji.toReactionEmoji())
                 dismiss()

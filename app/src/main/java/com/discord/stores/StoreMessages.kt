@@ -5,6 +5,7 @@ import android.util.Log
 import com.discord.api.activity.Activity
 import com.discord.api.application.Application
 import com.discord.api.message.MessageReference
+import com.discord.api.interaction.InteractionStateUpdate
 import com.discord.api.message.activity.MessageActivity
 import com.discord.api.message.allowedmentions.MessageAllowedMentions
 import com.discord.api.message.reaction.MessageReaction
@@ -12,6 +13,7 @@ import com.discord.api.message.reaction.MessageReactionEmoji
 import com.discord.api.message.reaction.MessageReactionUpdate
 import com.discord.api.sticker.Sticker
 import com.discord.api.utcdatetime.UtcDateTime
+import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.models.domain.ModelMessageDelete
 import com.discord.models.domain.ModelPayload
 import com.discord.models.message.Message
@@ -752,6 +754,29 @@ class StoreMessages @JvmOverloads constructor(
     }
 
     @StoreThread
+    fun handleApplicationCommandInteraction(
+        sendData: ApplicationCommandLocalSendData,
+        interaction: InteractionStateUpdate,
+        failed: Boolean,
+        loading: Boolean,
+    ) {
+        val message = localMessagesHolder.getMessage(sendData.channelId, sendData.nonceString) ?: return
+        localMessagesHolder.addMessage(
+            message.copy(
+                type = if (failed) TYPE_APPLICATION_COMMAND_FAILED else TYPE_APPLICATION_COMMAND,
+                flags = if (loading) MESSAGE_FLAG_LOADING else null,
+                interaction = message.interaction?.copy(id = interaction.id),
+            ),
+        )
+        markChanged()
+    }
+
+    @StoreThread
+    fun handleApplicationCommandModal(sendData: ApplicationCommandLocalSendData) {
+        if (localMessagesHolder.deleteMessage(sendData.channelId, sendData.nonceString) != null) markChanged()
+    }
+
+    @StoreThread
     fun handleMessageCreate(message: Message) = handleMessageCreate(message.channelId, message, message.nonce)
 
     @StoreThread
@@ -933,6 +958,22 @@ class StoreMessages @JvmOverloads constructor(
                 awaitResult(coordinator, submission.requestId)
             }
         }
+    }
+
+    @JvmOverloads
+    fun sendMessage(
+        message: Message,
+        applicationCommandLocalSendData: ApplicationCommandLocalSendData,
+        attachments: List<UploadAttachment>? = null,
+    ): Observable<MessageResult> {
+        val coordinator = sendCoordinator ?: return Observable.just(MessageResult.NoValidContent)
+        dispatcher?.schedule { handleLocalMessageCreate(message) }
+        scheduleBackgroundSend()
+        return coordinator.sendApplicationCommand(
+            message.synthesizeApiMessage(),
+            applicationCommandLocalSendData,
+            attachments,
+        )
     }
 
     /**
@@ -1244,6 +1285,10 @@ class StoreMessages @JvmOverloads constructor(
 
         /** Blocked by AutoMod. */
         const val TYPE_AUTOMOD_BLOCKED = -8
+
+        private const val TYPE_APPLICATION_COMMAND = -5
+        private const val TYPE_APPLICATION_COMMAND_FAILED = -4
+        private const val MESSAGE_FLAG_LOADING = 128L
     }
 }
 

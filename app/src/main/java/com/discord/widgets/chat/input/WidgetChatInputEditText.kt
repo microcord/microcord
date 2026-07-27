@@ -10,6 +10,7 @@ import com.discord.utilities.view.text.TextWatcher
 import com.lytefast.flexinput.widget.FlexEditText
 import rx.Observable
 import rx.subjects.BehaviorSubject
+import rx.subjects.Subject
 
 /**
  * The behaviour bolted onto the composer's raw `EditText`: drafts, typing indicators, and the two
@@ -30,11 +31,10 @@ class WidgetChatInputEditText(
 
     /** The channel drafts are saved against. Set by the composer on every channel change. */
     var channelId: Long = 0L
-        private set
 
     var onSendListener: (() -> Unit)? = null
 
-    private val emptyTextSubject: BehaviorSubject<Boolean> = BehaviorSubject.create(true)
+    private val emptyTextSubject: Subject<Boolean, Boolean> = BehaviorSubject.create(true)
 
     /** Last time a typing event was sent, so the gateway is not told once per keystroke. */
     private var lastTypingEmissionMillis: Long = 0L
@@ -81,11 +81,11 @@ class WidgetChatInputEditText(
                         emptyTextSubject.onNext(isEmpty)
                     }
 
-                    val now = ClockFactory.get().currentTimeMillis()
-                    val due = lastTypingEmissionMillis - now < -TYPING_EMISSION_INTERVAL_MS
+                    val due = lastTypingEmissionMillis - ClockFactory.get().currentTimeMillis() <
+                        -TYPING_EMISSION_INTERVAL_MS
                     // A slash command is not a message being typed, so it does not announce.
                     if (due && !isEmpty && !s.toString().startsWith('/')) {
-                        lastTypingEmissionMillis = now
+                        lastTypingEmissionMillis = ClockFactory.get().currentTimeMillis()
                         StoreStream.getUsersTyping().setUserTyping(channelId)
                     }
                 }

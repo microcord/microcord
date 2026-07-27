@@ -2,6 +2,7 @@ package com.discord.stores
 
 import android.content.Context
 import com.discord.stores.updates.ObservationDeck
+import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.takeSingleUntilTimeout
 import rx.Observable
@@ -20,14 +21,13 @@ class StoreGuildsNsfw(
     private val dispatcher: Dispatcher,
     private val storeChannels: StoreChannels,
     private val observationDeck: ObservationDeck,
-    /** Wire to `StoreStream.selectChannel`; called with `(0, 0)` to leave the guild entirely. */
-    private val selectChannel: (guildId: Long, channelId: Long) -> Unit = { _, _ -> },
 ) : StoreV2() {
     private val guildIdsAllowed = LinkedHashSet<Long>()
     private var guildIdsAllowedSnapshot: Set<Long> = emptySet()
 
     @StoreThread
     override fun init(context: Context) {
+        super.init(context)
         guildIdsAllowed.addAll(prefs.getStringSet(GUILDS_ALLOWED_KEY, emptySet()).orEmpty().toGuildIdSet())
         markChanged()
     }
@@ -51,15 +51,16 @@ class StoreGuildsNsfw(
             .takeSingleUntilTimeout()
             .appSubscribe(StoreGuildsNsfw::class.java) { channel ->
                 if (channel != null && !channel.nsfw) {
-                    selectChannel(channel.guildId, channel.id)
+                    ChannelSelector.getInstance().selectChannel(channel)
                 } else {
-                    selectChannel(0L, 0L)
+                    ChannelSelector.getInstance().selectChannel(0L, 0L)
                 }
             }
     }
 
     @StoreThread
     override fun snapshotData() {
+        super.snapshotData()
         guildIdsAllowedSnapshot = HashSet(guildIdsAllowed)
         prefs.edit().putStringSet(GUILDS_ALLOWED_KEY, guildIdsAllowed.toStringSet()).apply()
     }

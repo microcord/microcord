@@ -18,6 +18,7 @@ import com.discord.widgets.chat.list.entries.NewMessagesEntry
 import com.discord.widgets.chat.list.entries.ReactionsEntry
 import com.discord.widgets.chat.list.entries.SpacerEntry
 import com.discord.widgets.chat.list.entries.StartOfChatEntry
+import com.discord.widgets.chat.list.entries.StartOfPrivateChatEntry
 import com.discord.widgets.chat.list.entries.TimestampEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -25,6 +26,25 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ChatListRowsTest {
+
+    @Test fun messageEntryIncludesItsAuthorDisplayName() {
+        val body = rows(listOf(message(1, 1_000))).filterIsInstance<MessageEntry>().single()
+
+        assertEquals("author", body.nickOrUsernames[1L])
+    }
+
+    @Test fun directMessageStartRowUsesRecipientAvatar() {
+        val directMessage = channel().copy(
+            type = Channel.DM,
+            guildId = 0L,
+            name = null,
+            recipients = listOf(User(8L, "recipient")),
+        )
+
+        val start = rows(emptyList(), channel = directMessage).filterIsInstance<StartOfPrivateChatEntry>().single()
+
+        assertTrue(start.channelIcon?.isNotBlank() == true)
+    }
 
     @Test fun groupsAtMostFiveMessagesWithinSevenMinutes() {
         val messages = (1L..6L).map { message(it, it * 60_000) }
@@ -104,9 +124,10 @@ class ChatListRowsTest {
         unreadMessageId: Long? = null,
         detached: Boolean = false,
         permissions: Long? = null,
+        channel: Channel = channel(),
     ) = ChatListRows.build(
         ChatListRows.State(
-            channel = channel(),
+            channel = channel,
             messages = messages,
             loaded = StoreMessagesLoader.ChannelLoadedState(
                 isInitialMessagesLoaded = true,

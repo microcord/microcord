@@ -1,8 +1,15 @@
 package com.discord.stores
 
 import android.content.SharedPreferences
+import com.discord.api.activity.ActivityType
 import com.discord.api.channel.Channel
+import com.discord.api.commands.GuildApplicationCommands
+import com.discord.api.embeddedactivities.EmbeddedActivity
+import com.discord.api.embeddedactivities.EmbeddedActivityInboundUpdate
+import com.discord.api.interaction.InteractionStateUpdate
 import com.discord.api.message.Message as ApiMessage
+import com.discord.models.commands.Application
+import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.models.domain.ModelPayload
 import com.discord.utilities.time.Clock
@@ -12,15 +19,16 @@ import java.lang.reflect.Modifier
 import java.lang.reflect.Proxy
 import java.nio.file.Files
 import org.junit.AfterClass
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
 import org.junit.Test
 
 /**
- * Proves the two wirings the parity audit found missing in `StoreStream` itself, end to end
+ * Proves wirings the parity audit found missing in `StoreStream` itself, end to end
  * through the real store graph rather than against an isolated store.
  *
- * Both defects were invisible from a store-level test: every store involved already behaved
+ * These defects were invisible from store-level tests: every store involved already behaved
  * correctly in isolation, and only `StoreStream` failed to connect them.
  */
 class StoreStreamWiringTest {
@@ -85,6 +93,141 @@ class StoreStreamWiringTest {
             "StoreChat interaction state must reach StoreMessagesLoader, saw $seen",
             seen.any(StoreMessagesLoader.ChannelLoadedState::isTouchedSinceLastJump),
         )
+    }
+
+    @Test
+    fun applicationCommandResultIsRoutedByNonce() {
+        val commands = StoreStream.getApplicationCommands()
+        commands.requestApplicationCommandsQuery(1L, "wir")
+        val nonce = StoreApplicationCommands::class.java.getDeclaredField("queryNonce").run {
+            isAccessible = true
+            get(commands) as String
+        }
+
+        stream.handleGatewayDispatch(
+            "GUILD_APPLICATION_COMMANDS_UPDATE",
+            GuildApplicationCommands(
+                guildId = 1L,
+                updatedAt = 0L,
+                applications = emptyList(),
+                nonce = nonce,
+                applicationCommands = listOf(
+                    com.discord.api.commands.ApplicationCommand(
+                        id = 44L,
+                        applicationId = 9L,
+                        name = "wired",
+                        description = null,
+                        options = null,
+                        version = "1",
+                        guildId = "1",
+                        defaultPermissions = null,
+                        permissions = null,
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(listOf("wired"), commands.getQueryCommands().map { it.name })
+    }
+
+    @Test
+    fun interactionEventsAndConnectionLifecycleReachStore() {
+        val interactions = StoreStream.getInteractions()
+        val nonce = "9001"
+        stream.dispatcher.schedule {
+            interactions.handlePreLogout()
+            interactions.applicationCommandLocalSendDataSet[nonce] = ApplicationCommandLocalSendData(
+                nonce = nonce.toLong(),
+                channelId = 10L,
+                guildId = 1L,
+                commandGuildId = 1L,
+                application = Application(id = 9L, name = "bot", commandCount = 1),
+                sessionId = "session",
+                applicationCommandName = "wired",
+                applicationCommandId = "44",
+                applicationCommandsValues = emptyList(),
+                version = "1",
+            )
+            interactions.sentInteractions.put(
+                nonce,
+                StoreApplicationInteractions.SentInteraction(10L, null, 1L),
+            )
+        }
+
+        stream.handleGatewayDispatch("INTERACTION_CREATE", InteractionStateUpdate(77L, nonce))
+        assertEquals(77L, interactions.applicationCommandLocalSendDataSet[nonce]?.interactionId)
+
+        stream.handleGatewayDispatch("INTERACTION_SUCCESS", InteractionStateUpdate(77L, nonce))
+        assertEquals(
+            StoreApplicationInteractions.SentInteractionState.SUCCESS,
+            interactions.sentInteractions[nonce]?.state,
+        )
+
+        StoreStream.getGatewayConnection().handleConnectionReady(true)
+        assertEquals(
+            StoreApplicationInteractions.SentInteractionState.FAILURE,
+            interactions.sentInteractions[nonce]?.state,
+        )
+    }
+
+    @Test
+    fun remainingGatewayStoresArePublishedAndRouted() {
+        stream.handleGatewayDispatch("USER_SUBSCRIPTIONS_UPDATE", Unit)
+        stream.handleGatewayDispatch("USER_PAYMENT_SOURCES_UPDATE", Unit)
+        stream.handleGatewayDispatch(
+            "EMBEDDED_ACTIVITY_UPDATE",
+            EmbeddedActivityInboundUpdate(
+                channelId = 10L,
+                embeddedActivity = EmbeddedActivity(
+                    applicationId = 99L,
+                    assets = null,
+                    createdAt = null,
+                    details = null,
+                    name = "Activity",
+                    secrets = null,
+                    state = null,
+                    timestamps = null,
+                    type = ActivityType.PLAYING,
+                ),
+                guildId = 1L,
+                users = listOf(7L),
+            ),
+        )
+
+        assertTrue(StoreStream.getSubscriptions().getSubscriptions() is StoreSubscriptions.SubscriptionsState.Failure)
+        assertTrue(StoreStream.getPaymentSources().getPaymentSourcesState() is StorePaymentSources.PaymentSourcesState.Failure)
+        assertEquals(listOf(7L), StoreStream.getEmbeddedActivities().getEmbeddedActivities()[10L]?.get(99L)?.userIds)
+    }
+
+    @Test
+    fun switchingGuildSurfacesRestoresTheirLastChannel() {
+        stream.handleConnectionOpen(gson.fromJson(READY_JSON, ModelPayload::class.java))
+        val dm = gson.fromJson(
+            """{"id":20,"type":1,"guild_id":0,"recipients":[{"id":8,"username":"dm"}]}""",
+            Channel::class.java,
+        )
+        StoreStream.getChannels().onGroupCreated(dm)
+        repeat(100) {
+            if (StoreStream.getChannels().getChannel(dm.id) != null) return@repeat
+            Thread.sleep(5)
+        }
+        assertTrue("DM channel was not stored", StoreStream.getChannels().getChannel(dm.id) != null)
+        StoreStream.selectChannel(0L, dm.id)
+        awaitSelectedChannel(dm.id)
+
+        StoreStream.selectGuild(1L)
+        awaitSelectedChannel(10L)
+        StoreStream.selectGuild(0L)
+        awaitSelectedChannel(dm.id)
+
+        assertEquals("DM selection was not restored", dm.id, StoreStream.getChannelsSelected().getId())
+    }
+
+    private fun awaitSelectedChannel(channelId: Long) {
+        repeat(100) {
+            if (StoreStream.getChannelsSelected().getId() == channelId) return
+            Thread.sleep(5)
+        }
     }
 
     companion object {

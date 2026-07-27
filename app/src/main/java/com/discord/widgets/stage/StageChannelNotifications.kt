@@ -13,6 +13,7 @@ import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.fcm.NotificationClient
 import com.discord.utilities.lifecycle.ApplicationProvider
 import com.discord.utilities.lifecycle.Backgrounded
+import com.discord.utilities.notifications.NotificationRenderer
 
 /**
  * Posts the system notification that tells the user a stage moderator has invited them to speak.
@@ -90,8 +91,13 @@ class StageChannelNotifications(
             }
 
             fun notify(context: Context, notification: Notification) {
-                NotificationManagerCompat.from(context)
-                    .notify(NOTIFICATION_TAG, NOTIFICATION_ID, notification)
+                if (!NotificationRenderer().canNotify(context)) return
+                try {
+                    NotificationManagerCompat.from(context)
+                        .notify(NOTIFICATION_TAG, NOTIFICATION_ID, notification)
+                } catch (_: SecurityException) {
+                    // Permission can be revoked between the check and the notify call.
+                }
             }
         }
     }

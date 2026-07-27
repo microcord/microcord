@@ -27,6 +27,7 @@ class WidgetSettingsTest {
      *  - `appearance` -> `WidgetSettingsAppearance` and `language` -> `WidgetSettingsLanguage`, both
      *    reading `StoreStream.getUserSettingsSystem()` and mirroring the change to the account
      *    through `RestAPI`.
+     *  - `privacy` and `voice` are backed by their recovered settings fragments.
      */
     @Test fun `main settings exposes only implemented recovered app routes`() {
         assertEquals(setOf(
@@ -38,6 +39,8 @@ class WidgetSettingsTest {
             com.discord.R.id.behavior,
             com.discord.R.id.activity_status,
             com.discord.R.id.notifications,
+            com.discord.R.id.privacy,
+            com.discord.R.id.voice,
         ), WidgetSettings.implementedRouteIds)
     }
 

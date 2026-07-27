@@ -15,6 +15,7 @@ import com.discord.app.AppPermissionsRequests
 import com.discord.stores.StoreStream
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.widgets.stage.StageChannelJoinHelper
+import com.discord.widgets.stage.StageChannelAPI
 import com.discord.widgets.stage.start.WidgetModeratorStartStage
 import com.discord.widgets.voice.call.callAndLaunch
 import com.discord.widgets.voice.sheet.WidgetVoiceBottomSheet
@@ -28,7 +29,7 @@ import com.discord.widgets.voice.sheet.WidgetVoiceBottomSheet
  * * a **DM or group DM** places a private call, which means asking for the microphone, deciding
  *   whether to ring, and only then connecting;
  * * a **stage channel** connects as audience and opens the stage controls;
- * * a **regular voice channel** connects and opens the voice bottom sheet.
+ * * a **regular voice channel** opens the voice bottom sheet; its Join button connects later.
  */
 object VoiceUtils {
 
@@ -73,9 +74,7 @@ object VoiceUtils {
                 fragmentManager = fragmentManager,
             )
             channel.isStageVoiceChannel() -> handleStageChannel(channel, context, fragmentManager)
-            else -> appPermissionsRequests.requestMicrophone(onFailure = null) {
-                connectAndShowControls(channel, fragmentManager)
-            }
+            else -> showControls(channel, fragmentManager)
         }
     }
 
@@ -157,18 +156,25 @@ object VoiceUtils {
         onEventStarted: () -> Unit,
     ) {
         if (!channel.isGuildVocalChannel()) return
+        if (channel.isStageVoiceChannel()) {
+            StageChannelJoinHelper.connectToStage(context, fragmentManager, channel.id) {
+                StageChannelAPI.setUserSuppressedInChannel(
+                    channel,
+                    StoreStream.getUsers().getMe().id,
+                    isSuppressed = false,
+                ).subscribe({}, {})
+                onEventStarted()
+            }
+            return
+        }
         appPermissionsRequests.requestMicrophone(onFailure = null) {
             connectAndShowControls(channel, fragmentManager)
-            // On a stage the reference additionally calls
-            // `StageChannelAPI.setUserSuppressedInChannel(channel, meId, suppressed = false)` here,
-            // so the host who starts the event lands on stage instead of in the audience. That
-            // call is made from the stage slice; see the handoff report.
             onEventStarted()
         }
     }
 
     /**
-     * Joins [channel] and brings up the controls for it.
+     * Joins [channel] and brings up its controls for scheduled-event entry points.
      *
      * The reference opens `WidgetCallPreviewFullscreen` / `WidgetCallFullscreen` instead whenever
      * the text-in-voice feature flag is on. Neither that flag nor a `TextInVoiceFeatureFlag`
@@ -177,6 +183,10 @@ object VoiceUtils {
      */
     private fun connectAndShowControls(channel: Channel, fragmentManager: FragmentManager) {
         StoreStream.getVoiceChannelSelected().selectVoiceChannel(channel.id).subscribe({}, {})
+        showControls(channel, fragmentManager)
+    }
+
+    private fun showControls(channel: Channel, fragmentManager: FragmentManager) {
         WidgetVoiceBottomSheet.show(
             fragmentManager,
             channel.id,

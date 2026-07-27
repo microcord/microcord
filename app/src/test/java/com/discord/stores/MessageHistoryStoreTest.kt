@@ -1,5 +1,9 @@
 package com.discord.stores
 
+import com.discord.api.interaction.Interaction
+import com.discord.api.interaction.InteractionStateUpdate
+import com.discord.models.commands.Application
+import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.models.domain.ModelChannelUnreadUpdate
 import com.discord.models.domain.ModelReadState
 import com.discord.models.message.Message
@@ -22,6 +26,55 @@ class MessageHistoryStoreTest {
     @Before
     fun initializePersistence() {
         Persister.init(Files.createTempDirectory("message-history").toFile(), Observable.never())
+    }
+
+    @Test
+    fun applicationCommandGatewayStateUpdatesAndModalRemovalReachTheLocalRow() {
+        val fixture = storeFixture()
+        val sendData = commandSendData(900L)
+        fixture.dispatcher.schedule {
+            fixture.store.handleLocalMessageCreate(
+                Message(
+                    id = 900L,
+                    channelId = 42L,
+                    nonce = "900",
+                    type = -5,
+                    interaction = Interaction(name = "upload"),
+                ),
+            )
+        }
+        fixture.scheduler.triggerActions()
+
+        fixture.dispatcher.schedule {
+            fixture.store.handleApplicationCommandInteraction(
+                sendData,
+                InteractionStateUpdate(123L, "900"),
+                failed = false,
+                loading = true,
+            )
+        }
+        fixture.scheduler.triggerActions()
+        var local = fixture.store.localMessagesHolder.getMessage(42L, "900")
+        assertEquals(-5, local?.type)
+        assertEquals(128L, local?.flags)
+        assertEquals(123L, local?.interaction?.id)
+
+        fixture.dispatcher.schedule {
+            fixture.store.handleApplicationCommandInteraction(
+                sendData,
+                InteractionStateUpdate(123L, "900"),
+                failed = true,
+                loading = false,
+            )
+        }
+        fixture.scheduler.triggerActions()
+        local = fixture.store.localMessagesHolder.getMessage(42L, "900")
+        assertEquals(-4, local?.type)
+        assertEquals(null, local?.flags)
+
+        fixture.dispatcher.schedule { fixture.store.handleApplicationCommandModal(sendData) }
+        fixture.scheduler.triggerActions()
+        assertEquals(null, fixture.store.localMessagesHolder.getMessage(42L, "900"))
     }
 
     @Test
@@ -351,6 +404,19 @@ class MessageHistoryStoreTest {
     }
 
     private fun message(id: Long, content: String = "message-$id") = Message(id = id, content = content)
+
+    private fun commandSendData(nonce: Long) = ApplicationCommandLocalSendData(
+        nonce = nonce,
+        channelId = 42L,
+        guildId = null,
+        commandGuildId = null,
+        application = Application(id = 9L, name = "test", commandCount = 1),
+        sessionId = "session",
+        applicationCommandName = "upload",
+        applicationCommandId = "10",
+        applicationCommandsValues = emptyList(),
+        version = "1",
+    )
 
     private data class Fixture(
         val scheduler: TestScheduler,

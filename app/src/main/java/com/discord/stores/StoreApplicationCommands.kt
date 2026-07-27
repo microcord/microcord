@@ -1,5 +1,6 @@
 package com.discord.stores
 
+import android.content.res.Resources
 import com.discord.R
 import com.discord.api.commands.ApplicationCommandAutocompleteChoice
 import com.discord.api.commands.ApplicationCommandAutocompleteResult
@@ -26,6 +27,7 @@ import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.user.UserUtils.synthesizeApiUser
+import com.discord.widgets.chat.input.models.ApplicationCommandValue
 import rx.Observable
 
 /**
@@ -1207,3 +1209,41 @@ fun com.discord.api.commands.ApplicationCommandOption.toSlashCommandOption(): Ap
         minValue = minValue,
         maxValue = maxValue,
     )
+
+fun ApplicationCommand.getDescriptionText(resources: Resources): String? =
+    descriptionRes?.let(resources::getString)?.replace("¯_(ツ)_/¯", "¯\\_(ツ)_/¯") ?: description
+
+fun ApplicationCommandOption.getDescriptionText(resources: Resources): String? =
+    descriptionRes?.let(resources::getString) ?: description
+
+fun ApplicationCommandOption.getErrorText(resources: Resources): String = resources.getString(
+    when {
+        type == ApplicationCommandType.STRING && !choices.isNullOrEmpty() -> R.string.command_validation_choice_error
+        type == ApplicationCommandType.INTEGER -> R.string.command_validation_integer_error
+        type == ApplicationCommandType.NUMBER -> R.string.command_validation_number_error
+        type == ApplicationCommandType.BOOLEAN -> R.string.command_validation_boolean_error
+        type == ApplicationCommandType.USER -> R.string.command_validation_user_error
+        type == ApplicationCommandType.CHANNEL -> R.string.command_validation_channel_error
+        type == ApplicationCommandType.ROLE -> R.string.command_validation_role_error
+        type == ApplicationCommandType.MENTIONABLE -> R.string.command_validation_mentionable_error
+        else -> R.string.command_validation_required_error
+    },
+)
+
+fun List<ApplicationCommandValue>.mapApplicationCommandValues(
+    mappingFunction: (ApplicationCommandValue) -> ApplicationCommandValue,
+): List<ApplicationCommandValue> = map { value ->
+    val nested = when (value.type) {
+        ApplicationCommandType.SUBCOMMAND.type ->
+            value.copy(options = value.options?.map(mappingFunction))
+
+        ApplicationCommandType.SUBCOMMAND_GROUP.type -> value.copy(
+            options = value.options?.map { subcommand ->
+                mappingFunction(subcommand.copy(options = subcommand.options?.map(mappingFunction)))
+            },
+        )
+
+        else -> value
+    }
+    mappingFunction(nested)
+}

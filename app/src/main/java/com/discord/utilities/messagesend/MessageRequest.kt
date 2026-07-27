@@ -1,7 +1,9 @@
 package com.discord.utilities.messagesend
 
 import com.discord.api.activity.Activity
+import com.discord.api.message.Message as ApiMessage
 import com.discord.api.message.allowedmentions.MessageAllowedMentions
+import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.models.message.Message
 import com.discord.utilities.attachments.UploadAttachment
 import com.discord.utilities.rest.FileUpload
@@ -67,6 +69,20 @@ sealed class MessageRequest(
             return null
         }
     }
+
+    class SendApplicationCommand(
+        val message: ApiMessage,
+        val applicationCommandSendData: ApplicationCommandLocalSendData,
+        val attachments: List<UploadAttachment>?,
+        val onPreprocessing: (SendUtils.SendPayload.Preprocessing) -> Unit,
+        val onProgress: (List<FileUpload>) -> Unit,
+        onCompleted: (MessageResult, Boolean) -> Unit,
+        attemptTimestamp: Long,
+    ) : MessageRequest(
+        requestId = message.nonce ?: applicationCommandSendData.nonce.toString(),
+        onCompleted = onCompleted,
+        attemptTimestamp = attemptTimestamp,
+    )
 
     /**
      * Edit an existing message's content.

@@ -9,6 +9,7 @@ import com.discord.utilities.persister.Persister
 import java.nio.file.Files
 import org.junit.AfterClass
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
@@ -21,6 +22,11 @@ import rx.schedulers.TestScheduler
  * inputs were never populated.
  */
 class StoreReadStatesUnreadTest {
+    @Test
+    fun readStateAndMessageAckCachesCannotShareTypedValues() {
+        assertNotEquals(StoreMessageAck.ACKS_CACHE_KEY, StoreReadStates.ACKS_CACHE_KEY)
+    }
+
 
     private val scheduler = TestScheduler()
     private val dispatcher = Dispatcher(scheduler)

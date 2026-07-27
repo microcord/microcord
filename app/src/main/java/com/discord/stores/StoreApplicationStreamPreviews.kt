@@ -4,9 +4,13 @@ import com.discord.models.domain.ModelApplicationStream
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
 import com.discord.utilities.error.RestApiError
+import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.streams.StreamContext
 import com.discord.utilities.time.Clock
 import java.util.concurrent.TimeUnit
+import retrofit2.HttpException
 import rx.Observable
 import rx.Subscription
 
@@ -29,8 +33,9 @@ import rx.Subscription
 class StoreApplicationStreamPreviews(
     private val dispatcher: Dispatcher,
     private val clock: Clock,
-    /** `GET /streams/{streamKey}/preview?version=<now>`; emits the preview URL. */
-    private val fetchPreview: (streamKey: String, version: Long) -> Observable<String?>,
+    private val fetchPreview: (streamKey: String, version: Long) -> Observable<String> = { streamKey, version ->
+        RestAPI.api.getStreamPreview(streamKey, version).map { it.url }
+    },
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
 ) : StoreV2() {
 
@@ -52,17 +57,13 @@ class StoreApplicationStreamPreviews(
         dispatcher.schedule { handleFetchStart(streamKey) }
         fetchStreamPreviewSubscriptions[streamKey]?.unsubscribe()
 
-        val subscription = fetchPreview(streamKey, clock.currentTimeMillis()).subscribe(
-            { url -> dispatcher.schedule { handleFetchSuccess(streamKey, url) } },
-            { throwable ->
-                fetchStreamPreviewSubscriptions.remove(streamKey)
-                dispatcher.schedule { handleFetchFailed(streamKey, RestApiError.from(throwable)) }
-            },
-            { fetchStreamPreviewSubscriptions.remove(streamKey) },
+        fetchPreview(streamKey, clock.currentTimeMillis()).restSubscribeOn(false).appSubscribe(
+            errorClass = StoreApplicationStreamPreviews::class.java,
+            subscriptionHandler = { fetchStreamPreviewSubscriptions[streamKey] = it },
+            errorHandler = { error -> dispatcher.schedule { handleFetchFailed(streamKey, error) } },
+            onTerminated = { fetchStreamPreviewSubscriptions.remove(streamKey) },
+            onNext = { url -> dispatcher.schedule { handleFetchSuccess(streamKey, url) } },
         )
-        // A stream that already terminated has nothing left to cancel; recording it would leave a
-        // dead handle behind the key and mask the next in-flight request.
-        if (!subscription.isUnsubscribed) fetchStreamPreviewSubscriptions[streamKey] = subscription
     }
 
     private fun fetchStreamPreviewIfNotFetching(preview: StreamPreview?, streamKey: String) {
@@ -85,7 +86,7 @@ class StoreApplicationStreamPreviews(
     }
 
     @StoreThread
-    fun handleFetchSuccess(streamKey: String, url: String?) {
+    fun handleFetchSuccess(streamKey: String, url: String) {
         streamKeyToPreviewMap[streamKey] = StreamPreview.Resolved(url)
         fetchAttempts.remove(streamKey)
         markChanged()
@@ -98,7 +99,8 @@ class StoreApplicationStreamPreviews(
         val attempts = (fetchAttempts[streamKey] ?: 0) + 1
         val linearDelayMs = attempts * READ_PREVIEW_DEFAULT_RETRY_DELAY_MS
 
-        val retryDelayMs: Long? = when (error.statusCode) {
+        val statusCode = (error.cause as? HttpException)?.code()
+        val retryDelayMs: Long? = when (statusCode) {
             HTTP_TOO_MANY_REQUESTS -> error.retryAfterMs ?: linearDelayMs
             HTTP_UNAUTHORIZED, HTTP_FORBIDDEN -> null
             else -> linearDelayMs
@@ -106,12 +108,12 @@ class StoreApplicationStreamPreviews(
 
         if (retryDelayMs != null) {
             fetchStreamPreviewSubscriptions[streamKey]?.unsubscribe()
-            fetchStreamPreviewSubscriptions[streamKey] =
-                Observable.timer(retryDelayMs, TimeUnit.MILLISECONDS).subscribe(
-                    { dispatcher.schedule { fetchStreamPreviewIfNotFetching(streamKey) } },
-                    { fetchStreamPreviewSubscriptions.remove(streamKey) },
-                    { fetchStreamPreviewSubscriptions.remove(streamKey) },
-                )
+            Observable.timer(retryDelayMs, TimeUnit.MILLISECONDS).appSubscribe(
+                errorClass = StoreApplicationStreamPreviews::class.java,
+                subscriptionHandler = { fetchStreamPreviewSubscriptions[streamKey] = it },
+                onTerminated = { fetchStreamPreviewSubscriptions.remove(streamKey) },
+                onNext = { dispatcher.schedule { fetchStreamPreviewIfNotFetching(streamKey) } },
+            )
         }
 
         fetchAttempts[streamKey] = attempts

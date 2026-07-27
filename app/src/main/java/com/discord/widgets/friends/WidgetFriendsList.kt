@@ -19,6 +19,7 @@ import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rest.RestAPIAbortMessages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
+import com.discord.utilities.rx.ui
 import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
 import com.discord.widgets.contact_sync.ContactSyncFlowAnalytics
 import com.discord.widgets.contact_sync.WidgetContactSync
@@ -95,9 +96,11 @@ class WidgetFriendsList : AppFragment(R.layout.widget_friends_list) {
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
         viewModel.observeViewState()
+            .ui(this)
             .bindToComponentLifecycle(this)
             .appSubscribe(WidgetFriendsList::class.java) { configureUI(it) }
         viewModel.observeEvents()
+            .ui(this)
             .bindToComponentLifecycle(this)
             .appSubscribe(WidgetFriendsList::class.java) { handleEvent(it) }
 
@@ -107,6 +110,7 @@ class WidgetFriendsList : AppFragment(R.layout.widget_friends_list) {
         // selection is observed directly instead, which produces the same single call per switch.
         StoreStream.getTabsNavigation().observeSelectedTab()
             .distinctUntilChanged()
+            .ui(this)
             .bindToComponentLifecycle(this)
             .appSubscribe(WidgetFriendsList::class.java) { tab ->
                 if (tab == NavigationTab.FRIENDS) onTabSelected()

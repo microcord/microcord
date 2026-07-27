@@ -94,11 +94,11 @@ class WidgetChannelGroupDMSettings : AppFragment(R.layout.widget_channel_group_d
                 setActionBarTitle(R.string.channel_settings)
                 setActionBarSubtitle(displayName)
                 setActionBarDisplayHomeAsUpEnabled()
-                setActionBarOptionsMenu(R.menu.menu_main_group_settings) { menuItem ->
+                setActionBarOptionsMenu(R.menu.menu_main_group_settings, onSelected = { menuItem ->
                     if (menuItem.itemId == R.id.menu_leave_group) {
                         confirmLeave(displayName) { viewModel.leaveGroup() }
                     }
-                }
+                })
 
                 // Only overwrite the field while the user has not started editing it, so a store
                 // emission mid-edit does not throw away what they typed.

@@ -59,7 +59,10 @@ class WidgetGifPicker : AppFragment(R.layout.widget_gif_picker) {
         categoryRecycler.itemAnimator = null
         // Reads the field per click rather than capturing it, so a host that installs its callback
         // after the view is bound still receives selections.
-        categoryAdapter = GifCategoryAdapter(this) { item -> onSelectGifCategory?.invoke(item) }
+        categoryAdapter = GifCategoryAdapter(
+            appComponent = this,
+            onSelectGifCategory = { item -> onSelectGifCategory?.invoke(item) },
+        )
         categoryRecycler.adapter = categoryAdapter
         categoryRecycler.addItemDecoration(
             GridColumnSpaceItemDecoration(dpToPixels(COLUMN_SPACE_DP), CATEGORY_COLUMNS_COUNT),

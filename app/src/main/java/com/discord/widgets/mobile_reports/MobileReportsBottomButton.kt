@@ -55,7 +55,7 @@ class MobileReportsBottomButton @JvmOverloads constructor(
                     .replace(Regex("\\[([^]]+)]\\(([^)]+)\\)"), "<a href=\"$2\">$1</a>")
                 description.text = Html.fromHtml(html)
                 button.setText(context.getString(R.string.mobile_reports_submit_report))
-                button.setBackgroundColor(ContextCompat.getColor(context, R.color.brand_500))
+                button.setBackgroundColor(ContextCompat.getColor(context, R.color.status_red))
                 button.setOnClickListener { handleButtonPress?.invoke(bottomButton) }
             }
             is ReportNodeBottomButton.Done -> {

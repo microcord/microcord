@@ -2,6 +2,8 @@ package com.discord.utilities.messagesend
 
 import android.content.ContentResolver
 import com.discord.api.message.MessageReference
+import com.discord.api.message.Message as ApiMessage
+import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.api.message.allowedmentions.MessageAllowedMentions
 import com.discord.api.message.allowedmentions.MessageAllowedMentionsTypes
 import com.discord.api.user.User
@@ -25,6 +27,7 @@ import rx.Observable
 import rx.Scheduler
 import rx.schedulers.Schedulers
 import rx.subjects.PublishSubject
+import rx.subjects.AsyncSubject
 
 /**
  * Owns the optimistic-message lifecycle around [MessageQueue].
@@ -116,6 +119,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
     )
 
     private val operations = ConcurrentHashMap<String, Operation>()
+    private val commandChannels = ConcurrentHashMap<String, Long>()
     private val updates = PublishSubject.create<Update>().toSerialized()
     private val uploadEvents = PublishSubject.create<UploadEvent>().toSerialized()
     private val queues = ConcurrentHashMap<Long, MessageQueue>()
@@ -125,6 +129,35 @@ class MessageSendCoordinator @JvmOverloads constructor(
 
     /** Attachment preprocessing and per-file upload progress for in-flight sends. */
     fun observeUploadEvents(): Observable<UploadEvent> = uploadEvents
+
+    fun sendApplicationCommand(
+        message: ApiMessage,
+        command: ApplicationCommandLocalSendData,
+        attachments: List<UploadAttachment>? = null,
+    ): Observable<MessageResult> {
+        val result = AsyncSubject.create<MessageResult>()
+        val requestId = message.nonce ?: command.nonceString
+        val request = MessageRequest.SendApplicationCommand(
+            message = message,
+            applicationCommandSendData = command,
+            attachments = attachments,
+            onPreprocessing = {
+                uploadEvents.onNext(UploadEvent.Preprocessing(command.nonceString, it))
+            },
+            onProgress = {
+                uploadEvents.onNext(UploadEvent.Progress(command.nonceString, it))
+            },
+            onCompleted = { settled, _ ->
+                commandChannels.remove(requestId)
+                result.onNext(settled)
+                result.onCompleted()
+            },
+            attemptTimestamp = now(),
+        )
+        commandChannels[request.requestId] = command.channelId
+        queue(command.channelId).enqueue(request)
+        return result
+    }
 
     fun send(input: Send): Submission {
         validate(input)?.let { return Submission.Rejected(it) }
@@ -223,7 +256,9 @@ class MessageSendCoordinator @JvmOverloads constructor(
         operations.remove(requestId)?.let { operation ->
             updates.onNext(Update.Cancelled(requestId))
             queues[operation.channelId]?.cancel(operation.queueRequestId)
+            return
         }
+        commandChannels.remove(requestId)?.let { queues[it]?.cancel(requestId) }
     }
 
     /** The gateway already delivered this message, so the queued attempt is redundant. */
@@ -237,6 +272,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
         queues.values.forEach(MessageQueue::cancelAll)
         operations.keys.toList().forEach { updates.onNext(Update.Cancelled(it)) }
         operations.clear()
+        commandChannels.clear()
     }
 
     /**

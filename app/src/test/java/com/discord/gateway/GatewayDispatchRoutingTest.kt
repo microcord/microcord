@@ -29,6 +29,7 @@ import com.discord.models.domain.StreamDelete
 import com.discord.models.domain.StreamServerUpdate
 import com.discord.stores.StoreGatewayConnection
 import com.discord.stores.StoreStream
+import com.discord.stores.storeTestScheduler
 import com.discord.utilities.time.Clock
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder

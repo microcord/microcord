@@ -26,12 +26,9 @@ fun immutablePendingIntentFlag(flags: Int = 0): Int =
         flags
     }
 
-/**
- * Leaves the intent mutable.
- *
- * Deliberately does *not* set `FLAG_MUTABLE`, matching the reference: only a receiver that fills
- * in the intent — a notification `RemoteInput` reply — needs mutability, and on those platforms the
- * absence of `FLAG_IMMUTABLE` already means mutable. Kept as a named function so a mutable
- * `PendingIntent` is a visible, greppable decision rather than an omission.
- */
-fun mutablePendingIntentFlag(flags: Int = 0): Int = flags
+/** Adds `FLAG_MUTABLE` where the platform requires an explicit mutability choice. */
+fun mutablePendingIntentFlag(flags: Int = 0): Int =
+    mutablePendingIntentFlag(flags, Build.VERSION.SDK_INT)
+
+internal fun mutablePendingIntentFlag(flags: Int, sdkInt: Int): Int =
+    if (sdkInt >= Build.VERSION_CODES.S) flags or PendingIntent.FLAG_MUTABLE else flags

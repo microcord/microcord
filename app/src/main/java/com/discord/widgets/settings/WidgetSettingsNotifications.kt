@@ -35,6 +35,7 @@ class WidgetSettingsNotifications : AppFragment(R.layout.widget_settings_notific
         setActionBarTitle(R.string.notifications)
         setActionBarSubtitle(R.string.user_settings)
         setActionBarDisplayHomeAsUpEnabled()
+        SettingsNavigation.bindBack(this)
 
         val store = notificationStore
         if (store == null) {

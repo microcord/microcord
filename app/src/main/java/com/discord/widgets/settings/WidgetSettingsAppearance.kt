@@ -59,6 +59,7 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
         setActionBarTitle(R.string.appearance)
         setActionBarSubtitle(R.string.user_settings)
         setActionBarDisplayHomeAsUpEnabled()
+        SettingsNavigation.bindBack(this)
 
         lightRadio = view.findViewById(R.id.settings_appearance_theme_light_radio)
         darkRadio = view.findViewById(R.id.settings_appearance_theme_dark_radio)

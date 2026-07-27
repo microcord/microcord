@@ -3,6 +3,8 @@ package com.discord.widgets.home
 import android.os.Bundle
 import android.view.View
 import android.view.ViewStub
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.Fragment
 import com.discord.app.AppFragment
 import androidx.fragment.app.commitNow
@@ -23,7 +25,15 @@ import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.search.WidgetSearch
 import com.discord.models.message.Message
 import com.discord.api.channel.Channel
+import com.discord.api.channel.getDisplayNameOrDefault
+import com.discord.api.channel.getDisplayName
+import com.discord.api.channel.isAnnouncementChannel
+import com.discord.api.channel.isDM
+import com.discord.api.channel.isGuildTextChannel
 import com.discord.api.channel.isPrivate
+import com.discord.api.channel.isSystemDM
+import com.discord.utilities.color.ColorCompat
+import com.discord.widgets.user.calls.PrivateCallLauncher
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import rx.Subscription
 
@@ -31,6 +41,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
     private lateinit var panels: HomePanelsLayout
     private var navigationSubscription: Subscription? = null
     private var selectedChannelSubscription: Subscription? = null
+    private var voiceChannelSubscription: Subscription? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -99,6 +110,11 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
                 if (channel != null) configureToolbar(channel)
             }
         }
+        voiceChannelSubscription = StoreStream.getVoiceChannelSelected().observeSelectedVoiceChannelId().subscribe {
+            activity?.runOnUiThread {
+                StoreStream.getChannelsSelected().getSelectedChannel()?.let(::configureToolbar)
+            }
+        }
     }
 
     override fun onStop() {
@@ -106,6 +122,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
         navigationSubscription = null
         selectedChannelSubscription?.unsubscribe()
         selectedChannelSubscription = null
+        voiceChannelSubscription?.unsubscribe()
+        voiceChannelSubscription = null
         super.onStop()
     }
 
@@ -176,16 +194,33 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
     private fun configureToolbar(channel: Channel) {
         val toolbar = view?.findViewById<View>(R.id.widget_home_panel_center_chat)?.findDescendant(Toolbar::class.java)
             ?: return
-        toolbar.title = channel.name ?: channel.recipients.orEmpty().joinToString(", ") { it.username }
+        toolbar.title = when {
+            channel.isDM() -> "@ ${channel.getDisplayName()}"
+            channel.isGuildTextChannel() || channel.isAnnouncementChannel() -> "# ${channel.getDisplayName()}"
+            else -> channel.getDisplayNameOrDefault(requireContext(), includePrefix = false)
+        }
         if (toolbar.menu.size() == 0) {
             toolbar.inflateMenu(R.menu.menu_chat_toolbar)
-            toolbar.menu.findItem(R.id.menu_chat_side_panel)?.isVisible = true
+            val pin = ContextCompat.getDrawable(requireContext(), R.drawable.ic_pin_24dp)?.mutate()?.also {
+                DrawableCompat.setTint(it, ColorCompat.getThemedColor(requireContext(), R.attr.colorInteractiveNormal))
+            }
             toolbar.menu.add(0, R.id.menu_private_channel_sidebar_pinned_messages, 1, R.string.pinned_messages)
-                .setIcon(R.drawable.ic_pin_24dp)
+                .setIcon(pin)
                 .setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_IF_ROOM)
         }
+        val callableDm = channel.isPrivate() && !channel.isSystemDM()
+        val selectedVoiceChannelId = StoreStream.getVoiceChannelSelected().getSelectedVoiceChannelId()
+        toolbar.menu.findItem(R.id.menu_chat_start_call)?.isVisible = callableDm && selectedVoiceChannelId == 0L
+        toolbar.menu.findItem(R.id.menu_chat_start_video_call)?.isVisible = callableDm && selectedVoiceChannelId == 0L
+        toolbar.menu.findItem(R.id.menu_chat_stop_call)?.isVisible = callableDm && selectedVoiceChannelId == channel.id
+        toolbar.menu.findItem(R.id.menu_chat_side_panel)?.isVisible = true
         toolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
+                R.id.menu_chat_start_call -> true.also { privateCallLauncher().launchVoiceCall(channel.id) }
+                R.id.menu_chat_start_video_call -> true.also { privateCallLauncher().launchVideoCall(channel.id) }
+                R.id.menu_chat_stop_call -> true.also {
+                    StoreStream.getVoiceChannelSelected().selectVoiceChannel(0L).subscribe({}, {})
+                }
                 R.id.menu_chat_side_panel -> true.also { panels.openEndPanel() }
                 R.id.menu_private_channel_sidebar_pinned_messages -> true.also {
                     openPins(channel.id)
@@ -194,6 +229,16 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
             }
         }
     }
+
+    private fun privateCallLauncher() = PrivateCallLauncher(
+        appPermissionsRequests = this,
+        appComponent = this,
+        context = requireContext(),
+        fragmentManager = childFragmentManager,
+        storeCalls = StoreStream.getCalls(),
+        storeVoiceChannelSelected = StoreStream.getVoiceChannelSelected(),
+        storeMediaEngine = StoreStream.getMediaEngine(),
+    )
 
     override fun pinnedMessagesStore() = StoreStream.getPinnedMessages()
     override fun channelForPins(channelId: Long) = StoreStream.getChannels().getChannel(channelId)

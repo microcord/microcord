@@ -2,20 +2,33 @@ package com.discord.widgets.botuikit
 
 import com.discord.api.botuikit.SelectItem
 import com.discord.stores.StoreApplicationInteractions
+import com.discord.stores.StoreStream
+import rx.Observable
 
 /**
  * The store-side inputs the chat list needs to turn a message's API components into renderable
  * [com.discord.models.botuikit.MessageComponent]s.
  *
- * The reference also exposes `observeChatListComponentState()` here — a `combineLatest` of
- * `StoreApplicationInteractions.observeComponentInteractionState()`,
- * `StoreLocalActionComponentState.observeSelectComponentSelections()` and
- * `StoreUserSettings.observeIsAnimatedEmojisEnabled()`, projected into one
- * `Map<messageId, ComponentStoreState>`. Both stores exist in this reconstruction but neither is
- * published by `StoreStream`, so the observable has no way to reach them yet and is deliberately
- * not written rather than faked; see the handoff notes.
+ * The reference combines interaction progress, optimistic select-menu state, and the animated
+ * emoji preference into one map keyed by message id.
  */
 object ComponentChatListState {
+
+    fun observeChatListComponentState(): Observable<Map<Long, ComponentStoreState>> =
+        Observable.combineLatest(
+            StoreStream.getInteractions().observeComponentInteractionState(),
+            StoreStream.getLocalActionComponentState().observeSelectComponentSelections(),
+            StoreStream.getUserSettings().observeIsAnimatedEmojisEnabled(),
+            ::combineState,
+        )
+
+    internal fun combineState(
+        interactions: Map<Long, Map<Int, StoreApplicationInteractions.InteractionSendState>>,
+        selections: Map<Long, Map<Int, List<SelectItem>>>,
+        animateEmojis: Boolean,
+    ): Map<Long, ComponentStoreState> = (interactions.keys + selections.keys).associateWith { messageId ->
+        ComponentStoreState(interactions[messageId], selections[messageId], animateEmojis)
+    }
 
     /**
      * One message's component state.

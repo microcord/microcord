@@ -8,32 +8,8 @@ import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
 import rx.Observable
 
-/**
- * Which embedded activities ("Activities", formerly Project Lightspeed) are running in which voice
- * channel, and who is in them.
- *
- * Keyed channel → application → activity, because a channel can host at most one instance of a
- * given application but several different applications at once.
- *
- * Two rules are worth stating because they are easy to get wrong:
- *
- * - **An empty participant list is a removal, not an update.** `EMBEDDED_ACTIVITY_UPDATE` announces
- *   the end of an activity by sending it with no users, so the entry is deleted rather than stored
- *   with an empty pile.
- * - **An application with no launch URL is dropped entirely.** [urlForApplication] is the only
- *   thing that can veto an activity, and it does so before any state is written.
- */
 class StoreEmbeddedActivities(
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
-    /**
-     * Host that serves embedded-activity front-ends, as `https://<applicationId>.<host>`.
-     *
-     * This is service infrastructure, in the same category as the CDN host, not a credential: the
-     * activity front-end for a Discord application is only reachable there. An empty host disables
-     * every activity tile, which is what makes this injectable at all — tests use it, and a build
-     * pointed at a different backend can repoint it.
-     */
-    private val embeddedActivityHost: String = EMBEDDED_ACTIVITY_HOST,
 ) : StoreV2() {
 
     private val embeddedActivitiesByChannel =
@@ -53,7 +29,7 @@ class StoreEmbeddedActivities(
     @StoreThread
     fun handleConnectionOpen(payload: ModelPayload) {
         embeddedActivitiesByChannel.clear()
-        payload.guilds.orEmpty().forEach(::handleEmbeddedActivitiesForGuild)
+        payload.guilds!!.forEach(::handleEmbeddedActivitiesForGuild)
         markChanged()
     }
 
@@ -112,16 +88,17 @@ class StoreEmbeddedActivities(
     }
 
     private fun urlForApplication(applicationId: Long): String? =
-        if (embeddedActivityHost.isEmpty()) null else "https://$applicationId.$embeddedActivityHost"
+        if (EMBEDDED_ACTIVITY_HOST.isEmpty()) null else "https://$applicationId.$EMBEDDED_ACTIVITY_HOST"
 
     @StoreThread
     override fun snapshotData() {
-        embeddedActivitiesByChannelSnapshot = embeddedActivitiesByChannel
-            .mapValues { (_, byApplication) -> HashMap(byApplication) }
+        super.snapshotData()
+        embeddedActivitiesByChannelSnapshot = embeddedActivitiesByChannel.mapValuesTo(HashMap()) {
+            HashMap(it.value)
+        }
     }
 
     companion object {
-        /** Reference `StoreEmbeddedActivities.getUrlForApplication`'s `EMBEDDED_ACTIVITY_HOST`. */
-        const val EMBEDDED_ACTIVITY_HOST: String = "discordsays.com"
+        private const val EMBEDDED_ACTIVITY_HOST = "discordsays.com"
     }
 }

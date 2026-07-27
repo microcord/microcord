@@ -111,9 +111,13 @@ class WidgetEmojiPicker : AppFragment(R.layout.widget_emoji_picker) {
     }
 
     private fun initializeSearchBar(view: View) {
-        view.findViewById<View>(R.id.emoji_inline_search_button).visibility = View.GONE
+        val mode = arguments?.getSerializable(ARG_MODE) as? EmojiPickerMode ?: EmojiPickerMode.INLINE
+        view.findViewById<View>(R.id.emoji_app_bar).visibility =
+            if (mode.showsSearchBar) View.VISIBLE else View.GONE
+        view.findViewById<View>(R.id.emoji_inline_search_button).visibility =
+            if (mode == EmojiPickerMode.INLINE) View.VISIBLE else View.GONE
         val input = view.findViewById<TextInputEditText>(R.id.emoji_search_input)
-        input.visibility = View.VISIBLE
+        input.visibility = if (mode.showsSearchBar) View.VISIBLE else View.GONE
         input.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
@@ -157,14 +161,21 @@ class WidgetEmojiPicker : AppFragment(R.layout.widget_emoji_picker) {
 
     companion object {
         private const val ARG_CONTEXT_TYPE = "emoji_picker_context_type"
+        private const val ARG_MODE = "emoji_picker_mode"
 
         private const val FLIPPER_GRID = 0
         private const val FLIPPER_EMPTY = 1
 
         /** Restricts the picker to [contextType]; the default is the whole of the user's emoji. */
-        fun create(contextType: EmojiPickerContextType): WidgetEmojiPicker =
+        fun create(
+            contextType: EmojiPickerContextType,
+            mode: EmojiPickerMode = EmojiPickerMode.INLINE,
+        ): WidgetEmojiPicker =
             WidgetEmojiPicker().apply {
-                arguments = Bundle().apply { putSerializable(ARG_CONTEXT_TYPE, contextType) }
+                arguments = Bundle().apply {
+                    putSerializable(ARG_CONTEXT_TYPE, contextType)
+                    putSerializable(ARG_MODE, mode)
+                }
             }
     }
 }

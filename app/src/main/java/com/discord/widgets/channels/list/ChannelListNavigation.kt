@@ -1,6 +1,5 @@
 package com.discord.widgets.channels.list
 
-import com.discord.stores.StoreStream
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -9,10 +8,11 @@ import android.widget.Toast
 import androidx.fragment.app.Fragment
 import com.discord.R
 import com.discord.api.channel.Channel
+import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.widgets.channels.settings.WidgetChannelNotificationSettings
 import com.discord.widgets.hubs.WidgetHubAddServer
-import com.discord.widgets.voice.VoiceStoreAccess
+import com.discord.widgets.voice.VoiceUtils
 import rx.Observable
 
 /**
@@ -35,11 +35,8 @@ object ChannelListNavigation {
      * Live as soon as `StoreStream` calls `VoiceStoreAccess.install(...)`; until then the tap is
      * dropped rather than half-joining a call.
      */
-    fun callChannel(fragment: Fragment, channel: Channel) {
-        // `StoreStream` publishes the voice *state* stores directly; `VoiceStoreAccess` only
-        // carries the three RTC-transport stores it does not construct.
-        StoreStream.getVoiceChannelSelected().selectVoiceChannel(channel.id)
-    }
+    fun callChannel(fragment: AppFragment, channel: Channel) =
+        VoiceUtils.handleCallChannel(channel, fragment)
 
     /** The hub "Add a server" flow. */
     fun addServerToHub(fragment: Fragment) {

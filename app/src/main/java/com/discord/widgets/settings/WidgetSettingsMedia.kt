@@ -27,6 +27,7 @@ class WidgetSettingsMedia : AppFragment(R.layout.widget_settings_media) {
         setActionBarTitle(R.string.text_and_images)
         setActionBarSubtitle(R.string.user_settings)
         setActionBarDisplayHomeAsUpEnabled()
+        SettingsNavigation.bindBack(this)
 
         val settings = StoreStream.getUserSettings()
 

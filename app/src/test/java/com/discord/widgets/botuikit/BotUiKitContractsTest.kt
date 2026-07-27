@@ -9,12 +9,31 @@ import com.discord.models.botuikit.ActionRowMessageComponent
 import com.discord.models.botuikit.ButtonMessageComponent
 import com.discord.models.botuikit.SelectMessageComponent
 import com.discord.models.botuikit.childError
+import com.discord.stores.StoreApplicationInteractions
 import com.discord.widgets.botuikit.views.buttonLabelPaddingDp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BotUiKitContractsTest {
+    @Test
+    fun componentChatStateCombinesEveryMessageId() {
+        val selection = SelectItem("One", "1", null, null, true)
+        val failed = StoreApplicationInteractions.InteractionSendState.Failed("nope")
+
+        val state = ComponentChatListState.combineState(
+            interactions = mapOf(1L to mapOf(2 to failed)),
+            selections = mapOf(2L to mapOf(3 to listOf(selection))),
+            animateEmojis = false,
+        )
+
+        assertEquals(setOf(1L, 2L), state.keys)
+        assertEquals(failed, state[1L]?.interactionState?.get(2))
+        assertEquals(selection, state[2L]?.selections?.get(3)?.single())
+        assertTrue(state.values.none { it.animateEmojis })
+    }
+
     @Test
     fun preservesCompleteComponentContractsAndChildFailure() {
         val emoji = ComponentEmoji("1", "wave", true)

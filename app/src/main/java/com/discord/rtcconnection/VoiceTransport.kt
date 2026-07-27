@@ -41,11 +41,8 @@ import rx.Subscription
  * express their half as a controller interface with a no-op default; this class provides the real
  * implementations and is the only place that knows both sides exist.
  *
- * **Required wiring.** `StoreStream` does not construct these four stores today, so it must call
- * [VoiceTransport.install] once its graph is up (see the class KDoc on
- * [com.discord.widgets.voice.VoiceStoreAccess]). Until it does, every voice screen renders against
- * the documented "no camera, no RTC session, default routing" fallback rather than against a live
- * engine.
+ * `StoreStream` installs this composition root after its REST and connectivity dependencies exist;
+ * JVM store tests deliberately keep using the controller seams without constructing native media.
  *
  * Nothing here logs a token, an endpoint, or user content: [RtcConnection] already redacts those,
  * and [describe] exists so diagnostics have a safe surface to read instead.
@@ -56,7 +53,7 @@ class VoiceTransport(
     private val clock: Clock,
     private val networkMonitor: NetworkMonitor,
     storeRtcRegion: StoreRtcRegion,
-    storeUser: StoreUser,
+    private val storeUser: StoreUser,
     private val storeMediaSettings: StoreMediaSettings,
     videoUseDetector: StoreAudioManagerV2.VideoUseDetector,
     /** `StoreChannels.findChannelByIdInternal`. */
@@ -132,6 +129,9 @@ class VoiceTransport(
     private val meUserId: Long get() = storeUser.getMeInternal().id
 
     private var voiceSettingsSubscription: Subscription? = null
+
+    @Volatile
+    private var released = false
 
     init {
         storeMediaEngine.init()
@@ -240,6 +240,7 @@ class VoiceTransport(
             guildId: Long?,
             sessionId: String,
         ) {
+            if (released) return
             val existing = connection
             if (existing != null && connectedChannelId == channelId && connectedSessionId == sessionId) {
                 // Same session, new endpoint: reuse the connection so mute state and peer volumes
@@ -352,6 +353,7 @@ class VoiceTransport(
             streamOwnerId: Long,
             streamKey: String,
         ) {
+            if (released) return
             disconnect()
             val created = RtcConnection(
                 guildId = guildId,
@@ -487,16 +489,36 @@ class VoiceTransport(
         override val maxMediaVolume: Int get() = router?.maxMediaVolume ?: 0
 
         fun describe(): Map<String, Any?> = router?.describe() ?: emptyMap()
+
+        fun release() {
+            handler.post {
+                subscriptions.forEach { it.unsubscribe() }
+                subscriptions.clear()
+                try {
+                    router?.release()
+                } finally {
+                    router = null
+                    thread.quitSafely()
+                }
+            }
+        }
     }
 
     // endregion
 
     private fun sslSocketFactory(): SSLSocketFactory = SSLSocketFactory.getDefault() as SSLSocketFactory
 
-    /** Releases the media engine's settings subscription. Tests and process teardown only. */
+    /** One-way process teardown. The singleton remains retained to prevent a second native engine. */
+    @Synchronized
     fun release() {
+        if (released) return
+        released = true
+
+        streamController.disconnect()
+        voiceController.disconnect("Voice transport released")
         voiceSettingsSubscription?.unsubscribe()
         voiceSettingsSubscription = null
+        audioOutput.release()
     }
 
     companion object {

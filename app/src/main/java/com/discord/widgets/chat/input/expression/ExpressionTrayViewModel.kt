@@ -9,6 +9,7 @@ import com.discord.stores.StoreStream
 import com.discord.stores.StoreUser
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.analytics.ChatInputComponentTypes
+import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.widgets.chat.input.gifpicker.GifCategoryItem
 import com.discord.widgets.stickers.GuildStickerStore
@@ -93,10 +94,10 @@ class ExpressionTrayViewModel(
     init {
         storeStateObservable
             .ui(this)
-            .subscribe({ handleStoreState(it) }, { /* keep the current page */ })
+            .appSubscribe(ExpressionTrayViewModel::class.java, onNext = ::handleStoreState)
         expressionPickerEventObservable
             .ui(this)
-            .subscribe({ handleExpressionPickerEvents(it) }, { /* a dropped command is not fatal */ })
+            .appSubscribe(ExpressionTrayViewModel::class.java, onNext = ::handleExpressionPickerEvents)
     }
 
     fun observeEvents(): Observable<Event> = eventSubject

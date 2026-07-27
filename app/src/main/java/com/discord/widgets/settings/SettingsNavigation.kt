@@ -6,8 +6,10 @@ import android.content.Intent
 import androidx.fragment.app.Fragment
 import com.discord.R
 import com.discord.app.AppActivity
+import com.discord.app.AppFragment
 import com.discord.app.AppLog
 import com.discord.app.AppScreenRouter
+import com.discord.app.BackPressHandlerRegistry
 
 /**
  * Opens a full-screen settings destination.
@@ -24,6 +26,18 @@ import com.discord.app.AppScreenRouter
  * here changes when the activity starts consuming `EXTRA_SCREEN`.
  */
 internal object SettingsNavigation {
+
+    fun bindBack(fragment: AppFragment) {
+        fragment.setOnBackPressed(
+            handler = {
+                val fragmentManager = fragment.parentFragmentManager
+                if (fragmentManager.backStackEntryCount == 0) return@setOnBackPressed false
+                fragmentManager.popBackStack()
+                true
+            },
+            priority = BackPressHandlerRegistry.DEFAULT_PRIORITY - 1,
+        )
+    }
 
     fun launch(context: Context, screen: Class<out Fragment>, extras: Intent = Intent()) {
         val activity = context.findAppActivity()

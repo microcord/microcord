@@ -95,6 +95,7 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
         setActionBarDisplayHomeAsUpEnabled()
         setActionBarTitle(R.string.privacy_and_safety)
         setActionBarSubtitle(R.string.user_settings)
+        SettingsNavigation.bindBack(this)
 
         dimmer = view.findViewById(R.id.dimmer_view)
         defaultRestrictedGuilds = view.findViewById(R.id.settings_privacy_default_restricted_guilds)

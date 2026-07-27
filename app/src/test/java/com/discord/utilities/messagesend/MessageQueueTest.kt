@@ -1,6 +1,8 @@
 package com.discord.utilities.messagesend
 
 import com.discord.api.message.Message as ApiMessage
+import com.discord.models.commands.Application
+import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.models.message.Message
 import com.discord.utilities.time.Clock
 import java.net.UnknownHostException
@@ -188,6 +190,46 @@ class MessageQueueTest {
         )
 
         assertEquals("555", request.requestId)
+    }
+
+    @Test
+    fun commandRequestIdFallsBackToTheCommandNonce() {
+        val command = commandData(1234L)
+        val request = MessageRequest.SendApplicationCommand(
+            message = ApiMessage(id = 1234L, channelId = CHANNEL_ID),
+            applicationCommandSendData = command,
+            attachments = null,
+            onPreprocessing = {},
+            onProgress = {},
+            onCompleted = { _, _ -> },
+            attemptTimestamp = clock.now,
+        )
+
+        assertEquals("1234", request.requestId)
+    }
+
+    @Test
+    fun commandSuccessSettlesWithTheOptimisticCommandMessage() {
+        val command = commandData(1234L)
+        val message = ApiMessage(id = 1234L, channelId = CHANNEL_ID, nonce = "1234")
+        queue.enqueue(commandRequest(message, command))
+
+        assertEquals("1234", restApi.commandCalls.single().body.nonce)
+        assertFalse(restApi.commandCalls.single().multipart)
+        restApi.respondCommandSuccess()
+
+        val result = settled.single().second as MessageResult.Success
+        assertSame(message, result.message)
+    }
+
+    @Test
+    fun commandFailureUsesTheOrdinaryQueueErrorSettlement() {
+        val command = commandData(1234L)
+        queue.enqueue(commandRequest(ApiMessage(1234L, CHANNEL_ID, nonce = "1234"), command))
+
+        restApi.respondApiError(status = 400, json = """{"code":50035,"message":"Invalid Form Body"}""")
+
+        assertTrue(settled.single().second is MessageResult.UnknownFailure)
     }
 
     // endregion
@@ -430,6 +472,33 @@ class MessageQueueTest {
 
     private fun apiMessage(nonce: String, id: Long = nonce.toLong()) =
         ApiMessage(id = id, channelId = CHANNEL_ID, content = "hello", nonce = nonce)
+
+    private fun commandRequest(message: ApiMessage, command: ApplicationCommandLocalSendData) =
+        MessageRequest.SendApplicationCommand(
+            message = message,
+            applicationCommandSendData = command,
+            attachments = null,
+            onPreprocessing = {},
+            onProgress = {},
+            onCompleted = { result, isLast ->
+                settled += command.nonceString to result
+                lastInQueueFlags += isLast
+            },
+            attemptTimestamp = clock.now,
+        )
+
+    private fun commandData(nonce: Long) = ApplicationCommandLocalSendData(
+        nonce = nonce,
+        channelId = CHANNEL_ID,
+        guildId = null,
+        commandGuildId = null,
+        application = Application(id = 9L, name = "test", commandCount = 1),
+        sessionId = "session",
+        applicationCommandName = "ping",
+        applicationCommandId = "10",
+        applicationCommandsValues = emptyList(),
+        version = "1",
+    )
 
     private class MutableClock(var now: Long = 1_700_000_000_000L) : Clock {
         override fun currentTimeMillis() = now

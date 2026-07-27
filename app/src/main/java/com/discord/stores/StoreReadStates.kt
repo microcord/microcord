@@ -539,6 +539,8 @@ class StoreReadStates(
 
     companion object {
         const val UNREAD_MARKER_CACHE_KEY = "UNREAD_MESSAGE_MARKER_V3"
-        const val ACKS_CACHE_KEY = "MOST_RECENT_ACKS_V3"
+        // This reconstructed store owns a different Ack class than StoreMessageAck.
+        // Sharing its persisted key lets type-erased map values cross stores and crash at runtime.
+        const val ACKS_CACHE_KEY = "READ_STATES_ACKS_V1"
     }
 }

@@ -1,7 +1,9 @@
 package com.discord.widgets.guilds.invite
 
 import com.discord.app.AppComponent
+import com.discord.app.AppFragment
 import com.discord.models.domain.ModelInvite
+import com.discord.stores.StoreInviteSettings
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationBuffered
 import com.discord.utilities.rx.ui
@@ -21,7 +23,7 @@ import java.io.Closeable
  * see `WidgetInviteModel.create`) rather than blanking out.
  */
 class InviteGenerator(
-    private val inviteSettings: InviteSettingsSource = InviteSettingsSource.instance,
+    private val inviteSettings: StoreInviteSettings = InviteSettingsSource.store,
 ) : Closeable {
 
     /**
@@ -44,6 +46,18 @@ class InviteGenerator(
         BehaviorSubject.create(InviteGenerationState())
 
     val generationState: Observable<InviteGenerationState> get() = generationStateSubject
+
+    fun generate(fragment: AppFragment, channelId: Long) {
+        moveTo(GenerationState.GENERATING)
+        inviteSettings.generateInvite(channelId)
+            .ui(fragment)
+            .appSubscribe(
+                errorClass = InviteGenerator::class.java,
+                context = fragment.context,
+                errorHandler = { moveTo(GenerationState.FAILURE) },
+                onNext = ::handleGeneratedInvite,
+            )
+    }
 
     /**
      * Generates an invite for [channelId], binding the request to [appComponent] so it terminates

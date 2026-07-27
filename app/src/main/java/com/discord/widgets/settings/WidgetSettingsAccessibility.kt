@@ -61,6 +61,7 @@ class WidgetSettingsAccessibility : AppFragment(R.layout.widget_settings_accessi
         setActionBarTitle(R.string.accessibility)
         setActionBarSubtitle(R.string.user_settings)
         setActionBarDisplayHomeAsUpEnabled()
+        SettingsNavigation.bindBack(this)
 
         val root = view ?: return
         val accessibility = StoreStream.getAccessibility()

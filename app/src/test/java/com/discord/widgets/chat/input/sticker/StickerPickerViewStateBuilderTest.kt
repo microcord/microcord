@@ -23,6 +23,11 @@ import org.junit.Test
 class StickerPickerViewStateBuilderTest {
 
     @Test
+    fun `picker tiles always animate like the reference`() {
+        assertEquals(0, StickerViewHolder.PICKER_ANIMATION_SETTING)
+    }
+
+    @Test
     fun `sections are recents then guilds then packs, each behind its own header`() {
         val state = state(
             frequentlyUsedStickerIds = listOf(GUILD_STICKER_A.id),

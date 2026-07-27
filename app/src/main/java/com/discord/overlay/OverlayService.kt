@@ -3,6 +3,8 @@ package com.discord.overlay
 import android.app.Notification
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 import com.discord.overlay.views.OverlayBubbleWrap
 import com.discord.overlay.views.TrashWrap
@@ -63,7 +65,12 @@ abstract class OverlayService : Service() {
     fun handleStart(intent: Intent?) {
         val startIntent = intent ?: Intent()
         if (attachBubbleToWindow(startIntent)) {
-            startForeground(NOTIFICATION_ID, createNotification(startIntent))
+            val notification = createNotification(startIntent)
+            if (Build.VERSION.SDK_INT >= 34) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
         }
     }
 

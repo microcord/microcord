@@ -3,9 +3,11 @@ package com.discord.widgets.chat.input.attachments
 import android.content.DialogInterface
 import android.graphics.drawable.Animatable
 import android.os.Bundle
+import android.provider.MediaStore
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
+import android.webkit.MimeTypeMap
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.os.bundleOf
 import androidx.fragment.app.FragmentManager
@@ -13,6 +15,7 @@ import com.discord.R
 import com.discord.app.AppBottomSheet
 import com.discord.utilities.embed.EmbedResourceUtils
 import com.discord.utilities.images.MGImages
+import com.discord.utilities.time.TimeUtils
 import com.facebook.drawee.controller.BaseControllerListener
 import com.facebook.drawee.view.SimpleDraweeView
 import com.facebook.imagepipeline.image.ImageInfo
@@ -66,10 +69,17 @@ class AttachmentBottomSheet : AppBottomSheet() {
 
         filename.text = attachment?.displayName
 
-        // The duration chip belongs to video attachments; the published FlexInput's `Attachment`
-        // carries no duration, so there is nothing to show. Hidden rather than left as its
-        // placeholder text.
-        view.findViewById<View>(R.id.attachment_duration).visibility = View.GONE
+        view.findViewById<TextView>(R.id.attachment_duration).apply {
+            val durationMs = videoDurationMs()
+            visibility = if (durationMs == null) View.GONE else View.VISIBLE
+            if (durationMs != null) {
+                text = if (durationMs > 0) {
+                    TimeUtils.toFriendlyStringSimple(durationMs)
+                } else {
+                    getString(R.string.video)
+                }
+            }
+        }
 
         preview.addOnLayoutChangeListener { v, left, _, right, _, _, _, _, _ ->
             attachmentViewSize = right - left
@@ -129,6 +139,28 @@ class AttachmentBottomSheet : AppBottomSheet() {
                 }
             },
         )
+    }
+
+    private fun videoDurationMs(): Long? {
+        val attachment = attachment ?: return null
+        val resolver = context?.contentResolver ?: return null
+        val mimeType = runCatching { resolver.getType(attachment.uri) }.getOrNull()
+            ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(
+                attachment.displayName.substringAfterLast('.', "").lowercase(),
+            )
+        if (mimeType?.startsWith("video/") != true) return null
+
+        return runCatching {
+            resolver.query(
+                attachment.uri,
+                arrayOf(MediaStore.Video.VideoColumns.DURATION),
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getLong(0) else 0L
+            } ?: 0L
+        }.getOrDefault(0L)
     }
 
     private fun updateSpoilerViewSize() {

@@ -16,8 +16,10 @@ import com.discord.api.guild.GuildFeature
 import com.discord.i18n.i18nFormat
 import com.discord.models.domain.ModelInvite
 import com.discord.models.user.User
+import com.discord.stores.StoreInstantInvites
 import com.discord.stores.StoreStream
 import com.discord.stores.updates.ObservationDeckProvider
+import com.discord.utilities.SnowflakeUtils.toSnowflake
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.rx.appSubscribe
@@ -38,7 +40,7 @@ import rx.Subscription
 /**
  * The card rendered for a `discord.gg` link in a message body.
  *
- * The row starts with nothing but a code: it asks [InviteEmbedStore] to resolve it, shows a
+ * The row starts with nothing but a code: it asks [StoreInstantInvites] to resolve it, shows a
  * skeleton while that is in flight, and then renders one of three faces — the resolved invite, or
  * the "invalid invite" state, which is a different apology depending on whether the viewer is the
  * person who sent the dead link.
@@ -73,8 +75,8 @@ class WidgetChatListAdapterItemInvite(
         val entry = data as InviteEntry
         item = entry
 
-        val eventId = entry.eventId?.toLongOrNull()
-        InviteEmbedStore.installed.fetchInviteIfNotLoaded(entry.inviteCode, eventId, INVITE_SOURCE)
+        val eventId = entry.eventId?.toSnowflake()
+        StoreStream.getInstantInvites().fetchInviteIfNotLoaded(entry.inviteCode, eventId)
         observeModel(entry, eventId).ui().appSubscribe(
             WidgetChatListAdapterItemInvite::class.java,
             subscriptionHandler = { subscription = it },
@@ -86,13 +88,16 @@ class WidgetChatListAdapterItemInvite(
     // region model
 
     private fun observeModel(entry: InviteEntry, eventId: Long?): Observable<Model> =
-        InviteEmbedStore.installed.observeInvite(entry.inviteCode, eventId).switchMap { state ->
-            when (state) {
-                is InviteEmbedStore.InviteState.Loading -> Observable.just<Model>(Model.Loading)
-                is InviteEmbedStore.InviteState.Resolved -> observeResolved(entry, state.invite)
-                is InviteEmbedStore.InviteState.Invalid -> observeInvalid(entry)
+        StoreStream.getInstantInvites()
+            .observeInvite(ModelInvite.getInviteStoreKey(entry.inviteCode, eventId))
+            .switchMap { state ->
+                when (state.inviteCardState()) {
+                    InviteCardState.LOADING -> Observable.just<Model>(Model.Loading)
+                    InviteCardState.RESOLVED ->
+                        observeResolved(entry, (state as StoreInstantInvites.InviteState.Resolved).invite)
+                    InviteCardState.INVALID -> observeInvalid(entry)
+                }
             }
-        }
 
     private fun observeInvalid(entry: InviteEntry): Observable<Model> {
         val users = StoreStream.getUsers()
@@ -424,44 +429,11 @@ internal object ChatListRowNavigation {
     var updateThreadDraft: ((com.discord.stores.StoreThreadDraft.ThreadDraftState) -> Unit)? = null
 }
 
-/**
- * Resolution of an invite code into a full invite.
- *
- * Stands in for the reference's `StoreInstantInvites`, which is not reconstructed. Until a store
- * installs itself here every invite card stays on its loading skeleton, which is also what the
- * reference shows for the moment between the row appearing and the fetch returning.
- *
- * This is the row-level counterpart of
- * `com.discord.widgets.chat.list.entries.InviteEmbedResolver`, which answers the narrower question
- * of *which kind* of row a code deserves while the list is being built. The two should merge into
- * one store-backed type when `StoreInstantInvites` lands.
- */
-internal interface InviteEmbedStore {
+internal enum class InviteCardState { LOADING, RESOLVED, INVALID }
 
-    /** Starts a fetch unless this code is already loaded or in flight. */
-    fun fetchInviteIfNotLoaded(inviteCode: String, eventId: Long?, analyticsSource: String)
-
-    fun observeInvite(inviteCode: String, eventId: Long?): Observable<InviteState>
-
-    sealed class InviteState {
-        object Loading : InviteState()
-        data class Resolved(val invite: ModelInvite) : InviteState()
-        object Invalid : InviteState()
-    }
-
-    companion object {
-        /** Resolves nothing; every invite card stays on its skeleton. */
-        val UNAVAILABLE: InviteEmbedStore = object : InviteEmbedStore {
-            override fun fetchInviteIfNotLoaded(
-                inviteCode: String,
-                eventId: Long?,
-                analyticsSource: String,
-            ) = Unit
-
-            override fun observeInvite(inviteCode: String, eventId: Long?): Observable<InviteState> =
-                Observable.just(InviteState.Loading)
-        }
-
-        var installed: InviteEmbedStore = UNAVAILABLE
-    }
+internal fun StoreInstantInvites.InviteState.inviteCardState(): InviteCardState = when (this) {
+    StoreInstantInvites.InviteState.Loading,
+    StoreInstantInvites.InviteState.LoadFailed -> InviteCardState.LOADING
+    is StoreInstantInvites.InviteState.Resolved -> InviteCardState.RESOLVED
+    StoreInstantInvites.InviteState.Invalid -> InviteCardState.INVALID
 }

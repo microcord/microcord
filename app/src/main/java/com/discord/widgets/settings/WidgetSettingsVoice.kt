@@ -85,6 +85,7 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
         super.onViewBound(view)
         // Title and subtitle come from the toolbar declared in the layout.
         setActionBarDisplayHomeAsUpEnabled()
+        SettingsNavigation.bindBack(this)
 
         inputModeRow = view.findViewById(R.id.settings_voice_mode)
         inputModeValue = view.findViewById(R.id.settings_voice_mode_value)

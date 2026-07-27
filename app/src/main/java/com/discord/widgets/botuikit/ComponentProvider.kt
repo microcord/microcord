@@ -3,7 +3,6 @@ package com.discord.widgets.botuikit
 import android.content.Context
 import android.view.View
 import android.view.ViewGroup
-import com.discord.api.botuikit.ComponentType
 import com.discord.models.botuikit.ActionRowMessageComponent
 import com.discord.models.botuikit.ButtonMessageComponent
 import com.discord.models.botuikit.MessageComponent
@@ -22,16 +21,13 @@ class ComponentProvider(val context: Context) {
         childIndex: Int,
     ): ComponentView<out MessageComponent>? {
         val reusable = root.getChildAt(childIndex) as? ComponentView<*>
-        val view = if (reusable?.type() == component.type) reusable else inflate(component.type, root)
+        val view = if (reusable?.type() == component.type) {
+            reusable
+        } else {
+            ComponentInflater.from(context).inflateComponent(component.type, root)
+        }
         configure(view, component, listener)
         return view
-    }
-
-    private fun inflate(type: ComponentType, root: ViewGroup): ComponentView<out MessageComponent>? = when (type) {
-        ComponentType.ACTION_ROW -> ActionRowComponentView.inflateComponent(context, root)
-        ComponentType.BUTTON -> ButtonComponentView.inflateComponent(context, root)
-        ComponentType.SELECT -> SelectComponentView.inflateComponent(context, root)
-        ComponentType.TEXT, ComponentType.UNKNOWN -> null
     }
 
     private fun configure(

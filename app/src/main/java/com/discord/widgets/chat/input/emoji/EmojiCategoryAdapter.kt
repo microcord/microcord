@@ -65,7 +65,7 @@ class EmojiCategoryViewHolder(
     private val onCategorySelected: (EmojiCategoryItem) -> Unit,
 ) : RecyclerView.ViewHolder(itemView) {
 
-    private val overline: View = itemView.findViewById(R.id.expression_picker_category_selection_overline)
+    private val overline: View = itemView.findViewById(R.id.overline)
     private val standardIcon: ImageView? = itemView.findViewById(R.id.emoji_category_item_standard_icon)
     private val guildIcon: GuildIcon? = itemView.findViewById(R.id.emoji_category_item_guild_icon)
 

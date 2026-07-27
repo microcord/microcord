@@ -79,9 +79,11 @@ fun testBackoff(scheduler: ManualBackoffScheduler) = Backoff(
  */
 class RecordingRestApi {
     data class SendCall(val channelId: Long, val body: RestAPIParams.Message?, val multipart: Boolean)
+    data class CommandCall(val body: RestAPIParams.ApplicationCommand, val multipart: Boolean)
     data class EditCall(val channelId: Long, val messageId: Long, val content: String?)
 
     val sendCalls = mutableListOf<SendCall>()
+    val commandCalls = mutableListOf<CommandCall>()
     val editCalls = mutableListOf<EditCall>()
     val typingCalls = mutableListOf<Long>()
 
@@ -96,6 +98,17 @@ class RecordingRestApi {
     ) { _, method, args ->
         val arguments = args ?: emptyArray()
         when (method.name) {
+            "sendApplicationCommand" -> {
+                val multipart = arguments.firstOrNull() is PayloadJSON<*>
+                val body = if (multipart) {
+                    payloadData(arguments[0] as PayloadJSON<*>) as RestAPIParams.ApplicationCommand
+                } else {
+                    arguments[0] as RestAPIParams.ApplicationCommand
+                }
+                commandCalls += CommandCall(body, multipart)
+                deferred()
+            }
+
             "sendMessage" -> {
                 val multipart = arguments.size > 2
                 val body = if (multipart) {
@@ -131,15 +144,25 @@ class RecordingRestApi {
         emitter.onCompleted()
     }
 
+    fun respondCommandSuccess() {
+        val emitter = pendingEmitters.removeFirst()
+        emitter.onNext(null)
+        emitter.onCompleted()
+    }
+
     fun respondError(throwable: Throwable) = pendingEmitters.removeFirst().onError(throwable)
 
     /** Fails the oldest in-flight request with a Discord error body. */
     fun respondApiError(status: Int, json: String) = respondError(httpException(status, json))
 
     private fun payloadMessage(payload: PayloadJSON<*>): RestAPIParams.Message? {
+        return payloadData(payload) as? RestAPIParams.Message
+    }
+
+    private fun payloadData(payload: PayloadJSON<*>): Any? {
         val field = PayloadJSON::class.java.getDeclaredField("data")
         field.isAccessible = true
-        return field.get(payload) as? RestAPIParams.Message
+        return field.get(payload)
     }
 
     private fun deferred(): Observable<Any> = Observable.create<Any>(

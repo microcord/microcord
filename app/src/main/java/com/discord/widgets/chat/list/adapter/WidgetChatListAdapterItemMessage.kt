@@ -887,7 +887,7 @@ class WidgetChatListAdapterItemMessage(
     }
 
     private companion object {
-        private const val TAG = "WidgetChatListAdapterItemMessage"
+        private const val TAG = "ChatListAdapterMessage"
 
         private const val TYPE_DEFAULT = 0
         private const val TYPE_GUILD_MEMBER_JOIN = 7

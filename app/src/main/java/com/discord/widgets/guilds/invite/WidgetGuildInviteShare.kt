@@ -183,7 +183,7 @@ class WidgetGuildInviteShare : AppFragment(R.layout.widget_guild_invite_share) {
                 }
             },
         )
-        bottomSheetBehavior.isUpdateImportantForAccessibilityOnSiblings = true
+        bottomSheetBehavior.setUpdateImportantForAccessibilityOnSiblings(true)
     }
 
     private fun configureUI(viewState: WidgetGuildInviteShareViewModel.ViewState.Loaded) {

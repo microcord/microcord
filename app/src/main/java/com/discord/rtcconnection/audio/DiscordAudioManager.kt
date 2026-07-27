@@ -1,5 +1,6 @@
 package com.discord.rtcconnection.audio
 
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothHeadset
 import android.bluetooth.BluetoothManager
@@ -407,17 +408,25 @@ class DiscordAudioManager(context: Context) {
 
         val profile = headsetProfile
         val activeBluetoothDevice = profile?.let { headset ->
-            runCatching {
+            try {
                 headset.connectedDevices?.firstOrNull { device -> headset.isAudioConnected(device) }
-            }.getOrNull() ?: HiddenBluetoothApi.getActiveDevice(headset)
+            } catch (_: SecurityException) {
+                null
+            } catch (_: Throwable) {
+                null
+            } ?: HiddenBluetoothApi.getActiveDevice(headset)
         }
 
-        val hasHeadset = runCatching {
+        val hasHeadset = try {
             val adapter = bluetoothManager?.adapter
             adapter != null && adapter.isEnabled &&
                 adapter.getProfileConnectionState(BluetoothProfile.HEADSET) ==
-                BluetoothProfile.STATE_CONNECTED
-        }.getOrDefault(false)
+                BluetoothAdapter.STATE_CONNECTED
+        } catch (_: SecurityException) {
+            false
+        } catch (_: Throwable) {
+            false
+        }
 
         synchronized(lock) {
             val routedToBluetooth = inCommunicationMode && activeDevice == DeviceTypes.BLUETOOTH_HEADSET
@@ -759,7 +768,13 @@ class DiscordAudioManager(context: Context) {
 
     private fun BluetoothDevice.address(): String? = runCatching { address }.getOrNull()
 
-    private fun BluetoothDevice.deviceName(): String? = runCatching { name }.getOrNull()
+    private fun BluetoothDevice.deviceName(): String? = try {
+        name
+    } catch (_: SecurityException) {
+        null
+    } catch (_: Throwable) {
+        null
+    }
 
     companion object {
         private const val TAG = "DiscordAudioManager"

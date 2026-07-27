@@ -51,7 +51,7 @@ import rx.subjects.PublishSubject
  */
 class WidgetHomeViewModel(
     private val storeNavigation: StoreNavigation = StoreStream.getNavigation(),
-    private val storeGuildWelcomeScreens: StoreGuildWelcomeScreens? = null,
+    private val storeGuildWelcomeScreens: StoreGuildWelcomeScreens? = StoreStream.getGuildWelcomeScreens(),
     storeExperiments: StoreExperiments = StoreStream.getExperiments(),
     storeGuilds: StoreGuilds = StoreStream.getGuilds(),
     storePermissions: StorePermissions = StoreStream.getPermissions(),

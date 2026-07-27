@@ -12,6 +12,7 @@ import com.discord.models.domain.emoji.Emoji
 import com.discord.stores.StoreStream
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.analytics.ChatInputComponentTypes
+import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.utilities.view.extensions.setForwardingWindowInsetsListener
 import com.discord.views.segmentedcontrol.SegmentedControlContainer
@@ -142,10 +143,10 @@ class WidgetExpressionTray : AppFragment(R.layout.widget_expression_tray), Widge
         super.onViewBoundOrOnResume()
         expressionTrayViewModel.observeViewState()
             .ui(this)
-            .subscribe({ handleViewState(it) }, { /* leave the current page in place */ })
+            .appSubscribe(WidgetExpressionTray::class.java, onNext = ::handleViewState)
         expressionTrayViewModel.observeEvents()
             .ui(this)
-            .subscribe({ handleEvent(it) }, { /* a dropped command is not fatal */ })
+            .appSubscribe(WidgetExpressionTray::class.java, onNext = ::handleEvent)
     }
 
     private fun initializeExpressionTabToViewsMap(view: View) {

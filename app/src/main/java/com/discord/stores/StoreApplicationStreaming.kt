@@ -34,6 +34,8 @@ class StoreApplicationStreaming(
     private val streamWatchRequest: (streamKey: String) -> Unit = {},
     /** Routes a local stop back through the normal `STREAM_DELETE` path. */
     private val streamDeleteRequest: (StreamDelete) -> Unit = {},
+    /** Routes a user-selected stream through StoreStream so voice joins its channel before watching. */
+    private val targetStreamRequest: ((streamKey: String) -> Unit)? = null,
     /** Lets the RTC layer know whether we are the one sharing. */
     private val onIsScreenSharingChanged: (Boolean) -> Unit = {},
     /**
@@ -414,7 +416,7 @@ class StoreApplicationStreaming(
         if (active?.state?.isStreamActive() == true) {
             stopStreamInternal(active.stream.encodedStreamKey)
         }
-        handleStreamTargeted(streamKey)
+        targetStreamRequest?.invoke(streamKey) ?: handleStreamTargeted(streamKey)
     }
 
     @StoreThread
@@ -432,6 +434,6 @@ class StoreApplicationStreaming(
 
     private companion object {
         private const val MAX_BREAD_CRUMBS = 50
-        private const val LOG_TAG = "StoreApplicationStreaming"
+        private const val LOG_TAG = "StoreAppStreaming"
     }
 }

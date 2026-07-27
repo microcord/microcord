@@ -2,6 +2,8 @@ package com.discord.utilities.messagesend
 
 import com.discord.api.message.Message as ApiMessage
 import com.discord.api.message.MessageReference
+import com.discord.models.commands.Application
+import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.models.message.Message
 import com.discord.stores.StorePendingReplies
 import com.discord.utilities.captcha.CaptchaHelper
@@ -225,11 +227,61 @@ class MessageSendCoordinatorTest {
         assertNull(updates.filterIsInstance<MessageSendCoordinator.Update.Failed>().firstOrNull())
     }
 
+    @Test
+    fun applicationCommandsReuseTheChannelsExistingMessageQueue() {
+        val ordinary = coordinator.send(MessageSendCoordinator.Send(channelId = CHANNEL_ID, content = "first"))
+        val ordinaryNonce = acceptedNonce(ordinary)
+        val command = commandData(1234L)
+        val commandResults = mutableListOf<MessageResult>()
+
+        coordinator.sendApplicationCommand(
+            ApiMessage(id = command.nonce, channelId = CHANNEL_ID, nonce = command.nonceString),
+            command,
+        ).subscribe { commandResults += it }
+
+        assertTrue(restApi.commandCalls.isEmpty())
+        restApi.respondSuccess(ApiMessage(id = 5000L, channelId = CHANNEL_ID, nonce = ordinaryNonce))
+        assertEquals(1, restApi.commandCalls.size)
+
+        restApi.respondCommandSuccess()
+        assertTrue(commandResults.single() is MessageResult.Success)
+    }
+
+    @Test
+    fun cancellingAQueuedApplicationCommandRemovesItFromTheSharedChannelQueue() {
+        coordinator.send(MessageSendCoordinator.Send(channelId = CHANNEL_ID, content = "first"))
+        val command = commandData(1234L)
+        val commandResults = mutableListOf<MessageResult>()
+        coordinator.sendApplicationCommand(
+            ApiMessage(id = command.nonce, channelId = CHANNEL_ID, nonce = command.nonceString),
+            command,
+        ).subscribe { commandResults += it }
+
+        coordinator.cancel(command.nonceString)
+        restApi.respondSuccess(ApiMessage(id = 5000L, channelId = CHANNEL_ID))
+
+        assertTrue(restApi.commandCalls.isEmpty())
+        assertEquals(listOf<MessageResult>(MessageResult.UserCancelled), commandResults)
+    }
+
     private fun acceptedNonce(submission: MessageSendCoordinator.Submission) =
         (submission as MessageSendCoordinator.Submission.Accepted).requestId
 
     private fun assertRejected(submission: MessageSendCoordinator.Submission) =
         assertTrue("expected a rejection but got $submission", submission is MessageSendCoordinator.Submission.Rejected)
+
+    private fun commandData(nonce: Long) = ApplicationCommandLocalSendData(
+        nonce = nonce,
+        channelId = CHANNEL_ID,
+        guildId = null,
+        commandGuildId = null,
+        application = Application(id = 9L, name = "test", commandCount = 1),
+        sessionId = "session",
+        applicationCommandName = "ping",
+        applicationCommandId = "10",
+        applicationCommandsValues = emptyList(),
+        version = "1",
+    )
 
     private companion object {
         const val CHANNEL_ID = 42L

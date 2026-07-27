@@ -62,7 +62,7 @@ class WidgetMaskedLinksDialog : AppDialog(R.layout.widget_masked_links_dialog) {
             openAndDismiss(v.context, url)
         }
         view.findViewById<TextView>(R.id.masked_links_trust_domain).setOnClickListener { v ->
-            trustDomainHandler?.invoke(url)
+            UriHandler.trustDomainHandler?.invoke(url)
             openAndDismiss(v.context, url)
         }
     }
@@ -100,17 +100,6 @@ class WidgetMaskedLinksDialog : AppDialog(R.layout.widget_masked_links_dialog) {
             WidgetMedia::class,
         )
 
-        /**
-         * Remembers a domain the user chose to trust.
-         *
-         * Installed by whoever publishes `StoreMaskedLinks` on `StoreStream`; the reference calls
-         * `StoreStream.getMaskedLinks().trustDomain(url)` directly. `StoreStream` does not construct
-         * that store yet, so until it does the "Trust this Domain" row still opens the link — it
-         * just does not persist the decision.
-         */
-        @JvmStatic
-        var trustDomainHandler: ((url: String) -> Unit)? = null
-
         fun show(fragmentManager: FragmentManager, url: String) {
             WidgetMaskedLinksDialog().apply {
                 arguments = Bundle().apply { putString(ARG_URL, url) }
@@ -131,11 +120,10 @@ class WidgetMaskedLinksDialog : AppDialog(R.layout.widget_masked_links_dialog) {
                 StoreStream.getNotices().requestToShow(
                     StoreNotices.Notice(
                         name = NOTICE_NAME,
-                        requestedShowTimestamp = 0L,
                         priority = StoreNotices.PRIORITY_HIGH,
                         persist = false,
                         validScreens = VALID_SCREENS,
-                        delayPeriodMs = DELAY_PERIOD_MS,
+                        delayPeriodMs = 0L,
                         // The user asked for this link now; a previous confirmation must not
                         // suppress the next one.
                         sinceLastPeriodMs = 0L,
@@ -147,7 +135,5 @@ class WidgetMaskedLinksDialog : AppDialog(R.layout.widget_masked_links_dialog) {
                 )
             }
         }
-
-        private const val DELAY_PERIOD_MS = 1000L
     }
 }

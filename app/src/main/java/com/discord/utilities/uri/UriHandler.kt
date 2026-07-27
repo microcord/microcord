@@ -70,8 +70,6 @@ object UriHandler {
         "open.spotify.com",
     )
 
-    private val DISCORD_DOMAINS_REGEX = Regex("(?:^|\\.)(?:discordapp|discord)\\.com$")
-
     /**
      * Additional trust decisions contributed by the store graph (domains the user chose to trust,
      * and the relationship-based allowance for masked links from friends). Installed at startup;
@@ -79,6 +77,10 @@ object UriHandler {
      */
     @JvmStatic
     var trustedDomainResolver: ((url: String, mask: String?) -> Boolean)? = null
+
+    /** Remembers a destination after the user confirms "Trust this domain". */
+    @JvmStatic
+    var trustDomainHandler: ((url: String) -> Unit)? = null
 
     /**
      * Presents the "this link may not go where it says" confirmation. Installed by the UI layer;
@@ -153,7 +155,9 @@ object UriHandler {
     /** @return true when [host] is a Discord-owned or otherwise first-party domain. */
     @JvmStatic
     fun isImplicitlyTrustedDomain(host: String): Boolean =
-        IMPLICITLY_TRUSTED_HOSTS.contains(host) || DISCORD_DOMAINS_REGEX.containsMatchIn(host)
+        IMPLICITLY_TRUSTED_HOSTS.contains(host) ||
+            host.endsWith(".discord.com") ||
+            host.endsWith(".discordapp.com")
 
     /**
      * @return false for URLs whose scheme must not be launched from untrusted content, and for

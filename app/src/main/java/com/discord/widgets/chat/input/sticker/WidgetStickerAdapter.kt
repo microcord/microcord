@@ -13,6 +13,7 @@ import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.utilities.rx.ui
+import com.discord.utilities.stickers.StickerUtils
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.views.sticker.StickerView
 import com.discord.widgets.stickers.StickerSendability
@@ -162,7 +163,7 @@ class StickerViewHolder(
     }
 
     private fun configureSticker(item: StickerItem) {
-        stickerView.setSticker(item.sticker, item.stickerAnimationSettings)
+        stickerView.setSticker(item.sticker, PICKER_ANIMATION_SETTING)
         // A sticker the user cannot send is dimmed rather than hidden: tapping it still explains why.
         stickerView.alpha = if (item.sendability == StickerSendability.SENDABLE) 1f else 0.25f
         stickerView.setOnClickListener {
@@ -175,6 +176,10 @@ class StickerViewHolder(
     fun cancelLoading() {
         scrollingSpeedSubscription?.unsubscribe()
         scrollingSpeedSubscription = null
+    }
+
+    companion object {
+        const val PICKER_ANIMATION_SETTING = StickerUtils.ALWAYS_ANIMATE
     }
 }
 

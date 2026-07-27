@@ -36,7 +36,7 @@ class StorePaymentSources(
     }
 
     /** Raised when a payment source arrives in a shape this client cannot project. */
-    class UnableToWrapException(cause: Throwable) : RuntimeException(cause)
+    class UnableToWrapException(cause: Throwable) : Exception(cause)
 
     private var paymentSourcesState: PaymentSourcesState = PaymentSourcesState.Unfetched
     private var paymentSourcesStateSnapshot: PaymentSourcesState = PaymentSourcesState.Unfetched

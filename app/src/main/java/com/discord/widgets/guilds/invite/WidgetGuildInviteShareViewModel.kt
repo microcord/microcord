@@ -14,6 +14,7 @@ import com.discord.stores.StoreChannels
 import com.discord.stores.StoreGuildScheduledEvents
 import com.discord.stores.StoreGuilds
 import com.discord.stores.StoreInstantInvites
+import com.discord.stores.StoreInviteSettings
 import com.discord.stores.StoreMessages
 import com.discord.stores.StoreStageInstances
 import com.discord.stores.StoreStream
@@ -58,7 +59,7 @@ class WidgetGuildInviteShareViewModel(
     private val resources: Resources,
     private val storeChannels: StoreChannels = StoreStream.getChannels(),
     private val storeGuilds: StoreGuilds = StoreStream.getGuilds(),
-    private val inviteSettings: InviteSettingsSource = InviteSettingsSource.instance,
+    private val inviteSettings: StoreInviteSettings = InviteSettingsSource.store,
     private val storeUser: StoreUser = StoreStream.getUsers(),
     private val storeStageInstances: StoreStageInstances = StoreStream.getStageInstances(),
     private val storeGuildScheduledEvents: StoreGuildScheduledEvents =
@@ -219,7 +220,7 @@ class WidgetGuildInviteShareViewModel(
         eventId: Long?,
         inviteStoreKey: String?,
     ): Observable<WidgetInviteModel> = Observable.combineLatest(
-        inviteSettings.observeInviteSettings(),
+        inviteSettings.getInviteSettings(),
         inviteSettings.getInvitableChannels(guildId),
         inviteGenerator.generationState,
         selectedChannelSubject,

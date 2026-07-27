@@ -2,7 +2,6 @@ package com.discord.widgets.user.profile
 
 import android.content.Context
 import android.graphics.Color
-import android.net.Uri
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
@@ -16,6 +15,8 @@ import com.discord.R
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
 import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.UsernameView
@@ -36,6 +37,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
     private val primaryName: UsernameView
     private val secondaryName: SimpleDraweeSpanTextView
     private val badgeAdapter = BadgeAdapter()
+    private val bannerChangeDetector = MGImages.DistinctChangeDetector()
     private var backgroundColor: Int
     private var onAvatarEdit: () -> Unit = {}
     private var onBannerPress: () -> Unit = {}
@@ -103,14 +105,21 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
 
     private fun configureBanner(state: UserProfileHeaderViewModel.ViewState.Loaded) {
         val hash = state.guildMember?.bannerHash ?: state.banner
+        val size = maxOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels)
         val url = when {
             hash == null -> null
             hash.startsWith("data:") -> hash
-            state.guildMember?.hasBanner() == true -> "https://cdn.discordapp.com/guilds/${state.guildMember.guildId}/users/${state.user.id}/banners/$hash.${if (state.shouldAnimateBanner && hash.startsWith("a_")) "gif" else "webp"}?size=1024"
-            else -> "https://cdn.discordapp.com/banners/${state.user.id}/$hash.${if (state.shouldAnimateBanner && hash.startsWith("a_")) "gif" else "webp"}?size=1024"
+            state.guildMember?.hasBanner() == true -> IconUtils.getForGuildMemberBanner(
+                hash,
+                state.guildMember.guildId,
+                state.user.id,
+                size,
+                state.shouldAnimateBanner,
+            )
+            else -> IconUtils.getForUserBanner(state.user.id, hash, size, state.shouldAnimateBanner)
         }
         banner.aspectRatio = if (url == null) 5f else 2.5f
-        banner.setImageURI(url?.let(Uri::parse))
+        MGImages.setImage(banner, url, changeDetector = bannerChangeDetector)
         updateBannerColor(state)
         banner.setOnClickListener { onBannerPress() }
         bannerEdit.setOnClickListener { onBannerPress() }

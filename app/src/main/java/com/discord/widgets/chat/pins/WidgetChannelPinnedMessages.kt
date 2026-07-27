@@ -10,6 +10,7 @@ import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isPrivate
 import com.discord.app.AppFragment
+import com.discord.app.BackPressHandlerRegistry
 import com.discord.models.guild.Guild
 import com.discord.models.message.Message
 import com.discord.stores.StorePinnedMessages
@@ -71,7 +72,7 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
             val handled = parentFragmentManager.backStackEntryCount > 0
             if (handled) parentFragmentManager.popBackStack()
             handled
-        })
+        }, priority = BackPressHandlerRegistry.DEFAULT_PRIORITY - 1)
 
         val context = requireContext()
         subscription = host.pinnedMessagesStore().observeForChannel(channelId).subscribe(

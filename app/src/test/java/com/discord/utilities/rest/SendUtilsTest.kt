@@ -1,6 +1,11 @@
 package com.discord.utilities.rest
 
+import com.discord.api.commands.ApplicationCommandType
+import com.discord.models.commands.Application
+import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.restapi.RestAPIParams
+import com.discord.utilities.attachments.uniqueUploadFileNamesFromSanitized
+import com.discord.widgets.chat.input.models.ApplicationCommandValue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -54,4 +59,71 @@ class SendUtilsTest {
 
         assertTrue(completed)
     }
+
+    @Test
+    fun commandAttachmentUrisAreRewrittenRecursivelyToUniqueUploadNames() {
+        val names = uniqueUploadFileNamesFromSanitized(listOf("photo.png", "photo.png"))
+        val command = command(
+            listOf(
+                ApplicationCommandValue(
+                    name = "group",
+                    type = ApplicationCommandType.SUBCOMMAND.type,
+                    options = listOf(
+                        attachmentValue("first", "content://one"),
+                        attachmentValue("second", "content://two"),
+                    ),
+                ),
+            ),
+        )
+
+        val rewritten = SendUtils.rewriteCommandAttachmentNames(
+            command,
+            listOf("content://one" to names[0], "content://two" to names[1]),
+        )
+
+        assertEquals(listOf("photo.png", "photo-1.png"), names)
+        assertEquals(
+            names,
+            rewritten.applicationCommandsValues.single().options.orEmpty().map { it.value },
+        )
+        val wireAttachments = rewritten.toRestApiParam().data.attachments.orEmpty()
+        assertEquals(listOf("photo.png", "photo-1.png"), wireAttachments.map { it.filename })
+        assertEquals(listOf("0", "1"), wireAttachments.map { it.id })
+    }
+
+    @Test(expected = NoSuchElementException::class)
+    fun commandAttachmentWithoutAMatchingUploadKeepsTheReferenceFailure() {
+        SendUtils.rewriteCommandAttachmentNames(
+            command(listOf(attachmentValue("file", "content://missing"))),
+            listOf("content://other" to "other.png"),
+        )
+    }
+
+    @Test(expected = NoSuchElementException::class)
+    fun emptyCommandAttachmentListStillValidatesAttachmentOptions() {
+        SendUtils.getSendCommandPayload(
+            contentResolver = null,
+            command = command(listOf(attachmentValue("file", "content://missing"))),
+            attachments = emptyList(),
+        )
+    }
+
+    private fun attachmentValue(name: String, uri: String) = ApplicationCommandValue(
+        name = name,
+        value = uri,
+        type = ApplicationCommandType.ATTACHMENT.type,
+    )
+
+    private fun command(values: List<ApplicationCommandValue>) = ApplicationCommandLocalSendData(
+        nonce = 123L,
+        channelId = 42L,
+        guildId = null,
+        commandGuildId = null,
+        application = Application(id = 9L, name = "test", commandCount = 1),
+        sessionId = "session",
+        applicationCommandName = "upload",
+        applicationCommandId = "10",
+        applicationCommandsValues = values,
+        version = "1",
+    )
 }

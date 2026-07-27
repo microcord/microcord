@@ -10,6 +10,9 @@ import androidx.annotation.DrawableRes
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import com.discord.R
+import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
+import com.discord.widgets.guild_role_subscriptions.tier.model.Benefit
 import com.facebook.drawee.drawable.ScalingUtils
 import com.facebook.drawee.view.SimpleDraweeView
 
@@ -56,6 +59,21 @@ class GuildRoleSubscriptionBenefitItemView @JvmOverloads constructor(
         configureTitleAndDescription(title, description)
         image.hierarchy.actualImageScaleType = ScalingUtils.ScaleType.CENTER_INSIDE
         image.setActualImageResource(imageRes)
+    }
+
+    fun configureUI(benefit: Benefit) {
+        configureTitleAndDescription(benefit.name, benefit.description)
+        image.hierarchy.actualImageScaleType = ScalingUtils.ScaleType.CENTER
+        MGImages.setImage(
+            image,
+            benefit.emoji.getImageUri(
+                false,
+                minOf(IconUtils.getMediaProxySize(resources.getDimensionPixelSize(R.dimen.emoji_size)), 64),
+                context,
+            ),
+        )
+        image.contentDescription = benefit.emoji.firstName
+        setChannelIcon((benefit as? Benefit.ChannelBenefit)?.channelIconResId)
     }
 
     fun configureUI(title: String, imageUri: String, imageContentDescription: String, description: String?) {

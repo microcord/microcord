@@ -1,0 +1,187 @@
+package com.discord.widgets.servers
+
+import android.content.Context
+import android.content.Intent
+import android.view.View
+import android.widget.Toast
+import androidx.recyclerview.widget.ItemTouchHelper
+import androidx.recyclerview.widget.RecyclerView
+import com.discord.R
+import com.discord.api.permission.Permission
+import com.discord.api.role.GuildRole
+import com.discord.app.AppFragment
+import com.discord.models.guild.Guild
+import com.discord.models.member.GuildMember
+import com.discord.models.user.MeUser
+import com.discord.restapi.RestAPIParams
+import com.discord.stores.StoreStream
+import com.discord.utilities.dimmer.DimmerView
+import com.discord.utilities.guilds.RoleUtils
+import com.discord.utilities.mg_recycler.DragAndDropHelper
+import com.discord.utilities.mg_recycler.MGRecyclerAdapter
+import com.discord.utilities.permissions.PermissionUtils
+import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.computationLatest
+import com.discord.utilities.rx.restSubscribeOn
+import com.discord.utilities.rx.takeSingleUntilTimeout
+import com.discord.utilities.rx.ui
+import com.discord.widgets.settings.SettingsNavigation
+import com.google.android.material.floatingactionbutton.FloatingActionButton
+import rx.Observable
+
+class WidgetServerSettingsRoles : AppFragment(R.layout.widget_server_settings_roles) {
+    private val guildId: Long
+        get() = arguments?.getLong(INTENT_EXTRA_GUILD_ID, INVALID_ID)
+            ?.takeIf { it != INVALID_ID }
+            ?: mostRecentIntent.getLongExtra(INTENT_EXTRA_GUILD_ID, INVALID_ID)
+
+    private var adapter: WidgetServerSettingsRolesAdapter? = null
+    private var itemTouchHelper: ItemTouchHelper? = null
+    private lateinit var addRole: FloatingActionButton
+    private lateinit var dimmer: DimmerView
+
+    override fun onViewBound(view: View) {
+        super.onViewBound(view)
+        setActionBarDisplayHomeAsUpEnabled()
+        addRole = view.findViewById(R.id.roles_list_add_role_fab)
+        dimmer = view.findViewById(R.id.dimmer_view)
+        val recycler = view.findViewById<RecyclerView>(R.id.server_settings_roles_recycler)
+        adapter = MGRecyclerAdapter.configure(WidgetServerSettingsRolesAdapter(recycler))
+        itemTouchHelper?.attachToRecyclerView(null)
+        itemTouchHelper = ItemTouchHelper(DragAndDropHelper(requireNotNull(adapter))).also {
+            it.attachToRecyclerView(recycler)
+        }
+    }
+
+    override fun onViewBoundOrOnResume() {
+        super.onViewBoundOrOnResume()
+        Model.observe(guildId).computationLatest().ui(this).appSubscribe(javaClass) { configureUI(it) }
+    }
+
+    private fun configureUI(model: Model?) {
+        if (model == null || model.roleItems.isEmpty()) {
+            appActivity?.onBackPressed()
+            return
+        }
+        setActionBarTitle(R.string.roles)
+        setActionBarSubtitle(model.guildName)
+        adapter?.configure(
+            model.roleItems,
+            roleSelected = { WidgetServerSettingsEditRole.launch(model.guildId, it.id, requireContext()) },
+            rolesMoved = { processRoleDrop(it, model) },
+        )
+        if (model.canManageRoles && model.elevated) {
+            addRole.show()
+            addRole.setOnClickListener { createRole(model) }
+        } else {
+            addRole.hide()
+            addRole.setOnClickListener(null)
+        }
+    }
+
+    private fun createRole(snapshot: Model) {
+        var createdObserved = false
+        RestAPI.api.createRole(snapshot.guildId)
+            .restSubscribeOn(retry = false)
+            .flatMap { created ->
+                StoreStream.getGuilds().observeRoles(snapshot.guildId, listOf(created.id))
+                    .map { it[created.id] }
+                    .filter { it != null }
+                    .map { it!! }
+            }
+            .takeSingleUntilTimeout(emitError = false)
+            .ui(this)
+            .appSubscribe(
+                javaClass,
+                requireContext(),
+                onCompleted = { if (!createdObserved) configureUI(snapshot) },
+            ) { created ->
+                createdObserved = true
+                WidgetServerSettingsEditRole.launch(snapshot.guildId, created.id, requireContext())
+            }
+    }
+
+    private fun processRoleDrop(newPositions: Map<String, Int>, snapshot: Model) {
+        val updates = newPositions.map { (roleId, position) ->
+            RestAPIParams.Role.createForPosition(roleId.toLong(), position)
+        }
+        dimmer.setDimmed(true)
+        RestAPI.api.batchUpdateRole(snapshot.guildId, updates)
+            .restSubscribeOn(retry = false)
+            .ui(this)
+            .appSubscribe(
+                javaClass,
+                requireContext(),
+                errorHandler = {
+                    dimmer.setDimmed(false)
+                    configureUI(snapshot)
+                },
+                onCompleted = {
+                    Toast.makeText(requireContext(), R.string.role_edit_saved, Toast.LENGTH_SHORT).show()
+                },
+                onTerminated = { dimmer.setDimmed(false) },
+            ) { }
+    }
+
+    data class Model(
+        val guildId: Long,
+        val guildName: String?,
+        val canManageRoles: Boolean,
+        val elevated: Boolean,
+        val roleItems: List<WidgetServerSettingsRolesAdapter.Item>,
+    ) {
+        companion object {
+            fun observe(guildId: Long): Observable<Model?> = StoreStream.getUsers().observeMe().flatMap { me ->
+                Observable.combineLatest(
+                    StoreStream.getGuilds().observeGuild(guildId),
+                    StoreStream.getGuilds().observeComputed(guildId).map { it[me.id] },
+                    StoreStream.getPermissions().observePermissionsForGuild(guildId),
+                    StoreStream.getGuilds().observeRoles(guildId),
+                ) { guild, member, permissions, roles ->
+                    create(guildId, me, guild, member, permissions, roles)
+                }
+            }.distinctUntilChanged()
+
+            internal fun create(
+                guildId: Long,
+                me: MeUser,
+                guild: Guild?,
+                member: GuildMember?,
+                permissions: Long?,
+                roles: Map<Long, GuildRole>,
+            ): Model? {
+                if (guild == null || member == null || permissions == null) return null
+                val canManage = PermissionUtils.can(Permission.MANAGE_ROLES, permissions)
+                val elevated = PermissionUtils.isElevated(me.mfaEnabled, guild.mfaLevel)
+                val highestRole = RoleUtils.getHighestRole(roles, member)
+                val items = ArrayList<WidgetServerSettingsRolesAdapter.Item>(roles.size + 1)
+                items += WidgetServerSettingsRolesAdapter.HelpItem(guildId)
+                roles.values.sortedWith(RoleUtils.ROLE_COMPARATOR).forEach { role ->
+                    items += WidgetServerSettingsRolesAdapter.RoleItem(
+                        role = role,
+                        everyoneRole = role.id == guildId,
+                        locked = guild.ownerId != me.id && !RoleUtils.rankIsHigher(highestRole, role),
+                        userAbleToManageRoles = canManage,
+                        elevated = elevated,
+                        guildId = guildId,
+                    )
+                }
+                return Model(guildId, guild.name, canManage, elevated, items)
+            }
+        }
+    }
+
+    companion object {
+        private const val INTENT_EXTRA_GUILD_ID = "INTENT_EXTRA_GUILD_ID"
+        private const val INVALID_ID = -1L
+
+        fun launch(context: Context, guildId: Long) {
+            SettingsNavigation.launch(
+                context,
+                WidgetServerSettingsRoles::class.java,
+                Intent().putExtra(INTENT_EXTRA_GUILD_ID, guildId),
+            )
+        }
+    }
+}

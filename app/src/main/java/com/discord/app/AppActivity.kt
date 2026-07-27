@@ -19,12 +19,15 @@ import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
+import androidx.lifecycle.Lifecycle
 import com.discord.R
 import com.discord.databinding.ActivityAppBinding
 import com.discord.models.domain.ModelUserSettings
 import com.discord.stores.IntentRouteResult
 import com.discord.stores.MainRoute
 import com.discord.stores.RequiredAction
+import com.discord.stores.StoreNotices
 import com.discord.stores.StoreStream
 import com.discord.utilities.intent.AppIntentParser
 import com.discord.utilities.logging.BootLog
@@ -73,9 +76,17 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
     private lateinit var binding: ActivityAppBinding
     private var routeSubscription: Subscription? = null
     private var settingsSubscription: Subscription? = null
+    private var noticeSubscription: Subscription? = null
+    private var pendingNotice: StoreNotices.Notice? = null
     private var stopBootLog: (() -> Unit)? = null
     private var pendingLaunchIntent: Intent? = null
     private var fatalCrashShown: Boolean = false
+
+    private val noticeFragmentCallbacks = object : FragmentManager.FragmentLifecycleCallbacks() {
+        override fun onFragmentResumed(fragmentManager: FragmentManager, fragment: Fragment) {
+            tryShowPendingNotice()
+        }
+    }
 
     final override val unsubscribeSignal: Subject<Void, Void> = PublishSubject.create()
 
@@ -156,6 +167,7 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
             }
         )
         super.onCreate(savedInstanceState)
+        supportFragmentManager.registerFragmentLifecycleCallbacks(noticeFragmentCallbacks, true)
         try {
             binding = ActivityAppBinding.inflate(layoutInflater)
             setContentView(binding.root)
@@ -193,6 +205,12 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
         }
         routeSubscription = StoreStream.getNavigation().observeMainRoute()
             .subscribe { route -> runOnUiThread { showRoute(route) } }
+        noticeSubscription = StoreStream.getNotices().getNotices().subscribe { notice ->
+            runOnUiThread {
+                pendingNotice = notice
+                tryShowPendingNotice()
+            }
+        }
     }
 
     override fun onResume() {
@@ -212,6 +230,7 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
         settingsSubscription = userSettings.observeSettings(true)
             .bindToComponentLifecycle(this)
             .subscribe { settings -> runOnUiThread { onUserSettingsChanged(settings.locale, settings.theme, settings.fontScale) } }
+        tryShowPendingNotice()
     }
 
     override fun onPause() {
@@ -226,16 +245,41 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
         stopBootLog = null
         routeSubscription?.unsubscribe()
         routeSubscription = null
+        noticeSubscription?.unsubscribe()
+        noticeSubscription = null
+        pendingNotice = null
         super.onStop()
     }
 
     override fun onDestroy() {
         newIntentListeners.clear()
         backPressHandlers.clear()
+        supportFragmentManager.unregisterFragmentLifecycleCallbacks(noticeFragmentCallbacks)
         super.onDestroy()
     }
 
     // endregion
+
+    private fun tryShowPendingNotice() {
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        val notice = pendingNotice ?: return
+        val validScreens = notice.validScreens
+        if (validScreens != null && validScreens.none { screen -> isScreenVisible(screen.java) }) return
+
+        AppLog.recordBreadcrumb("Notice [${notice.name}]", "navigation")
+        if (notice.autoMarkSeen) StoreStream.getNotices().markSeen(notice.name)
+        notice.show(this)
+    }
+
+    private fun isScreenVisible(screen: Class<*>): Boolean =
+        screen.isInstance(this) || hasVisibleScreen(supportFragmentManager, screen)
+
+    private fun hasVisibleScreen(fragmentManager: FragmentManager, screen: Class<*>): Boolean =
+        fragmentManager.fragments.any { fragment ->
+            fragment.isVisible && (
+                screen.isInstance(fragment) || hasVisibleScreen(fragment.childFragmentManager, screen)
+            )
+        }
 
     // region back press and new intents
 

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.annotation.VisibleForTesting
 import com.discord.api.channel.Channel
+import com.discord.api.channel.getDMRecipient
 import com.discord.models.domain.ModelUserRelationship
 import com.discord.utilities.uri.UriHandler
 
@@ -28,9 +29,12 @@ class StoreMaskedLinks(
 
     fun getUserTrustedDomains(): Set<String> = userTrustedDomainsSnapshot
 
+    @StoreThread
     override fun init(context: Context) {
         super.init(context)
         userTrustedDomains = HashSet(prefs.getStringSet(USER_TRUSTED_DOMAINS_CACHE_KEY, emptySet()).orEmpty())
+        UriHandler.trustedDomainResolver = ::isTrustedDomain
+        UriHandler.trustDomainHandler = ::trustDomain
         markChanged()
     }
 
@@ -58,6 +62,7 @@ class StoreMaskedLinks(
     }
 
     override fun snapshotData() {
+        super.snapshotData()
         userTrustedDomainsSnapshot = HashSet(userTrustedDomains)
         prefs.edit().putStringSet(USER_TRUSTED_DOMAINS_CACHE_KEY, userTrustedDomainsSnapshot).apply()
     }
@@ -72,8 +77,7 @@ class StoreMaskedLinks(
      * Only a one-to-one DM has a "the other person" to check a relationship against; a group DM
      * has several recipients and no single trust decision, so it gets none.
      */
-    private fun dmRecipientId(channel: Channel): Long? =
-        if (channel.type == Channel.DM) channel.recipients?.singleOrNull()?.id else null
+    private fun dmRecipientId(channel: Channel): Long? = channel.getDMRecipient()?.id
 
     companion object {
         @VisibleForTesting

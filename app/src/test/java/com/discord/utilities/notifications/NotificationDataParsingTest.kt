@@ -1,0 +1,166 @@
+package com.discord.utilities.notifications
+
+import com.discord.api.channel.Channel
+import com.discord.api.guildscheduledevent.GuildScheduledEventEntityType
+import com.discord.api.message.activity.MessageActivityType
+import com.discord.api.sticker.StickerFormatType
+import com.discord.api.sticker.StickerType
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class NotificationDataParsingTest {
+    @Test fun parsesTheCompleteSanitized37FieldPayload() {
+        val payload = NotificationData.parsePushPayload(mapOf(
+            "type" to "MESSAGE_CREATE",
+            "message_id" to "101",
+            "message_activity_type" to "2",
+            "message_application_name" to "Example Game",
+            "message_type_" to "19",
+            "message_content" to "sanitized message",
+            "parent_name" to "parent",
+            "parent_id" to "102",
+            "channel_type" to "0",
+            "channel_name" to "general",
+            "channel_id" to "103",
+            "channel_icon" to "channel-icon",
+            "channel_ids" to "103,104",
+            "rtc_region" to "example-region",
+            "user_id" to "105",
+            "user_username" to "fixture-user",
+            "user_discriminator" to "1234",
+            "user_avatar" to "user-avatar",
+            "user_guild_avatar" to "member-avatar",
+            "rel_type" to "1",
+            "deeplink" to "https://discord.com/channels/1/2",
+            "guild_id" to "106",
+            "guild_name" to "Fixture Guild",
+            "guild_icon" to "guild-icon",
+            "activity_type" to "0",
+            "activity_name" to "Fixture Activity",
+            "application_id" to "107",
+            "application_name" to "Fixture Application",
+            "application_icon" to "application-icon",
+            "message" to STICKER_JSON,
+            "title" to "Fixture title",
+            "subtitle" to "Fixture subtitle",
+            "title_resource_name" to "fixture_title",
+            "subtitle_resource_name" to "fixture_subtitle",
+            "stage_instance_topic" to "Fixture topic",
+            "guild_scheduled_event_entity_type" to "2",
+            "guild_scheduled_event_id" to "108",
+            "notification_type" to "reminder",
+            "tracking_type" to "fixture_tracking",
+            "notification_channel" to "General",
+            "expand_subtitle" to "TRUE",
+            "notification_id" to "fixture-notification",
+        ))
+
+        assertEquals(37, NotificationData.PushPayload::class.java.declaredConstructors.single().parameterCount)
+        assertEquals(PushType.MESSAGE_CREATE, payload.pushType)
+        assertEquals(101L, payload.messageId)
+        assertEquals(MessageActivityType.SPECTATE, payload.messageActivityType)
+        assertEquals(19, payload.messageType)
+        assertEquals("parent", payload.parentChannel?.name)
+        assertEquals(102L, payload.parentChannel?.id)
+        assertEquals(Channel.GUILD_TEXT, payload.channel.type)
+        assertEquals(103L, payload.channel.id)
+        assertEquals(listOf(103L, 104L), payload.acknowledgementChannelIds)
+        assertEquals(106L, payload.normalizedGuildId)
+        assertEquals(GuildScheduledEventEntityType.VOICE, payload.guildScheduledEventEntityType)
+        assertEquals(PushNotificationType.REMINDER, payload.notificationType)
+        assertEquals(StickerFormatType.APNG, payload.sticker?.formatType)
+        assertEquals(StickerType.GUILD, payload.sticker?.type)
+        assertTrue(payload.expandSubtitle)
+        assertTrue(payload.isGroupConversation)
+        assertTrue(payload.isValid())
+        assertFalse(payload.toString().contains("sanitized message"))
+    }
+
+    @Test fun recognizesEvery12621PushTypeAndItsValidityRules() {
+        val alwaysValid = listOf(
+            PushType.APPLICATION_LIBRARY_INSTALL_COMPLETE,
+            PushType.CALL_RING,
+            PushType.GENERIC_PUSH_NOTIFICATION_SENT,
+            PushType.MESSAGE_CREATE,
+            PushType.RELATIONSHIP_ADD,
+            PushType.STAGE_INSTANCE_CREATE,
+        )
+        alwaysValid.forEach { assertTrue(parse(it).isValid()) }
+
+        assertTrue(parse(PushType.ACTIVITY_START, "activity_type" to "0").isValid())
+        assertFalse(parse(PushType.ACTIVITY_START, "activity_type" to "1").isValid())
+        assertTrue(parse(PushType.FORUM_THREAD_CREATED).isValid { true })
+        assertFalse(parse(PushType.FORUM_THREAD_CREATED).isValid { false })
+        listOf("1", "2", "3").forEach { entityType ->
+            assertTrue(parse(
+                PushType.GUILD_SCHEDULED_EVENT_UPDATE,
+                "guild_scheduled_event_entity_type" to entityType,
+            ).isValid())
+        }
+        assertFalse(parse(
+            PushType.GUILD_SCHEDULED_EVENT_UPDATE,
+            "guild_scheduled_event_entity_type" to "0",
+        ).isValid())
+    }
+
+    @Test fun malformedScalarsUseReferenceSentinelsWithoutThrowing() {
+        val payload = NotificationData.parsePushPayload(mapOf(
+            "type" to "message_create",
+            "message_id" to "not-a-long",
+            "message_activity_type" to "not-an-int",
+            "message_type_" to "",
+            "channel_type" to "invalid",
+            "channel_id" to "invalid",
+            "channel_ids" to "1,bad,-1,-2, 3",
+            "user_discriminator" to "invalid",
+            "guild_scheduled_event_entity_type" to "99",
+            "guild_scheduled_event_id" to "invalid",
+            "expand_subtitle" to "yes",
+            "message" to "{not-json}",
+        ))
+
+        assertNull(payload.pushType)
+        assertEquals(NotificationData.UNSET_LONG, payload.messageId)
+        assertNull(payload.messageActivityType)
+        assertEquals(NotificationData.UNSET_INT, payload.messageType)
+        assertEquals(NotificationData.UNSET_INT, payload.channel.type)
+        assertEquals(listOf(1L, -2L), payload.acknowledgementChannelIds)
+        assertNull(payload.userDiscriminator)
+        assertEquals(GuildScheduledEventEntityType.UNKNOWN, payload.guildScheduledEventEntityType)
+        assertNull(payload.guildScheduledEventId)
+        assertNull(payload.sticker)
+        assertFalse(payload.expandSubtitle)
+        assertFalse(payload.isValid())
+    }
+
+    @Test fun absentValuesMatchReferenceDefaultsAndDmGuildNormalization() {
+        val empty = NotificationData.parsePushPayload(emptyMap())
+        assertEquals("", empty.type)
+        assertEquals(NotificationData.UNSET_LONG, empty.messageId)
+        assertEquals(NotificationData.UNSET_INT, empty.messageType)
+        assertEquals(NotificationData.UNSET_LONG, empty.guildId)
+        assertEquals(NotificationData.UNSET_LONG, empty.normalizedGuildId)
+        assertEquals(NotificationData.UNSET_LONG, empty.parentChannel?.id)
+        assertTrue(empty.acknowledgementChannelIds.isEmpty())
+        assertFalse(empty.expandSubtitle)
+        assertFalse(empty.isValid())
+
+        val dm = NotificationData.parsePushPayload(mapOf(
+            "type" to PushType.MESSAGE_CREATE.wireValue,
+            "channel_type" to Channel.DM.toString(),
+        ))
+        assertEquals(0L, dm.guildId)
+        assertEquals(0L, dm.normalizedGuildId)
+        assertFalse(dm.isGroupConversation)
+    }
+
+    private fun parse(type: PushType, vararg fields: Pair<String, String>) =
+        NotificationData.parsePushPayload(mapOf("type" to type.wireValue, *fields))
+
+    companion object {
+        private const val STICKER_JSON = """{"stickers":[{"id":"201","pack_id":"202","guild_id":"203","name":"fixture-sticker","description":"sanitized","format_type":2,"tags":"fixture","type":2}]}"""
+    }
+}

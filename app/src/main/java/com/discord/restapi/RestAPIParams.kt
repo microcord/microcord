@@ -499,10 +499,8 @@ object RestAPIParams {
         val allowedMentions: AllowedMentions? = null,
         val captchaKey: String? = null,
         val captchaRqtoken: String? = null,
-        /**
-         * Not present in 126.21. Retained because the reconstructed send pipeline relies on
-         * server-side nonce de-duplication; see PLAN.md decision log.
-         */
+        // ponytail: remove with StoreStream's legacy upload call site; 126.21 never sends this field.
+        @Transient
         val enforceNonce: Boolean? = null,
     ) {
         override fun toString(): String =

@@ -36,6 +36,7 @@ class WidgetSettingsLanguage : AppFragment(R.layout.widget_settings_language) {
         setActionBarTitle(R.string.language)
         setActionBarSubtitle(R.string.user_settings)
         setActionBarDisplayHomeAsUpEnabled()
+        SettingsNavigation.bindBack(this)
 
         currentFlag = view.findViewById(R.id.settings_language_current_flag)
         currentText = view.findViewById(R.id.settings_language_current_text)

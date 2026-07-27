@@ -81,6 +81,6 @@ class UserAvatarPresenceViewController(
     }
 
     private companion object {
-        private const val TAG = "UserAvatarPresenceViewController"
+        private const val TAG = "UserAvatarPresence"
     }
 }

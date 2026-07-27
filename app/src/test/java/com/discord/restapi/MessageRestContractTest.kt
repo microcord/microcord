@@ -55,6 +55,7 @@ class MessageRestContractTest {
             ),
             captchaKey = "captcha",
             captchaRqtoken = "rqtoken",
+            enforceNonce = true,
         )
         enqueueMessage()
         api.sendMessage(42, send).toBlocking().single()
@@ -70,6 +71,7 @@ class MessageRestContractTest {
         assertEquals("rqtoken", json["captcha_rqtoken"].asString)
         assertEquals(3L, json["message_reference"].asJsonObject["message_id"].asLong)
         assertFalse(json["allowed_mentions"].asJsonObject["replied_user"].asBoolean)
+        assertFalse(json.has("enforce_nonce"))
 
         enqueueMessage()
         api.editMessage(

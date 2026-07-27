@@ -12,6 +12,7 @@ class UriHandlerSafetyTest {
     @After
     fun tearDown() {
         UriHandler.trustedDomainResolver = null
+        UriHandler.trustDomainHandler = null
         UriHandler.untrustedLinkHandler = null
     }
 
@@ -93,6 +94,7 @@ class UriHandlerSafetyTest {
             "discordapp.com.attacker.net",
             "notdiscord.com",
             "xn--discord-hza.com",
+            "cdn.discord.com\n",
         ).forEach { assertFalse("expected $it to be untrusted", UriHandler.isImplicitlyTrustedDomain(it)) }
     }
 

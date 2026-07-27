@@ -1,5 +1,6 @@
 package com.discord.views.calls
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Point
@@ -23,7 +24,7 @@ import com.discord.views.VoiceUserView
 import com.facebook.drawee.view.SimpleDraweeView
 import org.webrtc.RendererCommon
 
-class VideoCallParticipantView @JvmOverloads constructor(
+class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,

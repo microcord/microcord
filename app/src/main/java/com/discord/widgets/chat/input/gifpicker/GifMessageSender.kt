@@ -16,7 +16,7 @@ import com.discord.stores.StoreUser
  * A send into a thread draft is dropped rather than misdirected to the parent channel: there is no
  * channel id to send to until the thread exists.
  */
-internal class GifMessageSender(
+class GifMessageSender(
     private val storeChannelsSelected: StoreChannelsSelected = StoreStream.getChannelsSelected(),
     private val storeUser: StoreUser = StoreStream.getUsers(),
     private val storeMessages: StoreMessages = StoreStream.getMessages(),

@@ -1509,11 +1509,10 @@ private val gson: Gson = GsonBuilder().registerDiscordApiTypeAdapters().create()
 present.) Note the reference sets **no** `FieldNamingPolicy`, so the persisted keys are
 the raw Kotlin field names — do not add one.
 
-### `widgets/botuikit/ComponentChatListState` is only half-built
+### RESOLVED: `widgets/botuikit/ComponentChatListState`
 
 Created this wave (it did not exist) because `Button`/`Select` `mergeToMessageComponent`
-take `ComponentStoreState`. Only the nested `ComponentStoreState` data class is
-implemented. The reference also exposes
+take `ComponentStoreState`. The reference also exposes
 
 ```kotlin
 fun observeChatListComponentState(): Observable<Map<Long, ComponentStoreState>>
@@ -1521,10 +1520,8 @@ fun observeChatListComponentState(): Observable<Map<Long, ComponentStoreState>>
 
 as `combineLatest(interactions.observeComponentInteractionState(),
 localActionComponentState.observeSelectComponentSelections(),
-userSettings.observeIsAnimatedEmojisEnabled())`. Both stores exist
-(`StoreApplicationInteractions`, `StoreLocalActionComponentState`) but **`StoreStream`
-publishes neither**, so it was not written rather than faked. Adding the two accessors
-to `StoreStream` closes it.
+userSettings.observeIsAnimatedEmojisEnabled())`. `StoreStream` now publishes both stores and the
+observable projects the union of their message IDs exactly as the reference does.
 
 Still missing in `widgets/botuikit` and needed before component rows can render:
 `ComponentStateMapper` (`createActionMessageComponent` / `toMessageLayoutComponent` /
@@ -3701,10 +3698,9 @@ file-by-file, no rebuild needed:
 | `widgets/notice/NoticeAlertView.kt` (187 ln), `NoticePopupChannel.kt` (264 ln), `WidgetNoticeDialog.kt` (325 ln), `WidgetNoticeNuxOverlay.kt` (46 ln), `WidgetNoticeNuxSamsungLink.kt` (96 ln) | Present |
 | `utilities/notices/NoticeBuilders.kt` (148 ln) | Complete for both `StoreNotices.Dialog.Type` values (`REQUEST_RATING_MODAL`, `DELETE_CONNECTION_MODAL`) |
 
-**Two wiring gaps remain, both outside the notice agent's ownership. Until BOTH are
-closed no notice ever renders, silently.**
+**Both app-shell wiring gaps were closed on 2026-07-27.**
 
-1. **`NoticeBuilders.install()` is never called.** `app/App.kt:onCreate` calls
+1. **RESOLVED: `NoticeBuilders.install()` is called.** `app/App.kt:onCreate` calls
    `AppLog.init` ... `WidgetMaskedLinksDialog.installUntrustedLinkHandler()` but not
    `NoticeBuilders.install()`. Without it `StoreNotices.dialogPresenter` stays
    `null`, `Dialog.Type.buildPassiveNotice`'s `show` lambda returns `false`, and
@@ -3712,7 +3708,7 @@ closed no notice ever renders, silently.**
    to `App.onCreate`, next to `WidgetMaskedLinksDialog.installUntrustedLinkHandler()`.**
    Owner: app-shell agent.
 
-2. **Nothing subscribes to `StoreNotices.getNotices()`.** Grepped the whole tree: the
+2. **RESOLVED: `AppActivity` subscribes to `StoreNotices.getNotices()`.** The original gap was:
    only callers of `StoreStream.getNotices()` are `requestToShow` / `markSeen` /
    `markDialogSeen` producers. `StoreNavigation` has **no `launchNotice`** — its
    public surface is panel/route/intent only (`StoreNavigation.kt:58-123`). The
@@ -3727,7 +3723,9 @@ closed no notice ever renders, silently.**
      `notice.validScreens == null || notice.validScreens.any { it.isInstance(visibleComponent) }`
      then `notice.show(activity)`. A `false` return must leave the notice queued.
 
-   Owner: `StoreStream`/`StoreNavigation` agent plus the `AppActivity` agent.
+   The host now retains deferred notices, retries on activity/fragment resume, checks the visible
+   activity and recursive fragment tree against `validScreens`, and preserves breadcrumb,
+   `autoMarkSeen`, then `show` ordering. `NoticeHostTest` verifies delivery on Android 16.
    `StoreNotices.DEFAULT_VALID_SCREENS` is currently `[WidgetHome]` only; the
    reference also lists `WidgetCallFullscreen`, which does not exist yet — add it
    when it lands or notices will be suppressed during a call instead of shown over it.
@@ -4508,3 +4506,232 @@ All three target files already carry a comment noting the missing launcher.
 **Security:** the submission body carries message, channel and guild ids, and `MenuAPIResponse` /
 `ReportNode` are plain data classes whose generated `toString` would dump the entire node graph.
 Never pass any of them to a logger. The reference does not, and neither should we.
+
+## 2026-07-27 scheduled-event / role-subscription handoff
+
+Completed in the target:
+
+- Scheduled-event location selection, settings form, preview, create/edit/start requests, date/time
+  validation, and fragment-result propagation.
+- Role-subscription tier adapter, setup screens, benefit models/generator, review/benefit view
+  models, adapters, and view holders.
+- `StoreContactSync` and `StoreGuildProfiles` are now constructed, initialized, snapshotted, and
+  exposed by `StoreStream`.
+- Device crash: `StoreReadStates.Ack` and `StoreMessageAck.Ack` had shared the type-erased
+  `MOST_RECENT_ACKS_V3` persistence key. The reconstructed duplicate read-state cache now uses
+  `READ_STATES_ACKS_V1`; the canonical `StoreMessageAck` cache is unchanged. The reference instead
+  has `StoreReadStates` consume `StoreMessageAck.Ack`, so converging those stores remains a larger
+  structural cleanup.
+- Device crash: both emoji category layouts expose the included selection view as `R.id.overline`,
+  matching the reference binding. `EmojiCategoryViewHolder` no longer looks up the child layout's
+  internal ID.
+
+Remaining gaps:
+
+- Scheduled-event channel selection uses `MaterialAlertDialogBuilder` until the shared
+  `WidgetChannelSelector` exists.
+- Role-subscription add-benefit entry and benefit channel/emoji selectors remain disabled until
+  `WidgetChannelPickerBottomSheet` and `EmojiPickerNavigator` exist. Do not expose dead taps.
+- `CreateGuildRoleSubscriptionTierViewModel` and `WidgetCreateGuildRoleSubscriptionTier` remain
+  absent; the implemented plan-setup path does not currently require them.
+- The 16-error lint frontier is closed: Bluetooth and notification calls now handle revocable
+  permissions, the overlay declares its Android 14 `specialUse` foreground-service subtype, the
+  styleable and Fragment argument contracts are explicit, log tags fit Android's limit, and the two
+  target-only strings carry narrow missing-translation suppressions.
+
+Verification: `assembleDebug`, all 1,166 unit tests, and `lintDebug` pass. No live backend call was made.
+The user supplied runtime crash logs; the repaired paths still need an on-device retest.
+
+## 2026-07-27 StoreLurking wiring closure
+
+The earlier `StoreLurking` seams at lines 958, 1027, 2567, 3172, and 3179 are now closed in the
+target graph:
+
+- `StoreStream` constructs and exposes `StoreLurking` and `StoreGuildWelcomeScreens`.
+- READY, `GUILD_CREATE`, `GUILD_DELETE`, guild selection, DM selection, and selected voice-channel
+  changes reach `StoreLurking` in dispatcher order.
+- `StoreGuilds`, `StoreChannels`, and `StoreGuildSelected` exclude lurked state from persistence;
+  `StoreGuildsSorted` receives the live lurked-guild set.
+- `StageStoreAccess`, `WidgetHomeViewModel`, `ChatInputStoreBindings`, and
+  `ChatInputGuardActions.joinGuildAsMember` use the shared store instance.
+- `StoreNavigation.launchNotice` matches the recovered contract: unrestricted priority 0, zero
+  delay/cooldown, marks in-app seen before queueing, and marks the named notice seen before invoking
+  its show action. A successful new lurk queues `LURK:<guildId>` and opens the guild panel.
+
+Verification: focused lurking/wiring tests, the full unit suite, `assembleDebug`, and `lintDebug`
+pass. No live backend was used.
+
+Remaining device work: preview an unjoined guild with and without a channel, navigate away while
+outside and inside its voice channel, join it as a member, and verify the welcome sheet is shown once.
+
+## 2026-07-27 VoiceTransport installation
+
+The production `StoreStream` now installs the existing `VoiceTransport` composition root:
+
+- One `NetworkMonitor` is shared by connectivity and both RTC connections.
+- `StoreRtcRegion` uses the absolute `https://latency.discord.media/rtc` client without the API
+  version prefix; its media-engine dependency cycle is closed with callbacks evaluated after the
+  transport is assigned.
+- `StoreRtcConnection`, `StoreMediaEngine`, `StoreStreamRtcConnection`, and
+  `StoreAudioManagerV2` receive READY/selection/gateway inputs; the two `StoreV2` stores participate
+  in snapshots and observation.
+- `VOICE_SERVER_UPDATE`, `VOICE_STATE_UPDATE`, `STREAM_CREATE`, `STREAM_DELETE`, and
+  `STREAM_SERVER_UPDATE` reach their transport stores. Gateway resume re-announces voice state, RTC
+  connections send live pings, and logout disconnects voice and stream transports.
+- Public stream targeting now routes through both `StoreApplicationStreaming` and
+  `StoreVoiceChannelSelected`, so watching a stream in another channel initiates the channel join.
+- Leaving voice omits the `preferred_region` field rather than sending an explicit null.
+- `VoiceTransport.release()` is idempotent and releases RTC connections, audio subscriptions,
+  `DiscordAudioManager`, and its handler thread. The native engine and singleton remain
+  process-lifetime to prevent a second engine from competing for media devices.
+
+Verification: `assembleDebug`, the full unit suite, `lintDebug`, focused tests for RTC regions,
+voice connection ordering/payloads, stream RTC lifecycle, video-use detection, and stream targeting,
+plus `DiscordNativeLifecycleTest` and `NativeEngineLifecycleTest` on Android 16 all pass. No live
+backend voice call was made.
+
+Remaining parity gaps in this area:
+
+- `StoreRtcConnection.handleVoiceStateUpdate` still has no `VoicePropsTracker` equivalent.
+- `StoreVoiceChannelSelected` lacks the reference RTC-state/AFK-channel camera correction.
+- Screen-share analytics remain blocked on the unwired `StoreAnalytics` graph.
+- Real voice join/leave/move, audio-device switching, and Go Live watch/publish require an approved
+  test-account device exercise.
+
+## 2026-07-27 Notice activity-host closure
+
+`AppActivity` now consumes `StoreNotices.getNotices()` while started and delivers only while resumed
+and on a valid visible activity/fragment screen. Deferred notices retry on activity and recursive
+fragment resume; teardown removes the subscription and lifecycle callback. The reference delivery
+ordering is preserved: breadcrumb, optional `markSeen`, then `Notice.show`.
+
+Verification: `assembleDebug`, full `testDebugUnitTest`, `lintDebug`, and `NoticeHostTest` on Android
+16 pass. The only known shell limitation is the absent `WidgetCallFullscreen`, which must be added to
+`StoreNotices.DEFAULT_VALID_SCREENS` when that screen is reconstructed.
+
+## 2026-07-27 Application-command and interaction graph closure
+
+`StoreStream` now constructs, registers, initializes, and publishes
+`StoreApplicationCommandFrecency`, `StoreApplicationCommands`, `StoreLocalActionComponentState`, and
+`StoreApplicationInteractions`. READY/connection lifecycle, channel selection, logout, message
+create/update/load/local-delete, guild command/autocomplete results, and all four interaction gateway
+events reach the owning stores on the dispatcher. `ComponentChatListState` now combines interaction
+progress, optimistic selections, and animated-emoji settings for every affected message ID.
+
+Verification: `assembleDebug`, full `testDebugUnitTest`, `lintDebug`, focused
+`StoreStreamWiringTest`, and `BotUiKitContractsTest` pass. Remaining work is the slash-command
+`MessageQueue` transport, the absent `StoreMessages` interaction handlers, and the bot UI-kit mapper/
+inflater/rendering classes.
+
+## 2026-07-27 exact-reference parallel reconstruction waves
+
+Two coordinator-owned 20-agent waves used JADX/Vineflower and `javap` for broken bodies, with
+exclusive file ownership and no subagent Gradle/git/docs access. Integrated and verified work:
+
+- Slash-command sends now use the existing per-channel `MessageQueue`, including attachment URI to
+  unique filename rewriting, multipart `files[i]`, progress, cancellation, retries and optimistic row
+  transitions. `StoreStream` supplies the real `ContentResolver`, installs the pipeline once, and
+  routes upload state without double-applying message updates.
+- `ReadyPayloadHydrator` restores the error result, all 22 verified cached guild scalars and
+  per-channel `lastMessageId`; hydration failure clears client data and resets the gateway.
+- `VoicePropsTracker` and the AFK/camera correction are reconstructed. `StoreEmbeddedActivities`,
+  `StoreSubscriptions`, and `StorePaymentSources` are published and receive their remaining gateway
+  subjects. `StoreDirectories` exists but still needs graph publication.
+- Bot-component mapper/inflater/experiments, shared channel picker, account-management core, group-DM
+  creation/invite flow, mobile reports, server role management, invite-card resolution, sticker
+  hydration, user-sheet moderation destinations and full chat-list message/top models were added.
+- Provider-neutral push payload parsing now covers the 37-field reference payload and nine push
+  types with redacted rendering. Download filenames, mutable PendingIntents and OAuth redirect launch
+  paths retain mandatory project security hardening.
+- Chat author names disappeared because the reduced `nickOrUsernames` builder populated mentions but
+  omitted the message author. The shared builder now inserts the author's guild nickname or username,
+  matching the reference adapter's author-id lookup; `ChatListRowsTest` pins the regression.
+
+Verification: `compileDebugKotlin`, all 1,257 unit tests, `assembleDebug`, `lintDebug`, Android-test
+compilation, and four new Android 16 device checks (application startup, queued-command attachment
+payload, command presentation and chat-input behavior) pass. The new attachment-sheet harness was
+invalid because the exact sheet dismisses on `onPause`; it was removed rather than changing production
+lifecycle behavior. Runtime attachment-sheet coverage remains open.
+
+Coordinator-only graph handoffs, in priority order:
+
+1. `StoreStream.kt`: construct/init/publish `StoreMaskedLinks`, `StoreGuildsNsfw`,
+   `StoreApplicationStreamPreviews`, `StoreDirectories`, `StoreInviteSettings`, `StoreMediaFavorites`,
+   `StoreNotificationUpsells`, and `StoreAnalytics`; preserve exact reference lifecycle/event order.
+2. Wire the new shared channel picker into role-subscription benefits, scheduled events and move-user.
+3. Wire account, group-DM, server-role and mobile-report entry points in their owning parent screens.
+4. Feed `ComponentChatListState` and `ComponentStateMapper` into the full chat-list row producer.
+5. `ModalComponent` remains absent: its agent was cancelled and made no changes.
+6. Concrete overlay service remains blocked on missing `OverlayVoiceBubble`,
+   `OverlayVoiceSelectorBubbleDialog`, and an `OverlayDialog`-based menu bubble.
+
+## 2026-07-27 runtime regression batch and current widget measurement
+
+Reference-aligned fixes landed for the latest device findings:
+
+- Friends-list store emissions now cross onto the UI scheduler before rebuilding the shared toolbar,
+  removing `CalledFromWrongThreadException` accessibility/menu mutations.
+- The Maven FlexInput fragment differs from the patched class embedded in 126.21 and crashes when
+  restored without XML `onInflate`. `AppFlexInputFragment` restores the original XML attributes before
+  delegating to the public dependency. The send container now follows composer text visibility.
+- Chat headers now reset call/video/stop visibility for every selected channel, render the old visual
+  spacing (`# channel` / `@ user`), tint the dynamic pin icon, and route private call actions through
+  the installed voice stores. Composer hints retain the reference `#channel` token.
+- Guild/friends sidebar clicks use `StoreStream.selectGuild`, restoring the persisted last channel for
+  each guild and the DM surface. DM start rows now use `IconUtils.getForChannel` for recipient avatars.
+- Inline emoji search visibility, autoplaying profile banners, animated sticker tiles, voice-channel
+  bottom-sheet routing, and nested settings/pinned-message Back handlers were corrected from reference
+  call sites and bytecode.
+
+Verification: all 1,261 unit tests, `assembleDebug`, and `lintDebug` pass. Android tests compile. The
+connected rerun could not execute because no device remained attached; these runtime paths still need
+an Android 16 device pass.
+
+### Widget coverage report
+
+Measured from current relative paths against the 1,155 non-synthetic first-party reference widget
+files used by the 2026-07-26 audit:
+
+- Exact path matches: **651 / 1,155 (56.4%)**.
+- Structurally missing exact paths: **504 (43.6%)**.
+- Target widget files: **747**; **96** are renamed, consolidated, or target-only and are not credited
+  without behavioral audit evidence.
+- Packages: **24 / 45** structurally complete by exact path; **21 / 45** still have missing files.
+
+Largest exact-path deficits: `chat` 151, `servers` 70, `channels` 55, `guilds` 45, `settings` 44,
+`hubs` 28, `voice` 24, `guildscheduledevent` 17, `auth` 16, `forums` 14, `user` 10, and `nux` 9.
+
+This **56.4% is structural coverage only**, not behavioral parity. It is an upper bound: present files
+can still be partial, disconnected, or missing lifecycle/error/accessibility behavior. A fresh
+file-by-file widget audit is required before publishing a behavioral percentage or marking Wave 4
+done. The campaign has moved substantially beyond the old 11.4% baseline, but chat, servers, channels,
+guilds, settings, voice and auth remain the dominant parity frontier.
+
+## 2026-07-27 REST identity and ExoPlayer ABI corrections
+
+An account was server-classified as spam after a DM send. The server-side decision is not observable
+or reversible from this client, and no live request was made during investigation. Offline comparison
+against 126.21 found and corrected these concrete request divergences:
+
+- Main REST User-Agent is `Discord-Android/126021`.
+- `Accept-Language` uses `LocaleList.getAdjustedDefault()` with the reference's descending quality
+  weights; `X-Discord-Locale` remains the selected app locale.
+- Every main REST request carries the reference `X-Super-Properties` payload.
+- `RestAPIParams.Message.enforceNonce` is transient and the legacy caller no longer sets it; 126.21
+  does not serialize that field.
+- The main client no longer installs automatic interceptor retries, and the legacy upload request no
+  longer uses an unbounded `retryWhen` path. `MessageQueue` is the sole retry owner for reconstructed
+  sends, preventing one user action from being replayed by multiple layers.
+
+API v9, raw authorization token format, persistent cookies, nonce generation, endpoint and ordinary
+message JSON otherwise matched the recovered reference. Remaining transport cleanup: replace
+`StoreStream.startUpload` entirely with `MessageSendCoordinator`/`MessageQueue` before any live
+attachment test.
+
+`InlineMediaView` used an anonymous `Player.Listener` that only implemented two callbacks. Under the
+installed/reference ExoPlayer 2.16 ABI, desugared listener defaults are abstract at runtime, causing
+`AbstractMethodError` on `onTimelineChanged`. The listener is now proxy-backed and implements every
+runtime callback while forwarding the same playback-state and error behavior.
+
+Verification: focused REST contract/transport and inline-media tests, the full unit suite,
+`assembleDebug`, and `lintDebug` pass. No live backend or device was used.

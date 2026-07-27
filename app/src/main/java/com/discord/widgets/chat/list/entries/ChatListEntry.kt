@@ -329,6 +329,11 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             guildMembers: Map<Long, GuildMember>,
         ): Map<Long, String> {
             val names = HashMap<Long, String>()
+            message.author?.let { user ->
+                val nick = guildMembers[user.id]?.nick?.takeUnless(String::isBlank)
+                    ?: user.member?.nick?.takeUnless(String::isBlank)
+                names[user.id] = nick ?: user.username
+            }
             message.mentions.orEmpty().forEach { user ->
                 val nick = guildMembers[user.id]?.nick?.takeUnless(String::isBlank)
                     ?: user.member?.nick?.takeUnless(String::isBlank)

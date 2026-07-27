@@ -1,6 +1,8 @@
 package com.discord.utilities.rest
 
 import com.discord.restapi.RestAPIInterface
+import com.discord.utilities.analytics.AnalyticSuperProperties
+import okhttp3.Interceptor
 
 /**
  * Process-wide access point for the authenticated REST client.
@@ -28,6 +30,18 @@ object RestAPI {
     @JvmStatic
     fun reset() {
         installed = null
+    }
+
+    /** Adds the same client metadata header as Discord Android 126.21. */
+    @JvmStatic
+    fun buildAnalyticsInterceptor(
+        superPropertiesProvider: () -> String = { AnalyticSuperProperties.superPropertiesStringBase64 },
+    ): Interceptor = Interceptor { chain ->
+        chain.proceed(
+            chain.request().newBuilder()
+                .addHeader("X-Super-Properties", superPropertiesProvider())
+                .build(),
+        )
     }
 
     /** The REST client, or `null` before the store graph has published one. */

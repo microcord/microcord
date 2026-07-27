@@ -16,6 +16,7 @@ import com.discord.stores.StoreMessagesLoader
 import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.permissions.PermissionUtils
+import com.discord.utilities.icon.IconUtils
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.EphemeralMessageEntry
 import com.discord.widgets.chat.list.entries.InviteEmbedResolver
@@ -203,7 +204,7 @@ object ChatListRows {
                 channelId = channel.id,
                 channelName = channel.getDisplayName(),
                 channelType = channel.type,
-                channelIcon = channel.icon,
+                channelIcon = IconUtils.getForChannel(channel),
                 isSystemDM = channel.isSystemDM(),
                 // Mutual guilds come from `StoreUserMutualGuilds`, which does not exist yet.
                 mutualGuilds = emptyList(),

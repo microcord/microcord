@@ -19,6 +19,7 @@ class WidgetSettingsActivityStatus : AppFragment(R.layout.widget_settings_activi
         setActionBarTitle(R.string.activity_status)
         setActionBarSubtitle(R.string.user_settings)
         setActionBarDisplayHomeAsUpEnabled()
+        SettingsNavigation.bindBack(this)
     }
 
     override fun onViewBoundOrOnResume() {

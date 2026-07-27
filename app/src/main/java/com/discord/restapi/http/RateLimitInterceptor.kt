@@ -6,7 +6,7 @@ import okhttp3.Request
 import okhttp3.Response
 
 class RateLimitInterceptor(
-    private val maxRetries: Int = 3,
+    private val maxRetries: Int = 0,
     private val maxDelayMillis: Long = 60_000,
     private val nowMillis: () -> Long = System::currentTimeMillis,
     private val sleep: (Long) -> Unit = Thread::sleep,

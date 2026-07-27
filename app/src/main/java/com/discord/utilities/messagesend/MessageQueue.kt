@@ -139,6 +139,7 @@ class MessageQueue @JvmOverloads constructor(
         when (request) {
             is MessageRequest.Send -> doSend(request, drainListener)
             is MessageRequest.Edit -> doEdit(request, drainListener)
+            is MessageRequest.SendApplicationCommand -> doSendApplicationCommand(request, drainListener)
         }
     }
 
@@ -235,6 +236,8 @@ class MessageQueue @JvmOverloads constructor(
                     is SendUtils.SendPayload.Preprocessing -> request.onPreprocessing(payload)
                     is SendUtils.SendPayload.ReadyToSend ->
                         if (payload.uploads.isNotEmpty()) request.onProgress(payload.uploads)
+
+                    is SendUtils.SendPayload.ReadyToSendCommand -> Unit
                 }
             }
             .filterIs<SendUtils.SendPayload.ReadyToSend>()
@@ -261,6 +264,42 @@ class MessageQueue @JvmOverloads constructor(
         } else {
             api.sendMessage(channelId, PayloadJSON(ready.message), parts.toTypedArray())
         }
+    }
+
+    private fun doSendApplicationCommand(
+        request: MessageRequest.SendApplicationCommand,
+        drainListener: DrainListener,
+    ) {
+        SendUtils.getSendCommandPayload(contentResolver, request.applicationCommandSendData, request.attachments)
+            .doOnNext { payload ->
+                when (payload) {
+                    is SendUtils.SendPayload.Preprocessing -> request.onPreprocessing(payload)
+                    is SendUtils.SendPayload.ReadyToSendCommand ->
+                        if (payload.uploads.isNotEmpty()) request.onProgress(payload.uploads)
+
+                    is SendUtils.SendPayload.ReadyToSend -> Unit
+                }
+            }
+            .filterIs<SendUtils.SendPayload.ReadyToSendCommand>()
+            .take(1)
+            .flatMap { ready ->
+                val body = ready.command.toRestApiParam()
+                val parts = ready.uploads.map(FileUpload::part)
+                if (parts.isEmpty()) {
+                    api.sendApplicationCommand(body)
+                } else {
+                    api.sendApplicationCommand(PayloadJSON(body), parts.toTypedArray())
+                }
+            }
+            .restSubscribeOn(retry = false)
+            .appSubscribe(
+                errorClass = MessageQueue::class.java,
+                subscriptionHandler = { subscription ->
+                    inFlightRequest = InflightRequest(request, subscription, drainListener)
+                },
+                errorHandler = { error -> handleError(error, drainListener) },
+                onNext = { handleSuccess(request.message, drainListener) },
+            )
     }
 
     /**

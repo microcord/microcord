@@ -1,9 +1,13 @@
 package com.discord.widgets.chat.list.adapter
 
 import com.discord.R
+import com.discord.api.sticker.Sticker
+import com.discord.utilities.rx.appSubscribe
 import com.discord.views.sticker.StickerView
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.StickerEntry
+import com.discord.widgets.stickers.StickerStores
+import rx.Observable
 import rx.Subscription
 
 /**
@@ -26,7 +30,18 @@ class WidgetChatListAdapterItemSticker(
     override fun onConfigure(position: Int, data: ChatListEntry) {
         super.onConfigure(position, data)
         val entry = data as StickerEntry
-        stickerView.setSticker(entry.sticker)
-        stickerView.setOnClickListener { adapter.onStickerClicked(entry.message, entry.sticker) }
+        Observable.just(resolveSticker(entry.sticker.getStickerId()))
+            .take(1)
+            .appSubscribe(WidgetChatListAdapterItemSticker::class.java) { hydratedSticker ->
+                val sticker = hydratedSticker ?: entry.sticker
+                stickerView.setSticker(sticker)
+                stickerView.setOnClickListener { adapter.onStickerClicked(entry.message, sticker) }
+            }
     }
 }
+
+internal fun resolveSticker(
+    stickerId: Long,
+    standardSticker: (Long) -> Sticker? = { StickerStores.stickers.getStickers()[it] },
+    guildSticker: (Long) -> Sticker? = StickerStores.guildStickers::getGuildSticker,
+): Sticker? = standardSticker(stickerId) ?: guildSticker(stickerId)

@@ -193,15 +193,24 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
                     WidgetAuthCaptcha.processErrorsForCaptcha(requireContext(), captchaLauncher, unhandled, error)
                 },
             ) { response ->
-                val redirect = Uri.parse(response.location)
-                // The reference logs the whole redirect. It carries the freshly minted
-                // authorization `code`, so only the destination is recorded here.
-                AppLog.d("Redirect OAuth flow to: ${redirect.scheme}://${redirect.host}")
-                startActivity(
-                    Intent(Intent.ACTION_VIEW, redirect).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
-                appActivity?.setResult(android.app.Activity.RESULT_OK)
-                requireActivity().finish()
+                if (!isSafeRedirect(response.location)) {
+                    AppLog.w("Refusing an OAuth redirect with an unsupported scheme.")
+                    finishCancelled()
+                } else {
+                    var handled = true
+                    UriHandler.handle(
+                        requireContext(),
+                        response.location,
+                        preventCustomTab = true,
+                        onFailure = { handled = false },
+                    )
+                    if (handled) {
+                        appActivity?.setResult(android.app.Activity.RESULT_OK)
+                        requireActivity().finish()
+                    } else {
+                        finishCancelled()
+                    }
+                }
             }
     }
 
@@ -388,6 +397,8 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
 
         /** Notice key the OAuth request queues under, so two requests never stack. */
         fun noticeName(clientId: Long): String = "OAUTH_REQUEST:$clientId"
+
+        internal fun isSafeRedirect(location: String): Boolean = UriHandler.isSafeScheme(location)
 
         /**
          * Parses the request URL.

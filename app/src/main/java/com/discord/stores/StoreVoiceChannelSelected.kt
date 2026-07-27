@@ -5,7 +5,9 @@ import com.discord.api.channel.isStageVoiceChannel
 import com.discord.api.channel.shouldPlayJoinLeaveSounds
 import com.discord.api.permission.Permission
 import com.discord.api.voice.state.VoiceState
+import com.discord.models.domain.ModelApplicationStream
 import com.discord.models.domain.ModelPayload
+import com.discord.rtcconnection.RtcConnection
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.time.Clock
@@ -39,6 +41,9 @@ class StoreVoiceChannelSelected(
     private val setAudioInputEnabled: (Boolean) -> Unit,
     /** `guild.maxVideoChannelUsers`, or `null` for unlimited. */
     private val getMaxVideoChannelUsers: (guildId: Long) -> Int? = { null },
+    private val getAfkChannelId: (guildId: Long) -> Long? = { null },
+    private val hasSelectedVideoInputDevice: () -> Boolean = { false },
+    private val selectVideoInputDevice: (String?) -> Unit = {},
 ) : StoreV2() {
 
     enum class Sound { JOINED, LEFT, MOVED }
@@ -134,10 +139,19 @@ class StoreVoiceChannelSelected(
         if (userId == getMeId()) validateSelectedVoiceChannel()
     }
 
+    @StoreThread
+    fun handleRtcConnectionStateChanged(state: RtcConnection.State) {
+        if (state != RtcConnection.State.RtcConnected) return
+        val channel = channels.findChannelByIdInternal(selectedVoiceChannelId) ?: return
+        if (getAfkChannelId(channel.guildId) == selectedVoiceChannelId && hasSelectedVideoInputDevice()) {
+            selectVideoInputDevice(null)
+        }
+    }
+
     /** A stream key names the channel it originates in; targeting one implies joining that channel. */
     @StoreThread
-    fun handleStreamTargeted(channelId: Long) {
-        selectVoiceChannelInternal(channelId, forceMoved = false)
+    fun handleStreamTargeted(streamKey: String) {
+        selectVoiceChannelInternal(ModelApplicationStream.decodeStreamKey(streamKey).channelId, forceMoved = false)
     }
 
     /**

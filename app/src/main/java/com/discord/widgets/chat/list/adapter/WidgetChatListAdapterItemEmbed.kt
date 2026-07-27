@@ -656,7 +656,7 @@ class WidgetChatListAdapterItemEmbed(
 
 }
 
-private const val LOG_TAG = "WidgetChatListAdapterItemEmbed"
+private const val LOG_TAG = "ChatListAdapterEmbed"
 
 private const val PART_TITLE = "title"
 private const val PART_DESCRIPTION = "desc"

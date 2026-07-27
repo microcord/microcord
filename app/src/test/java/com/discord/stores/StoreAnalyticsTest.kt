@@ -1,5 +1,6 @@
 package com.discord.stores
 
+import co.discord.media_engine.VideoInputDeviceDescription
 import com.discord.api.channel.Channel
 import com.discord.api.guild.GuildFeature
 import com.discord.api.permission.Permission
@@ -10,12 +11,16 @@ import com.discord.models.guild.Guild
 import com.discord.utilities.analytics.AnalyticsSink
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.time.Clock
+import com.discord.widgets.home.WidgetHome
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import rx.schedulers.Schedulers
+import rx.plugins.RxJavaHooks
+import rx.schedulers.TestScheduler
+import java.util.concurrent.TimeUnit
 
 /**
  * Covers the snapshots `StoreAnalytics` takes on the store thread, since those are what every
@@ -99,6 +104,8 @@ class StoreAnalyticsTest {
         assertEquals(8L, properties["guild_member_perms"])
         assertEquals(true, properties["guild_is_vip"])
         assertEquals(false, properties["is_pending"])
+        assertEquals(false, properties["preview_enabled"])
+        assertTrue("guild_is_preview_enabled" !in properties)
     }
 
     @Test
@@ -178,6 +185,35 @@ class StoreAnalyticsTest {
         queued.handleAuthToken("auth-token")
 
         assertTrue(sink.events.isEmpty())
+    }
+
+    @Test
+    fun `camera callback uses the media engine DTO`() {
+        val parameter = StoreAnalytics::class.java
+            .getDeclaredMethod("handleVideoInputDeviceSelected", VideoInputDeviceDescription::class.java)
+            .parameterTypes.single()
+
+        assertEquals(VideoInputDeviceDescription::class.java, parameter)
+    }
+
+    @Test
+    fun `home waits two seconds before tracking the first screen`() {
+        val scheduler = TestScheduler()
+        RxJavaHooks.setOnComputationScheduler { scheduler }
+        try {
+            store.init(testContext())
+            store.appUiViewed(WidgetHome::class.java)
+
+            scheduler.advanceTimeBy(1999, TimeUnit.MILLISECONDS)
+            store.handleFingerprint("fingerprint")
+            assertTrue(sink.events.isEmpty())
+
+            scheduler.advanceTimeBy(1, TimeUnit.MILLISECONDS)
+            store.handleFingerprint("fingerprint")
+            assertTrue(sink.events.isNotEmpty())
+        } finally {
+            RxJavaHooks.reset()
+        }
     }
 
     private fun delivered(): List<Science.Event> {

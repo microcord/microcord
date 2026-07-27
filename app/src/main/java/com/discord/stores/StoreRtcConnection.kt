@@ -6,6 +6,7 @@ import com.discord.api.voice.state.VoiceState
 import com.discord.gateway.io.VoiceStateUpdate
 import com.discord.models.domain.ModelPayload
 import com.discord.rtcconnection.RtcConnection
+import com.discord.rtcconnection.VoicePropsTracker
 import com.discord.utilities.rx.computationLatest
 import java.util.concurrent.TimeUnit
 import rx.Observable
@@ -46,6 +47,10 @@ class StoreRtcConnection(
         shouldIncludePreferredRegion: Boolean,
     ) -> Unit,
     private val rtcConnectionController: RtcConnectionController = RtcConnectionController.NoOp,
+    private val getLocalUserId: () -> Long = { StoreStream.getUsers().getMeInternal().id },
+    private val getVoiceStates: (guildId: Long) -> Map<Long, VoiceState>? = { guildId ->
+        StoreStream.getVoiceStates().get()[guildId]
+    },
 ) {
 
     /**
@@ -125,6 +130,7 @@ class StoreRtcConnection(
     private var hasSelectedVoiceChannel = false
     private var voiceServer: VoiceServer? = null
     private var sessionId: String? = null
+    private var voicePropsTracker: VoicePropsTracker? = null
 
     val connectedGuildId: Long get() = rtcConnectionMetadata?.guildId ?: 0L
 
@@ -151,6 +157,7 @@ class StoreRtcConnection(
         val previousChannelId = selectedVoiceChannel?.id
         if (channelId != previousChannelId) {
             rtcConnectionController.disconnect("Channel ID changed, $channelId != $previousChannelId")
+            voicePropsTracker = null
         }
 
         val channel = channelId?.let(findChannel)
@@ -162,6 +169,15 @@ class StoreRtcConnection(
 
         if (channel != null) {
             hasSelectedVoiceChannel = true
+            if (voicePropsTracker == null && sessionId != null) {
+                val guildId = channel.guildId.takeIf { it > 0L } ?: 0L
+                voicePropsTracker = VoicePropsTracker(
+                    guildId,
+                    channel.id,
+                    getLocalUserId(),
+                    getVoiceStates(guildId),
+                )
+            }
             checkForVoiceServerUpdate()
         } else {
             // Dropping the server here is what makes a later VOICE_SERVER_UPDATE for the *new*
@@ -178,8 +194,9 @@ class StoreRtcConnection(
     }
 
     @StoreThread
-    @Suppress("UNUSED_PARAMETER")
-    fun handleVoiceStateUpdate(voiceState: VoiceState) = Unit
+    fun handleVoiceStateUpdate(voiceState: VoiceState) {
+        voicePropsTracker?.handleVoiceStateUpdate(voiceState)
+    }
 
     @StoreThread
     fun handleSelfMuted(selfMuted: Boolean) {
@@ -219,8 +236,10 @@ class StoreRtcConnection(
 
     // region Transport callbacks
 
-    fun onSpeaking(userId: Long, isSpeaking: Boolean) =
+    fun onSpeaking(userId: Long, isSpeaking: Boolean) {
         speakingUsersSubject.onNext(SpeakingUserUpdate(userId, isSpeaking))
+        dispatcher.schedule { voicePropsTracker?.handleOnSpeaking(userId, isSpeaking) }
+    }
 
     fun onConnectedChanged(connected: Boolean) {
         connectionStateSubject.onNext(connected)
@@ -281,7 +300,8 @@ class StoreRtcConnection(
             currentVoiceState.selfDeaf,
             currentVoiceState.selfVideo,
             preferredRegion,
-            storeRtcRegion.shouldIncludePreferredRegion(currentVoiceState.guildId),
+            currentVoiceState.channelId != null &&
+                storeRtcRegion.shouldIncludePreferredRegion(currentVoiceState.guildId),
         )
     }
 

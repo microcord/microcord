@@ -19,7 +19,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
-import com.discord.api.channel.getDisplayName
+import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.guild.GuildVerificationLevel
 import com.discord.app.AppFragment
 import com.discord.app.appActivityViewModels
@@ -102,6 +102,8 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         override fun beforeTextChanged(value: CharSequence?, start: Int, count: Int, after: Int) = Unit
         override fun onTextChanged(value: CharSequence?, start: Int, before: Int, count: Int) = Unit
         override fun afterTextChanged(value: Editable?) {
+            view?.findViewById<View>(R.id.send_btn_container)?.visibility =
+                if (value.isNullOrEmpty()) View.GONE else View.VISIBLE
             if (restoringText) return
             val loaded = state ?: return
             if (!loaded.isEditing) drafts.setTextChannelInput(loaded.channelId, value)
@@ -570,7 +572,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         !hasSendMessagePermissions -> context.getString(R.string.no_send_messages_permission_placeholder)
         else -> FormatUtils.format(
             context.getString(R.string.textarea_placeholder),
-            "channel" to channel.getDisplayName(),
+            "channel" to channel.getDisplayNameOrDefault(context),
         )
     }
 

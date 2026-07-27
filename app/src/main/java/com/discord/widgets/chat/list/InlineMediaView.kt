@@ -20,7 +20,26 @@ import com.google.android.exoplayer2.MediaItem
 import com.google.android.exoplayer2.PlaybackException
 import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.ui.PlayerView
+import java.lang.reflect.Proxy
 import java.util.Locale
+
+// A proxy implements every callback that Android's desugared Player.Listener exposes as abstract.
+internal fun inlineMediaPlayerListener(
+    onPlaybackStateChanged: (Int) -> Unit,
+    onPlayerError: (PlaybackException) -> Unit,
+): Player.Listener = Proxy.newProxyInstance(
+    Player.Listener::class.java.classLoader,
+    arrayOf(Player.Listener::class.java),
+) { proxy, method, args ->
+    when (method.name) {
+        "onPlaybackStateChanged" -> onPlaybackStateChanged(args?.get(0) as Int)
+        "onPlayerError" -> onPlayerError(args?.get(0) as PlaybackException)
+        "equals" -> proxy === args?.get(0)
+        "hashCode" -> System.identityHashCode(proxy)
+        "toString" -> "InlineMediaPlayerListener"
+        else -> null
+    }
+} as Player.Listener
 
 class InlineMediaView @JvmOverloads constructor(
     context: Context,
@@ -157,19 +176,20 @@ class InlineMediaView @JvmOverloads constructor(
             playerView.player = exoPlayer
             exoPlayer.volume = if (muted) 0f else 1f
             configureVolume(exoPlayer)
-            exoPlayer.addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(state: Int) {
-                    loadingIndicator.visibility = if (state == Player.STATE_BUFFERING) View.VISIBLE else View.GONE
-                    if (state == Player.STATE_READY) {
-                        imagePreview.visibility = if (shouldAutoPlay(viewParams)) View.GONE else View.VISIBLE
-                        volumeToggle.visibility = if (viewParams?.embedType in setOf(null, EmbedType.VIDEO)) View.VISIBLE else View.GONE
-                    } else if (state == Player.STATE_ENDED) {
-                        resetCurrentEmbed()
-                    }
-                }
-
-                override fun onPlayerError(error: PlaybackException) = resetCurrentEmbed()
-            })
+            exoPlayer.addListener(
+                inlineMediaPlayerListener(
+                    onPlaybackStateChanged = { state ->
+                        loadingIndicator.visibility = if (state == Player.STATE_BUFFERING) View.VISIBLE else View.GONE
+                        if (state == Player.STATE_READY) {
+                            imagePreview.visibility = if (shouldAutoPlay(viewParams)) View.GONE else View.VISIBLE
+                            volumeToggle.visibility = if (viewParams?.embedType in setOf(null, EmbedType.VIDEO)) View.VISIBLE else View.GONE
+                        } else if (state == Player.STATE_ENDED) {
+                            resetCurrentEmbed()
+                        }
+                    },
+                    onPlayerError = { resetCurrentEmbed() },
+                ),
+            )
             exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(uri)))
             exoPlayer.prepare()
             exoPlayer.playWhenReady = true

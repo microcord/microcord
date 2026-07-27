@@ -1,8 +1,12 @@
 package com.discord.utilities.rest
 
 import android.content.ContentResolver
+import com.discord.api.commands.ApplicationCommandType
+import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.restapi.RestAPIParams
+import com.discord.stores.mapApplicationCommandValues
 import com.discord.utilities.attachments.UploadAttachment
+import com.discord.utilities.attachments.uniqueUploadFileNames
 import rx.Observable
 
 /**
@@ -51,6 +55,11 @@ object SendUtils {
             val message: RestAPIParams.Message,
             val uploads: List<FileUpload>,
         ) : SendPayload()
+
+        data class ReadyToSendCommand(
+            val command: ApplicationCommandLocalSendData,
+            val uploads: List<FileUpload>,
+        ) : SendPayload()
     }
 
     /**
@@ -74,6 +83,49 @@ object SendUtils {
         }
         return Observable.concat(preprocessing, readyToSend)
     }
+
+    fun getSendCommandPayload(
+        contentResolver: ContentResolver?,
+        command: ApplicationCommandLocalSendData,
+        attachments: List<UploadAttachment>?,
+    ): Observable<SendPayload> {
+        if (attachments == null) {
+            return Observable.just(SendPayload.ReadyToSendCommand(command, emptyList()))
+        }
+        val uniqueAttachments = uniqueUploadFileNames(attachments).mapIndexed { index, name ->
+            attachments[index].copy(displayName = name)
+        }
+        val correctedCommand = rewriteCommandAttachmentNames(
+            command,
+            uniqueAttachments.map { it.uri.toString() to it.displayName },
+        )
+        if (uniqueAttachments.isEmpty()) {
+            return Observable.just(SendPayload.ReadyToSendCommand(correctedCommand, emptyList()))
+        }
+        requireNotNull(contentResolver) { "A ContentResolver is required to upload attachments" }
+        return Observable.concat(
+            Observable.just<SendPayload>(preprocessingFor(uniqueAttachments)),
+            Observable.fromCallable {
+                SendPayload.ReadyToSendCommand(
+                    correctedCommand,
+                    buildUploads(contentResolver, uniqueAttachments),
+                ) as SendPayload
+            },
+        )
+    }
+
+    internal fun rewriteCommandAttachmentNames(
+        command: ApplicationCommandLocalSendData,
+        attachmentNamesByUri: List<Pair<String, String>>,
+    ): ApplicationCommandLocalSendData = command.copy(
+        applicationCommandsValues = command.applicationCommandsValues.mapApplicationCommandValues { value ->
+            if (value.type == ApplicationCommandType.ATTACHMENT.type) {
+                value.copy(value = attachmentNamesByUri.first { it.first == value.value }.second)
+            } else {
+                value
+            }
+        },
+    )
 
     private fun preprocessingFor(attachments: List<UploadAttachment>): SendPayload.Preprocessing {
         val single = attachments.singleOrNull()

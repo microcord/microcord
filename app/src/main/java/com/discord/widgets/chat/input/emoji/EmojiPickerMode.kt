@@ -14,6 +14,9 @@ enum class EmojiPickerMode {
 
     /** Presented over the current screen, e.g. when picking a reaction. */
     BOTTOM_SHEET,
+    ;
+
+    val showsSearchBar: Boolean get() = this == BOTTOM_SHEET
 }
 
 /**

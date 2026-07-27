@@ -28,7 +28,10 @@ import com.discord.utilities.textprocessing.AstRenderer
 import com.discord.utilities.textprocessing.MessageRenderContext
 import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.view.text.LinkifiedTextView
+import com.discord.widgets.guildcommunicationdisabled.start.WidgetDisableGuildCommunication
+import com.discord.widgets.guildcommunicationdisabled.start.WidgetEnableGuildCommunication
 import com.discord.widgets.roles.RolesListView
+import com.discord.widgets.servers.WidgetServerSettingsEditMember
 import com.discord.widgets.user.Badge
 import com.discord.widgets.user.WidgetBanUser
 import com.discord.widgets.user.WidgetKickUser
@@ -485,11 +488,20 @@ class WidgetUserSheet : AppBottomSheet() {
                 onCall?.invoke(event.channelId, true)
             }
 
+            is WidgetUserSheetViewModel.Event.LaunchEditMember ->
+                WidgetServerSettingsEditMember.launch(event.guildId, event.userId, requireView().context)
+
             is WidgetUserSheetViewModel.Event.LaunchKickUser ->
                 WidgetKickUser.show(parentFragmentManager, event.guildId, event.userId, event.username)
 
             is WidgetUserSheetViewModel.Event.LaunchBanUser ->
                 WidgetBanUser.show(parentFragmentManager, event.guildId, event.userId, event.username)
+
+            is WidgetUserSheetViewModel.Event.LaunchDisableCommunication ->
+                WidgetDisableGuildCommunication.launch(event.userId, event.guildId, requireView().context)
+
+            is WidgetUserSheetViewModel.Event.LaunchEnableCommunication ->
+                WidgetEnableGuildCommunication.launch(event.userId, event.guildId, parentFragmentManager)
 
             is WidgetUserSheetViewModel.Event.UserNotFound -> {
                 toast(getString(R.string.user_profile_failure_to_open_message))
@@ -498,10 +510,7 @@ class WidgetUserSheet : AppBottomSheet() {
 
             is WidgetUserSheetViewModel.Event.DismissSheet -> dismiss()
 
-            // The remaining destinations are screens this project has not reconstructed yet:
-            // `WidgetServerSettingsEditMember`, `WidgetChannelSelector`,
-            // `Widget{Disable,Enable}GuildCommunication`, and the spectate surface. They are
-            // logged rather than silently swallowed so the gap is visible in a bug report.
+            // WidgetChannelSelector and the spectate surface are not reconstructed yet.
             else -> AppLog.i("WidgetUserSheet: no destination for $event")
         }
     }

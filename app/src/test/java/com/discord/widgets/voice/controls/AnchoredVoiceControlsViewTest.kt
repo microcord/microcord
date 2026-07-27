@@ -45,7 +45,7 @@ class AnchoredVoiceControlsViewTest {
         assertFalse(inactive.speakerActive)
         assertFalse(inactive.speakerActivated)
         assertEquals(R.drawable.ic_mobile_screenshare_24dp, inactive.screenShareIcon)
-        assertEquals(R.string.mobile_stream_screen_share, inactive.screenShareDescription)
+        assertEquals(R.string.screenshare_screen, inactive.screenShareDescription)
 
         val speakerphone = anchoredVoiceControlsPresentation(
             MediaEngineConnection.InputMode.VOICE_ACTIVITY,

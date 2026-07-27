@@ -115,4 +115,13 @@ class OAuth2AuthorizeTest {
         assertNull(request.codeChallenge)
         assertEquals(listOf("identify"), request.scopeNames)
     }
+
+    @Test
+    fun `oauth redirects reject schemes that can address local or embedded content`() {
+        assertTrue(WidgetOauth2Authorize.isSafeRedirect("https://example.com/callback?code=secret"))
+        assertTrue(WidgetOauth2Authorize.isSafeRedirect("example-app://callback?code=secret"))
+        assertFalse(WidgetOauth2Authorize.isSafeRedirect("file:///data/data/private?code=secret"))
+        assertFalse(WidgetOauth2Authorize.isSafeRedirect("intent://callback/#Intent;end"))
+        assertFalse(WidgetOauth2Authorize.isSafeRedirect("javascript:alert(1)"))
+    }
 }

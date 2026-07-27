@@ -2,6 +2,7 @@ package com.discord.restapi
 
 import com.discord.restapi.http.RateLimitInterceptor
 import com.discord.utilities.error.RestApiError
+import com.discord.utilities.rest.RestAPI
 import com.discord.models.domain.ModelGuildFolder
 import okhttp3.Cookie
 import okhttp3.CookieJar
@@ -55,6 +56,18 @@ class RestTransportTest {
         assertEquals("tr-TR,tr;q=0.9", first.getHeader("Accept-Language"))
         assertEquals("Manticord fixture", first.getHeader("User-Agent"))
         assertEquals("session=abc", second.getHeader("Cookie"))
+    }
+
+    @Test
+    fun analyticsInterceptorAddsSuperProperties() {
+        server.enqueue(MockResponse().setBody("ok"))
+        val client = OkHttpClient.Builder()
+            .addInterceptor(RestAPI.buildAnalyticsInterceptor { "fixture-super-properties" })
+            .build()
+
+        client.newCall(request("/metadata")).execute().close()
+
+        assertEquals("fixture-super-properties", server.takeRequest().getHeader("X-Super-Properties"))
     }
 
     @Test
@@ -117,18 +130,16 @@ class RestTransportTest {
     }
 
     @Test
-    fun rateLimitRetriesAreBounded() {
+    fun rateLimitInterceptorDoesNotReplayRequests() {
         val clock = MutableClock()
-        repeat(4) {
-            server.enqueue(MockResponse().setResponseCode(429).setBody(fixture("route_rate_limit.json")))
-        }
+        server.enqueue(MockResponse().setResponseCode(429).setBody(fixture("route_rate_limit.json")))
         val client = OkHttpClient.Builder().addInterceptor(
             RateLimitInterceptor(nowMillis = clock::now, sleep = clock::sleep),
         ).build()
 
         assertEquals(429, client.newCall(request("/bounded")).execute().use { it.code })
-        assertEquals(4, server.requestCount)
-        assertEquals(listOf(250L, 250L, 250L), clock.sleeps)
+        assertEquals(1, server.requestCount)
+        assertTrue(clock.sleeps.isEmpty())
     }
 
     private fun request(path: String) = Request.Builder().url(server.url(path)).build()

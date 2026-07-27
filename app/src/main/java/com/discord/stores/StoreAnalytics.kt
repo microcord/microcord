@@ -1,6 +1,7 @@
 package com.discord.stores
 
 import android.content.Context
+import co.discord.media_engine.VideoInputDeviceDescription
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isGuildTextyChannel
 import com.discord.api.channel.isGuildVocalChannel
@@ -16,7 +17,6 @@ import com.discord.app.ImpressionTracker
 import com.discord.models.domain.ModelGift
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.guild.Guild
-import com.discord.native.engine.VideoInputDeviceDescription
 import com.discord.rtcconnection.RtcConnection
 import com.discord.rtcconnection.audio.DiscordAudioManager
 import com.discord.rtcconnection.mediaengine.MediaEngine
@@ -32,7 +32,9 @@ import com.discord.utilities.collections.filterNonNullValues
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationBuffered
 import com.discord.utilities.time.Clock
+import com.discord.widgets.home.WidgetHome
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.TimeUnit
 import rx.Observable
 import rx.subjects.PublishSubject
 
@@ -169,6 +171,13 @@ class StoreAnalytics(
             .appSubscribe(errorClass = StoreAnalytics::class.java) { selectedVoiceChannel = it }
 
         screenViewedSubject
+            .flatMap { viewed ->
+                if (viewed.screen == WidgetHome::class.java) {
+                    Observable.timer(HOME_SCREEN_DELAY_SECONDS, TimeUnit.SECONDS).map { viewed }
+                } else {
+                    Observable.just(viewed)
+                }
+            }
             .first()
             .appSubscribe(errorClass = StoreAnalytics::class.java, onNext = ::onScreenViewed)
     }
@@ -283,7 +292,7 @@ class StoreAnalytics(
         AnalyticsTracker.guildViewed(guildId) {
             getGuildAnalyticsPropertiesInternal(guildId) + mapOf(
                 "is_pending" to isPending,
-                "guild_is_preview_enabled" to isPreviewEnabled,
+                "preview_enabled" to isPreviewEnabled,
             )
         }
     }
@@ -623,7 +632,13 @@ class StoreAnalytics(
             meId = stores.getMeId(),
             channel = channel,
             guildVoiceStates = stores.getVoiceStatesForGuild(channel.guildId),
-            videoInputDevice = selectedVideoInputDevice,
+            videoInputDevice = selectedVideoInputDevice?.let {
+                com.discord.native.engine.VideoInputDeviceDescription(
+                    name = it.name,
+                    guid = it.guid,
+                    facing = com.discord.native.engine.VideoInputDeviceFacing.valueOf(it.facing.name),
+                )
+            },
             isScreenSharing = isScreenSharing,
             mediaSessionId = stores.getRtcConnectionMetadata()?.mediaSessionId,
         )
@@ -803,6 +818,7 @@ class StoreAnalytics(
 
     companion object {
         private const val CACHE_KEY_LOGOUT_TS = "CACHE_KEY_LOGOUT_TS"
+        private const val HOME_SCREEN_DELAY_SECONDS = 2L
         private const val MAX_REPORTED_THREAD_MESSAGES = 50
     }
 }

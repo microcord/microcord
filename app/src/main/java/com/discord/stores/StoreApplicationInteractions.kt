@@ -5,8 +5,11 @@ import android.content.SharedPreferences
 import androidx.collection.LruCache
 import com.discord.api.botuikit.ComponentType
 import com.discord.api.commands.ApplicationCommandData
+import com.discord.api.interaction.Interaction
 import com.discord.api.interaction.InteractionModalCreate
 import com.discord.api.interaction.InteractionStateUpdate
+import com.discord.api.user.User
+import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.app.AppLog
 import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
@@ -19,6 +22,7 @@ import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.error.RestApiError
+import com.discord.utilities.attachments.UploadAttachment
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
@@ -59,6 +63,7 @@ class StoreApplicationInteractions(
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
     private val restApi: () -> RestAPIInterface? = { RestAPI.apiOrNull },
     private val nonceGenerator: NonceGenerator = NonceGenerator(),
+    private val now: () -> Long = System::currentTimeMillis,
     /**
      * Must carry the API type adapters. The persisted ledger contains
      * `api.user.User.avatar: NullSerializable<String>?`, a sealed class that a bare [Gson] cannot
@@ -197,6 +202,12 @@ class StoreApplicationInteractions(
     @StoreThread
     fun handleInteractionCreate(interactionStateUpdate: InteractionStateUpdate) {
         val sendData = applicationCommandLocalSendDataSet[interactionStateUpdate.nonce] ?: return
+        storeMessages.handleApplicationCommandInteraction(
+            sendData,
+            interactionStateUpdate,
+            failed = false,
+            loading = true,
+        )
         handleApplicationCommandRequestStateUpdate(sendData, interactionStateUpdate.id)
     }
 
@@ -238,13 +249,23 @@ class StoreApplicationInteractions(
             return
         }
         applicationCommandLocalSendDataSet[interactionStateUpdate.nonce]?.let { sendData ->
+            storeMessages.handleApplicationCommandInteraction(
+                sendData,
+                interactionStateUpdate,
+                failed = true,
+                loading = false,
+            )
             handleApplicationCommandRequestStateUpdate(sendData, interactionStateUpdate.id)
         }
     }
 
     @StoreThread
-    fun handleInteractionModalCreate(interactionModalCreate: InteractionModalCreate) =
+    fun handleInteractionModalCreate(interactionModalCreate: InteractionModalCreate) {
+        applicationCommandLocalSendDataSet[interactionModalCreate.nonce]?.let(
+            storeMessages::handleApplicationCommandModal,
+        )
         this.interactionModalCreate.onNext(interactionModalCreate)
+    }
 
     @StoreThread
     fun handleMessageCreate(message: com.discord.api.message.Message) =
@@ -380,32 +401,13 @@ class StoreApplicationInteractions(
 
     // -- Sending: application commands ---------------------------------------------------------
 
-    /**
-     * Sends a slash command.
-     *
-     * **Degraded relative to the reference.** The reference routes the send through
-     * `StoreMessages.sendMessage(localMessage, localSendData, attachments)` so that an optimistic
-     * "using /command" row appears immediately and file arguments are uploaded with the
-     * interaction. Neither `MessageSendCoordinator` nor
-     * `utilities/message/LocalMessageCreators.createLocalApplicationCommandMessage` supports an
-     * application-command send yet, so this posts the interaction directly instead. Consequences,
-     * both visible:
-     *
-     * - no optimistic row — the command appears only when the application replies;
-     * - [attachmentCount] is accepted and validated but **attachment arguments are not uploaded**,
-     *   because that needs the multipart `sendApplicationCommand` overload driven by the upload
-     *   pipeline.
-     *
-     * The send-data ledger, the nonce correlation and every gateway path below are fully live, so
-     * closing this only means swapping the transport.
-     */
     @Suppress("LongParameterList")
     fun sendApplicationCommand(
         channelId: Long,
         guildId: Long?,
         version: String?,
         data: com.discord.widgets.chat.input.models.ApplicationCommandData,
-        attachmentCount: Int = 0,
+        attachments: List<UploadAttachment>? = null,
         onSuccess: () -> Unit = {},
         onFail: (RestApiError) -> Unit = {},
     ) = dispatcher.schedule {
@@ -421,13 +423,7 @@ class StoreApplicationInteractions(
             applicationCommandsValues = data.values,
             version = version ?: data.applicationCommand.version,
         )
-        if (attachmentCount > 0) {
-            AppLog.e(
-                "Application command attachments are not uploaded yet; sending without them",
-                UnsupportedOperationException("attachmentCount=$attachmentCount"),
-            )
-        }
-        handleSendApplicationCommandRequest(localSendData, onSuccess, onFail)
+        handleSendApplicationCommandRequest(localSendData, attachments, onSuccess, onFail)
     }
 
     /** Re-sends a command whose optimistic row failed. */
@@ -445,41 +441,65 @@ class StoreApplicationInteractions(
     @StoreThread
     private fun handleSendApplicationCommandRequest(
         localSendData: ApplicationCommandLocalSendData,
+        attachments: List<UploadAttachment>? = null,
         onSuccess: () -> Unit = {},
         onFail: (RestApiError) -> Unit = {},
     ) {
         upsertApplicationCommandSendData(localSendData)
-        sentInteractions.put(
-            localSendData.nonceString,
-            SentInteraction(localSendData.channelId, null, localSendData.guildId),
-        )
-        val api = restApi()
-        if (api == null) {
-            handleInteractionFailure(
-                InteractionStateUpdate(localSendData.interactionId, localSendData.nonceString),
-            )
-            return
+        val localMessage = buildApplicationCommandLocalMessage(localSendData)
+        sentInteractions.put(localSendData.nonceString, SentInteraction(localSendData.channelId, null, localSendData.guildId))
+        storeMessages.sendMessage(localMessage, localSendData, attachments).subscribe { result ->
+            dispatcher.schedule { handleApplicationCommandResult(result, localSendData, onSuccess, onFail) }
         }
-        api.sendApplicationCommand(localSendData.toRestApiParam())
-            .restSubscribeOn(false)
-            .appSubscribe(
-                StoreApplicationInteractions::class.java,
-                errorHandler = { error ->
-                    onFail(error)
-                    dispatcher.schedule {
-                        handleInteractionFailure(
-                            InteractionStateUpdate(
-                                localSendData.interactionId,
-                                localSendData.nonceString,
-                            ),
-                        )
-                    }
-                },
-            ) {
+    }
+
+    @StoreThread
+    private fun handleApplicationCommandResult(
+        result: com.discord.utilities.messagesend.MessageResult,
+        localSendData: ApplicationCommandLocalSendData,
+        onSuccess: () -> Unit,
+        onFail: (RestApiError) -> Unit,
+    ) {
+        val awaitingInteraction = applicationCommandLocalSendDataSet[localSendData.nonceString]?.interactionId == null
+        when (result) {
+            is com.discord.utilities.messagesend.MessageResult.Success -> {
                 onSuccess()
-                // The real state transition arrives as INTERACTION_CREATE; a 204 only means the
-                // interaction was accepted, so nothing else is recorded here.
+                if (awaitingInteraction) handleApplicationCommandRequestStateUpdate(localSendData)
             }
+
+            is com.discord.utilities.messagesend.MessageResult.UnknownFailure -> {
+                onFail(result.error)
+                if (awaitingInteraction) {
+                    handleInteractionFailure(InteractionStateUpdate(localSendData.interactionId, localSendData.nonceString))
+                }
+            }
+
+            else -> if (awaitingInteraction) {
+                handleInteractionFailure(InteractionStateUpdate(localSendData.interactionId, localSendData.nonceString))
+            }
+        }
+    }
+
+    private fun buildApplicationCommandLocalMessage(localSendData: ApplicationCommandLocalSendData): Message {
+        val application = localSendData.application.bot ?: User(
+            id = localSendData.application.id,
+            username = localSendData.application.name,
+        )
+        return Message(
+            id = localSendData.nonce,
+            channelId = localSendData.channelId,
+            author = application,
+            content = "",
+            timestamp = UtcDateTime(now()),
+            nonce = localSendData.nonceString,
+            type = LOCAL_APPLICATION_COMMAND_MESSAGE_TYPE_SENDING,
+            applicationId = application.id,
+            interaction = Interaction(
+                id = localSendData.interactionId,
+                type = Interaction.TYPE_INTERACTION_APPLICATION_COMMAND,
+                name = localSendData.applicationCommandName,
+            ),
+        )
     }
 
     @StoreThread
@@ -731,6 +751,8 @@ class StoreApplicationInteractions(
             "CACHE_KEY_APPLICATION_COMMAND_SEND_DATA_SET"
 
         private const val SENT_INTERACTIONS_CACHE_SIZE = 5
+
+        const val LOCAL_APPLICATION_COMMAND_MESSAGE_TYPE_SENDING = -5
 
         /**
          * `Message.type` of the optimistic "using /command" row. Negative because it is a purely

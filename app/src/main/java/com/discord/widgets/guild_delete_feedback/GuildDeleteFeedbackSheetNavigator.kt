@@ -47,7 +47,7 @@ object GuildDeleteFeedbackSheetNavigator {
     /** Shows the sheet immediately. Callers that already own a stable host use this directly. */
     fun show(fragmentManager: FragmentManager, guildId: Long) {
         val sheet = WidgetFeedbackSheet.newInstance(WidgetFeedbackSheet.FeedbackType.GUILD_DELETE)
-        checkNotNull(sheet.arguments).putLong(
+        sheet.requireArguments().putLong(
             WidgetFeedbackSheet.ARG_GUILD_DELETE_FEEDBACK_GUILD_ID,
             guildId,
         )

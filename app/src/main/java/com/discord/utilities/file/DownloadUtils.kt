@@ -3,6 +3,7 @@ package com.discord.utilities.file
 import android.Manifest
 import android.content.Context
 import androidx.annotation.RequiresPermission
+import com.discord.utilities.io.sanitizeDownloadFileName
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -25,13 +26,15 @@ object DownloadUtils {
         downloadDirectory: File = context.cacheDir,
     ): Observable<DownloadState> = Observable.create { subscriber ->
         subscriber.onNext(DownloadState.InProgress(0f))
-        val destination = File(downloadDirectory, fileName)
-        val partial = File(downloadDirectory, "$fileName.part")
         var connection: HttpURLConnection? = null
+        var partial: File? = null
         try {
             check(downloadDirectory.exists() || downloadDirectory.mkdirs()) {
                 "Unable to create download directory"
             }
+            val destination = resolveDownloadFile(downloadDirectory, fileName)
+            val partialFile = confinedFile(downloadDirectory, "${destination.name}.part")
+            partial = partialFile
             connection = URL(fileUrl).openConnection() as HttpURLConnection
             connection.connectTimeout = 15_000
             connection.readTimeout = 30_000
@@ -42,7 +45,7 @@ object DownloadUtils {
             }
             val total = connection.getHeaderField("Content-Length")?.toLongOrNull() ?: -1L
             connection.inputStream.buffered().use { input ->
-                partial.outputStream().buffered().use { output ->
+                partialFile.outputStream().buffered().use { output ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                     var downloaded = 0L
                     while (!subscriber.isUnsubscribed) {
@@ -59,21 +62,31 @@ object DownloadUtils {
                 }
             }
             if (subscriber.isUnsubscribed) {
-                partial.delete()
+                partialFile.delete()
                 return@create
             }
             if (destination.exists()) destination.delete()
-            check(partial.renameTo(destination)) { "Unable to finish download" }
+            check(partialFile.renameTo(destination)) { "Unable to finish download" }
             subscriber.onNext(DownloadState.Completed(destination))
             subscriber.onCompleted()
         } catch (error: Exception) {
-            partial.delete()
+            partial?.delete()
             if (!subscriber.isUnsubscribed) {
                 subscriber.onNext(DownloadState.Failure(error))
                 subscriber.onCompleted()
             }
         } finally {
             connection?.disconnect()
+        }
+    }
+
+    internal fun resolveDownloadFile(downloadDirectory: File, fileName: String): File =
+        confinedFile(downloadDirectory, sanitizeDownloadFileName(fileName))
+
+    private fun confinedFile(downloadDirectory: File, fileName: String): File {
+        val directory = downloadDirectory.canonicalFile
+        return File(directory, fileName).canonicalFile.also {
+            require(it.parentFile == directory) { "Download path escapes its directory" }
         }
     }
 }

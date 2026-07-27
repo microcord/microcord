@@ -1,5 +1,6 @@
 package com.discord.stores
 
+import androidx.fragment.app.FragmentActivity
 import com.discord.panels.PanelState
 import com.discord.models.authentication.AuthState
 import com.discord.utilities.intent.AppIntentContract
@@ -104,6 +105,22 @@ class StoreNavigation internal constructor(private val stream: StoreStream) {
 
     @StoreThread
     fun handleHomeTabSelected(panelAction: PanelAction) = setNavigationPanelAction(panelAction)
+
+    fun launchNotice(noticeName: String, showAction: (FragmentActivity) -> Boolean) {
+        val notices = StoreStream.getNotices()
+        val notice = StoreNotices.Notice(
+            name = noticeName,
+            priority = StoreNotices.PRIORITY_HIGH,
+            validScreens = null,
+            delayPeriodMs = 0L,
+            sinceLastPeriodMs = 0L,
+        ) { activity ->
+            notices.markSeen(noticeName)
+            showAction(activity)
+        }
+        notices.markInAppSeen()
+        notices.requestToShow(notice)
+    }
 
     @JvmOverloads
     fun setNavigationPanelAction(actionType: PanelAction, panelLayout: PanelLayout? = null) {

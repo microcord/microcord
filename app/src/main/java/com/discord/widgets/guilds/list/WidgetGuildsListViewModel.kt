@@ -101,7 +101,7 @@ class WidgetGuildsListViewModel(
                     .setNavigationPanelAction(StoreNavigation.PanelAction.CLOSE)
                 item.guild.isHub() && !GuildsListStoreHooks.isHubEnabled() ->
                     eventSubject.onNext(Event.ShowHubUnavailable)
-                else -> StoreStream.getGuildSelected().set(item.guild.id)
+                else -> StoreStream.selectGuild(item.guild.id)
             }
             is GuildListItem.PrivateChannelItem -> StoreStream.selectChannel(0L, item.channel.id)
             is GuildListItem.UnavailableItem ->
@@ -109,7 +109,7 @@ class WidgetGuildsListViewModel(
             is GuildListItem.FriendsItem -> if (item.isSelected) {
                 StoreStream.getNavigation().setNavigationPanelAction(StoreNavigation.PanelAction.CLOSE)
             } else {
-                StoreStream.getGuildSelected().set(0L)
+                StoreStream.selectGuild(0L)
             }
             GuildListItem.CreateItem -> eventSubject.onNext(Event.ShowCreateGuild)
             is GuildListItem.HubItem -> {
