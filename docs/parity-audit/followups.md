@@ -4735,3 +4735,28 @@ runtime callback while forwarding the same playback-state and error behavior.
 
 Verification: focused REST contract/transport and inline-media tests, the full unit suite,
 `assembleDebug`, and `lintDebug` pass. No live backend or device was used.
+
+### X-Super-Properties producer closure
+
+The header already declared the accessibility and client-performance keys, but nothing called their
+setters. Exact 126.21 producers are now restored:
+
+- `StoreAccessibility.snapshotData()` publishes `accessibility_support_enabled` and the cumulative
+  `accessibility_features` bitset after applying detection, reduced-motion and font-scale flags.
+- `AnalyticsDeviceResourceUsageMonitor` starts after native initialization and samples once per
+  second through `DeviceResourceUsageMonitor`.
+- The monitor reads process user/system ticks and RSS pages from `/proc/<pid>/stat`, normalizes CPU
+  usage by clock ticks, elapsed time and available cores, converts RSS bytes to KiB, and publishes
+  `client_performance_cpu`, `client_performance_memory`, and `cpu_core_count`.
+
+`device_advertiser_id` remains deliberately absent. The reference receives GAID from Adjust; the
+target has no approved Adjust integration or `AD_ID` permission. Substituting `ANDROID_ID`, a random
+UUID, or a recovered official identifier would not match the reference contract and would violate the
+project privacy/security decisions.
+
+Offline transport fixtures may inject a generated UUID through `setAdvertiserId`; a focused test
+verifies the generated value survives JSON/Base64 encoding into `X-Super-Properties`. This test-only
+value is never installed by production startup and is never sent to Discord.
+
+Verification: focused device-resource/accessibility tests, full unit suite, `assembleDebug`, and
+`lintDebug` pass. No live request was made.

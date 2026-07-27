@@ -86,6 +86,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okio)
     implementation(libs.persistent.cookie.jar)
+    implementation(libs.play.services.ads.identifier)
     implementation(libs.retrofit)
     implementation(libs.retrofit.adapter.rxjava)
     implementation(libs.retrofit.converter.gson)

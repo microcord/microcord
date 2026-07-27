@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.appcompat.app.AppCompatDelegate
 import com.discord.dialogs.WidgetMaskedLinksDialog
 import com.discord.stores.StoreStream
+import com.discord.utilities.analytics.AnalyticsDeviceResourceUsageMonitor
+import com.discord.utilities.analytics.AdvertisingIdProvider
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.lifecycle.ActivityProvider
 import com.discord.utilities.lifecycle.ApplicationProvider
@@ -41,6 +43,8 @@ class App : Application() {
         BootLog.record(BootLogEvent.PLATFORM_READY)
         System.loadLibrary("dsti")
         BootLog.record(BootLogEvent.NATIVE_READY)
+        AnalyticsDeviceResourceUsageMonitor.start()
+        AdvertisingIdProvider.initialize(this)
         StoreStream.initialize(this)
     }
 

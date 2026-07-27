@@ -3,6 +3,7 @@ package com.discord.restapi
 import com.discord.restapi.http.RateLimitInterceptor
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.analytics.AnalyticSuperProperties
 import com.discord.models.domain.ModelGuildFolder
 import okhttp3.Cookie
 import okhttp3.CookieJar
@@ -21,6 +22,8 @@ import retrofit2.HttpException
 import retrofit2.Response
 import retrofit2.http.GET
 import rx.Observable
+import java.util.Base64
+import java.util.UUID
 
 class RestTransportTest {
     private val server = MockWebServer()
@@ -68,6 +71,26 @@ class RestTransportTest {
         client.newCall(request("/metadata")).execute().close()
 
         assertEquals("fixture-super-properties", server.takeRequest().getHeader("X-Super-Properties"))
+    }
+
+    @Test
+    fun offlineSuperPropertiesCanUseAGeneratedAdvertiserId() {
+        val fakeAdvertiserId = UUID.randomUUID().toString()
+        AnalyticSuperProperties.setAdvertiserId(fakeAdvertiserId)
+        val encoded = Base64.getEncoder().encodeToString(
+            AnalyticSuperProperties.superPropertiesString.toByteArray(),
+        )
+        server.enqueue(MockResponse().setBody("ok"))
+        val client = OkHttpClient.Builder()
+            .addInterceptor(RestAPI.buildAnalyticsInterceptor { encoded })
+            .build()
+
+        client.newCall(request("/offline-metadata")).execute().close()
+
+        val decoded = String(Base64.getDecoder().decode(
+            requireNotNull(server.takeRequest().getHeader("X-Super-Properties")),
+        ))
+        assertTrue(decoded.contains("\"device_advertiser_id\":\"$fakeAdvertiserId\""))
     }
 
     @Test
