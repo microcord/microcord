@@ -60,6 +60,10 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
     private var initialChannelShown = false
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        // A restored WidgetChatList needs its container before child restoration advances.
+        if (savedInstanceState != null || childFragmentManager.findFragmentById(R.id.widget_chat_list) != null) {
+            view.findViewById<ViewStub>(R.id.widget_home_panel_center_chat_stub)?.inflate()
+        }
         super.onViewCreated(view, savedInstanceState)
         panels = view.findViewById(R.id.overlapping_panels)
         initialChannelShown = savedInstanceState != null
@@ -333,7 +337,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
     }
     private fun openPins(channelId: Long) {
         childFragmentManager.commit {
-            replace(R.id.panel_center, WidgetChannelPinnedMessages.newInstance(channelId))
+            replace(R.id.widget_home_panel_center_overlay, WidgetChannelPinnedMessages.newInstance(channelId))
             addToBackStack("pins")
         }
     }

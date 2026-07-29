@@ -151,7 +151,9 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             }
         })
 
-        view.post(::bindFlexInput)
+        view.post {
+            if (isAdded && this.view === view) bindFlexInput()
+        }
     }
 
     override fun onViewBoundOrOnResume() {
@@ -212,7 +214,9 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     }
 
     private fun bindFlexInput() {
+        if (!isAdded || view == null) return
         val flex = childFragmentManager.findFragmentById(R.id.chat_input_widget) as? FlexInputFragment ?: return
+        val flexView = flex.view ?: return
         flex.setKeyboardManager(object : KeyboardManager {
             override fun requestDisplay(editText: EditText) {
                 editText.requestFocus()
@@ -233,7 +237,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             override fun toFileProviderUri(context: Context, file: File) =
                 FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         })
-        val editText = flex.requireView().findViewById<FlexEditText>(com.lytefast.flexinput.R.id.text_input)
+        val editText = flexView.findViewById<FlexEditText>(com.lytefast.flexinput.R.id.text_input)
         input = editText
         editText.addTextChangedListener(watcher)
         editText.setOnClickListener { flexInputViewModel.hideExpressionTray() }
@@ -248,7 +252,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 submit(attachments)
         })
         bindAutocomplete(editText)
-        bindExpressionTray(flex)
+        bindExpressionTray(flex, flexView)
         // The composer is bound from a `post`, so the first view state usually arrives before this
         // point and found no EditText to write into. Restore explicitly rather than relying on
         // configureLoaded, whose "channel changed" test is false when re-rendering the same state.
@@ -282,8 +286,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
      * tray's own children (a sticker sheet dismissing, a GIF being picked) have to close it and
      * have no reference to this fragment.
      */
-    private fun bindExpressionTray(flex: FlexInputFragment) {
-        val flexView = flex.requireView()
+    private fun bindExpressionTray(flex: FlexInputFragment, flexView: View) {
         expressionTray = flexView.findViewById(R.id.emoji_container)
         val button = flexView.findViewById<View>(R.id.emoji_btn)
 

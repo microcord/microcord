@@ -76,8 +76,10 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
     }
 
     private fun postIfStarted(action: () -> Unit) {
-        view?.post {
-            if (viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) action()
+        val postedView = view ?: return
+        postedView.post {
+            val owner = viewLifecycleOwnerLiveData.value ?: return@post
+            if (view === postedView && owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) action()
         }
     }
 

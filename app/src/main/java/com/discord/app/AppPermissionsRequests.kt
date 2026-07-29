@@ -25,4 +25,6 @@ interface AppPermissionsRequests {
     fun requestCameraQRScanner(onSuccess: () -> Unit, onFailure: (() -> Unit)?)
 
     fun requestContacts(onSuccess: () -> Unit, onFailure: () -> Unit)
+
+    fun requestNotifications(onFailure: () -> Unit, onSuccess: () -> Unit)
 }

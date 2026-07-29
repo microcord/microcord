@@ -17,12 +17,14 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.intent.AppIntentContract
 import com.discord.utilities.intent.DeepLinkRoute
 import com.discord.utilities.intent.LinkParseResult
+import com.discord.widgets.auth.WidgetAuthLogin
 import com.discord.widgets.tabs.WidgetTabsHost
 import com.discord.widgets.home.HomePanelsLayout
 import com.discord.widgets.home.WidgetHome
 import com.discord.widgets.channels.list.WidgetChannelsList
 import com.discord.widgets.channels.memberlist.WidgetChannelMembersList
 import com.discord.widgets.guilds.list.WidgetGuildsList
+import com.discord.widgets.settings.WidgetSettings
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -123,6 +125,20 @@ class MainHostNavigationTest {
     }
 
     @Test
+    fun directAuthLoginBindsPhoneInputLifecycleObserver() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val activity = instrumentation.startActivitySync(
+            AppScreenRouter.createScreenIntent(instrumentation.targetContext, WidgetAuthLogin::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        ) as AppActivity
+
+        instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync { activity.supportFragmentManager.executePendingTransactions() }
+        assertTrue(activity.supportFragmentManager.findFragmentById(R.id.app_root) is WidgetAuthLogin)
+        instrumentation.runOnMainSync(activity::finish)
+    }
+
+    @Test
     fun loggedInRouteCreatesTabsAndHomeHost() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         WidgetTabsHost.homeFragmentFactory = ::WidgetHome
@@ -160,6 +176,26 @@ class MainHostNavigationTest {
         assertTrue(recreated.supportFragmentManager.findFragmentById(R.id.app_root) is WidgetTabsHost)
         assertEquals(View.VISIBLE, recreated.findViewById<View>(R.id.overlapping_panels).visibility)
         instrumentation.runOnMainSync(recreated::finish)
+    }
+
+    @Test
+    fun detachedTabsHostClearsCrossScreenCallbacks() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        WidgetTabsHost.homeFragmentFactory = ::TestHomeFragment
+        StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, true, true))
+        val activity = instrumentation.startActivitySync(
+            Intent(instrumentation.targetContext, AppActivity.Main::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        ) as AppActivity.Main
+
+        instrumentation.runOnMainSync {
+            activity.supportFragmentManager.executePendingTransactions()
+            activity.supportFragmentManager.beginTransaction()
+                .replace(R.id.app_root, TestRouteFragment.newInstance("replacement"))
+                .commitNowAllowingStateLoss()
+        }
+
+        assertNull(WidgetSettings.onSetStatus)
+        instrumentation.runOnMainSync(activity::finish)
     }
 
     private fun assertRoute(activity: AppActivity, expected: String) {

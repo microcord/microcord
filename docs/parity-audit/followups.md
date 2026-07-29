@@ -4901,3 +4901,90 @@ Highest-value resumable work:
 - `app/src/main/java/com/discord/widgets/servers/guild_role_subscription/**` | reference `out/com/discord/widgets/servers/guild_role_subscription/**` | restore tier list/edit/payments/upsell screens from the existing store/model surface.
 - `app/src/main/java/com/discord/widgets/servers/member_verification/**` | reference `out/com/discord/widgets/servers/member_verification/**` | build the real membership-gate destination before enabling the invite-join gate branch.
 - `app/src/main/java/com/discord/widgets/voice/fullscreen/**` | reference `out/com/discord/widgets/voice/fullscreen/**` | remains blocked on the foreground voice service, activity route, permissions manager, and complete RTC state; do not create inert screens.
+
+## 2026-07-30 detached-navigation and permission runtime fixes
+
+Two device crashes shared lifecycle root causes rather than individual screen defects:
+
+- `WidgetTabsHost.installCrossScreenNavigation()` installed process-global callbacks that captured its
+  `childFragmentManager` and survived `onDestroyView()`. Every callback now verifies the host is added
+  and started, rejects saved fragment-manager state, and is cleared during teardown. This closes the
+  reported detached-host crash from settings and the same risk in member/profile/mutual screens.
+- The public FlexInput dependency calls `keyboardManager.requestHide()` unconditionally from
+  `onPause()`, while `WidgetChatInput` assigned the manager from a posted callback. The compatibility
+  subclass now installs a functional fallback during `onAttach()`, before pause is possible; the host
+  still replaces it with its normal manager after binding.
+
+Permission audit result: no required source-manifest declaration is missing. Billing and boot
+permissions are contributed by their dependencies; Firebase/install-referrer and official-package
+permissions must not be copied. The actual gaps were runtime behavior: Android 13+
+`POST_NOTIFICATIONS` is now requested when notifications are enabled, and media selection no longer
+requests `READ_EXTERNAL_STORAGE` above its manifest `maxSdkVersion` or legacy write storage under
+scoped storage.
+
+Verification: all 1,443 unit tests, `assembleDebug`, `lintDebug`, and Android-test compilation pass.
+`MainHostNavigationTest#detachedTabsHostClearsCrossScreenCallbacks` passes on Android 16. The installed
+APK cold-starts and backgrounds with no `AndroidRuntime` fatal. Running the entire navigation test
+class still exposes three pre-existing failures: home/panel visibility and app-action routing.
+
+## 2026-07-30 one-level Back dispatch
+
+The temporary split between screen, fragment-stack and shell dispatch was removed. AndroidX already
+registers each active `FragmentManager` with `OnBackPressedDispatcher`, so `AppActivity` again has one
+`backPressHandlers.dispatchBackPressed()` call and its ordinary root fallback. Do not reintroduce a
+second custom fragment-stack walker.
+
+Pinned messages had a separate restoration bug: `WidgetHome` replaced `panel_center`, even though the
+same child fragment manager owned `WidgetChatList` in a container nested inside that panel. Popping
+then tried to recreate chat into the missing `widget_chat_list` view. Pinned messages now render in a
+permanent `widget_home_panel_center_overlay`, leaving chat and its parent hierarchy intact. Posted chat
+overlay/FlexInput callbacks also verify their fragment view is still attached before running.
+
+### Physical phone Back correction
+
+The first version of the test invoked `onBackPressedDispatcher` directly and therefore did not test the
+user's phone Back button. Replacing it with `Espresso.pressBack()` reproduced the real failure in all
+three cases: Android 16 finished the activity before the dispatcher ran.
+
+Root cause: the project preserves reference-era AppCompat 1.2, which predates Android 13's predictive
+Back integration. With no manifest opt-out, the platform used `OnBackInvokedDispatcher` and bypassed
+the app's `OnBackPressedDispatcher`. `android:enableOnBackInvokedCallback="false"` now forces the legacy
+Back entry path that AppCompat 1.2 and the reconstructed activity implement. All three physical-Back
+tests pass on Android 16 after the manifest change. Do not remove the opt-out until AppCompat/activity
+is upgraded and predictive Back is implemented and device-tested end-to-end. The tests now use
+`Espresso.pressBack()` rather than calling the dispatcher directly; nested settings, two full-screen
+settings levels, and pinned messages all pass on Android 16.
+
+Final verification forced a fresh lint analysis rather than trusting incremental state:
+`lintDebug --rerun-tasks` completed successfully in 5m 14s. It reported 261 warnings, with 16,733
+errors and 24,069 warnings covered by the recovered-resource baseline; 4,162 stale baseline entries
+were not present in the current project. The baseline was intentionally left unchanged. `git diff
+--check` is clean apart from Windows LF-to-CRLF conversion notices. A final full
+`testDebugUnitTest` rerun also passes; the earlier isolated `PersisterTest` failure did not recur.
+
+### Full-screen state preservation correction
+
+The missing-chat-container crash exposed an architectural divergence rather than a Back-dispatch
+problem. Reference `b/a/d/j.java:124-149` starts `AppActivity` with `EXTRA_SCREEN`; it does not replace
+the existing activity's root fragment. The target's obsolete `SettingsNavigation.show()` replaced
+`Main.app_root`, destroying `WidgetTabsHost` and `WidgetHome` and forcing their child fragments to
+recreate when Back popped the transaction.
+
+`SettingsNavigation` now routes full-screen destinations through `AppScreenRouter`. A direct-screen
+`AppActivity` treats that fragment as its root, does not subscribe to `MainRoute`, and finishes on
+Back. Tab-local destinations such as Appearance remain nested in the settings tab. Device coverage
+confirms that returning from a full-screen setting exposes the same `WidgetHome` instance, the same
+view, and the still-open left panel; two full-screen levels unwind one activity at a time.
+
+Two restoration defects found while reproducing the old path were fixed at their contracts:
+
+- FlexInput 0.10.9 consumes and clears its private XML-attribute initializer during
+  `onCreateView()`. `AppFlexInputFragment` now marks XML attributes stale in `onDestroyView()` so its
+  existing parser recreates the initializer before the next view.
+- `DefaultLifecycleObserver` generated Java default-method calls that failed on-device with
+  `AbstractMethodError`. `PhoneOrEmailInputView` now uses the single-method `LifecycleEventObserver`
+  contract to remove text watchers on `ON_DESTROY`.
+
+Verification: the full unit suite passes; forced `lintDebug --rerun-tasks` passes with only the
+recovered-resource baseline; all four `NestedBackPressTest` cases and the focused direct-auth
+phone-input lifecycle test pass on Android 16.

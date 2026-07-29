@@ -53,5 +53,6 @@ class BackPressHandlerRegistry {
     companion object {
         /** Handlers registered without an explicit priority run last. */
         const val DEFAULT_PRIORITY: Int = Int.MAX_VALUE
+
     }
 }

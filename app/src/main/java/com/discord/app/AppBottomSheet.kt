@@ -289,5 +289,8 @@ abstract class AppBottomSheet(
     override fun requestContacts(onSuccess: () -> Unit, onFailure: () -> Unit) =
         requireAppActivity().appPermissions.requestContacts(onSuccess, onFailure)
 
+    override fun requestNotifications(onFailure: () -> Unit, onSuccess: () -> Unit) =
+        requireAppActivity().appPermissions.requestNotifications(onFailure, onSuccess)
+
     // endregion
 }

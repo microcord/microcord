@@ -38,7 +38,7 @@ class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRe
     }
 
     @MainThread
-    override fun hasMedia(): Boolean = hasPermissions(MEDIA)
+    override fun hasMedia(): Boolean = hasPermissions(mediaPermissions())
 
     @MainThread
     override fun requestVideoCallPermissions(onSuccess: () -> Unit) {
@@ -52,7 +52,7 @@ class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRe
 
     @MainThread
     override fun requestMedia(onSuccess: () -> Unit) {
-        request(MEDIA, onSuccess) { toast(R.string.permission_media_denied) }
+        request(mediaPermissions(), onSuccess) { toast(R.string.permission_media_denied) }
     }
 
     @MainThread
@@ -82,6 +82,15 @@ class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRe
         request(CONTACTS, onSuccess) { onFailure() }
     }
 
+    @MainThread
+    override fun requestNotifications(onFailure: () -> Unit, onSuccess: () -> Unit) {
+        if (Build.VERSION.SDK_INT < 33) {
+            onSuccess()
+        } else {
+            request(arrayOf(Manifest.permission.POST_NOTIFICATIONS), onSuccess) { onFailure() }
+        }
+    }
+
     private fun request(
         permissions: Array<String>,
         onSuccess: () -> Unit,
@@ -106,6 +115,12 @@ class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRe
         ContextCompat.checkSelfPermission(activity, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }
 
+    private fun mediaPermissions(): Array<String> = when {
+        Build.VERSION.SDK_INT >= 33 -> arrayOf(Manifest.permission.CAMERA)
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> MEDIA_SCOPED
+        else -> MEDIA_LEGACY
+    }
+
     private val toastManager = ToastManager()
 
     private fun toast(@StringRes messageResId: Int) {
@@ -118,10 +133,14 @@ class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRe
 
         val MICROPHONE = arrayOf(Manifest.permission.RECORD_AUDIO)
         val VIDEO_CALL = arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
-        val MEDIA = arrayOf(
+        val MEDIA_LEGACY = arrayOf(
             Manifest.permission.CAMERA,
             Manifest.permission.READ_EXTERNAL_STORAGE,
             Manifest.permission.WRITE_EXTERNAL_STORAGE,
+        )
+        val MEDIA_SCOPED = arrayOf(
+            Manifest.permission.CAMERA,
+            Manifest.permission.READ_EXTERNAL_STORAGE,
         )
         val MEDIA_DOWNLOAD = arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         val CAMERA = arrayOf(Manifest.permission.CAMERA)

@@ -322,6 +322,9 @@ abstract class AppFragment : Fragment, AppComponent, AppPermissionsRequests, App
     override fun requestContacts(onSuccess: () -> Unit, onFailure: () -> Unit) =
         requireAppActivity().appPermissions.requestContacts(onSuccess, onFailure)
 
+    override fun requestNotifications(onFailure: () -> Unit, onSuccess: () -> Unit) =
+        requireAppActivity().appPermissions.requestNotifications(onFailure, onSuccess)
+
     // endregion
 
     private companion object {

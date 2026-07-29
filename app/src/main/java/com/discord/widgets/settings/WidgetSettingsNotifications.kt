@@ -45,7 +45,16 @@ class WidgetSettingsNotifications : AppFragment(R.layout.widget_settings_notific
             return
         }
         view.findViewById<CheckedSetting>(R.id.settings_notifications_enabled)
-            .setOnCheckedListener(Action1 { store.setEnabled(it) })
+            .setOnCheckedListener(Action1 { enabled ->
+                if (!enabled) {
+                    store.setEnabled(false)
+                } else {
+                    requestNotifications(
+                        onFailure = { store.setEnabled(false) },
+                        onSuccess = { store.setEnabled(true) },
+                    )
+                }
+            })
         view.findViewById<CheckedSetting>(R.id.settings_inapp_notifs_switch)
             .setOnCheckedListener(Action1 { store.setEnabledInApp(it) })
         view.findViewById<CheckedSetting>(R.id.settings_notifications_blink)

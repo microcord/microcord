@@ -82,6 +82,7 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
     private var stopBootLog: (() -> Unit)? = null
     private var pendingLaunchIntent: Intent? = null
     private var fatalCrashShown: Boolean = false
+    private var directScreen: Boolean = false
 
     private val noticeFragmentCallbacks = object : FragmentManager.FragmentLifecycleCallbacks() {
         override fun onFragmentResumed(fragmentManager: FragmentManager, fragment: Fragment) {
@@ -204,8 +205,10 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
                 binding.appLoading.post { binding.appLoading.fullScroll(ScrollView.FOCUS_DOWN) }
             }
         }
-        routeSubscription = StoreStream.getNavigation().observeMainRoute()
-            .subscribe { route -> runOnUiThread { showRoute(route) } }
+        if (!directScreen) {
+            routeSubscription = StoreStream.getNavigation().observeMainRoute()
+                .subscribe { route -> runOnUiThread { showRoute(route) } }
+        }
         noticeSubscription = StoreStream.getNotices().getNotices().subscribe { notice ->
             runOnUiThread {
                 pendingNotice = notice
@@ -447,6 +450,7 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
     }
 
     private fun consumeIntent(intent: Intent) {
+        directScreen = false
         // A screen intent addresses one fragment directly and bypasses MainRoute entirely. Without
         // this branch `AppScreenRouter.launch` silently re-entered the tab host, which left every
         // router-launched screen (media viewer, QR scanner, TOS report) unreachable.
@@ -459,6 +463,7 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
         // to the non-exported base activity instead; see `AppScreenRouter.createScreenIntent`.
         if (this !is Main) {
             AppScreenRouter.screenOf(intent)?.let { screen ->
+                directScreen = true
                 showScreen(screen, intent)
                 return
             }
@@ -477,8 +482,8 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
      * Shows a fragment addressed directly by [AppScreenRouter.EXTRA_SCREEN].
      *
      * The launching intent's extras are carried through as fragment arguments so a screen can read
-     * its arguments either way, and the transaction is added to the back stack so Back returns to
-     * whatever was showing.
+     * its arguments either way. The fragment is the root of this activity; Back finishes the
+     * activity and reveals the previous screen activity exactly as the reference does.
      */
     private fun showScreen(screen: Class<out Fragment>, intent: Intent) {
         val tag = "screen:${screen.name}"
@@ -490,7 +495,6 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
         AppLog.recordNavigation(javaClass.simpleName, screen.simpleName)
         supportFragmentManager.beginTransaction()
             .replace(R.id.app_root, fragment, tag)
-            .addToBackStack(tag)
             .commit()
     }
 

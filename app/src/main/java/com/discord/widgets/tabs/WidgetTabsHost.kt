@@ -9,8 +9,10 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.children
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.commit
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator
+import androidx.lifecycle.Lifecycle
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
@@ -127,6 +129,7 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
     override fun onDestroyView() {
         bottomNavAnimator?.cancel()
         bottomNavAnimator = null
+        clearCrossScreenNavigation()
         super.onDestroyView()
     }
 
@@ -307,40 +310,77 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
         // toolbar's add-friend item goes through `WidgetFriendsAdd.show` (which also emits the
         // "Add Friend Modal" analytics event), rows open `WidgetUserSheet` directly, and
         // `WidgetFriendsAddById` registers its own `WidgetCaptcha.registerForResult` launcher.
-        WidgetChannelMembersList.onUserClicked = { WidgetUserSheet.show(it, childFragmentManager) }
+        WidgetChannelMembersList.onUserClicked = { userId ->
+            withActiveChildManager { WidgetUserSheet.show(userId, it) }
+        }
         WidgetUserStatusSheet.onCustomStatus = {
-            childFragmentManager.commit {
-                replace(activeTabContainerId(), WidgetUserSetCustomStatus())
-                addToBackStack("custom_status")
+            withActiveChildManager { manager ->
+                manager.commit {
+                    replace(activeTabContainerId(), WidgetUserSetCustomStatus())
+                    addToBackStack("custom_status")
+                }
             }
         }
         WidgetUserSheet.onMutualFriends = { userId ->
-            childFragmentManager.commit {
-                replace(activeTabContainerId(), WidgetUserMutualFriends.newInstance(userId))
-                addToBackStack("mutual_friends")
+            withActiveChildManager { manager ->
+                manager.commit {
+                    replace(activeTabContainerId(), WidgetUserMutualFriends.newInstance(userId))
+                    addToBackStack("mutual_friends")
+                }
             }
         }
         WidgetUserSheet.onMutualGuilds = { userId ->
-            childFragmentManager.commit {
-                replace(activeTabContainerId(), WidgetUserMutualGuilds.newInstance(userId))
-                addToBackStack("mutual_guilds")
+            withActiveChildManager { manager ->
+                manager.commit {
+                    replace(activeTabContainerId(), WidgetUserMutualGuilds.newInstance(userId))
+                    addToBackStack("mutual_guilds")
+                }
             }
         }
-        WidgetUserMutualFriends.onFriendSelected = { WidgetUserSheet.show(it, childFragmentManager) }
-        WidgetUserMutualGuilds.onGuildSelected = {
-            childFragmentManager.popBackStack()
-            StoreStream.getTabsNavigation().selectTab(NavigationTab.HOME, true)
-            StoreStream.selectGuild(it)
+        WidgetUserMutualFriends.onFriendSelected = { userId ->
+            withActiveChildManager { WidgetUserSheet.show(userId, it) }
         }
-        WidgetSettings.onSetStatus = { WidgetUserStatusSheet.show(childFragmentManager) }
+        WidgetUserMutualGuilds.onGuildSelected = { guildId ->
+            withActiveChildManager { manager ->
+                manager.popBackStack()
+                StoreStream.getTabsNavigation().selectTab(NavigationTab.HOME, true)
+                StoreStream.selectGuild(guildId)
+            }
+        }
+        WidgetSettings.onSetStatus = {
+            withActiveChildManager(WidgetUserStatusSheet::show)
+        }
         WidgetSettings.onBlockedUsers = {
-            childFragmentManager.commit {
-                replace(R.id.widget_tabs_host_user_settings, WidgetSettingsBlockedUsers())
-                addToBackStack("blocked_users")
+            withActiveChildManager { manager ->
+                manager.commit {
+                    replace(R.id.widget_tabs_host_user_settings, WidgetSettingsBlockedUsers())
+                    addToBackStack("blocked_users")
+                }
             }
         }
         WidgetSettings.onLogout = { StoreStream.getAuthentication().logout() }
-        WidgetSettingsBlockedUsers.onProfile = { WidgetUserSheet.show(it.id, childFragmentManager) }
+        WidgetSettingsBlockedUsers.onProfile = { user ->
+            withActiveChildManager { WidgetUserSheet.show(user.id, it) }
+        }
+    }
+
+    private inline fun withActiveChildManager(action: (FragmentManager) -> Unit) {
+        if (!isAdded || view == null || !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
+        val manager = childFragmentManager
+        if (!manager.isStateSaved) action(manager)
+    }
+
+    private fun clearCrossScreenNavigation() {
+        WidgetChannelMembersList.onUserClicked = null
+        WidgetUserStatusSheet.onCustomStatus = null
+        WidgetUserSheet.onMutualFriends = null
+        WidgetUserSheet.onMutualGuilds = null
+        WidgetUserMutualFriends.onFriendSelected = null
+        WidgetUserMutualGuilds.onGuildSelected = null
+        WidgetSettings.onSetStatus = null
+        WidgetSettings.onBlockedUsers = null
+        WidgetSettings.onLogout = null
+        WidgetSettingsBlockedUsers.onProfile = {}
     }
 
     private fun activeTabContainerId(): Int =

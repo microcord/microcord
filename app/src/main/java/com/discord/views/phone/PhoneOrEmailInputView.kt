@@ -12,8 +12,8 @@ import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.discord.R
 import com.discord.models.phone.PhoneCountryCode
 import com.discord.utilities.phone.PhoneUtils
@@ -211,8 +211,8 @@ class PhoneOrEmailInputView @JvmOverloads constructor(
             override fun afterTextChanged(text: Editable?) = afterChanged()
         }
         editText.addTextChangedListener(watcher)
-        fragment.viewLifecycleOwner.lifecycle.addObserver(object : DefaultLifecycleObserver {
-            override fun onDestroy(owner: LifecycleOwner) {
+        fragment.viewLifecycleOwner.lifecycle.addObserver(LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_DESTROY) {
                 editText.removeTextChangedListener(watcher)
             }
         })
