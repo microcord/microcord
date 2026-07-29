@@ -53,6 +53,7 @@ import com.discord.widgets.channels.list.items.ChannelListItemThread
 import com.discord.widgets.channels.list.items.ChannelListItemVoiceChannel
 import com.discord.widgets.channels.list.items.ChannelListItemVoiceUser
 import com.discord.widgets.guildscheduledevent.GuildScheduledEventLocationInfo
+import com.discord.widgets.stage.model.StageChannel
 import rx.Observable
 
 /**
@@ -161,7 +162,7 @@ data class WidgetChannelListModel(
 
     private data class StageState(
         val voiceUsers: Map<Long, List<ChannelListItemVoiceUser>>,
-        val stageChannels: Map<Long, StageChannelInfo>,
+        val stageChannels: Map<Long, StageChannel>,
         val stageInstances: Map<Long, StageInstance>,
     )
 
@@ -180,7 +181,7 @@ data class WidgetChannelListModel(
     /** Stage, scheduled-event, directory and membership-screening inputs. */
     private data class EventState(
         val voiceUsers: Map<Long, List<ChannelListItemVoiceUser>>,
-        val stageChannels: Map<Long, StageChannelInfo>,
+        val stageChannels: Map<Long, StageChannel>,
         val stageInstances: Map<Long, StageInstance>,
         val guildScheduledEvents: List<GuildScheduledEvent>,
         val canCreateAnyEvent: Boolean,
@@ -188,22 +189,6 @@ data class WidgetChannelListModel(
         val directoryUnreadCounts: Map<Long, Int>,
         val guildJoinRequest: GuildJoinRequest?,
         val meGuildMember: GuildMember?,
-    )
-
-    /**
-     * The live stage state for one stage channel.
-     *
-     * Stands in for `com.discord.widgets.stage.model.StageChannel`, which belongs to the stage
-     * package and is not reconstructed yet.
-     */
-    data class StageChannelInfo(
-        val channel: Channel,
-        val stageInstance: StageInstance?,
-        val speakerIds: Set<Long>,
-        val speakers: List<UserGuildMember>,
-        val audienceSize: Int,
-        val containsMe: Boolean,
-        val isMeSpeaker: Boolean,
     )
 
     /**
@@ -387,7 +372,7 @@ data class WidgetChannelListModel(
                     meUserId = meUserId,
                     hubEnabled = ChannelListSources.hubEnabled(),
                     hubStudyGroupEnabled = ChannelListSources.hubStudyGroupEnabled(),
-                    hubEventsEnabled = ChannelListSources.hubEventsEnabled(),
+                    hubEventsEnabled = ChannelListSources.hubEventsEnabled(guildId),
                 ) to guild.guild
             }
             return Observable.combineLatest(
@@ -550,7 +535,7 @@ data class WidgetChannelListModel(
             mentionCounts: Map<Long, Int>,
             unreadChannelIds: Set<Long>,
             collapsedCategories: Set<Long>,
-            stageChannels: Map<Long, StageChannelInfo> = emptyMap(),
+            stageChannels: Map<Long, StageChannel> = emptyMap(),
             stageInstances: Map<Long, StageInstance> = emptyMap(),
             guildScheduledEvents: List<GuildScheduledEvent> = emptyList(),
             canCreateAnyEvent: Boolean = false,
@@ -943,7 +928,7 @@ data class WidgetChannelListModel(
         @JvmStatic
         fun getChannelEventNoticeData(
             channelPermissions: Map<Long, Long>,
-            stageChannels: Map<Long, StageChannelInfo>,
+            stageChannels: Map<Long, StageChannel>,
             guildScheduledEvents: List<GuildScheduledEvent>,
             voiceStates: Map<Long, Collection<ChannelListItemVoiceUser>>,
             guildChannels: Map<Long, Channel>,
@@ -965,7 +950,7 @@ data class WidgetChannelListModel(
                     audienceSize = stage.audienceSize,
                     speakers = stage.speakers,
                     connected = stage.containsMe,
-                    isSpeaker = stage.isMeSpeaker,
+                    isSpeaker = stage.myRoles?.isSpeaker == true,
                     eventId = null,
                 )
             }

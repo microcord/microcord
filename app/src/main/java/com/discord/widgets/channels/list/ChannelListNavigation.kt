@@ -10,22 +10,33 @@ import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
+import com.discord.models.invite.InviteUtils
+import com.discord.stores.StoreStream
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.ui
+import com.discord.widgets.channels.WidgetCreateChannel
 import com.discord.widgets.channels.settings.WidgetChannelNotificationSettings
+import com.discord.widgets.channels.settings.WidgetChannelGroupDMSettings
+import com.discord.widgets.channels.settings.WidgetTextChannelSettings
+import com.discord.widgets.channels.settings.WidgetThreadSettings
+import com.discord.widgets.channels.threads.browser.WidgetThreadBrowser
+import com.discord.widgets.guild_role_subscriptions.entrypoint.WidgetGuildRoleSubscriptionEntryPoint
+import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
+import com.discord.widgets.guilds.profile.WidgetGuildProfileSheet
 import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventDetailsBottomSheet
 import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventListBottomSheet
 import com.discord.widgets.hubs.WidgetHubAddServer
+import com.discord.widgets.status.WidgetGlobalStatusIndicatorState
+import com.discord.widgets.tabs.BottomNavViewObserver
 import com.discord.widgets.voice.VoiceUtils
+import com.discord.widgets.voice.settings.WidgetVoiceChannelSettings
 import rx.Observable
 
 /**
  * Everywhere the channels sidebar can send the user.
  *
- * A handful of these destinations exist in this reconstruction and are wired directly. The rest
- * are screens that have not been rebuilt yet; each is an overridable handler that does nothing,
- * so the row is still rendered and still reports the tap rather than being hidden or crashing.
- *
- * Every entry names the screen or store it is waiting on. When that lands, replace the default
- * body and delete the property — do not add a second seam alongside it.
+ * Destinations reconstructed elsewhere are wired directly here so list rows cannot silently
+ * become no-ops.
  */
 object ChannelListNavigation {
 
@@ -58,57 +69,70 @@ object ChannelListNavigation {
         Toast.makeText(context, R.string.copied_text, Toast.LENGTH_SHORT).show()
     }
 
-    // ---- Pending screens --------------------------------------------------------------------
+    fun showGuildProfile(fragment: Fragment, guildId: Long) {
+        WidgetGuildProfileSheet.show(fragment.parentFragmentManager, true, guildId)
+    }
 
-    /** TODO(WidgetGuildProfileSheet): guild name / banner tap. */
-    @JvmField
-    var showGuildProfile: (fragment: Fragment, guildId: Long) -> Unit = { _, _ -> }
-
-    /** TODO(WidgetCreateChannel): the category "+" and the section-header "+". */
-    @JvmField
-    var createChannel: (
+    fun createChannel(
         fragment: Fragment,
         guildId: Long,
         channelType: Int,
         categoryId: Long?,
-    ) -> Unit = { _, _, _, _ -> }
+    ) {
+        WidgetCreateChannel.show(fragment.requireContext(), guildId, channelType, categoryId)
+    }
 
-    /** TODO(WidgetGuildInviteShare): tap on the "Invite people" row. */
-    @JvmField
-    var shareGuildInvite: (fragment: Fragment, guildId: Long) -> Unit = { _, _ -> }
+    fun shareGuildInvite(fragment: Fragment, guildId: Long) {
+        WidgetGuildInviteShare.launch(
+            context = fragment.requireContext(),
+            fragmentManager = fragment.parentFragmentManager,
+            guildId = guildId,
+            source = WidgetChannelsList.ANALYTICS_SOURCE,
+        )
+    }
 
-    /**
-     * TODO(StoreInstantInvites): long-press on the "Invite people" row copies a link to the
-     * clipboard in the reference. [anchor] is the row, used for the confirmation toast.
-     */
-    @JvmField
-    var copyGuildInvite: (anchor: View, guildId: Long?) -> Unit = { _, _ -> }
+    /** Long-pressing Invite People generates the default invite, falling back to the vanity URL. */
+    fun copyGuildInvite(fragment: AppFragment, anchor: View, guildId: Long?) {
+        guildId ?: return
+        StoreStream.getInviteSettings().generateInviteDefaultChannel(guildId)
+            .ui(fragment)
+            .appSubscribe(ChannelListNavigation::class.java) { invite ->
+                val link = invite?.toLink(anchor.resources, INVITE_BASE_URL)
+                    ?: StoreStream.getGuilds().getGuild(guildId)?.vanityUrlCode
+                        ?.let { InviteUtils.createLinkFromCode(it) }
+                    ?: return@appSubscribe
+                copyToClipboard(anchor.context, link)
+            }
+    }
 
-    /** TODO(WidgetVoiceChannelSettings): long-press on a voice channel. */
-    @JvmField
-    var showVoiceChannelSettings: (fragment: Fragment, channelId: Long) -> Unit = { _, _ -> }
+    fun showVoiceChannelSettings(fragment: Fragment, channelId: Long) {
+        WidgetVoiceChannelSettings.launch(channelId, fragment.requireContext())
+    }
 
-    /** TODO(WidgetTextChannelSettings): "Edit channel" for a guild text/announcement/forum channel. */
-    @JvmField
-    var showTextChannelSettings: (fragment: Fragment, channelId: Long) -> Unit = { _, _ -> }
+    fun showTextChannelSettings(fragment: Fragment, channelId: Long) {
+        WidgetTextChannelSettings.launch(channelId, fragment.requireContext())
+    }
 
-    /** TODO(WidgetChannelGroupDMSettings): "Edit channel" for a group DM. */
-    @JvmField
-    var showGroupDmSettings: (fragment: Fragment, channelId: Long) -> Unit = { _, _ -> }
+    fun showGroupDmSettings(fragment: Fragment, channelId: Long) {
+        WidgetChannelGroupDMSettings.create(channelId, fragment.requireContext())
+    }
 
-    /** TODO(WidgetThreadBrowser): "Browse threads" from the channel sheet. */
-    @JvmField
-    var showThreadBrowser: (fragment: Fragment, guildId: Long, channelId: Long) -> Unit =
-        { _, _, _ -> }
+    fun showThreadBrowser(fragment: Fragment, guildId: Long, channelId: Long) {
+        WidgetThreadBrowser.show(
+            fragment.requireContext(),
+            guildId,
+            channelId,
+            WidgetChannelsList.ANALYTICS_SOURCE,
+        )
+    }
 
-    /** TODO(WidgetThreadSettings): "Edit thread" from the thread sheet. */
-    @JvmField
-    var showThreadSettings: (fragment: Fragment, threadId: Long) -> Unit = { _, _ -> }
+    fun showThreadSettings(fragment: Fragment, threadId: Long) {
+        WidgetThreadSettings.launch(threadId, fragment.requireContext())
+    }
 
-    /** TODO(WidgetGuildRoleSubscriptionEntryPoint): locked role-subscription channel, and the tab. */
-    @JvmField
-    var showGuildRoleSubscriptions: (fragment: Fragment, guildId: Long, source: String) -> Unit =
-        { _, _, _ -> }
+    fun showGuildRoleSubscriptions(fragment: Fragment, guildId: Long, source: String) {
+        WidgetGuildRoleSubscriptionEntryPoint.launch(fragment.requireContext(), guildId, source)
+    }
 
     /** Opens the scheduled-event list from a normal guild's channel sidebar. */
     fun showGuildScheduledEventList(fragment: Fragment, guildId: Long) {
@@ -124,27 +148,12 @@ object ChannelListNavigation {
     @JvmField
     var showMemberVerification: (fragment: Fragment, guildId: Long) -> Unit = { _, _ -> }
 
-    /** TODO(StoreNux): dismissing the boost hint must persist, or it returns on the next emission. */
-    @JvmField
-    var ackPremiumGuildHint: () -> Unit = { }
+    fun ackPremiumGuildHint() = StoreStream.getNux().setPremiumGuildHintGuildId(null)
 
-    // ---- Pending observers ------------------------------------------------------------------
+    fun customStatusBackground(): Observable<Boolean> =
+        WidgetGlobalStatusIndicatorState.Provider.get().observeState().map { it.isCustomBackground }
 
-    /**
-     * Whether the global status indicator is drawing its own background over the top of the panel.
-     *
-     * TODO(WidgetGlobalStatusIndicatorState): while inert the panel keeps its rounded corners at
-     * all times, which is only wrong while a call/stream bar is showing.
-     */
-    @JvmField
-    var customStatusBackground: () -> Observable<Boolean> = { Observable.just(false) }
+    fun bottomNavHeight(): Observable<Int> = BottomNavViewObserver.INSTANCE.observeHeight()
 
-    /**
-     * Height of the bottom navigation bar, mirrored into the list's trailing spacer.
-     *
-     * TODO(BottomNavViewObserver): while inert the spacer is zero-height, so the last row can sit
-     * under the navigation bar.
-     */
-    @JvmField
-    var bottomNavHeight: () -> Observable<Int> = { Observable.just(0) }
+    private const val INVITE_BASE_URL = "https://discord.gg"
 }

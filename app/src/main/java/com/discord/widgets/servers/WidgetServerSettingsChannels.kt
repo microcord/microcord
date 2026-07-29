@@ -8,6 +8,7 @@ import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
+import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.getSortByNameAndType
 import com.discord.api.channel.isGuildTextyChannel
 import com.discord.api.channel.isVoiceChannel
@@ -29,6 +30,8 @@ import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.rx.withDimmer
+import com.discord.widgets.channels.settings.WidgetTextChannelSettings
+import com.discord.widgets.voice.settings.WidgetVoiceChannelSettings
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import rx.Observable
 import rx.functions.Func7
@@ -40,7 +43,6 @@ class WidgetServerSettingsChannels : AppFragment(R.layout.widget_server_settings
     private var adapter: SettingsChannelListAdapter? = null
     private lateinit var dimmer: DimmerView
     private lateinit var createChannel: FloatingActionButton
-    private var currentModel: Model? = null
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -54,7 +56,6 @@ class WidgetServerSettingsChannels : AppFragment(R.layout.widget_server_settings
             ),
         ).also { channelAdapter ->
             channelAdapter.onClickListener = null
-            channelAdapter.setPositionUpdateListener(::reorderChannels)
         }
     }
 
@@ -67,7 +68,6 @@ class WidgetServerSettingsChannels : AppFragment(R.layout.widget_server_settings
     }
 
     private fun configureUI(model: Model?) {
-        currentModel = model
         if (model == null) {
             appActivity?.onBackPressedDispatcher?.onBackPressed()
             return
@@ -90,11 +90,38 @@ class WidgetServerSettingsChannels : AppFragment(R.layout.widget_server_settings
                 menu.findItem(R.id.menu_sort_done).isVisible = model.isSorting
             },
         )
+        createChannel.apply {
+            if (model.isSorting) hide() else show()
+            setOnClickListener {
+                WidgetServerSettingsChannelsFabMenuFragment.show(
+                    model.guild.id,
+                    childFragmentManager,
+                ) { if (!model.isSorting) show() }
+                hide()
+            }
+        }
         adapter?.setData(model.items)
+        adapter?.setPositionUpdateListener { reorderChannels(model, it) }
+        adapter?.onClickListener = if (model.isSorting) {
+            {}
+        } else {
+            { channelId ->
+                if (PermissionUtils.can(Permission.MANAGE_CHANNELS, model.channelPermissions[channelId])) {
+                    val channel = model.channels[channelId]
+                    if (channel?.isVoiceChannel() == true) {
+                        WidgetVoiceChannelSettings.launch(channelId, requireContext())
+                    } else {
+                        WidgetTextChannelSettings.launch(channelId, requireContext())
+                    }
+                }
+            }
+        }
     }
 
-    private fun reorderChannels(newPositions: Map<Long, SettingsChannelListAdapter.UpdatedPosition>) {
-        val model = currentModel ?: return
+    private fun reorderChannels(
+        model: Model,
+        newPositions: Map<Long, SettingsChannelListAdapter.UpdatedPosition>,
+    ) {
         if (newPositions.isEmpty()) return
         RestAPI.api.reorderChannels(
             model.guild.id,
@@ -174,7 +201,9 @@ class WidgetServerSettingsChannels : AppFragment(R.layout.widget_server_settings
                     )
                 }
                 categories.sortedWith(Channel.getSortByNameAndType()).forEach { category ->
-                    if (!PermissionUtils.hasAccess(category, channelPermissions)) return@forEach
+                    if (!PermissionUtils.hasAccess(category, channelPermissions) && category.id != 0L) {
+                        return@forEach
+                    }
                     val canManageCategory = PermissionUtils.can(
                         Permission.MANAGE_CHANNELS,
                         channelPermissions[category.id],
@@ -183,7 +212,7 @@ class WidgetServerSettingsChannels : AppFragment(R.layout.widget_server_settings
                     if (!isSorting || canManageCategory) {
                         grouped[category.id] = mutableListOf(
                             SettingsChannelListAdapter.CategoryItem(
-                                category.name,
+                                category.getDisplayName(),
                                 category.id,
                                 category.position,
                                 channelType == Channel.CATEGORY,
@@ -237,11 +266,14 @@ class WidgetServerSettingsChannels : AppFragment(R.layout.widget_server_settings
         const val INTENT_EXTRA_GUILD_ID = "INTENT_EXTRA_GUILD_ID"
 
         fun show(context: Context, guildId: Long) {
+            StoreStream.getAnalytics().onGuildSettingsPaneViewed("CHANNELS", guildId)
             AppScreenRouter.launch(
                 context,
                 WidgetServerSettingsChannels::class.java,
                 Intent().putExtra(INTENT_EXTRA_GUILD_ID, guildId),
             )
         }
+
+        fun launch(context: Context, guildId: Long) = show(context, guildId)
     }
 }

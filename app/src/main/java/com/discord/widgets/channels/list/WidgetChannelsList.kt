@@ -19,12 +19,15 @@ import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayName
+import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.guild.GuildFeature
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.models.guild.Guild
+import com.discord.stores.SelectedChannelAnalyticsLocation
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
+import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
@@ -35,6 +38,9 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.view.rounded.RoundedCoordinatorLayout
 import com.discord.views.CustomAppBarLayout
 import com.discord.views.ThemedColor
+import com.discord.widgets.channels.WidgetGroupInviteFriends
+import com.discord.widgets.channels.invite.GroupInviteFriendsSheet
+import com.discord.widgets.channels.invite.GroupInviteFriendsSheetFeatureFlag
 import com.discord.widgets.directories.WidgetDirectoryChannel
 import com.discord.widgets.friends.EmptyFriendsStateView
 import com.discord.widgets.hubs.events.WidgetHubEventsPage
@@ -107,7 +113,11 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
             WidgetGlobalSearchDialog.show(parentFragmentManager, "@")
         }
         startGroup.setOnClickListener {
-            WidgetGlobalSearchDialog.show(parentFragmentManager, newGroupDm = true)
+            if (GroupInviteFriendsSheetFeatureFlag.INSTANCE.isEnabled()) {
+                GroupInviteFriendsSheet.show(parentFragmentManager, source = ANALYTICS_SOURCE)
+            } else {
+                WidgetGroupInviteFriends.launch(requireContext(), ANALYTICS_SOURCE)
+            }
         }
         view.findViewById<View>(R.id.channels_list_premium_guild_hint_button)
             .setOnClickListener { ackPremiumGuildHint() }
@@ -193,13 +203,19 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
         }
         adapter.onCollapseCategory = ::collapseCategory
         adapter.onSelectInvite = { anchor ->
-            ChannelListNavigation.copyGuildInvite(anchor, selectedGuildId)
+            ChannelListNavigation.copyGuildInvite(this, anchor, selectedGuildId)
         }
         adapter.onShareGuildInvite = { guildId ->
             ChannelListNavigation.shareGuildInvite(this, guildId)
         }
-        adapter.onSelectUserOptions = { user, _ ->
-            WidgetUserSheet.show(user.id, parentFragmentManager)
+        adapter.onSelectUserOptions = { user, channel ->
+            WidgetUserSheet.show(
+                fragmentManager = parentFragmentManager,
+                userId = user.id,
+                channelId = channel.id,
+                guildId = channel.guildId,
+                isVoiceContext = channel.isGuildVocalChannel(),
+            )
         }
         adapter.onViewGuildScheduledEvents = ::showGuildScheduledEvents
         adapter.onViewGuildScheduledEventDetails = { eventId ->
@@ -217,10 +233,13 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
     /** `null` clears the selection, which is how the hub returns the user to the DM list. */
     private fun selectChannel(channel: Channel?) {
         if (channel == null) {
-            StoreStream.selectChannel(0L, 0L)
+            ChannelSelector.getInstance().selectChannel(0L, 0L)
             return
         }
-        StoreStream.selectChannel(channel.guildId, channel.id)
+        ChannelSelector.getInstance().selectChannel(
+            channel,
+            analyticsLocation = SelectedChannelAnalyticsLocation.CHANNEL_LIST,
+        )
         if (channel.type == Channel.DIRECTORY) {
             // A directory channel holds no messages: opening it in the chat surface lands the user
             // on a permanently empty conversation. It gets its own screen instead.

@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import com.discord.utilities.captcha.CaptchaErrorBody
 import com.discord.utilities.captcha.CaptchaHelper
 import java.io.Serializable
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import rx.subjects.BehaviorSubject
 
 enum class AuthRoute : Serializable {
@@ -45,9 +47,7 @@ data class AuthUiState(
     val email: String? = null,
     val phone: String? = null,
     val phonePurpose: AuthPhonePurpose = AuthPhonePurpose.REGISTRATION,
-    val phoneToken: String? = null,
-    val ticket: String? = null,
-    val resetToken: String? = null,
+    private val credentialHandle: String? = null,
     val birthday: Long? = null,
     val identityMode: AuthIdentityMode = AuthIdentityMode.EMAIL,
     val consentRequired: Boolean = false,
@@ -60,13 +60,30 @@ data class AuthUiState(
     val disabledAccount: Boolean = false,
     val landingContent: AuthLandingContent? = null,
 ) : Serializable {
+    internal val phoneToken: String? get() = AuthCredentialMemory[credentialHandle]?.phoneToken
+    internal val ticket: String? get() = AuthCredentialMemory[credentialHandle]?.ticket
+    internal val resetToken: String? get() = AuthCredentialMemory[credentialHandle]?.resetToken
+
+    /** Keeps bearer credentials outside this serializable state and every Bundle containing it. */
+    internal fun withCredentials(
+        phoneToken: String? = this.phoneToken,
+        ticket: String? = this.ticket,
+        resetToken: String? = this.resetToken,
+    ): AuthUiState {
+        AuthCredentialMemory.remove(credentialHandle)
+        return copy(credentialHandle = AuthCredentialMemory.store(phoneToken, ticket, resetToken))
+    }
+
+    internal fun clearCredentials(): AuthUiState {
+        AuthCredentialMemory.remove(credentialHandle)
+        return copy(credentialHandle = null)
+    }
+
     /**
      * Redacted rendering.
      *
-     * [ticket], [phoneToken] and [resetToken] are server-issued bearer credentials that complete an
-     * authentication — an MFA challenge, a phone-verified registration, a password reset. The
-     * generated `toString` would print all three, so it is replaced: this object is passed around
-     * the UI layer freely and must stay safe to log.
+     * [ticket], [phoneToken] and [resetToken] resolve through process memory and are not fields of
+     * this serializable object. The custom rendering also omits the non-secret lookup handle.
      *
      * No password, MFA code or backup code is ever stored on this state; those are read straight
      * off their password-style inputs at submit time and are never held here.
@@ -78,6 +95,29 @@ data class AuthUiState(
         "consentRequired=$consentRequired, consented=$consented, requiredAction=$requiredAction, " +
         "allowEmail=$allowEmail, allowPhone=$allowPhone, ageStep=$ageStep, " +
         "disabledAccount=$disabledAccount, landingContent=$landingContent)"
+}
+
+private object AuthCredentialMemory {
+    class Credentials(
+        val phoneToken: String?,
+        val ticket: String?,
+        val resetToken: String?,
+    )
+
+    private val credentials = ConcurrentHashMap<String, Credentials>()
+
+    operator fun get(handle: String?): Credentials? = handle?.let(credentials::get)
+
+    fun store(phoneToken: String?, ticket: String?, resetToken: String?): String? {
+        if (phoneToken == null && ticket == null && resetToken == null) return null
+        return UUID.randomUUID().toString().also {
+            credentials[it] = Credentials(phoneToken, ticket, resetToken)
+        }
+    }
+
+    fun remove(handle: String?) {
+        handle?.let(credentials::remove)
+    }
 }
 
 sealed class AuthAction {

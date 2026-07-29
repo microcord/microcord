@@ -37,7 +37,7 @@ import rx.functions.Action1
  */
 class WidgetServerSettingsIntegrationsListItem(
     adapter: WidgetServerSettingsIntegrations.Adapter,
-) : MGRecyclerViewHolder<WidgetServerSettingsIntegrations.Adapter, WidgetServerSettingsIntegrations.IntegrationItem>(
+) : MGRecyclerViewHolder<WidgetServerSettingsIntegrations.Adapter, WidgetServerSettingsIntegrations.Model.IntegrationItem>(
     R.layout.widget_server_settings_integration_list_item,
     adapter,
 ) {
@@ -54,7 +54,7 @@ class WidgetServerSettingsIntegrationsListItem(
 
     override fun onConfigure(
         position: Int,
-        data: WidgetServerSettingsIntegrations.IntegrationItem,
+        data: WidgetServerSettingsIntegrations.Model.IntegrationItem,
     ) {
         super.onConfigure(position, data)
         val integration = data.integration

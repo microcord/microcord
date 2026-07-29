@@ -118,7 +118,8 @@ object AuthRequests {
                         pendingLogin = null
                         AuthResult.Challenge(
                             AuthRoute.MFA,
-                            AuthUiState(route = AuthRoute.MFA, ticket = ticket, identifier = identifier),
+                            AuthUiState(route = AuthRoute.MFA, identifier = identifier)
+                                .withCredentials(ticket = ticket),
                         )
                     } else {
                         pendingLogin = null
@@ -266,12 +267,11 @@ object AuthRequests {
             AuthUiState(
                 route = AuthRoute.REGISTER_ACCOUNT,
                 phone = phone,
-                phoneToken = token,
-            ),
+            ).withCredentials(phoneToken = token),
         )
         AuthPhonePurpose.PASSWORD_RESET -> AuthResult.Challenge(
             AuthRoute.RESET_PASSWORD,
-            AuthUiState(route = AuthRoute.RESET_PASSWORD, resetToken = token),
+            AuthUiState(route = AuthRoute.RESET_PASSWORD).withCredentials(resetToken = token),
         )
         AuthPhonePurpose.LOGIN -> error("Login phone verification must authorize the IP before retrying")
     }

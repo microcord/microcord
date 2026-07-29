@@ -167,6 +167,10 @@ class WidgetServerSettingsEmojisEdit :
                 }
             }
 
+        @JvmStatic
+        fun create(context: Context, guildId: Long, emojiId: Long, alias: String) =
+            launch(context, guildId, emojiId, alias)
+
         fun launch(context: Context, guildId: Long, emojiId: Long, alias: String) {
             SettingsNavigation.launch(
                 context,

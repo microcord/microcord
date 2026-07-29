@@ -1,7 +1,6 @@
 package com.discord.widgets.channels
 
 import android.content.Context
-import android.os.Build
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.LeadingMarginSpan
@@ -14,6 +13,7 @@ import androidx.core.view.doOnPreDraw
 import com.discord.R
 import com.discord.models.member.GuildMember
 import com.discord.utilities.dimen.dpToPixels
+import com.discord.utilities.icon.IconUtils
 import com.discord.views.PileView
 import com.discord.views.user.mediaProxySize
 
@@ -42,9 +42,8 @@ class UserAkaView @JvmOverloads constructor(
     fun configure(guildMembers: List<GuildMember>) {
         this.guildMembers = guildMembers
         val avatarSize = resources.getDimension(R.dimen.aka_avatar_width).toInt()
-        val extension = if (Build.VERSION.SDK_INT == 28 || Build.VERSION.SDK_INT == 29) "png" else "webp"
         pileItems = guildMembers.filter(GuildMember::hasAvatar).mapNotNull { member ->
-            guildMemberAvatarUrl(member, avatarSize, extension)?.let { url ->
+            IconUtils.getForGuildMember(member, avatarSize)?.let { url ->
                 PileView.Item({ url }, null)
             }
         }

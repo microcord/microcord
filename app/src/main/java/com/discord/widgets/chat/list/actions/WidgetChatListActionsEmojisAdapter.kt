@@ -20,6 +20,10 @@ class WidgetChatListActionsEmojisAdapter(recycler: RecyclerView) :
         else -> throw invalidViewTypeException(viewType)
     }
 
+    private fun getEmojiItems(emojis: List<Emoji>, emojisToShow: Int): List<EmojiItem> =
+        if (emojis.isEmpty() || emojisToShow <= 0) emptyList()
+        else emojis.take(emojisToShow - 1).map { EmojiItem.EmojiData(it) } + EmojiItem.MoreEmoji
+
     fun setData(emojis: List<Emoji>, emojisToShow: Int) =
-        setData(EmojiItem.from(emojis, emojisToShow))
+        setData(getEmojiItems(emojis, emojisToShow))
 }

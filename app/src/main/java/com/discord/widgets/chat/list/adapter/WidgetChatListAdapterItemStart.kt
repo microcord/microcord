@@ -15,6 +15,8 @@ import com.discord.models.member.GuildMember
 import com.discord.primitives.ForumTagId
 import com.discord.utilities.dimen.dpToPixels
 import com.discord.views.ThemedColor
+import com.discord.widgets.channels.settings.WidgetTextChannelSettings
+import com.discord.widgets.channels.settings.WidgetThreadSettings
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.StartOfChatEntry
 import com.discord.widgets.forums.ForumPostTagView
@@ -84,9 +86,9 @@ class WidgetChatListAdapterItemStart(
             mapOf("channelName" to entry.channelName),
         )
 
-        // TODO(parity): the reference opens WidgetTextChannelSettings here; that screen has not
-        //  been reconstructed yet, so the row is shown by the same rule but does nothing.
-        editChannel.setOnClickListener(null)
+        editChannel.setOnClickListener {
+            WidgetTextChannelSettings.launch(entry.channelId, itemView.context)
+        }
         editChannel.setText(R.string.edit_channel)
         editChannel.visibility = if (entry.canManageChannel) View.VISIBLE else View.GONE
     }
@@ -137,8 +139,9 @@ class WidgetChatListAdapterItemStart(
             )
         }
 
-        // TODO(parity): the reference opens WidgetThreadSettings here; not yet reconstructed.
-        editChannel.setOnClickListener(null)
+        editChannel.setOnClickListener {
+            WidgetThreadSettings.launch(entry.channelId, itemView.context)
+        }
         editChannel.setText(R.string.edit_thread)
         editChannel.visibility = if (entry.canManageThread) View.VISIBLE else View.GONE
     }

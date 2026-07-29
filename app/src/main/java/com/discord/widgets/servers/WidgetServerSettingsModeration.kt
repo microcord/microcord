@@ -114,10 +114,10 @@ class WidgetServerSettingsModeration : AppFragment(R.layout.widget_server_settin
             is ServerSettingsModerationViewModel.ViewState.Unauthorized -> appActivity?.onBackPressed()
             is ServerSettingsModerationViewModel.ViewState.Loaded -> {
                 setActionBarSubtitle(viewState.guild.name)
-                GuildVerificationLevel.values().forEachIndexed { index, level ->
+                VERIFICATION_LEVELS.forEachIndexed { index, level ->
                     configureVerificationRow(viewState, verificationRows[index], level)
                 }
-                GuildExplicitContentFilter.values().forEachIndexed { index, filter ->
+                EXPLICIT_CONTENT_FILTERS.forEachIndexed { index, filter ->
                     configureExplicitContentRow(viewState, explicitContentRows[index], filter)
                 }
             }
@@ -179,6 +179,19 @@ class WidgetServerSettingsModeration : AppFragment(R.layout.widget_server_settin
 
         private const val MEDIUM_ROW = 2
         private const val HIGH_ROW = 3
+
+        private val VERIFICATION_LEVELS = listOf(
+            GuildVerificationLevel.NONE,
+            GuildVerificationLevel.LOW,
+            GuildVerificationLevel.MEDIUM,
+            GuildVerificationLevel.HIGH,
+            GuildVerificationLevel.HIGHEST,
+        )
+        private val EXPLICIT_CONTENT_FILTERS = listOf(
+            GuildExplicitContentFilter.NONE,
+            GuildExplicitContentFilter.SOME,
+            GuildExplicitContentFilter.ALL,
+        )
 
         fun newInstance(guildId: Long) = WidgetServerSettingsModeration().apply {
             arguments = Bundle().apply { putLong(INTENT_EXTRA_GUILD_ID, guildId) }

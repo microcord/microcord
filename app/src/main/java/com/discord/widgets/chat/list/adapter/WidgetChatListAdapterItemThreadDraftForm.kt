@@ -14,8 +14,10 @@ import com.discord.R
 import com.discord.api.channel.isGuildForumChannel
 import com.discord.i18n.Hook
 import com.discord.i18n.I18nHooks
+import com.discord.stores.StoreStream
 import com.discord.utilities.view.extensions.clear
 import com.discord.views.ThemedColor
+import com.discord.widgets.channels.threads.WidgetThreadDraftArchiveSheet
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.ThreadDraftFormEntry
 import com.google.android.material.switchmaterial.SwitchMaterial
@@ -68,7 +70,7 @@ class WidgetChatListAdapterItemThreadDraftForm(
                 override fun afterTextChanged(s: Editable?) {
                     // The "required" error stays only while the field is still empty.
                     val stillEmpty = draft.shouldDisplayNameError && s?.isEmpty() == true
-                    ChatListRowNavigation.updateThreadDraft?.invoke(
+                    StoreStream.getThreadDraft().setDraftState(
                         draft.copy(threadName = s?.toString(), shouldDisplayNameError = stillEmpty),
                     )
                 }
@@ -78,8 +80,7 @@ class WidgetChatListAdapterItemThreadDraftForm(
 
             editText.setOnFocusChangeListener { _, hasFocus ->
                 if (hasFocus && draft.shouldDisplayNameError) {
-                    ChatListRowNavigation.updateThreadDraft
-                        ?.invoke(draft.copy(shouldDisplayNameError = false))
+                    StoreStream.getThreadDraft().setDraftState(draft.copy(shouldDisplayNameError = false))
                 }
             }
             // The reference hands Next over to the message composer so the first message can be
@@ -101,8 +102,7 @@ class WidgetChatListAdapterItemThreadDraftForm(
             ?: entry.defaultAutoArchiveDuration
             ?: DEFAULT_AUTO_ARCHIVE_MINUTES
         val openPicker: (View) -> Unit = {
-            ChatListRowNavigation.showThreadArchiveDurationSheet
-                ?.invoke(adapter.fragmentManager, entry.guildId)
+            WidgetThreadDraftArchiveSheet.show(adapter.fragmentManager, entry.guildId)
         }
         autoArchiveDuration.text = I18nHooks.format(
             autoArchiveDuration.context,
@@ -151,7 +151,7 @@ class WidgetChatListAdapterItemThreadDraftForm(
             !entry.canCreatePublicThread && !draft.isPrivate -> {
                 // Private is the only kind the viewer may create, so the draft is moved there and
                 // the toggle stops responding.
-                ChatListRowNavigation.updateThreadDraft?.invoke(draft.copy(isPrivate = true))
+                StoreStream.getThreadDraft().setDraftState(draft.copy(isPrivate = true))
                 privateToggle.setOnClickListener(null)
             }
             !entry.canCreatePrivateThread -> {
@@ -160,7 +160,7 @@ class WidgetChatListAdapterItemThreadDraftForm(
                 privateToggle.setOnClickListener(null)
             }
             else -> privateToggle.setOnClickListener {
-                ChatListRowNavigation.updateThreadDraft?.invoke(draft.copy(isPrivate = !draft.isPrivate))
+                StoreStream.getThreadDraft().setDraftState(draft.copy(isPrivate = !draft.isPrivate))
             }
         }
 

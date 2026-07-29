@@ -5,13 +5,14 @@ import android.widget.TextView
 import com.discord.R
 import com.discord.i18n.i18nPlural
 import com.discord.models.domain.ModelGuildTemplate
-import com.discord.utilities.rest.RestAPI
+import com.discord.stores.StoreGuildTemplates
+import com.discord.stores.StoreStream
 import com.discord.utilities.rx.appSubscribe
-import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.GuildTemplateEntry
+import com.discord.widgets.guilds.create.WidgetGuildClone
 import com.google.android.material.button.MaterialButton
 import rx.Subscription
 
@@ -39,19 +40,24 @@ class WidgetChatListAdapterItemGuildTemplate(
         val entry = data as GuildTemplateEntry
 
         configureLoadingUI()
-        val api = RestAPI.apiOrNull
-        if (api == null) {
-            configureInvalidUI()
-            return
-        }
-        api.getGuildTemplateCode(entry.guildTemplateCode)
-            .restSubscribeOn()
+        val templates = StoreStream.getGuildTemplates()
+        templates.maybeInitTemplateState(entry.guildTemplateCode)
+        templates.observeGuildTemplate(entry.guildTemplateCode)
             .ui()
             .appSubscribe(
                 errorClass = WidgetChatListAdapterItemGuildTemplate::class.java,
                 subscriptionHandler = { modelSubscription = it },
                 errorHandler = { configureInvalidUI() },
-            ) { template -> configureResolvedUI(template) }
+            ) { state ->
+                when (state) {
+                    StoreGuildTemplates.GuildTemplateState.None,
+                    StoreGuildTemplates.GuildTemplateState.Loading,
+                    StoreGuildTemplates.GuildTemplateState.LoadFailed -> configureLoadingUI()
+                    StoreGuildTemplates.GuildTemplateState.Invalid -> configureInvalidUI()
+                    is StoreGuildTemplates.GuildTemplateState.Resolved ->
+                        configureResolvedUI(state.guildTemplate)
+                }
+            }
     }
 
     private fun configureLoadingUI() {
@@ -67,12 +73,6 @@ class WidgetChatListAdapterItemGuildTemplate(
         joinButton.visibility = View.GONE
     }
 
-    /**
-     * NOTE: the reference shows the "Use template" button here, which opens
-     * `widgets/guilds/create/WidgetGuildClone`. That screen has not been reconstructed, so the
-     * button stays hidden rather than leading nowhere; the informational half of the card is
-     * complete.
-     */
     private fun configureResolvedUI(template: ModelGuildTemplate) {
         name.text = template.name
         subtext.setTextAndVisibilityBy(
@@ -82,6 +82,13 @@ class WidgetChatListAdapterItemGuildTemplate(
                 "usageCount" to template.usageCount,
             ),
         )
-        joinButton.visibility = View.GONE
+        joinButton.visibility = View.VISIBLE
+        joinButton.setOnClickListener {
+            WidgetGuildClone.show(itemView.context, template.code, GUILD_TEMPLATE_LOCATION)
+        }
+    }
+
+    private companion object {
+        const val GUILD_TEMPLATE_LOCATION = "Guild Template Embed"
     }
 }

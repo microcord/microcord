@@ -8,14 +8,15 @@ import com.discord.stores.StoreThreadsJoined.JoinedThread
 import com.discord.utilities.guildscheduledevent.GuildScheduledEventUtilities
 import com.discord.widgets.channels.list.items.ChannelListItemVoiceUser
 import com.discord.widgets.guild_role_subscriptions.GuildRoleSubscriptionsFeatureFlag
+import com.discord.widgets.stage.model.StageChannel
 import rx.Observable
 
 /**
  * Replaceable inputs used by [WidgetChannelListModel.get].
  *
  * The indirection keeps the model builder deterministic in tests. Production defaults are live
- * store/feature sources except for directory unread counts and the three Growth Team experiment
- * gates, whose owners are not present in the target yet.
+ * store/feature sources except for directory unread counts, whose owning source is not present in
+ * the target yet.
  */
 object ChannelListSources {
 
@@ -63,17 +64,19 @@ object ChannelListSources {
     }
 
     @JvmField
-    var stageChannels: (guildId: Long) -> Observable<Map<Long, WidgetChannelListModel.StageChannelInfo>> = {
+    var stageChannels: (guildId: Long) -> Observable<Map<Long, StageChannel>> = {
         StoreStream.getStageChannels().observeGuildStageChannels(it).map { channels ->
             channels.mapValues { (_, stage) ->
-                WidgetChannelListModel.StageChannelInfo(
+                StageChannel(
                     channel = stage.channel,
-                    stageInstance = stage.stageInstance,
+                    participants = stage.participants,
+                    myRoles = stage.myRoles,
                     speakerIds = stage.speakerIds,
                     speakers = stage.speakers,
                     audienceSize = stage.audienceSize,
+                    stageInstance = stage.stageInstance,
+                    canAccess = stage.canAccess,
                     containsMe = stage.containsMe,
-                    isMeSpeaker = stage.myRoles?.isSpeaker == true,
                 )
             }
         }
@@ -105,11 +108,23 @@ object ChannelListSources {
         { Observable.just(emptyMap()) }
 
     @JvmField
-    var hubEnabled: () -> Boolean = { false }
+    var hubEnabled: () -> Boolean = {
+        StoreStream.getExperiments()
+            .getUserExperiment("2021-06_desktop_school_hubs", true)
+            ?.bucket == 1
+    }
 
     @JvmField
-    var hubStudyGroupEnabled: () -> Boolean = { false }
+    var hubStudyGroupEnabled: () -> Boolean = {
+        StoreStream.getExperiments()
+            .getUserExperiment("2021-10_study_group", true)
+            ?.bucket == 1
+    }
 
     @JvmField
-    var hubEventsEnabled: () -> Boolean = { false }
+    var hubEventsEnabled: (guildId: Long) -> Boolean = { guildId ->
+        StoreStream.getExperiments()
+            .getGuildExperiment("2021-11_hub_events", guildId, true)
+            ?.bucket == 1
+    }
 }

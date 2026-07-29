@@ -29,6 +29,7 @@ import com.discord.models.user.User
 import com.discord.stores.StoreMessageReplies
 import com.discord.stores.StoreMessageState
 import com.discord.stores.StoreStream
+import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.message.MessageUtils
 import com.discord.utilities.permissions.PermissionUtils
@@ -392,14 +393,8 @@ class WidgetChatListAdapterItemMessage(
         channelMentionOnClick = ::selectChannel,
     )
 
-    /**
-     * Reference: `ChannelSelector.findAndSet`, which is not reconstructed yet. Resolving the
-     * channel's guild first matters — selecting a guild channel with guild id `0` would drop the
-     * viewer into the DM list.
-     */
     private fun selectChannel(channelId: Long) {
-        val guildId = StoreStream.getChannels().getChannel(channelId)?.guildId ?: 0L
-        StoreStream.selectChannel(guildId, channelId)
+        ChannelSelector.getInstance().findAndSet(itemView.context, channelId)
     }
 
     /**

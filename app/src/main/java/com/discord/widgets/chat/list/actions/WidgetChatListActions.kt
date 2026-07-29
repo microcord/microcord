@@ -1,44 +1,57 @@
 package com.discord.widgets.chat.list.actions
 
-import android.app.Dialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.Rect
 import android.os.Bundle
-import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
 import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentManager
-import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
+import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isArchivedThread
 import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isSystemDM
-import com.discord.api.message.reaction.MessageReactionEmoji
+import com.discord.api.channel.isThread
+import com.discord.api.channel.isVoiceChannel
+import com.discord.api.permission.Permission
+import com.discord.app.AppBottomSheet
 import com.discord.models.domain.emoji.Emoji
-import com.discord.models.domain.emoji.ModelEmojiCustom
+import com.discord.models.domain.emoji.EmojiSet
+import com.discord.models.guild.Guild
+import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
+import com.discord.models.user.MeUser
 import com.discord.stores.StoreStream
+import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.permissions.ManageMessageContext
+import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
+import com.discord.utilities.rx.ui
+import com.discord.utilities.user.UserUtils.discriminatorWithPadding
+import com.discord.utilities.textprocessing.node.EditedMessageNode
+import com.discord.widgets.chat.list.CreateThreadsFeatureFlag
+import com.discord.widgets.chat.list.NewThreadsPermissionsFeatureFlag
+import com.discord.widgets.chat.list.ViewThreadsFeatureFlag
 import com.discord.widgets.chat.list.reactions.WidgetManageReactions
 import com.discord.widgets.mobile_reports.ReportsFeatureFlag
 import com.discord.widgets.mobile_reports.WidgetMobileReports
+import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.tos.WidgetTosReportViolation
 import com.discord.widgets.user.usersheet.WidgetUserSheet
-import com.google.android.material.bottomsheet.BottomSheetDialog
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import rx.Observable
+import rx.subscriptions.CompositeSubscription
 
-class WidgetChatListActions : BottomSheetDialogFragment() {
+class WidgetChatListActions : AppBottomSheet() {
     interface Host {
         fun messageActionCoordinator(): MessageActionCoordinator
         fun messageForAction(channelId: Long, messageId: Long): Message?
@@ -48,205 +61,253 @@ class WidgetChatListActions : BottomSheetDialogFragment() {
         fun onMessageActionError(error: Throwable) = Unit
     }
 
-    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        val dialog = BottomSheetDialog(requireContext(), theme)
-        val view = LayoutInflater.from(context).inflate(R.layout.widget_chat_list_actions, null)
-        dialog.setContentView(view)
-        val input = requireArguments().getSerializable(ARG_INPUT) as MessageActions.Input
-        val channelId = requireArguments().getLong(ARG_CHANNEL_ID)
-        val messageId = requireArguments().getLong(ARG_MESSAGE_ID)
-        val type = requireArguments().getInt(ARG_TYPE, TYPE_CHAT)
-        val host = host()
-        val message = host.messageForAction(channelId, messageId)
-        val channel = host.channelForAction(channelId)
-        if (message == null || channel == null) {
-            dismissAllowingStateLoss()
-            return dialog
-        }
+    private lateinit var emojiAdapter: WidgetChatListActionsEmojisAdapter
+    private var itemDecorator: RecyclerView.ItemDecoration? = null
+    private var channelId = 0L
+    private var messageId = 0L
 
-        val coordinator = host.messageActionCoordinator()
-        val me = StoreStream.getUsers().getMe()
-        val guild = StoreStream.getGuilds().getGuild(channel.guildId)
-        val manage = ManageMessageContext.from(
-            message,
-            input.permissions,
-            me,
-            guild?.mfaLevel,
-            channel.isPrivate(),
-            channel.isSystemDM(),
-            channel.isArchivedThread(),
-        )
-        val availability = MessageActions.evaluate(
-            input.copy(
-                canEdit = manage.canEdit && type == TYPE_CHAT,
-                canDelete = manage.canDelete,
-                canManageMessages = manage.canManageMessages,
-                canAddReactions = manage.canAddReactions,
-                canTogglePinned = manage.canTogglePinned,
-                canMarkUnread = manage.canMarkUnread,
-                hasReactions = message.reactions.orEmpty().isNotEmpty(),
-                isDeveloper = StoreStream.getUserSettings().getIsDeveloperMode(),
-                isFailed = message.isFailed(),
-            ),
-        )
+    override fun getContentViewResId() = R.layout.widget_chat_list_actions
 
-        bind(view, R.id.dialog_chat_actions_reply, availability, MessageActions.Action.REPLY) {
-            coordinator.reply(channel, message, input.currentUserId)
-        }
-        bind(view, R.id.dialog_chat_actions_edit, availability, MessageActions.Action.EDIT) {
-            host.requestMessageEdit(message, coordinator)
-        }
-        bind(view, R.id.dialog_chat_actions_delete, availability, MessageActions.Action.DELETE) {
-            confirm(R.string.delete_message_title, R.string.delete_message_body, R.string.delete) {
-                coordinator.delete(message) { host.reportFailure(it) }
-            }
-        }
-        bind(view, R.id.dialog_chat_actions_copy, availability, MessageActions.Action.COPY) {
-            copy(message.content.orEmpty(), R.string.copy_text)
-        }
-        bind(view, R.id.dialog_chat_actions_pin, availability, MessageActions.Action.PIN) {
-            confirm(R.string.pin_message, R.string.pin_message_body_mobile, R.string.pin_confirm) {
-                coordinator.setPinned(message, true) { host.reportFailure(it) }
-            }
-        }
-        if (availability.getValue(MessageActions.Action.UNPIN).visible) {
-            view.findViewById<TextView>(R.id.dialog_chat_actions_pin).setText(R.string.unpin)
-            bind(view, R.id.dialog_chat_actions_pin, availability, MessageActions.Action.UNPIN) {
-                confirm(R.string.unpin_message, R.string.unpin_message_body, R.string.unpin_confirm) {
-                    coordinator.setPinned(message, false) { host.reportFailure(it) }
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        channelId = argumentsOrDefault.getLong(ARG_CHANNEL_ID)
+        messageId = argumentsOrDefault.getLong(ARG_MESSAGE_ID)
+        val recycler = view.findViewById<RecyclerView>(R.id.dialog_chat_actions_add_reaction_emojis_list)
+        emojiAdapter = WidgetChatListActionsEmojisAdapter(recycler).apply {
+            onClickEmoji = ::addReaction
+            onClickMoreEmojis = {
+                currentModel?.message?.let { message ->
+                    host().requestMessageReaction(message, host().messageActionCoordinator())
+                    dismiss()
                 }
             }
         }
-        bind(view, R.id.dialog_chat_actions_resend, availability, MessageActions.Action.RETRY) {
-            coordinator.retry(message)
-        }
-        bind(view, R.id.dialog_chat_actions_profile, availability, MessageActions.Action.PROFILE) {
-            message.author?.id?.let { WidgetUserSheet.show(parentFragmentManager, it, channelId, channel.guildId) }
-        }
-        bind(
-            view,
-            R.id.dialog_chat_actions_manage_reactions,
-            availability,
-            MessageActions.Action.MANAGE_REACTIONS,
-        ) { WidgetManageReactions.create(channelId, messageId, requireContext()) }
-        bind(
-            view,
-            R.id.dialog_chat_actions_remove_all_reactions,
-            availability,
-            MessageActions.Action.REMOVE_ALL_REACTIONS,
-        ) {
-            confirm(
-                R.string.remove_all_reactions_confirm_title,
-                R.string.remove_all_reactions_confirm_body,
-                R.string.remove_all_reactions,
-            ) {
-                RestAPI.api.removeAllReactions(channelId, messageId)
-                    .restSubscribeOn()
-                    .appSubscribe(WidgetChatListActions::class.java, context = context) { dismiss() }
-            }
-        }
-        bind(view, R.id.dialog_chat_actions_mark_unread, availability, MessageActions.Action.MARK_UNREAD) {
-            StoreStream.getMessageAck().markUnread(channelId, messageId)
-        }
-        bind(view, R.id.dialog_chat_actions_copy_id, availability, MessageActions.Action.COPY_ID) {
-            copy(message.id.toString(), R.string.copy_id)
-        }
-        bind(view, R.id.dialog_chat_actions_report, availability, MessageActions.Action.REPORT) {
-            val authorName = message.author?.username.orEmpty()
-            if (ReportsFeatureFlag.isEnabled()) {
-                WidgetMobileReports.launchMessageReport(requireContext(), messageId, channelId)
-            } else {
-                WidgetTosReportViolation.show(requireContext(), authorName, channelId, messageId)
-            }
-        }
-
-        configureQuickReactions(view, channel, message, manage.canAddReactions, coordinator, host)
-        listOf(
-            R.id.dialog_chat_actions_start_thread,
-            R.id.dialog_chat_actions_publish,
-            R.id.dialog_chat_actions_share,
-        ).forEach { view.findViewById<View>(it).isVisible = false }
-        dialog.setTitle(R.string.message_actions_menu_label)
-        return dialog
+        recycler.adapter = emojiAdapter
+        dialog?.setTitle(R.string.message_actions_menu_label)
     }
 
-    private fun configureQuickReactions(
-        root: View,
-        channel: Channel,
-        message: Message,
-        canAddReactions: Boolean,
-        coordinator: MessageActionCoordinator,
-        host: Host,
-    ) {
+    override fun bindSubscriptions(compositeSubscription: CompositeSubscription) {
+        super.bindSubscriptions(compositeSubscription)
+        hideKeyboard()
+        Model.get(
+            channelId,
+            messageId,
+            argumentsOrDefault.getCharSequence(ARG_CONTENT),
+            argumentsOrDefault.getInt(ARG_TYPE, TYPE_CHAT),
+        ).computationLatest().distinctUntilChanged().ui(this)
+            .appSubscribe(
+                WidgetChatListActions::class.java,
+                subscriptionHandler = compositeSubscription::add,
+                onNext = ::configureUI,
+            )
+    }
+
+    private var currentModel: Model? = null
+
+    private fun configureUI(model: Model?) {
+        currentModel = model
+        if (model == null) {
+            dismiss()
+            return
+        }
+        val root = requireView()
+        val message = model.message
+        val manage = model.manageMessageContext
+        val isLocal = message.isLocal()
+        val hasReactions = message.getReactionsMap().isNotEmpty()
+
+        configureQuickReactions(root, model.recentEmojis, isLocal, manage.canAddReactions)
+        bind(root, R.id.dialog_chat_actions_edit, model.type == TYPE_CHAT && manage.canEdit) { editMessage(model) }
+        bind(root, R.id.dialog_chat_actions_publish, canPublish(model)) {
+            MessageActionDialogs.showPublishMessageConfirmation(parentFragmentManager, requireContext(), message, this) {
+                dismiss()
+            }
+        }
+        bind(root, R.id.dialog_chat_actions_manage_reactions, hasReactions) {
+            WidgetManageReactions.create(channelId, messageId, requireContext())
+        }
+        bind(root, R.id.dialog_chat_actions_remove_all_reactions, hasReactions && manage.canManageMessages) {
+            removeAllReactions(message)
+        }
+        bind(root, R.id.dialog_chat_actions_resend, message.canResend()) {
+            host().messageActionCoordinator().retry(message)
+            dismiss()
+        }
+        bind(root, R.id.dialog_chat_actions_mark_unread, !message.isFailed() && manage.canMarkUnread) {
+            StoreStream.getMessageAck().markUnread(message.channelId, message.id)
+            dismiss()
+        }
+        bind(
+            root,
+            R.id.dialog_chat_actions_copy,
+            !model.messageContent.isNullOrEmpty() && !message.isLocalApplicationCommand(),
+        ) {
+            val edited = EditedMessageNode.getEditedString(requireContext())
+            copy(model.messageContent.toString().replace(edited, ""), R.string.copy_text)
+            dismiss()
+        }
+        bind(root, R.id.dialog_chat_actions_copy_id, model.isDeveloper && !isLocal) {
+            copy(message.id.toString(), R.string.copy_id)
+            dismiss()
+        }
+        bind(root, R.id.dialog_chat_actions_report, message.author?.id != model.me.id) {
+            if (ReportsFeatureFlag.isEnabled()) {
+                WidgetMobileReports.launchMessageReport(requireContext(), message.id, channelId)
+            } else {
+                WidgetTosReportViolation.show(requireContext(), model.messageAuthorName, message.channelId, message.id)
+            }
+            dismiss()
+        }
+        bind(root, R.id.dialog_chat_actions_share, model.isDeveloper && !isLocal) {
+            share(model)
+            dismiss()
+        }
+        bind(root, R.id.dialog_chat_actions_pin, manage.canTogglePinned) {
+            MessageActionDialogs.showPinMessageConfirmation(parentFragmentManager, requireContext(), message, this) {
+                dismiss()
+            }
+        }
+        root.findViewById<TextView>(R.id.dialog_chat_actions_pin)
+            .setText(if (message.pinned == true) R.string.unpin else R.string.pin_message)
+        bind(root, R.id.dialog_chat_actions_delete, manage.canDelete) {
+            MessageActionDialogs.showDeleteMessageConfirmation(parentFragmentManager, requireContext(), message) {
+                dismiss()
+            }
+        }
+        bind(root, R.id.dialog_chat_actions_profile, true) {
+            dismiss()
+            message.author?.id?.let { WidgetUserSheet.show(parentFragmentManager, it, channelId, model.guild?.id) }
+        }
+        bind(root, R.id.dialog_chat_actions_reply, canReply(model)) {
+            dismiss()
+            model.channel?.let { host().messageActionCoordinator().reply(it, message, model.me.id) }
+        }
+        bind(root, R.id.dialog_chat_actions_start_thread, canCreatePublicThread(model)) {
+            dismiss()
+            ChannelSelector.getInstance().openCreateThread(
+                model.guild?.id ?: 0L,
+                message.channelId,
+                message.id,
+                "Message",
+            )
+        }
+    }
+
+    private fun configureQuickReactions(root: View, recent: List<Emoji>, isLocal: Boolean, canAdd: Boolean) {
         val recycler = root.findViewById<RecyclerView>(R.id.dialog_chat_actions_add_reaction_emojis_list)
-        if (message.isLocal() || !canAddReactions) {
+        if (recent.isEmpty() || isLocal || !canAdd) {
             recycler.isVisible = false
             return
         }
-        val adapter = WidgetChatListActionsEmojisAdapter(recycler).apply {
-            onClickEmoji = { emoji ->
-                coordinator.toggleReaction(message, emoji.toReactionEmoji()) { host.reportFailure(it) }
+        recycler.isVisible = true
+        recycler.post {
+            val size = resources.getDimensionPixelSize(R.dimen.chat_input_emoji_size)
+            val gap = dpToPixels(8)
+            val available = recycler.width - recycler.paddingStart - recycler.paddingEnd
+            val count = minOf(recent.size + 1, maxOf(1, (available + gap) / (size + gap)))
+            itemDecorator?.let(recycler::removeItemDecoration)
+            val remaining = maxOf(available - ((count - 1) * gap + size * count), 0)
+            val decoration = SpacingDecoration(gap + if (count > 1) remaining / (count - 1) else 0)
+            recycler.addItemDecoration(decoration)
+            itemDecorator = decoration
+            emojiAdapter.setData(recent, count)
+        }
+    }
+
+    private fun addReaction(emoji: Emoji) {
+        val model = currentModel ?: return
+        RestAPI.api.addReaction(model.message.channelId, model.message.id, emoji.getReactionKey())
+            .restSubscribeOn().ui(this)
+            .appSubscribe(WidgetChatListActions::class.java, context = context) {
                 StoreStream.getEmojis().onEmojiUsed(emoji)
                 dismiss()
             }
-            onClickMoreEmojis = {
-                host.requestMessageReaction(message, coordinator)
+    }
+
+    private fun editMessage(model: Model) {
+        val message = model.message
+        StoreStream.getEmojis().getEmojiSet(model.channel?.guildId ?: 0L, message.channelId).take(1)
+            .computationLatest().ui(this)
+            .appSubscribe(WidgetChatListActions::class.java) { emojiSet ->
+                val content = unparse(
+                    message.content.orEmpty(),
+                    model.guild,
+                    StoreStream.getChannels().getChannelsForGuild(model.channel?.guildId ?: 0L),
+                    StoreStream.getUsers().getUsers(),
+                    emojiSet,
+                )
+                host().requestMessageEdit(message.copy(content = content), host().messageActionCoordinator())
                 dismiss()
             }
+    }
+
+    private fun removeAllReactions(message: Message) {
+        WidgetNoticeDialog.show(
+            fragmentManager = parentFragmentManager,
+            headerText = getString(R.string.remove_all_reactions_confirm_title),
+            bodyText = getString(R.string.remove_all_reactions_confirm_body),
+            okText = getString(R.string.remove_all_reactions),
+            cancelText = getString(R.string.cancel),
+            listenerMap = mapOf(R.id.notice_ok to { view ->
+                RestAPI.api.removeAllReactions(message.channelId, message.id).restSubscribeOn().ui(this)
+                    .appSubscribe(WidgetChatListActions::class.java, view.context) { dismiss() }
+            }),
+        )
+    }
+
+    private fun share(model: Model) {
+        val guild = model.guild?.id?.toString() ?: "@me"
+        val url = "https://discord.com/channels/$guild/${model.message.channelId}/${model.message.id}"
+        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, url)
+        }, getString(R.string.share)))
+    }
+
+    private fun canPublish(model: Model): Boolean =
+        (model.manageMessageContext.canEdit || model.manageMessageContext.canManageMessages) &&
+            model.channel?.type == Channel.GUILD_ANNOUNCEMENT && model.message.type == 0 && !model.message.isCrossposted()
+
+    private fun canReply(model: Model): Boolean {
+        val channel = model.channel ?: return false
+        val message = model.message
+        val privateChannel = channel.isPrivate() && !channel.isSystemDM()
+        val canReadAndSend = PermissionUtils.can(
+            Permission.VIEW_CHANNEL or Permission.SEND_MESSAGES or Permission.READ_MESSAGE_HISTORY,
+            model.permissions,
+        )
+        return !message.isLocal() && model.type == TYPE_CHAT &&
+            (message.isUserMessage() || message.isApplicationMessage()) && (privateChannel || canReadAndSend)
+    }
+
+    private fun canCreatePublicThread(model: Model): Boolean {
+        val channel = model.channel ?: return false
+        val guild = model.guild ?: return false
+        val permissions = model.permissions
+        val permissionAllowed = PermissionUtils.can(Permission.CREATE_PUBLIC_THREADS, permissions) &&
+            PermissionUtils.can(Permission.MANAGE_MESSAGES, permissions) &&
+            (NewThreadsPermissionsFeatureFlag.isEnabled(guild.id) || PermissionUtils.hasAccessWrite(channel, permissions))
+        val channelAllowed = !model.message.isSystemMessage() && !channel.isThread() &&
+            !model.message.hasThread() && !channel.isVoiceChannel()
+        return ViewThreadsFeatureFlag.isEnabled() && CreateThreadsFeatureFlag.isEnabled(guild.id) &&
+            permissionAllowed && channelAllowed
+    }
+
+    private fun bind(root: View, id: Int, visible: Boolean, click: () -> Unit) =
+        root.findViewById<View>(id).apply {
+            isVisible = visible
+            setOnClickListener { click() }
         }
-        recycler.layoutManager = LinearLayoutManager(requireContext(), RecyclerView.HORIZONTAL, false)
-        recycler.adapter = adapter
-        StoreStream.getEmojis().getEmojiSet(channel.guildId, channel.id)
-            .take(1)
-            .subscribe { emojiSet ->
-                recycler.post {
-                    val size = resources.getDimensionPixelSize(R.dimen.chat_input_emoji_size)
-                    val gap = dpToPixels(8)
-                    val width = recycler.width - recycler.paddingStart - recycler.paddingEnd
-                    val count = minOf(emojiSet.recentEmojis.size + 1, maxOf(1, (width + gap) / (size + gap)))
-                    adapter.setData(emojiSet.recentEmojis, count)
-                    recycler.isVisible = count > 0
-                    recycler.addItemDecoration(SpacingDecoration(gap))
-                }
-            }
-    }
-
-    private fun Emoji.toReactionEmoji(): MessageReactionEmoji = when (this) {
-        is ModelEmojiCustom -> MessageReactionEmoji(idStr, name, isAnimated)
-        else -> MessageReactionEmoji(null, getReactionKey(), false)
-    }
-
-    private fun bind(
-        root: View,
-        id: Int,
-        states: Map<MessageActions.Action, MessageActions.Availability>,
-        action: MessageActions.Action,
-        click: () -> Unit,
-    ) = root.findViewById<View>(id).apply {
-        val state = states.getValue(action)
-        isVisible = state.visible
-        isEnabled = state.enabled
-        setOnClickListener { click(); dismiss() }
-    }
 
     private fun copy(text: CharSequence, label: Int) {
         val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText(getString(label), text))
     }
 
-    private fun host(): Host = (parentFragment as? Host) ?: (activity as? Host)
+    private fun host(): Host = (parentFragment as? Host)
+        ?: parentFragmentManager.fragments.lastOrNull { it is Host } as? Host
+        ?: (activity as? Host)
         ?: error("WidgetChatListActions host must implement Host")
-
-    private fun Host.reportFailure(result: Result<Unit>) = result.exceptionOrNull()?.let(::onMessageActionError)
-
-    private fun confirm(title: Int, message: Int, positive: Int, action: () -> Unit) {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(title)
-            .setMessage(message)
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(positive) { _, _ -> action() }
-            .show()
-    }
 
     private class SpacingDecoration(private val space: Int) : RecyclerView.ItemDecoration() {
         override fun getItemOffsets(outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State) {
@@ -254,39 +315,142 @@ class WidgetChatListActions : BottomSheetDialogFragment() {
         }
     }
 
+    data class Model(
+        val message: Message,
+        val guild: Guild?,
+        val messageAuthorName: String,
+        val messageContent: CharSequence?,
+        val manageMessageContext: ManageMessageContext,
+        val type: Int,
+        val isDeveloper: Boolean,
+        val recentEmojis: List<Emoji>,
+        val channel: Channel?,
+        val permissions: Long?,
+        val me: MeUser,
+    ) {
+        companion object {
+            fun get(channelId: Long, messageId: Long, messageContent: CharSequence?, type: Int): Observable<Model?> {
+                val message = when (type) {
+                    TYPE_CHAT -> StoreStream.getMessages().observeMessagesForChannel(channelId, messageId)
+                    TYPE_PINS -> StoreStream.getPinnedMessages().observePinnedMessage(channelId, messageId)
+                    else -> Observable.just(null)
+                }
+                return Observable.combineLatest(message, StoreStream.getChannels().observeChannel(channelId), ::Pair)
+                    .switchMap { (currentMessage, channel) ->
+                        if (currentMessage == null || channel == null) return@switchMap Observable.just<Model?>(null)
+                        val authorId = currentMessage.author?.id ?: 0L
+                        val identity = Observable.combineLatest(
+                            StoreStream.getPermissions().observePermissionsForChannel(channelId),
+                            StoreStream.getUsers().observeMe(),
+                            StoreStream.getGuilds().observeComputed(channel.guildId, listOf(authorId)),
+                        ) { permissions, me, members -> Triple(permissions, me, members[authorId]) }
+                        val context = Observable.combineLatest(
+                            StoreStream.getGuilds().observeGuild(channel.guildId),
+                            StoreStream.getEmojis().getEmojiSet(channel.guildId, channel.id),
+                            ::Pair,
+                        )
+                        Observable.combineLatest(identity, context) { (permissions, me, member), (guild, emojis) ->
+                            create(currentMessage, guild, permissions, me, member, channel, messageContent, type, emojis)
+                        }
+                    }
+            }
+
+            private fun create(
+                message: Message,
+                guild: Guild?,
+                permissions: Long?,
+                me: MeUser,
+                member: GuildMember?,
+                channel: Channel,
+                messageContent: CharSequence?,
+                type: Int,
+                emojis: EmojiSet,
+            ) = Model(
+                message = message,
+                guild = guild,
+                messageAuthorName = member?.nick ?: message.author?.username.orEmpty(),
+                messageContent = messageContent ?: message.content,
+                manageMessageContext = ManageMessageContext.from(
+                    message,
+                    permissions,
+                    me,
+                    guild?.mfaLevel,
+                    channel.isPrivate(),
+                    channel.isSystemDM(),
+                    channel.isArchivedThread(),
+                ),
+                type = type,
+                isDeveloper = StoreStream.getUserSettings().getIsDeveloperMode(),
+                recentEmojis = emojis.recentEmojis,
+                channel = channel,
+                permissions = permissions,
+                me = me,
+            )
+        }
+    }
+
     companion object {
-        private const val ARG_CHANNEL_ID = "channel_id"
-        private const val ARG_MESSAGE_ID = "message_id"
-        private const val ARG_INPUT = "policy_input"
-        private const val ARG_TYPE = "type"
+        private const val ARG_CHANNEL_ID = "INTENT_EXTRA_MESSAGE_CHANNEL_ID"
+        private const val ARG_MESSAGE_ID = "INTENT_EXTRA_MESSAGE_ID"
+        private const val ARG_CONTENT = "INTENT_EXTRA_MESSAGE_CONTENT"
+        private const val ARG_TYPE = "INTENT_EXTRA_TYPE"
         private const val TYPE_CHAT = 0
         private const val TYPE_PINS = 1
 
-        fun show(fragmentManager: FragmentManager, channelId: Long, messageId: Long, input: MessageActions.Input) =
-            show(fragmentManager, channelId, messageId, input, TYPE_CHAT)
+        fun showForChat(fragmentManager: FragmentManager, channelId: Long, messageId: Long, messageContent: CharSequence) =
+            show(fragmentManager, channelId, messageId, messageContent, TYPE_CHAT)
 
-        fun showForPin(
-            fragmentManager: FragmentManager,
-            channelId: Long,
-            messageId: Long,
-            input: MessageActions.Input,
-        ) = show(fragmentManager, channelId, messageId, input, TYPE_PINS)
+        fun showForPin(fragmentManager: FragmentManager, channelId: Long, messageId: Long, messageContent: CharSequence) =
+            show(fragmentManager, channelId, messageId, messageContent, TYPE_PINS)
+
+        fun show(fragmentManager: FragmentManager, channelId: Long, messageId: Long, _input: MessageActions.Input) =
+            show(fragmentManager, channelId, messageId, null, TYPE_CHAT)
+
+        fun showForPin(fragmentManager: FragmentManager, channelId: Long, messageId: Long, _input: MessageActions.Input) =
+            show(fragmentManager, channelId, messageId, null, TYPE_PINS)
 
         private fun show(
             fragmentManager: FragmentManager,
             channelId: Long,
             messageId: Long,
-            input: MessageActions.Input,
+            messageContent: CharSequence?,
             type: Int,
-        ) {
-            WidgetChatListActions().apply {
-                arguments = Bundle().apply {
-                    putLong(ARG_CHANNEL_ID, channelId)
-                    putLong(ARG_MESSAGE_ID, messageId)
-                    putSerializable(ARG_INPUT, input)
-                    putInt(ARG_TYPE, type)
-                }
-            }.show(fragmentManager, WidgetChatListActions::class.java.name)
+        ) = WidgetChatListActions().apply {
+            arguments = Bundle().apply {
+                putLong(ARG_CHANNEL_ID, channelId)
+                putLong(ARG_MESSAGE_ID, messageId)
+                putCharSequence(ARG_CONTENT, messageContent)
+                putInt(ARG_TYPE, type)
+            }
+        }.show(fragmentManager, WidgetChatListActions::class.java.name)
+
+        private fun unparse(
+            raw: String,
+            guild: Guild?,
+            channels: Map<Long, Channel>,
+            users: Map<Long, com.discord.models.user.User>,
+            emojis: EmojiSet,
+        ): String {
+            var result = USER_MENTION.replace(raw) { match ->
+                users[match.groupValues[1].toLongOrNull()]?.let { "@${it.username}${it.discriminatorWithPadding}" }
+                    ?: match.value
+            }
+            result = ROLE_MENTION.replace(result) { match ->
+                guild?.roles?.firstOrNull { it.id == match.groupValues[1].toLongOrNull() }?.let { "@${it.name}" }
+                    ?: match.value
+            }
+            result = CHANNEL_MENTION.replace(result) { match ->
+                channels[match.groupValues[1].toLongOrNull()]?.let { "#${it.getDisplayName()}" } ?: match.value
+            }
+            return CUSTOM_EMOJI.replace(result) { match ->
+                val emoji = emojis.emojiIndex[match.groupValues[3]]
+                ":${emoji?.firstName ?: match.groupValues[2]}:"
+            }
         }
+
+        private val USER_MENTION = Regex("<@!?(\\d+)>")
+        private val ROLE_MENTION = Regex("<@&?(\\d+)>")
+        private val CHANNEL_MENTION = Regex("<#?(\\d+)>")
+        private val CUSTOM_EMOJI = Regex("<(a)?:([A-Za-z0-9_]+):(\\d+)>")
     }
 }

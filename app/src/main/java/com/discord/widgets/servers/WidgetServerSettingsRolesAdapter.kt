@@ -5,15 +5,15 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
-import android.text.SpannableString
-import android.text.Spanned
 import android.text.method.LinkMovementMethod
-import android.text.style.ClickableSpan
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.role.GuildRole
+import com.discord.i18n.I18nSpans
+import com.discord.i18n.withClickableHook
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.mg_recycler.DragAndDropAdapter
+import com.discord.utilities.mg_recycler.DragAndDropAdapter.Payload
 import com.discord.utilities.mg_recycler.DragAndDropHelper
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.widgets.roles.RoleIconView
@@ -21,13 +21,13 @@ import com.discord.widgets.servers.settings.members.WidgetServerSettingsMembers
 
 class WidgetServerSettingsRolesAdapter(
     recycler: RecyclerView,
-) : DragAndDropAdapter<WidgetServerSettingsRolesAdapter.Item>(recycler) {
+) : DragAndDropAdapter<Payload>(recycler) {
 
     private var roleSelected: (GuildRole) -> Unit = {}
     private var rolesMoved: (Map<String, Int>) -> Unit = {}
 
     fun configure(
-        items: List<Item>,
+        items: List<Payload>,
         roleSelected: (GuildRole) -> Unit,
         rolesMoved: (Map<String, Int>) -> Unit,
     ) {
@@ -46,16 +46,14 @@ class WidgetServerSettingsRolesAdapter(
 
     override fun onNewPositions(newPositions: Map<String, Int>) = rolesMoved(newPositions)
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MGRecyclerViewHolder<*, Item> =
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MGRecyclerViewHolder<*, Payload> =
         when (viewType) {
-            TYPE_HELP -> HelpViewHolder(this)
-            TYPE_ROLE -> RoleViewHolder(this)
+            TYPE_HELP -> RoleListHelpItem(this)
+            TYPE_ROLE -> RoleListItem(this)
             else -> throw invalidViewTypeException(viewType)
         }
 
-    sealed interface Item : DragAndDropAdapter.Payload
-
-    data class HelpItem(val guildId: Long) : Item {
+    data class HelpItem(val guildId: Long) : Payload {
         override val key = "key0"
         override val type = TYPE_HELP
         override val position = 0
@@ -68,7 +66,7 @@ class WidgetServerSettingsRolesAdapter(
         val userAbleToManageRoles: Boolean,
         val elevated: Boolean,
         val guildId: Long,
-    ) : Item {
+    ) : Payload {
         override val key = role.id.toString()
         override val type = TYPE_ROLE
         override val position = role.position
@@ -76,44 +74,29 @@ class WidgetServerSettingsRolesAdapter(
         fun canReorder() = !everyoneRole && !locked && userAbleToManageRoles && elevated
     }
 
-    private class HelpViewHolder(
+    class RoleListHelpItem(
         adapter: WidgetServerSettingsRolesAdapter,
-    ) : MGRecyclerViewHolder<WidgetServerSettingsRolesAdapter, Item>(
+    ) : MGRecyclerViewHolder<WidgetServerSettingsRolesAdapter, Payload>(
         R.layout.widget_server_settings_help_item,
         adapter,
     ), DragAndDropHelper.DraggableViewHolder {
         override fun canDrag() = false
         override fun onDragStateChanged(dragging: Boolean) = Unit
 
-        override fun onConfigure(position: Int, data: Item) {
+        override fun onConfigure(position: Int, data: Payload) {
             val item = data as HelpItem
             val textView = itemView as TextView
-            val raw = itemView.context.getString(R.string.help_roles_description)
-            val label = "[Members](onMembersClick)"
-            val start = raw.indexOf(label)
-            if (start < 0) {
-                textView.text = raw
-                return
-            }
-            textView.text = SpannableString(raw.replace(label, "Members")).apply {
-                setSpan(
-                    object : ClickableSpan() {
-                        override fun onClick(widget: View) {
-                            WidgetServerSettingsMembers.launch(widget.context, item.guildId)
-                        }
-                    },
-                    start,
-                    start + "Members".length,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                )
-            }
+            textView.text = I18nSpans.render(itemView.context.getString(R.string.help_roles_description))
+                .withClickableHook("onMembersClick") {
+                    WidgetServerSettingsMembers.launch(itemView.context, item.guildId)
+                }
             textView.movementMethod = LinkMovementMethod.getInstance()
         }
     }
 
-    private class RoleViewHolder(
+    class RoleListItem(
         adapter: WidgetServerSettingsRolesAdapter,
-    ) : MGRecyclerViewHolder<WidgetServerSettingsRolesAdapter, Item>(
+    ) : MGRecyclerViewHolder<WidgetServerSettingsRolesAdapter, Payload>(
         R.layout.widget_server_settings_role_item,
         adapter,
     ), DragAndDropHelper.DraggableViewHolder {
@@ -125,7 +108,7 @@ class WidgetServerSettingsRolesAdapter(
 
         override fun canDrag() = draggable
 
-        override fun onConfigure(position: Int, data: Item) {
+        override fun onConfigure(position: Int, data: Payload) {
             val item = data as RoleItem
             draggable = item.canReorder()
             name.text = item.role.name
@@ -154,7 +137,7 @@ class WidgetServerSettingsRolesAdapter(
         const val TYPE_HELP = 0
         const val TYPE_ROLE = 1
 
-        internal fun changedPositions(items: List<Item>, original: Map<String, Int>): Map<String, Int> =
+        internal fun changedPositions(items: List<Payload>, original: Map<String, Int>): Map<String, Int> =
             buildMap {
                 items.forEachIndexed { index, item ->
                     if (item is RoleItem && !item.everyoneRole) {

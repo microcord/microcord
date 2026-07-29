@@ -62,6 +62,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         panels = view.findViewById(R.id.overlapping_panels)
+        initialChannelShown = savedInstanceState != null
         // Registered here rather than in onViewBound so `panels` is already resolved, and before the
         // child transactions below so this stays behind WidgetTabsHost in the registry.
         setOnBackPressed(::handleBackPressed)

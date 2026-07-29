@@ -17,6 +17,7 @@ import com.discord.utilities.rx.ui
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.GuildScheduledEventInviteEntry
 import com.discord.widgets.guildscheduledevent.GuildScheduledEventItemView
+import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventDetailsBottomSheet
 import rx.Observable
 import rx.Subscription
 import java.lang.ref.WeakReference
@@ -30,7 +31,10 @@ import java.lang.ref.WeakReference
  */
 class WidgetChatListAdapterItemGuildScheduledEventInvite(
     adapter: WidgetChatListAdapter,
-) : WidgetChatListItem(R.layout.widget_chat_list_adapter_item_guild_scheduled_event_invite, adapter) {
+) : WidgetChatListAdapterItemInviteBase(
+    R.layout.widget_chat_list_adapter_item_guild_scheduled_event_invite,
+    adapter,
+) {
 
     private val card: GuildScheduledEventItemView =
         itemView.findViewById(R.id.guild_scheduled_event_invite_container)
@@ -52,8 +56,10 @@ class WidgetChatListAdapterItemGuildScheduledEventInvite(
         val users = StoreStream.getUsers()
         val channels = StoreStream.getChannels()
         val permissions = StoreStream.getPermissions()
+        val scheduledEvents = StoreStream.getGuildScheduledEvents()
+        val voiceChannelSelected = StoreStream.getVoiceChannelSelected()
         return ObservationDeckProvider.get()
-            .connectRx(guilds, users, channels, permissions)
+            .connectRx(guilds, users, channels, permissions, scheduledEvents, voiceChannelSelected)
             .map { _ ->
                 val event = entry.guildScheduledEvent
                 // The invite's channel snapshot has no guild id of its own; the event's guild owns it.
@@ -63,10 +69,7 @@ class WidgetChatListAdapterItemGuildScheduledEventInvite(
                     invite = entry.invite,
                     guildScheduledEvent = event,
                     isInGuild = guilds.getMember(event.guildId, users.getMe().id) != null,
-                    // The reference reads this from `StoreGuildScheduledEvents`, which does not exist
-                    // here; the event payload carries the viewer's own RSVP, which is the same answer
-                    // for as long as the payload is current.
-                    isRsvped = event.userRsvp != null,
+                    isRsvped = scheduledEvents.isMeRsvpedToEvent(event.guildId, event.id),
                     channel = inviteChannel?.let { channels.getChannel(it.id) },
                     guild = guilds.getGuild(event.guildId),
                     creator = creatorId?.let { id ->
@@ -76,6 +79,7 @@ class WidgetChatListAdapterItemGuildScheduledEventInvite(
                         Permission.CONNECT,
                         permissions.getPermissionsByChannel()[inviteChannel.id],
                     ),
+                    isConnected = event.channelId == voiceChannelSelected.getSelectedVoiceChannelId(),
                 )
             }
     }
@@ -92,19 +96,21 @@ class WidgetChatListAdapterItemGuildScheduledEventInvite(
             isRsvped = model.isRsvped,
             canConnect = model.canConnect,
             isConnected = model.isConnected,
-            onCardClicked = { view ->
+            onCardClicked = {
                 if (model.isInGuild) {
-                    ChatListRowNavigation.showGuildScheduledEventDetails
-                        ?.invoke(adapter.fragmentManager, model.guildScheduledEvent.id)
+                    WidgetGuildScheduledEventDetailsBottomSheet.showForGuild(
+                        adapter.fragmentManager,
+                        model.guildScheduledEvent.id,
+                    )
                 } else {
-                    ChatListRowNavigation.joinInvite?.invoke(view, model.invite, INVITE_SOURCE)
+                    joinServerOrDM(javaClass, model.invite)
                 }
             },
             rsvpButtonClickListener = {
-                ChatListRowNavigation.toggleEventRsvp?.invoke(model.guildScheduledEvent)
+                StoreStream.getGuildScheduledEvents().toggleMeRsvpForEvent(model.guildScheduledEvent)
             },
-            joinServerButtonClickListener = { view ->
-                ChatListRowNavigation.joinInvite?.invoke(view, model.invite, INVITE_SOURCE)
+            joinServerButtonClickListener = {
+                joinServerOrDM(javaClass, model.invite)
             },
             shareButtonClickListener = {
                 adapter.onShareButtonClick(
@@ -120,11 +126,6 @@ class WidgetChatListAdapterItemGuildScheduledEventInvite(
     private fun hostFragment(): AppFragment? =
         runCatching { adapter.recycler.findFragment<AppFragment>() }.getOrNull()
 
-    /**
-     * [isConnected] is always false: the reference compares the event's channel against
-     * `StoreVoiceChannelSelected`, which is not reachable through `StoreStream` in this
-     * reconstruction. The card then never shows its "you are already here" state.
-     */
     private data class Model(
         val invite: ModelInvite,
         val guildScheduledEvent: GuildScheduledEvent,
@@ -134,10 +135,6 @@ class WidgetChatListAdapterItemGuildScheduledEventInvite(
         val guild: Guild?,
         val creator: UserGuildMember?,
         val canConnect: Boolean,
-        val isConnected: Boolean = false,
+        val isConnected: Boolean,
     )
-
-    private companion object {
-        private const val INVITE_SOURCE = "Invite Button Embed"
-    }
 }

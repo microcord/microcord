@@ -6,7 +6,6 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayNameOrDefault
@@ -32,6 +31,7 @@ import com.discord.views.ThemedColor
 import com.discord.views.guilds.ServerMemberCount
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.InviteEntry
+import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.button.MaterialButton
 import rx.Observable
@@ -47,7 +47,7 @@ import rx.Subscription
  */
 class WidgetChatListAdapterItemInvite(
     adapter: WidgetChatListAdapter,
-) : WidgetChatListItem(R.layout.widget_chat_list_adapter_item_invite, adapter) {
+) : WidgetChatListAdapterItemInviteBase(R.layout.widget_chat_list_adapter_item_invite, adapter) {
 
     private val splash: SimpleDraweeView = itemView.findViewById(R.id.item_invite_splash)
     private val splashContainer: RoundedRelativeLayout =
@@ -209,15 +209,15 @@ class WidgetChatListAdapterItemInvite(
         mentionButton.setOnClickListener { view ->
             if (isInviter) {
                 val channel = model?.channel ?: return@setOnClickListener
-                ChatListRowNavigation.launchInviteShare?.invoke(
+                WidgetGuildInviteShare.launch(
                     view.context,
                     adapter.fragmentManager,
                     channel.guildId,
                     channel.id,
-                    INVITE_SOURCE,
+                    source = INVITE_SOURCE,
                 )
             } else {
-                ChatListRowNavigation.appendMention?.invoke(model?.authorUser, item.guildId)
+                StoreStream.getChat().appendMention(model?.authorUser, item.guildId)
             }
         }
 
@@ -307,8 +307,8 @@ class WidgetChatListAdapterItemInvite(
         joinedButton.visibility = if (isJoined) View.VISIBLE else View.GONE
         joinButton.visibility = if (isJoined) View.GONE else View.VISIBLE
         mentionButton.visibility = View.GONE
-        joinButton.setOnClickListener { view -> joinInvite(view, invite) }
-        joinedButton.setOnClickListener { view -> joinInvite(view, invite) }
+        joinButton.setOnClickListener { joinServerOrDM(javaClass, invite) }
+        joinedButton.setOnClickListener { joinServerOrDM(javaClass, invite) }
 
         // The reference gates the hub e-mail prompt on a growth experiment; the experiment client
         // is not reconstructed, so the prompt stays off, which is its default state.
@@ -334,10 +334,6 @@ class WidgetChatListAdapterItemInvite(
         }
         channelName.setCompoundDrawablesWithIntrinsicBounds(iconRes, 0, 0, 0)
         channelName.setTextAndVisibilityBy(channel.getDisplayNameOrDefault(context, includePrefix = false))
-    }
-
-    private fun joinInvite(view: View, invite: ModelInvite) {
-        ChatListRowNavigation.joinInvite?.invoke(view, invite, INVITE_SOURCE)
     }
 
     /**
@@ -386,47 +382,6 @@ class WidgetChatListAdapterItemInvite(
 
         private val POSSESSIVE = Regex("'s ")
     }
-}
-
-/**
- * What the chat rows in this package cannot reach on their own.
- *
- * Two kinds of thing end up here. Screens the reference navigates to directly and this
- * reconstruction has not built yet — `WidgetGuildInviteShare`, `WidgetServerSettingsOverview`,
- * `WidgetGuildScheduledEventDetailsBottomSheet`, `WidgetThreadDraftArchiveSheet`,
- * `InviteJoinHelper` — and store writes whose store exists but is not published by `StoreStream`
- * ([appendMention] on `StoreChat`, [updateThreadDraft] on `StoreThreadDraft`,
- * [toggleEventRsvp] pending `StoreGuildScheduledEvents`).
- *
- * Rather than have six rows each grow their own stub, this is one installable seam: whoever builds
- * a destination assigns the matching field once and the rows stop being inert with no further
- * change. An unassigned field makes that one affordance a no-op; the row still renders.
- * See `docs/parity-audit/followups.md`.
- */
-internal object ChatListRowNavigation {
-    /** `(context, fragmentManager, guildId, channelId, analyticsSource)` */
-    var launchInviteShare: ((Context, FragmentManager, Long, Long?, String) -> Unit)? = null
-
-    /** `(context, guildId, scrollToIconUpload)` */
-    var launchGuildSettings: ((Context, Long, Boolean) -> Unit)? = null
-
-    /** `(anchorView, invite, analyticsSource)` — resolves the fragment from the view. */
-    var joinInvite: ((View, ModelInvite, String) -> Unit)? = null
-
-    /** `(fragmentManager, guildScheduledEventId)` */
-    var showGuildScheduledEventDetails: ((FragmentManager, Long) -> Unit)? = null
-
-    /** `(fragmentManager, guildId)` — the auto-archive duration picker. */
-    var showThreadArchiveDurationSheet: ((FragmentManager, Long) -> Unit)? = null
-
-    /** `(user, guildId)` — inserts a mention into the chat composer. */
-    var appendMention: ((User?, Long) -> Unit)? = null
-
-    /** Marks the viewer interested (or no longer interested) in a scheduled event. */
-    var toggleEventRsvp: ((com.discord.api.guildscheduledevent.GuildScheduledEvent) -> Unit)? = null
-
-    /** Writes the thread-creation form back into `StoreThreadDraft`. */
-    var updateThreadDraft: ((com.discord.stores.StoreThreadDraft.ThreadDraftState) -> Unit)? = null
 }
 
 internal enum class InviteCardState { LOADING, RESOLVED, INVALID }

@@ -2,6 +2,7 @@ package com.discord.widgets.servers
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.ScrollView
@@ -14,12 +15,15 @@ import com.discord.app.AppFragment
 import com.discord.app.AppToast
 import com.discord.app.AppViewModel
 import com.discord.app.appViewModels
+import com.discord.dialogs.ImageUploadDialog
 import com.discord.i18n.i18nPlural
+import com.discord.media_picker.MediaPicker
 import com.discord.models.guild.Guild
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
@@ -55,11 +59,6 @@ import rx.Observable
  * - **"All messages" is disabled on a large guild.** Above Discord's member threshold the default
  *   notification level is forced to mentions-only, and the radio carries a tooltip saying why.
  *
- * ### Deliberate degradations
- * - **Image upload is unavailable.** Guild icon, banner and splash uploads need
- *   `MGImages.requestImageCrop`/`prepareImageUpload`, which this project has not reconstructed
- *   (`docs/parity-audit/followups.md`). The icon renders read-only and the banner/splash sections are
- *   hidden rather than shown with a dead upload button.
  */
 class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings_overview) {
 
@@ -74,14 +73,20 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
 
     private val state = StatefulViews(
         R.id.overview_name,
+        R.id.server_settings_overview_icon,
         R.id.afk_channel,
         R.id.afk_timeout_wrap,
         R.id.system_channel,
         R.id.system_channel_join,
         R.id.system_channel_join_replies,
         R.id.system_channel_boost,
+        R.id.upload_banner,
+        R.id.upload_splash,
         STATE_ID_NOTIFICATION_DEFAULT,
     )
+
+    private var hasOpenedAvatarPicker = false
+    private var imageSelectedResult: ((String) -> Unit)? = null
 
     private lateinit var scroll: ScrollView
     private lateinit var icon: SimpleDraweeView
@@ -134,11 +139,6 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
             R.string.minimum_size,
             "size" to MINIMUM_ICON_SIZE_PX,
         )
-        // No upload path exists, so the "remove icon" affordance would be one-way. See class KDoc.
-        iconRemove.visibility = View.GONE
-        view.findViewById<View>(R.id.uploadBanner).visibility = View.GONE
-        view.findViewById<View>(R.id.uploadSplash).visibility = View.GONE
-
         notificationRadios = RadioManager(listOf(notificationAll, notificationOnlyMentions))
 
         save.hide()
@@ -179,6 +179,8 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
         setActionBarSubtitle(guild.name)
 
         configureIcon(guild)
+        configureSplash(guild)
+        configureBanner(guild)
         nameInput.setText(state.get(nameInput.id, guild.name))
 
         configureAfkChannel(state.get(afkChannel.id, viewState.afkChannel))
@@ -195,8 +197,8 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
         val afkTimeoutSeconds = state.get(afkTimeoutWrap.id, guild.afkTimeout)
         afkTimeout.text = afkTimeoutLabel(requireContext(), afkTimeoutSeconds)
         afkTimeoutWrap.setOnClickListener {
-            AfkTimeoutBottomSheet()
-                .show(childFragmentManager, AfkTimeoutBottomSheet::class.java.name)
+            AfkBottomSheet()
+                .show(childFragmentManager, AfkBottomSheet::class.java.name)
         }
 
         val currentSystemChannel = state.get(systemChannel.id, viewState.systemChannel)
@@ -222,11 +224,148 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
     }
 
     private fun configureIcon(guild: Guild) {
-        val iconUrl = IconUtils.getForGuild(guild, allowAnimation = true)
-        IconUtils.setIcon(icon, iconUrl, R.dimen.avatar_size_xxlarge)
+        val original = IconUtils.getForGuild(guild, allowAnimation = true)
+        val current = state.get(icon.id, original)
+        if (!hasOpenedAvatarPicker && mostRecentIntent.getBooleanExtra(INTENT_EXTRA_OPEN_AVATAR_PICKER, false)) {
+            openImagePicker { configureIcon(guild, it) }
+        }
+        icon.setOnClickListener { openImagePicker { configureIcon(guild, it) } }
+        IconUtils.setIcon(icon, current, R.dimen.avatar_size_xxlarge)
         // The lettered fallback is a sibling of the image, not a placeholder inside it.
-        iconText.visibility = if (iconUrl == null) View.VISIBLE else View.GONE
+        iconText.visibility = if (current.isNullOrBlank()) View.VISIBLE else View.GONE
         iconText.text = guild.shortName
+        iconRemove.visibility = if (current.isNullOrBlank()) View.GONE else View.VISIBLE
+        iconRemove.setOnClickListener { configureIcon(guild, null) }
+    }
+
+    private fun configureIcon(guild: Guild, updated: String?) {
+        state.put(icon.id, updated.orEmpty())
+        configureIcon(guild)
+        state.configureSaveActionView(save)
+    }
+
+    private fun configureSplash(guild: Guild) {
+        val image = requireView().findViewById<SimpleDraweeView>(R.id.upload_splash)
+        val container = requireView().findViewById<View>(R.id.server_settings_overview_upload_splash_container)
+        val remove = requireView().findViewById<TextView>(R.id.server_settings_overview_upload_splash_remove)
+        val unlock = requireView().findViewById<TextView>(R.id.upload_splash_unlock)
+        val nitroTier = requireView().findViewById<TextView>(R.id.upload_splash_nitro_tier)
+        val current = state.get(image.id, IconUtils.getGuildSplashUrl(guild, resources.displayMetrics.widthPixels))
+        IconUtils.setIcon(image, current)
+        val enabled = guild.canHaveSplash()
+        container.isEnabled = enabled
+        container.setOnClickListener(if (enabled) View.OnClickListener {
+            openImagePicker { value ->
+                state.put(image.id, value)
+                configureSplash(guild)
+                state.configureSaveActionView(save)
+            }
+        } else null)
+        remove.visibility = if (enabled && !current.isNullOrBlank()) View.VISIBLE else View.GONE
+        remove.setOnClickListener {
+            state.put(image.id, "")
+            configureSplash(guild)
+            state.configureSaveActionView(save)
+        }
+        unlock.text = SettingsStrings.render(
+            requireContext(),
+            if (enabled) R.string.guild_settings_overview_boost_unlocked else R.string.guild_settings_overview_tier_info,
+            "tier" to 1,
+            "tierStatusUrl" to "",
+        )
+        unlock.visibility = if (current.isNullOrBlank()) View.VISIBLE else View.GONE
+        image.alpha = if (enabled) 1f else 0.3f
+        nitroTier.visibility = if (enabled) View.GONE else View.VISIBLE
+        nitroTier.text = SettingsStrings.render(
+            requireContext(),
+            R.string.guild_settings_overview_tier_info,
+            "tier" to 1,
+            "tierStatusUrl" to "",
+        )
+    }
+
+    private fun configureBanner(guild: Guild) {
+        val image = requireView().findViewById<SimpleDraweeView>(R.id.upload_banner)
+        val container = requireView().findViewById<View>(R.id.server_settings_overview_upload_banner_container)
+        val remove = requireView().findViewById<TextView>(R.id.server_settings_overview_upload_banner_remove)
+        val unlock = requireView().findViewById<TextView>(R.id.upload_banner_unlock)
+        val nitroTier = requireView().findViewById<TextView>(R.id.upload_banner_nitro_tier)
+        val current = state.get(
+            image.id,
+            IconUtils.getBannerForGuild(guild, resources.displayMetrics.widthPixels, false),
+        )
+        IconUtils.setIcon(image, current)
+        val enabled = guild.canHaveBanner()
+        container.isEnabled = enabled
+        container.setOnClickListener(if (enabled) View.OnClickListener {
+            openImagePicker { value ->
+                state.put(image.id, value)
+                configureBanner(guild)
+                state.configureSaveActionView(save)
+            }
+        } else null)
+        remove.visibility = if (enabled && !current.isNullOrBlank()) View.VISIBLE else View.GONE
+        remove.setOnClickListener {
+            state.put(image.id, "")
+            configureBanner(guild)
+            state.configureSaveActionView(save)
+        }
+        unlock.text = SettingsStrings.render(
+            requireContext(),
+            if (enabled) R.string.guild_settings_overview_boost_unlocked else R.string.guild_settings_overview_tier_info,
+            "tier" to 2,
+            "tierStatusUrl" to "",
+        )
+        unlock.visibility = if (current.isNullOrBlank()) View.VISIBLE else View.GONE
+        image.alpha = if (enabled) 1f else 0.3f
+        nitroTier.visibility = if (enabled) View.GONE else View.VISIBLE
+        nitroTier.text = SettingsStrings.render(
+            requireContext(),
+            R.string.guild_settings_overview_tier_info,
+            "tier" to 2,
+            "tierStatusUrl" to "",
+        )
+
+        val animatedUpsell = requireView().findViewById<View>(R.id.animated_banner_upsell_container)
+        animatedUpsell.visibility =
+            if (guild.canHaveAnimatedBanner()) View.VISIBLE else View.GONE
+        requireView().findViewById<TextView>(R.id.animated_banner_upsell_text).setText(
+            if (guild.canHaveAnimatedBanner()) {
+                R.string.guild_settings_animated_banner_try_it_mobile
+            } else R.string.guild_settings_animated_banner_upsell,
+        )
+        requireView().findViewById<View>(R.id.animated_banner_upsell_button).visibility = View.GONE
+    }
+
+    private fun openImagePicker(onSelected: (String) -> Unit) {
+        hasOpenedAvatarPicker = true
+        imageSelectedResult = onSelected
+        openMediaChooser()
+    }
+
+    override fun onImageChosen(uri: Uri, mimeType: String) {
+        super.onImageChosen(uri, mimeType)
+        ImageUploadDialog.show(
+            parentFragmentManager,
+            uri,
+            mediaPickerProvider(),
+            mimeType,
+            imageSelectedResult,
+            ImageUploadDialog.PreviewType.GUILD_AVATAR,
+        )
+    }
+
+    override fun onImageCropped(uri: Uri, mimeType: String) {
+        super.onImageCropped(uri, mimeType)
+        MGImages.requestDataUrl(context, uri, mimeType, imageSelectedResult)
+    }
+
+    private fun mediaPickerProvider() = object : MediaPicker.Provider {
+        override fun requireContext() = this@WidgetServerSettingsOverview.requireContext()
+        override fun getImageFile() = imageFile
+        @Suppress("DEPRECATION")
+        override fun startActivityForResult(intent: Intent, requestCode: Int) =
+            this@WidgetServerSettingsOverview.startActivityForResult(intent, requestCode)
     }
 
     private fun configureAfkChannel(channel: Channel?) {
@@ -321,13 +460,18 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
                     STATE_ID_NOTIFICATION_DEFAULT,
                     guild.defaultMessageNotifications,
                 ),
-                // Icon/banner/splash are echoed unchanged: this screen cannot upload them.
-                icon = guild.icon,
+                icon = state.get(icon.id, IconUtils.getForGuild(guild, allowAnimation = false)),
                 name = nameInput.getTextOrEmpty().trim(),
                 verificationLevel = guild.verificationLevel,
                 explicitContentFilter = guild.explicitContentFilter,
-                splash = guild.splash,
-                banner = guild.banner,
+                splash = state.get(
+                    R.id.upload_splash,
+                    guild.splash,
+                ),
+                banner = state.get(
+                    R.id.upload_banner,
+                    guild.banner,
+                ),
                 systemChannelFlags = systemChannelFlags,
                 features = guild.features.toList(),
                 rulesChannelId = guild.rulesChannelId,
@@ -347,7 +491,7 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
     }
 
     /** The AFK timeout picker. Every option is a fixed value Discord accepts. */
-    class AfkTimeoutBottomSheet : AppBottomSheet() {
+    internal class AfkBottomSheet : AppBottomSheet() {
 
         override fun getContentViewResId(): Int =
             R.layout.widget_server_settings_overview_afk_timeout
@@ -378,7 +522,7 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
     }
 
     /**
-     * Records a pick from [AfkTimeoutBottomSheet].
+     * Records a pick from [AfkBottomSheet].
      *
      * The sheet reports back through the child fragment manager rather than a captured lambda, so a
      * sheet that survives a configuration change still reaches the recreated screen.
@@ -391,6 +535,7 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
 
     companion object {
         private const val INTENT_EXTRA_GUILD_ID = "INTENT_EXTRA_GUILD_ID"
+        private const val INTENT_EXTRA_OPEN_AVATAR_PICKER = "INTENT_EXTRA_OPEN_AVATAR_PICKER"
         private const val INVALID_GUILD_ID = -1L
         private const val REQUEST_KEY_AFK_CHANNEL = "REQUEST_KEY_AFK_CHANNEL"
         private const val REQUEST_KEY_SYSTEM_CHANNEL = "REQUEST_KEY_SYSTEM_CHANNEL"
@@ -443,11 +588,14 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
             arguments = Bundle().apply { putLong(INTENT_EXTRA_GUILD_ID, guildId) }
         }
 
-        fun launch(context: Context, guildId: Long) {
+        @JvmOverloads
+        fun launch(context: Context, guildId: Long, openAvatarPicker: Boolean = false) {
             SettingsNavigation.launch(
                 context,
                 WidgetServerSettingsOverview::class.java,
-                Intent().putExtra(INTENT_EXTRA_GUILD_ID, guildId),
+                Intent()
+                    .putExtra(INTENT_EXTRA_GUILD_ID, guildId)
+                    .putExtra(INTENT_EXTRA_OPEN_AVATAR_PICKER, openAvatarPicker),
             )
         }
     }

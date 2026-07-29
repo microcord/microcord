@@ -24,6 +24,7 @@ import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.views.ThemedColor
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.GiftEntry
+import com.discord.widgets.settings.account.WidgetSettingsAccount
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.button.MaterialButton
 import rx.Observable
@@ -169,12 +170,9 @@ class WidgetChatListAdapterItemGift(
                 claimButton.setOnClickListener { acceptGift(entry, gift) }
             }
             !me.isVerified -> {
-                // The reference sends the user to account settings to verify their email. That
-                // screen is not reconstructed yet, so the button is shown disabled rather than
-                // pretending to lead somewhere.
                 showOnly(verifyButton)
-                verifyButton.isEnabled = false
-                verifyButton.setOnClickListener(null)
+                verifyButton.isEnabled = true
+                verifyButton.setOnClickListener { WidgetSettingsAccount.launch(context) }
             }
             else -> {
                 showOnly(cannotClaimButton)

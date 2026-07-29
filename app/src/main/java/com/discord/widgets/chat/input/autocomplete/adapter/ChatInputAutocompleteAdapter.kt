@@ -1,6 +1,7 @@
 package com.discord.widgets.chat.input.autocomplete.adapter
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -16,6 +17,7 @@ import com.discord.widgets.chat.input.autocomplete.EmojiUpsellPlaceholder
 import com.discord.widgets.chat.input.autocomplete.GlobalRoleAutocompletable
 import com.discord.widgets.chat.input.autocomplete.RoleAutocompletable
 import com.discord.widgets.chat.input.autocomplete.UserAutocompletable
+import com.discord.utilities.views.StickyHeaderItemDecoration
 
 /**
  * The autocomplete popup's list.
@@ -25,24 +27,50 @@ import com.discord.widgets.chat.input.autocomplete.UserAutocompletable
  * rows of empty space. Heights are per-row-kind because the command header and the emoji upsell are
  * physically different sizes.
  */
-class ChatInputAutocompleteAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+class ChatInputAutocompleteAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>(),
+    StickyHeaderItemDecoration.StickyHeaderAdapter {
 
     var onItemSelected: ((Autocompletable) -> Unit)? = null
 
     private var data: List<Autocompletable> = emptyList()
+    private var headerPositions: List<Int> = emptyList()
     private var recyclerView: RecyclerView? = null
+    private var stickyHeaderManager: StickyHeaderManager? = null
+
+    init {
+        setHasStableIds(true)
+    }
 
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
         super.onAttachedToRecyclerView(recyclerView)
         this.recyclerView = recyclerView
+        stickyHeaderManager = StickyHeaderManager(recyclerView, this)
+        recyclerView.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            stickyHeaderManager?.layoutViews(recyclerView)
+        }
+        StickyHeaderItemDecoration(this).also {
+            recyclerView.addItemDecoration(it)
+            it.blockClicks(recyclerView)
+        }
     }
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
         super.onDetachedFromRecyclerView(recyclerView)
         this.recyclerView = null
+        stickyHeaderManager = null
     }
 
     fun getItem(position: Int): Autocompletable = data[position]
+
+    override fun getAndBindHeaderView(position: Int): View? {
+        val item = data.getOrNull(position) as? ApplicationPlaceholder ?: return null
+        return stickyHeaderManager?.stickyHeaderHolder?.apply { bind(item) }?.getItemView()
+    }
+
+    override fun getHeaderPositionForItem(itemPosition: Int): Int? =
+        headerPositions.lastOrNull { it <= itemPosition }
+
+    override fun isHeader(position: Int): Boolean = position in headerPositions
 
     override fun getItemCount(): Int = data.size
 
@@ -121,6 +149,7 @@ class ChatInputAutocompleteAdapter : RecyclerView.Adapter<RecyclerView.ViewHolde
         sizeToMax: Boolean = false,
     ) {
         resizeRecyclerToData(autocompletables, hasStickers, sizeToMax)
+        headerPositions = autocompletables.indices.filter { autocompletables[it] is ApplicationPlaceholder }
         data = autocompletables
         notifyDataSetChanged()
     }

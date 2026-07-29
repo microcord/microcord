@@ -16,7 +16,7 @@ import com.discord.widgets.chat.input.autocomplete.ApplicationPlaceholder
  * Rebinding is guarded on [currentItem]: the header is re-bound on every scroll frame while it is
  * pinned, and re-issuing the icon request each time would thrash Fresco.
  */
-class CommandHeaderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+class CommandHeaderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView), StickyHeaderHolder {
 
     private val avatar: ImageView = itemView.findViewById(R.id.chat_input_application_avatar)
     private val name: TextView = itemView.findViewById(R.id.chat_input_application_name)
@@ -24,7 +24,9 @@ class CommandHeaderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView
     var currentItem: ApplicationPlaceholder? = null
         private set
 
-    fun bind(item: ApplicationPlaceholder) {
+    override fun getItemView(): View = itemView
+
+    override fun bind(item: ApplicationPlaceholder) {
         if (currentItem == item) return
         currentItem = item
 

@@ -5,6 +5,7 @@ import com.discord.R
 import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
+import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
 import com.google.android.material.button.MaterialButton
 
 /**
@@ -39,8 +40,12 @@ class WidgetChatListAdapterItemGuildInviteReminder(
         )
 
         button.setOnClickListener { view ->
-            ChatListRowNavigation.launchInviteShare
-                ?.invoke(view.context, adapter.fragmentManager, adapter.data.guildId, null, INVITE_SOURCE)
+            WidgetGuildInviteShare.launch(
+                view.context,
+                adapter.fragmentManager,
+                adapter.data.guildId,
+                source = INVITE_SOURCE,
+            )
         }
 
         // The action sheet wants the message as text. The reference always hands it the owner

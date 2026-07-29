@@ -18,6 +18,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.dimmer.DimmerView
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.mg_recycler.DragAndDropHelper
+import com.discord.utilities.mg_recycler.DragAndDropAdapter.Payload
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
@@ -129,7 +130,7 @@ class WidgetServerSettingsRoles : AppFragment(R.layout.widget_server_settings_ro
         val guildName: String?,
         val canManageRoles: Boolean,
         val elevated: Boolean,
-        val roleItems: List<WidgetServerSettingsRolesAdapter.Item>,
+        val roleItems: List<Payload>,
     ) {
         companion object {
             fun observe(guildId: Long): Observable<Model?> = StoreStream.getUsers().observeMe().flatMap { me ->
@@ -155,7 +156,7 @@ class WidgetServerSettingsRoles : AppFragment(R.layout.widget_server_settings_ro
                 val canManage = PermissionUtils.can(Permission.MANAGE_ROLES, permissions)
                 val elevated = PermissionUtils.isElevated(me.mfaEnabled, guild.mfaLevel)
                 val highestRole = RoleUtils.getHighestRole(roles, member)
-                val items = ArrayList<WidgetServerSettingsRolesAdapter.Item>(roles.size + 1)
+                val items = ArrayList<Payload>(roles.size + 1)
                 items += WidgetServerSettingsRolesAdapter.HelpItem(guildId)
                 roles.values.sortedWith(RoleUtils.ROLE_COMPARATOR).forEach { role ->
                     items += WidgetServerSettingsRolesAdapter.RoleItem(
@@ -176,12 +177,15 @@ class WidgetServerSettingsRoles : AppFragment(R.layout.widget_server_settings_ro
         private const val INTENT_EXTRA_GUILD_ID = "INTENT_EXTRA_GUILD_ID"
         private const val INVALID_ID = -1L
 
-        fun launch(context: Context, guildId: Long) {
+        fun create(context: Context, guildId: Long) {
+            StoreStream.getAnalytics().onGuildSettingsPaneViewed("ROLES", guildId)
             SettingsNavigation.launch(
                 context,
                 WidgetServerSettingsRoles::class.java,
                 Intent().putExtra(INTENT_EXTRA_GUILD_ID, guildId),
             )
         }
+
+        fun launch(context: Context, guildId: Long) = create(context, guildId)
     }
 }

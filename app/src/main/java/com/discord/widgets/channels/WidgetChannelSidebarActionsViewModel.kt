@@ -118,12 +118,7 @@ class WidgetChannelSidebarActionsViewModel(
             storeChannelsSelected: StoreChannelsSelected = StoreStream.getChannelsSelected(),
             storeUserGuildSettings: StoreUserGuildSettings = StoreStream.getUserGuildSettings(),
             storeUser: StoreUser = StoreStream.getUsers(),
-            /**
-             * `StoreStream` publishes no accessor for [StoreGuildsNsfw] yet, so the gate defaults to
-             * "agreed". The only effect is that pins stay enabled on an NSFW channel whose gate the
-             * viewer has not accepted; the viewer's own account-level NSFW allowance still applies.
-             */
-            storeGuildsNsfw: StoreGuildsNsfw? = null,
+            storeGuildsNsfw: StoreGuildsNsfw = StoreStream.getGuildsNsfw(),
         ): Observable<StoreState> = storeNavigation.observeRightPanelState().switchMap { panelState ->
             val storeState = storeChannelsSelected.observeSelectedChannel().switchMap { channel ->
                 if (channel == null) {
@@ -134,7 +129,7 @@ class WidgetChannelSidebarActionsViewModel(
                         storeUser.observeMe(),
                         storeChannels.observeChannel(channel.parentId),
                     ) { guildSettings, meUser, parentChannel ->
-                        val gateAgreed = storeGuildsNsfw?.isGuildNsfwGateAgreed(channel.guildId) ?: true
+                        val gateAgreed = storeGuildsNsfw.isGuildNsfwGateAgreed(channel.guildId)
                         StoreState.ChannelFound(
                             channel = channel,
                             parentChannel = parentChannel,

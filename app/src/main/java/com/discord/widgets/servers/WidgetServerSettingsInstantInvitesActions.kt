@@ -76,8 +76,7 @@ class WidgetServerSettingsInstantInvitesActions : AppBottomSheet() {
     }
 
     private fun revokeInvite(inviteCode: String) {
-        val api = RestAPI.apiOrNull ?: return
-        api.revokeInvite(inviteCode)
+        RestAPI.api.revokeInvite(inviteCode)
             .restSubscribeOn()
             .ui(this)
             .appSubscribe(

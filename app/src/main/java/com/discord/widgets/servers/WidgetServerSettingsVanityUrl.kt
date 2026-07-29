@@ -285,8 +285,6 @@ class ServerSettingsVanityUrlViewModel(
             val vanityUrl = RestAPI.apiOrNull
                 ?.getVanityUrl(guildId)
                 ?.restSubscribeOn()
-                // A guild with no vanity code answers 404; that is "no code", not a failure.
-                ?.onErrorReturn { VanityUrlResponse(code = "", uses = 0) }
                 ?: Observable.just(VanityUrlResponse(code = "", uses = 0))
             return Observable.combineLatest(
                 StoreStream.getUsers().observeMe(),

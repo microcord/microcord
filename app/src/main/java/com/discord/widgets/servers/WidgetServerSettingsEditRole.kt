@@ -3,8 +3,11 @@ package com.discord.widgets.servers
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
+import android.text.SpannableStringBuilder
+import android.text.style.ForegroundColorSpan
 import android.view.View
 import android.widget.TextView
 import android.widget.Toast
@@ -19,6 +22,7 @@ import com.discord.models.member.GuildMember
 import com.discord.models.user.MeUser
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
@@ -66,19 +70,49 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
 
     private fun configureUI(model: Model?) {
         if (model == null) {
-            appActivity?.onBackPressed()
+            appActivity?.finish()
             return
         }
-        setActionBarTitle(R.string.form_label_role_settings)
-        setActionBarSubtitle(model.role.name)
-        appActivity?.toolbar?.setBackgroundColor(RoleUtils.getRoleColor(model.role, requireContext()))
         setupMenu(model)
+        setupActionBar(model)
         setupName(model)
         setupColor(model)
         setupRoleIcon(model)
         setupBooleanSettings(model)
         setupPermissions(model)
         state.configureSaveActionView(save)
+    }
+
+    private fun setupActionBar(model: Model) {
+        val toolbar = appActivity?.toolbar ?: return
+        val roleColor = RoleUtils.getRoleColor(
+            model.role,
+            requireContext(),
+            ColorCompat.getThemedColor(requireContext(), R.attr.color_brand),
+        )
+        val statusBarColor = if (RoleUtils.isDefaultColor(model.role)) {
+            ColorCompat.getThemedColor(this, R.attr.color_brand_460)
+        } else {
+            val hsv = FloatArray(3)
+            Color.colorToHSV(roleColor, hsv)
+            hsv[2] *= 0.5f
+            Color.HSVToColor(hsv)
+        }
+        val isDark = ColorCompat.isColorDark(roleColor)
+        val foreground = ColorCompat.getColor(
+            requireContext(),
+            if (isDark) R.color.primary_100 else R.color.primary_500,
+        )
+        ColorCompat.setStatusBarColor(this, statusBarColor, isDark)
+        setActionBarDisplayHomeAsUpEnabled()
+        fun colored(text: String) = SpannableStringBuilder(text).apply {
+            setSpan(ForegroundColorSpan(foreground), 0, length, 0)
+        }
+        setActionBarTitle(colored(getString(R.string.form_label_role_settings)))
+        setActionBarSubtitle(colored(model.role.name))
+        toolbar.setBackgroundColor(roleColor)
+        toolbar.navigationIcon?.colorFilter = PorterDuffColorFilter(foreground, PorterDuff.Mode.SRC_ATOP)
+        toolbar.overflowIcon?.colorFilter = PorterDuffColorFilter(foreground, PorterDuff.Mode.SRC_ATOP)
     }
 
     private fun setupMenu(model: Model) {
@@ -246,11 +280,20 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
             requireView().findViewById<CheckedSetting>(R.id.role_settings_send_messages)
                 .setSubtext(getString(R.string.role_permissions_send_messages_description))
             requireView().findViewById<CheckedSetting>(R.id.role_settings_send_messages_in_threads)
-                .setText(getString(R.string.interim_send_messages_in_threads))
+                .apply {
+                    setText(getString(R.string.interim_send_messages_in_threads))
+                    setSubtext(getString(R.string.interim_role_permissions_send_messages_in_threads_description))
+                }
             requireView().findViewById<CheckedSetting>(R.id.role_settings_create_public_threads)
-                .setText(getString(R.string.interim_create_public_threads))
+                .apply {
+                    setText(getString(R.string.interim_create_public_threads))
+                    setSubtext(getString(R.string.interim_role_permissions_create_public_threads_description))
+                }
             requireView().findViewById<CheckedSetting>(R.id.role_settings_create_private_threads)
-                .setText(getString(R.string.interim_create_private_threads))
+                .apply {
+                    setText(getString(R.string.interim_create_private_threads))
+                    setSubtext(getString(R.string.interim_role_permissions_create_private_threads_description))
+                }
         }
     }
 
@@ -304,7 +347,7 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
         val owner: Boolean,
         val guildId: Long,
         val role: GuildRole,
-        val manageStatus: ManageStatus,
+        val manageStatus: ManageStatus?,
         val myPermissions: Long?,
         val myPermissionsFromOtherRoles: Long,
         val isCommunityServer: Boolean,
@@ -315,6 +358,15 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
         fun canManage() = manageStatus == ManageStatus.CAN_MANAGE_CONDITIONAL ||
             manageStatus == ManageStatus.CAN_MANAGE_ADMIN
         fun isSingular(permission: Long) = !owner && myPermissionsFromOtherRoles and permission != permission
+
+        enum class ManageStatus {
+            NO_MANAGE_ROLES_PERMISSION,
+            LOCKED_HIGHER,
+            LOCKED_HIGHEST,
+            USER_NOT_ELEVATED,
+            CAN_MANAGE_CONDITIONAL,
+            CAN_MANAGE_ADMIN,
+        }
 
         companion object {
             fun observe(guildId: Long, roleId: Long): Observable<Model?> =
@@ -401,13 +453,13 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
         }
     }
 
-    enum class ManageStatus {
-        NO_MANAGE_ROLES_PERMISSION,
-        LOCKED_HIGHER,
-        LOCKED_HIGHEST,
-        USER_NOT_ELEVATED,
-        CAN_MANAGE_CONDITIONAL,
-        CAN_MANAGE_ADMIN,
+    object ManageStatus {
+        val NO_MANAGE_ROLES_PERMISSION = Model.ManageStatus.NO_MANAGE_ROLES_PERMISSION
+        val LOCKED_HIGHER = Model.ManageStatus.LOCKED_HIGHER
+        val LOCKED_HIGHEST = Model.ManageStatus.LOCKED_HIGHEST
+        val USER_NOT_ELEVATED = Model.ManageStatus.USER_NOT_ELEVATED
+        val CAN_MANAGE_CONDITIONAL = Model.ManageStatus.CAN_MANAGE_CONDITIONAL
+        val CAN_MANAGE_ADMIN = Model.ManageStatus.CAN_MANAGE_ADMIN
     }
 
     companion object {

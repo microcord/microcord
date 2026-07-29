@@ -4875,3 +4875,29 @@ complete. Remaining deficits: `chat` 111, `servers` 40, `channels` 23, `settings
 `voice` 9, `guilds` 4, and two each in `captcha`, `home`, `guild_role_subscriptions`, `stage`, and
 `botuikit`, plus one each in `contact_sync` and `playstation`. Structural coverage remains an upper
 bound pending renewed behavioral auditing.
+
+## 2026-07-30 parallel widget completion wave
+
+A 21-agent disjoint-ownership wave completed exact root and subtree work across chat input/list/actions,
+server settings, channels, settings, auth, voice and residual widget packages. Integration restored the
+central `ChannelSelector` path for channel-list taps, applies a restored channel once on a fresh launch,
+preserves a restored panel after recreation, and sends raw guild splash/banner hashes rather than CDN
+URLs when saving server overview settings. Auth challenge credentials now remain behind random
+process-memory handles and never enter fragment arguments or saved-instance-state serialization.
+
+Verification: production Kotlin compiles, all 1,443 unit tests pass, `assembleDebug` passes, and
+`lintDebug` passes with baseline-covered findings only. No live backend or device was used.
+
+Measured exact-path widget coverage is now **973 / 1,155 (84.2%)**, up from 929 / 1,155. **182 exact
+paths remain**. Remaining deficits: `chat` 84, `servers` 39, `channels` 23, `settings` 11, `voice` 9,
+`guilds` 4, `botuikit` 2, `captcha` 2, `guild_role_subscriptions` 2, `stage` 2, and one each in `auth`,
+`contact_sync`, `home`, and `playstation`.
+
+Highest-value resumable work:
+
+- `app/src/main/java/com/discord/widgets/chat/input/models/**` | reference `out/com/discord/widgets/chat/input/models/**` | split the consolidated composer input models into the exact verified contracts, then finish `AutocompleteCommandUtils`.
+- `app/src/main/java/com/discord/widgets/chat/list/sheet/**` | reference `out/com/discord/widgets/chat/list/sheet/**` | reconstruct the application-command bottom sheet and view model.
+- `app/src/main/java/com/discord/widgets/channels/memberlist/**` | reference `out/com/discord/widgets/channels/memberlist/**` | restore the sparse item generators and exact adapter/view-holder package.
+- `app/src/main/java/com/discord/widgets/servers/guild_role_subscription/**` | reference `out/com/discord/widgets/servers/guild_role_subscription/**` | restore tier list/edit/payments/upsell screens from the existing store/model surface.
+- `app/src/main/java/com/discord/widgets/servers/member_verification/**` | reference `out/com/discord/widgets/servers/member_verification/**` | build the real membership-gate destination before enabling the invite-join gate branch.
+- `app/src/main/java/com/discord/widgets/voice/fullscreen/**` | reference `out/com/discord/widgets/voice/fullscreen/**` | remains blocked on the foreground voice service, activity route, permissions manager, and complete RTC state; do not create inert screens.

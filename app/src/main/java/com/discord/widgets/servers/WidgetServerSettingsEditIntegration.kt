@@ -11,11 +11,10 @@ import com.discord.R
 import com.discord.api.permission.Permission
 import com.discord.api.role.GuildRole
 import com.discord.app.AppFragment
-import com.discord.app.AppViewModel
-import com.discord.app.appViewModels
 import com.discord.i18n.i18nPlural
 import com.discord.models.domain.ModelGuildIntegration
 import com.discord.models.guild.Guild
+import com.discord.models.user.MeUser
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
 import com.discord.utilities.color.ColorCompat
@@ -60,14 +59,10 @@ class WidgetServerSettingsEditIntegration :
             ?.takeIf { it != INVALID_ID }
             ?: mostRecentIntent.getLongExtra(INTENT_EXTRA_INTEGRATION_ID, INVALID_ID)
 
-    private val viewModel: ServerSettingsEditIntegrationViewModel by appViewModels {
-        ServerSettingsEditIntegrationViewModel(guildId, integrationId)
-    }
-
     private val state = StatefulViews(
+        R.id.edit_integration_custom_emotes_toggle,
         R.id.edit_integration_expired_sub_container,
         R.id.edit_integration_grace_period_container,
-        R.id.edit_integration_custom_emotes_toggle,
     )
 
     private lateinit var dimmer: DimmerView
@@ -90,6 +85,7 @@ class WidgetServerSettingsEditIntegration :
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        retainInstance = true
         setActionBarDisplayHomeAsUpEnabled()
         setActionBarTitle(R.string.integration_settings)
 
@@ -125,8 +121,8 @@ class WidgetServerSettingsEditIntegration :
                     radio.context,
                     radio.context.i18nPlural(
                         R.plurals.n_days_days,
-                        GRACE_PERIOD_DAYS[index],
-                        "days" to GRACE_PERIOD_DAYS[index],
+                        gracePeriodDays[index],
+                        "days" to gracePeriodDays[index],
                     ),
                 ),
             )
@@ -151,7 +147,9 @@ class WidgetServerSettingsEditIntegration :
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
         StoreStream.getGuildIntegrations().onIntegrationScreenOpened(guildId)
-        viewModel.observeViewState().ui(this).subscribe(::configureUI)
+        Model.get(guildId, integrationId)
+            .ui(this)
+            .appSubscribe(WidgetServerSettingsEditIntegration::class.java, context, onNext = ::configureUI)
     }
 
     override fun onPause() {
@@ -159,23 +157,14 @@ class WidgetServerSettingsEditIntegration :
         StoreStream.getGuildIntegrations().onIntegrationScreenClosed()
     }
 
-    private fun configureUI(viewState: ServerSettingsEditIntegrationViewModel.ViewState) {
-        when (viewState) {
-            is ServerSettingsEditIntegrationViewModel.ViewState.Uninitialized ->
-                dimmer.setDimmed(true)
-
-            // The integration was removed, or Manage Server was lost.
-            is ServerSettingsEditIntegrationViewModel.ViewState.Unavailable ->
-                appActivity?.onBackPressed()
-
-            is ServerSettingsEditIntegrationViewModel.ViewState.Loaded -> configureLoaded(viewState)
-        }
+    private fun configureUI(model: Model?) {
+        if (model == null) appActivity?.onBackPressed() else configureLoaded(model)
     }
 
-    private fun configureLoaded(viewState: ServerSettingsEditIntegrationViewModel.ViewState.Loaded) {
-        val integration = viewState.integration
+    private fun configureLoaded(model: Model) {
+        val integration = model.integration
         val isTwitch = integration.type == ModelGuildIntegration.TYPE_TWITCH
-        setActionBarSubtitle(viewState.guild.name)
+        setActionBarSubtitle(model.guild.name)
 
         name.text = integration.displayName
         ownerName.text = integration.user?.username
@@ -183,7 +172,7 @@ class WidgetServerSettingsEditIntegration :
             if (isTwitch) R.drawable.asset_account_sync_twitch else R.drawable.asset_account_sync_youtube,
         )
 
-        syncContainer.setOnClickListener { syncNow(viewState.guild.id, integration.id) }
+        syncContainer.setOnClickListener { syncNow(model.guild.id, integration.id) }
         // A sync in progress blocks the whole form, since its outcome changes what is displayed.
         dimmer.setDimmed(integration.syncing)
 
@@ -198,19 +187,19 @@ class WidgetServerSettingsEditIntegration :
             ),
         )
 
-        val role = viewState.role
+        val role = model.role
         syncedRoleContainer.setOnClickListener(
             role?.let { syncedRole ->
                 View.OnClickListener {
                     WidgetServerSettingsEditRole.launch(
-                        viewState.guild.id,
+                        model.guild.id,
                         syncedRole.id,
                         requireContext(),
                     )
                 }
             },
         )
-        syncedRole.text = role?.name ?: getString(R.string.none)
+        syncedRole.text = role?.name ?: "None"
         syncedRole.setTextColor(
             RoleUtils.getOpaqueColor(role, ColorCompat.getColor(this, R.color.primary_300)),
         )
@@ -222,14 +211,14 @@ class WidgetServerSettingsEditIntegration :
             integration.expireBehavior,
         )
         expiryBehaviorRadioManager.setChecked(
-            expiryBehaviorRadios[expiryPosition.coerceIn(expiryBehaviorRadios.indices)],
+            expiryBehaviorRadios[expiryPosition],
         )
         val gracePeriodPosition = state.get(
             R.id.edit_integration_grace_period_container,
             gracePeriodPositionOf(integration.expireGracePeriod),
         )
         gracePeriodRadioManager.setChecked(
-            gracePeriodRadios[gracePeriodPosition.coerceIn(gracePeriodRadios.indices)],
+            gracePeriodRadios[gracePeriodPosition],
         )
 
         // Emote sync is a Twitch-only concept.
@@ -240,7 +229,7 @@ class WidgetServerSettingsEditIntegration :
         )
 
         state.configureSaveActionView(save)
-        save.setOnClickListener { saveChanges(viewState.guild.id, integration.id) }
+        save.setOnClickListener { saveChanges(model.guild.id, integration.id) }
     }
 
     private fun syncNow(guildId: Long, integrationId: Long) {
@@ -262,7 +251,7 @@ class WidgetServerSettingsEditIntegration :
             integrationId,
             RestAPIParams.GuildIntegration(
                 expireBehavior = expiryBehaviorRadioManager.checkedButtonIndex,
-                expireGracePeriod = GRACE_PERIOD_DAYS[gracePeriodRadioManager.checkedButtonIndex],
+                expireGracePeriod = gracePeriodDays[gracePeriodRadioManager.checkedButtonIndex],
                 enableEmoticons = customEmotesToggle.isChecked(),
             ),
         )
@@ -287,9 +276,39 @@ class WidgetServerSettingsEditIntegration :
         return manager
     }
 
-    /** Index of [gracePeriodDays] in [GRACE_PERIOD_DAYS]; an unknown value falls back to 1 day. */
+    /** Index in [gracePeriodDays]; an unknown value falls back to 1 day. */
     private fun gracePeriodPositionOf(gracePeriodDays: Int): Int =
-        GRACE_PERIOD_DAYS.indexOf(gracePeriodDays).takeIf { it >= 0 } ?: 0
+        Companion.gracePeriodDays.indexOf(gracePeriodDays).takeIf { it >= 0 } ?: 0
+
+    private data class Model(
+        val guild: Guild,
+        val integration: ModelGuildIntegration,
+        val role: GuildRole?,
+    ) {
+        companion object {
+            fun get(guildId: Long, integrationId: Long): Observable<Model?> =
+                Observable.combineLatest(
+                    StoreStream.getUsers().observeMe(),
+                    StoreStream.getGuilds().observeGuild(guildId),
+                    StoreStream.getGuilds().observeRoles(guildId),
+                    StoreStream.getPermissions().observePermissionsForGuild(guildId),
+                    StoreStream.getGuildIntegrations().get(guildId, integrationId),
+                ) { meUser: MeUser, guild: Guild?, roles: Map<Long, GuildRole>?, permissions: Long?, integration: ModelGuildIntegration? ->
+                    if (guild == null || roles == null || permissions == null || integration == null ||
+                        !integration.enabled || !PermissionUtils.canAndIsElevated(
+                            Permission.MANAGE_GUILD,
+                            permissions,
+                            meUser.mfaEnabled,
+                            guild.mfaLevel,
+                        )
+                    ) {
+                        null
+                    } else {
+                        Model(guild, integration, roles[integration.roleId])
+                    }
+                }.computationLatest().distinctUntilChanged()
+        }
+    }
 
     companion object {
         private const val INTENT_EXTRA_GUILD_ID = "INTENT_EXTRA_GUILD_ID"
@@ -297,7 +316,7 @@ class WidgetServerSettingsEditIntegration :
         private const val INVALID_ID = -1L
 
         /** The grace periods Discord offers, in the radio order the layout declares. */
-        private val GRACE_PERIOD_DAYS = listOf(1, 3, 7, 14, 30)
+        private val gracePeriodDays = intArrayOf(1, 3, 7, 14, 30)
 
         fun newInstance(guildId: Long, integrationId: Long) =
             WidgetServerSettingsEditIntegration().apply {
@@ -306,6 +325,9 @@ class WidgetServerSettingsEditIntegration :
                     putLong(INTENT_EXTRA_INTEGRATION_ID, integrationId)
                 }
             }
+
+        fun launch(guildId: Long, integrationId: Long, context: Context) =
+            launch(context, guildId, integrationId)
 
         fun launch(context: Context, guildId: Long, integrationId: Long) {
             SettingsNavigation.launch(
@@ -319,19 +341,7 @@ class WidgetServerSettingsEditIntegration :
     }
 }
 
-/**
- * State for [WidgetServerSettingsEditIntegration].
- *
- * Reference: `WidgetServerSettingsEditIntegration.Model`. Note it requires the integration to be
- * **enabled** as well as the user to hold Manage Server — a disabled integration has no settings to
- * edit, so the screen closes rather than showing a dead form.
- */
-class ServerSettingsEditIntegrationViewModel(
-    guildId: Long,
-    integrationId: Long,
-    storeStateObservable: Observable<StoreState> = observeStoreState(guildId, integrationId),
-) : AppViewModel<ServerSettingsEditIntegrationViewModel.ViewState>(ViewState.Uninitialized) {
-
+internal class ServerSettingsEditIntegrationViewModel {
     data class StoreState(
         val guild: Guild?,
         val integration: ModelGuildIntegration?,
@@ -340,11 +350,7 @@ class ServerSettingsEditIntegrationViewModel(
     )
 
     sealed class ViewState {
-        object Uninitialized : ViewState()
-
-        /** No such integration, it is disabled, or the user may not manage the guild. */
         object Unavailable : ViewState()
-
         data class Loaded(
             val guild: Guild,
             val integration: ModelGuildIntegration,
@@ -352,44 +358,15 @@ class ServerSettingsEditIntegrationViewModel(
         ) : ViewState()
     }
 
-    init {
-        storeStateObservable.computationLatest().distinctUntilChanged().ui(this).subscribe {
-            updateViewState(toViewState(it))
-        }
-    }
-
     companion object {
-        internal fun toViewState(storeState: StoreState): ViewState {
-            val guild = storeState.guild
-            val integration = storeState.integration
-            return if (guild == null || integration == null ||
-                !integration.enabled || !storeState.canManageServer
-            ) {
+        fun toViewState(state: StoreState): ViewState {
+            val guild = state.guild
+            val integration = state.integration
+            return if (guild == null || integration == null || !integration.enabled || !state.canManageServer) {
                 ViewState.Unavailable
             } else {
-                ViewState.Loaded(guild, integration, storeState.role)
+                ViewState.Loaded(guild, integration, state.role)
             }
         }
-
-        fun observeStoreState(guildId: Long, integrationId: Long): Observable<StoreState> =
-            Observable.combineLatest(
-                StoreStream.getUsers().observeMe(),
-                StoreStream.getGuilds().observeGuild(guildId),
-                StoreStream.getGuilds().observeRoles(guildId),
-                StoreStream.getPermissions().observePermissionsForGuild(guildId),
-                StoreStream.getGuildIntegrations().get(guildId, integrationId),
-            ) { meUser, guild, roles, guildPermissions, integration ->
-                StoreState(
-                    guild = guild,
-                    integration = integration,
-                    role = integration?.let { roles[it.roleId] },
-                    canManageServer = guild != null && PermissionUtils.canAndIsElevated(
-                        Permission.MANAGE_GUILD,
-                        guildPermissions,
-                        meUser.mfaEnabled,
-                        guild.mfaLevel,
-                    ),
-                )
-            }
     }
 }

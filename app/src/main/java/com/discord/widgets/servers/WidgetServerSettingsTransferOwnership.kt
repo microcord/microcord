@@ -78,7 +78,7 @@ class WidgetServerSettingsTransferOwnership : AppDialog(R.layout.widget_guild_tr
         )
             .restSubscribeOn()
             .ui(this)
-            .appSubscribe(WidgetServerSettingsTransferOwnership::class.java) { dismiss() }
+            .appSubscribe(WidgetServerSettingsTransferOwnership::class.java, context) { dismiss() }
     }
 
     private val mfaCode: String?

@@ -2,7 +2,11 @@ package com.discord.widgets.channels.threads.browser
 
 import com.discord.R
 import com.discord.api.channel.Channel
+import com.discord.api.channel.getDisplayName
+import com.discord.api.channel.isAnnouncementChannel
 import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isThread
+import com.discord.api.channel.isVoiceChannel
 import com.discord.api.permission.Permission
 import com.discord.api.role.GuildRole
 import com.discord.app.AppViewModel
@@ -15,6 +19,9 @@ import com.discord.stores.StoreStream
 import com.discord.stores.StoreThreadMessages
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rx.ui
+import com.discord.widgets.chat.list.CreateThreadsFeatureFlag
+import com.discord.widgets.chat.list.NewThreadsPermissionsFeatureFlag
+import com.discord.widgets.chat.list.ViewThreadsFeatureFlag
 import rx.Observable
 import rx.subjects.BehaviorSubject
 
@@ -38,6 +45,8 @@ private data class ArchivedInput(
     val members: Map<Long, GuildMember>,
     val users: Map<Long, User>,
     val permissions: Long?,
+    val channel: Channel?,
+    val guild: Guild?,
 )
 
 class WidgetThreadBrowserViewModel(
@@ -62,11 +71,12 @@ class WidgetThreadBrowserViewModel(
 
     init {
         stateSource.ui(this).subscribe { state ->
+            if (viewState is ViewState.GoToChannel) return@subscribe
             val channel = state.channel
             updateViewState(ViewState.Browser(
-                channel?.name,
-                canCreateThread(state.permissions),
-                PermissionUtils.can(Permission.READ_MESSAGE_HISTORY, state.permissions),
+                channel?.getDisplayName(),
+                canCreateThread(state.permissions, channel, state.guild),
+                canViewArchivedThreads(channel, state.permissions),
                 channel?.isGuildForumChannel() == true,
             ))
         }
@@ -75,9 +85,25 @@ class WidgetThreadBrowserViewModel(
     fun openThread(channel: Channel) = updateViewState(ViewState.GoToChannel(channel))
 
     companion object {
-        internal fun canCreateThread(permissions: Long?) =
-            PermissionUtils.can(Permission.CREATE_PUBLIC_THREADS, permissions) ||
-                PermissionUtils.can(Permission.CREATE_PRIVATE_THREADS, permissions)
+        internal fun canCreateThread(permissions: Long?, channel: Channel?, guild: Guild?): Boolean {
+            if (permissions == null || channel == null || guild == null || channel.isThread() || channel.isVoiceChannel()) {
+                return false
+            }
+            if (!ViewThreadsFeatureFlag.isEnabled() || !CreateThreadsFeatureFlag.isEnabled(guild.id)) return false
+
+            val newPermissions = NewThreadsPermissionsFeatureFlag.isEnabled(guild.id)
+            val canWrite = PermissionUtils.hasAccessWrite(channel, permissions)
+            val canCreatePublic = PermissionUtils.can(Permission.CREATE_PUBLIC_THREADS, permissions) &&
+                (newPermissions || canWrite)
+            val canCreatePrivate = !channel.isAnnouncementChannel() &&
+                PermissionUtils.can(Permission.CREATE_PRIVATE_THREADS, permissions) &&
+                (newPermissions || canWrite)
+            return canCreatePublic || canCreatePrivate
+        }
+
+        internal fun canViewArchivedThreads(channel: Channel?, permissions: Long?) =
+            channel != null && PermissionUtils.hasAccess(channel, permissions) &&
+                PermissionUtils.can(Permission.READ_MESSAGE_HISTORY, permissions)
     }
 }
 
@@ -104,14 +130,18 @@ class WidgetThreadBrowserActiveViewModel(
 
     init {
         stateSource.ui(this).subscribe {
-            requestMissingOwners(it.activeThreads.values, it.users)
+            requestMissingMembers(it)
             updateViewState(buildState(it))
         }
     }
 
-    private fun requestMissingOwners(threads: Collection<Channel>, users: Map<Long, User>) {
+    private fun requestMissingMembers(state: StoreState) {
         val requester = StoreStream.getGuildMemberRequester()
-        threads.map(Channel::ownerId).filter { it > 0 && it !in users }.distinct()
+        val threads = state.activeJoinedThreads.values + state.activeThreads.values
+        val missing = threads.flatMap { thread ->
+            listOfNotNull(thread.ownerId.takeIf { it > 0 }, state.threadStates[thread.id]?.mostRecentMessage?.author?.id)
+        }.filter { it !in state.users || it !in state.guildMembers }.distinct()
+        missing
             .forEach { requester.queueRequest(guildId, it) }
         requester.performQueuedRequests()
     }
@@ -130,9 +160,12 @@ class WidgetThreadBrowserActiveViewModel(
                     state.threadStates[id]?.mostRecentMessage?.author?.id?.let { state.blockedUsers[it] == 2 } == true,
                 ),
             )
-            val joined = state.activeJoinedThreads.values.sortedByDescending(Channel::id)
-            val others = state.activeThreads.filterKeys { it !in state.activeJoinedThreads }.values.sortedByDescending(Channel::id)
+            val joined = state.activeJoinedThreads.values
+            val others = state.activeThreads.filterKeys { it !in state.activeJoinedThreads }.values
             val rows = buildList<WidgetThreadBrowserAdapter.Item> {
+                if (state.channel?.isGuildForumChannel() == true) {
+                    add(WidgetThreadBrowserAdapter.Item.Warning())
+                }
                 if (joined.isNotEmpty()) {
                     add(WidgetThreadBrowserAdapter.Item.Header("joined", R.string.thread_browser_joined_header, joined.size))
                     addAll(joined.map { it.item() })
@@ -142,7 +175,10 @@ class WidgetThreadBrowserActiveViewModel(
                     addAll(others.map { it.item() })
                 }
             }
-            return ViewState(rows, WidgetThreadBrowserViewModel.canCreateThread(state.permissions))
+            return ViewState(
+                if (joined.isEmpty() && others.isEmpty()) emptyList() else rows,
+                WidgetThreadBrowserViewModel.canCreateThread(state.permissions, state.channel, state.guild),
+            )
         }
 
         private fun defaultSource(guildId: Long, channelId: Long): Observable<StoreState> =
@@ -199,9 +235,9 @@ class WidgetThreadBrowserArchivedViewModel(
     data class ViewState(
         val viewMode: ViewMode,
         val listItems: List<WidgetThreadBrowserAdapter.Item>,
-        val canCreateThread: Boolean,
         val isModerator: Boolean,
         val isError: Boolean,
+        val canCreateThread: Boolean,
     )
 
     private val mode = BehaviorSubject.create(ViewMode(VisibilityMode.PublicThreads, false))
@@ -214,8 +250,10 @@ class WidgetThreadBrowserArchivedViewModel(
                 StoreStream.getGuilds().observeGuildMembers(guildId),
                 StoreStream.getUsers().observeAllUsers(),
                 StoreStream.getPermissions().observePermissionsForChannel(channelId),
-            ) { listing, members, users, permissions ->
-                ArchivedInput(selected, listing, members, users, permissions)
+                StoreStream.getChannels().observeChannel(channelId),
+                StoreStream.getGuilds().observeGuild(guildId),
+            ) { listing, members, users, permissions, channel, guild ->
+                ArchivedInput(selected, listing, members, users, permissions, channel, guild)
             }
         }.ui(this).subscribe(::update)
     }
@@ -232,42 +270,68 @@ class WidgetThreadBrowserArchivedViewModel(
     private fun update(input: ArchivedInput) {
         val viewMode = input.mode
         val listing = input.listing
-        val isModerator = PermissionUtils.can(Permission.MANAGE_THREADS, input.permissions)
+        val isModerator = PermissionUtils.can(Permission.MANAGE_THREADS, input.permissions) &&
+            PermissionUtils.can(Permission.READ_MESSAGE_HISTORY, input.permissions)
         (listing as? ArchivedThreadsStore.ThreadListingState.Listing)?.threads
             ?.map(Channel::ownerId)
-            ?.filter { it > 0 && it !in input.users }
+            ?.filter { it > 0 && (it !in input.users || it !in input.members) }
             ?.distinct()
             ?.forEach { StoreStream.getGuildMemberRequester().queueRequest(guildId, it) }
         StoreStream.getGuildMemberRequester().performQueuedRequests()
         val rows = when (listing) {
             ArchivedThreadsStore.ThreadListingState.Uninitialized -> listOf(WidgetThreadBrowserAdapter.Item.Loading())
             ArchivedThreadsStore.ThreadListingState.Error -> emptyList()
-            is ArchivedThreadsStore.ThreadListingState.Listing -> buildList<WidgetThreadBrowserAdapter.Item> {
-                if (viewMode.visibility == VisibilityMode.PrivateThreads && viewMode.isModeratorMode) {
-                    add(WidgetThreadBrowserAdapter.Item.Warning())
-                }
-                addAll(listing.threads.map { thread ->
-                    WidgetThreadBrowserAdapter.Item.Thread(ThreadBrowserThreadView.ThreadData.ArchivedThread(
-                        thread,
-                        input.members,
-                        input.users[thread.ownerId],
-                        if (viewMode.visibility == VisibilityMode.PublicThreads) {
-                            ThreadBrowserThreadView.TimestampMode.ArchivedAt
-                        } else {
-                            ThreadBrowserThreadView.TimestampMode.CreatedAt
-                        },
-                    ))
-                })
-                if (listing.isLoadingMore) add(WidgetThreadBrowserAdapter.Item.Loading())
-            }
+            is ArchivedThreadsStore.ThreadListingState.Listing -> buildItems(
+                viewMode,
+                listing,
+                input.members,
+                input.users,
+                isForumChannel = input.channel?.isGuildForumChannel() == true,
+            )
         }
         canLoadMore = (listing as? ArchivedThreadsStore.ThreadListingState.Listing)?.let { it.hasMore && !it.isLoadingMore } == true
         updateViewState(ViewState(
             viewMode,
             rows,
-            WidgetThreadBrowserViewModel.canCreateThread(input.permissions),
             isModerator,
             listing === ArchivedThreadsStore.ThreadListingState.Error,
+            WidgetThreadBrowserViewModel.canCreateThread(input.permissions, input.channel, input.guild),
         ))
+    }
+
+    companion object {
+        internal fun buildItems(
+            viewMode: ViewMode,
+            listing: ArchivedThreadsStore.ThreadListingState.Listing,
+            members: Map<Long, GuildMember>,
+            users: Map<Long, User>,
+            isForumChannel: Boolean,
+        ) = buildList<WidgetThreadBrowserAdapter.Item> {
+            if (isForumChannel) add(WidgetThreadBrowserAdapter.Item.Warning())
+            if (listing.threads.isNotEmpty()) {
+                add(WidgetThreadBrowserAdapter.Item.Header(
+                    "header",
+                    if (viewMode.visibility == VisibilityMode.PublicThreads) {
+                        R.string.thread_browser_public_header
+                    } else {
+                        R.string.thread_browser_private_header
+                    },
+                    listing.threads.size,
+                ))
+                addAll(listing.threads.map { thread ->
+                    WidgetThreadBrowserAdapter.Item.Thread(ThreadBrowserThreadView.ThreadData.ArchivedThread(
+                        thread,
+                        members,
+                        users[thread.ownerId],
+                        if (viewMode.threadListingType == ArchivedThreadsStore.ThreadListingType.MY_ARCHIVED_PRIVATE_THREADS) {
+                            ThreadBrowserThreadView.TimestampMode.CreatedAt
+                        } else {
+                            ThreadBrowserThreadView.TimestampMode.ArchivedAt
+                        },
+                    ))
+                })
+            }
+            if (listing.isLoadingMore) add(WidgetThreadBrowserAdapter.Item.Loading())
+        }
     }
 }

@@ -1,91 +1,82 @@
 package com.discord.widgets.settings.account
 
 import android.os.Bundle
-import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
-import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
-import androidx.fragment.app.Fragment
+import androidx.lifecycle.ViewModelProvider
 import com.discord.app.AppFragment
-import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.app.AppToast
 import com.discord.app.AppViewFlipper
-import com.discord.widgets.friends.BlockedUserUi
 import com.discord.widgets.friends.BlockedUsersState
 import com.discord.widgets.friends.FriendUserUi
-import com.facebook.drawee.view.SimpleDraweeView
-import com.google.android.material.button.MaterialButton
+import com.discord.utilities.icon.IconUtils
 import rx.Observable
 import rx.Subscription
 
 class WidgetSettingsBlockedUsers : AppFragment(R.layout.widget_settings_blocked_users) {
-    private var subscription: Subscription? = null
-    private val listAdapter = Adapter()
+    private lateinit var viewModel: WidgetSettingsBlockedUsersViewModel
+    private lateinit var listAdapter: WidgetSettingsBlockedUsersAdapter
+    private var stateSubscription: Subscription? = null
+    private var eventSubscription: Subscription? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        (activity as? AppCompatActivity)?.supportActionBar?.title = getString(R.string.user_settings_blocked_users)
+        setActionBarTitle(R.string.user_settings_blocked_users)
+        setActionBarDisplayHomeAsUpEnabled()
+        viewModel = ViewModelProvider(this)[WidgetSettingsBlockedUsersViewModel::class.java]
         view.findViewById<RecyclerView>(R.id.blocked_users_list_recycler).apply {
             layoutManager = LinearLayoutManager(context)
-            adapter = listAdapter
+            listAdapter = WidgetSettingsBlockedUsersAdapter(this).also { adapter = it }
+        }
+        listAdapter.onClickUnblock = { viewModel.onClickUnblock(it.id) }
+        listAdapter.onClickUserProfile = { user ->
+            onProfile(
+                FriendUserUi(
+                    id = user.id,
+                    username = user.username,
+                    discriminator = user.discriminator,
+                    avatarUrl = IconUtils.getForUser(user.id, user.avatar, user.discriminator),
+                ),
+            )
         }
     }
 
     override fun onStart() {
         super.onStart()
-        subscription = (stateSource?.invoke() ?: Observable.just(BlockedUsersState.Loaded(emptyList())))
+        stateSubscription = viewModel.observeViewState()
             .distinctUntilChanged()
-            .subscribe { state -> view?.post { if (view != null) show(state) } }
+            .subscribe(::show)
+        eventSubscription = viewModel.observeEvents().subscribe { event ->
+            when (event) {
+                is WidgetSettingsBlockedUsersViewModel.Event.ShowToast -> AppToast.show(this, event.stringRes)
+            }
+        }
     }
 
     override fun onStop() {
-        subscription?.unsubscribe()
-        subscription = null
+        stateSubscription?.unsubscribe()
+        stateSubscription = null
+        eventSubscription?.unsubscribe()
+        eventSubscription = null
         super.onStop()
     }
 
-    private fun show(state: BlockedUsersState) {
+    private fun show(state: WidgetSettingsBlockedUsersViewModel.ViewState) {
         val flipper = requireView().findViewById<AppViewFlipper>(R.id.blocked_users_flipper)
         when (state) {
-            BlockedUsersState.Loading -> flipper.visibility = View.INVISIBLE
-            is BlockedUsersState.Loaded -> {
-                flipper.visibility = View.VISIBLE
-                flipper.displayedChild = if (state.users.isEmpty()) 1 else 0
-                listAdapter.submitList(state.users)
+            WidgetSettingsBlockedUsersViewModel.ViewState.Uninitialized -> Unit
+            WidgetSettingsBlockedUsersViewModel.ViewState.Empty -> flipper.displayedChild = 1
+            is WidgetSettingsBlockedUsersViewModel.ViewState.Loaded -> {
+                flipper.displayedChild = 0
+                listAdapter.setData(state.items)
             }
         }
     }
-
-    private class Adapter : ListAdapter<BlockedUserUi, Holder>(DIFF) {
-        init { setHasStableIds(true) }
-        override fun getItemId(position: Int) = getItem(position).user.id
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = Holder(
-            LayoutInflater.from(parent.context).inflate(R.layout.widget_settings_item_blocked_user, parent, false),
-        )
-        override fun onBindViewHolder(holder: Holder, position: Int) {
-            val user = getItem(position).user
-            holder.itemView.contentDescription = user.username
-            holder.itemView.setOnClickListener { onProfile(user) }
-            holder.itemView.findViewById<SimpleDraweeView>(R.id.blocked_user_item_avatar).setImageURI(user.avatarUrl)
-            holder.itemView.findViewById<TextView>(R.id.blocked_user_item_name).text = user.username
-            holder.itemView.findViewById<MaterialButton>(R.id.unblock_user_button).setOnClickListener { onUnblock(user) }
-        }
-
-        companion object {
-            val DIFF = object : DiffUtil.ItemCallback<BlockedUserUi>() {
-                override fun areItemsTheSame(oldItem: BlockedUserUi, newItem: BlockedUserUi) = oldItem.user.id == newItem.user.id
-                override fun areContentsTheSame(oldItem: BlockedUserUi, newItem: BlockedUserUi) = oldItem == newItem
-            }
-        }
-    }
-
-    private class Holder(view: View) : RecyclerView.ViewHolder(view)
 
     companion object {
+        // Retained until StoreStream's old installation sites are removed by their owner.
         @JvmField var stateSource: (() -> Observable<BlockedUsersState>)? = null
         @JvmField var onUnblock: (FriendUserUi) -> Unit = {}
         @JvmField var onProfile: (FriendUserUi) -> Unit = {}

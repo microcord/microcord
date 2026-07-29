@@ -4,8 +4,6 @@ import android.content.Context
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
@@ -17,7 +15,9 @@ import com.discord.api.application.Application
 import com.discord.api.message.activity.MessageActivity
 import com.discord.api.message.activity.MessageActivityType
 import com.discord.models.user.MeUser
+import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.time.Clock
+import com.discord.widgets.channels.list.WidgetCollapsedUsersListAdapter
 import com.discord.widgets.channels.list.items.CollapsedUser
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.button.MaterialButton
@@ -36,7 +36,7 @@ class ViewEmbedGameInvite @JvmOverloads constructor(
     private val cover: SimpleDraweeView
     private val header: TextView
     private val subtext: TextView
-    private val userAdapter = PartyUserAdapter()
+    private val userAdapter: WidgetCollapsedUsersListAdapter
     var onActionButtonClick: ((View, Model) -> Unit)? = null
 
     init {
@@ -49,7 +49,8 @@ class ViewEmbedGameInvite @JvmOverloads constructor(
         cover = requireNotNull(findViewById(R.id.item_game_invite_cover_iv))
         header = requireNotNull(findViewById(R.id.item_game_invite_header))
         subtext = requireNotNull(findViewById(R.id.item_game_invite_subtext))
-        requireNotNull<RecyclerView>(findViewById(R.id.item_game_invite_recycler)).adapter = userAdapter
+        val recycler = requireNotNull<RecyclerView>(findViewById(R.id.item_game_invite_recycler))
+        userAdapter = MGRecyclerAdapter.configure(WidgetCollapsedUsersListAdapter(recycler))
     }
 
     fun bind(model: Model, clock: Clock) {
@@ -57,7 +58,13 @@ class ViewEmbedGameInvite @JvmOverloads constructor(
         val openSlots = model.activity?.party?.size?.let { (it.lastOrNull() ?: 0) - (it.firstOrNull() ?: 0) } ?: 0
         val full = openSlots <= 0
         applicationName.text = model.application.name
-        header.setText(if (dead || model.messageActivity.type == MessageActivityType.SPECTATE) R.string.invite_embed_game_invite else R.string.invite_embed_invite_to_join)
+        header.setText(
+            if (dead || model.messageActivity.type == MessageActivityType.SPECTATE) {
+                R.string.invite_embed_game_has_ended
+            } else {
+                R.string.invite_embed_invite_to_join_group
+            },
+        )
         subtext.text = if (full) model.activity?.details else model.activity?.state
         subtext.visibility = if (subtext.text.isNullOrEmpty()) View.GONE else View.VISIBLE
         configureImages(model, dead)
@@ -94,16 +101,16 @@ class ViewEmbedGameInvite @JvmOverloads constructor(
         actionButton.visibility = View.VISIBLE
         if (dead || !model.canJoin) {
             actionButton.isEnabled = false
-            actionButton.setText(R.string.game_action_button_play_disabled_desktop_app)
+            actionButton.setText(R.string.join)
             actionButton.setOnClickListener(null)
             return
         }
-        actionButton.isEnabled = model.isInParty || full || model.creatorId == model.meUser.id
+        actionButton.isEnabled = !model.isInParty && !full && model.creatorId != model.meUser.id
         actionButton.setText(
             when {
-                full -> R.string.invite_embed_ask_to_join
+                full -> R.string.invite_embed_full_group
                 model.isInParty -> R.string.invite_embed_joined
-                else -> R.string.game_action_button_play_disabled_desktop_app
+                else -> R.string.join
             },
         )
         actionButton.setOnClickListener { onActionButtonClick?.invoke(it, model) }
@@ -134,38 +141,6 @@ class ViewEmbedGameInvite @JvmOverloads constructor(
         }
     }
 
-    private inner class PartyUserAdapter : RecyclerView.Adapter<PartyUserViewHolder>() {
-        private var users: List<CollapsedUser> = emptyList()
-
-        fun setData(users: List<CollapsedUser>) {
-            this.users = users.take(MAX_USERS_SHOWN)
-            notifyDataSetChanged()
-        }
-
-        override fun getItemCount() = users.size
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PartyUserViewHolder {
-            val image = SimpleDraweeView(parent.context).apply {
-                val size = (40 * resources.displayMetrics.density).toInt()
-                layoutParams = ViewGroup.LayoutParams(size, size)
-            }
-            return PartyUserViewHolder(image)
-        }
-
-        override fun onBindViewHolder(holder: PartyUserViewHolder, position: Int) = holder.bind(users[position])
-    }
-
-    private class PartyUserViewHolder(private val image: SimpleDraweeView) : RecyclerView.ViewHolder(image) {
-        fun bind(item: CollapsedUser) {
-            image.contentDescription = item.user.username
-            image.setImageURI(
-                item.user.avatar?.let {
-                    "https://cdn.discordapp.com/avatars/${item.user.id}/$it.webp?size=64"
-                },
-            )
-        }
-    }
-
     private fun applicationIcon(applicationId: Long, hash: String) =
         "https://cdn.discordapp.com/app-icons/$applicationId/$hash.webp?size=256"
 
@@ -184,6 +159,5 @@ class ViewEmbedGameInvite @JvmOverloads constructor(
 
     companion object {
         const val EMBED_LIFETIME_MILLIS = 7_200_000L
-        const val MAX_USERS_SHOWN = 4
     }
 }

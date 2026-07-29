@@ -7,6 +7,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.api.guild.GuildFeature
 import com.discord.api.role.GuildRole
 import com.discord.app.AppFragment
 import com.discord.app.AppToast
@@ -105,6 +106,7 @@ class WidgetServerSettingsEditMember : AppFragment(R.layout.widget_server_settin
         super.onViewBoundOrOnResume()
         val guildId = mostRecentIntent.getLongExtra(INTENT_EXTRA_GUILD_ID, INVALID_ID)
         val userId = mostRecentIntent.getLongExtra(INTENT_EXTRA_USER_ID, INVALID_ID)
+        StoreStream.getGuildSubscriptions().subscribeUser(guildId, userId)
         Model.get(guildId, userId).ui(this).subscribe(::configureUI)
     }
 
@@ -145,7 +147,7 @@ class WidgetServerSettingsEditMember : AppFragment(R.layout.widget_server_settin
         // The whole administrative block disappears when none of its actions is available, rather
         // than leaving a bare divider and header behind.
         administrativeContainer.visibility =
-            if (data.canDisableCommunication || data.canKick || data.canBan || data.canTransferOwnership) {
+            if (data.canKick || data.canBan || data.canTransferOwnership) {
                 View.VISIBLE
             } else {
                 View.GONE
@@ -232,18 +234,24 @@ class WidgetServerSettingsEditMember : AppFragment(R.layout.widget_server_settin
         }
     }
 
-    /**
-     * Ownership transfer is irreversible and only the owner sees it.
-     *
-     * **Degraded**: `WidgetServerSettingsTransferOwnership` — which owns the reference's
-     * type-the-server-name confirmation — has not been reconstructed, so the row stays hidden rather
-     * than leading nowhere or, worse, transferring without a confirmation. The verified/partnered
-     * guard the reference applies before opening it is preserved here so it is not lost when the
-     * screen lands.
-     */
-    private fun configureTransferOwnership(@Suppress("UNUSED_PARAMETER") data: Model) {
-        transferOwnershipButton.visibility = View.GONE
-        transferOwnershipButton.setOnClickListener(null)
+    private fun configureTransferOwnership(data: Model) {
+        if (!data.canTransferOwnership) {
+            transferOwnershipButton.visibility = View.GONE
+            transferOwnershipButton.setOnClickListener(null)
+            return
+        }
+        transferOwnershipButton.visibility = View.VISIBLE
+        transferOwnershipButton.setOnClickListener {
+            if (GuildFeature.VERIFIED in data.guild.features || GuildFeature.PARTNERED in data.guild.features) {
+                AppToast.show(this, R.string.transfer_ownership_protected_guild)
+            } else {
+                WidgetServerSettingsTransferOwnership.create(
+                    data.guild.id,
+                    data.user.id,
+                    parentFragmentManager,
+                )
+            }
+        }
     }
 
     private fun setupNickname(data: Model) {
@@ -421,7 +429,7 @@ class WidgetServerSettingsEditMember : AppFragment(R.layout.widget_server_settin
                                 manageContext.canManageRoles,
                             )
                         },
-                    canManage = manageContext.canManage() || manageContext.canDisableCommunication,
+                    canManage = manageContext.canManage(),
                     canKick = manageContext.canKick,
                     canBan = manageContext.canBan,
                     canChangeNickname = manageContext.canChangeNickname,

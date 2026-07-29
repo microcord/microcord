@@ -20,6 +20,8 @@ import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
 import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.time.TimeUtils
+import com.discord.widgets.channels.list.WidgetCollapsedUsersListAdapter
+import com.discord.widgets.channels.list.items.CollapsedUser
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.SpotifyListenTogetherEntry
 import com.facebook.drawee.view.SimpleDraweeView
@@ -46,6 +48,9 @@ class WidgetChatListAdapterItemSpotifyListenTogether(
     private val track: TextView = itemView.findViewById(R.id.item_listen_together_track)
     private val artist: TextView = itemView.findViewById(R.id.item_listen_together_artist)
     private val participants: RecyclerView = itemView.findViewById(R.id.item_listen_together_recycler)
+    private val userAdapter = WidgetCollapsedUsersListAdapter(participants).also {
+        participants.adapter = it
+    }
 
     private var modelSubscription: Subscription? = null
     override val subscription: Subscription? get() = modelSubscription
@@ -54,13 +59,16 @@ class WidgetChatListAdapterItemSpotifyListenTogether(
         super.onConfigure(position, data)
         val entry = data as SpotifyListenTogetherEntry
 
-        observePresence(entry).ui().appSubscribe(
+        observeModel(entry).ui().appSubscribe(
             errorClass = WidgetChatListAdapterItemSpotifyListenTogether::class.java,
             subscriptionHandler = { modelSubscription = it },
-        ) { presence -> configureUI(entry, presence) }
+            onNext = ::configureUI,
+        )
     }
 
-    private fun configureUI(entry: SpotifyListenTogetherEntry, presence: Presence?) {
+    private fun configureUI(model: Model) {
+        val entry = model.item
+        val presence = model.presence
         header.text = header.i18nFormat(
             R.string.invite_embed_invite_to_listen,
             "name" to activityName(header.context, entry),
@@ -73,14 +81,13 @@ class WidgetChatListAdapterItemSpotifyListenTogether(
         track.visibility = if (dead) View.GONE else View.VISIBLE
         artist.visibility = if (dead) View.GONE else View.VISIBLE
         albumImage.visibility = if (dead) View.GONE else View.VISIBLE
-        // The participant pile needs the game-party roster, which is not reachable yet (see
-        // `observePresence`), so the strip stays collapsed rather than reserving an empty row.
-        participants.visibility = View.GONE
+        participants.visibility = if (dead) View.GONE else View.VISIBLE
         // Marquee only scrolls on a selected view, and the track title is routinely too long.
         container.isSelected = true
 
         if (dead) return
 
+        userAdapter.setData(model.users)
         track.text = listeningActivity?.details
         artist.text = artist.i18nFormat(
             R.string.user_activity_listening_artists,
@@ -96,17 +103,27 @@ class WidgetChatListAdapterItemSpotifyListenTogether(
         track.setOnClickListener { view -> launchSpotifyTrack(view.context, listeningActivity) }
     }
 
-    /**
-     * NOTE: the reference also combines `StoreGameParty.observeUsersForPartyId` here to fill the
-     * avatar pile of everyone already listening. `StoreGameParty` exists in this project but is not
-     * reachable from `StoreStream`, so the pile is omitted; liveness and the track details come from
-     * the author's real presence.
-     */
-    private fun observePresence(entry: SpotifyListenTogetherEntry): Observable<Presence?> =
-        StoreStream.getPresences()
-            .observePresenceForUser(entry.userId)
-            .computationLatest()
-            .distinctUntilChanged()
+    private fun observeModel(entry: SpotifyListenTogetherEntry): Observable<Model> =
+        Observable.combineLatest(
+            StoreStream.getPresences().observePresenceForUser(entry.userId),
+            StoreStream.getGameParty().observeUsersForPartyId(entry.activity.partyId),
+            StoreStream.getUsers().observeMeId(),
+        ) { presence, partyUsers, meId ->
+            val users = partyUsers.values.associateByTo(LinkedHashMap(), { it.id }) { CollapsedUser(it) }
+            if (meId == entry.userId) {
+                StoreStream.getUsers().getMe().let { users[it.id] = CollapsedUser(it) }
+            }
+            val maxSize = with(PresenceUtils) {
+                presence?.spotifyListeningActivity?.party?.maxSize
+            } ?: 0L
+            val collapsedUsers = users.values.toMutableList()
+            for (index in partyUsers.size until minOf(MAX_VISIBLE_USERS.toLong(), maxSize).toInt()) {
+                collapsedUsers += CollapsedUser.createEmptyUser(
+                    if (index == MAX_VISIBLE_USERS - 1) maxSize - MAX_VISIBLE_USERS else 0,
+                )
+            }
+            Model(presence, collapsedUsers, entry, meId == entry.userId)
+        }.computationLatest().distinctUntilChanged()
 
     /**
      * The platform named in the header.
@@ -154,6 +171,13 @@ class WidgetChatListAdapterItemSpotifyListenTogether(
         }
     }
 
+    private data class Model(
+        val presence: Presence?,
+        val users: List<CollapsedUser>,
+        val item: SpotifyListenTogetherEntry,
+        val isMe: Boolean,
+    )
+
     private companion object {
         /** How long a listen-along invite stays live, matching the reference's two hours. */
         private const val EMBED_LIFETIME_MILLIS = 7_200_000L
@@ -161,5 +185,6 @@ class WidgetChatListAdapterItemSpotifyListenTogether(
         private const val SPOTIFY_PARTY_ID_MARKER = "spotify"
         private const val SPOTIFY_NAME = "Spotify"
         private const val SPOTIFY_UTM_PARAMS = "utm_source=discord&utm_medium=mobile"
+        private const val MAX_VISIBLE_USERS = 6
     }
 }

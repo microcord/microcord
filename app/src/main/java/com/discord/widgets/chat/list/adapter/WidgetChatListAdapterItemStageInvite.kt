@@ -6,6 +6,9 @@ import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.stageinstance.StageInstance
 import com.discord.models.domain.ModelInvite
+import com.discord.models.member.GuildMember
+import com.discord.models.user.CoreUser
+import com.discord.models.user.User
 import com.discord.stores.StoreStream
 import com.discord.stores.updates.ObservationDeckProvider
 import com.discord.utilities.icon.IconUtils
@@ -28,7 +31,7 @@ import rx.Subscription
  */
 class WidgetChatListAdapterItemStageInvite(
     adapter: WidgetChatListAdapter,
-) : WidgetChatListItem(R.layout.widget_chat_list_adapter_item_stage_invite, adapter) {
+) : WidgetChatListAdapterItemInviteBase(R.layout.widget_chat_list_adapter_item_stage_invite, adapter) {
 
     private val image: SimpleDraweeView = itemView.findViewById(R.id.item_invite_image)
     private val imageText: TextView = itemView.findViewById(R.id.item_invite_image_text)
@@ -57,17 +60,57 @@ class WidgetChatListAdapterItemStageInvite(
         val channels = StoreStream.getChannels()
         val stageInstances = StoreStream.getStageInstances()
         val accessibility = StoreStream.getAccessibility()
+        val users = StoreStream.getUsers()
+        val guilds = StoreStream.getGuilds()
+        val requestedStageChannels = StoreStream.getRequestedStageChannels()
+        val stageChannels = StoreStream.getStageChannels()
         return ObservationDeckProvider.get()
-            .connectRx(channels, stageInstances, accessibility)
+            .connectRx(
+                users,
+                channels,
+                guilds,
+                accessibility,
+                stageInstances,
+                requestedStageChannels,
+                stageChannels,
+            )
             .map { _ ->
                 // The invite carries a snapshot of the channel; the local copy is fresher when the
                 // viewer is already in the guild.
                 val channel = entry.invite.channel?.let { channels.getChannel(it.id) } ?: entry.invite.channel
+                val channelId = channel?.id
+                val requestedState = channelId?.let {
+                    requestedStageChannels.getRequestedInstanceStatesByChannel()[it]
+                }
+                val channelRoles = channelId?.let(stageChannels::getChannelRoles)
+                val localSpeakers = channelRoles?.mapNotNull { (userId, roles) ->
+                    if (!roles.isSpeaker) return@mapNotNull null
+                    val user = users.getUsers()[userId] ?: return@mapNotNull null
+                    speaker(user, guilds.getMember(entry.guildId, userId))
+                }
+                val speakers = localSpeakers ?: requestedState?.stageInstance?.sampleSpeakerMembers
+                    ?.map { member ->
+                        val user = CoreUser(member.user)
+                        speaker(user, GuildMember.from(member, member.guildId))
+                    }
+                    .orEmpty()
+                val listenersCount = if (channelRoles != null && localSpeakers != null) {
+                    channelRoles.size - speakers.size
+                } else {
+                    requestedState?.stageInstance?.let { it.participantCount - it.speakers.size }
+                }
                 Model(
                     invite = entry.invite,
+                    meId = users.getMe().id,
+                    authorUser = users.getUsers()[entry.userId],
                     channel = channel,
-                    stageInstance = channel?.let { stageInstances.getStageInstanceForChannel(it.id) },
+                    stageInstance = channelId?.let {
+                        stageInstances.getStageInstanceForChannel(it)
+                            ?: requestedStageChannels.getStageInstanceForChannel(it)
+                    },
                     shouldAnimateGuildIcon = !accessibility.isReducedMotionEnabled(),
+                    speakers = speakers,
+                    listenersCount = listenersCount,
                 )
             }
     }
@@ -97,9 +140,7 @@ class WidgetChatListAdapterItemStageInvite(
         speakersView.setSpeakers(model.speakers)
         speakersView.visibility = if (model.speakers.isEmpty()) View.GONE else View.VISIBLE
 
-        joinButton.setOnClickListener { view ->
-            ChatListRowNavigation.joinInvite?.invoke(view, model.invite, INVITE_SOURCE)
-        }
+        joinButton.setOnClickListener { joinServerOrDM(javaClass, model.invite) }
     }
 
     private fun updateIconUrlIfChanged(url: String?) {
@@ -108,23 +149,24 @@ class WidgetChatListAdapterItemStageInvite(
         iconUrl = url
     }
 
-    /**
-     * [speakers] and [listenersCount] are always empty/null in this reconstruction: the reference
-     * reads them from `StoreStageChannels` (per-user stage roles) and `StoreRequestedStageChannels`
-     * (the discovery sample), neither of which exists yet, and `StoreVoiceStates` is not reachable
-     * through `StoreStream`. The speaker strip hides itself rather than showing an empty row.
-     */
+    private fun speaker(user: User, guildMember: GuildMember?) = StageCardSpeakersView.Speaker(
+        user = user,
+        guildMember = guildMember,
+        displayName = guildMember?.nick ?: user.username,
+    )
+
     private data class Model(
         val invite: ModelInvite,
+        val meId: Long,
+        val authorUser: User?,
         val channel: Channel?,
-        val stageInstance: StageInstance?,
         val shouldAnimateGuildIcon: Boolean,
-        val speakers: List<StageCardSpeakersView.Speaker> = emptyList(),
-        val listenersCount: Int? = null,
+        val stageInstance: StageInstance?,
+        val speakers: List<StageCardSpeakersView.Speaker>,
+        val listenersCount: Int?,
     )
 
     private companion object {
-        private const val INVITE_SOURCE = "Invite Button Embed"
         private const val DEFAULT_GUILD_ICON = "asset://asset/images/default_icon_selected.jpg"
         private val POSSESSIVE = Regex("'s ")
     }

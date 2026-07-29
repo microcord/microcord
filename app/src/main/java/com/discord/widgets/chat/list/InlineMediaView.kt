@@ -1,7 +1,6 @@
 package com.discord.widgets.chat.list
 
 import android.content.Context
-import android.net.Uri
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
@@ -13,15 +12,23 @@ import com.discord.api.message.attachment.MessageAttachment
 import com.discord.api.message.attachment.MessageAttachmentType
 import com.discord.api.message.embed.EmbedType
 import com.discord.api.message.embed.MessageEmbed
+import com.discord.app.AppComponent
 import com.discord.embed.RenderableEmbedMedia
+import com.discord.player.AppMediaPlayer
+import com.discord.player.MediaSource
+import com.discord.player.MediaType
+import com.discord.utilities.embed.EmbedResourceUtils
+import com.discord.utilities.images.MGImages
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.ui
 import com.facebook.drawee.view.SimpleDraweeView
-import com.google.android.exoplayer2.ExoPlayer
-import com.google.android.exoplayer2.MediaItem
 import com.google.android.exoplayer2.PlaybackException
 import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.ui.PlayerView
 import java.lang.reflect.Proxy
-import java.util.Locale
+import rx.subjects.PublishSubject
+import rx.subjects.Subject
+import rx.subscriptions.CompositeSubscription
 
 // A proxy implements every callback that Android's desugared Player.Listener exposes as abstract.
 internal fun inlineMediaPlayerListener(
@@ -48,14 +55,17 @@ class InlineMediaView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
-) : CardView(context, attrs, defStyleAttr), View.OnAttachStateChangeListener {
+) : CardView(context, attrs, defStyleAttr), View.OnAttachStateChangeListener, AppComponent {
     private val playerView: PlayerView
     private val imagePreview: SimpleDraweeView
     private val gifIndicator: ImageView
     private val playButton: ImageView
     private val loadingIndicator: ProgressBar
     private val volumeToggle: ImageView
-    private var player: ExoPlayer? = null
+    override val unsubscribeSignal: Subject<Void, Void> = PublishSubject.create()
+    private var appMediaPlayer: AppMediaPlayer? = null
+    private var subscriptions = CompositeSubscription()
+    private var featureTag = ""
     private var viewParams: ViewParams? = null
 
     init {
@@ -78,9 +88,10 @@ class InlineMediaView @JvmOverloads constructor(
     ) {
         if (attachment.type !in setOf(MessageAttachmentType.IMAGE, MessageAttachmentType.VIDEO)) return
         val type = if (attachment.type == MessageAttachmentType.VIDEO) EmbedType.VIDEO else EmbedType.IMAGE
+        featureTag = "${InlineMediaView::class.java.simpleName}: attachment"
         update(
-            RenderableEmbedMedia(attachment.proxyUrl, attachment.width, attachment.height),
-            attachment.url.takeIf { attachment.type == MessageAttachmentType.VIDEO },
+            EmbedResourceUtils.createRenderableEmbedMediaFromAttachment(attachment),
+            attachment.proxyUrl.takeIf { attachment.type == MessageAttachmentType.VIDEO },
             type,
             targetWidth,
             targetHeight,
@@ -95,7 +106,8 @@ class InlineMediaView @JvmOverloads constructor(
         targetHeight: Int? = null,
         autoPlayGifs: Boolean,
     ) {
-        val preview = previewImage(embed) ?: return
+        val preview = with(EmbedResourceUtils) { embed.getPreviewImage() } ?: return
+        featureTag = "${InlineMediaView::class.java.simpleName}: embed"
         update(
             preview,
             embed.video?.let { it.proxyUrl ?: it.url },
@@ -106,17 +118,17 @@ class InlineMediaView @JvmOverloads constructor(
         )
     }
 
-    fun onPause() = clearPlayer()
+    fun onPause() = clearPlayerAndSubscriptions()
 
     fun onResume() = resetCurrentEmbed()
 
     override fun onViewAttachedToWindow(view: View) = resetCurrentEmbed()
 
-    override fun onViewDetachedFromWindow(view: View) = clearPlayer()
+    override fun onViewDetachedFromWindow(view: View) = clearPlayerAndSubscriptions()
 
     override fun onVisibilityChanged(changedView: View, visibility: Int) {
         super.onVisibilityChanged(changedView, visibility)
-        if (visibility == View.VISIBLE) resetCurrentEmbed() else clearPlayer()
+        if (visibility == View.VISIBLE) resetCurrentEmbed() else clearPlayerAndSubscriptions()
     }
 
     private fun update(
@@ -145,109 +157,113 @@ class InlineMediaView @JvmOverloads constructor(
     }
 
     private fun render(params: ViewParams) {
+        resetViews(params)
+        subscriptions.unsubscribe()
         clearPlayer()
         params.targetWidth?.let { width ->
             params.targetHeight?.let { height ->
-                layoutParams = layoutParams.apply {
-                    this.width = width
-                    this.height = height
+                if (layoutParams.width != width || layoutParams.height != height) {
+                    layoutParams.width = width
+                    layoutParams.height = height
+                    requestLayout()
+                }
+                params.previewImage?.url?.let { url ->
+                    MGImages.setImage(
+                        imagePreview,
+                        EmbedResourceUtils.getPreviewUrls(url, width, height, shouldAutoPlay(params)),
+                    )
                 }
             }
         }
+
+        val uri = params.progressiveMediaUri ?: return
+        subscriptions = CompositeSubscription()
+        val player = AppMediaPlayer.create(context)
+        appMediaPlayer = player
+        player.volume.ui(this).appSubscribe(
+            InlineMediaView::class.java,
+            subscriptionHandler = subscriptions::add,
+        ) { configureVolume(player, it > 0f) }
+        player.events.onBackpressureBuffer().ui(this).appSubscribe(
+            InlineMediaView::class.java,
+            subscriptionHandler = subscriptions::add,
+            errorHandler = { resetViews(params) },
+        ) { handlePlayerEvent(it, params) }
+
+        val mediaSource = MediaSource.create(
+            if (params.embedType == EmbedType.GIFV) MediaType.GIFV else MediaType.VIDEO,
+            uri,
+            featureTag,
+        )
+        if (params.embedType == EmbedType.GIFV) {
+            player.play(
+                mediaSource,
+                playerView,
+                autoPlayWhenReady = shouldAutoPlay(params),
+                loopMedia = true,
+            )
+            player.setVolume(0f)
+        } else {
+            player.setVolume(1f)
+        }
+        playButton.setOnClickListener {
+            playerView.visibility = View.VISIBLE
+            player.play(mediaSource, playerView)
+            playButton.visibility = View.GONE
+            loadingIndicator.visibility = View.VISIBLE
+        }
+    }
+
+    private fun handlePlayerEvent(event: AppMediaPlayer.Event, params: ViewParams) {
+        when (event) {
+            AppMediaPlayer.Event.Ready -> {
+                imagePreview.visibility = if (shouldAutoPlay(params)) View.GONE else View.VISIBLE
+                loadingIndicator.visibility = View.GONE
+            }
+            AppMediaPlayer.Event.Buffering -> loadingIndicator.visibility = View.VISIBLE
+            AppMediaPlayer.Event.Playing -> {
+                volumeToggle.visibility =
+                    if (params.embedType == null || params.embedType == EmbedType.VIDEO) View.VISIBLE else View.GONE
+            }
+            AppMediaPlayer.Event.Ended -> resetCurrentEmbed()
+            is AppMediaPlayer.Event.CurrentPositionUpdate,
+            AppMediaPlayer.Event.Paused -> Unit
+        }
+    }
+
+    private fun configureVolume(player: AppMediaPlayer, audible: Boolean) {
+        volumeToggle.setImageResource(
+            if (audible) R.drawable.ic_volume_up_white_24dp else R.drawable.ic_volume_off_24dp,
+        )
+        volumeToggle.contentDescription = context.getString(if (audible) R.string.mute else R.string.unmute)
+        volumeToggle.setOnClickListener { player.setVolume(if (audible) 0f else 1f) }
+    }
+
+    private fun resetViews(params: ViewParams) {
         imagePreview.visibility = View.VISIBLE
-        imagePreview.setImageURI(params.previewImage?.url?.let { previewUrl(it, params) })
-        playerView.visibility = View.GONE
+        playerView.visibility = if (params.progressiveMediaUri != null && shouldAutoPlay(params)) View.VISIBLE else View.GONE
         volumeToggle.visibility = View.GONE
         loadingIndicator.visibility = View.GONE
         playButton.visibility = if (params.embedType == EmbedType.VIDEO) View.VISIBLE else View.GONE
         gifIndicator.visibility = if (isAnimated(params) && !shouldAutoPlay(params)) View.VISIBLE else View.GONE
-
-        val uri = params.progressiveMediaUri ?: return
-        if (params.embedType == EmbedType.GIFV && shouldAutoPlay(params)) {
-            startPlayer(uri, muted = true)
-        } else if (params.embedType == EmbedType.VIDEO) {
-            playButton.setOnClickListener { startPlayer(uri, muted = false) }
-        }
-    }
-
-    private fun startPlayer(uri: String, muted: Boolean) {
-        clearPlayer()
-        loadingIndicator.visibility = View.VISIBLE
-        playButton.visibility = View.GONE
-        playerView.visibility = View.VISIBLE
-        player = ExoPlayer.Builder(context).build().also { exoPlayer ->
-            playerView.player = exoPlayer
-            exoPlayer.volume = if (muted) 0f else 1f
-            exoPlayer.repeatMode = inlineMediaRepeatMode(viewParams?.embedType)
-            configureVolume(exoPlayer)
-            exoPlayer.addListener(
-                inlineMediaPlayerListener(
-                    onPlaybackStateChanged = { state ->
-                        loadingIndicator.visibility = if (state == Player.STATE_BUFFERING) View.VISIBLE else View.GONE
-                        if (state == Player.STATE_READY) {
-                            imagePreview.visibility = if (shouldAutoPlay(viewParams)) View.GONE else View.VISIBLE
-                            volumeToggle.visibility = if (viewParams?.embedType in setOf(null, EmbedType.VIDEO)) View.VISIBLE else View.GONE
-                        } else if (state == Player.STATE_ENDED) {
-                            resetCurrentEmbed()
-                        }
-                    },
-                    onPlayerError = { resetCurrentEmbed() },
-                ),
-            )
-            exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(uri)))
-            exoPlayer.prepare()
-            exoPlayer.playWhenReady = true
-        }
-    }
-
-    private fun configureVolume(exoPlayer: ExoPlayer) {
-        fun updateIcon() {
-            val audible = exoPlayer.volume > 0f
-            volumeToggle.setImageResource(
-                if (audible) R.drawable.ic_volume_up_white_24dp else R.drawable.ic_volume_off_24dp,
-            )
-            volumeToggle.contentDescription = context.getString(
-                if (audible) R.string.mute else R.string.unmute,
-            )
-            volumeToggle.setOnClickListener {
-                exoPlayer.volume = if (audible) 0f else 1f
-                updateIcon()
-            }
-        }
-        updateIcon()
     }
 
     private fun clearPlayer() {
         playerView.player = null
-        player?.release()
-        player = null
+        appMediaPlayer?.release()
+        appMediaPlayer = null
     }
 
-    private fun previewUrl(url: String, params: ViewParams): String {
-        val width = params.targetWidth ?: params.previewImage?.width ?: measuredWidth
-        val height = params.targetHeight ?: params.previewImage?.height ?: measuredHeight
-        return "$url?width=$width&height=$height" + if (shouldAutoPlay(params) && url.endsWith(".gif")) "" else "&format=webp"
+    private fun clearPlayerAndSubscriptions() {
+        clearPlayer()
+        subscriptions.unsubscribe()
+        unsubscribeSignal.onNext(null)
     }
 
     private fun shouldAutoPlay(params: ViewParams?) = params != null && (!isAnimated(params) || params.autoPlayGifs)
 
-    private fun isAnimated(params: ViewParams) = params.embedType == EmbedType.GIFV ||
-        (params.embedType == EmbedType.IMAGE && params.previewImage?.url?.lowercase(Locale.ROOT)?.contains(".gif") == true)
-
-    private fun previewImage(embed: MessageEmbed): RenderableEmbedMedia? = when (embed.type) {
-        EmbedType.VIDEO, EmbedType.GIFV -> embed.thumbnail?.toRenderable() ?: embed.video?.toRenderable()
-        EmbedType.ARTICLE, EmbedType.IMAGE, EmbedType.TWEET -> embed.thumbnail?.toRenderable()
-        else -> embed.image?.toRenderable()
-    }
-
-    private fun com.discord.api.message.embed.EmbedImage.toRenderable() =
-        RenderableEmbedMedia(proxyUrl ?: url, width, height)
-
-    private fun com.discord.api.message.embed.EmbedThumbnail.toRenderable() =
-        RenderableEmbedMedia(proxyUrl ?: url, width, height)
-
-    private fun com.discord.api.message.embed.EmbedVideo.toRenderable() =
-        RenderableEmbedMedia(proxyUrl ?: url, width, height)
+    private fun isAnimated(params: ViewParams) =
+        EmbedResourceUtils.isAnimated(params.embedType, params.previewImage?.url)
 
     data class ViewParams(
         val previewImage: RenderableEmbedMedia?,

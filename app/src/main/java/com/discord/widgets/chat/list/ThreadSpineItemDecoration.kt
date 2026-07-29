@@ -17,8 +17,8 @@ import com.discord.widgets.chat.list.adapter.WidgetChatListAdapter
  * the list is built and carried on [com.discord.widgets.chat.list.entries.ChatListEntry.shouldShowThreadSpine].
  */
 class ThreadSpineItemDecoration(
-    private val context: Context,
-    private val adapter: WidgetChatListAdapter,
+    val context: Context,
+    val adapter: WidgetChatListAdapter,
 ) : RecyclerView.ItemDecoration() {
 
     private val drawable = ContextCompat.getDrawable(context, R.drawable.thread_embed_spine_drawable)

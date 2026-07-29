@@ -12,6 +12,8 @@ import com.discord.utilities.view.text.LinkifiedTextView
 import com.discord.views.ChatActionItem
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.GuildWelcomeEntry
+import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
+import com.discord.widgets.servers.WidgetServerSettingsOverview
 
 /**
  * The panel that replaces "this is the beginning of #channel" in a brand new guild.
@@ -40,13 +42,17 @@ class WidgetChatListAdapterItemGuildWelcome @JvmOverloads constructor(
 
         uploadIcon.visibility = if (!entry.guildHasIcon && entry.isOwner) View.VISIBLE else View.GONE
         uploadIcon.setOnClickListener { view ->
-            ChatListRowNavigation.launchGuildSettings?.invoke(view.context, entry.guildId, true)
+            WidgetServerSettingsOverview.launch(view.context, entry.guildId, openAvatarPicker = true)
         }
 
         inviteFriends.visibility = if (entry.canInvite) View.VISIBLE else View.GONE
         inviteFriends.setOnClickListener { view ->
-            ChatListRowNavigation.launchInviteShare
-                ?.invoke(view.context, adapter.fragmentManager, entry.guildId, null, INVITE_SOURCE)
+            WidgetGuildInviteShare.launch(
+                view.context,
+                adapter.fragmentManager,
+                entry.guildId,
+                source = INVITE_SOURCE,
+            )
         }
 
         // The "here are some steps" line only makes sense when at least one step is on screen.

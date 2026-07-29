@@ -9,6 +9,6 @@ package com.discord.widgets.chat.list
  * which is correct: they are torn down anyway.
  */
 interface FragmentLifecycleListener {
-    fun onPause() = Unit
-    fun onResume() = Unit
+    fun onPause()
+    fun onResume()
 }
