@@ -35,11 +35,11 @@ class AppFlexInputViewModel : AppViewModel<AppFlexInputViewModel.ViewState>(View
 
     fun observeEvents(): Observable<Event> = eventSubject
 
-    fun showExpressionTray() {
-        if (!requireViewState().expressionTrayShown) {
-            updateViewState(ViewState(expressionTrayShown = true))
-        }
+    fun showExpressionTray(): Boolean {
+        if (requireViewState().expressionTrayShown) return false
+        updateViewState(ViewState(expressionTrayShown = true))
         eventSubject.onNext(Event.HideKeyboard)
+        return true
     }
 
     /** @return `true` when the tray was open and this closed it — the shape a back handler wants. */

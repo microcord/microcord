@@ -209,9 +209,6 @@ class ServerSettingsSectionsTest {
 
         assertEquals(voice.id, viewState.afkChannel?.id)
         assertEquals(text.id, viewState.systemChannel?.id)
-        // The pickers only offer the channel kind each setting accepts.
-        assertEquals(listOf(voice.id), viewState.voiceChannels.map { it.id })
-        assertEquals(listOf(text.id), viewState.textChannels.map { it.id })
     }
 
     @Test

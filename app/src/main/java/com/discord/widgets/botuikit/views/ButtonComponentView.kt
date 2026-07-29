@@ -19,6 +19,7 @@ import com.discord.api.botuikit.ComponentType
 import com.discord.models.botuikit.ActionInteractionComponentState
 import com.discord.models.botuikit.ButtonMessageComponent
 import com.discord.utilities.dimen.dpToPixels
+import com.discord.utilities.view.extensions.setEnabledAlpha
 import com.discord.views.typing.TypingDots
 import com.discord.widgets.botuikit.ComponentProvider
 import com.facebook.drawee.view.SimpleDraweeView
@@ -45,13 +46,15 @@ class ButtonComponentView @JvmOverloads constructor(
 
         configureStyle(button, component.style)
         if (component.emoji != null && loading) emoji.visibility = View.INVISIBLE
-        else emoji.setEmojiOrHide(component.emoji, component.emojiAnimationsEnabled)
+        else ComponentViewUtils.run {
+            emoji.setEmojiOrHide(component.emoji, component.emojiAnimationsEnabled)
+        }
         linkIcon.visibility = if (component.style == ButtonStyle.LINK) View.VISIBLE else View.GONE
-        val (start, end) = buttonLabelPaddingDp(component.label != null, component.emoji != null, component.style == ButtonStyle.LINK)
+        val (start, end) = buttonLabelPaddingDp(component.label != null, component.hasEmoji(), component.hasIcon())
         label.setPadding(dpToPixels(start), 0, dpToPixels(end), 0)
         label.text = component.label
         label.visibility = if (loading) View.INVISIBLE else View.VISIBLE
-        label.setEnabledAlpha(enabled)
+        label.setEnabledAlpha(enabled, 0.5f)
         emoji.setEnabledAlpha(enabled)
         linkIcon.setEnabledAlpha(enabled)
         button.isEnabled = enabled
@@ -93,6 +96,10 @@ class ButtonComponentView @JvmOverloads constructor(
             ) as ButtonComponentView
     }
 }
+
+fun ButtonMessageComponent.hasEmoji(): Boolean = emoji != null
+
+fun ButtonMessageComponent.hasIcon(): Boolean = style == ButtonStyle.LINK
 
 internal fun buttonLabelPaddingDp(hasLabel: Boolean, hasEmoji: Boolean, hasIcon: Boolean): Pair<Int, Int> =
     if (!hasLabel) 0 to if (hasEmoji && hasIcon) 8 else 16

@@ -17,7 +17,7 @@ class WidgetHubAuthenticationViewModel(
     private val email: String,
     private val guildId: Long?,
     private val restAPI: RestAPIInterface = RestAPI.api,
-    private val multiDomainEnabled: Boolean = false,
+    private val multiDomainEnabled: Boolean = isMultiDomainEnabled(),
 ) : AppViewModel<HubAuthenticationState>(HubAuthenticationState()) {
 
     fun resendEmail() {

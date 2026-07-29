@@ -1,6 +1,5 @@
 package com.discord.widgets.voice.sheet
 
-import android.content.Context
 import android.os.Bundle
 import android.view.View
 import android.widget.TextView
@@ -14,6 +13,12 @@ import com.discord.app.AppBottomSheet
 import com.discord.app.appViewModels
 import com.discord.models.guild.Guild
 import com.discord.utilities.rx.bindToComponentLifecycle
+import com.discord.widgets.channels.settings.WidgetChannelNotificationSettings
+import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventListBottomSheet
+import com.discord.widgets.mobile_reports.WidgetMobileReports
+import com.discord.widgets.settings.WidgetSettingsVoice
+import com.discord.widgets.stage.sheet.WidgetStageStartEventBottomSheet
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.switchmaterial.SwitchMaterial
 
 /**
@@ -62,6 +67,7 @@ class WidgetVoiceSettingsBottomSheet : AppBottomSheet() {
         notifications = view.findViewById(R.id.voice_settings_notifications)
         events = view.findViewById(R.id.voice_settings_events)
         report = view.findViewById(R.id.voice_settings_report)
+        setBottomSheetState(BottomSheetBehavior.STATE_EXPANDED)
     }
 
     override fun onResume() {
@@ -77,7 +83,7 @@ class WidgetVoiceSettingsBottomSheet : AppBottomSheet() {
         invite.visibility = if (viewState.showInviteItem) View.VISIBLE else View.GONE
         invite.setOnClickListener {
             dismiss()
-            Navigation.inviteToChannel(this, channel, INVITE_ANALYTICS_SOURCE)
+            launchChannelInvite(this, channel, INVITE_ANALYTICS_SOURCE)
         }
 
         toggleVideoParticipants.isChecked = viewState.showVoiceParticipants
@@ -93,19 +99,23 @@ class WidgetVoiceSettingsBottomSheet : AppBottomSheet() {
         stageSettings.visibility = if (viewState.showStageSettings) View.VISIBLE else View.GONE
         stageSettings.setOnClickListener {
             dismiss()
-            Navigation.showStageStartEvent(parentFragmentManager, channelId)
+            WidgetStageStartEventBottomSheet.show(parentFragmentManager, channelId)
         }
 
         // Scheduled events belong to vocal channels only.
         events.visibility = if (channel.isGuildVocalChannel()) View.VISIBLE else View.GONE
         events.setOnClickListener {
             dismiss()
-            Navigation.showGuildScheduledEventList(parentFragmentManager, channel.guildId, channel.id)
+            WidgetGuildScheduledEventListBottomSheet.show(
+                parentFragmentManager,
+                channel.guildId,
+                channel.id,
+            )
         }
 
         voiceSettings.setOnClickListener {
             dismiss()
-            Navigation.launchVoiceSettings(requireContext())
+            WidgetSettingsVoice.launch(requireContext())
         }
 
         // NOTE: the reference's visibility ternary for this row is one of the branches JADX
@@ -116,41 +126,13 @@ class WidgetVoiceSettingsBottomSheet : AppBottomSheet() {
         notifications.visibility =
             if (channel.isStageVoiceChannel() && guildIsCommunity) View.VISIBLE else View.GONE
         notifications.setOnClickListener {
-            Navigation.launchChannelNotificationSettings(requireContext(), channelId)
+            WidgetChannelNotificationSettings.launch(requireContext(), channelId)
         }
 
         report.visibility = if (viewState.showReportItem) View.VISIBLE else View.GONE
         report.setOnClickListener {
-            Navigation.launchStageChannelReport(requireContext(), channel.id)
+            WidgetMobileReports.launchStageChannelReport(requireContext(), channel.id)
         }
-    }
-
-    /**
-     * Screens this sheet links out to that are not reconstructed yet, each defaulting to a no-op.
-     *
-     * Reference call sites: `ChannelInviteLaunchUtils.inviteToChannel`,
-     * `WidgetStageStartEventBottomSheet.show`, `WidgetGuildScheduledEventListBottomSheet.show`,
-     * `WidgetSettingsVoice.launch`, `WidgetChannelNotificationSettings.launch`,
-     * `WidgetMobileReports.launchStageChannelReport`.
-     */
-    object Navigation {
-        @JvmField
-        var inviteToChannel: (AppBottomSheet, Channel, String) -> Unit = { _, _, _ -> }
-
-        @JvmField
-        var showStageStartEvent: (FragmentManager, Long) -> Unit = { _, _ -> }
-
-        @JvmField
-        var showGuildScheduledEventList: (FragmentManager, Long, Long) -> Unit = { _, _, _ -> }
-
-        @JvmField
-        var launchVoiceSettings: (Context) -> Unit = {}
-
-        @JvmField
-        var launchChannelNotificationSettings: (Context, Long) -> Unit = { _, _ -> }
-
-        @JvmField
-        var launchStageChannelReport: (Context, Long) -> Unit = { _, _ -> }
     }
 
     companion object {

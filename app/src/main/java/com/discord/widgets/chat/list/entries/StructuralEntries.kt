@@ -1,5 +1,8 @@
 package com.discord.widgets.chat.list.entries
 
+import com.discord.api.channel.Channel
+import com.discord.api.channel.getDisplayName
+import com.discord.models.guild.Guild
 import com.discord.models.message.Message
 
 /**
@@ -14,16 +17,13 @@ import com.discord.models.message.Message
 class LoadingEntry : ChatListEntry() {
     override val type: Int = ChatListEntry.LOAD_INDICATOR
     override val key: String = ChatListEntry.LOAD_INDICATOR.toString()
-
-    override fun equals(other: Any?): Boolean = other is LoadingEntry
-    override fun hashCode(): Int = ChatListEntry.LOAD_INDICATOR
 }
 
 /**
  * Bottom padding under the newest message. The list is rendered with a reversed layout manager, so
  * this is the first row and keeps the newest message clear of the chat input.
  */
-data class SpacerEntry(val channelId: Long) : ChatListEntry() {
+data class SpacerEntry(private val channelId: Long) : ChatListEntry() {
     override val type: Int = ChatListEntry.SPACER
     override val key: String = "${ChatListEntry.SPACER}$channelId"
 }
@@ -32,9 +32,6 @@ data class SpacerEntry(val channelId: Long) : ChatListEntry() {
 class DividerEntry : ChatListEntry() {
     override val type: Int = ChatListEntry.DIVIDER
     override val key: String = ChatListEntry.DIVIDER.toString()
-
-    override fun equals(other: Any?): Boolean = other is DividerEntry
-    override fun hashCode(): Int = ChatListEntry.DIVIDER
 }
 
 /** Date separator; [timestamp] is the start of the day the following messages belong to. */
@@ -67,6 +64,12 @@ data class MessageHeaderEntry(
     val text: String?,
     val channelName: String?,
 ) : ChatListEntry() {
+    constructor(message: Message, channel: Channel?, guild: Guild?) : this(
+        message,
+        guild?.name,
+        channel?.getDisplayName(),
+    )
+
     override val type: Int = ChatListEntry.MESSAGE_HEADER
     override val key: String = ChatListEntry.MESSAGE_HEADER.toString()
 }
@@ -75,9 +78,6 @@ data class MessageHeaderEntry(
 class MentionFooterEntry : ChatListEntry() {
     override val type: Int = ChatListEntry.MENTION_FOOTER
     override val key: String = ChatListEntry.MENTION_FOOTER.toString()
-
-    override fun equals(other: Any?): Boolean = other is MentionFooterEntry
-    override fun hashCode(): Int = ChatListEntry.MENTION_FOOTER
 }
 
 /** "N results" header shown when the chat list is displaying search results. */
@@ -90,27 +90,18 @@ data class SearchResultCountEntry(val totalResults: Int) : ChatListEntry() {
 class SearchIndexingEntry : ChatListEntry() {
     override val type: Int = ChatListEntry.SEARCH_INDEXING
     override val key: String = ChatListEntry.SEARCH_INDEXING.toString()
-
-    override fun equals(other: Any?): Boolean = other is SearchIndexingEntry
-    override fun hashCode(): Int = ChatListEntry.SEARCH_INDEXING
 }
 
 /** Search ran and matched nothing. */
 class SearchEmptyEntry : ChatListEntry() {
     override val type: Int = ChatListEntry.SEARCH_EMPTY
     override val key: String = ChatListEntry.SEARCH_EMPTY.toString()
-
-    override fun equals(other: Any?): Boolean = other is SearchEmptyEntry
-    override fun hashCode(): Int = ChatListEntry.SEARCH_EMPTY
 }
 
 /** Search failed. */
 class SearchErrorEntry : ChatListEntry() {
     override val type: Int = ChatListEntry.SEARCH_ERROR
     override val key: String = ChatListEntry.SEARCH_ERROR.toString()
-
-    override fun equals(other: Any?): Boolean = other is SearchErrorEntry
-    override fun hashCode(): Int = ChatListEntry.SEARCH_ERROR
 }
 
 /**
@@ -160,9 +151,4 @@ data class ReactionsEntry(
 class EphemeralMessageEntry(val message: Message) : ChatListEntry() {
     override val type: Int = ChatListEntry.EPHEMERAL_MESSAGE
     override val key: String = "${ChatListEntry.EPHEMERAL_MESSAGE} ${message.nonce ?: message.id}"
-
-    override fun equals(other: Any?): Boolean =
-        other is EphemeralMessageEntry && other.message == message
-
-    override fun hashCode(): Int = message.hashCode()
 }

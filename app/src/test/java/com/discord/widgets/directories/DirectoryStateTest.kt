@@ -12,6 +12,7 @@ import com.discord.stores.utilities.Success
 import com.discord.utilities.error.RestApiError
 import java.io.IOException
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -132,6 +133,15 @@ class DirectoryStateTest {
         )
         assertEquals(DirectoryLoadState.Content, state.loadState)
         assertEquals(1, state.directoryEntryData.size)
+    }
+
+    @Test
+    fun realNamePromptOnlyShowsForAnUnseenBlankNickname() {
+        assertTrue(shouldPromptForHubName(null, wasSeen = false))
+        assertTrue(shouldPromptForHubName(" ", wasSeen = false))
+        assertFalse(shouldPromptForHubName("Manti", wasSeen = false))
+        assertFalse(shouldPromptForHubName(null, wasSeen = true))
+        assertFalse(shouldPromptForHubName(null, wasSeen = false, killSwitchEnabled = true))
     }
 
     private fun entryData(

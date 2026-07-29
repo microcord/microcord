@@ -3,14 +3,15 @@ package com.discord.widgets.voice.fullscreen
 import com.discord.api.application.Application
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isPrivate
-import com.discord.api.guildscheduledevent.GuildScheduledEvent
-import com.discord.api.guildscheduledevent.GuildScheduledEventStatus
 import com.discord.models.commands.Application as CommandApplication
 import com.discord.models.embeddedactivities.EmbeddedActivity
 import com.discord.models.guild.UserGuildMember
 import com.discord.stores.StoreApplicationStreamPreviews
 import com.discord.stores.StoreVoiceParticipants
+import com.discord.utilities.guildscheduledevent.GuildScheduledEventsComparator
 import com.discord.utilities.user.UserUtils
+import com.discord.widgets.guildscheduledevent.GuildScheduledEventTiming
+import com.discord.widgets.guildscheduledevent.ScheduledEventUi
 import com.discord.widgets.voice.model.CallModel
 import com.discord.widgets.voice.sheet.CallParticipantsAdapter
 
@@ -42,8 +43,12 @@ object ParticipantsListItemGenerator {
 
         // Only the soonest relevant event gets a card; the rest live in the events list.
         callModel.guildScheduledEvents
-            .filter { it.status == GuildScheduledEventStatus.ACTIVE || it.isStartable() }
-            .minByOrNull { it.scheduledStartTime.dateTimeMillis }
+            .filter {
+                ScheduledEventUi.timing(it).let { timing ->
+                    timing == GuildScheduledEventTiming.LIVE || timing.isStartable()
+                }
+            }
+            .minWithOrNull(GuildScheduledEventsComparator)
             ?.let { event ->
                 listItems += CallParticipantsAdapter.ListItem.Event(
                     event = event,
@@ -146,8 +151,4 @@ object ParticipantsListItemGenerator {
             UserUtils.compareUserNames(user1.user, user2.user, user1.nickname, user2.nickname)
         }
     }
-
-    /** An event is startable once it is scheduled and has not been started or cancelled yet. */
-    private fun GuildScheduledEvent.isStartable(): Boolean =
-        status == GuildScheduledEventStatus.SCHEDULED
 }

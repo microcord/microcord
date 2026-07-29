@@ -6,8 +6,4 @@ package com.discord.widgets.channels.list.items
  */
 class ChannelListItemMfaNotice : ChannelListItem {
     override val type: Int = ChannelListItem.TYPE_MFA_NOTICE
-
-    override fun equals(other: Any?): Boolean = other is ChannelListItemMfaNotice
-    override fun hashCode(): Int = type
-    override fun toString(): String = "ChannelListItemMfaNotice"
 }

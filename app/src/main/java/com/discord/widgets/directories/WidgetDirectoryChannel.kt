@@ -14,6 +14,9 @@ import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.app.appActivityViewModels
 import com.discord.i18n.i18nFormat
+import com.discord.models.guild.Guild
+import com.discord.stores.StoreDirectories
+import com.discord.stores.StoreStream
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.views.ChatActionItem
@@ -108,6 +111,7 @@ class WidgetDirectoryChannel : AppFragment(R.layout.widget_directory_channel) {
     private fun configureUi(state: WidgetDirectoriesViewModel.ViewState) {
         configureSearchHeader(state.channel)
         configureEmptyCards(state)
+        maybePromptForHubName(state.guild)
 
         val hasContent = state.loadState == DirectoryLoadState.Content
         header.visibility = if (hasContent) View.VISIBLE else View.GONE
@@ -119,6 +123,18 @@ class WidgetDirectoryChannel : AppFragment(R.layout.widget_directory_channel) {
         tabs.visibility = if (showTabs) View.VISIBLE else View.GONE
 
         pagerAdapter.tabs = state.mappedTabs.map { it.first }
+    }
+
+    private fun maybePromptForHubName(guild: Guild?) {
+        if (!isVisible || guild?.isHub() != true) return
+        val me = StoreStream.getUsers().getMe()
+        val member = StoreStream.getGuilds().getMember(guild.id, me.id) ?: return
+        val nickname = member.nick
+        if (!nickname.isNullOrBlank()) return
+        val wasSeen = (DirectoryStores.directories as StoreDirectories).getAndSetSeenNamePrompt(guild.id)
+        if (shouldPromptForHubName(nickname, wasSeen)) {
+            DirectoryNavigation.promptForHubName?.invoke(requireContext(), guild.id)
+        }
     }
 
     private fun configureSearchHeader(channel: Channel?) {
@@ -204,3 +220,9 @@ class WidgetDirectoryChannel : AppFragment(R.layout.widget_directory_channel) {
         private const val TAB_LAYOUT_MARGINS_DP = 48
     }
 }
+
+internal fun shouldPromptForHubName(
+    nickname: String?,
+    wasSeen: Boolean,
+    killSwitchEnabled: Boolean = false,
+): Boolean = nickname.isNullOrBlank() && !wasSeen && !killSwitchEnabled

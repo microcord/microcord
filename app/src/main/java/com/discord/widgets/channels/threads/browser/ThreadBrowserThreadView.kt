@@ -60,6 +60,9 @@ class ThreadBrowserThreadView @JvmOverloads constructor(
         val owner = threadData.owner ?: CoreUser(threadData.channel.ownerId)
         val ownerMember = threadData.guildMembers[owner.id]
         message.text = startedBy(GuildMember.getNickOrUsername(ownerMember, owner), ownerMember)
+        timestamp.text = null
+        timestamp.visibility = View.GONE
+        timestampSeparator.visibility = View.GONE
 
         when (threadData) {
             is ThreadData.ActiveThread -> configureActiveThreadUI(threadData)
@@ -105,11 +108,11 @@ class ThreadBrowserThreadView @JvmOverloads constructor(
     }
 
     private fun configureArchivedThreadUI(data: ThreadData.ArchivedThread) {
-        val metadata = data.channel.threadMetadata ?: return
+        val metadata = data.channel.threadMetadata
         val time = when (data.timestampMode) {
-            TimestampMode.ArchivedAt -> parseUtcDate(metadata.archiveTimestamp) ?: return
+            TimestampMode.ArchivedAt -> parseUtcDate(metadata?.archiveTimestamp)
             TimestampMode.CreatedAt -> snowflakeTimestamp(data.channel.id)
-        }
+        } ?: return
         val template = context.getString(
             if (data.timestampMode == TimestampMode.ArchivedAt) {
                 R.string.thread_browser_archive_time
@@ -118,6 +121,7 @@ class ThreadBrowserThreadView @JvmOverloads constructor(
             },
         )
         timestamp.text = template.replace("{time}", formatDateTimestamp(time).toString())
+        timestamp.visibility = View.VISIBLE
         configureAvatar(data.owner, data.owner?.let { data.guildMembers[it.id] })
     }
 

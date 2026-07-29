@@ -7,19 +7,6 @@ import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.google.android.material.card.MaterialCardView
 
-/** A row in the template list: either a template card or the "or pick your own" caption. */
-sealed class GuildTemplateViewType(val viewType: Int) {
-
-    data class Template(val guildTemplate: GuildTemplate) : GuildTemplateViewType(TEMPLATE)
-
-    object Text : GuildTemplateViewType(TEXT)
-
-    companion object {
-        const val TEXT: Int = 0
-        const val TEMPLATE: Int = 1
-    }
-}
-
 /**
  * Backs the template picker list.
  *

@@ -13,6 +13,7 @@ import androidx.lifecycle.ViewModelProvider
 import com.discord.R
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
+import com.discord.widgets.guilds.profile.WidgetGuildProfileSheet
 import com.discord.widgets.servers.WidgetServerNotifications
 
 /** The guild long-press menu: mark as read, notifications, leave, and the guild profile sheet. */
@@ -113,9 +114,8 @@ class WidgetGuildContextMenu : AnchoredContextMenu(R.layout.widget_guild_context
 /**
  * Context-menu destinations that do not exist in this project yet.
  *
- * `WidgetLeaveGuildDialog`, `WidgetGuildProfileSheet` and `WidgetGuildFolderSettings` have not been
- * reconstructed. The menu rows are still shown and still dismiss the menu; they simply do not
- * navigate. **Install each from app start-up and delete the field as the screen lands.**
+ * Destinations still under reconstruction stay injectable so their menu rows do not need another
+ * rewrite when those screens land.
  */
 object ContextMenuNavigation {
 
@@ -125,7 +125,9 @@ object ContextMenuNavigation {
 
     /** `WidgetGuildProfileSheet.show(fragmentManager, isGuildSelected, guildId)`. */
     @Volatile
-    var showGuildProfile: (FragmentManager, Long, Boolean) -> Unit = { _, _, _ -> }
+    var showGuildProfile: (FragmentManager, Long, Boolean) -> Unit = { manager, guildId, viewingGuild ->
+        WidgetGuildProfileSheet.show(manager, viewingGuild, guildId)
+    }
 
     /** `WidgetGuildFolderSettings.create(context, folderId)`. */
     @Volatile

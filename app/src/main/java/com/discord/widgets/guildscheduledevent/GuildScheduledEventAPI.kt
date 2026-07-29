@@ -28,12 +28,3 @@ object GuildScheduledEventAPI {
             RestAPIParams.UpdateGuildScheduledEventBody(status = GuildScheduledEventStatus.COMPLETED),
         )
 }
-
-/** Canonical web URL of an event, used wherever the invite flow is unavailable. */
-object GuildScheduledEventUrlUtils {
-
-    private const val WEB_HOST = "https://discord.com"
-
-    fun getEventDetailsUrl(guildId: Long, guildEventId: Long): CharSequence =
-        "$WEB_HOST/events/$guildId/$guildEventId"
-}

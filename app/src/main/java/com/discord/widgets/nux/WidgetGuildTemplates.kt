@@ -2,9 +2,6 @@ package com.discord.widgets.nux
 
 import android.content.Context
 import android.content.Intent
-import android.os.Bundle
-import android.os.Parcel
-import android.os.Parcelable
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -14,6 +11,7 @@ import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.AppLog
 import com.discord.app.AppScreenRouter
+import com.discord.utilities.analytics.AnalyticsTracker
 import com.google.android.material.button.MaterialButton
 
 /**
@@ -61,7 +59,7 @@ open class WidgetGuildTemplates : AppFragment(R.layout.widget_nux_guild_template
                 GuildTemplateAnalytics.STEP_GUILD_TEMPLATE,
                 GuildTemplateAnalytics.STEP_GUILD_JOIN,
             )
-            navigation.showPostRegistrationJoin(requireContext())
+            WidgetNuxPostRegistrationJoin.show(requireContext())
             activity?.finish()
         }
         view.findViewById<LinearLayout>(R.id.nux_guild_template_section_bottom).visibility =
@@ -82,6 +80,7 @@ open class WidgetGuildTemplates : AppFragment(R.layout.widget_nux_guild_template
             closeWithResult = args.closeWithResult,
         )
         if (args.guildTemplate.skipCreationIntent) {
+            AnalyticsTracker.openModal("Create Guild Step 2", options.analyticsLocation)
             navigation.showGuildCreate(this, options)
         } else {
             trackPostRegistrationTransition(
@@ -106,11 +105,9 @@ open class WidgetGuildTemplates : AppFragment(R.layout.widget_nux_guild_template
         /**
          * Where the picker goes next.
          *
-         * The three destinations — `WidgetCreationIntent`, `WidgetGuildCreate` and
-         * `WidgetNuxPostRegistrationJoin` — all live in `widgets/guilds/create` and
-         * `widgets/guilds/join`, neither of which is reconstructed. Rather than launch nothing
-         * silently, the picker routes through this seam and the default implementation logs. Replace
-         * the whole object with direct calls once those screens exist.
+         * Guild creation lives in `widgets/guilds/create`, which is outside this package's ownership.
+         * Keep this seam until those two screens are reconstructed; the NUX-owned join destination is
+         * launched directly.
          */
         @JvmStatic
         var navigation: Navigation = LoggingNavigation
@@ -149,7 +146,6 @@ open class WidgetGuildTemplates : AppFragment(R.layout.widget_nux_guild_template
     interface Navigation {
         fun showCreationIntent(fragment: Fragment, trigger: CreateGuildTrigger, options: GuildCreateOptions)
         fun showGuildCreate(fragment: Fragment, options: GuildCreateOptions)
-        fun showPostRegistrationJoin(context: Context)
     }
 
     private object LoggingNavigation : Navigation {
@@ -164,22 +160,8 @@ open class WidgetGuildTemplates : AppFragment(R.layout.widget_nux_guild_template
         override fun showGuildCreate(fragment: Fragment, options: GuildCreateOptions) {
             AppLog.w("WidgetGuildCreate is not reconstructed; dropping $options")
         }
-
-        override fun showPostRegistrationJoin(context: Context) {
-            AppLog.w("WidgetNuxPostRegistrationJoin is not reconstructed; dropping join request")
-        }
     }
 }
-
-/**
- * The Student Hub flavour of the picker.
- *
- * The only reference difference is the impression event it logs
- * (`TrackImpressionHubCreateGuildTemplate`). `com.discord.analytics.generated` is not reconstructed
- * in this project, so `loggingConfig` is not overridden and no impression is recorded; the screen is
- * otherwise identical, which is why it exists as its own class at all.
- */
-class WidgetHubGuildTemplates : WidgetGuildTemplates()
 
 /**
  * What [WidgetGuildTemplates] hands to guild creation once a template is chosen.
@@ -194,78 +176,3 @@ data class GuildCreateOptions(
     val customTitle: String,
     val closeWithResult: Boolean,
 )
-
-/** Arguments for the picker screen itself. */
-data class GuildTemplateArgs(
-    val title: String,
-    val subtitle: String,
-    val templates: List<GuildTemplate> = GuildTemplateTypes.NUX,
-    val showInvitePrompt: Boolean = true,
-    val skipCreationIntent: Boolean = false,
-) : Parcelable {
-
-    constructor(parcel: Parcel) : this(
-        title = parcel.readString().orEmpty(),
-        subtitle = parcel.readString().orEmpty(),
-        templates = parcel.createStringArrayList().orEmpty().map(GuildTemplate::valueOf),
-        showInvitePrompt = parcel.readInt() != 0,
-        skipCreationIntent = parcel.readInt() != 0,
-    )
-
-    override fun describeContents(): Int = 0
-
-    override fun writeToParcel(parcel: Parcel, flags: Int) {
-        parcel.writeString(title)
-        parcel.writeString(subtitle)
-        parcel.writeStringList(templates.map(GuildTemplate::name))
-        parcel.writeInt(if (showInvitePrompt) 1 else 0)
-        parcel.writeInt(if (skipCreationIntent) 1 else 0)
-    }
-
-    companion object CREATOR : Parcelable.Creator<GuildTemplateArgs> {
-        override fun createFromParcel(parcel: Parcel) = GuildTemplateArgs(parcel)
-
-        override fun newArray(size: Int): Array<GuildTemplateArgs?> = arrayOfNulls(size)
-    }
-}
-
-/**
- * Arguments for the whole create-a-server flow, of which the picker is the first step.
- *
- * @param isNux `true` when this is post-registration onboarding, which is the only thing that
- *   enables funnel reporting.
- * @param closeWithResult finish the host activity with a result instead of navigating into the new
- *   guild — used when creation was started from a sheet that has to report back.
- */
-data class GuildCreateArgs(
-    val isNux: Boolean,
-    val location: String,
-    val trigger: CreateGuildTrigger,
-    val guildTemplate: GuildTemplateArgs,
-    val closeWithResult: Boolean = false,
-) : Parcelable {
-
-    constructor(parcel: Parcel) : this(
-        isNux = parcel.readInt() != 0,
-        location = parcel.readString().orEmpty(),
-        trigger = CreateGuildTrigger.valueOf(parcel.readString().orEmpty()),
-        guildTemplate = GuildTemplateArgs.createFromParcel(parcel),
-        closeWithResult = parcel.readInt() != 0,
-    )
-
-    override fun describeContents(): Int = 0
-
-    override fun writeToParcel(parcel: Parcel, flags: Int) {
-        parcel.writeInt(if (isNux) 1 else 0)
-        parcel.writeString(location)
-        parcel.writeString(trigger.name)
-        guildTemplate.writeToParcel(parcel, flags)
-        parcel.writeInt(if (closeWithResult) 1 else 0)
-    }
-
-    companion object CREATOR : Parcelable.Creator<GuildCreateArgs> {
-        override fun createFromParcel(parcel: Parcel) = GuildCreateArgs(parcel)
-
-        override fun newArray(size: Int): Array<GuildCreateArgs?> = arrayOfNulls(size)
-    }
-}

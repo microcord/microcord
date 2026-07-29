@@ -6,6 +6,8 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppFragment
+import com.discord.app.appActivityViewModels
+import com.discord.app.appViewModels
 import com.discord.models.guild.Guild
 import com.discord.models.message.Message
 import com.discord.stores.StoreNavigation
@@ -18,6 +20,7 @@ import com.discord.widgets.chat.list.entries.LoadingEntry
 import com.discord.widgets.chat.list.entries.MentionFooterEntry
 import com.discord.widgets.chat.list.entries.MessageHeaderEntry
 import com.discord.widgets.chat.list.model.ChatListRows
+import com.discord.widgets.user.search.WidgetGlobalSearchDismissModel
 import rx.Subscription
 import rx.schedulers.Schedulers
 
@@ -31,15 +34,22 @@ import rx.schedulers.Schedulers
  */
 class WidgetUserMentions : AppFragment(R.layout.widget_user_mentions) {
 
+    private val viewModel: WidgetUserMentionsViewModel by appViewModels { WidgetUserMentionsViewModel() }
     private var adapter: WidgetChatListAdapter? = null
     private val messages = ArrayList<Message>()
     private var request: Subscription? = null
     private var loading = false
     private var allLoaded = false
+    private val dismissViewModel: WidgetGlobalSearchDismissModel by appActivityViewModels {
+        WidgetGlobalSearchDismissModel()
+    }
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        view.findViewById<Toolbar>(R.id.action_bar_toolbar).setTitle(R.string.recent_mentions)
+        view.findViewById<Toolbar>(R.id.action_bar_toolbar).apply {
+            setTitle(R.string.recent_mentions)
+            visibility = if (arguments?.getBoolean(ARG_EMBEDDED) == true) View.GONE else View.VISIBLE
+        }
         val recycler = view.findViewById<RecyclerView>(R.id.user_mentions_list)
         val mentionsAdapter = MGRecyclerAdapter.configure<ChatListEntry, WidgetChatListAdapter>(
             WidgetChatListAdapter(recycler, this, parentFragmentManager, MentionsEventHandler()),
@@ -54,6 +64,7 @@ class WidgetUserMentions : AppFragment(R.layout.widget_user_mentions) {
             }
         })
         adapter = mentionsAdapter
+        viewModel.model?.let { mentionsAdapter.data = it }
         load()
     }
 
@@ -114,13 +125,15 @@ class WidgetUserMentions : AppFragment(R.layout.widget_user_mentions) {
             rows += ChatListRows.contextMessageRows(state, message)
         }
         if (loading) rows += LoadingEntry() else if (allLoaded) rows += MentionFooterEntry()
-        adapter?.data = Model(
+        val model = Model(
             userId = StoreStream.getUsers().getMe().id,
             guildId = StoreStream.getGuildSelected().getSelectedGuildId(),
             guild = StoreStream.getGuilds().getGuild(StoreStream.getGuildSelected().getSelectedGuildId()),
             channelNames = StoreStream.getChannels().getChannelNames(),
             list = rows,
         )
+        viewModel.model = model
+        adapter?.data = model
     }
 
     private fun openMessage(message: Message) {
@@ -128,6 +141,7 @@ class WidgetUserMentions : AppFragment(R.layout.widget_user_mentions) {
         StoreStream.selectChannel(channel.guildId, channel.id)
         StoreStream.getMessagesLoader().jumpToMessage(channel.id, message.id)
         StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE, true)
+        dismissViewModel.dismiss()
     }
 
     /** Tapping a result leaves this screen for the message in its own channel. */
@@ -143,7 +157,7 @@ class WidgetUserMentions : AppFragment(R.layout.widget_user_mentions) {
      * matching the reference: this list belongs to no single channel, and `0` would read as
      * "channel 0" to the adapter's channel-change detection.
      */
-    private data class Model(
+    internal data class Model(
         override val userId: Long,
         override val guildId: Long,
         override val guild: Guild?,
@@ -156,7 +170,13 @@ class WidgetUserMentions : AppFragment(R.layout.widget_user_mentions) {
         override val isSpoilerClickAllowed: Boolean = false,
     ) : WidgetChatListAdapter.Data
 
-    private companion object {
+    companion object {
+        private const val ARG_EMBEDDED = "is_embedded"
+
+        fun create(isEmbedded: Boolean) = WidgetUserMentions().apply {
+            arguments = android.os.Bundle().apply { putBoolean(ARG_EMBEDDED, isEmbedded) }
+        }
+
         const val PAGE_SIZE = 25
 
         /** How close to the end of the loaded results the list must get before the next page. */

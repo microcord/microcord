@@ -90,6 +90,10 @@ import com.discord.widgets.user.profile.UserStatusPresenceCustomView
 import com.discord.widgets.settings.account.WidgetSettingsBlockedUsers
 import com.discord.widgets.friends.BlockedUsersBuilder
 import com.discord.widgets.home.WidgetHomeViewModel
+import com.discord.widgets.home.WidgetHome
+import com.discord.widgets.home.WidgetHomeModel
+import com.discord.widgets.home.WidgetHomePanelLoading
+import com.discord.widgets.home.WidgetHomePanelNsfw
 import com.discord.widgets.stage.StageStoreAccess
 import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.models.domain.ModelCustomStatusSetting
@@ -220,6 +224,8 @@ class StoreStream private constructor(
         channels, permissions, guildSelected, dispatcher, observationDeck,
         onResolvedChannelChanged = ::handleResolvedChannelChanged,
     )
+    private val guildsNsfw = StoreGuildsNsfw(dispatcher, channels, observationDeck)
+    private val maskedLinks = StoreMaskedLinks(dispatcher, channelsSelected, userRelationships)
     private val channelMembers = StoreChannelMembers(observationDeck) { guildId, roleId ->
         guilds.getGuildRolesInternal()[guildId]?.get(roleId)
     }
@@ -475,7 +481,20 @@ class StoreStream private constructor(
         observationDeck = observationDeck,
         restApi = { if (::restApi.isInitialized) restApi else null },
     )
+    private val applicationStreamPreviews = StoreApplicationStreamPreviews(dispatcher, clock)
     private val embeddedActivities = StoreEmbeddedActivities(observationDeck)
+    private val entitlements = StoreEntitlements(
+        dispatcher = dispatcher,
+        observationDeck = observationDeck,
+        restApi = { if (::restApi.isInitialized) restApi else null },
+    )
+    private val googlePlayPurchases = StoreGooglePlayPurchases(
+        observationDeck = observationDeck,
+        dispatcher = dispatcher,
+        restApi = { if (::restApi.isInitialized) restApi else null },
+        clock = clock,
+    )
+    private val googlePlaySkuDetails = StoreGooglePlaySkuDetails(observationDeck, dispatcher)
     private val subscriptions = StoreSubscriptions(
         observationDeck = observationDeck,
         dispatcher = dispatcher,
@@ -553,6 +572,9 @@ class StoreStream private constructor(
         userSettings,
         api = { if (::restApi.isInitialized) restApi else null },
     )
+    private val inviteSettings = StoreInviteSettings()
+    private val mediaFavorites = StoreMediaFavorites(observationDeck, dispatcher)
+    private val notificationUpsells = StoreNotificationUpsells(dispatcher, observationDeck)
 
     // -- Voice and stages ---------------------------------------------------------------------------
     private lateinit var voiceTransport: VoiceTransport
@@ -654,6 +676,44 @@ class StoreStream private constructor(
         observeSelectedVoiceChannelId = { voiceChannelSelected.observeSelectedVoiceChannelId() },
         streamContextForUser = { userId -> streamContextService.getForUser(userId, true) },
     )
+    private val analytics = StoreAnalytics(
+        stores = object : StoreAnalytics.Stores {
+            override fun getChannel(channelId: Long) = channels.findChannelById(channelId)
+            override fun getChannelsForGuild(guildId: Long) = channels.getChannelsForGuild(guildId).values
+            override fun getSelectedChannelId() = channelsSelected.getId()
+            override fun getGuild(guildId: Long) = guilds.getGuild(guildId)
+            override fun getSelectedGuildId() = guildSelected.getSelectedGuildId()
+            override fun getApproximateMemberCount(guildId: Long) = guildMemberCounts.getApproximateMemberCount(guildId)
+            override fun getGuildRoleCount(guildId: Long) = guilds.getRoles()[guildId]?.size ?: 0
+            override fun getGuildMemberRoleCount(guildId: Long, userId: Long) =
+                guilds.getMember(guildId, userId)?.getRoles()?.size ?: 0
+            override fun isGuildMember(guildId: Long, userId: Long) = guilds.getMember(guildId, userId) != null
+            override fun isGuildMemberPending(guildId: Long, userId: Long) =
+                guilds.getMember(guildId, userId)?.pending == true
+            override fun getGuildNotificationSettings(guildId: Long) = guildSettings.getGuildSettings()[guildId]
+            override fun getGuildPermissions(guildId: Long) = permissions.getGuildPermissions()[guildId]
+            override fun getChannelPermissions(channelId: Long) = permissions.getPermissionsByChannel()[channelId]
+            override fun getMeId() = users.getMe().id
+            override fun getThreadMessageCount(channelId: Long) = threadMessages.getThreadMessageCount(channelId)
+            override fun getVoiceStatesForGuild(guildId: Long) = voiceStates.get()[guildId].orEmpty()
+            override fun getSelectedVoiceChannelId() = voiceChannelSelected.getSelectedVoiceChannelId()
+            override fun getLastSelectedVoiceChannelId() = voiceChannelSelected.getLastSelectedVoiceChannelId()
+            override fun observeSelectedVoiceChannel() = voiceChannelSelected.observeSelectedChannel()
+            override fun observeInputMode() = mediaSettings.getInputMode()
+            override fun getRtcConnectionMetadata() =
+                if (::voiceTransport.isInitialized) voiceTransport.storeRtcConnection.getRtcConnectionMetadata() else null
+            override fun getPreferredRtcRegion() = if (::rtcRegion.isInitialized) rtcRegion.getPreferredRegion() else null
+            override fun getVoiceConfiguration() = mediaSettings.getVoiceConfigurationBlocking()
+            override fun isScreenSharing() = applicationStreaming.isScreenSharing()
+            override fun getSelectedVideoInputDevice() =
+                if (::voiceTransport.isInitialized) voiceTransport.storeMediaEngine.getSelectedVideoInputDeviceBlocking() else null
+            override fun getMaxViewersForStream(userId: Long, channelId: Long, guildId: Long?) =
+                applicationStreaming.getMaxViewersForStream(userId, channelId, guildId)
+            override fun getTheme() = userSettingsSystem.getTheme()
+        },
+        dispatcher = dispatcher,
+        clock = clock,
+    )
 
     /**
      * `by lazy` because it takes the stores declared above it and is only touched once a voice
@@ -710,6 +770,10 @@ class StoreStream private constructor(
         localActionComponentState,
         applicationInteractions,
         embeddedActivities,
+        applicationStreamPreviews,
+        entitlements,
+        googlePlayPurchases,
+        googlePlaySkuDetails,
         subscriptions,
         paymentSources,
         // Threads and forums
@@ -736,6 +800,10 @@ class StoreStream private constructor(
         guildStickers,
         // Cross-cutting
         experiments,
+        guildsNsfw,
+        maskedLinks,
+        mediaFavorites,
+        notificationUpsells,
         notifications,
         gameParty,
         guildMemberCounts,
@@ -806,6 +874,11 @@ class StoreStream private constructor(
         )
         StageStoreAccess.install(lurking)
         WidgetHomeViewModel.storeLurking = lurking
+        WidgetHomeViewModel.storeGuildsNsfw = guildsNsfw
+        WidgetHomeModel.guildNsfwGateAgreed = guildsNsfw::isGuildNsfwGateAgreed
+        WidgetHomePanelNsfw.onGuildNsfwGateAllowed = guildsNsfw::allow
+        WidgetHomePanelNsfw.onGuildNsfwGateDenied = guildsNsfw::deny
+        WidgetHomePanelLoading.onHomeShown = { analytics.appUiViewed(WidgetHome::class.java) }
         ChatInputStoreBindings.chatEvents = chat::observeEvents
         ChatInputStoreBindings.slowModeCooldown = { channelId ->
             slowMode.observeCooldownSecs(channelId, StoreSlowMode.Type.MessageSend)
@@ -862,6 +935,18 @@ class StoreStream private constructor(
         dispatcher.registerDispatchHandlers(storeV2DispatchHandler)
         voiceTransport.storeRtcConnection.speakingUpdates.subscribe { updates ->
             dispatcher.schedule { voiceSpeaking.handleSpeakingUpdates(updates) }
+        }
+        voiceSpeaking.observeSpeakingUsers().subscribe { speakingUsers ->
+            dispatcher.schedule { analytics.handleUserSpeaking(speakingUsers) }
+        }
+        applicationStreaming.observeActiveStream()
+            .map { applicationStreaming.isScreenSharing() }
+            .distinctUntilChanged()
+            .subscribe { isScreenSharing ->
+                dispatcher.schedule { analytics.handleIsScreenSharingChanged(isScreenSharing) }
+            }
+        voiceTransport.storeMediaEngine.getSelectedVideoInputDevice().subscribe { device ->
+            dispatcher.schedule { analytics.handleVideoInputDeviceSelected(device) }
         }
         voiceTransport.storeRtcConnection.connectionState.filter { it }.subscribe {
             gatewayConnection.handleRtcConnectionLive(null)
@@ -967,9 +1052,12 @@ class StoreStream private constructor(
         // relative ordering below is unchanged.
         dispatcher.schedule {
             experiments.init(context)
+            guildsNsfw.init(context)
+            maskedLinks.init(context)
             userConnections.init(context)
             contactSync.init(context)
             mediaSettings.init()
+            analytics.init(context)
             notifications.restore()
             applicationInteractions.init(context)
         }
@@ -984,7 +1072,10 @@ class StoreStream private constructor(
         Rules.setEmojiDataProvider(emoji)
         stickers.init()
         authentication.observeFingerprint().subscribe(
-            { fingerprint -> dispatcher.schedule { experiments.handleFingerprint(fingerprint) } },
+            { fingerprint -> dispatcher.schedule {
+                experiments.handleFingerprint(fingerprint)
+                analytics.handleFingerprint(fingerprint)
+            } },
             {},
         )
         com.discord.utilities.lifecycle.Backgrounded.observe().subscribe(
@@ -1657,11 +1748,12 @@ class StoreStream private constructor(
 
     @StoreThread
     private fun handleGatewayConnectedInternal(connected: Boolean) {
-        connectionOpen.handleConnected(connected)
-        connectivity.handleConnected(connected)
-        channels.handleConnected(connected)
         messages.handleConnected(connected)
         messagesLoader.handleConnected(connected)
+        analytics.handleConnected(connected)
+        connectivity.handleConnected(connected)
+        connectionOpen.handleConnected(connected)
+        channels.handleConnected(connected)
         if (connected && ::messageSendCoordinator.isInitialized) messageSendCoordinator.handleConnected()
     }
 
@@ -2230,6 +2322,7 @@ class StoreStream private constructor(
         calls.handleGuildSelect(guildId)
         lurking.handleGuildSelected(guildId)
         nux.handleGuildSelected(guildId)
+        inviteSettings.handleGuildSelected(guildId)
     }
 
     private fun selectChannelInternal(guildId: Long, channelId: Long) = dispatcher.schedule {
@@ -2237,6 +2330,7 @@ class StoreStream private constructor(
             guildSelected.handleGuildSelected(guildId)
             lurking.handleGuildSelected(guildId)
             nux.handleGuildSelected(guildId)
+            inviteSettings.handleGuildSelected(guildId)
         }
         channelsSelected.handleChannelSelected(guildId, channelId)
         navigation.setNavigationPanelAction(StoreNavigation.PanelAction.CLOSE)
@@ -2303,10 +2397,11 @@ class StoreStream private constructor(
         authentication.handleAuthStateInternal(state)
         users.handleAuthToken(state?.token)
         messagesLoader.handleAuthToken(state?.token)
-        experiments.handleAuthToken(state?.token)
-        voiceStates.handleAuthToken(state?.token)
-        voiceChannelSelected.handleAuthToken(state?.token)
         notifications.handleAuthToken(state?.token)
+        experiments.handleAuthToken(state?.token)
+        analytics.handleAuthToken(state?.token)
+        voiceChannelSelected.handleAuthToken(state?.token)
+        voiceStates.handleAuthToken(state?.token)
         val token = state?.token
         if (token != gatewayToken) {
             authGeneration++
@@ -2361,6 +2456,8 @@ class StoreStream private constructor(
         }
         authentication.handlePreLogout()
         userSettingsSystem.handlePreLogout()
+        notifications.handlePreLogout()
+        analytics.handlePreLogout()
         userRelationships.handlePreLogout()
         userProfiles.handlePreLogout()
         userNotes.handlePreLogout()
@@ -2425,7 +2522,6 @@ class StoreStream private constructor(
         messageReactions.handlePreLogout()
         messageAck.handlePreLogout()
         mentions.handlePreLogout()
-        notifications.handlePreLogout()
         embeddedActivities.handlePreLogout()
         subscriptions.handlePreLogout()
         paymentSources.handlePreLogout()
@@ -2492,6 +2588,8 @@ class StoreStream private constructor(
         usersTyping.clear()
         tabsNavigation.handlePreLogout()
         clientDataState.clear()
+        notifications.handlePreLogout()
+        analytics.handlePreLogout()
         resetSecondaryStoresInternal()
         voiceChannelSelected.clear()
         connectionOpen.handleConnected(false)
@@ -2537,7 +2635,6 @@ class StoreStream private constructor(
         friendSuggestions.handleConnectionOpen(payload)
         userAffinities.handleConnectionOpen()
         clientDataState.handleConnectionOpen(payload)
-        experiments.handleConnectionOpen(payload)
         guildMemberCounts.handleConnectionOpen(payload)
         gameParty.handleConnectionOpen(payload)
         userRequiredActions.handleConnectionOpen(payload)
@@ -2563,6 +2660,8 @@ class StoreStream private constructor(
             voiceTransport.storeMediaEngine.handleConnectionOpen(payload)
             voiceTransport.storeStreamRtcConnection.handleConnectionOpen(payload)
         }
+        analytics.handleConnectionOpen(payload)
+        experiments.handleConnectionOpen(payload)
         if (::rtcRegion.isInitialized) rtcRegion.handleConnectionOpen()
         messageAck.handleConnectionOpen(payload)
         mentions.handleConnectionOpen(payload)
@@ -2895,6 +2994,10 @@ class StoreStream private constructor(
         @JvmStatic fun getInteractions() = requireInstance().applicationInteractions
         @JvmStatic fun getLocalActionComponentState() = requireInstance().localActionComponentState
         @JvmStatic fun getEmbeddedActivities() = requireInstance().embeddedActivities
+        @JvmStatic fun getApplicationStreamPreviews() = requireInstance().applicationStreamPreviews
+        @JvmStatic fun getEntitlements() = requireInstance().entitlements
+        @JvmStatic fun getGooglePlayPurchases() = requireInstance().googlePlayPurchases
+        @JvmStatic fun getGooglePlaySkuDetails() = requireInstance().googlePlaySkuDetails
         @JvmStatic fun getSubscriptions() = requireInstance().subscriptions
         @JvmStatic fun getPaymentSources() = requireInstance().paymentSources
         @JvmStatic fun getNavigation() = requireInstance().navigation
@@ -2921,6 +3024,11 @@ class StoreStream private constructor(
 
         // Cross-cutting
         @JvmStatic fun getExperiments() = requireInstance().experiments
+        @JvmStatic fun getAnalytics() = requireInstance().analytics
+        @JvmStatic fun getGuildsNsfw() = requireInstance().guildsNsfw
+        @JvmStatic fun getMaskedLinks() = requireInstance().maskedLinks
+        @JvmStatic fun getMediaFavorites() = requireInstance().mediaFavorites
+        @JvmStatic fun getNotificationUpsells() = requireInstance().notificationUpsells
         @JvmStatic fun getNotifications() = requireInstance().notifications
         @JvmStatic fun getGameParty() = requireInstance().gameParty
         @JvmStatic fun getGuildMemberCounts() = requireInstance().guildMemberCounts
@@ -2939,6 +3047,7 @@ class StoreStream private constructor(
         @JvmStatic fun getGuildBoost() = requireInstance().guildBoost
         @JvmStatic fun getGuildScheduledEvents() = requireInstance().guildScheduledEvents
         @JvmStatic fun getInstantInvites() = requireInstance().instantInvites
+        @JvmStatic fun getInviteSettings() = requireInstance().inviteSettings
         @JvmStatic fun getStageChannels() = requireInstance().stageChannels
         @JvmStatic fun getRequestedStageChannels() = requireInstance().requestedStageChannels
         @JvmStatic fun getStageChannelSelfPresence() = requireInstance().stageChannelSelfPresence

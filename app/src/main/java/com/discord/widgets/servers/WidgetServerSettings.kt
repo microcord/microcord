@@ -144,6 +144,9 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
         bindDestination(R.id.server_settings_members_option) {
             WidgetServerSettingsMembers.launch(it.context, guildId)
         }
+        bindDestination(R.id.server_settings_roles_option) {
+            WidgetServerSettingsRoles.launch(it.context, guildId)
+        }
         bindDestination(R.id.server_settings_option_overview) {
             WidgetServerSettingsOverview.launch(it.context, guildId)
         }
@@ -202,6 +205,7 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
             R.id.server_settings_bans_option,
             R.id.server_settings_option_audit_log,
             R.id.server_settings_members_option,
+            R.id.server_settings_roles_option,
             R.id.server_settings_option_overview,
             R.id.server_settings_option_moderation,
             R.id.server_settings_option_security,

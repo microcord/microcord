@@ -12,6 +12,7 @@ import androidx.viewpager2.widget.ViewPager2
 import com.discord.R
 import com.discord.app.AppDialog
 import com.discord.app.AppFragment
+import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.dimen.dpToPixels
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
@@ -99,6 +100,7 @@ class WidgetNavigationHelp : AppDialog(R.layout.widget_navigation_help) {
         private const val TAG = "javaClass"
 
         fun show(fragmentManager: FragmentManager) {
+            AnalyticsTracker.openModal("Help Nav", "Guild List")
             WidgetNavigationHelp().show(fragmentManager, TAG)
         }
     }

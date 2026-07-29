@@ -32,6 +32,8 @@ class WidgetSettingsTest {
     @Test fun `main settings exposes only implemented recovered app routes`() {
         assertEquals(setOf(
             com.discord.R.id.blocked_users,
+            com.discord.R.id.account,
+            com.discord.R.id.authorized_apps,
             com.discord.R.id.text_images_settings,
             com.discord.R.id.appearance,
             com.discord.R.id.language,

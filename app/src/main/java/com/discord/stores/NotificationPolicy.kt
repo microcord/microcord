@@ -51,13 +51,10 @@ object NotificationPolicy {
             ) return emptySet()
         }
 
-        return buildSet {
-            if (input.appSettings.isEnabledInApp &&
-                input.selectedChannelId != channel.id &&
-                (input.parentChannel == null || input.selectedChannelId != input.parentChannel.id)
-            ) add(Delivery.FOREGROUND)
-            if (input.appSettings.isEnabled && guildSettings?.isMobilePush != false) add(Delivery.SYSTEM)
-        }
+        return if (input.appSettings.isEnabledInApp &&
+            input.selectedChannelId != channel.id &&
+            (input.parentChannel == null || input.selectedChannelId != input.parentChannel.id)
+        ) setOf(Delivery.FOREGROUND) else emptySet()
     }
 
     private fun isAccessible(channel: Channel, permissions: Long?): Boolean {

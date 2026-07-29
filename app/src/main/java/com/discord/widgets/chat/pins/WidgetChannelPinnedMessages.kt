@@ -17,12 +17,17 @@ import com.discord.stores.StorePinnedMessages
 import com.discord.stores.StoreStream
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.widgets.chat.list.ThreadSpineItemDecoration
+import com.discord.widgets.chat.list.WidgetChatList
+import com.discord.widgets.chat.list.actions.MessageActionCoordinator
+import com.discord.widgets.chat.list.actions.MessageActions
+import com.discord.widgets.chat.list.actions.WidgetChatListActions
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapter
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.DividerEntry
 import com.discord.widgets.chat.list.entries.EmptyPinsEntry
 import com.discord.widgets.chat.list.entries.LoadingEntry
 import com.discord.widgets.chat.list.model.ChatListRows
+import com.discord.widgets.chat.input.emoji.WidgetEmojiPickerSheet
 import rx.Subscription
 
 /**
@@ -33,17 +38,17 @@ import rx.Subscription
  * reveal it. Mention highlighting is left on, matching the reference — only the recent-mentions
  * screen turns it off.
  */
-class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_messages) {
+class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_messages), WidgetChatListActions.Host {
 
     interface Host {
         fun pinnedMessagesStore(): StorePinnedMessages
         fun channelForPins(channelId: Long): Channel?
         fun jumpToPinnedMessage(channelId: Long, messageId: Long)
-        fun onPinnedMessageLongPress(message: Message): Boolean = false
     }
 
     private var subscription: Subscription? = null
     private var adapter: WidgetChatListAdapter? = null
+    private var pinnedMessages: Map<Long, Message> = emptyMap()
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -76,8 +81,13 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
 
         val context = requireContext()
         subscription = host.pinnedMessagesStore().observeForChannel(channelId).subscribe(
-            { messages -> view.post { chatAdapter.data = model(context, channelId, channel, messages) } },
-            { view.post { chatAdapter.data = model(context, channelId, channel, emptyList()) } },
+            { messages ->
+                view.post {
+                    pinnedMessages = messages.orEmpty().associateBy(Message::id)
+                    chatAdapter.data = model(context, channelId, channel, messages)
+                }
+            },
+            { /* Keep the loading state: a failed fetch is not an empty pin list. */ },
         )
     }
 
@@ -96,6 +106,7 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
         subscription = null
         adapter?.dispose()
         adapter = null
+        pinnedMessages = emptyMap()
         super.onDestroyView()
     }
 
@@ -109,8 +120,7 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
         return null
     }
 
-    /** Forwards the two interactions this surface supports; everything else keeps its no-op default. */
-    private class PinnedMessagesEventHandler(
+    private inner class PinnedMessagesEventHandler(
         private val host: Host,
         private val channelId: Long,
     ) : WidgetChatListAdapter.EventHandler {
@@ -123,8 +133,46 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
             formattedMessage: CharSequence,
             isThreadStarterMessage: Boolean,
         ) {
-            host.onPinnedMessageLongPress(message)
+            WidgetChatListActions.showForPin(
+                childFragmentManager,
+                channelId,
+                message.id,
+                actionInput(message, channelId),
+            )
         }
+
+        override fun onStickerClicked(message: Message, sticker: com.discord.api.sticker.BaseSticker) =
+            host.jumpToPinnedMessage(channelId, message.id)
+
+        override fun onThreadClicked(channel: Channel) = StoreStream.selectChannel(channel.guildId, channel.id)
+    }
+
+    override fun messageActionCoordinator(): MessageActionCoordinator =
+        requireNotNull(WidgetChatList.actionCoordinator) { "Chat message actions are not initialized" }
+
+    override fun messageForAction(channelId: Long, messageId: Long): Message? = pinnedMessages[messageId]
+
+    override fun channelForAction(channelId: Long): Channel? = host().channelForPins(channelId)
+
+    override fun requestMessageEdit(message: Message, coordinator: MessageActionCoordinator) = Unit
+
+    override fun requestMessageReaction(message: Message, coordinator: MessageActionCoordinator) {
+        WidgetEmojiPickerSheet.show(childFragmentManager) { emoji -> coordinator.toggleReaction(message, emoji) }
+    }
+
+    private fun actionInput(message: Message, channelId: Long): MessageActions.Input {
+        val channel = host().channelForPins(channelId)
+        return MessageActions.Input(
+            authorId = message.author?.id,
+            currentUserId = StoreStream.getUsers().getMe().id,
+            messageType = message.type,
+            isLocal = message.isLocal(),
+            canResend = message.canResend(),
+            hasContent = !message.content.isNullOrEmpty(),
+            permissions = StoreStream.getPermissions().getPermissionsByChannel()[channelId],
+            pinned = message.pinned == true,
+            channelType = channel?.type ?: Channel.GUILD_TEXT,
+        )
     }
 
     /**

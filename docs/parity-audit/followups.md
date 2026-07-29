@@ -4770,3 +4770,108 @@ optimistic message had a null author and rendered a broken sender name until the
 it. The reference local-message creator always carries the current user. The target now passes
 `Loaded.me.synthesizeApiUser()`; coordinator coverage asserts the optimistic username before
 reconciliation.
+
+## 2026-07-27 twenty-agent widget parity wave
+
+Twenty disjoint agents worked only from 126.21 JADX/Vineflower/bytecode evidence. Integrated work:
+
+- all five application-command composer classes;
+- full chat-list model plus action/reaction management (adapter inventory was already complete);
+- server overview/ViewModel, channel selectors, role entry, channel sorting/reordering and notification settings;
+- MFA, backup-code, SMS backup and billing UI;
+- remaining clean channel-list rows/controllers and thread/archive behavior;
+- guild-create templates, profile emoji, announcement profile and ownership transfer;
+- hub event details/share/join/RSVP;
+- expanded voice settings/stage-role sheets;
+- auth registration/MFA/undelete/password continuations;
+- forum browser/tags/guidelines/NSFW/unreads/reactions;
+- NUX join/help/hub flows, user profile helpers/mutuals/connections, and `ModalComponent`.
+
+The fullscreen voice slice intentionally made no changes: exact implementation still requires
+`VideoPermissionsManager`, `VoiceEngineServiceController`, `VideoPlayerIdleDetector`, overlay and
+feedback/onboarding destinations, `AppActivity.Call`, and manifest registration. Building the fragment
+without those would be a dead placeholder.
+
+Integration required four mechanical corrections: named NSFW callback placement, object-scoped forum
+reaction extensions, a guild-template resource-name collision, and handling the new profile-header
+`Uninitialized` state. The MFA test was corrected to accept the reference's default-locale lowercase
+behavior (including Turkish dotless-i).
+
+Verification: production Kotlin compiles, all 1,304 unit tests pass, `assembleDebug` passes, and
+`lintDebug` passes with only baseline-covered findings.
+
+Measured exact-path widget coverage is now **703 / 1,155 (60.9%)**, up from 651 / 1,155. **452 exact
+paths remain**. Target contains 806 widget Kotlin files; renamed/consolidated extras are not credited
+without behavioral evidence. The largest remaining deficits are `chat` 142, `servers` 67, `channels`
+55, `settings` 33, `guilds` 31, `hubs` 28, `voice` 24, `guildscheduledevent` 17, `auth` 16, `nux` 8,
+`user` 7, `botuikit` 5 and `forums` 4. Structural coverage remains an upper bound, not a certified
+behavioral-parity percentage.
+
+## 2026-07-28 second twenty-agent widget parity wave
+
+The second disjoint widget wave completed command autocomplete wiring, chat structural-entry and
+overlay/pin/quick-mention behavior, server role-member/community/emoji management, channel permission
+editing, member lists and thread browser/archive flows, authorized-app settings, guild join/profile
+identity, hub onboarding, voice feedback and fullscreen prerequisites, scheduled-event flows, SMS auth,
+and remaining user status/mention helpers. GIF-picker and NUX owners found their scoped behavior already
+present or in dirty exact-path files and correctly avoided duplication.
+
+Integration fixes covered RxJava 1 static `combineLatest`, `ViewModelProvider.get`, permission callback
+signatures, forum object-scoped extensions, `NullSerializable` typing, guild-event invite settings,
+adapter generic bounds, and tests whose assumptions contradicted reference default-locale/UTC formatting.
+
+Verification: production Kotlin compiles, all 1,355 unit tests pass, `assembleDebug` passes, and
+`lintDebug` passes with baseline-covered findings only.
+
+Measured exact-path widget coverage is now **778 / 1,155 (67.4%)**, up from 703 / 1,155. **377 exact
+paths remain**. Target contains 885 widget Kotlin files. Largest remaining deficits: `chat` 138,
+`servers` 59, `channels` 32, `settings` 29, `hubs` 28, `guilds` 18, `auth` 15, `voice` 12,
+`guildscheduledevent` 10, `nux` 8, `botuikit` 5, and four each in `user`,
+`guild_role_subscriptions`, and `forums`. Structural coverage remains an upper bound pending a fresh
+behavioral audit.
+
+## 2026-07-29 third twenty-agent widget parity wave
+
+The third wave completed chat host/model consumption, Flex attachment helpers, remote command browsing,
+embedded-message/media helpers, the community enable wizard, server/channel/settings/premium/profile
+flows, hub concrete-store usage, guild clone/join corrections, auth landing/age verification,
+scheduled-event wiring, exact NUX file splitting, modal auto-open support and small-package tests.
+Fullscreen voice remained correctly blocked on missing service/activity/permission infrastructure.
+
+Integration repairs covered absent fullscreen screen restrictions, host-method naming, API-to-domain user
+conversion, hub clickable hooks, community Back callback shape, profile-header covariance, Android billing
+fixture behavior, and one invalid i18n formatting call.
+
+Verification: production Kotlin compiles, all 1,404 unit tests pass, `assembleDebug` passes, and
+`lintDebug` passes with baseline-covered findings only.
+
+Measured exact-path widget coverage is now **819 / 1,155 (70.9%)**, up from 778 / 1,155. **336 exact
+paths remain**. Target contains 925 widget Kotlin files and 25 of 45 widget packages are structurally
+complete; NUX is now 14/14. Largest deficits: `chat` 132, `servers` 52, `hubs` 28, `channels` 24,
+`settings` 21, `guilds` 17, `auth` 13, `voice` 11, `guildscheduledevent` 10, `botuikit` 5, and four
+each in `forums`, `guild_role_subscriptions`, and `user`. Structural coverage remains an upper bound
+pending renewed behavioral auditing.
+
+## 2026-07-29 fourth twenty-agent mixed parity wave
+
+The fourth wave combined reachability and structural work. `StoreStream` now constructs, initializes
+and publishes ten previously dead stores where dependencies permitted, including analytics lifecycle
+feeds and NSFW/invite/media/notification hooks. Notifications gained initialization, token registration,
+completed settings and foreground-only gateway handling. Overlay voice bubbles, selector/menu
+prerequisites, voice permission/controller contracts, and broad exact-path widget splits landed.
+
+Structural closures include all hub, scheduled-event, forum and user exact paths, plus stage and
+guild-role-subscription reductions. Fullscreen call fragments remain intentionally blocked on service,
+activity and permission infrastructure; no dead screens were created.
+
+Integration repaired AppFragment argument/menu APIs, nullable push-token unregister semantics,
+API/domain user conversion, Rx timing in tests, private-member presence expectations and JVM fixture
+assumptions. Verification: production Kotlin compiles, all 1,440 unit tests pass, `assembleDebug`
+passes, and `lintDebug` passes with baseline-covered findings only.
+
+Measured exact-path widget coverage is now **929 / 1,155 (80.4%)**, up from 819 / 1,155. **226 exact
+paths remain**. Target contains 1,023 widget Kotlin files; 31 of 45 widget packages are structurally
+complete. Remaining deficits: `chat` 111, `servers` 40, `channels` 23, `settings` 14, `auth` 13,
+`voice` 9, `guilds` 4, and two each in `captcha`, `home`, `guild_role_subscriptions`, `stage`, and
+`botuikit`, plus one each in `contact_sync` and `playstation`. Structural coverage remains an upper
+bound pending renewed behavioral auditing.

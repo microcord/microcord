@@ -8,9 +8,18 @@ import android.content.Intent
 import com.discord.R
 import com.discord.api.directory.DirectoryEntryGuild
 import com.discord.app.AppFragment
+import com.discord.app.AppScreenRouter
 import com.discord.dialogs.SimpleConfirmationDialog
 import com.discord.dialogs.SimpleConfirmationDialogArgs
 import com.discord.i18n.i18nFormat
+import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
+import com.discord.widgets.hubs.HubAddNameArgs
+import com.discord.widgets.hubs.HubDescriptionArgs
+import com.discord.widgets.hubs.WidgetHubAddName
+import com.discord.widgets.hubs.WidgetHubAddServer
+import com.discord.widgets.hubs.WidgetHubDescription
+import com.discord.widgets.hubs.toArgsIntent
+import com.discord.widgets.mobile_reports.WidgetMobileReports
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.json.JSONObject
 
@@ -23,38 +32,53 @@ private const val MAX_RECOMMENDATION_COUNT = 5
 /** A server below this many members is never featured in the "Newest" section. */
 private const val MINIMUM_MEMBER_COUNT = 5
 
-/**
- * Screens this package hands off to that do not exist yet.
- *
- * Each destination lives in another package and another wave (`widgets/hubs`,
- * `widgets/guilds/invite`, `widgets/mobile_reports`). Rather than open a dead screen or silently
- * swallow the tap, the corresponding affordance is **hidden** while its hook is `null`, so the user
- * is never offered an action that goes nowhere. The owning wave assigns the hook and the affordance
- * appears; nothing in this package changes.
- *
- * Same pattern as `ChatListRowNavigation` in the chat-row wave.
- */
+/** Directory destinations, kept overridable for focused widget tests. */
 object DirectoryNavigation {
 
     /** `widgets/hubs/WidgetHubAddServer` — the add-a-server flow, started for a result. */
     @JvmField
-    var addServerToHub: ((Context, ActivityResultLauncher<Intent>) -> Unit)? = null
+    var addServerToHub: ((Context, ActivityResultLauncher<Intent>) -> Unit)? = { context, launcher ->
+        AppScreenRouter.launchForResult(context, launcher, WidgetHubAddServer::class.java)
+    }
 
     /** `widgets/guilds/invite/WidgetGuildInviteShare` — invite people to the hub itself. */
     @JvmField
-    var inviteToHub: ((AppFragment, guildId: Long) -> Unit)? = null
+    var inviteToHub: ((AppFragment, guildId: Long) -> Unit)? = { fragment, guildId ->
+        WidgetGuildInviteShare.launch(
+            fragment.requireContext(),
+            fragment.childFragmentManager,
+            guildId,
+            source = "Guild Header",
+        )
+    }
 
     /** `widgets/hubs/WidgetHubDescription` — edit a listing this user owns. */
     @JvmField
-    var editHubEntry: ((Context, DirectoryEntryGuild, hubName: String) -> Unit)? = null
+    var editHubEntry: ((Context, DirectoryEntryGuild, hubName: String) -> Unit)? = { context, entry, hubName ->
+        AppScreenRouter.launch(
+            context,
+            WidgetHubDescription::class.java,
+            HubDescriptionArgs(
+                guildId = entry.guild.id,
+                channelId = entry.directoryChannelId,
+                isEditing = true,
+                hubName = hubName,
+                description = entry.description,
+                primaryCategoryId = entry.primaryCategoryId,
+            ).toArgsIntent(),
+        )
+    }
 
     /** `widgets/mobile_reports/WidgetMobileReports.launchDirectoryServerReport`. */
     @JvmField
-    var reportHubEntry: ((Context, guildId: Long, entityId: Long, channelId: Long) -> Unit)? = null
+    var reportHubEntry: ((Context, guildId: Long, entityId: Long, channelId: Long) -> Unit)? =
+        WidgetMobileReports::launchDirectoryServerReport
 
     /** `widgets/hubs/WidgetHubAddName` — the "pick a nickname" prompt on first hub entry. */
     @JvmField
-    var promptForHubName: ((Context, guildId: Long) -> Unit)? = null
+    var promptForHubName: ((Context, guildId: Long) -> Unit)? = { context, guildId ->
+        AppScreenRouter.launch(context, WidgetHubAddName::class.java, HubAddNameArgs(guildId).toArgsIntent())
+    }
 }
 
 /**

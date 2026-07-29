@@ -11,7 +11,10 @@ import com.discord.models.botuikit.SelectMessageComponent
 import com.discord.models.botuikit.childError
 import com.discord.stores.StoreApplicationInteractions
 import com.discord.widgets.botuikit.views.buttonLabelPaddingDp
+import com.discord.widgets.botuikit.views.hasEmoji
+import com.discord.widgets.botuikit.views.hasIcon
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -66,6 +69,9 @@ class BotUiKitContractsTest {
         assertEquals("nope", row.childError()?.errorMessage)
         assertEquals(option, select.selectedOptions.single())
         assertEquals(3, button.index)
+        assertTrue(button.hasEmoji())
+        assertFalse(button.hasIcon())
+        assertTrue(button.copy(style = ButtonStyle.LINK).hasIcon())
         assertNull(ActionRowMessageComponent(ComponentType.ACTION_ROW, components = listOf(select)).childError())
     }
 

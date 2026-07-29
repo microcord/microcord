@@ -1,23 +1,34 @@
 package com.discord.widgets.hubs.events
 
 import android.os.Bundle
+import android.util.Base64
 import android.view.View
 import android.widget.TextView
-import android.widget.Toast
 import androidx.fragment.app.FragmentManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.api.guildscheduledevent.GuildScheduledEventStatus
 import com.discord.app.AppBottomSheet
 import com.discord.app.appViewModels
 import com.discord.i18n.i18nPlural
+import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
 import com.discord.stores.utilities.Success
 import com.discord.stores.utilities.handleResponse
+import com.discord.utilities.guildscheduledevent.GuildScheduledEventUtilities
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
+import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
+import com.discord.utilities.rx.restSubscribeOn
+import com.discord.utilities.rx.ui
+import com.discord.widgets.guildscheduledevent.GuildScheduledEventTiming
+import com.discord.widgets.guildscheduledevent.ScheduledEventUi
+import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventDetailsBottomSheet
+import com.discord.widgets.directories.DIRECTORY_JOIN_GUILD_SOURCE
 import com.discord.widgets.hubs.hubDialogArgs
 import com.discord.widgets.hubs.toArgsBundle
+import org.json.JSONObject
 
 /**
  * The scheduled events published into a hub directory channel. Binds
@@ -44,15 +55,16 @@ class WidgetHubEventsPage : AppBottomSheet() {
         override fun fetchGuildScheduledEvents() = viewModel.fetchGuildScheduledEvents()
 
         override fun onCardClicked(eventData: HubGuildScheduledEventData) {
-            // The reference opens WidgetGuildScheduledEventDetailsBottomSheet, which does not exist
-            // in this project; selecting the event's guild is the closest reachable behaviour.
-            StoreStream.selectGuild(eventData.event.guildId)
-            dismiss()
+            WidgetGuildScheduledEventDetailsBottomSheet.showForDirectory(
+                parentFragmentManager,
+                eventData.event.id,
+                args.guildId,
+                args.directoryChannelId,
+            )
         }
 
         override fun onPrimaryButtonClicked(eventData: HubGuildScheduledEventData) {
-            StoreStream.selectChannel(eventData.event.guildId, eventData.event.channelId ?: return)
-            dismiss()
+            joinAndGoToGuild(eventData)
         }
 
         override fun onSecondaryButtonClicked(eventData: HubGuildScheduledEventData) {
@@ -60,11 +72,51 @@ class WidgetHubEventsPage : AppBottomSheet() {
         }
 
         override fun onShareClicked(eventData: HubGuildScheduledEventData) {
-            // Sharing routes through WidgetGuildInviteShare, which is not reconstructed; reported as
-            // an error rather than silently doing nothing under a visible button.
-            context?.let { Toast.makeText(it, R.string.error_generic_title, Toast.LENGTH_SHORT).show() }
+            GuildScheduledEventUtilities.launchInvite(
+                eventData.canShare,
+                this@WidgetHubEventsPage,
+                eventData.event.guildId,
+                eventData.channel,
+                eventData.event.id,
+            )
         }
     }
+
+    private fun joinAndGoToGuild(eventData: HubGuildScheduledEventData) {
+        val event = eventData.event
+        if (eventData.isInGuild) {
+            StoreStream.selectGuild(event.guildId)
+            dismiss()
+            return
+        }
+        RestAPI.apiOrNull?.joinGuild(
+            guildId = event.guildId,
+            isLurker = false,
+            sessionId = null,
+            directoryChannelId = args.directoryChannelId,
+            body = RestAPIParams.InviteCode(null, null),
+            context = directoryJoinContext(),
+        )
+            ?.restSubscribeOn()
+            ?.ui(this)
+            ?.appSubscribe(WidgetHubEventsPage::class.java, context = requireContext()) {
+                if (shouldToggleRsvpAfterHubJoin(
+                        eventData.isRsvped,
+                        ScheduledEventUi.timing(event),
+                        event.status,
+                    )
+                ) {
+                    viewModel.toggleRsvp(event)
+                }
+                StoreStream.selectGuild(event.guildId)
+                parentFragmentManager.fragments.filterIsInstance<AppBottomSheet>().forEach(AppBottomSheet::dismiss)
+            }
+    }
+
+    private fun directoryJoinContext(): String = Base64.encodeToString(
+        JSONObject().put("source", DIRECTORY_JOIN_GUILD_SOURCE).toString().toByteArray(Charsets.UTF_8),
+        Base64.NO_WRAP,
+    )
 
     override fun getContentViewResId(): Int = R.layout.widget_hub_events_page
 
@@ -123,3 +175,9 @@ class WidgetHubEventsPage : AppBottomSheet() {
         }
     }
 }
+
+internal fun shouldToggleRsvpAfterHubJoin(
+    isRsvped: Boolean,
+    timing: GuildScheduledEventTiming,
+    status: GuildScheduledEventStatus,
+): Boolean = !isRsvped && timing != GuildScheduledEventTiming.LIVE && status != GuildScheduledEventStatus.COMPLETED

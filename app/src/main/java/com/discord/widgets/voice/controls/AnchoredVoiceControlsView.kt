@@ -20,6 +20,7 @@ import com.discord.tooltips.FloatingViewManager
 import com.discord.tooltips.SparkleView
 import com.discord.tooltips.TooltipManager
 import com.discord.widgets.voice.model.CameraState
+import com.discord.widgets.voice.feedback.call.CallFeedbackSheetNavigator
 import com.discord.widgets.voice.sheet.WidgetVoiceBottomSheet
 
 class AnchoredVoiceControlsView @JvmOverloads constructor(
@@ -38,6 +39,7 @@ class AnchoredVoiceControlsView @JvmOverloads constructor(
         TooltipManager.Provider.get(FloatingViewManager.Provider.get())
 
     init {
+        CallFeedbackSheetNavigator.install()
         LayoutInflater.from(context).inflate(R.layout.anchored_voice_controls_view, this, true)
         camera = requireNotNull(findViewById(R.id.voice_fullscreen_controls_camera))
         disconnect = requireNotNull(findViewById(R.id.voice_fullscreen_controls_disconnect))

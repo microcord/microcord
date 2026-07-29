@@ -147,7 +147,7 @@ class WidgetHubDescription : AppFragment(R.layout.widget_hub_description) {
         if (category != null) categoryError.visibility = View.GONE
 
         state.addServerAsync.handleResponse(context) { success ->
-            HubStores.directories.addServerToDirectory(args.channelId, success.response)
+            storeDirectories().addServerToDirectory(args.channelId, success.response)
             hideKeyboard(view)
             val activity = activity ?: return@handleResponse
             activity.setResult(

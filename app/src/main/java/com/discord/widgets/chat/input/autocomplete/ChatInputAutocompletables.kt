@@ -8,6 +8,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.filterNull
 import com.discord.widgets.chat.input.ChatInputStoreBindings
+import com.discord.widgets.chat.input.autocomplete.sources.ApplicationCommandsAutocompletableSource
 import com.discord.widgets.chat.input.autocomplete.sources.ChannelAutocompletableSource
 import com.discord.widgets.chat.input.autocomplete.sources.EmojiAutocompletableSource
 import com.discord.widgets.chat.input.autocomplete.sources.UserAutocompletableSource
@@ -38,6 +39,14 @@ object ChatInputAutocompletables {
             storeChannels = StoreStream.getChannels(),
             observeJoinedThreads = { guildId -> ChatInputStoreBindings.joinedThreads(guildId) },
             storePermissions = StoreStream.getPermissions(),
+        )
+    }
+
+    val APPLICATION_COMMANDS_SOURCE: ApplicationCommandsAutocompletableSource by lazy {
+        ApplicationCommandsAutocompletableSource(
+            storeUsers = StoreStream.getUsers(),
+            storeGuilds = StoreStream.getGuilds(),
+            storeApplicationCommands = StoreStream.getApplicationCommands(),
         )
     }
 
@@ -91,16 +100,18 @@ object ChatInputAutocompletables {
     ): Observable<Map<LeadingIdentifier, Set<Autocompletable>>> {
         val users = USERS_SOURCE.observeAutocompletables(channel)
         val emoji = EMOJI_SOURCE.observeEmojiAutocompletables(channel)
+        val commands = APPLICATION_COMMANDS_SOURCE.observeApplicationCommandAutocompletables(channel)
         val channels = if (channel.isPrivate()) {
             Observable.just(emptyMap<LeadingIdentifier, TreeSet<Autocompletable>>())
         } else {
             CHANNEL_SOURCE.observeChannelAutocompletables(channel.guildId)
         }
-        return Observable.combineLatest(users, emoji, channels) { a, b, c ->
+        return Observable.combineLatest(users, emoji, channels, commands) { a, b, c, d ->
             val merged = LinkedHashMap<LeadingIdentifier, Set<Autocompletable>>()
             merged.putAll(a)
             merged.putAll(b)
             merged.putAll(c)
+            merged.putAll(d)
             merged
         }
     }

@@ -107,8 +107,23 @@ class StoreNotificationsClientConfigTest {
         assertTrue(rendered.contains("<redacted>"))
     }
 
-    @Test fun configureNotificationClientRegistersTheTokenSinkAndPushesTheBackgroundedState() {
-        store.configureNotificationClient()
+    @Test fun productionDefaultAuthStreamUpdatesCompletedSettings() {
+        val local = StoreNotifications(
+            dispatcher = dispatcher,
+            clock = Clock { 0 },
+            observationDeck = deck,
+            observeLocale = { locale },
+            observeChannelPermissions = { permissions },
+        )
+        val completed = mutableListOf<NotificationClient.SettingsV2>()
+        local.observeCompletedSettings().subscribe(completed::add)
+
+        assertFalse(completed.last().isAuthed)
+        local.handleAuthToken("secret")
+        assertTrue(completed.last().isAuthed)
+    }
+
+    @Test fun restoreRegistersTheTokenSinkAndPushesTheBackgroundedState() {
         assertNotNull(tokenSink)
 
         // The registration-id callback is the store's only route to the push token.

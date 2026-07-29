@@ -24,6 +24,7 @@ enum class AuthRoute : Serializable {
 }
 
 enum class AuthIdentityMode : Serializable { EMAIL, PHONE }
+enum class AuthPhonePurpose : Serializable { REGISTRATION, LOGIN, PASSWORD_RESET }
 enum class AuthAgeStep : Serializable { VERIFY, CONFIRM, UNDERAGE }
 enum class AuthRequiredAction : Serializable { VERIFY_EMAIL, VERIFY_PHONE, UPDATE_PASSWORD }
 
@@ -43,6 +44,7 @@ data class AuthUiState(
     val username: String = "",
     val email: String? = null,
     val phone: String? = null,
+    val phonePurpose: AuthPhonePurpose = AuthPhonePurpose.REGISTRATION,
     val phoneToken: String? = null,
     val ticket: String? = null,
     val resetToken: String? = null,
@@ -71,7 +73,7 @@ data class AuthUiState(
      */
     override fun toString(): String = "AuthUiState(route=$route, loading=$loading, " +
         "fieldErrorKeys=${fieldErrors.keys}, identifier=<redacted>, username=$username, " +
-        "email=<redacted>, phone=<redacted>, phoneToken=<redacted>, ticket=<redacted>, " +
+        "email=<redacted>, phone=<redacted>, phonePurpose=$phonePurpose, phoneToken=<redacted>, ticket=<redacted>, " +
         "resetToken=<redacted>, birthday=$birthday, identityMode=$identityMode, " +
         "consentRequired=$consentRequired, consented=$consented, requiredAction=$requiredAction, " +
         "allowEmail=$allowEmail, allowPhone=$allowPhone, ageStep=$ageStep, " +
@@ -101,8 +103,12 @@ sealed class AuthAction {
     class SendPhoneCode(val phone: String) : AuthAction() {
         override fun toString() = "SendPhoneCode(phone=<redacted>)"
     }
-    class VerifyPhone(val phone: String, val code: String) : AuthAction() {
-        override fun toString() = "VerifyPhone(phone=<redacted>, code=<redacted>)"
+    class VerifyPhone(
+        val phone: String,
+        val code: String,
+        val purpose: AuthPhonePurpose,
+    ) : AuthAction() {
+        override fun toString() = "VerifyPhone(phone=<redacted>, code=<redacted>, purpose=$purpose)"
     }
     class ResendPhoneCode(val phone: String) : AuthAction() {
         override fun toString() = "ResendPhoneCode(phone=<redacted>)"
@@ -116,9 +122,6 @@ sealed class AuthAction {
     data class VerifyAge(val birthday: Long) : AuthAction()
     class ForgotPassword(val identifier: String) : AuthAction() {
         override fun toString() = "ForgotPassword(identifier=<redacted>)"
-    }
-    class ResetPassword(val token: String) : AuthAction() {
-        override fun toString() = "ResetPassword(token=<redacted>)"
     }
     data class UndeleteAccount(val restore: Boolean) : AuthAction()
     class ChangePassword(val currentPassword: String, val newPassword: String, val mfaCode: String?) : AuthAction() {

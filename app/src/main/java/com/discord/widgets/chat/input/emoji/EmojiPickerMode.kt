@@ -1,7 +1,5 @@
 package com.discord.widgets.chat.input.emoji
 
-import java.io.Serializable
-
 /**
  * Where the picker is being shown.
  *
@@ -17,16 +15,4 @@ enum class EmojiPickerMode {
     ;
 
     val showsSearchBar: Boolean get() = this == BOTTOM_SHEET
-}
-
-/**
- * Which emoji the picker is allowed to offer.
- *
- * [Guild] restricts the picker to one guild's uploads — used from guild settings — while [Chat]
- * offers everything usable in the selected channel and [Global] everything the user owns.
- */
-sealed class EmojiPickerContextType : Serializable {
-    object Chat : EmojiPickerContextType()
-    object Global : EmojiPickerContextType()
-    data class Guild(val guildId: Long) : EmojiPickerContextType()
 }

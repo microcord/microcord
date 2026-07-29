@@ -8,7 +8,7 @@ import com.discord.api.botuikit.SelectItem
 import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.view.extensions.setEnabledAlpha
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
-import com.discord.widgets.botuikit.views.setEmojiOrHide
+import com.discord.widgets.botuikit.views.ComponentViewUtils
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.checkbox.MaterialCheckBox
 
@@ -59,7 +59,9 @@ class SelectComponentBottomSheetItemViewHolder(
         checkbox.visibility = if (isMultiSelect) View.VISIBLE else View.INVISIBLE
         checkbox.isEnabled = enabled
 
-        icon.setEmojiOrHide(data.selectItem.emoji, emojiAnimationsEnabled)
+        ComponentViewUtils.run {
+            icon.setEmojiOrHide(data.selectItem.emoji, emojiAnimationsEnabled)
+        }
 
         val verticalPadding = dpToPixels(12)
         val bottomPadding = if (data.selectItem.description == null) dpToPixels(12) else 0

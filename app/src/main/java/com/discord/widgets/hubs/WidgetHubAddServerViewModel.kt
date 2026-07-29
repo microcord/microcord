@@ -9,6 +9,7 @@ import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreGuildSelected
 import com.discord.stores.StoreGuilds
 import com.discord.stores.StorePermissions
+import com.discord.stores.StoreDirectories
 import com.discord.stores.StoreStream
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
@@ -31,7 +32,7 @@ import rx.Observable
  */
 class WidgetHubAddServerViewModel(
     storeObservable: Observable<HubAddServerState> = observeStores(),
-    private val directoriesStore: HubDirectoriesStore = HubStores.directories,
+    private val directoriesStore: StoreDirectories = storeDirectories(),
 ) : AppViewModel<HubAddServerState>(HubAddServerState()) {
 
     init {
@@ -82,7 +83,7 @@ class WidgetHubAddServerViewModel(
             permissionsStore: StorePermissions = StoreStream.getPermissions(),
             channelsStore: StoreChannels = StoreStream.getChannels(),
             channelsSelectedStore: StoreChannelsSelected = StoreStream.getChannelsSelected(),
-            directoriesStore: HubDirectoriesStore = HubStores.directories,
+            directoriesStore: StoreDirectories = storeDirectories(),
         ): Observable<HubAddServerState> = observationDeck.connectRx(
             guildsStore,
             guildsSelected,
@@ -107,7 +108,7 @@ class WidgetHubAddServerViewModel(
             permissionsStore: StorePermissions,
             channelsStore: StoreChannels,
             channelsSelectedStore: StoreChannelsSelected,
-            directoriesStore: HubDirectoriesStore,
+            directoriesStore: StoreDirectories,
         ): HubAddServerState {
             val allGuilds = guildsStore.getGuilds().values
             val selectedGuildId = guildsSelected.getSelectedGuildId()

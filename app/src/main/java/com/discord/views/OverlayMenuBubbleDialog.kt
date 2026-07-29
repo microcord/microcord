@@ -9,14 +9,19 @@ import android.content.res.Configuration
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppComponent
+import com.discord.overlay.views.OverlayDialog
+import com.discord.stores.StoreStream
 import com.discord.stores.StoreVoiceParticipants
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.computationLatest
+import com.discord.utilities.rx.ui
+import rx.Observable
 import rx.subjects.PublishSubject
 import rx.subjects.Subject
 
@@ -26,18 +31,13 @@ import rx.subjects.Subject
  * The dialog fills the overlay window, dims what is behind it, closes when the scrim is tapped,
  * and animates itself out before telling the overlay host to detach it.
  *
- * In the reference this derives from `com.discord.overlay.views.OverlayDialog`, which supplies the
- * `WindowManager` layout params, the dim flag and the "cannot be dragged" behavior. That overlay
- * module has not been reconstructed in this project yet, so this class currently derives from
- * [FrameLayout] and covers only the dialog behavior itself; the window plumbing arrives with the
- * overlay module.
  */
-abstract class OverlayAppDialog(context: Context) : FrameLayout(context), AppComponent {
+abstract class OverlayAppDialog(context: Context) : OverlayDialog(context), AppComponent {
 
     override val unsubscribeSignal: Subject<Void, Void> = PublishSubject.create<Void>()
 
     /** Invoked once the dialog has finished closing so the overlay host can detach it. */
-    var onDialogClosed: (OverlayAppDialog) -> Unit = {}
+    var onDialogClosed: (OverlayDialog) -> Unit = {}
 
     init {
         setOnClickListener { close() }
@@ -120,14 +120,9 @@ class OverlayMenuBubbleDialog(context: Context) : OverlayAppDialog(context) {
         clipChildren = false
     }
 
-    /**
-     * Shows the other participants of the current call. The local user is never shown — the
-     * collapsed bubble already represents them.
-     */
-    fun setVoiceUsers(voiceUsers: List<StoreVoiceParticipants.VoiceUser>, currentUserId: Long) {
-        val others = voiceUsers.filter { voiceUser -> voiceUser.user.id != currentUserId }
-        val overflowCount = (others.size - MAX_VISIBLE_MEMBERS).coerceAtLeast(0)
-        adapter.setData(if (overflowCount == 0) others else others.take(MAX_VISIBLE_MEMBERS))
+    private fun updateVoiceUsers(voiceUsers: List<StoreVoiceParticipants.VoiceUser>) {
+        val (visibleUsers, overflowCount) = visibleParticipants(voiceUsers) { it.isMe }
+        adapter.setData(visibleUsers)
         if (overflowCount == 0) {
             membersOverflowText.text = null
             membersOverflowText.visibility = View.GONE
@@ -152,6 +147,21 @@ class OverlayMenuBubbleDialog(context: Context) : OverlayAppDialog(context) {
         }.start()
 
         membersRecycler.adapter = adapter
+        StoreStream.getVoiceChannelSelected().observeSelectedVoiceChannelId()
+            .switchMap { channelId ->
+                StoreStream.getChannels().observeChannel(channelId).switchMap { channel ->
+                    if (channel == null) {
+                        Observable.just(emptyList<StoreVoiceParticipants.VoiceUser>())
+                    } else {
+                        StoreStream.getVoiceParticipants().get(channelId)
+                            .map { participants -> participants.values.toList() }
+                            .distinctUntilChanged()
+                    }
+                }
+            }
+            .computationLatest()
+            .ui(this)
+            .appSubscribe(OverlayMenuBubbleDialog::class.java, context, onNext = ::updateVoiceUsers)
     }
 
     override fun getClosingAnimator(): Animator = AnimatorSet().apply {
@@ -213,5 +223,14 @@ class OverlayMenuBubbleDialog(context: Context) : OverlayAppDialog(context) {
     companion object {
         /** Participants shown before the `+n` overflow chip takes over. */
         const val MAX_VISIBLE_MEMBERS = 3
+
+        internal fun <T> visibleParticipants(
+            participants: List<T>,
+            isCurrentUser: (T) -> Boolean,
+        ): Pair<List<T>, Int> {
+            val others = participants.filterNot(isCurrentUser)
+            return others.take(MAX_VISIBLE_MEMBERS) to
+                (others.size - MAX_VISIBLE_MEMBERS).coerceAtLeast(0)
+        }
     }
 }

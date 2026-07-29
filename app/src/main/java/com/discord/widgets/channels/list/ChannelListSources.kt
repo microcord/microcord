@@ -5,48 +5,30 @@ import com.discord.api.guildjoinrequest.GuildJoinRequest
 import com.discord.api.guildscheduledevent.GuildScheduledEvent
 import com.discord.stores.StoreThreadsActiveJoined.ActiveJoinedThread
 import com.discord.stores.StoreThreadsJoined.JoinedThread
+import com.discord.utilities.guildscheduledevent.GuildScheduledEventUtilities
 import com.discord.widgets.channels.list.items.ChannelListItemVoiceUser
-import com.discord.widgets.voice.VoiceStoreAccess
+import com.discord.widgets.guild_role_subscriptions.GuildRoleSubscriptionsFeatureFlag
 import rx.Observable
 
 /**
- * The store inputs of [WidgetChannelListModel.get] that `StoreStream` does not publish yet.
+ * Replaceable inputs used by [WidgetChannelListModel.get].
  *
- * Every store listed here **already exists** under `com.discord.stores`; what is missing is the
- * `StoreStream.Companion` accessor (and, for several of them, the construction site inside
- * `StoreStream` itself). Rather than let the sidebar silently render a wrong list, each input is a
- * single named provider with an inert default, so the effect of the gap is visible in one place
- * and closing it is a one-line change per entry.
- *
- * This is a seam, not an architecture: when `StoreStream` grows the accessors, replace each
- * default body with the real call and delete the property.
- *
- * | Provider | Needs on `StoreStream` | Effect while inert |
- * |---|---|---|
- * | [voiceUsers] | `getVoiceStates()`, `getApplicationStreaming()` | voice rows list no participants |
- * | [joinedThreads] / [activeJoinedThreads] / [channelsWithActiveThreads] | `getThreadsJoined()`, `getThreadsActiveJoined()`, `getThreadsActive()` | no thread rows, and text channels never show the "has threads" icon |
- * | [streamingUserIds] | `getApplicationStreaming()` | DM rows never show "streaming" |
- * | [selectedVoiceChannelId] | `getVoiceChannelSelected()` | the joined voice channel is never highlighted, and a collapsed category hides it |
- * | [guildScheduledEvents] | `getGuildScheduledEvents()` | no events row, no "happening now" banner for scheduled events |
- * | [stageChannels] | `getStageChannels()` | stage rows show no speakers and no audience count |
- * | [guildJoinRequest] | `getGuildJoinRequests()` | membership-screening card never appears |
- * | [canSeeGuildRoleSubscriptions] | `GuildRoleSubscriptionsFeatureFlag` | role-subscription rows stay hidden |
- * | [canCreateAnyEvent] | `GuildScheduledEventUtilities` | the events row is hidden in guilds with no events |
- * | [showPremiumGuildHint] | `getNux()` | the boost hint bubble never shows |
- * | [hubEnabled] / [hubStudyGroupEnabled] / [hubEventsEnabled] | `GrowthTeamFeatures` | hub guilds render as ordinary guilds |
+ * The indirection keeps the model builder deterministic in tests. Production defaults are live
+ * store/feature sources except for directory unread counts and the three Growth Team experiment
+ * gates, whose owners are not present in the target yet.
  */
 object ChannelListSources {
 
     /**
      * Connected participants per voice/stage channel id, pre-sorted for display.
      *
-     * Live as soon as `StoreStream` calls `VoiceStoreAccess.install(...)`.
+     * Built from the live voice-state, member, user, stream, channel and permission stores.
      */
     @JvmField
     var voiceUsers: (guildId: Long) -> Observable<Map<Long, List<ChannelListItemVoiceUser>>> =
         { guildId -> WidgetChannelListModel.VoiceStates.get(guildId) }
 
-    /** Live once `VoiceStoreAccess` is installed. */
+    /** The currently joined voice channel, or `0` when disconnected. */
     @JvmField
     var selectedVoiceChannelId: () -> Observable<Long> = {
         StoreStream.getVoiceChannelSelected().observeSelectedVoiceChannelId()
@@ -55,16 +37,19 @@ object ChannelListSources {
     /** `parentChannelId -> threadId -> thread`, newest join first. */
     @JvmField
     var activeJoinedThreads: (guildId: Long) -> Observable<Map<Long, Map<Long, ActiveJoinedThread>>> =
-        { Observable.just(emptyMap()) }
+        { StoreStream.getThreadsActiveJoined().observeActiveJoinedThreadsForGuild(it) }
 
     /** Per-thread mute state, keyed by thread id. */
     @JvmField
-    var joinedThreads: () -> Observable<Map<Long, JoinedThread>> = { Observable.just(emptyMap()) }
+    var joinedThreads: () -> Observable<Map<Long, JoinedThread>> = {
+        StoreStream.getThreadsJoined().observeJoinedThreads()
+    }
 
     /** Channels with at least one active thread, which changes the channel's icon. */
     @JvmField
-    var channelsWithActiveThreads: (guildId: Long) -> Observable<Set<Long>> =
-        { Observable.just(emptySet()) }
+    var channelsWithActiveThreads: (guildId: Long) -> Observable<Set<Long>> = {
+        StoreStream.getThreadsActive().observeChannelsWithActiveThreadsByGuild(it)
+    }
 
     /** Users currently streaming an application. Live once `VoiceStoreAccess` is installed. */
     @JvmField
@@ -73,26 +58,46 @@ object ChannelListSources {
     }
 
     @JvmField
-    var guildScheduledEvents: (guildId: Long) -> Observable<List<GuildScheduledEvent>> =
-        { Observable.just(emptyList()) }
+    var guildScheduledEvents: (guildId: Long) -> Observable<List<GuildScheduledEvent>> = {
+        StoreStream.getGuildScheduledEvents().observeGuildScheduledEvents(it, false)
+    }
 
     @JvmField
-    var stageChannels: (guildId: Long) -> Observable<Map<Long, WidgetChannelListModel.StageChannelInfo>> =
-        { Observable.just(emptyMap()) }
+    var stageChannels: (guildId: Long) -> Observable<Map<Long, WidgetChannelListModel.StageChannelInfo>> = {
+        StoreStream.getStageChannels().observeGuildStageChannels(it).map { channels ->
+            channels.mapValues { (_, stage) ->
+                WidgetChannelListModel.StageChannelInfo(
+                    channel = stage.channel,
+                    stageInstance = stage.stageInstance,
+                    speakerIds = stage.speakerIds,
+                    speakers = stage.speakers,
+                    audienceSize = stage.audienceSize,
+                    containsMe = stage.containsMe,
+                    isMeSpeaker = stage.myRoles?.isSpeaker == true,
+                )
+            }
+        }
+    }
 
     @JvmField
-    var guildJoinRequest: (guildId: Long) -> Observable<GuildJoinRequest?> =
-        { Observable.just(null) }
+    var guildJoinRequest: (guildId: Long) -> Observable<GuildJoinRequest?> = {
+        StoreStream.getGuildJoinRequests().observeGuildJoinRequest(it)
+    }
 
     @JvmField
-    var canSeeGuildRoleSubscriptions: (guildId: Long) -> Observable<Boolean> =
-        { Observable.just(false) }
+    var canSeeGuildRoleSubscriptions: (guildId: Long) -> Observable<Boolean> = {
+        GuildRoleSubscriptionsFeatureFlag.INSTANCE.observeCanGuildSeeGuildRoleSubscriptions(it)
+    }
 
     @JvmField
-    var canCreateAnyEvent: (guildId: Long) -> Observable<Boolean> = { Observable.just(false) }
+    var canCreateAnyEvent: (guildId: Long) -> Observable<Boolean> = {
+        GuildScheduledEventUtilities.observeCanCreateAnyEvent(it)
+    }
 
     @JvmField
-    var showPremiumGuildHint: (guildId: Long) -> Observable<Boolean> = { Observable.just(false) }
+    var showPremiumGuildHint: (guildId: Long) -> Observable<Boolean> = { guildId ->
+        StoreStream.getNux().getNuxState().map { it.guildBoostHintGuildId == guildId }
+    }
 
     /** Unread "new server" counts per hub directory channel. */
     @JvmField

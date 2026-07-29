@@ -15,6 +15,7 @@ import com.discord.stores.utilities.Success
 import com.discord.utilities.persister.Persister
 import com.discord.widgets.directories.DirectoryStores
 import com.discord.widgets.hubs.HubStores
+import com.discord.widgets.hubs.storeDirectories
 import java.lang.reflect.Proxy
 import java.nio.file.Files
 import org.junit.Assert.assertEquals
@@ -84,6 +85,7 @@ class StoreDirectoriesTest {
 
         assertEquals(store, DirectoryStores.directories)
         assertEquals(store, HubStores.directories)
+        assertEquals(store, storeDirectories())
     }
 
     @Test

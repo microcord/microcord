@@ -7,19 +7,25 @@ import android.os.Bundle
 import com.discord.api.permission.Permission
 import com.discord.models.message.Message
 import com.discord.models.notification.NotificationSettingsV2
+import com.discord.restapi.RestAPIParams
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.fcm.NotificationClient
+import com.discord.utilities.lifecycle.ApplicationProvider
 import com.discord.utilities.lifecycle.Backgrounded
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.persister.Persister
+import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationBuffered
 import com.discord.utilities.rx.leadingEdgeThrottle
+import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.time.Clock
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import rx.Observable
 import rx.Subscription
+import rx.subjects.BehaviorSubject
 
 class StoreNotifications(
     private val dispatcher: Dispatcher,
@@ -27,16 +33,23 @@ class StoreNotifications(
     private val observationDeck: ObservationDeck,
     private val clearChannelNotifications: (Long) -> Unit = {},
     private val onMessageCandidate: (Message, NotificationPolicy.Delivery) -> Unit = { _, _ -> },
-    private val registerPushToken: (authToken: String, pushToken: String, persisted: (Boolean) -> Unit) -> Unit = { _, _, done -> done(true) },
+    private val registerPushToken: (authToken: String, pushToken: String?, persisted: (Boolean) -> Unit) -> Unit =
+        { _, pushToken, persisted -> registerDevice(pushToken, persisted) },
     private val settingsCache: Persister<NotificationSettingsV2> = Persister(SETTINGS_CACHE_KEY, NotificationSettingsV2()),
     /**
      * The four inputs the reference folds into a completed `NotificationClient.SettingsV2`. They are
-     * injected rather than reached for through `StoreStream.Companion` so the fold is testable
-     * without a store graph; `StoreStream` supplies the real ones from [init].
+     * injectable so the fold is testable without a store graph. The production defaults use this
+     * store's auth stream and the existing system-settings and permissions stores.
      */
-    private val observeAuthedToken: () -> Observable<String?> = { Observable.just(null) },
-    private val observeLocale: () -> Observable<String> = { Observable.just("") },
-    private val observeChannelPermissions: () -> Observable<Map<Long, Long>> = { Observable.just(emptyMap()) },
+    private val observeAuthedToken: (() -> Observable<String?>)? = null,
+    private val observeLocale: () -> Observable<String> = {
+        runCatching { StoreStream.getUserSettingsSystem().observeSettings(false).map { it.locale } }
+            .getOrElse { Observable.just(Locale.getDefault().toLanguageTag()) }
+    },
+    private val observeChannelPermissions: () -> Observable<Map<Long, Long>> = {
+        runCatching { StoreStream.getPermissions().observePermissionsForAllChannels() }
+            .getOrElse { Observable.just(emptyMap()) }
+    },
     private val observeBackgrounded: () -> Observable<Boolean> = Backgrounded::observe,
     private val setRegistrationIdReceived: ((String?) -> Unit) -> Unit = NotificationClient::setRegistrationIdReceived,
     private val updateNotificationClient: (NotificationClient.SettingsV2, Boolean) -> Unit = NotificationClient::updateSettings,
@@ -44,8 +57,10 @@ class StoreNotifications(
     private var settings = NotificationSettingsV2()
     private var settingsSnapshot = settings
     private var authToken: String? = null
+    private val authTokenSubject = BehaviorSubject.create(null as String?)
     private var pushToken: String? = null
     private var pushTokenPersisted: String? = null
+    private var registrationTokenReceived = false
 
     /**
      * The visible activity, used as the context for in-app notification popups.
@@ -57,6 +72,8 @@ class StoreNotifications(
     private var context: Context? = null
 
     private var notificationClientSubscription: Subscription? = null
+    private var notificationClientConfigured = false
+    private var initializedApplication: Application? = null
 
     fun getSettings() = settingsSnapshot
     fun getPushToken(): String? = synchronized(this) { pushToken }
@@ -68,6 +85,8 @@ class StoreNotifications(
     internal fun restore() {
         StoreThreadScheduler.assertCurrentThread()
         settings = settingsCache.get()
+        val application = runCatching(ApplicationProvider::get).getOrNull()
+        if (application != null) init(application) else ensureNotificationClientConfigured()
         markChanged()
     }
 
@@ -79,10 +98,13 @@ class StoreNotifications(
     override fun init(context: Context) {
         super.init(context)
         (context.applicationContext as? Application)?.let { application ->
-            configureContextSetter(application)
-            NotificationClient.init(application)
+            if (initializedApplication !== application) {
+                initializedApplication = application
+                configureContextSetter(application)
+                NotificationClient.init(application)
+            }
         }
-        configureNotificationClient()
+        ensureNotificationClientConfigured()
     }
 
     /** Tracks the visible activity so an in-app popup has somewhere to show. */
@@ -122,6 +144,7 @@ class StoreNotifications(
      * store thread for no observable gain.
      */
     internal fun configureNotificationClient() {
+        notificationClientConfigured = true
         setRegistrationIdReceived(::handleRegistrationToken)
         notificationClientSubscription?.unsubscribe()
         Observable.combineLatest(observeCompletedSettings(), observeBackgrounded(), ::Pair)
@@ -133,11 +156,15 @@ class StoreNotifications(
             ) { (completed, isBackgrounded) -> updateNotificationClient(completed, isBackgrounded) }
     }
 
+    private fun ensureNotificationClientConfigured() {
+        if (!notificationClientConfigured) configureNotificationClient()
+    }
+
     /** The four-way fold described on [configureNotificationClient], without the delivery gate. */
     internal fun observeCompletedSettings(): Observable<NotificationClient.SettingsV2> =
         Observable.combineLatest(
             observeSettings(),
-            observeAuthedToken(),
+            observeAuthedToken?.invoke() ?: authTokenSubject,
             observeLocale(),
             observeChannelPermissions()
                 .leadingEdgeThrottle(1L, TimeUnit.SECONDS)
@@ -160,7 +187,9 @@ class StoreNotifications(
         channelPermissions.filterValues { !PermissionUtils.can(Permission.SEND_MESSAGES, it) }.keys.toSet()
 
     fun setEnabled(value: Boolean) = updateSettings { copy(isEnabled = value) }
-    fun setEnabledInApp(value: Boolean) = updateSettings { copy(isEnabledInApp = value) }
+    @Suppress("UNUSED_PARAMETER")
+    fun setEnabledInApp(value: Boolean, logToggle: Boolean = true) =
+        updateSettings { copy(isEnabledInApp = value) }
     fun setWake(value: Boolean) = updateSettings { copy(isWake = value) }
     fun setNotificationLightDisabled(value: Boolean) = updateSettings { copy(isDisableBlink = value) }
     fun setNotificationSoundDisabled(value: Boolean) = updateSettings { copy(isDisableSound = value) }
@@ -168,11 +197,13 @@ class StoreNotifications(
 
     fun handleAuthToken(token: String?) = synchronized(this) {
         authToken = token
+        authTokenSubject.onNext(token)
         if (token == null) pushTokenPersisted = null
         tryTokenPersist()
     }
 
     fun handleRegistrationToken(token: String?) = synchronized(this) {
+        registrationTokenReceived = true
         pushToken = token
         tryTokenPersist()
     }
@@ -182,10 +213,9 @@ class StoreNotifications(
 
     @StoreThread
     fun handleMessageCreate(input: NotificationPolicy.Input, isForeground: Boolean) {
-        if (!isFresh(input.message)) return
-        val delivery = if (isForeground) NotificationPolicy.Delivery.FOREGROUND else NotificationPolicy.Delivery.SYSTEM
-        if (delivery in NotificationPolicy.evaluate(input.copy(appSettings = settings))) {
-            onMessageCandidate(input.message, delivery)
+        if (!isForeground || !isFresh(input.message)) return
+        if (NotificationPolicy.Delivery.FOREGROUND in NotificationPolicy.evaluate(input.copy(appSettings = settings))) {
+            onMessageCandidate(input.message, NotificationPolicy.Delivery.FOREGROUND)
         }
     }
 
@@ -223,7 +253,8 @@ class StoreNotifications(
     @Synchronized
     private fun tryTokenPersist() {
         val auth = authToken ?: return
-        val push = pushToken ?: return
+        if (!registrationTokenReceived) return
+        val push = pushToken
         if (push == pushTokenPersisted) return
         registerPushToken(auth, push) { success ->
             if (success) synchronized(this) {
@@ -241,5 +272,17 @@ class StoreNotifications(
     companion object {
         const val SETTINGS_CACHE_KEY = "STORE_NOTIFICATIONS_SETTINGS_V2"
         const val MESSAGE_WINDOW_MS = 10_000L
+
+        private fun registerDevice(pushToken: String?, persisted: (Boolean) -> Unit) {
+            val api = RestAPI.apiOrNull ?: return persisted(false)
+            api.userCreateDevice(RestAPIParams.UserDevices(pushToken))
+                .restSubscribeOn(retry = false)
+                .appSubscribe(
+                    errorTag = "StoreNotifications",
+                    errorHandler = { persisted(false) },
+                    onCompleted = { persisted(true) },
+                    onNext = {},
+                )
+        }
     }
 }

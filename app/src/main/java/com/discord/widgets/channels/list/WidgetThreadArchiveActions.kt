@@ -13,6 +13,7 @@ import com.discord.i18n.i18nFormat
 import com.discord.models.guild.Guild
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
+import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
@@ -194,15 +195,18 @@ class WidgetThreadArchiveActions : AppBottomSheet() {
         /**
          * When the thread will archive if nothing else is said in it.
          *
-         * Reference: `ThreadUtils.computeThreadAutoArchiveTimeMs`, which is not reconstructed. The
-         * clock starts at the metadata's archive timestamp — the API refreshes that on every
-         * message, so it is the last-activity time, not the time the thread was created.
+         * Reference: `ThreadUtils.computeThreadAutoArchiveTimeMs`. The API refreshes the archive
+         * timestamp on activity, but malformed or stale metadata
+         * must never place auto-archive before the thread itself existed.
          */
         @JvmStatic
         fun computeThreadAutoArchiveTimeMs(channel: Channel): Long {
-            val metadata = channel.threadMetadata ?: return 0L
-            val lastActivityMs = TimeUtils.parseUTCDate(metadata.archiveTimestamp)
-            return lastActivityMs + metadata.autoArchiveDuration * MILLIS_PER_MINUTE
+            val lastActivityMs = maxOf(
+                SnowflakeUtils.toTimestamp(channel.id),
+                channel.threadMetadata?.archiveTimestamp?.let(TimeUtils::parseUTCDate) ?: 0L,
+            )
+            return lastActivityMs +
+                (channel.threadMetadata?.autoArchiveDuration ?: 0) * MILLIS_PER_MINUTE
         }
 
         private const val MILLIS_PER_MINUTE = 60_000L

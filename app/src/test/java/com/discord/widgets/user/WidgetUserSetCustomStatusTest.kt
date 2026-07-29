@@ -3,6 +3,7 @@ package com.discord.widgets.user
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import com.discord.utilities.time.TimeUtils
 
 class WidgetUserSetCustomStatusTest {
     private val now = 1_721_886_300_123L // 2024-07-25T05:45:00.123Z
@@ -13,6 +14,22 @@ class WidgetUserSetCustomStatusTest {
         assertEquals("2024-07-25T06:45:00.123Z", WidgetUserSetCustomStatus.expirationUtc(WidgetUserSetCustomStatus.Expiration.IN_1_HOUR, now))
         assertEquals("2024-07-25T09:45:00.123Z", WidgetUserSetCustomStatus.expirationUtc(WidgetUserSetCustomStatus.Expiration.IN_4_HOURS, now))
         assertEquals("2024-07-26T00:00:00.000Z", WidgetUserSetCustomStatus.expirationUtc(WidgetUserSetCustomStatus.Expiration.TOMORROW, now))
+
+        assertNull(WidgetUserSetCustomStatusViewModel.expirationUtc(WidgetUserSetCustomStatusViewModel.FormState.Expiration.NEVER, now))
+        assertEquals("2024-07-25T06:15:00", WidgetUserSetCustomStatusViewModel.expirationUtc(WidgetUserSetCustomStatusViewModel.FormState.Expiration.IN_30_MINUTES, now))
+        assertEquals("2024-07-25T06:45:00", WidgetUserSetCustomStatusViewModel.expirationUtc(WidgetUserSetCustomStatusViewModel.FormState.Expiration.IN_1_HOUR, now))
+        assertEquals("2024-07-25T09:45:00", WidgetUserSetCustomStatusViewModel.expirationUtc(WidgetUserSetCustomStatusViewModel.FormState.Expiration.IN_4_HOURS, now))
+        val tomorrow = TimeUtils.toCalendar(now).apply {
+            add(java.util.Calendar.DAY_OF_MONTH, 1)
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        assertEquals(
+            TimeUtils.toUTCDateTime(tomorrow.timeInMillis),
+            WidgetUserSetCustomStatusViewModel.expirationUtc(WidgetUserSetCustomStatusViewModel.FormState.Expiration.TOMORROW, now),
+        )
     }
 
     @Test fun formTrimsLimitsAndClearsEmptyStatus() {

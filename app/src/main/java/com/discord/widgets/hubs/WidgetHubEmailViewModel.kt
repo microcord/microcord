@@ -16,13 +16,11 @@ import com.discord.utilities.rx.ui
  * shows the waitlist page).
  *
  * @param multiDomainEnabled the `2021-08_hub_multi_domain_mobile` experiment. It decides whether the
- *   server may answer with several matching guilds instead of one. This project has no
- *   `StoreExperiments`/`GrowthTeamFeatures`, so it defaults to the control bucket (`false`) and is a
- *   constructor parameter so the gate can be supplied without touching this class.
+ *   server may answer with several matching guilds instead of one.
  */
 class WidgetHubEmailViewModel(
     private val restAPI: RestAPIInterface = RestAPI.api,
-    private val multiDomainEnabled: Boolean = false,
+    private val multiDomainEnabled: Boolean = isMultiDomainEnabled(),
 ) : AppViewModel<HubEmailState>(HubEmailState()) {
 
     /** Returns to the email input page, discarding a finished lookup. */

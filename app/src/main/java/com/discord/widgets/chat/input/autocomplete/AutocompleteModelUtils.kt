@@ -1,6 +1,9 @@
 package com.discord.widgets.chat.input.autocomplete
 
 import com.discord.api.channel.isGuildTextyChannel
+import com.discord.api.commands.ApplicationCommandType
+import com.discord.api.commands.CommandChoice
+import com.discord.models.commands.ApplicationCommandOption
 import com.discord.utilities.string.stripAccents
 import com.discord.widgets.chat.input.DEFAULT_LEADING_IDENTIFIERS
 import com.discord.widgets.chat.input.getSelectedToken
@@ -16,11 +19,7 @@ import java.util.regex.Pattern
  * Everything here is pure: no stores, no views, no Rx. That is deliberate — this is the part of
  * autocomplete that has to be exactly right, and it is the part that is unit-testable.
  *
- * Reference: `com.discord.widgets.chat.input.autocomplete.AutocompleteModelUtils`. The
- * command-context half of the reference object (`getCommandAutocompleteToken`,
- * `getApplicationSendData`, `filterAutocompletablesForInputContext`) is **not** reconstructed here;
- * it depends on `StoreApplicationCommands`, `InputSelectionModel.CommandInputSelectionModel` and
- * `ApplicationCommandData`, none of which exist in this project yet. See the handoff notes.
+ * Reference: `com.discord.widgets.chat.input.autocomplete.AutocompleteModelUtils`.
  */
 object AutocompleteModelUtils {
 
@@ -48,6 +47,94 @@ object AutocompleteModelUtils {
         } else {
             selectedToken.asMentionToken(selectedIndex)
         }
+    }
+
+    fun getCommandOptionAutocompleteToken(
+        input: CharSequence,
+        selection: IntRange,
+        option: ApplicationCommandOption,
+        commandOptions: List<ApplicationCommandOption>,
+    ): MentionToken? {
+        val valueRange = findCommandOptionValueRange(input, option, commandOptions) ?: return null
+        val caret = selection.first.coerceIn(0, input.length)
+        if (caret !in valueRange.first..valueRange.last) return null
+        val selectedToken = input.subSequence(valueRange.first, caret).toString()
+
+        val expectedIdentifier = when (option.type) {
+            ApplicationCommandType.USER,
+            ApplicationCommandType.ROLE,
+            ApplicationCommandType.MENTIONABLE,
+            -> LeadingIdentifier.MENTION
+
+            ApplicationCommandType.CHANNEL -> LeadingIdentifier.CHANNELS
+            else -> LeadingIdentifier.NONE
+        }
+        val token = selectedToken.asMentionToken(valueRange.first, expectedIdentifier == LeadingIdentifier.NONE)
+            ?: return null
+        return token.takeIf { it.leadingIdentifier == expectedIdentifier }
+    }
+
+    fun findCommandOptionValueRange(
+        input: CharSequence,
+        option: ApplicationCommandOption,
+        commandOptions: List<ApplicationCommandOption>,
+    ): IntRange? {
+        val text = input.toString()
+        val marker = Regex("(?:^|\\s)${Regex.escape(option.name)}:").find(text) ?: return null
+        val start = marker.range.last + 1
+        val end = commandOptions.asSequence()
+            .filterNot { it == option }
+            .mapNotNull { candidate ->
+                Regex("\\s${Regex.escape(candidate.name)}:").find(text, start)?.range?.first
+            }
+            .minOrNull()
+            ?: text.length
+        return start..end
+    }
+
+    fun autocompletablesForCommandOption(
+        option: ApplicationCommandOption,
+        all: Map<LeadingIdentifier, Set<Autocompletable>>,
+    ): Map<LeadingIdentifier, Set<Autocompletable>> {
+        val choices = when {
+            option.type == ApplicationCommandType.BOOLEAN -> listOf(
+                CommandChoice("true", "true"),
+                CommandChoice("false", "false"),
+            )
+            !option.choices.isNullOrEmpty() -> option.choices
+            else -> null
+        }
+        if (choices != null) {
+            return mapOf(
+                LeadingIdentifier.NONE to choices.mapTo(LinkedHashSet()) {
+                    ApplicationCommandChoiceAutocompletable(it, option.name)
+                },
+            )
+        }
+
+        val candidates = when (option.type) {
+            ApplicationCommandType.USER ->
+                all[LeadingIdentifier.MENTION].orEmpty().filterIsInstance<UserAutocompletable>()
+            ApplicationCommandType.ROLE ->
+                all[LeadingIdentifier.MENTION].orEmpty().filterIsInstance<RoleAutocompletable>()
+            ApplicationCommandType.MENTIONABLE ->
+                all[LeadingIdentifier.MENTION].orEmpty().filter {
+                    it is UserAutocompletable || it is RoleAutocompletable
+                }
+            ApplicationCommandType.CHANNEL ->
+                all[LeadingIdentifier.CHANNELS].orEmpty().filterIsInstance<ChannelAutocompletable>()
+                    .filter { option.channelTypes.isNullOrEmpty() || it.channel.type in option.channelTypes }
+            else -> emptyList()
+        }
+        val identifier = when (option.type) {
+            ApplicationCommandType.USER,
+            ApplicationCommandType.ROLE,
+            ApplicationCommandType.MENTIONABLE,
+            -> LeadingIdentifier.MENTION
+            ApplicationCommandType.CHANNEL -> LeadingIdentifier.CHANNELS
+            else -> LeadingIdentifier.NONE
+        }
+        return mapOf(identifier to candidates.toSet())
     }
 
     /**

@@ -7,6 +7,8 @@ import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.appViewModels
 import com.discord.i18n.I18nSpans
+import com.discord.i18n.withClickableHook
+import com.discord.stores.StoreStream
 import com.discord.stores.utilities.handleResponse
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
@@ -42,7 +44,7 @@ class WidgetHubAuthentication : AppFragment(R.layout.widget_hub_authentication) 
         // "Didn't get the code? [Resend code](onClick) to !!{email}!!"
         description.text = I18nSpans
             .render(getString(R.string.hub_pin_description), "email" to args.email)
-            .withHubHook(RESEND_HOOK) { viewModel.resendEmail() }
+            .withClickableHook(RESEND_HOOK) { viewModel.resendEmail() }
         showKeyboard(verification)
     }
 
@@ -69,9 +71,7 @@ class WidgetHubAuthentication : AppFragment(R.layout.widget_hub_authentication) 
                     activity.setResult(Activity.RESULT_OK, AuthenticationResult(result.guild.id).toArgsIntent())
                     activity.finish()
                 }
-                // The reference also clears the NUX "post-registration" flag here through
-                // StoreNux.updateNux { it.copy(postRegistrationJoin = false) }. StoreNux does not exist
-                // in this project; recorded as a gap rather than approximated.
+                StoreStream.getNux().updateNux { it.copy(postRegister = false) }
             } else {
                 // A well-formed code that did not join the user to anything.
                 Toast.makeText(context, R.string.error_generic_title, Toast.LENGTH_SHORT).show()

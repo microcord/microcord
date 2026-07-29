@@ -61,10 +61,10 @@ class WidgetRemoteAuthViewModel(
         }
     }
 
-    /** Grants the waiting device a session. */
+    /** Grants the waiting device a session. 126.21 always sends `temporary = false`. */
     fun remoteLogin() {
         val loaded = viewState as? ViewState.Loaded ?: return
-        restAPI.postRemoteAuthFinish(RestAPIParams.RemoteAuthFinish(loaded.isTemporary, loaded.handshakeToken))
+        restAPI.postRemoteAuthFinish(RestAPIParams.RemoteAuthFinish(false, loaded.handshakeToken))
             .restSubscribeOn()
             .ui(this)
             .appSubscribe(
@@ -83,7 +83,6 @@ class WidgetRemoteAuthViewModel(
 
     fun toggleTemporary(isTemporary: Boolean) {
         temporary.onNext(isTemporary)
-        (viewState as? ViewState.Loaded)?.let { updateViewState(it.copy(isTemporary = isTemporary)) }
     }
 
     sealed class ViewState {

@@ -1,7 +1,6 @@
 package com.discord.widgets.friends
 
 import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
@@ -29,6 +28,3 @@ class WidgetFriendsListLoadingAdapter : RecyclerView.Adapter<FriendsListLoadingV
         private const val LOADING_CELLS_COUNT = 15
     }
 }
-
-/** Holder for a single friends-list skeleton row. */
-class FriendsListLoadingViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView)

@@ -194,7 +194,7 @@ class WidgetEmojiSheet : AppBottomSheet() {
                 buttonContainer.visibility = View.VISIBLE
                 premiumBtn.visibility = View.GONE
                 joinBtn.visibility = View.VISIBLE
-                joinBtn.setOnClickListener { viewModel.joinGuild(guild) }
+                joinBtn.setOnClickListener { viewModel.joinGuild(requireContext(), guild) }
             }
 
             else -> buttonContainer.visibility = View.GONE

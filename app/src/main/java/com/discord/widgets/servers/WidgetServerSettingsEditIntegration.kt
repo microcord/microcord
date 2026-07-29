@@ -199,11 +199,17 @@ class WidgetServerSettingsEditIntegration :
         )
 
         val role = viewState.role
-        // The reference opens `WidgetServerSettingsEditRole` from this row. That screen has not been
-        // reconstructed, so the row shows the synced role but does not navigate; restore the
-        // listener when it lands (recorded in docs/parity-audit/followups.md).
-        syncedRoleContainer.setOnClickListener(null)
-        syncedRoleContainer.isClickable = false
+        syncedRoleContainer.setOnClickListener(
+            role?.let { syncedRole ->
+                View.OnClickListener {
+                    WidgetServerSettingsEditRole.launch(
+                        viewState.guild.id,
+                        syncedRole.id,
+                        requireContext(),
+                    )
+                }
+            },
+        )
         syncedRole.text = role?.name ?: getString(R.string.none)
         syncedRole.setTextColor(
             RoleUtils.getOpaqueColor(role, ColorCompat.getColor(this, R.color.primary_300)),

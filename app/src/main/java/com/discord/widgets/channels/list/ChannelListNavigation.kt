@@ -11,6 +11,8 @@ import com.discord.api.channel.Channel
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.widgets.channels.settings.WidgetChannelNotificationSettings
+import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventDetailsBottomSheet
+import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventListBottomSheet
 import com.discord.widgets.hubs.WidgetHubAddServer
 import com.discord.widgets.voice.VoiceUtils
 import rx.Observable
@@ -108,13 +110,15 @@ object ChannelListNavigation {
     var showGuildRoleSubscriptions: (fragment: Fragment, guildId: Long, source: String) -> Unit =
         { _, _, _ -> }
 
-    /** TODO(WidgetGuildScheduledEventListBottomSheet): the "Events" row in a normal guild. */
-    @JvmField
-    var showGuildScheduledEventList: (fragment: Fragment, guildId: Long) -> Unit = { _, _ -> }
+    /** Opens the scheduled-event list from a normal guild's channel sidebar. */
+    fun showGuildScheduledEventList(fragment: Fragment, guildId: Long) {
+        WidgetGuildScheduledEventListBottomSheet.show(fragment.parentFragmentManager, guildId)
+    }
 
-    /** TODO(WidgetGuildScheduledEventDetailsBottomSheet): "See detail" on an external event. */
-    @JvmField
-    var showGuildScheduledEventDetails: (fragment: Fragment, eventId: Long) -> Unit = { _, _ -> }
+    /** Opens details for an external event surfaced in the normal guild channel list. */
+    fun showGuildScheduledEventDetails(fragment: Fragment, eventId: Long) {
+        WidgetGuildScheduledEventDetailsBottomSheet.showForGuild(fragment.parentFragmentManager, eventId)
+    }
 
     /** TODO(MemberVerificationUtils): the membership-screening card's button. */
     @JvmField

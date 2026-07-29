@@ -1,5 +1,6 @@
 package com.discord.widgets.hubs
 
+import android.app.Activity
 import android.content.Intent
 import android.view.View
 import android.widget.Toast
@@ -18,6 +19,13 @@ import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.views.ScreenTitleView
 import com.discord.views.segmentedcontrol.CardSegment
 import com.discord.views.segmentedcontrol.SegmentedControlContainer
+import com.discord.widgets.guilds.create.WidgetGuildCreate
+import com.discord.widgets.nux.CreateGuildTrigger
+import com.discord.widgets.nux.GuildCreateArgs
+import com.discord.widgets.nux.GuildTemplateAnalytics
+import com.discord.widgets.nux.GuildTemplateArgs
+import com.discord.widgets.nux.GuildTemplateTypes
+import com.discord.widgets.nux.WidgetHubGuildTemplates
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
@@ -39,6 +47,14 @@ class WidgetHubAddServer : AppFragment(R.layout.widget_hub_add_server) {
     private lateinit var header: ScreenTitleView
     private lateinit var segmentedControl: SegmentedControlContainer
     private lateinit var createServerButton: MaterialButton
+
+    private val createServerLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
+            val guild = result.data?.getArgsFromIntent<WidgetGuildCreate.Result>()
+                ?: return@registerForActivityResult
+            onServerClicked(guild.guildId, isNewGuild = true)
+        }
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -97,8 +113,7 @@ class WidgetHubAddServer : AppFragment(R.layout.widget_hub_add_server) {
         val context = context ?: return
         val channelId = viewModel.getChannelId()
         if (channelId == null) {
-            // No directory channel resolved — either the selected guild is not a hub, or the
-            // directory store has not been installed. Report it instead of doing nothing.
+            // The selected guild is not a hub or has no directory channel.
             Toast.makeText(context, R.string.error_generic_title, Toast.LENGTH_SHORT).show()
             return
         }
@@ -181,18 +196,29 @@ class WidgetHubAddServer : AppFragment(R.layout.widget_hub_add_server) {
             .show()
     }
 
-    /**
-     * The reference opens `widgets/nux/WidgetHubGuildTemplates` for a result here, with
-     * `GuildCreateArgs(trigger = DIRECTORY_CHANNEL, GuildTemplateArgs(hub title/subtitle, HUB
-     * templates))`, and lists the freshly created server through [onServerClicked] with
-     * `isNewGuild = true`.
-     *
-     * The whole `widgets/nux` package is unreconstructed, so the button reports the gap rather than
-     * appearing to work.
-     */
     private fun onCreateServerClicked() {
         val context = context ?: return
-        Toast.makeText(context, R.string.error_generic_title, Toast.LENGTH_SHORT).show()
+        AppScreenRouter.launchForResult(
+            context,
+            createServerLauncher,
+            WidgetHubGuildTemplates::class.java,
+            GuildCreateArgs(
+                isNux = false,
+                location = GuildTemplateAnalytics.IN_APP_LOCATION_TEMPLATE,
+                trigger = CreateGuildTrigger.DIRECTORY_CHANNEL,
+                guildTemplate = GuildTemplateArgs(
+                    title = I18nSpans.render(
+                        getString(R.string.hub_create_or_add_guild_title),
+                        "guildName" to viewModel.getHubName(),
+                    ).toString(),
+                    subtitle = getString(R.string.hub_create_or_add_guild_subtitle),
+                    templates = GuildTemplateTypes.HUB,
+                    showInvitePrompt = false,
+                    skipCreationIntent = true,
+                ),
+                closeWithResult = true,
+            ).toArgsIntent(),
+        )
     }
 
     companion object {

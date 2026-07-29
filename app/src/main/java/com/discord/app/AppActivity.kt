@@ -27,6 +27,7 @@ import com.discord.models.domain.ModelUserSettings
 import com.discord.stores.IntentRouteResult
 import com.discord.stores.MainRoute
 import com.discord.stores.RequiredAction
+import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreNotices
 import com.discord.stores.StoreStream
 import com.discord.utilities.intent.AppIntentParser
@@ -497,7 +498,11 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
         MainRoute.Loading -> error("Loading has no fragment")
         MainRoute.LoggedIn -> WidgetTabsHost()
         MainRoute.LoggedOut -> WidgetAuthLanding()
-        is MainRoute.AgeGated -> WidgetAgeVerify()
+        is MainRoute.AgeGated -> WidgetAgeVerify().apply {
+            arguments = WidgetAgeVerify.arguments(
+                route.ageGate == StoreNavigation.AgeGate.NSFW_CHANNEL_AGE_GATE,
+            )
+        }
         is MainRoute.Required -> instantiate(
             when (route.action) {
                 RequiredAction.UPDATE_PASSWORD -> WidgetAuthForceChangePassword::class.java.name

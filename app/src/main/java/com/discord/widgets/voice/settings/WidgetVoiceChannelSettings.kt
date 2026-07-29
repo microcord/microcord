@@ -1,0 +1,279 @@
+package com.discord.widgets.voice.settings
+
+import android.content.Context
+import android.content.Intent
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.View
+import android.widget.LinearLayout
+import android.widget.SeekBar
+import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
+import androidx.core.view.isVisible
+import com.discord.R
+import com.discord.api.channel.Channel
+import com.discord.api.channel.getDeletedMessage
+import com.discord.api.channel.getDisplayNameOrDefault
+import com.discord.api.channel.isGuildVocalChannel
+import com.discord.api.channel.isStageVoiceChannel
+import com.discord.api.guild.GuildFeature
+import com.discord.api.permission.Permission
+import com.discord.app.AppFragment
+import com.discord.app.AppScreenRouter
+import com.discord.app.AppToast
+import com.discord.models.domain.ModelVoiceRegion
+import com.discord.models.guild.Guild
+import com.discord.restapi.RestAPIParams
+import com.discord.stores.StoreStream
+import com.discord.utilities.permissions.PermissionUtils
+import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.computationLatest
+import com.discord.utilities.rx.restSubscribeOn
+import com.discord.utilities.rx.ui
+import com.discord.views.CheckedSetting
+import com.discord.widgets.channels.permissions.WidgetChannelSettingsPermissionsOverview
+import com.discord.widgets.notice.WidgetNoticeDialog
+import com.discord.widgets.settings.SettingsStrings
+import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.textfield.TextInputLayout
+import rx.Observable
+
+/** Edits a guild voice or stage channel. */
+class WidgetVoiceChannelSettings : AppFragment(R.layout.widget_voice_channel_settings) {
+
+    private lateinit var name: TextInputLayout
+    private lateinit var bitrate: SeekBar
+    private lateinit var bitrateDisplay: TextView
+    private lateinit var userLimit: SeekBar
+    private lateinit var userLimitDisplay: TextView
+    private lateinit var region: TextView
+    private lateinit var nsfw: CheckedSetting
+    private lateinit var save: FloatingActionButton
+    private var model: Model? = null
+    private var selectedRegion: String? = null
+    private var bindingState = false
+
+    override fun onViewBound(view: View) {
+        super.onViewBound(view)
+        name = view.findViewById(R.id.channel_settings_edit_name)
+        bitrate = view.findViewById(R.id.bitrate_seekbar)
+        bitrateDisplay = view.findViewById(R.id.current_bitrate_display)
+        userLimit = view.findViewById(R.id.user_limit_seekbar)
+        userLimitDisplay = view.findViewById(R.id.current_user_limit_display)
+        region = view.findViewById(R.id.channel_settings_region_override)
+        nsfw = view.findViewById(R.id.channel_settings_nsfw)
+        save = view.findViewById(R.id.channel_settings_save)
+
+        name.editText?.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) = updateSaveVisibility()
+        })
+        bitrate.setOnSeekBarChangeListener(listener { progress ->
+            bitrateDisplay.text = "${MIN_BITRATE_KBPS + progress} Kbps"
+        })
+        userLimit.setOnSeekBarChangeListener(listener { progress ->
+            userLimitDisplay.text = if (progress == 0) getString(R.string.no_user_limit) else progress.toString()
+        })
+        nsfw.setOnCheckedListener { updateSaveVisibility() }
+        save.setOnClickListener { saveChanges() }
+    }
+
+    override fun onViewBoundOrOnResume() {
+        super.onViewBoundOrOnResume()
+        Model.observe(channelId()).ui(this).appSubscribe(WidgetVoiceChannelSettings::class.java) {
+            if (it == null) appActivity?.finish() else render(it)
+        }
+    }
+
+    private fun render(next: Model) {
+        if (!next.canManageChannel && !next.canManagePermissions) {
+            appActivity?.finish()
+            return
+        }
+        val root = view ?: return
+        model = next
+        setActionBarDisplayHomeAsUpEnabled()
+        setActionBarTitle(R.string.channel_settings)
+        setActionBarSubtitle(next.channel.getDisplayNameOrDefault(requireContext()))
+        setActionBarOptionsMenu(R.menu.menu_voice_channel_settings, onSelected = {
+            if (it.itemId == R.id.menu_channel_settings_delete) confirmDelete(next.channel)
+        })
+
+        bindingState = true
+        name.editText?.setText(next.channel.name.orEmpty())
+        bitrate.max = (next.maxBitrateKbps - MIN_BITRATE_KBPS).coerceAtLeast(0)
+        bitrate.progress = (next.channel.bitrate / 1_000 - MIN_BITRATE_KBPS).coerceIn(0, bitrate.max)
+        bitrateDisplay.text = "${MIN_BITRATE_KBPS + bitrate.progress} Kbps"
+        userLimit.progress = next.channel.userLimit.coerceIn(0, userLimit.max)
+        userLimitDisplay.text = if (userLimit.progress == 0) getString(R.string.no_user_limit) else userLimit.progress.toString()
+        selectedRegion = next.channel.rtcRegion
+        region.text = regionName(next.regions, selectedRegion)
+        nsfw.setOnCheckedListener(null)
+        nsfw.isChecked = next.channel.nsfw
+        nsfw.setOnCheckedListener { updateSaveVisibility() }
+        bindingState = false
+
+        root.findViewById<TextView>(R.id.settings_bitrate_help).text = SettingsStrings.render(
+            requireContext(), R.string.form_help_bitrate, "bitrate" to DEFAULT_BITRATE_KBPS,
+        )
+        val ordinaryVoice = !next.channel.isStageVoiceChannel()
+        root.findViewById<View>(R.id.user_limit_divider).isVisible = ordinaryVoice
+        root.findViewById<TextView>(R.id.user_limit_title).isVisible = ordinaryVoice
+        root.findViewById<LinearLayout>(R.id.settings_user_limit).isVisible = ordinaryVoice
+        root.findViewById<TextView>(R.id.settings_user_limit_help).isVisible = ordinaryVoice
+
+        val canEdit = next.canManageChannel
+        name.isVisible = canEdit
+        root.findViewById<View>(R.id.region_override_divider).isVisible = canEdit
+        root.findViewById<LinearLayout>(R.id.channel_settings_region_override_container).apply {
+            isVisible = canEdit
+            setOnClickListener { showRegionDialog(next.regions) }
+        }
+        root.findViewById<TextView>(R.id.channel_settings_region_override_help).apply {
+            isVisible = canEdit
+            setText(R.string.form_help_region_override)
+        }
+        root.findViewById<LinearLayout>(R.id.channel_settings_section_user_management).isVisible = next.canManagePermissions
+        root.findViewById<TextView>(R.id.channel_settings_permissions).setOnClickListener {
+            WidgetChannelSettingsPermissionsOverview.launch(requireContext(), next.channel.id)
+        }
+        root.findViewById<LinearLayout>(R.id.channel_settings_section_privacy_safety).isVisible =
+            canEdit && ordinaryVoice
+        save.isVisible = canEdit
+        updateSaveVisibility()
+    }
+
+    private fun showRegionDialog(regions: List<ModelVoiceRegion>) {
+        val labels = listOf(getString(R.string.automatic_region)) + regions.map { it.name.orEmpty() }
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.form_label_region_override)
+            .setItems(labels.toTypedArray()) { dialog, position ->
+                selectedRegion = regions.getOrNull(position - 1)?.id
+                region.text = labels[position]
+                dialog.dismiss()
+                updateSaveVisibility()
+            }
+            .show()
+    }
+
+    private fun saveChanges() {
+        val current = model?.channel ?: return
+        RestAPI.api.editVoiceChannel(
+            current.id,
+            RestAPIParams.VoiceChannel(
+                name = name.editText?.text?.toString().orEmpty(),
+                topic = current.topic,
+                type = current.type,
+                nsfw = nsfw.isChecked,
+                userLimit = userLimit.progress,
+                bitrate = (MIN_BITRATE_KBPS + bitrate.progress) * 1_000,
+                rtcRegion = selectedRegion,
+            ),
+        ).restSubscribeOn().ui(this).appSubscribe(WidgetVoiceChannelSettings::class.java, context = context) {
+            AppToast.show(context, R.string.saved_settings)
+            hideKeyboard()
+        }
+    }
+
+    private fun confirmDelete(channel: Channel) {
+        WidgetNoticeDialog.show(
+            fragmentManager = parentFragmentManager,
+            headerText = getString(R.string.delete_channel),
+            bodyText = SettingsStrings.render(
+                requireContext(), R.string.delete_channel_body,
+                "channelName" to channel.getDisplayNameOrDefault(requireContext()),
+            ),
+            okText = getString(R.string.delete),
+            cancelText = getString(R.string.cancel),
+            listenerMap = mapOf(R.id.notice_ok to { _: View ->
+                RestAPI.api.deleteChannel(channel.id).restSubscribeOn().ui(this)
+                    .appSubscribe(WidgetVoiceChannelSettings::class.java, context = context) { deleted ->
+                        deleted.getDeletedMessage()?.let { AppToast.show(context, it) }
+                        appActivity?.finish()
+                    }
+            }),
+            dialogTheme = R.attr.notice_theme_positive_red,
+        )
+    }
+
+    private fun listener(update: (Int) -> Unit) = object : SeekBar.OnSeekBarChangeListener {
+        override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+            update(progress)
+            updateSaveVisibility()
+        }
+        override fun onStartTrackingTouch(seekBar: SeekBar) = Unit
+        override fun onStopTrackingTouch(seekBar: SeekBar) = Unit
+    }
+
+    private fun updateSaveVisibility() {
+        if (bindingState || !::save.isInitialized) return
+        val channel = model?.channel ?: return
+        save.isVisible = model?.canManageChannel == true && (
+            name.editText?.text?.toString().orEmpty() != channel.name.orEmpty() ||
+                (MIN_BITRATE_KBPS + bitrate.progress) * 1_000 != channel.bitrate ||
+                userLimit.progress != channel.userLimit || selectedRegion != channel.rtcRegion ||
+                nsfw.isChecked != channel.nsfw
+            )
+    }
+
+    private fun regionName(regions: List<ModelVoiceRegion>, id: String?): String =
+        regions.firstOrNull { it.id == id }?.name ?: getString(R.string.automatic_region)
+
+    private fun channelId() = mostRecentIntent.getLongExtra(ARG_CHANNEL_ID, -1L)
+
+    internal data class Model(
+        val channel: Channel,
+        val canManageChannel: Boolean,
+        val canManagePermissions: Boolean,
+        val maxBitrateKbps: Int,
+        val regions: List<ModelVoiceRegion>,
+    ) {
+        companion object {
+            fun observe(channelId: Long): Observable<Model?> = StoreStream.getChannels().observeChannel(channelId)
+                .switchMap { channel ->
+                    if (channel == null || !channel.isGuildVocalChannel()) return@switchMap Observable.just(null)
+                    Observable.combineLatest(
+                        StoreStream.getGuilds().observeGuild(channel.guildId),
+                        StoreStream.getUsers().observeMe(),
+                        StoreStream.getPermissions().observePermissionsForChannel(channel.id),
+                        RestAPI.api.getGuildVoiceRegions(channel.guildId).restSubscribeOn()
+                            .onErrorReturn { emptyList() },
+                    ) { guild, me, permissions, regions ->
+                        guild?.let {
+                            Model(
+                                channel,
+                                PermissionUtils.canAndIsElevated(Permission.MANAGE_CHANNELS, permissions, me.mfaEnabled, it.mfaLevel),
+                                PermissionUtils.canAndIsElevated(Permission.MANAGE_ROLES, permissions, me.mfaEnabled, it.mfaLevel),
+                                maxBitrateKbps(it, channel),
+                                regions.filterNot { region -> region.isDeprecated || region.isHidden }
+                                    .sortedBy { region -> region.name },
+                            )
+                        }
+                    }
+                }.computationLatest().distinctUntilChanged()
+        }
+    }
+
+    companion object {
+        private const val ARG_CHANNEL_ID = "INTENT_EXTRA_CHANNEL_ID"
+        const val MIN_BITRATE_KBPS = 8
+        const val DEFAULT_BITRATE_KBPS = 64
+
+        @JvmStatic
+        fun launch(channelId: Long, context: Context) = AppScreenRouter.launch(
+            context,
+            WidgetVoiceChannelSettings::class.java,
+            Intent().putExtra(ARG_CHANNEL_ID, channelId),
+        )
+
+        internal fun maxBitrateKbps(guild: Guild, channel: Channel): Int = when {
+            channel.isStageVoiceChannel() -> DEFAULT_BITRATE_KBPS
+            guild.hasFeature(GuildFeature.VIP_REGIONS) || guild.premiumTier >= 3 -> 384
+            guild.premiumTier == 2 -> 256
+            guild.premiumTier == 1 -> 128
+            else -> 96
+        }
+    }
+}

@@ -1,9 +1,6 @@
 package com.discord.widgets.hubs.events
 
-import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
-import androidx.annotation.LayoutRes
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
@@ -30,19 +27,4 @@ class WidgetHubEventsPageAdapter(
     }
 
     fun setItems(items: List<HubEventsPage>) = setData(items)
-}
-
-/**
- * Base for the three row kinds. Sealed so the adapter's `when` over view types stays exhaustive at
- * the type level as well as at the id level.
- */
-sealed class WidgetHubEventsPageViewHolder(
-    itemView: View,
-    adapter: WidgetHubEventsPageAdapter,
-) : MGRecyclerViewHolder<WidgetHubEventsPageAdapter, HubEventsPage>(itemView, adapter) {
-
-    constructor(@LayoutRes layout: Int, adapter: WidgetHubEventsPageAdapter) : this(
-        LayoutInflater.from(adapter.recycler.context).inflate(layout, adapter.recycler, false),
-        adapter,
-    )
 }

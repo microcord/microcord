@@ -21,11 +21,13 @@ import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.rx.ui
 import com.discord.utilities.uri.UriHandler
 import com.discord.views.StatusView
+import com.discord.widgets.settings.account.WidgetSettingsAccount
 import com.discord.widgets.settings.account.WidgetSettingsBlockedUsers
+import com.discord.widgets.notice.WidgetNoticeDialog
+import com.discord.widgets.user.Badge
 import com.discord.widgets.user.WidgetUserStatusSheet
 import com.discord.widgets.user.profile.UserProfileHeaderView
 import com.discord.widgets.user.profile.UserProfileHeaderViewModel
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.shape.MaterialShapeDrawable
 import com.google.android.material.shape.ShapeAppearanceModel
 
@@ -39,9 +41,8 @@ import com.google.android.material.shape.ShapeAppearanceModel
  * 1. **`blocked_users` row.** The recovered `widget_settings.xml` in this project carries a
  *    `blocked_users` row that the reference layout does **not** have — the reference reaches
  *    `WidgetSettingsBlockedUsers` from `WidgetSettingsAccount` (`widget_settings_account.xml`).
- *    `WidgetSettingsAccount` has not been reconstructed, so the row is bound here to keep the
- *    finished blocked-users screen reachable. Remove the row from the layout and route through
- *    `WidgetSettingsAccount` when that screen lands.
+     *    It remains bound for compatibility with the recovered layout; the account screen also
+     *    exposes the reference destination.
  * 2. **[hideUnavailableRows]** has no reference counterpart. The reference shows every row and gates
  *    only `developer_options*`, `nitro_settings_container`, `role_subscriptions`,
  *    `nitro_gifting_badge` and `notification_upsell`. Rows here are hidden when their destination
@@ -72,14 +73,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         }
 
         view.findViewById<UserProfileHeaderView>(R.id.user_settings_profile_header_view).apply {
-            // Reference wires `Badge.Companion.onBadgeClick(fragmentManager, context)`, which opens a
-            // notice dialog for the badge and the premium screen for the Nitro upsell badge. Neither
-            // `Badge.onBadgeClick` nor `WidgetNoticeDialog` exists in this project yet, so the tap
-            // surfaces the badge's own tooltip text instead of silently doing nothing.
-            setOnBadgeClick { badge ->
-                val text = badge.tooltip ?: badge.text ?: return@setOnBadgeClick
-                android.widget.Toast.makeText(requireContext(), text, android.widget.Toast.LENGTH_SHORT).show()
-            }
+            setOnBadgeClick(Badge.onBadgeClick(parentFragmentManager, requireContext()))
             setOnBannerPress { viewModel.toggleAllowAnimationInReducedMotion() }
         }
 
@@ -98,6 +92,8 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
                 addToBackStack(WidgetSettingsBlockedUsers::class.java.name)
             }
         }
+        bindRoute(view, R.id.account, ::WidgetSettingsAccount)
+        bindRoute(view, R.id.authorized_apps, ::WidgetSettingsAuthorizedApps)
         bindRoute(view, R.id.text_images_settings, ::WidgetSettingsMedia)
         bindRoute(view, R.id.appearance, ::WidgetSettingsAppearance)
         bindRoute(view, R.id.language, ::WidgetSettingsLanguage)
@@ -210,16 +206,15 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
     }
 
     private fun showLogoutDialog(context: Context) {
-        // Reference uses `WidgetNoticeDialog` with the `notice_theme_positive_red` attr theme; that
-        // dialog widget has not been reconstructed, so the platform dialog stands in.
-        MaterialAlertDialogBuilder(context)
+        WidgetNoticeDialog.Builder(context)
             .setTitle(R.string.logout)
             .setMessage(R.string.user_settings_confirm_logout)
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.logout) { _, _ ->
+            .setNegativeButton(R.string.cancel)
+            .setPositiveButton(R.string.logout) {
                 onLogout?.invoke() ?: StoreStream.getAuthentication().logout()
             }
-            .show()
+            .setDialogAttrTheme(R.attr.notice_theme_positive_red)
+            .show(parentFragmentManager)
     }
 
     private fun openSystemNotificationSettings(context: Context) {
@@ -266,6 +261,8 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         /** Rows whose destination screen exists; everything else is hidden by [hideUnavailableRows]. */
         internal val implementedRouteIds = setOf(
             R.id.blocked_users,
+            R.id.account,
+            R.id.authorized_apps,
             R.id.text_images_settings,
             R.id.appearance,
             R.id.language,

@@ -21,7 +21,7 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.view.text.LinkifiedTextView
 import com.discord.widgets.hubs.hubArgs
 import com.discord.widgets.hubs.toArgsIntent
-import com.discord.widgets.hubs.withHubHook
+import com.discord.i18n.withClickableHook
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -146,7 +146,7 @@ class WidgetDirectoriesSearch : AppFragment(R.layout.widget_directories_search) 
             !state.hasAddGuildPermissions -> getString(R.string.directory_search_no_results_no_add)
             else -> requireContext()
                 .i18nRender(R.string.directory_search_no_results_subtitle)
-                .withHubHook(ADD_SERVER_HOOK) {
+                .withClickableHook(ADD_SERVER_HOOK) {
                     DirectoryNavigation.addServerToHub?.invoke(requireContext(), addServerLauncher)
                 }
         }

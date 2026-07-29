@@ -1,12 +1,38 @@
 package com.discord.widgets.guildscheduledevent
 
-import com.discord.api.guildscheduledevent.GuildScheduledEventStatus
 import com.discord.api.guildscheduledevent.GuildScheduledEventEntityMetadata
 import com.discord.api.guildscheduledevent.GuildScheduledEventEntityType
+import com.discord.api.guildscheduledevent.GuildScheduledEventStatus
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ScheduledEventUiTest {
+    @Test
+    fun splitContractsPreserveReferenceValues() {
+        assertEquals(
+            listOf(GuildScheduledEventDetailsSource.Guild, GuildScheduledEventDetailsSource.Directory),
+            GuildScheduledEventDetailsSource.entries,
+        )
+        assertEquals(
+            listOf(EventDetailsSection.EVENT_INFO, EventDetailsSection.RSVP_LIST),
+            EventDetailsSection.entries,
+        )
+        assertEquals(
+            listOf(
+                EventDetailsRsvpUsersFetchState.LOADING,
+                EventDetailsRsvpUsersFetchState.ERROR,
+                EventDetailsRsvpUsersFetchState.EMPTY,
+                EventDetailsRsvpUsersFetchState.SUCCESS,
+            ),
+            EventDetailsRsvpUsersFetchState.entries,
+        )
+        assertEquals(GuildScheduledEventDetailsSource.Guild, GuildScheduledEventDetailsArgs(1L).source)
+        assertEquals(
+            "https://discord.com/events/123/456",
+            GuildScheduledEventUrlUtils.getEventDetailsUrl(123L, 456L),
+        )
+    }
+
     @Test
     fun timingPreservesReferenceBoundaries() {
         val now = 1_000_000_000L

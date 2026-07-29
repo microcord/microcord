@@ -8,6 +8,7 @@ import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.app.appActivityViewModels
 import com.discord.i18n.I18nSpans
+import com.discord.i18n.withClickableHook
 import com.discord.stores.utilities.handleResponse
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rx.appSubscribe
@@ -64,10 +65,10 @@ class WidgetHubDomainSearch : AppFragment(R.layout.widget_hub_domain_search) {
         // "Can't find your school? [Join the waitlist.](onJoinWaitlist)"
         emptyDescription.text = I18nSpans
             .render(getString(R.string.hub_email_connection_guild_select_subheader))
-            .withHubHook(JOIN_WAITLIST_HOOK) { clicked ->
+            .withClickableHook(JOIN_WAITLIST_HOOK) {
                 AppScreenRouter.replaceFragment(
                     fragmentManager = parentFragmentManager,
-                    context = clicked.context,
+                    context = view.context,
                     screen = WidgetHubWaitlist::class.java,
                     addToBackStack = true,
                     arguments = HubWaitlistArgs(args.email).toArgsBundle(),

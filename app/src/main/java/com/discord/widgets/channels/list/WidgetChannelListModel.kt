@@ -1,6 +1,7 @@
 package com.discord.widgets.channels.list
 
 import com.discord.api.channel.Channel
+import com.discord.api.channel.getDMRecipient
 import com.discord.api.channel.getSortByMostRecent
 import com.discord.api.channel.getSortByNameAndType
 import com.discord.api.channel.isCategory
@@ -24,10 +25,12 @@ import com.discord.stores.StoreStream
 import com.discord.stores.StoreThreadsActiveJoined.ActiveJoinedThread
 import com.discord.stores.StoreThreadsJoined.JoinedThread
 import com.discord.models.user.User
+import com.discord.utilities.deniesAccessTo
+import com.discord.utilities.grantsAccessTo
+import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.leadingEdgeThrottle
-import com.discord.widgets.voice.VoiceStoreAccess
 import java.util.concurrent.TimeUnit
 import com.discord.widgets.channels.list.items.ChannelListBottomNavSpaceItem
 import com.discord.widgets.channels.list.items.ChannelListItem
@@ -311,8 +314,8 @@ data class WidgetChannelListModel(
          * The live sidebar model: the private-channel list while no guild is selected, otherwise
          * the selected guild's channel list.
          *
-         * Store inputs `StoreStream` does not publish yet come from [ChannelListSources], which
-         * documents exactly what each one costs while it is inert.
+         * Replaceable inputs come from [ChannelListSources] so the row builder remains deterministic
+         * in unit tests.
          */
         @JvmStatic
         fun get(): Observable<WidgetChannelListModel> =
@@ -336,12 +339,9 @@ data class WidgetChannelListModel(
                 StoreStream.getReadStates().getMentionCountsByChannel(),
                 ChannelListSources.streamingUserIds(),
                 StoreStream.getUserGuildSettings().observeGuildSettings(PRIVATE_CHANNELS_GUILD_ID),
-            ) { channels, selectedChannelId, presences, mentionCounts, streamingUserIds, settings ->
-                // The reference sorts by `StoreMessagesMostRecent`, which also counts messages that
-                // arrived while the channel was open. That store is not published by StoreStream,
-                // so the channel's own `lastMessageId` stands in — identical ordering except while
-                // a DM is being read.
-                val mostRecentIds = channels.values.associate { it.id to it.lastMessageId }
+                StoreStream.getMessagesMostRecent().observeRecentMessageIds(),
+            ) { channels, selectedChannelId, presences, mentionCounts, streamingUserIds, settings,
+                mostRecentIds ->
                 privateListBuilder(
                     channels = channels.values.sortedWith(
                         Channel.getSortByMostRecent(mostRecentIds),
@@ -352,7 +352,7 @@ data class WidgetChannelListModel(
                     streamingUserIds = streamingUserIds,
                     notificationSettings = settings,
                 )
-            }
+            }.leadingEdgeThrottle(250L, TimeUnit.MILLISECONDS)
 
         private fun guildChannelList(guildId: Long): Observable<WidgetChannelListModel> {
             val rows = Observable.combineLatest(
@@ -504,7 +504,7 @@ data class WidgetChannelListModel(
             notificationSettings: ModelNotificationSettings,
         ): WidgetChannelListModel {
             val rows = channels.map { channel ->
-                val recipientId = channel.recipients?.firstOrNull()?.id
+                val recipientId = channel.getDMRecipient()?.id
                 ChannelListItemPrivate(
                     channel = channel,
                     presence = presences[recipientId],
@@ -532,9 +532,6 @@ data class WidgetChannelListModel(
          *
          * @param canSeeGuildRoleSubscriptions gate for surfacing locked role-subscription
          *   channels; `false` hides them entirely.
-         * @param isGuildRoleSubscriptionChannel the reference calls
-         *   `ChannelUtils.isGuildRoleSubscriptionChannel`, which is not reconstructed yet, so
-         *   the predicate is injected. Defaults to "no channel is one".
          * @param hubEnabled / @param hubStudyGroupEnabled / @param hubEventsEnabled stand in for
          *   `GrowthTeamFeatures`, which does not exist in this project.
          */
@@ -562,13 +559,41 @@ data class WidgetChannelListModel(
             guildJoinRequest: GuildJoinRequest? = null,
             member: GuildMember? = null,
             meUserId: Long = 0L,
-            isGuildRoleSubscriptionChannel: (Channel) -> Boolean = { false },
             hubEnabled: Boolean = false,
             hubStudyGroupEnabled: Boolean = false,
             hubEventsEnabled: Boolean = false,
         ): List<ChannelListItem> {
             val items = ArrayList<ChannelListItem>(guildChannels.size + joinedThreads.size)
             val isHub = guild.guild?.isHub() == true
+
+            fun isGuildRoleSubscriptionChannel(channel: Channel): Boolean {
+                val model = guild.guild ?: return false
+                if (!model.hasFeature(GuildFeature.ROLE_SUBSCRIPTIONS_AVAILABLE_FOR_PURCHASE)) {
+                    return false
+                }
+                val overwrites = channel.permissionOverwrites.orEmpty()
+                if (overwrites.any { overwrite ->
+                        val role = guild.guildRoles?.get(overwrite.id)
+                        role != null &&
+                            RoleUtils.isSubscriptionRolePurchasableOrHasSubscribers(role) &&
+                            overwrite.grantsAccessTo(channel)
+                    }
+                ) {
+                    return true
+                }
+                val everyoneDenied = overwrites
+                    .firstOrNull { it.id == model.id }
+                    ?.deniesAccessTo(channel) == true
+                val fullyGated = !PermissionUtils.canRole(
+                    Permission.VIEW_CHANNEL,
+                    guild.everyoneRole,
+                    null,
+                )
+                return !everyoneDenied && fullyGated && guild.guildRoles?.values.orEmpty().any { role ->
+                    RoleUtils.isSubscriptionRolePurchasableOrHasSubscribers(role) &&
+                        PermissionUtils.canRole(Permission.VIEW_CHANNEL, role, null)
+                }
+            }
 
             if (guild.unelevated) items.add(ChannelListItemMfaNotice())
 
@@ -925,7 +950,15 @@ data class WidgetChannelListModel(
             selectedVoiceChannelId: Long,
             meUserId: Long,
         ): ChannelListItemActiveEventData? {
-            stageChannels.values.firstOrNull { it.containsMe }?.let { stage ->
+            stageChannels.values.firstOrNull { stage ->
+                PermissionUtils.can(
+                    Permission.VIEW_CHANNEL,
+                    channelPermissions[stage.channel.id],
+                ) && PermissionUtils.can(
+                    Permission.CONNECT,
+                    channelPermissions[stage.channel.id],
+                ) && stage.stageInstance != null && !stage.containsMe
+            }?.let { stage ->
                 return ChannelListItemActiveEventData(
                     topic = stage.stageInstance?.topic,
                     locationInfo = GuildScheduledEventLocationInfo.ChannelLocation(stage.channel),

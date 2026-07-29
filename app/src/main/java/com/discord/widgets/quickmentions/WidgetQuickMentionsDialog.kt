@@ -79,10 +79,7 @@ class WidgetQuickMentionsDialog : AppDialog(R.layout.widget_quick_mentions_dialo
 
         override fun createFragment(position: Int): Fragment = when (position) {
             POSITION_QUICK_SWITCHER -> WidgetGlobalSearch.create(searchText)
-            // The reference calls `WidgetUserMentions.create(isEmbedded = true)`, which suppresses
-            // the screen's own toolbar inside the pager. That factory lives in `widgets/user` and
-            // does not exist yet, so the embedded copy still draws its toolbar.
-            POSITION_MENTIONS -> WidgetUserMentions()
+            POSITION_MENTIONS -> WidgetUserMentions.create(isEmbedded = true)
             else -> throw UnsupportedOperationException("no tab at position $position")
         }
 

@@ -145,7 +145,11 @@ class WidgetServerSettingsEditMember : AppFragment(R.layout.widget_server_settin
         // The whole administrative block disappears when none of its actions is available, rather
         // than leaving a bare divider and header behind.
         administrativeContainer.visibility =
-            if (data.canKick || data.canBan || data.canTransferOwnership) View.VISIBLE else View.GONE
+            if (data.canDisableCommunication || data.canKick || data.canBan || data.canTransferOwnership) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
     }
 
     /**
@@ -417,7 +421,7 @@ class WidgetServerSettingsEditMember : AppFragment(R.layout.widget_server_settin
                                 manageContext.canManageRoles,
                             )
                         },
-                    canManage = manageContext.canManage(),
+                    canManage = manageContext.canManage() || manageContext.canDisableCommunication,
                     canKick = manageContext.canKick,
                     canBan = manageContext.canBan,
                     canChangeNickname = manageContext.canChangeNickname,

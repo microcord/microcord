@@ -19,12 +19,16 @@ import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
 import com.discord.widgets.channels.list.WidgetChannelsList
 import com.discord.widgets.channels.memberlist.WidgetChannelMembersList
+import com.discord.widgets.channels.WidgetChannelOnboarding
 import com.discord.widgets.channels.WidgetChannelTopic
 import com.discord.widgets.channels.WidgetChannelSidebarActions
 import com.discord.widgets.guilds.list.WidgetGuildsList
+import com.discord.widgets.guilds.join.WidgetGuildWelcomeSheet
 import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
+import com.discord.widgets.chat.list.WidgetChatList
+import com.discord.widgets.chat.list.adapter.WidgetChatListAdapterItemCallMessage
+import com.discord.widgets.quickmentions.WidgetQuickMentionsDialog
 import com.discord.widgets.search.WidgetSearch
-import com.discord.models.message.Message
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.getDisplayName
@@ -33,13 +37,20 @@ import com.discord.api.channel.isDM
 import com.discord.api.channel.isGuildTextChannel
 import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isSystemDM
+import com.discord.app.appViewModels
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.toolbar.positionUnreadCountView
+import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventUpsellBottomSheet
+import com.discord.widgets.playstation.WidgetPlaystationIntegrationUpsellBottomSheet
 import com.discord.widgets.user.calls.PrivateCallLauncher
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import rx.Subscription
 
-class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessages.Host {
+class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessages.Host, WidgetChatList.Host {
+    private val viewModel: WidgetHomeViewModel by appViewModels { WidgetHomeViewModel() }
+
     private lateinit var panels: HomePanelsLayout
     private var navigationSubscription: Subscription? = null
     private var selectedChannelSubscription: Subscription? = null
@@ -253,6 +264,32 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
         updateUnreadCount()
     }
 
+    override fun onViewBoundOrOnResume() {
+        super.onViewBoundOrOnResume()
+        viewModel.observeEvents()
+            .bindToComponentLifecycle(this)
+            .appSubscribe(WidgetHome::class.java, onNext = ::handleEvent)
+    }
+
+    private fun handleEvent(event: WidgetHomeViewModel.Event) = when (event) {
+        WidgetHomeViewModel.Event.OpenLeftPanel -> panels.openStartPanel()
+        WidgetHomeViewModel.Event.ClosePanels -> panels.closePanels()
+        WidgetHomeViewModel.Event.UnlockLeftPanel ->
+            panels.setStartPanelLockState(OverlappingPanelsLayout.LockState.UNLOCKED)
+        WidgetHomeViewModel.Event.ShowChannelOnboardingSheet ->
+            WidgetChannelOnboarding.show(parentFragmentManager)
+        WidgetHomeViewModel.Event.AnimatePeekIn,
+        WidgetHomeViewModel.Event.AnimatePeekOut,
+        -> Unit
+        is WidgetHomeViewModel.Event.ShowGuildWelcomeSheet ->
+            WidgetGuildWelcomeSheet.show(parentFragmentManager, event.guildId)
+        is WidgetHomeViewModel.Event.ShowGuildEventUpsell ->
+            WidgetGuildScheduledEventUpsellBottomSheet.launch(parentFragmentManager, event.guildId)
+        WidgetHomeViewModel.Event.ShowPlaystationUpsell ->
+            WidgetPlaystationIntegrationUpsellBottomSheet.show(parentFragmentManager)
+        is WidgetHomeViewModel.Event.ShowGuildRoleSubscriptionUpsell -> Unit
+    }
+
     private fun updateUnreadCount() {
         val center = view?.findViewById<View>(R.id.widget_home_panel_center_chat) ?: return
         val count = center.findViewById<TextView>(R.id.home_toolbar_unread_count)
@@ -260,6 +297,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
             ?: return
         count.text = unreadCount.takeIf { it > 0 }?.toString()
         count.visibility = if (unreadCount > 0) View.VISIBLE else View.GONE
+        count.setOnClickListener { WidgetQuickMentionsDialog.show(parentFragmentManager) }
         center.findDescendant(Toolbar::class.java)?.positionUnreadCountView(count)
     }
 
@@ -273,14 +311,25 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
         storeMediaEngine = StoreStream.getMediaEngine(),
     )
 
+    override fun openPinnedMessages(channelId: Long) = openPins(channelId)
+
+    override fun openCallMessage(
+        channelId: Long,
+        status: WidgetChatListAdapterItemCallMessage.CallStatus,
+    ) {
+        if (status == WidgetChatListAdapterItemCallMessage.CallStatus.ACTIVE_JOINED) {
+            StoreStream.getVoiceChannelSelected().selectVoiceChannel(channelId).subscribe({}, {})
+        } else {
+            privateCallLauncher().launchVoiceCall(channelId)
+        }
+    }
+
     override fun pinnedMessagesStore() = StoreStream.getPinnedMessages()
     override fun channelForPins(channelId: Long) = StoreStream.getChannels().getChannel(channelId)
     override fun jumpToPinnedMessage(channelId: Long, messageId: Long) {
         childFragmentManager.popBackStack()
         StoreStream.getMessagesLoader().jumpToMessage(channelId, messageId)
     }
-    override fun onPinnedMessageLongPress(message: Message) = false
-
     private fun openPins(channelId: Long) {
         childFragmentManager.commit {
             replace(R.id.panel_center, WidgetChannelPinnedMessages.newInstance(channelId))

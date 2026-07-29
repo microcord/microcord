@@ -4,19 +4,6 @@ import android.os.Parcel
 import android.os.Parcelable
 
 /**
- * Where the details sheet was opened from.
- *
- * The two sources resolve the event differently: [Guild] reads it out of
- * `StoreGuildScheduledEvents`, [Directory] reads it out of the hub's directory entries, because a
- * hub can show events for guilds the viewer has not joined and whose events are therefore not in
- * the store.
- */
-enum class GuildScheduledEventDetailsSource {
-    Directory,
-    Guild,
-}
-
-/**
  * Arguments of the event details sheet.
  *
  * [guildId] and [channelId] are only meaningful for [GuildScheduledEventDetailsSource.Directory]
@@ -72,23 +59,4 @@ data class GuildScheduledEventDetailsArgs(
 
         private fun Parcel.readNullableLong(): Long? = if (readInt() != 0) readLong() else null
     }
-}
-
-/** Which half of the details sheet the segmented control currently shows. */
-enum class EventDetailsSection {
-    EVENT_INFO,
-    RSVP_LIST,
-}
-
-/**
- * Lifecycle of the RSVP-user fetch behind the details sheet's second tab.
- *
- * Declared in the reference's ordinal order — `LOADING, ERROR, EMPTY, SUCCESS` — which is not the
- * alphabetical order Vineflower prints and is load-bearing wherever the value is persisted.
- */
-enum class EventDetailsRsvpUsersFetchState {
-    LOADING,
-    ERROR,
-    EMPTY,
-    SUCCESS,
 }

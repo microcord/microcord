@@ -12,8 +12,11 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.permission.Permission
 import com.discord.app.AppBottomSheet
+import com.discord.app.AppToast
 import com.discord.i18n.i18nFormat
+import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.guild.Guild
+import com.discord.models.user.MeUser
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreThreadsJoined.JoinedThread
@@ -21,10 +24,12 @@ import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rest.RestAPIAbortMessages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
+import com.discord.utilities.threads.ThreadUtils
 import com.discord.widgets.settings.WidgetMuteSettingsSheet
 import com.facebook.drawee.view.SimpleDraweeView
 import java.util.Locale
@@ -99,7 +104,7 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
         title.text = channel.getDisplayNameOrDefault(requireContext())
 
         markAsRead.setOnClickAndDismissListener {
-            StoreStream.getReadStates().markAsRead(channel.id)
+            StoreStream.getMessageAck().ack(channel.id, isLockedAck = false, clearLock = true)
         }
 
         mute.text = muteThreadText(channel, model.isMuted, requireContext())
@@ -190,6 +195,14 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
             .appSubscribe(
                 WidgetChannelsListItemThreadActions::class.java,
                 context = context,
+                errorHandler = { error ->
+                    AppToast.show(
+                        context,
+                        RestAPIAbortMessages.getAbortCodeMessageResId(error.code)
+                            ?: R.string.cannot_unarchive_thread,
+                    )
+                    error.showErrorToasts = false
+                },
             ) { dismiss() }
     }
 
@@ -205,15 +218,17 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
     }
 
     private data class Model(
+        val meUser: MeUser,
         val channel: Channel,
         val guild: Guild?,
         val parentChannel: Channel?,
+        val notificationSetting: Int,
         val joinedThread: JoinedThread?,
-        val isMuted: Boolean,
         val isActiveThread: Boolean,
         val isModerator: Boolean,
         val canManageThread: Boolean,
         val canUnarchiveThread: Boolean,
+        val isMuted: Boolean,
     ) {
         val isDeveloper: Boolean = StoreStream.getUserSettings().getIsDeveloperMode()
 
@@ -229,29 +244,75 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
                 .distinctUntilChanged()
 
             private fun build(channel: Channel): Observable<Model?> = Observable.combineLatest(
-                StoreStream.getGuilds().observeGuild(channel.guildId),
+                StoreStream.getUsers().observeMe(),
                 StoreStream.getChannels().observeChannel(channel.parentId),
-                StoreStream.getPermissions().observePermissionsForChannel(channel.id),
-                StoreStream.getUsers().observeMeId(),
-                ChannelListSources.joinedThreads(),
-            ) { guild, parentChannel, permissions, meId, joinedThreads ->
-                val joinedThread = joinedThreads[channel.id]
+                StoreStream.getGuilds().observeGuild(channel.guildId),
+                StoreStream.getPermissions().observePermissionsForChannel(channel.parentId),
+                StoreStream.getUserGuildSettings().observeGuildSettings(),
+                StoreStream.getThreadsJoined().observeJoinedThread(channel.id),
+                StoreStream.getThreadsActive().observeActiveThreadsForGuild(channel.guildId)
+                    .map { channel.id in it }
+                    .distinctUntilChanged(),
+            ) { me, parentChannel, guild, permissions, guildSettings, joinedThread, isActiveThread ->
                 val isModerator = PermissionUtils.can(Permission.MANAGE_THREADS, permissions)
-                val isOwner = channel.ownerId == meId
-                val locked = channel.threadMetadata?.locked == true
+                val settings = guildSettings[channel.guildId]
                 Model(
+                    meUser = me,
                     channel = channel,
                     guild = guild,
                     parentChannel = parentChannel,
+                    notificationSetting = computeThreadNotificationSetting(
+                        joinedThread,
+                        isMuted(settings, channel),
+                        notificationLevel(settings, channel, guild),
+                    ),
                     joinedThread = joinedThread,
                     isMuted = joinedThread?.muted == true,
-                    isActiveThread = channel.threadMetadata?.archived == false,
+                    isActiveThread = isActiveThread,
                     isModerator = isModerator,
-                    canManageThread = isModerator || isOwner,
-                    // A locked thread can only be reopened by someone who can clear the lock.
-                    canUnarchiveThread = isModerator || (isOwner && !locked),
+                    canManageThread = ThreadUtils.canManageThread(me, channel, permissions),
+                    canUnarchiveThread = ThreadUtils.canUnarchiveThread(channel, permissions),
                 )
             }
+
+            private fun isMuted(settings: ModelNotificationSettings?, channel: Channel): Boolean =
+                settings?.isMuted == true ||
+                    settings?.getChannelOverride(channel.parentId)?.isMuted == true ||
+                    settings?.getChannelOverride(channel.id)?.isMuted == true
+
+            private fun notificationLevel(
+                settings: ModelNotificationSettings?,
+                channel: Channel,
+                guild: Guild?,
+            ): Int? = settings?.getChannelOverride(channel.id)?.messageNotifications
+                ?.takeUnless { it == ModelNotificationSettings.FREQUENCY_UNSET }
+                ?: settings?.getChannelOverride(channel.parentId)?.messageNotifications
+                    ?.takeUnless { it == ModelNotificationSettings.FREQUENCY_UNSET }
+                ?: settings?.messageNotifications
+                    ?.takeUnless { it == ModelNotificationSettings.FREQUENCY_UNSET }
+                ?: guild?.defaultMessageNotifications
+
+            private fun computeThreadNotificationSetting(
+                joinedThread: JoinedThread?,
+                muted: Boolean,
+                parentSetting: Int?,
+            ): Int {
+                val flags = joinedThread?.flags ?: return THREAD_NOTIFICATION_NOTHING
+                if (flags and THREAD_NOTIFICATION_ALL != 0) return THREAD_NOTIFICATION_ALL
+                if (flags and THREAD_NOTIFICATION_MENTIONS != 0) return THREAD_NOTIFICATION_MENTIONS
+                if (flags and THREAD_NOTIFICATION_NOTHING != 0 || muted) {
+                    return THREAD_NOTIFICATION_NOTHING
+                }
+                return when (parentSetting) {
+                    ModelNotificationSettings.FREQUENCY_MENTIONS -> THREAD_NOTIFICATION_MENTIONS
+                    ModelNotificationSettings.FREQUENCY_NOTHING -> THREAD_NOTIFICATION_NOTHING
+                    else -> THREAD_NOTIFICATION_ALL
+                }
+            }
+
+            private const val THREAD_NOTIFICATION_ALL = 2
+            private const val THREAD_NOTIFICATION_MENTIONS = 4
+            private const val THREAD_NOTIFICATION_NOTHING = 8
         }
     }
 

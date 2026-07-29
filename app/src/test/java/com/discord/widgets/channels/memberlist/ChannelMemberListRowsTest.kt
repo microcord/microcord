@@ -91,6 +91,37 @@ class ChannelMemberListRowsTest {
         assertTrue(ChannelMemberListRows.thread("thread", 0, emptySet(), emptyMap(), emptyMap(), emptyMap(), emptyMap(), joined = false).first() is ChannelMemberListRow.JoinLeaveThread)
     }
 
+    @Test fun streamingStateReachesPrivateAndThreadMemberRows() {
+        val users = mapOf(1L to CoreUser(1, "Ada"))
+        val privateRows = ChannelMemberListRows.privateChannel(
+            channel(recipientIds = listOf(1)),
+            users,
+            emptyMap(),
+            streamingUserIds = setOf(1),
+        )
+        val threadRows = ChannelMemberListRows.thread(
+            "thread",
+            0,
+            setOf(1),
+            users,
+            mapOf(1L to member(1)),
+            emptyMap(),
+            emptyMap(),
+            joined = true,
+            streamingUserIds = setOf(1),
+        )
+
+        assertTrue(privateRows.filterIsInstance<ChannelMemberListRow.Member>().single().isApplicationStreaming)
+        assertTrue(threadRows.filterIsInstance<ChannelMemberListRow.Member>().single().isApplicationStreaming)
+    }
+
+    @Test fun unloadedGuildUsesStableLoadingRows() {
+        val rows = ChannelMemberListRows.loading("guild", 3)
+        assertTrue(rows.first() is ChannelMemberListRow.PlaceholderHeader)
+        assertEquals(3, rows.filterIsInstance<ChannelMemberListRow.PlaceholderMember>().size)
+        assertEquals(rows.size, rows.map { it.stableId }.distinct().size)
+    }
+
     private fun role(id: Long, name: String) = GuildRole(1, name, id, 0x123456, true, 0, false, false, null, null, null)
     private fun member(id: Long, hoistRoleId: Long = 0, nick: String? = null) =
         GuildMember(0, hoistRoleId, if (hoistRoleId == 0L) null else listOf(hoistRoleId), nick, null, false, null, 1, id)

@@ -117,6 +117,19 @@ class WidgetMediaLaunchTest {
     }
 
     @Test
+    fun `non playable embed cannot accidentally create a media source`() {
+        val args = launchArgs(
+            embed(
+                type = EmbedType.RICH,
+                thumbnail = EmbedThumbnail("https://host/i.png", "https://proxy/i.png", 480, 640),
+            ),
+        )
+
+        assertNull(args.progressiveMediaUri)
+        assertEquals(MediaType.VIDEO, args.mediaType)
+    }
+
+    @Test
     fun `embed without its own link shares the preview image instead`() {
         val args = launchArgs(
             embed(

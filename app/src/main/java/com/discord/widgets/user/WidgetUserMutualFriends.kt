@@ -17,6 +17,7 @@ import com.discord.R
 import com.discord.models.guild.Guild
 import com.discord.models.presence.Presence
 import com.discord.models.user.User
+import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.StatusView
 import com.facebook.drawee.view.SimpleDraweeView
@@ -29,7 +30,12 @@ class WidgetUserMutualFriends : AppFragment(R.layout.widget_user_mutual_friends)
         data class Loaded(val username: String?, val friends: List<Friend>) : State()
         data class Error(val message: String? = null) : State()
     }
-    data class Friend(val user: User, val presence: Presence? = null, val mutualGuilds: List<Guild> = emptyList())
+    data class Friend(
+        val user: User,
+        val presence: Presence? = null,
+        val mutualGuilds: List<Guild> = emptyList(),
+        val isApplicationStreaming: Boolean? = null,
+    )
 
     private val adapter = Adapter()
     private var subscription: Subscription? = null
@@ -93,7 +99,7 @@ class WidgetUserMutualFriends : AppFragment(R.layout.widget_user_mutual_friends)
             itemView.findViewById<TextView>(R.id.user_profile_adapter_item_friend_user_name).text = friend.user.username
             itemView.findViewById<StatusView>(R.id.user_profile_adapter_item_friend_status).setPresence(friend.presence)
             itemView.findViewById<SimpleDraweeSpanTextView>(R.id.user_profile_adapter_item_friend_user_game).apply {
-                text = friend.presence?.activities?.firstOrNull()?.name.orEmpty()
+                PresenceUtils.setPresenceText(friend.presence, friend.isApplicationStreaming == true, this, true)
                 visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
             }
             itemView.findViewById<SimpleDraweeView>(R.id.user_profile_adapter_item_friend_avatar).setImageURI(avatarUrl(friend.user))

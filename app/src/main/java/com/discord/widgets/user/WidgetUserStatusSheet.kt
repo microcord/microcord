@@ -7,16 +7,19 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import com.discord.app.AppBottomSheet
+import com.discord.app.appViewModels
 import com.discord.R
 import com.discord.api.presence.ClientStatus
-import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.widgets.user.profile.UserStatusPresenceCustomView
 import rx.Observable
-import rx.Subscription
+import rx.subscriptions.CompositeSubscription
 
 class WidgetUserStatusSheet : AppBottomSheet() {
     data class State(val customStatus: UserStatusPresenceCustomView.ViewState)
-    private var subscription: Subscription? = null
+
+    private val viewModel: WidgetUserStatusSheetViewModel by appViewModels {
+        WidgetUserStatusSheetViewModel()
+    }
 
     override fun getContentViewResId() = R.layout.widget_user_status_update
 
@@ -28,18 +31,21 @@ class WidgetUserStatusSheet : AppBottomSheet() {
         bindStatus(view, R.id.user_status_update_invisible, R.drawable.ic_status_invisible_16dp, R.string.status_invisible, R.string.status_invisible_helper, ClientStatus.INVISIBLE)
         view.findViewById<UserStatusPresenceCustomView>(R.id.user_status_update_custom).apply {
             setOnClickListener { onCustomStatus?.invoke(); dismiss() }
-            setOnClear { onClearCustomStatus?.invoke() }
+            setOnClear(viewModel::clearCustomStatus)
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        subscription = (stateSource?.invoke() ?: Observable.just(defaultState())).subscribe { state ->
-            view?.post { view?.findViewById<UserStatusPresenceCustomView>(R.id.user_status_update_custom)?.updateViewState(state.customStatus) }
-        }
+    override fun bindSubscriptions(compositeSubscription: CompositeSubscription) {
+        super.bindSubscriptions(compositeSubscription)
+        compositeSubscription.add(
+            viewModel.observeViewState().subscribe { state ->
+                if (state is WidgetUserStatusSheetViewModel.ViewState.Loaded) {
+                    view?.findViewById<UserStatusPresenceCustomView>(R.id.user_status_update_custom)
+                        ?.updateViewState(state.customStatusViewState)
+                }
+            },
+        )
     }
-
-    override fun onStop() { subscription?.unsubscribe(); subscription = null; super.onStop() }
 
     private fun bindStatus(root: View, id: Int, icon: Int, title: Int, subtitle: Int?, status: ClientStatus) {
         root.findViewById<View>(id).apply {
@@ -49,7 +55,7 @@ class WidgetUserStatusSheet : AppBottomSheet() {
                 visibility = if (subtitle == null) View.GONE else View.VISIBLE
                 subtitle?.let(::setText)
             }
-            setOnClickListener { onStatusSelected?.invoke(status); dismiss() }
+            setOnClickListener { viewModel.setStatus(status); dismiss() }
         }
     }
 
@@ -58,7 +64,6 @@ class WidgetUserStatusSheet : AppBottomSheet() {
         @JvmField var onStatusSelected: ((ClientStatus) -> Unit)? = null
         @JvmField var onCustomStatus: (() -> Unit)? = null
         @JvmField var onClearCustomStatus: (() -> Unit)? = null
-        private fun defaultState() = State(UserStatusPresenceCustomView.ViewState.WithPlaceholder(ModelEmojiUnicode(surrogates = "💬")))
         fun show(fragmentManager: androidx.fragment.app.FragmentManager) =
             WidgetUserStatusSheet().show(fragmentManager, WidgetUserStatusSheet::class.java.name)
     }

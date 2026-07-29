@@ -10,7 +10,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.connectedaccounts.ConnectedAccount
-import java.util.Locale
+import com.discord.utilities.platform.Platform
 
 class UserProfileConnectionsView(context: Context, attrs: AttributeSet) : LinearLayout(context, attrs) {
     data class ConnectedAccountItem(val connectedAccount: ConnectedAccount) {
@@ -81,21 +81,8 @@ class UserProfileConnectionsView(context: Context, attrs: AttributeSet) : Linear
 
     private class AccountViewHolder(val text: TextView) : RecyclerView.ViewHolder(text)
 
-    private fun platformInfo(account: ConnectedAccount): Pair<Int, String?> = when (account.type.lowercase(Locale.ENGLISH)) {
-        "battlenet" -> R.attr.ic_account_battlenet to null
-        "facebook" -> R.attr.ic_account_facebook to null
-        "github" -> R.attr.ic_account_github to "https://github.com/${account.name}"
-        "leagueoflegends" -> R.attr.ic_account_league_of_legends to null
-        "playstation" -> R.attr.ic_account_playstation to null
-        "reddit" -> R.attr.ic_account_reddit to "https://reddit.com/u/${account.name}"
-        "samsung" -> R.attr.ic_account_samsung to null
-        "skype" -> R.attr.ic_account_skype to null
-        "spotify" -> R.attr.ic_account_spotify to "https://open.spotify.com/user/${account.id}"
-        "steam" -> R.attr.ic_account_steam to "https://steamcommunity.com/profiles/${account.id}"
-        "twitch" -> R.attr.ic_account_twitch to "https://twitch.tv/${account.name}"
-        "twitter" -> R.attr.ic_account_twitter to "https://www.twitter.com/${account.name}"
-        "xbox" -> R.attr.ic_account_xbox to null
-        "youtube" -> R.attr.ic_account_youtube to "https://youtube.com/channel/${account.id}"
-        else -> R.attr.ic_account to null
+    private fun platformInfo(account: ConnectedAccount): Pair<Int, String?> {
+        val platform = Platform.from(account)
+        return (platform.themedPlatformImage ?: 0) to platform.getProfileUrl(account)
     }
 }

@@ -39,7 +39,7 @@ class WidgetKickUser : AppDialog(R.layout.widget_kick_user) {
             // A blank reason is omitted rather than sent as an empty audit-log header.
             val reason = view.findViewById<TextInputLayout>(R.id.kick_user_reason)
                 .getTextOrEmpty()
-                .takeUnless { it.isBlank() }
+                .asAuditLogReason()
 
             RestAPI.api.kickGuildMember(guildId, userId, reason)
                 .restSubscribeOn()

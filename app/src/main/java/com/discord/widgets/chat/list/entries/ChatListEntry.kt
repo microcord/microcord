@@ -8,9 +8,13 @@ import com.discord.models.botuikit.MessageComponent
 import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
 import com.discord.stores.StoreMessageState
+import com.discord.stores.StoreStream
 import com.discord.stores.StoreThreadMessages
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
+import com.discord.widgets.botuikit.BotComponentExperiments
+import com.discord.widgets.botuikit.ComponentChatListState.ComponentStoreState
+import com.discord.widgets.botuikit.ComponentStateMapper
 
 /**
  * One row of the chat list.
@@ -135,7 +139,7 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             }
 
             val isAutoModSystemMessage = message.type == AUTO_MOD_SYSTEM_MESSAGE_TYPE
-            if (isAutoModSystemMessage && embeds.isNotEmpty()) {
+            if (isAutoModSystemMessage) {
                 entries.add(
                     AutoModSystemMessageEmbedEntry(
                         channel = channel,
@@ -183,14 +187,14 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
         fun createGameInviteEntries(message: Message): List<ChatListEntry> {
             val application = message.application ?: return emptyList()
             val activity = message.activity ?: return emptyList()
-            val author = message.author ?: return emptyList()
+            val author = message.author!!
             return listOf(GameInviteEntry(author.id, message.id, activity, application))
         }
 
         fun createSpotifyListenTogetherEntries(message: Message): List<ChatListEntry> {
             val activity = message.activity ?: return emptyList()
             if (!message.isSpotifyListeningActivity()) return emptyList()
-            val author = message.author ?: return emptyList()
+            val author = message.author!!
             return listOf(SpotifyListenTogetherEntry(author.id, message.id, activity))
         }
 
@@ -198,13 +202,11 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
         fun createGiftEntries(message: Message): Collection<ChatListEntry> {
             val content = message.content
             if (content.isNullOrEmpty()) return emptyList()
-            val author = message.author ?: return emptyList()
-            val entries = LinkedHashMap<String, ChatListEntry>()
+            val entries = HashMap<String, ChatListEntry>()
             GIFT_LINK.findAll(content).forEach { match ->
                 val code = match.groupValues.lastOrNull().orEmpty()
-                if (code.isNotEmpty()) {
-                    entries[code] = GiftEntry(author.id, message.id, message.channelId, code)
-                }
+                val author = message.author!!
+                entries[code] = GiftEntry(author.id, message.id, message.channelId, code)
             }
             return entries.values
         }
@@ -213,13 +215,11 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
         fun createGuildTemplateEntries(message: Message): Collection<ChatListEntry> {
             val content = message.content
             if (content.isNullOrEmpty()) return emptyList()
-            val author = message.author ?: return emptyList()
-            val entries = LinkedHashMap<String, ChatListEntry>()
+            val entries = HashMap<String, ChatListEntry>()
             GUILD_TEMPLATE_LINK.findAll(content).forEach { match ->
                 val code = match.groupValues.lastOrNull().orEmpty()
-                if (code.isNotEmpty()) {
-                    entries[code] = GuildTemplateEntry(author.id, message.id, code)
-                }
+                val author = message.author!!
+                entries[code] = GuildTemplateEntry(author.id, message.id, code)
             }
             return entries.values
         }
@@ -235,8 +235,7 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
         ): Collection<ChatListEntry> {
             val content = message.content
             if (content.isNullOrEmpty()) return emptyList()
-            if (message.author == null) return emptyList()
-            val entries = LinkedHashMap<String, ChatListEntry>()
+            val entries = HashMap<String, ChatListEntry>()
             INVITE_LINK.findAll(content).forEach { match ->
                 val groups = match.groupValues
                 if (groups.size == 3) {
@@ -254,7 +253,7 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             eventId: String?,
             inviteResolver: InviteEmbedResolver,
         ): ChatListEntry {
-            val author = requireNotNull(message.author)
+            val author = message.author!!
             if (eventId != null) {
                 val eventInvite = inviteResolver.resolveInviteForGuildScheduledEvent(inviteCode, eventId)
                 val event = eventInvite?.getGuildScheduledEvent()
@@ -313,9 +312,27 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             guildId: Long,
             messageComponents: List<MessageComponent>,
         ): Collection<ChatListEntry> {
-            if (message.components.isNullOrEmpty() || messageComponents.isEmpty()) return emptyList()
-            val applicationId = message.applicationId ?: message.author?.id ?: return emptyList()
+            if (message.components.isNullOrEmpty()) return emptyList()
+            val applicationId = message.applicationId ?: message.author!!.id
             return listOf(BotUiComponentEntry(message, applicationId, guildId, messageComponents))
+        }
+
+        fun createBotComponentEntries(
+            message: Message,
+            guildId: Long,
+            componentStoreState: ComponentStoreState?,
+            animateEmojis: Boolean,
+        ): Collection<ChatListEntry> {
+            val components = message.components
+            if (components.isNullOrEmpty()) return emptyList()
+            val mapped = ComponentStateMapper.processComponentsToMessageComponents(
+                components,
+                componentStoreState,
+                BotComponentExperiments.get(StoreStream.getExperiments()),
+                animateEmojis,
+            )
+            val applicationId = message.applicationId ?: message.author!!.id
+            return listOf(BotUiComponentEntry(message, applicationId, guildId, mapped))
         }
 
         /**

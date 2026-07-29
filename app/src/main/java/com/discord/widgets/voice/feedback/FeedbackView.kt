@@ -83,12 +83,8 @@ class FeedbackView(context: Context, attrs: AttributeSet) : LinearLayout(context
         override fun getItemViewType(position: Int) = items[position].type
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): IssueViewHolder {
-            val item = TextView(parent.context, null, 0, R.style.UiKit_Settings_Item).apply {
-                layoutParams = RecyclerView.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                )
-            }
+            val item = LayoutInflater.from(parent.context)
+                .inflate(R.layout.selectable_list_item, parent, false) as TextView
             return IssueViewHolder(item)
         }
 

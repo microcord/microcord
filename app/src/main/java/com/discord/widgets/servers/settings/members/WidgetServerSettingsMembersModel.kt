@@ -141,7 +141,7 @@ data class WidgetServerSettingsMembersModel(
                         user = user,
                         userDisplayName = GuildMember.getNickOrUsername(member, user),
                         roles = member.getRoles().mapNotNull { roles[it] },
-                        isManagable = manageContext.canManage(),
+                        isManagable = manageContext.canManage() || manageContext.canDisableCommunication,
                         guildMember = member,
                     ),
                 )

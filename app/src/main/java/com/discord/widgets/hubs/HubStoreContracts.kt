@@ -2,25 +2,12 @@ package com.discord.widgets.hubs
 
 import com.discord.api.directory.DirectoryEntryEvent
 import com.discord.api.directory.DirectoryEntryGuild
-import com.discord.api.guildscheduledevent.GuildScheduledEvent
+import com.discord.stores.StoreDirectories
 import com.discord.stores.updates.ObservationDeck
-import com.discord.stores.utilities.Default
 import com.discord.stores.utilities.RestCallState
+import com.discord.widgets.directories.DirectoryStores
 
-/**
- * The store surface the Student Hub screens need, declared here because the stores do not exist yet.
- *
- * The reference reads all of this from `StoreDirectories`, `StoreGuildScheduledEvents` and
- * `StoreVoiceChannelSelected` via `StoreStream`. In this project `StoreDirectories` and
- * `StoreGuildScheduledEvents` have not been reconstructed and `StoreVoiceChannelSelected` exists but
- * is not published by `StoreStream`, so the hub view models depend on these interfaces instead of on
- * concrete stores.
- *
- * When the store wave lands, the real stores implement these interfaces (or the view models switch
- * to them directly and this file is deleted); nothing else in the package changes. Until then
- * [HubStores] serves the [Unavailable] implementations, which report "no data" rather than pretending
- * a request succeeded — every hub screen renders its empty/error state instead of a blank surface.
- */
+/** Compatibility surface used by the directory registry. Hub screens use [StoreDirectories] directly. */
 interface HubDirectoriesStore : ObservationDeck.UpdateSource {
 
     /**
@@ -59,80 +46,22 @@ interface HubDirectoriesStore : ObservationDeck.UpdateSource {
     }
 }
 
-/** The slice of `StoreGuildScheduledEvents` the hub events page needs. */
-interface HubGuildScheduledEventsStore : ObservationDeck.UpdateSource {
-
-    /** Ids of the events in [guildId] the current user marked interest in. */
-    fun getMeGuildScheduledEventIds(guildId: Long): Set<Long>
-
-    /** Flips the current user's interest in [event]. */
-    fun toggleMeRsvpForEvent(event: GuildScheduledEvent)
-
-    object Unavailable : HubGuildScheduledEventsStore {
-        override fun getMeGuildScheduledEventIds(guildId: Long): Set<Long> = emptySet()
-        override fun toggleMeRsvpForEvent(event: GuildScheduledEvent) = Unit
-    }
-}
-
-/** The slice of `StoreVoiceChannelSelected` the hub events page needs. */
-interface HubVoiceChannelSelection : ObservationDeck.UpdateSource {
-
-    /** The channel the user is connected to, or 0 when not connected. */
-    fun getSelectedVoiceChannelId(): Long
-
-    object Unavailable : HubVoiceChannelSelection {
-        override fun getSelectedVoiceChannelId(): Long = 0L
-    }
-}
-
-/**
- * Publishes the hub stores, in the same shape as `com.discord.utilities.rest.RestAPI`.
- *
- * The store graph calls [install] once it owns real implementations. Reads go through the
- * properties, so nothing in this package holds a mutable global callback.
- */
+/** Compatibility bridge for directory code that is installed before the StoreStream accessor lands. */
 object HubStores {
 
     @Volatile
     var directories: HubDirectoriesStore = HubDirectoriesStore.Unavailable
         private set
 
-    @Volatile
-    var guildScheduledEvents: HubGuildScheduledEventsStore = HubGuildScheduledEventsStore.Unavailable
-        private set
-
-    @Volatile
-    var voiceChannelSelection: HubVoiceChannelSelection = HubVoiceChannelSelection.Unavailable
-        private set
-
-    /** `true` while any hub store is still the inert stand-in; screens surface an error state. */
-    val isFullyInstalled: Boolean
-        get() = directories !== HubDirectoriesStore.Unavailable &&
-            guildScheduledEvents !== HubGuildScheduledEventsStore.Unavailable &&
-            voiceChannelSelection !== HubVoiceChannelSelection.Unavailable
-
     @JvmStatic
-    fun install(
-        directories: HubDirectoriesStore = this.directories,
-        guildScheduledEvents: HubGuildScheduledEventsStore = this.guildScheduledEvents,
-        voiceChannelSelection: HubVoiceChannelSelection = this.voiceChannelSelection,
-    ) {
+    fun install(directories: HubDirectoriesStore) {
         this.directories = directories
-        this.guildScheduledEvents = guildScheduledEvents
-        this.voiceChannelSelection = voiceChannelSelection
     }
 
-    /** Restores the stand-ins. Used by tests so one case cannot leak into the next. */
     @JvmStatic
     fun reset() {
         directories = HubDirectoriesStore.Unavailable
-        guildScheduledEvents = HubGuildScheduledEventsStore.Unavailable
-        voiceChannelSelection = HubVoiceChannelSelection.Unavailable
     }
 }
 
-/**
- * The state a hub screen shows when the request behind it never started because the owning store is
- * missing. Distinct from [Default] so a screen can tell "not asked yet" from "cannot ask".
- */
-internal fun <T> RestCallState<T>?.orUnavailable(): RestCallState<T> = this ?: Default
+internal fun storeDirectories(): StoreDirectories = DirectoryStores.directories as StoreDirectories

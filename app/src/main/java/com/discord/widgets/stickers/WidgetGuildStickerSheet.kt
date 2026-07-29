@@ -133,7 +133,7 @@ class WidgetGuildStickerSheet : AppBottomSheet() {
                 buttonContainer.visibility = View.VISIBLE
                 premiumButton.visibility = View.GONE
                 joinButton.visibility = View.VISIBLE
-                joinButton.setOnClickListener { viewModel.joinGuild(guild) }
+                joinButton.setOnClickListener { viewModel.joinGuild(requireContext(), guild) }
             }
 
             else -> buttonContainer.visibility = View.GONE

@@ -1,5 +1,6 @@
 package com.discord.widgets.emoji
 
+import android.content.Context
 import com.discord.api.channel.Channel
 import com.discord.api.guild.GuildFeature
 import com.discord.app.AppViewModel
@@ -19,6 +20,7 @@ import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
 import com.discord.utilities.textprocessing.node.EmojiNode
 import com.discord.utilities.user.UserUtils.isPremium
+import com.discord.widgets.guilds.join.joinGuild
 import retrofit2.HttpException
 import rx.Observable
 import com.discord.api.guild.Guild as ApiGuild
@@ -181,21 +183,13 @@ class EmojiSheetViewModel(
         )
     }
 
-    /**
-     * Joins the guild the emoji came from and dismisses.
-     *
-     * The reference routes this through `utilities/guilds/GuildJoinHelper`, which also owns the
-     * captcha retry, the "you are banned" toast and the analytics. That helper does not exist in
-     * this project, so this is the bare REST call — same seam as
-     * `widgets/stickers/GuildStickerSheetViewModel.joinGuild`; **replace both together.**
-     */
-    fun joinGuild(guild: Guild) {
-        restApi.joinGuild(guild.id, isLurker = false, sessionId = null)
-            .subscribe(
-                { updateViewState(ViewState.Dismiss) },
-                { /* Leave the sheet open; the button is still the way out. */ },
-            )
-    }
+    fun joinGuild(context: Context, guild: Guild) = joinGuild(
+        context = context,
+        guildId = guild.id,
+        isLurker = false,
+        errorClass = EmojiSheetViewModel::class.java,
+        onNext = { updateViewState(ViewState.Dismiss) },
+    )
 
     fun setFavorite(favorite: Boolean) {
         val key = when (val state = viewState) {

@@ -3,6 +3,7 @@ package com.discord.widgets.guildscheduledevent
 import android.content.Context
 import androidx.fragment.app.Fragment
 import com.discord.api.channel.Channel
+import com.discord.api.directory.DirectoryEntryEvent
 import com.discord.api.guildscheduledevent.GuildScheduledEvent
 import com.discord.api.guildscheduledevent.GuildScheduledEventEntityType
 import com.discord.api.permission.Permission
@@ -27,6 +28,8 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
+import com.discord.widgets.hubs.HubDirectoriesStore
+import com.discord.widgets.hubs.HubStores
 import java.lang.ref.WeakReference
 import rx.Observable
 
@@ -223,16 +226,7 @@ class GuildScheduledEventDetailsViewModel(
     // endregion
 
     companion object {
-        /**
-         * Resolves the event and everything the sheet needs to decide what to offer.
-         *
-         * **Degraded for [GuildScheduledEventDetailsSource.Directory].** The reference reads the
-         * event out of `StoreDirectories.getGuildScheduledEventsForChannel(channelId)`, and takes
-         * the guild from the event's own embedded `guild` field. `StoreDirectories` does not exist
-         * in this target, so the directory branch falls back to the event store — which finds the
-         * event only when it also arrived by some other route. The guild-side of the branch is
-         * implemented, so restoring this is a one-expression change when that store lands.
-         */
+        /** Resolves the event and everything the sheet needs to decide what to offer. */
         fun observeStores(
             args: GuildScheduledEventDetailsArgs,
             observationDeck: ObservationDeck = ObservationDeckProvider.get(),
@@ -243,6 +237,7 @@ class GuildScheduledEventDetailsViewModel(
             permissionsStore: StorePermissions = StoreStream.getPermissions(),
             userSettingsStore: StoreUserSettings = StoreStream.getUserSettings(),
             selectedVoiceChannelStore: StoreVoiceChannelSelected = StoreStream.getVoiceChannelSelected(),
+            directoriesStore: HubDirectoriesStore = HubStores.directories,
         ): Observable<StoreState> = observationDeck.connectRx(
             guildScheduledEventsStore,
             guildsStore,
@@ -250,8 +245,16 @@ class GuildScheduledEventDetailsViewModel(
             channelsStore,
             permissionsStore,
             selectedVoiceChannelStore,
+            directoriesStore,
         ) {
-            val event = guildScheduledEventsStore.findEventFromStore(args.eventId)
+            val event = when (args.source) {
+                GuildScheduledEventDetailsSource.Guild ->
+                    guildScheduledEventsStore.findEventFromStore(args.eventId)
+                GuildScheduledEventDetailsSource.Directory -> args.channelId
+                    ?.let(directoriesStore::getGuildScheduledEventsForChannel)
+                    ?.invoke()
+                    ?.let { findDirectoryEvent(it, args.eventId) }
+            }
                 ?: return@connectRx StoreState()
 
             val guild = when (args.source) {
@@ -295,5 +298,8 @@ class GuildScheduledEventDetailsViewModel(
                 isRsvpUsersError = guildScheduledEventsStore.getIsGuildScheduledEventUsersError(),
             )
         }
+
+        internal fun findDirectoryEvent(entries: List<DirectoryEntryEvent>, eventId: Long): GuildScheduledEvent? =
+            entries.firstOrNull { it.guildScheduledEvent.id == eventId }?.guildScheduledEvent
     }
 }

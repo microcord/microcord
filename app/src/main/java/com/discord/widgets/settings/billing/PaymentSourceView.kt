@@ -11,10 +11,9 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.annotation.DrawableRes
 import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.core.os.ConfigurationCompat
 import com.discord.R
 import com.discord.models.domain.ModelPaymentSource
-import java.text.DateFormatSymbols
+import com.discord.utilities.time.TimeUtils
 import java.util.Locale
 
 class PaymentSourceView @JvmOverloads constructor(
@@ -49,8 +48,7 @@ class PaymentSourceView @JvmOverloads constructor(
             }
             is ModelPaymentSource.ModelPaymentSourceCard -> {
                 title.text = cardTitle(paymentSource.brand, paymentSource.last4)
-                val locale = ConfigurationCompat.getLocales(resources.configuration)[0] ?: Locale.getDefault()
-                val month = DateFormatSymbols(locale).months[paymentSource.expiresMonth - 1]
+                val month = TimeUtils.getLocalizedMonthName(paymentSource.expiresMonth, context)
                 subtext.text = context.getString(R.string.payment_source_card_expires)
                     .replace("{month}", month)
                     .replace("{year}", paymentSource.expiresYear.toString())

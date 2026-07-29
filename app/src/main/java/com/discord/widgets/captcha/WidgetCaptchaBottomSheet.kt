@@ -27,6 +27,8 @@ import com.google.android.material.button.MaterialButton
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.reflect.KClass
 
+private const val ARG_CAPTCHA_ERROR_BODY = "INTENT_EXTRA_CAPTCHA_ERROR_BODY"
+
 /**
  * "You need to solve a captcha" prompt: an explanation and one button that opens the challenge.
  *
@@ -149,7 +151,6 @@ class WidgetCaptchaBottomSheet : AppBottomSheet() {
     }
 
     companion object {
-        private const val ARG_CAPTCHA_ERROR_BODY = "INTENT_EXTRA_CAPTCHA_ERROR_BODY"
         private const val ARG_REQUEST_KEY = "INTENT_EXTRA_REQUEST_CODE"
         private const val RESULT_EXTRA_CAPTCHA_TOKEN = "INTENT_EXTRA_CAPTCHA_TOKEN"
         private const val RESULT_EXTRA_CAPTCHA_RQTOKEN = "INTENT_EXTRA_CAPTCHA_RQTOKEN"

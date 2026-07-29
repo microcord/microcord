@@ -25,6 +25,7 @@ import com.discord.utilities.view.extensions.setOnImeActionDone
 import com.discord.utilities.view.validators.Input
 import com.discord.utilities.view.validators.ValidationManager
 import com.discord.views.LoadingButton
+import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.textfield.TextInputLayout
 
@@ -170,27 +171,21 @@ class WidgetNuxChannelPrompt : AppFragment(R.layout.widget_nux_channel_prompt) {
         error.showErrorToasts = validationManager.setErrors(error.messages).isNotEmpty()
     }
 
-    /**
-     * Leaves onboarding through the invite-share flow.
-     *
-     * `WidgetGuildInviteShare` / `WidgetGuildInviteShareSheet` are not reconstructed, so the seam
-     * below stands in for the reference's feature-flagged choice between them. With the default
-     * implementation the user simply lands back on the app with the new guild selected — no invite
-     * prompt — which is a degradation, not a dead end.
-     */
     private fun finishActivity(guildId: Long) {
-        inviteShareNavigation?.invoke(requireContext(), guildId)
-            ?: AppLog.w("Guild invite share is not reconstructed; skipping the invite prompt.")
-        activity?.finish()
+        WidgetGuildInviteShare.launch(
+            context = requireContext(),
+            fragmentManager = parentFragmentManager,
+            guildId = guildId,
+            isNuxFlow = true,
+            source = GUILD_CREATE_SOURCE,
+        )
+        requireActivity().finish()
     }
 
     companion object {
         private const val INTENT_EXTRA_GUILD_ID = "com.discord.intent.extra.EXTRA_GUILD_ID"
         private const val FIELD_NAME = "name"
-
-        /** `(context, guildId)`; installed by whoever builds the invite-share screens. */
-        @JvmStatic
-        var inviteShareNavigation: ((Context, Long) -> Unit)? = null
+        private const val GUILD_CREATE_SOURCE = "Guild Create"
 
         fun launch(context: Context, guildId: Long) {
             AppScreenRouter.launch(

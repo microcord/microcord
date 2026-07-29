@@ -8,23 +8,36 @@ import android.widget.ImageView
 import android.widget.RelativeLayout
 import android.widget.TextView
 import androidx.coordinatorlayout.widget.CoordinatorLayout
+import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
-import com.discord.api.guildscheduledevent.GuildScheduledEvent
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppToast
 import com.discord.app.appViewModels
 import com.discord.rtcconnection.mediaengine.MediaEngineConnection
 import com.discord.stores.StoreAudioManagerV2
+import com.discord.stores.StoreNotices
+import com.discord.stores.StoreStream
 import com.discord.stores.StoreVoiceParticipants
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.streams.StreamContext
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
+import com.discord.widgets.channels.WidgetGroupInviteFriends
+import com.discord.widgets.channels.invite.GroupInviteFriendsSheet
+import com.discord.widgets.channels.invite.GroupInviteFriendsSheetFeatureFlag
+import com.discord.widgets.guildscheduledevent.WidgetEndGuildScheduledEventBottomSheet
+import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventDetailsBottomSheet
+import com.discord.widgets.guildscheduledevent.WidgetPreviewGuildScheduledEvent
+import com.discord.widgets.guildscheduledevent.toModel
+import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
 import com.discord.widgets.notice.WidgetNoticeDialog
+import com.discord.widgets.notice.WidgetNoticeNuxOverlay
+import com.discord.widgets.settings.WidgetSettingsVoice
+import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.widgets.voice.VoiceStoreAccess
 import com.discord.widgets.voice.controls.AnchoredVoiceControlsView
 import com.discord.widgets.voice.model.CameraState
@@ -131,6 +144,11 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
         bindViews(view)
         setBottomSheetState(BottomSheetBehavior.STATE_EXPANDED)
         controls.setOnPttPressedListener(viewModel::onPttPressed)
+        WidgetEndGuildScheduledEventBottomSheet.registerForResult(
+            this,
+            END_EVENT_REQUEST_KEY,
+            viewModel::onDisconnect,
+        )
     }
 
     override fun onResume() {
@@ -138,8 +156,19 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
         participantsAdapter = MGRecyclerAdapter.configure(
             CallParticipantsAdapter(recycler, isCallPreview = false, quantizeUserAvatars = true),
         )
-        participantsAdapter.onEventClicked = { event -> Navigation.showEventDetails(this, event) }
-        participantsAdapter.onStartEventClicked = { event -> Navigation.startEvent(this, event) }
+        participantsAdapter.onEventClicked = { event ->
+            WidgetGuildScheduledEventDetailsBottomSheet.showForGuild(parentFragmentManager, event.id)
+        }
+        participantsAdapter.onStartEventClicked = { event ->
+            WidgetPreviewGuildScheduledEvent.launch(
+                requireContext(),
+                event.toModel(),
+                WidgetPreviewGuildScheduledEvent.ExistingEventData(
+                    event.id,
+                    WidgetPreviewGuildScheduledEvent.Action.START_EVENT,
+                ),
+            )
+        }
         // Rows carry a stream preview that appears and disappears, so the recycler must be allowed
         // to resize with its content.
         recycler.setHasFixedSize(false)
@@ -182,10 +211,10 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
 
         headerInvite.visibility = if (viewState.showInviteOption) View.VISIBLE else View.GONE
         headerInvite.setOnClickListener {
-            Navigation.inviteToChannel(this, viewState.channel, INVITE_ANALYTICS_SOURCE)
+            launchChannelInvite(this, viewState.channel, INVITE_ANALYTICS_SOURCE)
         }
 
-        headerSettings.setOnClickListener { Navigation.launchVoiceSettings(this) }
+        headerSettings.setOnClickListener { WidgetSettingsVoice.launch(requireContext()) }
 
         headerNoiseCancellation.setOnClickListener { viewModel.onNoiseCancellationPressed() }
         val noiseCancellationActive = viewState.isNoiseCancellationActive
@@ -215,10 +244,13 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
                 }
                 participantsAdapter.onToggleRingingClicked = viewModel::onToggleRingingPressed
                 participantsAdapter.onInviteFriendsClicked = {
-                    Navigation.inviteToChannel(this, channel, INVITE_ANALYTICS_SOURCE)
+                    launchChannelInvite(this, channel, INVITE_ANALYTICS_SOURCE)
                 }
                 participantsAdapter.onEmbeddedActivityClicked = {
-                    Navigation.launchEmbeddedActivity(this, channel)
+                    showNotice(
+                        R.string.embedded_activities_desktop_only_modal_title,
+                        R.string.embedded_activities_desktop_only_modal_description,
+                    )
                 }
             }
             is CenterContent.Empty -> {
@@ -294,7 +326,13 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
         voiceUser: StoreVoiceParticipants.VoiceUser,
         channel: Channel,
     ) {
-        Navigation.showUserSheet(this, voiceUser.user.id, channel)
+        WidgetUserSheet.show(
+            childFragmentManager,
+            voiceUser.user.id,
+            channel.id,
+            channel.guildId,
+            isVoiceContext = true,
+        )
     }
 
     private fun onStreamPreviewClicked(streamContext: StreamContext) {
@@ -347,9 +385,13 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
             is WidgetVoiceBottomSheetViewModel.Event.ShowNoiseCancellationBottomSheet ->
                 WidgetNoiseCancellationBottomSheet.show(this)
             is WidgetVoiceBottomSheetViewModel.Event.ShowOverlayNux ->
-                Navigation.enqueueOverlayNux()
-            is WidgetVoiceBottomSheetViewModel.Event.ShowEventEnd ->
-                Navigation.showEndEvent(this, event.guildScheduledEvent)
+                enqueueOverlayNux()
+            is WidgetVoiceBottomSheetViewModel.Event.ShowEventEnd -> WidgetEndGuildScheduledEventBottomSheet.show(
+                parentFragmentManager,
+                END_EVENT_REQUEST_KEY,
+                event.guildScheduledEvent.guildId,
+                event.guildScheduledEvent.id,
+            )
             is WidgetVoiceBottomSheetViewModel.Event.EnqueueCallFeedbackSheet ->
                 Navigation.enqueueCallFeedback(
                     event.channelId,
@@ -404,41 +446,29 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
         )
     }
 
+    private fun enqueueOverlayNux() {
+        StoreStream.getNotices().requestToShow(
+            StoreNotices.Notice(
+                name = WidgetNoticeNuxOverlay.NOTICE_NAME,
+                priority = 0,
+                persist = true,
+                show = { activity ->
+                    WidgetNoticeNuxOverlay().show(
+                        activity.supportFragmentManager,
+                        WidgetNoticeNuxOverlay.NOTICE_NAME,
+                    )
+                    true
+                },
+            ),
+        )
+    }
+
     /**
-     * Navigation this sheet needs but cannot reach: several screens and one service that are either
-     * still being reconstructed or owned by another package. Each defaults to a no-op so the sheet
-     * is fully usable without them, and each is a one-line assignment for the owning agent.
-     *
-     * Reference call sites, in order: `WidgetCallFullscreen.launch`,
-     * `ChannelInviteLaunchUtils.inviteToChannel`, `WidgetSettingsVoice.launch`, `WidgetUserSheet`,
-     * `WidgetEndGuildScheduledEventBottomSheet.show`, `CallFeedbackSheetNavigator.enqueueNotice`,
-     * and the two capacity dialogs. Screen sharing is no longer in this list — it goes through
-     * [StreamNavigator] directly.
+     * Remaining destinations whose reference classes do not exist in the target yet.
      */
     object Navigation {
         @JvmField
         var launchFullscreenCall: (Context, Long, String?) -> Unit = { _, _, _ -> }
-
-        @JvmField
-        var inviteToChannel: (AppBottomSheet, Channel, String) -> Unit = { _, _, _ -> }
-
-        @JvmField
-        var launchVoiceSettings: (AppBottomSheet) -> Unit = {}
-
-        @JvmField
-        var showUserSheet: (AppBottomSheet, Long, Channel) -> Unit = { _, _, _ -> }
-
-        @JvmField
-        var showEventDetails: (AppBottomSheet, GuildScheduledEvent) -> Unit = { _, _ -> }
-
-        @JvmField
-        var startEvent: (AppBottomSheet, GuildScheduledEvent) -> Unit = { _, _ -> }
-
-        @JvmField
-        var showEndEvent: (AppBottomSheet, GuildScheduledEvent) -> Unit = { _, _ -> }
-
-        @JvmField
-        var launchEmbeddedActivity: (AppBottomSheet, Channel) -> Unit = { _, _ -> }
 
         @JvmField
         var showCameraCapacityDialog: (AppBottomSheet, Int) -> Unit = { _, _ -> }
@@ -449,16 +479,11 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
         @JvmField
         var enqueueCallFeedback: (Long, String?, String?, Long, Int) -> Unit = { _, _, _, _, _ -> }
 
-        /**
-         * Reference: `WidgetNoticeNuxOverlay.enqueue()`, which pushes the overlay NUX onto
-         * `StoreNotices`. That store does not exist here, so the notice is not queued.
-         */
-        @JvmField
-        var enqueueOverlayNux: () -> Unit = {}
     }
 
     companion object {
         private const val EXTRA_CHANNEL_ID = "com.discord.intent.extra.EXTRA_CHANNEL_ID"
+        private const val END_EVENT_REQUEST_KEY = "END_EVENT_REQUEST_KEY"
         private const val ARG_FEATURE_CONTEXT = "ARG_FEATURE_CONTEXT"
         private const val ARG_FORWARD_TO_FULLSCREEN_IF_VIDEO_ACTIVATED =
             "ARG_FORWARD_TO_FULLSCREEN_IF_VIDEO_ACTIVATED"
@@ -480,5 +505,21 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
             }
             show(fragmentManager, WidgetVoiceBottomSheet::class.java.simpleName)
         }
+    }
+}
+
+internal fun launchChannelInvite(fragment: Fragment, channel: Channel, source: String) {
+    if (channel.guildId != 0L) {
+        WidgetGuildInviteShare.launch(
+            fragment.requireContext(),
+            fragment.childFragmentManager,
+            channel.guildId,
+            channel.id,
+            source = source,
+        )
+    } else if (GroupInviteFriendsSheetFeatureFlag.INSTANCE.isEnabled()) {
+        GroupInviteFriendsSheet.show(fragment.childFragmentManager, channel.id, source)
+    } else {
+        WidgetGroupInviteFriends.launch(fragment.requireContext(), channel.id, source)
     }
 }

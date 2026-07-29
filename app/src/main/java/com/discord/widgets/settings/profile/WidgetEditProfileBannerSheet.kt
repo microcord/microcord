@@ -1,0 +1,173 @@
+package com.discord.widgets.settings.profile
+
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.os.Bundle
+import android.view.View
+import android.widget.ImageView
+import android.widget.TextView
+import androidx.core.widget.ImageViewCompat
+import androidx.fragment.app.FragmentManager
+import com.discord.R
+import com.discord.app.AppBottomSheet
+import com.discord.app.AppToast
+import com.discord.app.appViewModels
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.bindToComponentLifecycle
+import com.google.android.material.button.MaterialButton
+import com.jaredrummler.android.colorpicker.ColorPickerDialog
+import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
+
+class WidgetEditProfileBannerSheet : AppBottomSheet() {
+    var onChangeProfileBannerImage: () -> Unit = {}
+    var onRemoveProfileBannerImage: () -> Unit = {}
+    var onColorSelected: (Int?) -> Unit = {}
+
+    private val defaultBannerColorHex get() = argumentsOrDefault.getString(ARG_DEFAULT_BANNER_COLOR_HEX, "#000000")
+    private val viewModel: EditProfileBannerSheetViewModel by appViewModels {
+        EditProfileBannerSheetViewModel(
+            defaultBannerColorHex,
+            argumentsOrDefault.getString(ARG_INITIAL_COLOR_PREVIEW_HEX),
+        )
+    }
+    private var colorPickerDialog: ColorPickerDialog? = null
+
+    private lateinit var colorContainer: View
+    private lateinit var colorTitle: TextView
+    private lateinit var colorPreview: ImageView
+    private lateinit var changeImageContainer: View
+    private lateinit var changeImageTitle: TextView
+    private lateinit var removeImage: TextView
+    private lateinit var premiumUpsell: MaterialButton
+
+    override fun getContentViewResId() = R.layout.widget_edit_profile_banner_sheet
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        colorContainer = view.findViewById(R.id.banner_color_item_container)
+        colorTitle = view.findViewById(R.id.banner_color_item_title)
+        colorPreview = view.findViewById(R.id.banner_color_preview)
+        changeImageContainer = view.findViewById(R.id.banner_change_image_item_container)
+        changeImageTitle = view.findViewById(R.id.banner_change_image_item_title)
+        removeImage = view.findViewById(R.id.banner_remove_image_item)
+        premiumUpsell = view.findViewById(R.id.premium_upsell_button)
+
+        val hasBanner = argumentsOrDefault.getBoolean(ARG_HAS_BANNER_IMAGE)
+        changeImageTitle.setText(
+            if (hasBanner) R.string.user_settings_change_profile_banner else R.string.user_settings_upload_profile_banner,
+        )
+        removeImage.visibility = visible(hasBanner)
+        removeImage.setOnClickListener {
+            onRemoveProfileBannerImage()
+            dismiss()
+        }
+        premiumUpsell.setOnClickListener { AppToast.show(this, R.string.premium_required) }
+        if (isGuildContext) {
+            colorTitle.setText(R.string.change_identity_profile_color)
+            changeImageTitle.setText(R.string.change_identity_profile_banner)
+            removeImage.setText(R.string.change_identity_reset_banner)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        viewModel.observeViewState().bindToComponentLifecycle(this)
+            .appSubscribe(WidgetEditProfileBannerSheet::class.java, onNext = ::configureUi)
+    }
+
+    override fun onPause() {
+        colorPickerDialog?.dismiss()
+        colorPickerDialog = null
+        super.onPause()
+        dismiss()
+    }
+
+    private fun configureUi(state: EditProfileBannerSheetViewModel.ViewState) {
+        val color = runCatching { Color.parseColor(state.bannerColorHex) }.getOrNull()
+        colorPreview.visibility = if (color == null) View.INVISIBLE else View.VISIBLE
+        color?.let { ImageViewCompat.setImageTintList(colorPreview, ColorStateList.valueOf(it)) }
+        colorContainer.setOnClickListener {
+            launchColorPicker(color ?: runCatching { Color.parseColor(defaultBannerColorHex) }.getOrDefault(Color.BLACK))
+        }
+        premiumUpsell.visibility = visible(state.showPremiumUpsell)
+        changeImageContainer.setOnClickListener {
+            if (state.showPremiumUpsell) {
+                AppToast.show(this, R.string.premium_required)
+            } else {
+                onChangeProfileBannerImage()
+                dismiss()
+            }
+        }
+    }
+
+    private fun launchColorPicker(initialColor: Int) {
+        val configured = ColorPickerDialog.newBuilder()
+            .setDialogTitle(R.string.user_settings_profile_color_select_color)
+            .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
+            .setColor(initialColor)
+            .setShowAlphaSlider(false)
+            .setAllowPresets(false)
+            .create()
+        val picker = object : ColorPickerDialog() {
+            override fun onStart() {
+                super.onStart()
+                (dialog as? androidx.appcompat.app.AlertDialog)?.setButton(
+                    android.content.DialogInterface.BUTTON_NEUTRAL,
+                    getString(R.string.reset),
+                ) { _, _ ->
+                    viewModel.updateColorPreview(null)
+                    onColorSelected(null)
+                    dismiss()
+                }
+            }
+        }.apply {
+            arguments = configured.arguments
+            setColorPickerDialogListener(object : ColorPickerDialogListener {
+                override fun onColorSelected(dialogId: Int, color: Int) {
+                    viewModel.updateColorPreview(colorHex(color))
+                    onColorSelected(color and 0xFFFFFF)
+                }
+
+                override fun onDialogDismissed(dialogId: Int) = Unit
+            })
+        }
+        picker.show(parentFragmentManager, DIALOG_TAG_COLOR_PICKER)
+        colorPickerDialog = picker
+    }
+
+    private val isGuildContext get() = argumentsOrDefault.containsKey(EXTRA_GUILD_ID)
+
+    companion object {
+        private const val ARG_DEFAULT_BANNER_COLOR_HEX = "ARG_DEFAULT_BANNER_COLOR_HEX"
+        private const val ARG_INITIAL_COLOR_PREVIEW_HEX = "ARG_INITIAL_COLOR_PREVIEW_HEX"
+        private const val ARG_HAS_BANNER_IMAGE = "ARG_HAS_BANNER_IMAGE"
+        private const val EXTRA_GUILD_ID = "com.discord.intent.extra.EXTRA_GUILD_ID"
+        private const val DIALOG_TAG_COLOR_PICKER = "DIALOG_TAG_COLOR_PICKER"
+
+        fun show(
+            guildId: Long? = null,
+            defaultBannerColorHex: String,
+            initialColorPreviewHex: String?,
+            hasBannerImage: Boolean,
+            fragmentManager: FragmentManager,
+            onChangeProfileBannerImage: () -> Unit = {},
+            onRemoveProfileBannerImage: () -> Unit = {},
+            onColorSelected: (Int?) -> Unit = {},
+        ) {
+            WidgetEditProfileBannerSheet().apply {
+                arguments = Bundle().apply {
+                    putString(ARG_DEFAULT_BANNER_COLOR_HEX, defaultBannerColorHex)
+                    putString(ARG_INITIAL_COLOR_PREVIEW_HEX, initialColorPreviewHex)
+                    putBoolean(ARG_HAS_BANNER_IMAGE, hasBannerImage)
+                    guildId?.let { putLong(EXTRA_GUILD_ID, it) }
+                }
+                this.onChangeProfileBannerImage = onChangeProfileBannerImage
+                this.onRemoveProfileBannerImage = onRemoveProfileBannerImage
+                this.onColorSelected = onColorSelected
+            }.show(fragmentManager, WidgetEditProfileBannerSheet::class.java.name)
+        }
+
+        private fun visible(value: Boolean) = if (value) View.VISIBLE else View.GONE
+        private fun colorHex(color: Int) = String.format("#%06X", color and 0xFFFFFF)
+    }
+}

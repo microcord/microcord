@@ -72,7 +72,6 @@ object AuthRequests {
             is AuthAction.ResendEmail -> resendEmail(callback)
             is AuthAction.VerifyAge -> verifyAge(action, callback)
             is AuthAction.ForgotPassword -> forgotPassword(action, captchaKey, captchaRqtoken, callback)
-            is AuthAction.ResetPassword -> callback(AuthResult.Success())
             is AuthAction.ChangePassword -> changePassword(action, callback)
         }
     }
@@ -116,6 +115,7 @@ object AuthRequests {
                     // already declined to dispatch it as a login, so the code screen is next.
                     val ticket = result.ticket
                     if (result.mfa && ticket != null) {
+                        pendingLogin = null
                         AuthResult.Challenge(
                             AuthRoute.MFA,
                             AuthUiState(route = AuthRoute.MFA, ticket = ticket, identifier = identifier),
@@ -149,9 +149,13 @@ object AuthRequests {
                                 route = AuthRoute.PHONE_VERIFICATION,
                                 identifier = identifier,
                                 phone = identifier,
+                                phonePurpose = AuthPhonePurpose.LOGIN,
                             ),
                         )
-                        else -> null
+                        else -> {
+                            pendingLogin = null
+                            null
+                        }
                     }
                 },
             )
@@ -230,19 +234,46 @@ object AuthRequests {
      * in-memory UI state only, never persisted.
      */
     private fun verifyPhone(action: AuthAction.VerifyPhone, callback: (AuthResult) -> Unit) {
-        RestAPI.api
+        val request = RestAPI.api
             .phoneVerificationsVerify(RestAPIParams.VerificationCode(action.phone, action.code))
             .requireSuccessful()
-            .dispatch("REST: verify phone", callback) { verification ->
-                AuthResult.Challenge(
-                    AuthRoute.REGISTER_ACCOUNT,
-                    AuthUiState(
-                        route = AuthRoute.REGISTER_ACCOUNT,
-                        phone = action.phone,
-                        phoneToken = verification.token,
-                    ),
-                )
+
+        if (action.purpose != AuthPhonePurpose.LOGIN) {
+            request.dispatch("REST: verify phone", callback) { verification ->
+                verifiedPhoneResult(action.purpose, action.phone, verification.token)
             }
+            return
+        }
+
+        request.execute("REST: verify phone", callback) { verification ->
+            authentication.authorizeIP(verification.token)
+                .requireSuccessfulEmpty()
+                .execute("REST: authorize IP", callback) {
+                    val credentials = pendingLogin
+                    if (credentials == null) callback(AuthResult.Success(nextRoute = AuthRoute.LOGIN))
+                    else login(credentials, null, null, undelete = false, callback = callback)
+                }
+        }
+    }
+
+    internal fun verifiedPhoneResult(
+        purpose: AuthPhonePurpose,
+        phone: String,
+        token: String,
+    ): AuthResult.Challenge = when (purpose) {
+        AuthPhonePurpose.REGISTRATION -> AuthResult.Challenge(
+            AuthRoute.REGISTER_ACCOUNT,
+            AuthUiState(
+                route = AuthRoute.REGISTER_ACCOUNT,
+                phone = phone,
+                phoneToken = token,
+            ),
+        )
+        AuthPhonePurpose.PASSWORD_RESET -> AuthResult.Challenge(
+            AuthRoute.RESET_PASSWORD,
+            AuthUiState(route = AuthRoute.RESET_PASSWORD, resetToken = token),
+        )
+        AuthPhonePurpose.LOGIN -> error("Login phone verification must authorize the IP before retrying")
     }
 
     private fun verifyMfa(action: AuthAction.VerifyMfa, callback: (AuthResult) -> Unit) {
@@ -304,7 +335,24 @@ object AuthRequests {
         authentication
             .forgotPassword(login, captchaKey, captchaRqtoken)
             .requireSuccessfulEmpty()
-            .dispatch("REST: forgot password", callback) { AuthResult.Success(message = login) }
+            .dispatch(
+                tag = "REST: forgot password",
+                callback = callback,
+                onError = { error ->
+                    if (error.code == CODE_PHONE_IP_AUTHORIZATION_REQUIRED) {
+                        AuthResult.Challenge(
+                            AuthRoute.PHONE_VERIFICATION,
+                            AuthUiState(
+                                route = AuthRoute.PHONE_VERIFICATION,
+                                phone = login,
+                                phonePurpose = AuthPhonePurpose.PASSWORD_RESET,
+                            ),
+                        )
+                    } else {
+                        null
+                    }
+                },
+            ) { AuthResult.Success(message = login) }
     }
 
     private fun changePassword(action: AuthAction.ChangePassword, callback: (AuthResult) -> Unit) {
@@ -332,6 +380,10 @@ object AuthRequests {
     @Volatile
     private var pendingLogin: AuthAction.Login? = null
 
+    internal fun cancelPendingLogin() {
+        pendingLogin = null
+    }
+
     // region plumbing
 
     /**
@@ -347,6 +399,15 @@ object AuthRequests {
         onError: ((RestApiError) -> AuthResult?)? = null,
         onSuccess: (T) -> AuthResult,
     ) {
+        execute(tag, callback, onError) { value -> callback(onSuccess(value)) }
+    }
+
+    private fun <T> Observable<T>.execute(
+        tag: String,
+        callback: (AuthResult) -> Unit,
+        onError: ((RestApiError) -> AuthResult?)? = null,
+        onSuccess: (T) -> Unit,
+    ) {
         restSubscribeOn(retry = false)
             .ui()
             .appSubscribe(
@@ -356,7 +417,7 @@ object AuthRequests {
                     error.showErrorToasts = false
                     callback(onError?.invoke(error) ?: defaultFailure(error))
                 },
-            ) { value -> callback(onSuccess(value)) }
+            ) { value -> onSuccess(value) }
     }
 
     /**

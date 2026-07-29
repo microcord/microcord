@@ -55,7 +55,7 @@ class WidgetBanUser : AppDialog(R.layout.widget_ban_user) {
         view.findViewById<View>(R.id.ban_user_confirm).setOnClickListener {
             val reason = view.findViewById<TextInputLayout>(R.id.ban_user_reason)
                 .getTextOrEmpty()
-                .takeUnless { it.isBlank() }
+                .asAuditLogReason()
 
             RestAPI.api.banGuildMember(
                 guildId,
@@ -82,11 +82,7 @@ class WidgetBanUser : AppDialog(R.layout.widget_ban_user) {
     /** How many days of the banned member's messages to delete; `0` keeps all of them. */
     private fun deleteMessageDays(): Int {
         val checkedIndex = deleteHistoryRadioManager?.checkedButtonIndex ?: 0
-        return when (historyRadios.getOrNull(checkedIndex)?.id) {
-            R.id.ban_user_delete_messages_1_day -> 1
-            R.id.ban_user_delete_messages_7_days -> 7
-            else -> 0
-        }
+        return deleteMessageDays(historyRadios.getOrNull(checkedIndex)?.id)
     }
 
     companion object {
@@ -112,3 +108,11 @@ class WidgetBanUser : AppDialog(R.layout.widget_ban_user) {
             launch(userName, guildId, userId, fragmentManager)
     }
 }
+
+internal fun deleteMessageDays(checkedId: Int?): Int = when (checkedId) {
+    R.id.ban_user_delete_messages_1_day -> 1
+    R.id.ban_user_delete_messages_7_days -> 7
+    else -> 0
+}
+
+internal fun String.asAuditLogReason(): String? = takeUnless(String::isBlank)

@@ -4,9 +4,4 @@ package com.discord.widgets.channels.list.items
 class ChannelListBottomNavSpaceItem(val guildId: Long = 0L) : ChannelListItem {
     override val type: Int = ChannelListItem.TYPE_BOTTOM_NAV_SPACE
     override val key: String = "$type$guildId"
-
-    override fun equals(other: Any?): Boolean =
-        other is ChannelListBottomNavSpaceItem && other.guildId == guildId
-    override fun hashCode(): Int = guildId.hashCode()
-    override fun toString(): String = "ChannelListBottomNavSpaceItem(guildId=$guildId)"
 }

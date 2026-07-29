@@ -4,7 +4,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
-import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.guilds.computeShortName
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.utilities.mg_recycler.SingleTypePayload
@@ -44,12 +44,9 @@ class HubDomainViewHolder(
         val guildInfo = data.data
         text.text = guildInfo.name
         guildView.useGuildIconCorners()
-        // The reference hands GuildView the raw `icon` hash here, which is not a loadable URI and so
-        // renders an empty avatar with the initials fallback suppressed. Resolved through IconUtils
-        // instead, exactly as the sibling row for already-joined guilds does.
         guildView.configure(
-            IconUtils.getForGuild(guildInfo.id, guildInfo.icon),
-            computeGuildInitials(guildInfo.name),
+            guildInfo.icon,
+            computeShortName(guildInfo.name),
         )
         card.setOnClickListener { onClickListener(guildInfo) }
     }

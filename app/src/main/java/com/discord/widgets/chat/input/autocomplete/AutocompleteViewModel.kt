@@ -3,12 +3,24 @@ package com.discord.widgets.chat.input.autocomplete
 import androidx.annotation.MainThread
 import androidx.annotation.VisibleForTesting
 import com.discord.app.AppViewModel
+import com.discord.models.commands.Application
+import com.discord.models.commands.ApplicationCommand
+import com.discord.models.commands.ApplicationCommandOption
+import com.discord.stores.CommandAutocompleteState
+import com.discord.stores.StoreStream
 import com.discord.utilities.rx.ui
 import com.discord.widgets.chat.input.AutocompleteStickerItem
+import com.discord.widgets.chat.input.WidgetChatInputDiscoveryCommandsModel
+import com.discord.widgets.chat.input.autocomplete.commands.buildRemoteCommandOptionRequest
+import com.discord.widgets.chat.input.models.ApplicationCommandData
+import com.discord.widgets.chat.input.models.AutocompleteApplicationCommands
 import com.discord.widgets.chat.input.models.ChatInputMentionsMap
 import com.discord.widgets.chat.input.models.MentionToken
+import java.util.concurrent.TimeUnit
 import rx.Observable
 import rx.Subscription
+import rx.subjects.BehaviorSubject
+import rx.subjects.PublishSubject
 
 /**
  * Owns the autocomplete popup's state for one composer.
@@ -31,11 +43,35 @@ class AutocompleteViewModel(
      * none and the sticker row stays hidden.
      */
     private val stickerSource: (MentionToken?) -> List<AutocompleteStickerItem> = { emptyList() },
+    private val commandQuery: (channelId: Long, query: String) -> Unit = { id, query ->
+        val channel = StoreStream.getChannels().getChannel(id)
+        StoreStream.getApplicationCommands().requestApplicationCommandsQuery(channel?.guildId, query)
+    },
+    private val commandStateSource: (Long) -> Observable<CommandState> = ::observeCommandState,
+    private val remoteOptionRequest: (channelId: Long, guildId: Long?, data: ApplicationCommandData) -> Unit =
+        { id, guildId, data ->
+            StoreStream.getApplicationCommands().requestApplicationCommandAutocompleteData(guildId, id, data)
+        },
 ) : AppViewModel<AutocompleteViewState>(AutocompleteViewState.Hidden) {
 
     private var autocompletables: Map<LeadingIdentifier, Set<Autocompletable>> = emptyMap()
     private var currentToken: MentionToken? = null
     private var subscription: Subscription? = null
+    private var commandSubscription: Subscription? = null
+    private var remoteRequestSubscription: Subscription? = null
+    private var selectedCommand: ApplicationCommandAutocompletable? = null
+    private var selectedCommandOption: ApplicationCommandOption? = null
+    private var lastCommandQuery: String? = null
+    private var commandState: CommandState = CommandState()
+    private var pendingRemoteQuery: Pair<String, String>? = null
+    private var sentRemoteQuery: Pair<String, String>? = null
+    private var lastJumpedSequenceId = -1
+    private val remoteRequests = PublishSubject.create<RemoteOptionRequest>()
+    private val events = PublishSubject.create<Event>()
+    private val commandBrowserState = BehaviorSubject.create(null as CommandBrowserState?)
+    private val selectedCommandState = BehaviorSubject.create<SelectedCommandViewState>(
+        SelectedCommandViewState.Hidden,
+    )
 
     /**
      * Where every recognised mention currently sits in the composer.
@@ -50,6 +86,13 @@ class AutocompleteViewModel(
     private var currentChannelId: Long? = null
 
     init {
+        remoteRequestSubscription = remoteRequests
+            .debounce(REMOTE_AUTOCOMPLETE_DELAY_MS, TimeUnit.MILLISECONDS)
+            .subscribe({ request ->
+                sentRemoteQuery = request.option.name to request.query
+                events.onNext(Event.RequestAutocompleteData(request.option))
+                remoteOptionRequest(request.channelId, request.guildId, request.data)
+            }, { /* a failed request is reflected by the store */ })
         setChannelId(channelId)
     }
 
@@ -67,15 +110,41 @@ class AutocompleteViewModel(
         if (channelId == currentChannelId) return
         currentChannelId = channelId
         subscription?.unsubscribe()
+        commandSubscription?.unsubscribe()
         subscription = null
+        commandSubscription = null
         autocompletables = emptyMap()
         currentToken = null
+        selectedCommand = null
+        selectedCommandOption = null
+        lastCommandQuery = null
+        commandState = CommandState()
+        pendingRemoteQuery = null
+        sentRemoteQuery = null
+        lastJumpedSequenceId = -1
         inputMentionsMap = ChatInputMentionsMap("", emptyMap())
         updateViewState(AutocompleteViewState.Hidden)
+        selectedCommandState.onNext(SelectedCommandViewState.Hidden)
+        commandBrowserState.onNext(null)
         if (channelId != null) {
             subscription = autocompletablesSource(channelId)
                 .ui(this)
                 .subscribe({ onAutocompletablesChanged(it) }, { /* keep the last good set */ })
+            commandSubscription = commandStateSource(channelId)
+                .ui(this)
+                .subscribe({
+                    val pending = pendingRemoteQuery
+                    if (pending != null && pending == sentRemoteQuery) {
+                        val result = it.remoteResults[pending.first]?.get(pending.second)
+                        if (result is CommandAutocompleteState.Choices || result is CommandAutocompleteState.Failed) {
+                            pendingRemoteQuery = null
+                            sentRemoteQuery = null
+                        }
+                    }
+                    commandState = it
+                    commandBrowserState.onNext(it.browserState())
+                    publish()
+                }, { /* keep the last good command state */ })
         }
     }
 
@@ -96,14 +165,169 @@ class AutocompleteViewModel(
     @MainThread
     fun onInputChanged(input: CharSequence, selection: IntRange) {
         val text = input.toString()
-        currentToken = AutocompleteModelUtils.getMessageAutocompleteToken(input, selection)
+        selectedCommand?.takeUnless { text.startsWith("/${it.command.name}") }?.let {
+            clearSelectedCommand()
+        }
+        currentToken = selectedCommandOption?.let { option ->
+            AutocompleteModelUtils.getCommandOptionAutocompleteToken(
+                input,
+                selection,
+                option,
+                selectedCommand?.command?.options.orEmpty(),
+            )
+        } ?: if (selectedCommand == null) {
+            AutocompleteModelUtils.getMessageAutocompleteToken(input, selection)
+        } else {
+            null
+        }
+        if (selectedCommand == null && currentToken?.leadingIdentifier == LeadingIdentifier.APP_COMMAND) {
+            val query = currentToken?.formattedToken?.trim().orEmpty()
+            val channelId = currentChannelId
+            if (query.isNotEmpty() && channelId != null && query != lastCommandQuery) {
+                lastCommandQuery = query
+                commandQuery(channelId, query)
+            }
+        }
         inputMentionsMap = AutocompleteModelUtils.mapInputToMentions(
             input = text,
             autocompletables = autocompletables,
             currentInputMentionMap = if (inputMentionsMap.input == text) inputMentionsMap.mentions else emptyMap(),
             isCommand = currentToken?.let { it.isAtStart && it.leadingIdentifier == LeadingIdentifier.APP_COMMAND } == true,
         )
+        requestRemoteOptionIfNeeded(input)
         publish()
+    }
+
+    fun observeSelectedCommandState(): Observable<SelectedCommandViewState> = selectedCommandState
+
+    fun observeEvents(): Observable<Event> = events
+
+    fun observeCommandBrowserState(): Observable<CommandBrowserState?> = commandBrowserState
+
+    @MainThread
+    fun selectAutocompleteItem(item: Autocompletable): Boolean {
+        if (item !is ApplicationCommandAutocompletable) return true
+        val application = item.application ?: return false
+        if (!item.hasPermissionToUse) return false
+        selectedCommand = item
+        selectedCommandOption = null
+        currentToken = null
+        selectedCommandState.onNext(
+            SelectedCommandViewState.SelectedCommand(item.command, null, application),
+        )
+        updateViewState(AutocompleteViewState.Hidden)
+        return true
+    }
+
+    @MainThread
+    fun selectCommandOption(option: ApplicationCommandOption) {
+        val command = selectedCommand ?: return
+        selectedCommandOption = option
+        pendingRemoteQuery = null
+        sentRemoteQuery = null
+        StoreStream.getApplicationCommands().clearAutocompleteResults()
+        selectedCommandState.onNext(
+            SelectedCommandViewState.SelectedCommand(
+                command.command,
+                option,
+                command.application ?: return,
+            ),
+        )
+    }
+
+    @MainThread
+    fun completeSelectedCommandOption() {
+        selectedCommandOption = null
+        pendingRemoteQuery = null
+        sentRemoteQuery = null
+        val command = selectedCommand ?: return
+        selectedCommandState.onNext(
+            SelectedCommandViewState.SelectedCommand(
+                command.command,
+                null,
+                command.application ?: return,
+            ),
+        )
+        currentToken = null
+        updateViewState(AutocompleteViewState.Hidden)
+    }
+
+    fun getSelectedCommandOption(): ApplicationCommandOption? = selectedCommandOption
+
+    fun getSelectedCommandOptions(): List<ApplicationCommandOption> =
+        selectedCommand?.command?.options.orEmpty()
+
+    fun getCommandBrowserCommandPositions(
+        discoveryCommands: WidgetChatInputDiscoveryCommandsModel,
+    ): Map<Long, Int> {
+        var offset = 0
+        return buildMap {
+            discoveryCommands.commandsByApplication.forEach { (application, commands) ->
+                put(
+                    application.id,
+                    offset + commands.indexOfFirst { it !is ApplicationCommandLoadingPlaceholder }.coerceAtLeast(0),
+                )
+                offset += commands.size
+            }
+        }
+    }
+
+    fun selectCommandBrowserApplication(application: Application) {
+        val browser = commandState.browser ?: return
+        val position = getCommandBrowserCommandPositions(browser)[application.id]
+        val store = StoreStream.getApplicationCommands()
+        if (position != null && store.hasFetchedApplicationCommands(application.id)) {
+            events.onNext(Event.ScrollAutocompletablesToApplication(application.id, position))
+        } else {
+            store.requestDiscoverCommands(application.id)
+        }
+    }
+
+    fun onCommandsBrowserScroll(firstVisible: Int, lastVisible: Int, itemCount: Int) {
+        val browser = commandState.browser ?: return
+        when {
+            browser.hasMoreBefore && firstVisible <= 3 -> StoreStream.getApplicationCommands().requestLoadMoreUp()
+            browser.hasMoreAfter && lastVisible >= itemCount - 9 ->
+                StoreStream.getApplicationCommands().requestLoadMoreDown()
+        }
+    }
+
+    @MainThread
+    private fun clearSelectedCommand() {
+        selectedCommand = null
+        selectedCommandOption = null
+        pendingRemoteQuery = null
+        selectedCommandState.onNext(SelectedCommandViewState.Hidden)
+    }
+
+    private fun requestRemoteOptionIfNeeded(input: CharSequence) {
+        val selected = selectedCommand ?: return
+        val option = selectedCommandOption?.takeIf(ApplicationCommandOption::autocomplete) ?: run {
+            pendingRemoteQuery = null
+            return
+        }
+        val channelId = currentChannelId ?: return
+        val token = currentToken ?: return
+        val query = token.formattedToken
+        val key = option.name to query
+        if (key == pendingRemoteQuery) return
+        pendingRemoteQuery = key
+        val application = selected.application ?: return
+        remoteRequests.onNext(
+            RemoteOptionRequest(
+                option,
+                query,
+                channelId,
+                StoreStream.getChannels().getChannel(channelId)?.guildId,
+                buildRemoteCommandOptionRequest(
+                    input,
+                    application,
+                    selected.command,
+                    option,
+                    inputMentionsMap.mentions.values,
+                ),
+            ),
+        )
     }
 
     /**
@@ -130,15 +354,138 @@ class AutocompleteViewModel(
         updateViewState(AutocompleteViewState.Hidden)
     }
 
-    private fun publish() = updateViewState(reduce(currentToken, autocompletables, stickerSource))
+    private fun publish() {
+        if (selectedCommand == null && currentToken?.token == COMMAND_DISCOVER_TOKEN) {
+            val browser = commandState.browser
+            if (browser != null) {
+                maybeEmitBrowserJump(browser)
+                updateViewState(
+                    AutocompleteViewState.Autocomplete(
+                        isAutocomplete = false,
+                        autocompletables = browser.getFlattenCommandsModel(),
+                        stickers = emptyList(),
+                        token = COMMAND_DISCOVER_TOKEN,
+                    ),
+                )
+                return
+            }
+        }
+        val remoteState = selectedCommandOption
+            ?.takeIf(ApplicationCommandOption::autocomplete)
+            ?.let { option ->
+                val query = currentToken?.formattedToken.orEmpty()
+                commandState.remoteResults[option.name]?.get(query)
+            }
+        val visibleRemoteState = remoteState.takeUnless {
+            pendingRemoteQuery == (selectedCommandOption?.name to currentToken?.formattedToken.orEmpty())
+        }
+        reduceRemoteOption(currentToken, selectedCommandOption, visibleRemoteState)?.let {
+            updateViewState(it)
+            return
+        }
+        val candidates = selectedCommandOption?.let {
+            AutocompleteModelUtils.autocompletablesForCommandOption(it, autocompletables)
+        } ?: autocompletables
+        updateViewState(
+            reduce(
+                currentToken,
+                candidates,
+                stickerSource,
+                allowEmptyQuery = selectedCommandOption != null,
+            ),
+        )
+    }
+
+    private fun maybeEmitBrowserJump(browser: WidgetChatInputDiscoveryCommandsModel) {
+        val applicationId = browser.jumpedApplicationId ?: return
+        if (browser.jumpedSequenceId == lastJumpedSequenceId) return
+        lastJumpedSequenceId = browser.jumpedSequenceId
+        events.onNext(
+            Event.ScrollAutocompletablesToApplication(
+                applicationId,
+                getCommandBrowserCommandPositions(browser)[applicationId] ?: 3,
+            ),
+        )
+    }
 
     override fun onCleared() {
         subscription?.unsubscribe()
+        commandSubscription?.unsubscribe()
+        remoteRequestSubscription?.unsubscribe()
         subscription = null
+        commandSubscription = null
+        remoteRequestSubscription = null
         super.onCleared()
     }
 
     companion object {
+        private const val COMMAND_DISCOVER_TOKEN = "/"
+        private const val REMOTE_AUTOCOMPLETE_DELAY_MS = 500L
+
+        private fun observeCommandState(channelId: Long): Observable<CommandState> {
+            val channel = StoreStream.getChannels().getChannel(channelId)
+                ?: return Observable.just(CommandState())
+            val commands = StoreStream.getApplicationCommands()
+            return Observable.combineLatest(
+                StoreStream.getUsers().observeMeId(),
+                StoreStream.getGuilds().observeComputed(channel.guildId),
+                commands.observeGuildApplications(channelId),
+                commands.observeQueryCommands(channelId),
+                commands.observeDiscoverCommands(channelId),
+                commands.observeFrecencyCommands(channel.guildId),
+                commands.observeAutocompleteResults(),
+            ) { myId, members, applications, queryCommands, discovery, frequent, remoteResults ->
+                CommandState(
+                    AutocompleteApplicationCommands(
+                        applications,
+                        queryCommands,
+                        WidgetChatInputDiscoveryCommandsModel.parseModelDiscoveryCommands(
+                            myId,
+                            members[myId]?.getRoles().orEmpty(),
+                            applications,
+                            discovery,
+                            includeHeaders = true,
+                            placeholdersCount = 3,
+                            frecencyCommands = frequent,
+                        ),
+                    ),
+                    frequent,
+                    remoteResults,
+                )
+            }
+        }
+
+        @VisibleForTesting
+        fun reduceRemoteOption(
+            token: MentionToken?,
+            option: ApplicationCommandOption?,
+            state: CommandAutocompleteState?,
+        ): AutocompleteViewState? {
+            if (option?.autocomplete != true) return null
+            token ?: return AutocompleteViewState.Hidden
+            if (state !is CommandAutocompleteState.Choices) {
+                return AutocompleteViewState.Autocomplete(
+                    isLoading = true,
+                    isError = state is CommandAutocompleteState.Failed,
+                    isAutocomplete = true,
+                    autocompletables = emptyList(),
+                    stickers = emptyList(),
+                    token = token.token,
+                )
+            }
+            val candidates = state.choices.mapTo(LinkedHashSet()) { choice ->
+                ApplicationCommandChoiceAutocompletable(
+                    com.discord.api.commands.CommandChoice(choice.name, choice.value),
+                    option.name,
+                )
+            }
+            return reduce(
+                token,
+                mapOf(LeadingIdentifier.NONE to candidates),
+                allowEmptyQuery = true,
+            )
+        }
+
         /**
          * The whole of the model's logic.
          *
@@ -155,13 +502,18 @@ class AutocompleteViewModel(
             token: MentionToken?,
             autocompletables: Map<LeadingIdentifier, Set<Autocompletable>>,
             stickerSource: (MentionToken?) -> List<AutocompleteStickerItem> = { emptyList() },
+            allowEmptyQuery: Boolean = false,
         ): AutocompleteViewState {
             if (token == null) return AutocompleteViewState.Hidden
 
-            val matches = AutocompleteModelUtils.filterMentionsFromToken(
-                token = token,
-                mentions = autocompletables.mapValues { (_, value) -> value.toList() },
-            )
+            val matches = if (allowEmptyQuery && token.formattedToken.isBlank()) {
+                autocompletables[token.leadingIdentifier].orEmpty().toList()
+            } else {
+                AutocompleteModelUtils.filterMentionsFromToken(
+                    token = token,
+                    mentions = autocompletables.mapValues { (_, value) -> value.toList() },
+                )
+            }
             val stickers = stickerSource(token)
             if (matches.isEmpty() && stickers.isEmpty()) return AutocompleteViewState.Hidden
 
@@ -175,4 +527,31 @@ class AutocompleteViewModel(
             )
         }
     }
+
+    data class CommandState(
+        val applicationCommands: AutocompleteApplicationCommands = AutocompleteApplicationCommands(),
+        val frequentCommands: List<ApplicationCommand> = emptyList(),
+        val remoteResults: Map<String, Map<String, CommandAutocompleteState>> = emptyMap(),
+    ) {
+        val browser: WidgetChatInputDiscoveryCommandsModel? get() = applicationCommands.discoveryCommands
+
+        fun browserState(): CommandBrowserState? = browser?.let {
+            CommandBrowserState(
+                frequentCommands,
+                applicationCommands.applications.filter { application ->
+                    application.commandCount > 0 ||
+                        (application.id == -2L && frequentCommands.isNotEmpty())
+                },
+                it,
+            )
+        }
+    }
+
+    private data class RemoteOptionRequest(
+        val option: ApplicationCommandOption,
+        val query: String,
+        val channelId: Long,
+        val guildId: Long?,
+        val data: ApplicationCommandData,
+    )
 }

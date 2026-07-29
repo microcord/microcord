@@ -8,8 +8,6 @@ import android.widget.ScrollView
 import android.widget.TextView
 import com.discord.R
 import com.discord.api.channel.Channel
-import com.discord.api.channel.isGuildTextChannel
-import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.permission.Permission
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppFragment
@@ -32,11 +30,11 @@ import com.discord.utilities.view.extensions.getTextOrEmpty
 import com.discord.utilities.view.extensions.setText
 import com.discord.views.CheckedSetting
 import com.discord.views.RadioManager
+import com.discord.widgets.channels.WidgetChannelSelector
 import com.discord.widgets.settings.SettingsNavigation
 import com.discord.widgets.settings.SettingsStrings
 import com.discord.widgets.settings.StatefulViews
 import com.facebook.drawee.view.SimpleDraweeView
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputLayout
 import rx.Observable
@@ -62,9 +60,6 @@ import rx.Observable
  *   `MGImages.requestImageCrop`/`prepareImageUpload`, which this project has not reconstructed
  *   (`docs/parity-audit/followups.md`). The icon renders read-only and the banner/splash sections are
  *   hidden rather than shown with a dead upload button.
- * - **Channel pickers are a plain chooser.** The reference opens `WidgetChannelSelector`, a
- *   searchable full screen that does not exist here; the eligible channels are listed in a dialog
- *   instead. Same result, less polish.
  */
 class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings_overview) {
 
@@ -112,6 +107,7 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
         super.onViewBound(view)
         setActionBarDisplayHomeAsUpEnabled()
         setActionBarTitle(R.string.overview)
+        retainInstance = true
 
         scroll = view.findViewById(R.id.server_settings_overview_scroll)
         icon = view.findViewById(R.id.server_settings_overview_icon)
@@ -151,6 +147,18 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
         // The two channel rows and the timeout row are set by a picker, not typed into, so they are
         // registered as optional: a guild legitimately has no AFK or system channel.
         state.addOptionalFields(afkChannel, systemChannel)
+        WidgetChannelSelector.registerForResult(this, REQUEST_KEY_AFK_CHANNEL, allowNullChannel = true) { id, _ ->
+            val channel = StoreStream.getChannels().getChannel(id)
+            state.put(afkChannel.id, channel)
+            configureAfkChannel(channel)
+            state.configureSaveActionView(save)
+        }
+        WidgetChannelSelector.registerForResult(this, REQUEST_KEY_SYSTEM_CHANNEL, allowNullChannel = true) { id, _ ->
+            val channel = StoreStream.getChannels().getChannel(id)
+            state.put(systemChannel.id, channel)
+            configureSystemChannel(channel)
+            state.configureSaveActionView(save)
+        }
     }
 
     override fun onViewBoundOrOnResume() {
@@ -175,15 +183,13 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
 
         configureAfkChannel(state.get(afkChannel.id, viewState.afkChannel))
         afkChannelWrap.setOnClickListener {
-            pickChannel(
-                title = R.string.form_label_afk_channel,
-                emptyLabel = R.string.no_afk_channel,
-                channels = viewState.voiceChannels,
-            ) { picked ->
-                state.put(afkChannel.id, picked)
-                configureAfkChannel(picked)
-                state.configureSaveActionView(save)
-            }
+            WidgetChannelSelector.launchForVoice(
+                this,
+                guild.id,
+                REQUEST_KEY_AFK_CHANNEL,
+                includeNoChannel = true,
+                noChannelStringId = R.string.no_afk_channel,
+            )
         }
 
         val afkTimeoutSeconds = state.get(afkTimeoutWrap.id, guild.afkTimeout)
@@ -196,16 +202,13 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
         val currentSystemChannel = state.get(systemChannel.id, viewState.systemChannel)
         configureSystemChannel(currentSystemChannel)
         systemChannelWrap.setOnClickListener {
-            pickChannel(
-                title = R.string.form_label_system_channel,
-                emptyLabel = R.string.no_system_channel,
-                channels = viewState.textChannels,
-            ) { picked ->
-                state.put(systemChannel.id, picked)
-                configureSystemChannel(picked)
-                configureSystemChannelToggles(guild, picked != null)
-                state.configureSaveActionView(save)
-            }
+            WidgetChannelSelector.launchForText(
+                this,
+                guild.id,
+                REQUEST_KEY_SYSTEM_CHANNEL,
+                includeNoChannel = true,
+                noChannelStringId = R.string.no_system_channel,
+            )
         }
         configureSystemChannelToggles(guild, currentSystemChannel != null)
 
@@ -250,6 +253,7 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
             val enabledOnServer = (guild.systemChannelFlags and flag) == 0
             toggle.setChecked(state.get(toggle.id, enabledOnServer), false)
             if (hasSystemChannel) {
+                toggle.alpha = 1f
                 toggle.setContainerClickListener {
                     toggle.toggle()
                     state.put(toggle.id, toggle.isChecked())
@@ -273,6 +277,7 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
             if (level == NOTIFICATION_ALL_MESSAGES && isAboveNotifyAllSize) {
                 radio.setDisabledTooltip(R.string.large_guild_notify_all_messages_description)
             } else {
+                radio.alpha = 1f
                 radio.setContainerClickListener {
                     notificationRadios.setChecked(radio)
                     state.put(STATE_ID_NOTIFICATION_DEFAULT, level)
@@ -341,27 +346,6 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
             }
     }
 
-    /**
-     * Stand-in for `WidgetChannelSelector`; see the class KDoc.
-     *
-     * "None" is always offered because both settings are legitimately unset.
-     */
-    private fun pickChannel(
-        title: Int,
-        emptyLabel: Int,
-        channels: List<Channel>,
-        onPicked: (Channel?) -> Unit,
-    ) {
-        val options: List<Channel?> = listOf<Channel?>(null) + channels
-        val labels: Array<CharSequence> = options
-            .map { it?.name ?: getString(emptyLabel) }
-            .toTypedArray()
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(title)
-            .setItems(labels) { _, which -> onPicked(options[which]) }
-            .show()
-    }
-
     /** The AFK timeout picker. Every option is a fixed value Discord accepts. */
     class AfkTimeoutBottomSheet : AppBottomSheet() {
 
@@ -408,6 +392,8 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
     companion object {
         private const val INTENT_EXTRA_GUILD_ID = "INTENT_EXTRA_GUILD_ID"
         private const val INVALID_GUILD_ID = -1L
+        private const val REQUEST_KEY_AFK_CHANNEL = "REQUEST_KEY_AFK_CHANNEL"
+        private const val REQUEST_KEY_SYSTEM_CHANNEL = "REQUEST_KEY_SYSTEM_CHANNEL"
 
         /**
          * The default-notification radios are not a single view, so [StatefulViews] needs a key that
@@ -494,8 +480,6 @@ class ServerSettingsOverviewViewModel(
             val guild: Guild,
             val afkChannel: Channel?,
             val systemChannel: Channel?,
-            val voiceChannels: List<Channel>,
-            val textChannels: List<Channel>,
             val isAboveNotifyAllSize: Boolean,
         ) : ViewState()
     }
@@ -521,12 +505,6 @@ class ServerSettingsOverviewViewModel(
                 guild = guild,
                 afkChannel = guild.afkChannelId?.let { byId[it] },
                 systemChannel = guild.systemChannelId?.let { byId[it] },
-                voiceChannels = storeState.guildChannels
-                    .filter { it.isGuildVocalChannel() }
-                    .sortedBy { it.position },
-                textChannels = storeState.guildChannels
-                    .filter { it.isGuildTextChannel() }
-                    .sortedBy { it.position },
                 // An unknown member count is treated as small, matching the reference's null branch.
                 isAboveNotifyAllSize =
                     (storeState.approximateMemberCount ?: 0) > NOTIFY_ALL_MEMBER_LIMIT,

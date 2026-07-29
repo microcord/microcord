@@ -1,7 +1,7 @@
 package com.discord.widgets.chat.input
 
 import android.text.TextUtils
-import androidx.fragment.app.Fragment
+import com.discord.app.AppFragment
 import com.discord.utilities.view.text.addBindedTextWatcher
 import com.lytefast.flexinput.widget.FlexEditText
 
@@ -13,9 +13,8 @@ import com.lytefast.flexinput.widget.FlexEditText
  * but clamping it permanently would also stop a long message from expanding — so the clamp is
  * applied only while the composer is empty and lifted the moment anything is typed.
  *
- * [previousMaxLines] is the value to restore. It is captured at construction and refreshed through
- * [setMaxLines] rather than read back from the view, because while the hint is truncated the view's
- * own `maxLines` is the clamp, not the real value.
+ * The reference's private FlexInput fork reports `maxLines` changes directly. Public FlexInput does
+ * not, so layout changes refresh the value to restore while the real line cap is active.
  */
 class WidgetChatInputTruncatedHint(val editText: FlexEditText) {
 
@@ -23,15 +22,10 @@ class WidgetChatInputTruncatedHint(val editText: FlexEditText) {
     private var hintIsTruncated = false
     private var previousMaxLines: Int = editText.maxLines
 
-    /**
-     * Tells the hint what the composer's real line cap is.
-     *
-     * The reference receives this through a `onMaxLinesChangedListener` on its own fork of
-     * `FlexEditText`; the published FlexInput has no such hook, so the composer calls this instead
-     * whenever it changes the cap.
-     */
-    fun setMaxLines(maxLines: Int) {
-        if (!hintIsTruncated) previousMaxLines = maxLines
+    init {
+        editText.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            if (!hintIsTruncated) previousMaxLines = editText.maxLines
+        }
     }
 
     fun setHint(hint: CharSequence) {
@@ -39,8 +33,7 @@ class WidgetChatInputTruncatedHint(val editText: FlexEditText) {
         syncHint()
     }
 
-    /** Re-evaluates on every edit; [Fragment] scoping detaches the watcher with the view. */
-    fun addBindedTextWatcher(fragment: Fragment) {
+    fun addBindedTextWatcher(fragment: AppFragment) {
         editText.addBindedTextWatcher(fragment) { syncHint() }
     }
 

@@ -11,6 +11,9 @@ import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.views.channelsidebar.GuildChannelSideBarActionsView
 import com.discord.views.channelsidebar.PrivateChannelSideBarActionsView
 import com.discord.widgets.channels.WidgetChannelSidebarActionsViewModel.ViewState
+import com.discord.widgets.channels.settings.WidgetTextChannelSettings
+import com.discord.widgets.channels.settings.WidgetThreadSettings
+import com.discord.widgets.channels.threads.browser.WidgetThreadBrowser
 import com.discord.widgets.search.WidgetSearch
 import com.discord.widgets.settings.WidgetMuteSettingsSheet
 import com.discord.widgets.user.calls.PrivateCallLauncher
@@ -76,14 +79,20 @@ class WidgetChannelSidebarActions : AppFragment(R.layout.widget_channel_sidebar_
                 guildView.isVisible = !viewState.shouldHideChannelSidebar
                 guildView.configure(
                     onSearchClicked = { WidgetSearch.launchForGuild(viewState.guildId, requireContext()) },
-                    // TODO(channels-wave): route to WidgetThreadBrowser.show(context, guildId,
-                    //  channelId, THREAD_BROWSER_SOURCE) once that screen exists.
-                    onThreadBrowserClicked = { onThreadBrowser?.invoke(viewState.guildId, viewState.channelId) },
+                    onThreadBrowserClicked = {
+                        WidgetThreadBrowser.show(
+                            requireContext(),
+                            viewState.guildId,
+                            viewState.channelId,
+                            THREAD_BROWSER_SOURCE,
+                        )
+                    },
                     onNotificationsClicked = { openNotificationSettings(viewState.channelId) },
                     onPinsClicked = { openPins(viewState.channelId) },
-                    // TODO(channels-wave): route to WidgetThreadSettings.launch /
-                    //  WidgetTextChannelSettings.launch once those screens exist.
-                    onSettingsClicked = { onChannelSettings?.invoke(viewState.channelId, viewState.isThread) },
+                    onSettingsClicked = {
+                        if (viewState.isThread) WidgetThreadSettings.launch(viewState.channelId, requireContext())
+                        else WidgetTextChannelSettings.launch(viewState.channelId, requireContext())
+                    },
                     hasUnseenPins = viewState.hasUnreadPins,
                     channelIsMuted = viewState.isMuted,
                     disablePins = viewState.disablePins,
@@ -125,24 +134,7 @@ class WidgetChannelSidebarActions : AppFragment(R.layout.widget_channel_sidebar_
     companion object {
         private const val SMALL_SCREEN_WIDTH_DP = 360
 
-        /**
-         * Analytics source the reference passes to the thread browser from this row. Kept so the
-         * value is not re-derived when `WidgetThreadBrowser` lands.
-         */
         const val THREAD_BROWSER_SOURCE = "Channel Side Bar"
-
-        /**
-         * Temporary seams for the two screens this row should launch directly.
-         *
-         * `WidgetThreadBrowser`, `WidgetThreadSettings` and `WidgetTextChannelSettings` do not
-         * exist yet; when they do, replace these with
-         * `WidgetThreadBrowser.show(context, guildId, channelId, THREAD_BROWSER_SOURCE)` and
-         * `WidgetThreadSettings.launch` / `WidgetTextChannelSettings.launch`, and delete the fields.
-         */
-        @JvmField var onThreadBrowser: ((Long, Long) -> Unit)? = null
-
-        /** `(channelId, isThread)`; see [onThreadBrowser]. */
-        @JvmField var onChannelSettings: ((Long, Boolean) -> Unit)? = null
 
         /**
          * Host-supplied navigation seams, installed by `WidgetHome`.

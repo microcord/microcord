@@ -5,7 +5,10 @@ import com.discord.api.permission.Permission
 import java.io.Serializable
 
 object MessageActions {
-    enum class Action { REPLY, EDIT, DELETE, COPY, PIN, UNPIN, ADD_REACTION, RETRY, CANCEL }
+    enum class Action {
+        REPLY, EDIT, DELETE, COPY, PIN, UNPIN, ADD_REACTION, RETRY, CANCEL,
+        PROFILE, MANAGE_REACTIONS, REMOVE_ALL_REACTIONS, MARK_UNREAD, COPY_ID, REPORT,
+    }
 
     data class Availability(val visible: Boolean, val enabled: Boolean = visible)
 
@@ -19,6 +22,15 @@ object MessageActions {
         val permissions: Long?,
         val pinned: Boolean,
         val channelType: Int,
+        val canEdit: Boolean? = null,
+        val canDelete: Boolean? = null,
+        val canManageMessages: Boolean = false,
+        val canAddReactions: Boolean? = null,
+        val canTogglePinned: Boolean? = null,
+        val canMarkUnread: Boolean = false,
+        val hasReactions: Boolean = false,
+        val isDeveloper: Boolean = false,
+        val isFailed: Boolean = false,
     ) : Serializable
 
     fun evaluate(input: Input): Map<Action, Availability> {
@@ -32,14 +44,23 @@ object MessageActions {
 
         return mapOf(
             Action.REPLY to Availability(remote && userMessage, canSend),
-            Action.EDIT to Availability(remote && userMessage && own),
-            Action.DELETE to Availability(remote && (own || canManage)),
+            Action.EDIT to Availability(input.canEdit ?: (remote && userMessage && own)),
+            Action.DELETE to Availability(input.canDelete ?: (remote && (own || canManage))),
             Action.COPY to Availability(input.hasContent),
-            Action.PIN to Availability(remote && !input.pinned, canPin),
-            Action.UNPIN to Availability(remote && input.pinned, canPin),
-            Action.ADD_REACTION to Availability(remote, privateChannel || input.has(Permission.ADD_REACTIONS)),
+            Action.PIN to Availability(remote && !input.pinned && (input.canTogglePinned ?: canPin)),
+            Action.UNPIN to Availability(remote && input.pinned && (input.canTogglePinned ?: canPin)),
+            Action.ADD_REACTION to Availability(
+                input.canAddReactions ?: remote,
+                input.canAddReactions ?: (privateChannel || input.has(Permission.ADD_REACTIONS)),
+            ),
             Action.RETRY to Availability(input.isLocal && input.canResend),
             Action.CANCEL to Availability(input.isLocal),
+            Action.PROFILE to Availability(input.authorId != null),
+            Action.MANAGE_REACTIONS to Availability(input.hasReactions),
+            Action.REMOVE_ALL_REACTIONS to Availability(input.hasReactions && input.canManageMessages),
+            Action.MARK_UNREAD to Availability(!input.isFailed && input.canMarkUnread),
+            Action.COPY_ID to Availability(input.isDeveloper && remote),
+            Action.REPORT to Availability(input.authorId != null && !own),
         )
     }
 

@@ -93,6 +93,7 @@ class SettingsViewModel(
             when (state) {
                 is UserProfileHeaderViewModel.ViewState.Loaded ->
                     state.copy(allowAnimationInReducedMotion = allowAnimation)
+                UserProfileHeaderViewModel.ViewState.Uninitialized -> state
             }
         }.distinctUntilChanged()
 

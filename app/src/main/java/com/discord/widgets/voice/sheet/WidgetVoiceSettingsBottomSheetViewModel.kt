@@ -6,6 +6,7 @@ import com.discord.api.channel.isStageVoiceChannel
 import com.discord.app.AppViewModel
 import com.discord.models.guild.Guild
 import com.discord.stores.StoreMediaSettings
+import com.discord.stores.StoreStageChannels
 import com.discord.stores.StoreStream
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
@@ -22,12 +23,14 @@ import rx.Observable
  */
 class WidgetVoiceSettingsBottomSheetViewModel(
     val channelId: Long,
+    private val stageChannelsStore: StoreStageChannels = StoreStream.getStageChannels(),
     private val mediaSettingsStore: StoreMediaSettings = StoreStream.getMediaSettings(),
-    val storeObservable: Observable<StoreState> = observeStoreState(channelId),
+    val storeObservable: Observable<StoreState> = observeStoreState(channelId, stageChannelsStore),
 ) : AppViewModel<WidgetVoiceSettingsBottomSheetViewModel.ViewState>() {
 
     init {
         storeObservable
+            .computationLatest()
             .ui(this)
             .subscribe(::handleStoreState)
     }
@@ -54,24 +57,7 @@ class WidgetVoiceSettingsBottomSheetViewModel(
 
     @MainThread
     private fun handleStoreState(storeState: StoreState) {
-        if (storeState !is StoreState.Valid) return
-        val callModel = storeState.callModel
-        val isStage = callModel.channel.isStageVoiceChannel()
-        updateViewState(
-            ViewState(
-                channel = callModel.channel,
-                showVoiceParticipants = !callModel.voiceSettings.voiceParticipantsHidden,
-                // Hiding non-video participants only means anything once there is video.
-                showVoiceParticipantsToggle =
-                    callModel.isVideoCall || callModel.activeStream != null,
-                showInviteItem = callModel.canInvite() && !isStage,
-                noiseCancellationEnabled = callModel.voiceSettings.noiseProcessing ==
-                    StoreMediaSettings.NoiseProcessing.Cancellation,
-                showStageSettings = isStage && storeState.myStageRoles?.isModerator == true,
-                showReportItem = isStage,
-                guild = callModel.guild,
-            ),
-        )
+        updateViewState(toViewState(storeState) ?: return)
     }
 
     @MainThread
@@ -88,21 +74,37 @@ class WidgetVoiceSettingsBottomSheetViewModel(
     }
 
     companion object {
-        /**
-         * The reference additionally observes `StoreStageChannels` for the current user's
-         * [StageRoles]. That store has not been reconstructed (see `followups.md`), so the roles
-         * are always `null` here and the **stage-settings row never appears**. Feed the roles in
-         * when `StoreStageChannels` lands and the row lights up unchanged.
-         */
-        fun observeStoreState(channelId: Long): Observable<StoreState> =
+        internal fun toViewState(storeState: StoreState): ViewState? {
+            if (storeState !is StoreState.Valid) return null
+            val model = storeState.callModel
+            val isStage = model.channel.isStageVoiceChannel()
+            return ViewState(
+                channel = model.channel,
+                showVoiceParticipants = !model.voiceSettings.voiceParticipantsHidden,
+                // Hiding non-video participants only means anything once there is video.
+                showVoiceParticipantsToggle = model.isVideoCall || model.activeStream != null,
+                showInviteItem = model.canInvite() && !isStage,
+                noiseCancellationEnabled = model.voiceSettings.noiseProcessing ==
+                    StoreMediaSettings.NoiseProcessing.Cancellation,
+                showStageSettings = isStage && storeState.myStageRoles?.isModerator == true,
+                showReportItem = isStage,
+                guild = model.guild,
+            )
+        }
+
+        fun observeStoreState(
+            channelId: Long,
+            stageChannelsStore: StoreStageChannels = StoreStream.getStageChannels(),
+        ): Observable<StoreState> =
             CallModel.get(channelId)
                 .computationLatest()
                 .distinctUntilChanged()
-                .map { callModel ->
+                .switchMap { callModel ->
                     if (callModel == null) {
-                        StoreState.Invalid
+                        Observable.just(StoreState.Invalid)
                     } else {
-                        StoreState.Valid(callModel, myStageRoles = null)
+                        stageChannelsStore.observeMyRoles(channelId)
+                            .map<StoreState> { roles -> StoreState.Valid(callModel, roles) }
                     }
                 }
     }

@@ -4,7 +4,6 @@ import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.content.Context
-import android.content.ContextWrapper
 import android.content.Intent
 import android.graphics.PointF
 import android.graphics.Rect
@@ -23,7 +22,6 @@ import com.discord.api.message.attachment.MessageAttachment
 import com.discord.api.message.attachment.MessageAttachmentType
 import com.discord.api.message.embed.EmbedType
 import com.discord.api.message.embed.MessageEmbed
-import com.discord.app.AppActivity
 import com.discord.app.AppFragment
 import com.discord.app.AppLog
 import com.discord.app.AppScreenRouter
@@ -529,10 +527,8 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
     /**
      * The screen's arguments.
      *
-     * The reference reads these off `mostRecentIntent`, because its `AppActivity` hosts whichever
-     * screen the launch intent names. This project's activity does not do that yet, so [launch]
-     * carries the same extras as fragment arguments instead. The intent is still preferred, so this
-     * screen needs no change once the activity starts honouring `EXTRA_SCREEN`.
+     * The reference reads these off `mostRecentIntent`, because `AppActivity` hosts whichever screen
+     * the launch intent names. Fragment arguments remain a fallback for restored instances.
      */
     private val launchExtras: Bundle
         get() = mostRecentIntent.extras?.takeIf { it.containsKey(INTENT_IMAGE_URL) }
@@ -666,44 +662,9 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
     }
 }
 
-/**
- * Shows [screen] full screen, carrying [launchIntent]'s extras.
- *
- * The reference starts `com.discord.app.AppActivity` with the screen class on
- * [AppScreenRouter.EXTRA_SCREEN] and lets the activity instantiate it. This project's `AppActivity`
- * does not read that extra — it only ever shows the fragment for the current `MainRoute` — and its
- * plain (non-`Main`) variant is not declared in the manifest, so such an intent lands back on the
- * tab host and the requested screen never appears. Until the activity consumes `EXTRA_SCREEN` the
- * transaction is made here instead, carrying the identical extras as fragment arguments; the intent
- * remains the fallback for a non-activity context, and remains the first place the screens look for
- * their arguments, so neither changes when the activity starts honouring it.
- */
-internal fun presentScreen(context: Context, screen: Class<out AppFragment>, launchIntent: Intent) {
-    val activity = context.findAppActivity()
-    if (activity == null || activity.isFinishing) {
-        AppScreenRouter.launch(context, screen, launchIntent)
-        return
-    }
-    AppLog.recordNavigation(activity.javaClass.simpleName, screen.simpleName)
-    val fragment = activity.supportFragmentManager.fragmentFactory
-        .instantiate(activity.classLoader, screen.name)
-        .apply { arguments = launchIntent.extras }
-    activity.supportFragmentManager.beginTransaction()
-        .replace(R.id.app_root, fragment, screen.name)
-        // Back returns to the screen the media was opened from and rebuilds its view, which is what
-        // re-binds that screen's toolbar.
-        .addToBackStack(null)
-        .commit()
-}
-
-private fun Context.findAppActivity(): AppActivity? {
-    var current: Context? = this
-    while (current is ContextWrapper) {
-        if (current is AppActivity) return current
-        current = current.baseContext
-    }
-    return null
-}
+/** Shows [screen] through the reference-shaped single-activity screen router. */
+internal fun presentScreen(context: Context, screen: Class<out AppFragment>, launchIntent: Intent) =
+    AppScreenRouter.launch(context, screen, launchIntent)
 
 /**
  * Everything [WidgetMedia] needs, decided before any Android type is involved.

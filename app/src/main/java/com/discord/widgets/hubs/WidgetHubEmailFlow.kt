@@ -15,6 +15,7 @@ import com.discord.dialogs.SimpleConfirmationDialog
 import com.discord.dialogs.SimpleConfirmationDialogArgs
 import com.discord.i18n.I18nSpans
 import com.discord.i18n.i18nPlural
+import com.discord.i18n.withClickableHook
 import com.discord.stores.StoreStream
 import com.discord.stores.utilities.Loading
 import com.discord.stores.utilities.Success
@@ -24,6 +25,8 @@ import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.view.text.LinkifiedTextView
 import com.discord.utilities.view.validators.ValidationManager
 import com.discord.views.LoadingButton
+import com.discord.widgets.nux.CreateGuildTrigger
+import com.discord.widgets.nux.WidgetGuildTemplates
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -139,7 +142,7 @@ class WidgetHubEmailFlow : AppFragment(R.layout.widget_hub_email_flow) {
             },
         )
         val learnMore = I18nSpans.render(getString(R.string.learn_more_link))
-            .withHubHook(LEARN_MORE_HOOK) { showLearnMore() }
+            .withClickableHook(LEARN_MORE_HOOK) { showLearnMore() }
         return SpannableStringBuilder(description).append(" ").append(learnMore)
     }
 
@@ -161,9 +164,10 @@ class WidgetHubEmailFlow : AppFragment(R.layout.widget_hub_email_flow) {
 
     private fun onDeclined() {
         val activity = activity ?: return
-        // The reference additionally clears the NUX flag and pushes the guild-template picker here.
-        // Neither StoreNux nor widgets/nux/WidgetGuildTemplates exists in this project; the decline
-        // still closes the flow, and the gap is recorded in the handoff report.
+        if (args.entryPoint == HubEmailEntryPoint.Onboarding) {
+            StoreStream.getNux().updateNux { it.copy(postRegister = false) }
+            WidgetGuildTemplates.launch(activity, CreateGuildTrigger.NUF, isNux = true)
+        }
         activity.finish()
     }
 
@@ -208,7 +212,7 @@ class WidgetHubEmailFlow : AppFragment(R.layout.widget_hub_email_flow) {
                     HubDomainArgs(submittedEmail, success.response.guildsInfo.map(DomainGuildInfo::from)).toArgsIntent(),
                 )
                 viewModel.reset()
-            } else if (!success.response.hasMatchingGuild && MULTI_DOMAIN_ENABLED) {
+            } else if (!success.response.hasMatchingGuild && isMultiDomainEnabled()) {
                 AppScreenRouter.launchForResult(
                     context,
                     activityResultHandler,
@@ -217,8 +221,7 @@ class WidgetHubEmailFlow : AppFragment(R.layout.widget_hub_email_flow) {
                 )
                 viewModel.reset()
             }
-            // The reference also calls StoreDirectories.markDiscordHubClicked() here, which suppresses
-            // the hub prompt on later launches. Left out until StoreDirectories exists; see the report.
+            storeDirectories().markDiscordHubClicked()
         }
     }
 
@@ -240,10 +243,5 @@ class WidgetHubEmailFlow : AppFragment(R.layout.widget_hub_email_flow) {
 
         private const val LEARN_MORE_HOOK = "{helpdeskArticle}"
 
-        /**
-         * `2021-08_hub_multi_domain_mobile`. Without `StoreExperiments` there is no bucket to read, so
-         * the control value is used — matching [WidgetHubEmailViewModel]'s default.
-         */
-        private const val MULTI_DOMAIN_ENABLED = false
     }
 }

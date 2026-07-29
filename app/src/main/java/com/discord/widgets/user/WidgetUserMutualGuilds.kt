@@ -92,13 +92,15 @@ class WidgetUserMutualGuilds : AppFragment(R.layout.widget_user_mutual_guilds) {
             itemView.findViewById<TextView>(R.id.user_profile_adapter_item_server_text).apply {
                 visibility = if (guild.icon == null) View.VISIBLE else View.GONE; text = guild.shortName
             }
-            val identity = item.nick ?: item.member?.nick ?: item.user?.username
+            val hasGuildMemberAvatar = item.member?.hasAvatar() == true
+            val identity = item.nick ?: item.user?.username
             itemView.findViewById<TextView>(R.id.user_profile_adapter_item_user_display_name).apply {
-                text = identity; visibility = if (identity.isNullOrBlank()) View.GONE else View.VISIBLE
+                text = identity
+                visibility = if (item.nick != null || hasGuildMemberAvatar) View.VISIBLE else View.GONE
             }
             itemView.findViewById<SimpleDraweeView>(R.id.guild_member_avatar).apply {
                 val hash = item.member?.avatarHash
-                visibility = if (hash == null || item.user == null) View.GONE else View.VISIBLE
+                visibility = if (hasGuildMemberAvatar) View.VISIBLE else View.GONE
                 setImageURI(if (hash == null || item.user == null) null else Uri.parse("https://cdn.discordapp.com/guilds/${guild.id}/users/${item.user.id}/avatars/$hash.webp?size=32"))
             }
         }

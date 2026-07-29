@@ -22,22 +22,30 @@ import com.discord.views.StatusView
 import com.discord.views.UsernameView
 import com.discord.views.user.avatarUrl
 import com.discord.widgets.roles.RoleIconView
+import com.discord.utilities.views.StickyHeaderItemDecoration
 import com.facebook.drawee.view.SimpleDraweeView
 
 internal class ChannelMembersListAdapter(
     private val onUserClicked: ((Long) -> Unit)?,
     private val onAddMemberClicked: (() -> Unit)?,
     private val onJoinLeaveThreadClicked: (() -> Unit)?,
-) : ListAdapter<ChannelMemberListRow, ChannelMembersListAdapter.Holder>(DIFF) {
+    private val onUserLongClicked: ((Long) -> Unit)? = null,
+) : ListAdapter<ChannelMemberListRow, ChannelMembersListAdapter.Holder>(DIFF),
+    StickyHeaderItemDecoration.StickyHeaderAdapter {
+    private var stickyHeader: Holder? = null
+    private var stickyPlaceholder: Holder? = null
+    private var recyclerView: RecyclerView? = null
     init { setHasStableIds(true) }
 
     override fun getItemId(position: Int) = getItem(position).stableId
     override fun getItemViewType(position: Int) = when (getItem(position)) {
         is ChannelMemberListRow.Member -> MEMBER
-        is ChannelMemberListRow.Header, is ChannelMemberListRow.RoleHeader -> HEADER
+        is ChannelMemberListRow.Header -> HEADER
+        is ChannelMemberListRow.RoleHeader -> ROLE_HEADER
         is ChannelMemberListRow.PlaceholderHeader -> PLACEHOLDER_HEADER
         is ChannelMemberListRow.PlaceholderMember -> PLACEHOLDER_MEMBER
-        is ChannelMemberListRow.AddMember, is ChannelMemberListRow.JoinLeaveThread -> ACTION
+        is ChannelMemberListRow.AddMember -> ADD_MEMBER
+        is ChannelMemberListRow.JoinLeaveThread -> JOIN_LEAVE_THREAD
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
@@ -46,12 +54,44 @@ internal class ChannelMembersListAdapter(
             HEADER -> R.layout.widget_channel_members_list_item_header
             PLACEHOLDER_HEADER -> R.layout.widget_channel_members_list_item_placeholder_header
             PLACEHOLDER_MEMBER -> R.layout.widget_channel_members_list_item_loading
+            ROLE_HEADER -> R.layout.widget_channel_members_list_item_header
             else -> R.layout.widget_channel_members_list_item_add_or_leave
         }
         return Holder(LayoutInflater.from(parent.context).inflate(layout, parent, false))
     }
 
     override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(getItem(position), position)
+
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+        super.onAttachedToRecyclerView(recyclerView)
+        this.recyclerView = recyclerView
+        stickyHeader = Holder(LayoutInflater.from(recyclerView.context).inflate(
+            R.layout.widget_channel_members_list_item_header,
+            recyclerView,
+            false,
+        ))
+        stickyPlaceholder = Holder(LayoutInflater.from(recyclerView.context).inflate(
+            R.layout.widget_channel_members_list_item_placeholder_header,
+            recyclerView,
+            false,
+        ))
+    }
+
+    override fun getAndBindHeaderView(position: Int): View? = getItem(position).let { row ->
+        val holder = if (row is ChannelMemberListRow.PlaceholderHeader) stickyPlaceholder else stickyHeader
+        holder?.bind(row, position)
+        holder?.itemView?.also { view ->
+            recyclerView?.let { StickyHeaderItemDecoration.LayoutManager.layoutHeaderView(it, view) }
+        }
+    }
+
+    override fun getHeaderPositionForItem(itemPosition: Int): Int? =
+        (itemPosition downTo 0).firstOrNull(::isHeader)
+
+    override fun isHeader(position: Int): Boolean = getItem(position).let {
+        it is ChannelMemberListRow.Header || it is ChannelMemberListRow.RoleHeader ||
+            it is ChannelMemberListRow.PlaceholderHeader
+    }
 
     internal inner class Holder(view: View) : RecyclerView.ViewHolder(view) {
         fun bind(row: ChannelMemberListRow, position: Int) {
@@ -60,7 +100,7 @@ internal class ChannelMembersListAdapter(
                 is ChannelMemberListRow.Header -> bindHeader(row)
                 is ChannelMemberListRow.RoleHeader -> bindRoleHeader(row)
                 is ChannelMemberListRow.PlaceholderMember -> itemView.findViewById<Guideline>(R.id.username_placeholder_end_guideline)
-                    .setGuidelinePercent(PLACEHOLDER_WIDTHS[position % PLACEHOLDER_WIDTHS.size])
+                    .setGuidelinePercent(PLACEHOLDER_WIDTHS[(row.key.hashCode() and Int.MAX_VALUE) % PLACEHOLDER_WIDTHS.size])
                 is ChannelMemberListRow.AddMember -> bindAction(row.title, R.drawable.ic_add_person_16dp, onAddMemberClicked)
                 is ChannelMemberListRow.JoinLeaveThread -> bindAction(
                     if (row.joined) R.string.leave_thread else R.string.join_thread,
@@ -92,7 +132,12 @@ internal class ChannelMembersListAdapter(
             status.contentDescription = statusDescription(row.presence?.status)
             activityText.text = activity?.details ?: activity?.state ?: activity?.name
             activityText.visibility = if (activityText.text.isNullOrBlank()) View.GONE else View.VISIBLE
+            richPresence.setImageResource(R.drawable.ic_rich_presence_grey_16dp)
             richPresence.visibility = if (activity != null && activity.type != ActivityType.CUSTOM_STATUS) View.VISIBLE else View.GONE
+            if (row.isApplicationStreaming) {
+                richPresence.setImageResource(R.drawable.ic_status_streaming_16dp)
+                richPresence.visibility = View.VISIBLE
+            }
             owner.visibility = if (row.isOwner) View.VISIBLE else View.GONE
             owner.contentDescription = itemView.context.getString(if (row.guildMember == null) R.string.group_owner else R.string.guild_owner)
             boosted.visibility = if (row.guildMember?.premiumSince != null) View.VISIBLE else View.GONE
@@ -105,6 +150,11 @@ internal class ChannelMembersListAdapter(
             }.joinToString(", ")
             itemView.isClickable = onUserClicked != null
             itemView.setOnClickListener(if (onUserClicked == null) null else View.OnClickListener { onUserClicked.invoke(row.user.id) })
+            itemView.isLongClickable = onUserLongClicked != null
+            itemView.setOnLongClickListener(if (onUserLongClicked == null) null else View.OnLongClickListener {
+                onUserLongClicked.invoke(row.user.id)
+                true
+            })
         }
 
         private fun bindHeader(row: ChannelMemberListRow.Header) {
@@ -155,6 +205,9 @@ internal class ChannelMembersListAdapter(
         const val PLACEHOLDER_HEADER = 2
         const val PLACEHOLDER_MEMBER = 3
         const val ACTION = 4
+        const val ROLE_HEADER = 5
+        const val ADD_MEMBER = 6
+        const val JOIN_LEAVE_THREAD = 7
         const val VERIFIED_BOT_FLAG = 1 shl 16
         val PLACEHOLDER_WIDTHS = floatArrayOf(0.7f, 0.3f, 0.6f, 0.4f, 0.6f, 0.8f, 0.3f, 0.5f)
         val DIFF = object : DiffUtil.ItemCallback<ChannelMemberListRow>() {

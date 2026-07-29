@@ -7,6 +7,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.permissions.ManageGuildContext
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
+import com.discord.widgets.guild_role_subscriptions.GuildRoleSubscriptionsFeatureFlag
 import rx.Observable
 
 /**
@@ -17,9 +18,8 @@ import rx.Observable
  * user's guild permissions, their per-category channel permissions, the guild's MFA level and
  * whether they own it, and each section reads a single boolean off it.
  *
- * `GuildRoleSubscriptionsFeatureFlag` and `StoreGuildRoleSubscriptions` have not been
- * reconstructed, so [canManageGuildRoleSubscriptions] comes from the constructor and defaults to
- * `false`; the monetization section stays hidden, which is what an unenrolled guild sees.
+ * Role-subscription visibility comes from the recovered experiment/permission gate; enrollment is
+ * the guild's `ROLE_SUBSCRIPTIONS_ENABLED` feature, matching 126.21.
  */
 class WidgetServerSettingsViewModel(
     val guildId: Long,
@@ -59,25 +59,28 @@ class WidgetServerSettingsViewModel(
     }
 
     private fun handleStoreState(storeState: StoreState) {
-        val guild = storeState.guild
-        if (guild == null || !storeState.manageGuildContext.canManage()) {
-            return updateViewState(ViewState.Unauthorized)
-        }
-        updateViewState(
-            ViewState.Loaded(
+        updateViewState(toViewState(storeState))
+    }
+
+    companion object {
+        internal fun toViewState(storeState: StoreState): ViewState {
+            val guild = storeState.guild
+            if (guild == null || !storeState.manageGuildContext.canManage()) {
+                return ViewState.Unauthorized
+            }
+            return ViewState.Loaded(
                 guild = guild,
                 manageGuildContext = storeState.manageGuildContext,
                 canManageGuildRoleSubscriptions = storeState.canManageGuildRoleSubscriptions,
                 hasGuildRoleSubscriptions = storeState.hasGuildRoleSubscriptions,
-            ),
-        )
-    }
+            )
+        }
 
-    companion object {
         fun observeStoreState(
             guildId: Long,
-            canManageGuildRoleSubscriptionsSource: Observable<Boolean> = Observable.just(false),
-            hasGuildRoleSubscriptionsSource: Observable<Boolean> = Observable.just(false),
+            canManageGuildRoleSubscriptionsSource: Observable<Boolean> =
+                GuildRoleSubscriptionsFeatureFlag()
+                    .observeCanGuildSeeGuildRoleSubscriptionsSettings(guildId),
         ): Observable<StoreState> = Observable.combineLatest(
             StoreStream.getUsers().observeMe(),
             StoreStream.getGuilds().observeGuild(guildId),
@@ -85,8 +88,7 @@ class WidgetServerSettingsViewModel(
             StoreStream.getChannels().observeChannelCategories(guildId),
             StoreStream.getPermissions().observeChannelPermissionsForGuild(guildId),
             canManageGuildRoleSubscriptionsSource,
-            hasGuildRoleSubscriptionsSource,
-        ) { meUser, guild, guildPermissions, categories, channelPermissions, canManageSubs, hasSubs ->
+        ) { meUser, guild, guildPermissions, categories, channelPermissions, canManageSubs ->
             StoreState(
                 guild = guild,
                 manageGuildContext = ManageGuildContext.from(
@@ -98,7 +100,8 @@ class WidgetServerSettingsViewModel(
                     isMeMfaEnabled = meUser.mfaEnabled,
                 ),
                 canManageGuildRoleSubscriptions = canManageSubs,
-                hasGuildRoleSubscriptions = hasSubs,
+                hasGuildRoleSubscriptions =
+                    guild?.hasFeature(GuildFeature.ROLE_SUBSCRIPTIONS_ENABLED) == true,
             )
         }.distinctUntilChanged()
     }

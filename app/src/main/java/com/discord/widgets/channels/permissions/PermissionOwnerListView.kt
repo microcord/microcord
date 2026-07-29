@@ -101,9 +101,10 @@ class PermissionOwnerListView : RecyclerView {
                             showToast(R.string.channel_permissions_remove_not_overwrite)
                         RemoveStatus.CannotRemove.Reason.HAS_NO_PERMISSION ->
                             showToast(R.string.channel_permissions_cannot_edit_moderators)
-                        RemoveStatus.CannotRemove.Reason.IS_GUILD_OWNER,
-                        RemoveStatus.CannotRemove.Reason.IS_ADMINISTRATOR,
-                        -> Unit
+                        RemoveStatus.CannotRemove.Reason.IS_GUILD_OWNER ->
+                            showToast(R.string.channel_permissions_add_members_tooltip_owner)
+                        RemoveStatus.CannotRemove.Reason.IS_ADMINISTRATOR ->
+                            showToast(R.string.channel_permissions_add_members_tooltip_administrator)
                     }
                 }
             }

@@ -37,6 +37,7 @@ import com.discord.views.RadioManager
 import com.discord.widgets.contact_sync.ContactSyncFlowAnalytics
 import com.discord.widgets.contact_sync.WidgetContactSync
 import com.discord.widgets.notice.WidgetNoticeDialog
+import com.discord.widgets.settings.account.WidgetSettingsAccount
 import com.google.android.material.button.MaterialButton
 import rx.Observable
 import rx.functions.Action1
@@ -538,10 +539,7 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
     }
 
     private fun openAccountSettings() {
-        // The reference opens `WidgetSettingsAccount` (with its disable/delete section expanded).
-        // That screen has not been reconstructed, so the help article stands in for it; swap this
-        // for `WidgetSettingsAccount.launch(context, true)` when it lands.
-        UriHandler.handle(requireContext(), ACCOUNT_DISABLE_HELP_URL)
+        WidgetSettingsAccount.launch(requireContext(), hintDataManagement = true)
     }
 
     // endregion
@@ -627,8 +625,6 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
             "https://support.discord.com/hc/en-us/articles/360035966492"
         private const val DATA_REQUEST_HELP_URL =
             "https://support.discord.com/hc/en-us/articles/360004027692"
-        private const val ACCOUNT_DISABLE_HELP_URL =
-            "https://support.discord.com/hc/en-us/articles/360004066391"
         private const val CONTACT_SYNC_HELP_URL =
             "https://support.discord.com/hc/en-us/articles/360061878534"
 

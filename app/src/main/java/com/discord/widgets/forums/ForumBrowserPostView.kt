@@ -6,8 +6,11 @@ import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.text.SpannableString
+import android.text.Spannable
 import android.text.Spanned
+import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
+import android.text.style.TypefaceSpan
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.View
@@ -31,6 +34,7 @@ import com.discord.views.typing.TypingDots
 import com.discord.views.user.UserSummaryView
 import com.discord.views.user.avatarUrl
 import com.facebook.drawee.backends.pipeline.Fresco
+import com.facebook.drawee.span.DraweeSpanStringBuilder
 import com.facebook.drawee.view.SimpleDraweeView
 import com.facebook.imagepipeline.request.ImageRequest
 import kotlin.math.max
@@ -89,7 +93,7 @@ class ForumBrowserPostView @JvmOverloads constructor(
         configureReadState(post)
         val isTyping = post.typingUsers.isNotEmpty()
         if (isTyping) configureTyping(post)
-        timestamp.text = activeAgoText(post.mostRecentMessageTimestamp)
+        timestamp.text = ForumUtils.getActiveAgoTimestamp(context, post.mostRecentMessageTimestamp)
         timestamp.visibility = if (isTyping || timestamp.text == null) View.GONE else View.VISIBLE
         typingUsers.visibility = if (isTyping) View.VISIBLE else View.GONE
         typingDots.visibility = if (isTyping) View.VISIBLE else View.GONE
@@ -111,8 +115,41 @@ class ForumBrowserPostView @JvmOverloads constructor(
             message.hasEmbeds() -> context.getString(R.string.embed_links)
             else -> null
         }
-        description.text = if (label == null) message.content else SpannableString("$label\u00a0").apply {
-            setSpan(StyleSpan(Typeface.ITALIC), 0, label.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        if (label == null) {
+            description.setDraweeSpanStringBuilder(renderMessage(message.content, post))
+        } else {
+            description.text = SpannableString("$label\u00a0").apply {
+                setSpan(StyleSpan(Typeface.ITALIC), 0, label.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
+    }
+
+    private fun renderMessage(content: String, post: PostData): DraweeSpanStringBuilder {
+        var rendered = content
+        post.firstMessage?.mentions.orEmpty().forEach { mention ->
+            val member = post.guildMembers[mention.id]
+            rendered = rendered.replace(Regex("<@!?${mention.id}>"), "@${member?.nick ?: mention.username}")
+        }
+        post.channelNames.forEach { (id, name) -> rendered = rendered.replace("<#$id>", "#$name") }
+        post.guildRoles.forEach { (id, role) -> rendered = rendered.replace("<@&$id>", "@${role.name}") }
+        rendered = rendered.replace(Regex("<a?:([A-Za-z0-9_]+):\\d+>"), ":$1:")
+        return DraweeSpanStringBuilder(rendered).also(::applyInlineMarkdown)
+    }
+
+    private fun applyInlineMarkdown(text: DraweeSpanStringBuilder) {
+        applyMarkup(text, Regex("\\*\\*(.+?)\\*\\*")) { StyleSpan(Typeface.BOLD) }
+        applyMarkup(text, Regex("__(.+?)__")) { StyleSpan(Typeface.BOLD) }
+        applyMarkup(text, Regex("~~(.+?)~~")) { StrikethroughSpan() }
+        applyMarkup(text, Regex("`([^`]+)`")) { TypefaceSpan("monospace") }
+        applyMarkup(text, Regex("(?<!\\*)\\*([^*]+)\\*(?!\\*)")) { StyleSpan(Typeface.ITALIC) }
+    }
+
+    private fun applyMarkup(text: DraweeSpanStringBuilder, pattern: Regex, span: () -> Any) {
+        while (true) {
+            val match = pattern.find(text) ?: return
+            val value = match.groupValues[1]
+            text.replace(match.range.first, match.range.last + 1, value)
+            text.setSpan(span(), match.range.first, match.range.first + value.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
     }
 
@@ -186,7 +223,7 @@ class ForumBrowserPostView @JvmOverloads constructor(
         messageCountContainer.visibility = if (count == null) View.GONE else View.VISIBLE
         messageCount.text = count
         val unread = unreadCountText(post.unreadCount)?.let {
-            context.getString(R.string.forum_post_message_count_short).replace("{count}", it)
+            context.getString(R.string.forum_post_message_count_short_parenthetical).replace("{count}", it)
         }
         unreadCount.text = unread
         unreadCount.visibility = if (post.readState.hasSeenBefore && unread != null) View.VISIBLE else View.GONE
@@ -198,10 +235,10 @@ class ForumBrowserPostView @JvmOverloads constructor(
         ownerAvatar.alpha = alpha
         ownerName.alpha = alpha
         title.setTextColor(
-            ColorCompat.getThemedColor(context, if (post.readState.hasUnread) R.attr.colorHeaderPrimary else R.attr.colorInteractiveNormal),
+            ColorCompat.getThemedColor(context, if (post.readState.hasUnread) R.attr.colorHeaderPrimary else R.attr.primary_300),
         )
         description.setTextColor(
-            ColorCompat.getThemedColor(context, if (post.readState.hasUnread) R.attr.colorHeaderSecondary else R.attr.colorInteractiveNormal),
+            ColorCompat.getThemedColor(context, if (post.readState.hasUnread) R.attr.colorHeaderSecondary else R.attr.primary_300),
         )
     }
 
@@ -214,29 +251,12 @@ class ForumBrowserPostView @JvmOverloads constructor(
         typingDots.layoutParams = params
     }
 
-    private fun activeAgoText(timestamp: Long?): CharSequence? {
-        if (timestamp == null) return null
-        val elapsed = System.currentTimeMillis() - timestamp
-        if (elapsed < 0) return null
-        val (resource, count) = when {
-            elapsed < HOUR -> R.string.form_post_active_ago_timestamp_minutes to elapsed / MINUTE
-            elapsed < DAY -> R.string.form_post_active_ago_timestamp_hours to elapsed / HOUR
-            elapsed < THIRTY_DAYS -> R.string.form_post_active_ago_timestamp_days to elapsed / DAY
-            else -> return context.getString(R.string.form_post_active_ago_timestamp_more_than_month)
-        }
-        return context.getString(resource).replace("{count}", count.toString())
-    }
-
     private fun themedDrawable(attribute: Int): Drawable? =
         context.getThemedDrawableRes(attribute).takeIf { it != 0 }
             ?.let { AppCompatResources.getDrawable(context, it) }
 
 
     private companion object {
-        const val MINUTE = 60_000L
-        const val HOUR = 3_600_000L
-        const val DAY = 86_400_000L
-        const val THIRTY_DAYS = 2_592_000_000L
         val CODE_EXTENSION = Regex(
             "(?:c\\+\\+|cpp|cc|c|h|hpp|mm|m|json|js|rb|rake|py|asm|fs|pyc|dtd|cgi|bat|rss|" +
                 "java|graphml|idb|lua|o|gml|prl|sls|conf|cmake|make|sln|vbe|cxx|wbf|vbs|" +

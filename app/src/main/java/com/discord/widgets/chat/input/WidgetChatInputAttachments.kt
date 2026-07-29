@@ -5,11 +5,15 @@ import android.view.GestureDetector
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
 import androidx.core.view.inputmethod.InputContentInfoCompat
 import androidx.recyclerview.widget.RecyclerView
+import com.discord.R
 import com.discord.api.sticker.Sticker
 import com.discord.app.AppFragment
 import com.discord.app.AppLog
+import com.discord.i18n.setI18nText
 import com.discord.models.domain.emoji.Emoji
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.rx.ui
@@ -20,12 +24,15 @@ import com.discord.widgets.chat.input.sticker.StickerPickerListener
 import com.lytefast.flexinput.InputListener
 import com.lytefast.flexinput.adapters.AddContentPagerAdapter
 import com.lytefast.flexinput.adapters.AttachmentPreviewAdapter
+import com.lytefast.flexinput.adapters.EmptyListAdapter
 import com.lytefast.flexinput.fragment.CameraFragment
 import com.lytefast.flexinput.fragment.FilesFragment
 import com.lytefast.flexinput.fragment.FlexInputFragment
 import com.lytefast.flexinput.fragment.PhotosFragment
 import com.lytefast.flexinput.model.Attachment
 import com.lytefast.flexinput.model.Attachment.Companion.toAttachment
+import com.lytefast.flexinput.utils.SelectionAggregator
+import com.lytefast.flexinput.utils.SelectionCoordinator
 
 /**
  * Everything the composer needs from FlexInput: the attachment pages, the attachment preview strip,
@@ -39,9 +46,8 @@ import com.lytefast.flexinput.model.Attachment.Companion.toAttachment
  *    `com.github.lytefast:flex-input:0.10.9` adapter has no such hook, so the long press is
  *    detected on the preview `RecyclerView` itself and resolved back to an attachment through the
  *    selection aggregator. Same result, no library fork.
- *  - Attachment sources are tracked by wrapping the selection listener rather than by overriding
- *    `SelectionAggregator.registerSelectionCoordinatorInternal`, which is `protected` in the fork
- *    and effectively final here.
+ *  - Public FlexInput's aggregator factory replaces the reference adapter constructor while keeping
+ *    the same coordinator-listener wrapping. This avoids copying analytics listeners on recreation.
  */
 class WidgetChatInputAttachments(
     private val flexInputFragment: FlexInputFragment,
@@ -59,8 +65,8 @@ class WidgetChatInputAttachments(
      */
     fun configureFlexInputContentPages(canCreateThread: Boolean) {
         flexInputFragment.setContentPages(
-            page(R_DRAWABLE_IMAGE, R_STRING_PHOTOS) { PhotosFragment() },
-            page(R_DRAWABLE_FILE, R_STRING_FILES) { FilesFragment() },
+            page(R_DRAWABLE_IMAGE, R_STRING_PHOTOS) { DiscordMediaFragment() },
+            page(R_DRAWABLE_FILE, R_STRING_FILES) { DiscordFilesFragment() },
             page(R_DRAWABLE_CAMERA, R_STRING_CAMERA) { CameraFragment() },
         )
         if (canCreateThread) {
@@ -91,16 +97,28 @@ class WidgetChatInputAttachments(
 
     private fun configurePreviewAdapter(fragment: AppFragment) {
         val context = fragment.context ?: return
-        val adapter = AttachmentPreviewAdapter<Attachment<Any>>(context.contentResolver)
-        adapter.selectionAggregator
-            .initFrom(flexInputFragment.selectionAggregator)
-            .addItemSelectionListener(
-                object : com.lytefast.flexinput.utils.SelectionCoordinator.ItemSelectionListener<Attachment<Any>> {
-                    override fun onItemSelected(item: Attachment<Any>) = track(item, context)
-                    override fun onItemUnselected(item: Attachment<Any>) = Unit
-                    override fun unregister() = Unit
-                },
-            )
+        val adapter = AttachmentPreviewAdapter<Attachment<Any>>(context.contentResolver) { previewAdapter ->
+            object : SelectionAggregator<Attachment<Any>>(previewAdapter) {
+                override fun registerSelectionCoordinatorInternal(
+                    selectionCoordinator: SelectionCoordinator<Attachment<Any>, *>,
+                ) {
+                    super.registerSelectionCoordinatorInternal(selectionCoordinator)
+                    val delegate = selectionCoordinator.itemSelectionListener
+                    selectionCoordinator.itemSelectionListener =
+                        object : SelectionCoordinator.ItemSelectionListener<Attachment<Any>> {
+                            override fun onItemSelected(item: Attachment<Any>) {
+                                track(item, context)
+                                delegate.onItemSelected(item)
+                            }
+
+                            override fun onItemUnselected(item: Attachment<Any>) =
+                                delegate.onItemUnselected(item)
+
+                            override fun unregister() = delegate.unregister()
+                        }
+                }
+            }
+        }
         flexInputFragment.setAttachmentPreviewAdapter(adapter)
 
         val previewList = flexInputFragment.view
@@ -124,6 +142,8 @@ class WidgetChatInputAttachments(
         val detector = GestureDetector(
             previewList.context,
             object : GestureDetector.SimpleOnGestureListener() {
+                override fun onDown(event: MotionEvent): Boolean = true
+
                 override fun onLongPress(event: MotionEvent) {
                     val child = previewList.findChildViewUnder(event.x, event.y) ?: return
                     val position = previewList.getChildAdapterPosition(child)
@@ -131,9 +151,9 @@ class WidgetChatInputAttachments(
                     val aggregator = adapter.selectionAggregator
                     if (position >= aggregator.size) return
                     val attachment = aggregator[position]
-                    child.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                    fragment.hideKeyboard(child)
                     AttachmentBottomSheet.show(
-                        fragmentManager = fragment.childFragmentManager,
+                        fragmentManager = flexInputFragment.childFragmentManager,
                         attachment = attachment,
                         spoiler = (attachment as? SourcedAttachment<*>)?.spoiler == true,
                         onFileRemoved = { aggregator.unselectItem(attachment) },
@@ -245,6 +265,26 @@ class WidgetChatInputAttachments(
             // Telemetry must never take the composer down with it.
             AppLog.i("Analytic error on attachment update", t)
         }
+    }
+
+    class DiscordFilesFragment : FilesFragment() {
+        override fun newPermissionsRequestAdapter(onClickListener: View.OnClickListener): EmptyListAdapter =
+            PermissionsEmptyListAdapter(onClickListener)
+    }
+
+    class DiscordMediaFragment : PhotosFragment() {
+        override fun newPermissionsRequestAdapter(onClickListener: View.OnClickListener): EmptyListAdapter =
+            PermissionsEmptyListAdapter(onClickListener)
+    }
+
+    private class PermissionsEmptyListAdapter(onClickListener: View.OnClickListener) :
+        EmptyListAdapter(R.layout.widget_chat_input_perm_req_files, R.id.action_btn, onClickListener) {
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): EmptyListAdapter.ViewHolder =
+            super.onCreateViewHolder(parent, viewType).also {
+                it.itemView.findViewById<TextView>(R.id.perm_req_text)
+                    .setI18nText(R.string.system_permission_request_files)
+            }
     }
 
     private companion object {

@@ -9,6 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import rx.Observable
 
 /**
  * The GIF picker's two list-building rules.
@@ -43,6 +44,26 @@ class GifPickerItemsTest {
         )
         assertEquals(GifCategoryItem.Trending("https://trend"), withPreview.first())
         assertEquals(categories.size + 1, withPreview.size)
+    }
+
+    @Test
+    fun serverCategoriesUseSearchWhileTrendingUsesItsDedicatedFeed() {
+        val store = RecordingGifPickerStore()
+        val favorites = GifCategoryItem.Standard(ModelGifCategory("Favorites", "https://p/favorites"))
+
+        assertEquals(
+            store.searchResults,
+            GifCategoryViewModel.observeStoreState(favorites, store).toBlocking().first().gifs,
+        )
+        assertEquals("Favorites", store.lastSearchQuery)
+
+        assertEquals(
+            store.trendingResults,
+            GifCategoryViewModel.observeStoreState(GifCategoryItem.Trending("https://p/trending"), store)
+                .toBlocking()
+                .first()
+                .gifs,
+        )
     }
 
     // endregion
@@ -151,5 +172,22 @@ class GifPickerItemsTest {
         )
 
         assertNotEquals(withResults.key, withoutResults.key)
+    }
+
+    private class RecordingGifPickerStore : GifPickerStore {
+        val searchResults = listOf(ModelGif("https://img/1.gif", "https://tenor/1", 100, 50))
+        val trendingResults = listOf(ModelGif("https://img/2.gif", "https://tenor/2", 100, 50))
+        var lastSearchQuery: String? = null
+
+        override fun observeGifCategories() = Observable.just(emptyList<ModelGifCategory>())
+        override fun observeTrendingGifCategoryPreviewUrl() = Observable.just("")
+        override fun observeTrendingCategoryGifs() = Observable.just(trendingResults)
+        override fun observeGifsForSearchQuery(query: String): Observable<List<ModelGif>> {
+            lastSearchQuery = query
+            return Observable.just(searchResults)
+        }
+        override fun observeGifTrendingSearchTerms() = Observable.just(emptyList<String>())
+        override fun observeSuggestedSearchTerms(query: String) = Observable.just(emptyList<String>())
+        override fun fetchGifCategories() = Unit
     }
 }

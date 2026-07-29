@@ -1,5 +1,6 @@
 package com.discord.widgets.stickers
 
+import android.content.Context
 import androidx.annotation.MainThread
 import com.discord.api.guild.GuildFeature
 import com.discord.api.sticker.Sticker
@@ -15,6 +16,7 @@ import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
 import com.discord.utilities.user.UserUtils
+import com.discord.widgets.guilds.join.joinGuild
 import retrofit2.HttpException
 import rx.Observable
 import com.discord.api.guild.Guild as ApiGuild
@@ -82,19 +84,13 @@ class GuildStickerSheetViewModel(
         )
     }
 
-    /**
-     * Joins [guild] and dismisses. The reference routes this through `GuildJoinHelper`, which also
-     * owns the captcha retry, the "you are banned" toast and the analytics; that helper does not
-     * exist in this project, so this is the bare REST call. **Replace the body when
-     * `utilities/guilds/GuildJoinHelper` lands** — reported to the guild wave.
-     */
-    fun joinGuild(guild: Guild) {
-        api.joinGuild(guild.id, isLurker = false, sessionId = null)
-            .subscribe(
-                { updateViewState(ViewState.Dismiss) },
-                { /* Leave the sheet open: the join failed and the button is still the way out. */ },
-            )
-    }
+    fun joinGuild(context: Context, guild: Guild) = joinGuild(
+        context = context,
+        guildId = guild.id,
+        isLurker = false,
+        errorClass = GuildStickerSheetViewModel::class.java,
+        onNext = { updateViewState(ViewState.Dismiss) },
+    )
 
     companion object {
 

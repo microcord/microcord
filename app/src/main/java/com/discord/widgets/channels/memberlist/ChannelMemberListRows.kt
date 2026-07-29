@@ -35,6 +35,8 @@ sealed class ChannelMemberListRow(open val key: String) {
         val presence: Presence?,
         val displayName: String,
         val isOwner: Boolean,
+        val isApplicationStreaming: Boolean = false,
+        val canDisplayStatusEmoji: Boolean = true,
     ) : ChannelMemberListRow("member:${user.id}")
 
     data class PlaceholderHeader(override val key: String) : ChannelMemberListRow(key)
@@ -64,7 +66,13 @@ object ChannelMemberListRows {
         val users: Map<Long, User>,
         val members: Map<Long, GuildMember>,
         val presences: Map<Long, Presence>,
+        val streamingUserIds: Set<Long> = emptySet(),
     )
+
+    fun loading(listId: String, memberCount: Int = 12): List<ChannelMemberListRow> = buildList {
+        add(ChannelMemberListRow.PlaceholderHeader("$listId:placeholder-header"))
+        repeat(memberCount) { add(ChannelMemberListRow.PlaceholderMember("$listId:placeholder-member:$it")) }
+    }
 
     fun guild(input: GuildInput): List<ChannelMemberListRow> = input.rows.map { row ->
         when (row) {
@@ -78,6 +86,7 @@ object ChannelMemberListRows {
                 input.members,
                 input.presences,
                 input.ownerId,
+                input.streamingUserIds,
             )
             is LazyMemberListRow.PlaceholderHeader ->
                 ChannelMemberListRow.PlaceholderHeader("${input.listId}:placeholder-header:${row.key}")
@@ -94,6 +103,7 @@ object ChannelMemberListRows {
         members: Map<Long, GuildMember>,
         presences: Map<Long, Presence>,
         roles: Map<Long, GuildRole>,
+        streamingUserIds: Set<Long> = emptySet(),
     ): List<ChannelMemberListRow> {
         val lazyUsers = users.toMutableMap()
         val lazyMembers = members.toMutableMap()
@@ -122,7 +132,7 @@ object ChannelMemberListRows {
                 }
             }
         }
-        return guild(GuildInput(list.listId, ownerId, rows, lazyUsers, lazyMembers, presences))
+        return guild(GuildInput(list.listId, ownerId, rows, lazyUsers, lazyMembers, presences, streamingUserIds))
     }
 
     fun loadedGuild(
@@ -132,8 +142,9 @@ object ChannelMemberListRows {
         members: Map<Long, GuildMember>,
         presences: Map<Long, Presence>,
         roles: Map<Long, GuildRole>,
+        streamingUserIds: Set<Long> = emptySet(),
     ): List<ChannelMemberListRow> = guild(
-        GuildInput(listId, ownerId, groupedRows(users, members, presences, roles), users, members, presences),
+        GuildInput(listId, ownerId, groupedRows(users, members, presences, roles), users, members, presences, streamingUserIds),
     )
 
     fun thread(
@@ -145,11 +156,12 @@ object ChannelMemberListRows {
         presences: Map<Long, Presence>,
         roles: Map<Long, GuildRole>,
         joined: Boolean? = null,
+        streamingUserIds: Set<Long> = emptySet(),
     ): List<ChannelMemberListRow> {
         val filteredUsers = users.filterKeys(memberIds::contains)
         return buildList {
             if (joined != null) add(ChannelMemberListRow.JoinLeaveThread("$listId:join-leave", joined))
-            addAll(loadedGuild(listId, ownerId, filteredUsers, members, presences, roles))
+            addAll(loadedGuild(listId, ownerId, filteredUsers, members, presences, roles, streamingUserIds))
         }
     }
 
@@ -159,6 +171,7 @@ object ChannelMemberListRows {
         presences: Map<Long, Presence>,
         canAddMembers: Boolean = false,
         currentUser: User? = null,
+        streamingUserIds: Set<Long> = emptySet(),
     ): List<ChannelMemberListRow> {
         val resolvedUsers = users.toMutableMap()
         channel.recipients.orEmpty().forEach { if (it.id !in resolvedUsers) resolvedUsers[it.id] = CoreUser(it) }
@@ -173,7 +186,14 @@ object ChannelMemberListRows {
             if (canAddMembers) add(ChannelMemberListRow.AddMember("${channel.id}:add", com.discord.R.string.invite_members))
             add(ChannelMemberListRow.Header("${channel.id}:members", ChannelMemberListRow.Header.Kind.MEMBERS, recipients.size))
             recipients.forEach { user ->
-                add(ChannelMemberListRow.Member(user, null, presences[user.id], nicks[user.id] ?: user.username, user.id == channel.ownerId))
+                add(ChannelMemberListRow.Member(
+                    user,
+                    null,
+                    presences[user.id],
+                    nicks[user.id] ?: user.username,
+                    user.id == channel.ownerId,
+                    user.id in streamingUserIds,
+                ))
             }
         }
     }
@@ -227,6 +247,7 @@ object ChannelMemberListRows {
         members: Map<Long, GuildMember>,
         presences: Map<Long, Presence>,
         ownerId: Long,
+        streamingUserIds: Set<Long>,
     ): ChannelMemberListRow = users[userId]?.let { user ->
         val guildMember = members[userId]
         ChannelMemberListRow.Member(
@@ -235,6 +256,7 @@ object ChannelMemberListRows {
             presences[userId],
             guildMember?.nick?.takeUnless(String::isBlank) ?: user.username,
             userId == ownerId,
+            userId in streamingUserIds,
         )
     } ?: ChannelMemberListRow.PlaceholderMember("$listId:missing:$userId")
 }

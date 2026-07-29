@@ -6,14 +6,3 @@ import com.discord.models.domain.emoji.Emoji
 interface EmojiPickerListener {
     fun onEmojiPicked(emoji: Emoji)
 }
-
-/**
- * Row-level callback inside the picker's own grid.
- *
- * Separate from [EmojiPickerListener] because the adapter must not know which surface it is in:
- * the picker translates a selection into whatever its host needs (chat text, a reaction, a
- * sticker-sheet dismissal).
- */
-interface OnEmojiSelectedListener {
-    fun onEmojiSelected(emoji: Emoji)
-}

@@ -8,8 +8,11 @@ import android.widget.TextView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.api.commands.ApplicationCommandType
 import com.discord.app.AppComponent
+import com.discord.models.commands.ApplicationCommandOption
 import com.discord.utilities.rx.ui
+import com.discord.widgets.chat.input.applicationcommands.SelectedApplicationCommandAdapter
 import com.discord.widgets.chat.input.autocomplete.adapter.ChatInputAutocompleteAdapter
 
 /**
@@ -20,9 +23,8 @@ import com.discord.widgets.chat.input.autocomplete.adapter.ChatInputAutocomplete
  * places in `widget_chat_input.xml` (the header, the recycler, the sticker row) and the composer
  * itself is inside the FlexInput child fragment. The reference makes the same choice.
  *
- * Reference: `com.discord.widgets.chat.input.autocomplete.InputAutocomplete`. The command browser
- * (application category rail, selected-command chips, attachment options) is not reconstructed —
- * see `AutocompleteModelUtils` for why.
+ * Reference: `com.discord.widgets.chat.input.autocomplete.InputAutocomplete`. The full command
+ * browser and attachment options remain separate from this typed-query/selected-command surface.
  */
 class InputAutocomplete(
     private val appComponent: AppComponent,
@@ -34,6 +36,27 @@ class InputAutocomplete(
 ) {
 
     private val adapter = ChatInputAutocompleteAdapter()
+    private val selectedCommandRoot: View? = autocompleteRecyclerView.rootView.findViewById(
+        R.id.application_commands_root,
+    )
+    private val selectedCommandDescription: TextView? = autocompleteRecyclerView.rootView.findViewById(
+        R.id.chat_input_application_commands_option_description,
+    )
+    private val selectedCommandRecycler: RecyclerView? = autocompleteRecyclerView.rootView.findViewById(
+        R.id.chat_input_application_commands_recycler,
+    )
+    private val selectedCommandAdapter: SelectedApplicationCommandAdapter? =
+        selectedCommandRecycler?.let { recycler ->
+                recycler.layoutManager = LinearLayoutManager(
+                    recycler.context,
+                    LinearLayoutManager.HORIZONTAL,
+                    false,
+                )
+                SelectedApplicationCommandAdapter(recycler, ::focusCommandOption).also {
+                    recycler.adapter = it
+                    recycler.itemAnimator = null
+                }
+            }
 
     /**
      * Suppresses the [TextWatcher] while [applySelection] rewrites the text. Without it, splicing
@@ -62,11 +85,15 @@ class InputAutocomplete(
         viewModel.observeViewState()
             .ui(appComponent)
             .subscribe({ configureUI(it) }, { /* a render failure must not kill the composer */ })
+        viewModel.observeSelectedCommandState()
+            .ui(appComponent)
+            .subscribe({ configureSelectedCommand(it) }, { /* keep the composer usable */ })
     }
 
     fun onDestroyView() {
         editText.removeTextChangedListener(textWatcher)
         autocompleteRecyclerView.adapter = null
+        selectedCommandRecycler?.adapter = null
     }
 
     /** True when the popup is open, so the host can consume a back press. */
@@ -139,6 +166,30 @@ class InputAutocomplete(
         stickersContainer.visibility = View.GONE
     }
 
+    private fun configureSelectedCommand(state: SelectedCommandViewState) {
+        when (state) {
+            SelectedCommandViewState.Hidden -> {
+                selectedCommandAdapter?.clear()
+                selectedCommandRoot?.visibility = View.GONE
+            }
+            is SelectedCommandViewState.SelectedCommand -> {
+                selectedCommandRoot?.visibility = View.VISIBLE
+                selectedCommandAdapter?.clear()
+                selectedCommandAdapter?.setApplicationCommand(state.command, state.application)
+                selectedCommandAdapter?.setVerified(emptyMap(), emptySet())
+                if (state.option != null) {
+                    selectedCommandAdapter?.highlightOption(state.option)
+                } else {
+                    selectedCommandAdapter?.clearParamOptionHighlight()
+                }
+                selectedCommandDescription?.text = state.option?.description
+                    ?: state.option?.descriptionRes?.let(editText.resources::getText)
+                    ?: state.command.description
+                    ?: state.command.descriptionRes?.let(editText.resources::getText)
+            }
+        }
+    }
+
     /**
      * Replaces the token under the caret with the picked candidate's input form, plus a trailing
      * space so the next word starts a fresh token.
@@ -150,8 +201,18 @@ class InputAutocomplete(
     private fun applySelection(autocompletable: Autocompletable) {
         val editable = editText.editableText ?: return
         val caret = editText.selectionStart.coerceAtLeast(0)
-        val token = AutocompleteModelUtils.getMessageAutocompleteToken(editable, caret..caret)
-            ?: return
+        val selectedOption = viewModel.getSelectedCommandOption()
+        val token = if (selectedOption != null && autocompletable !is ApplicationCommandAutocompletable) {
+            AutocompleteModelUtils.getCommandOptionAutocompleteToken(
+                editable,
+                caret..caret,
+                selectedOption,
+                viewModel.getSelectedCommandOptions(),
+            )
+        } else {
+            AutocompleteModelUtils.getMessageAutocompleteToken(editable, caret..caret)
+        } ?: return
+        if (!viewModel.selectAutocompleteItem(autocompletable)) return
 
         val replacement = autocompletable.getInputReplacement() + " "
         val start = token.startIndex
@@ -162,6 +223,42 @@ class InputAutocomplete(
         try {
             editable.replace(start, end, replacement)
             editText.setSelection((start + replacement.length).coerceAtMost(editable.length))
+        } finally {
+            applyingSelection = false
+        }
+        if (selectedOption != null) viewModel.completeSelectedCommandOption()
+        if (autocompletable is ApplicationCommandAutocompletable && autocompletable.command.options.size == 1) {
+            focusCommandOption(autocompletable.command.options.single())
+            return
+        }
+        resyncAfterEdit()
+    }
+
+    private fun focusCommandOption(option: ApplicationCommandOption) {
+        val editable = editText.editableText ?: return
+        viewModel.selectCommandOption(option)
+        val commandOptions = viewModel.getSelectedCommandOptions()
+        val existing = AutocompleteModelUtils.findCommandOptionValueRange(editable, option, commandOptions)
+        if (existing != null) {
+            editText.setSelection(existing.first, existing.last.coerceAtMost(editable.length))
+            resyncAfterEdit()
+            return
+        }
+
+        val prefix = when (option.type) {
+            ApplicationCommandType.USER,
+            ApplicationCommandType.ROLE,
+            ApplicationCommandType.MENTIONABLE,
+            -> "@"
+            ApplicationCommandType.CHANNEL -> "#"
+            else -> ""
+        }
+        val separator = if (editable.isEmpty() || editable.last().isWhitespace()) "" else " "
+        val insertion = "$separator${option.name}:$prefix"
+        applyingSelection = true
+        try {
+            editable.append(insertion)
+            editText.setSelection(editable.length)
         } finally {
             applyingSelection = false
         }

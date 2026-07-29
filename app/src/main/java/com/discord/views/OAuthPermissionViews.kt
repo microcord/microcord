@@ -4,9 +4,9 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.annotation.StringRes
-import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.auth.OAuthScope
+import com.discord.utilities.views.SimpleRecyclerAdapter
 
 /**
  * Rendering for the OAuth2 scope rows shown on the authorization screen and on the authorized
@@ -85,12 +85,13 @@ object OAuthPermissionViews {
      * Compact scope row (`oauth_token_permission_list_item`), a single check-marked line of text.
      * Used by the authorized applications list.
      */
-    class ScopeViewHolder(private val scopeText: TextView) : RecyclerView.ViewHolder(scopeText) {
+    class ScopeViewHolder(private val scopeText: TextView) :
+        SimpleRecyclerAdapter.ViewHolder<OAuthScope>(scopeText) {
 
         fun bind(scopeName: String) =
             OAuthPermissionViews.setScopePermissionText(scopeText, scopeName)
 
-        fun bind(scope: OAuthScope) =
+        override fun bind(scope: OAuthScope) =
             OAuthPermissionViews.setScopePermissionText(scopeText, scope)
 
         companion object {

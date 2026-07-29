@@ -2,11 +2,15 @@ package com.discord.widgets.hubs
 
 import com.discord.api.hubs.EmailVerification
 import com.discord.api.hubs.GuildInfo
+import com.discord.api.guildscheduledevent.GuildScheduledEventStatus
 import com.discord.models.hubs.DirectoryEntryCategory
 import com.discord.stores.utilities.Default
 import com.discord.stores.utilities.Loading
 import com.discord.stores.utilities.Success
+import com.discord.utilities.guilds.computeShortName
 import com.discord.widgets.hubs.events.HubEventsPage
+import com.discord.widgets.hubs.events.shouldToggleRsvpAfterHubJoin
+import com.discord.widgets.guildscheduledevent.GuildScheduledEventTiming
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -14,6 +18,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HubStateTest {
+
+    @Test
+    fun emailEntryPointOrdinalsMatchDexClinit() {
+        assertEquals(
+            listOf(HubEmailEntryPoint.Onboarding, HubEmailEntryPoint.Invite, HubEmailEntryPoint.Default),
+            HubEmailEntryPoint.values().toList(),
+        )
+    }
 
     @Test
     fun multipleDomainsOnlyWhenTheLookupReturnedGuilds() {
@@ -51,19 +63,9 @@ class HubStateTest {
 
     @Test
     fun guildInitialsDropPossessivesAndWhitespace() {
-        assertEquals("SU", computeGuildInitials("Springfield University"))
-        assertEquals("HN", computeGuildInitials("Homer's Nuclear"))
-        assertEquals("A", computeGuildInitials("Anon"))
-    }
-
-    @Test
-    fun hubStoresStartUninstalledAndReportIt() {
-        HubStores.reset()
-        assertFalse(HubStores.isFullyInstalled)
-        // The stand-ins answer "nothing loaded", which is what drives the screens' empty states.
-        assertNull(HubStores.directories.getGuildScheduledEventsForChannel(1L))
-        assertEquals(emptySet<Long>(), HubStores.guildScheduledEvents.getMeGuildScheduledEventIds(1L))
-        assertEquals(0L, HubStores.voiceChannelSelection.getSelectedVoiceChannelId())
+        assertEquals("SU", computeShortName("Springfield University"))
+        assertEquals("HN", computeShortName("Homer's Nuclear"))
+        assertEquals("A", computeShortName("Anon"))
     }
 
     @Test
@@ -72,6 +74,38 @@ class HubStateTest {
         assertEquals(HubEventsPage.FOOTER, HubEventsPage.Footer(Default).type)
         // Header and footer are singletons in the list, so a constant key is stable by construction.
         assertTrue(HubEventsPage.Header.key != HubEventsPage.Footer(Default).key)
+    }
+
+    @Test
+    fun joiningFromHubOnlyAddsAnEligibleMissingRsvp() {
+        assertTrue(
+            shouldToggleRsvpAfterHubJoin(
+                isRsvped = false,
+                timing = GuildScheduledEventTiming.SOON,
+                status = GuildScheduledEventStatus.SCHEDULED,
+            ),
+        )
+        assertFalse(
+            shouldToggleRsvpAfterHubJoin(
+                isRsvped = true,
+                timing = GuildScheduledEventTiming.SOON,
+                status = GuildScheduledEventStatus.SCHEDULED,
+            ),
+        )
+        assertFalse(
+            shouldToggleRsvpAfterHubJoin(
+                isRsvped = false,
+                timing = GuildScheduledEventTiming.LIVE,
+                status = GuildScheduledEventStatus.ACTIVE,
+            ),
+        )
+        assertFalse(
+            shouldToggleRsvpAfterHubJoin(
+                isRsvped = false,
+                timing = GuildScheduledEventTiming.EXPIRED,
+                status = GuildScheduledEventStatus.COMPLETED,
+            ),
+        )
     }
 
     private fun guildInfo() = GuildInfo(icon = null, id = 1L, name = "Springfield University")

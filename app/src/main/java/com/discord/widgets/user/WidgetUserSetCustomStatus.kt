@@ -5,9 +5,13 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
 import android.widget.RadioGroup
-import androidx.fragment.app.Fragment
+import android.widget.Toast
 import com.discord.app.AppFragment
+import com.discord.app.appViewModels
 import com.discord.R
+import com.discord.models.domain.emoji.ModelEmojiUnicode
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.bindToComponentLifecycle
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -23,7 +27,9 @@ class WidgetUserSetCustomStatus : AppFragment(R.layout.widget_user_set_custom_st
     data class Form(val text: String = "", val expiration: Expiration = Expiration.TOMORROW, val emojiUri: String? = null)
     data class Submission(val text: String?, val expiresAtUtc: String?, val emojiUri: String?)
 
-    private var form = Form()
+    private val viewModel: WidgetUserSetCustomStatusViewModel by appViewModels {
+        WidgetUserSetCustomStatusViewModel()
+    }
     private lateinit var input: TextInputEditText
     private lateinit var expiration: RadioGroup
 
@@ -31,65 +37,85 @@ class WidgetUserSetCustomStatus : AppFragment(R.layout.widget_user_set_custom_st
         super.onViewCreated(view, savedInstanceState)
         input = requireNotNull(view.findViewById<TextInputLayout>(R.id.set_custom_status_text).editText as? TextInputEditText)
         expiration = view.findViewById(R.id.set_custom_status_expiration)
-        form = savedInstanceState?.let { Form(it.getString(TEXT).orEmpty(), Expiration.valueOf(it.getString(EXPIRATION) ?: Expiration.TOMORROW.name), it.getString(EMOJI)) }
-            ?: initialState?.invoke() ?: Form()
-        render()
         input.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { form = form.copy(text = s?.take(MAX_LENGTH).toString()) }
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                viewModel.setStatusText(s?.take(MAX_LENGTH).toString())
+            }
             override fun afterTextChanged(s: Editable?) = Unit
         })
-        expiration.setOnCheckedChangeListener { _, checked -> expirationFor(checked)?.let { form = form.copy(expiration = it) } }
+        expiration.setOnCheckedChangeListener { _, checked ->
+            expirationFor(checked)?.let(viewModel::setExpiration)
+        }
         view.findViewById<View>(R.id.set_custom_status_emoji_button).setOnClickListener {
             if (onChooseEmoji != null) onChooseEmoji?.invoke() else {
                 val emojis = arrayOf("😀", "🎮", "🎵", "💬", "🌙")
                 MaterialAlertDialogBuilder(requireContext()).setItems(emojis) { _, index ->
-                    form = form.copy(emojiUri = emojis[index])
-                    render()
+                    viewModel.setStatusEmoji(
+                        ModelEmojiUnicode(names = listOf(emojis[index]), surrogates = emojis[index]),
+                    )
                 }.show()
             }
         }
         view.findViewById<TextInputLayout>(R.id.set_custom_status_text).setEndIconOnClickListener {
-            form = form.copy(text = "", emojiUri = null); render(); onClear?.invoke()
+            viewModel.clearStatusTextAndEmoji()
         }
         view.findViewById<View>(R.id.set_custom_status_save).setOnClickListener {
-            onSave?.invoke(submission(form, nowMillis()))
+            viewModel.saveStatus()
         }
     }
 
-    override fun onSaveInstanceState(outState: Bundle) {
-        outState.putString(TEXT, form.text); outState.putString(EXPIRATION, form.expiration.name); outState.putString(EMOJI, form.emojiUri)
-        super.onSaveInstanceState(outState)
+    override fun onViewBoundOrOnResume() {
+        super.onViewBoundOrOnResume()
+        viewModel.observeViewState()
+            .bindToComponentLifecycle(this)
+            .appSubscribe(WidgetUserSetCustomStatus::class.java) { state ->
+                if (state is WidgetUserSetCustomStatusViewModel.ViewState.Loaded) render(state)
+            }
+        viewModel.observeEvents()
+            .bindToComponentLifecycle(this)
+            .appSubscribe(WidgetUserSetCustomStatus::class.java) { event ->
+                val message = when (event) {
+                    is WidgetUserSetCustomStatusViewModel.Event.SetStatusFailure -> event.failureMessageStringRes
+                    is WidgetUserSetCustomStatusViewModel.Event.SetStatusSuccess -> event.successMessageStringRes
+                }
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                if (event is WidgetUserSetCustomStatusViewModel.Event.SetStatusSuccess) {
+                    parentFragmentManager.popBackStack()
+                }
+            }
     }
 
-    fun setEmojiUri(uri: String?) {
-        form = form.copy(emojiUri = uri)
-        if (view != null) render()
-    }
-
-    private fun render() {
-        if (input.text?.toString() != form.text) { input.setText(form.text.take(MAX_LENGTH)); input.setSelection(input.text?.length ?: 0) }
+    private fun render(state: WidgetUserSetCustomStatusViewModel.ViewState.Loaded) {
+        val form = state.formState
+        if (input.text?.toString() != form.text) {
+            input.setText(form.text.take(MAX_LENGTH))
+            input.setSelection(input.text?.length ?: 0)
+        }
         expiration.check(idFor(form.expiration))
         requireView().findViewById<SimpleDraweeView>(R.id.set_custom_status_emoji).apply {
-            if (form.emojiUri == null) setActualImageResource(R.drawable.ic_smiley_desaturated) else setImageURI(form.emojiUri)
+            if (form.emoji == null) {
+                setActualImageResource(R.drawable.ic_smiley_desaturated)
+            } else {
+                setImageURI(form.emoji.getImageUri(true, 64, requireContext()))
+            }
         }
-        requireView().findViewById<TextInputLayout>(R.id.set_custom_status_text).isEndIconVisible = form.text.isNotEmpty() || form.emojiUri != null
+        requireView().findViewById<TextInputLayout>(R.id.set_custom_status_text).isEndIconVisible =
+            state.showStatusClear
     }
 
-    private fun idFor(value: Expiration) = when (value) {
-        Expiration.NEVER -> R.id.set_custom_status_expiration_never
-        Expiration.IN_30_MINUTES -> R.id.set_custom_status_expiration_30_minutes
-        Expiration.IN_1_HOUR -> R.id.set_custom_status_expiration_1_hour
-        Expiration.IN_4_HOURS -> R.id.set_custom_status_expiration_4_hours
-        Expiration.TOMORROW -> R.id.set_custom_status_expiration_tomorrow
+    private fun idFor(value: WidgetUserSetCustomStatusViewModel.FormState.Expiration) = when (value) {
+        WidgetUserSetCustomStatusViewModel.FormState.Expiration.NEVER -> R.id.set_custom_status_expiration_never
+        WidgetUserSetCustomStatusViewModel.FormState.Expiration.IN_30_MINUTES -> R.id.set_custom_status_expiration_30_minutes
+        WidgetUserSetCustomStatusViewModel.FormState.Expiration.IN_1_HOUR -> R.id.set_custom_status_expiration_1_hour
+        WidgetUserSetCustomStatusViewModel.FormState.Expiration.IN_4_HOURS -> R.id.set_custom_status_expiration_4_hours
+        WidgetUserSetCustomStatusViewModel.FormState.Expiration.TOMORROW -> R.id.set_custom_status_expiration_tomorrow
     }
-    private fun expirationFor(id: Int) = Expiration.entries.firstOrNull { idFor(it) == id }
+    private fun expirationFor(id: Int) =
+        WidgetUserSetCustomStatusViewModel.FormState.Expiration.entries.firstOrNull { idFor(it) == id }
 
     companion object {
         const val MAX_LENGTH = 128
-        private const val TEXT = "custom_status_text"
-        private const val EXPIRATION = "custom_status_expiration"
-        private const val EMOJI = "custom_status_emoji"
         @JvmField var initialState: (() -> Form)? = null
         @JvmField var onChooseEmoji: (() -> Unit)? = null
         @JvmField var onSave: ((Submission) -> Unit)? = null

@@ -200,6 +200,29 @@ class StoreStreamWiringTest {
     }
 
     @Test
+    fun completedStoresArePublishedAndRegistered() {
+        val storesV2 = StoreStream::class.java.getDeclaredField("storesV2").run {
+            isAccessible = true
+            @Suppress("UNCHECKED_CAST")
+            get(stream) as List<StoreV2>
+        }
+        val publishedV2 = listOf(
+            StoreStream.getApplicationStreamPreviews(),
+            StoreStream.getEntitlements(),
+            StoreStream.getGooglePlayPurchases(),
+            StoreStream.getGooglePlaySkuDetails(),
+            StoreStream.getGuildsNsfw(),
+            StoreStream.getMaskedLinks(),
+            StoreStream.getMediaFavorites(),
+            StoreStream.getNotificationUpsells(),
+        )
+
+        assertTrue(storesV2.containsAll(publishedV2))
+        assertTrue(StoreStream.getAnalytics() is StoreAnalytics)
+        assertTrue(StoreStream.getInviteSettings() is StoreInviteSettings)
+    }
+
+    @Test
     fun switchingGuildSurfacesRestoresTheirLastChannel() {
         stream.handleConnectionOpen(gson.fromJson(READY_JSON, ModelPayload::class.java))
         val dm = gson.fromJson(

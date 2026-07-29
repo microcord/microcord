@@ -3,103 +3,343 @@ package com.discord.widgets.channels.settings
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.provider.Settings
 import android.view.View
-import android.widget.Toast
-import androidx.appcompat.widget.Toolbar
-import androidx.fragment.app.Fragment
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.core.view.isVisible
+import com.discord.R
+import com.discord.api.channel.Channel
+import com.discord.api.channel.getDisplayNameOrDefault
+import com.discord.api.channel.isCategory
+import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isStageVoiceChannel
+import com.discord.api.channel.isTextChannel
+import com.discord.api.channel.isThread
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
-import com.discord.R
 import com.discord.models.domain.ModelNotificationSettings
+import com.discord.models.guild.Guild
+import com.discord.stores.StoreThreadsJoined
+import com.discord.stores.StoreStream
+import com.discord.utilities.channel.ChannelNotificationSettingsUtils
+import com.discord.utilities.rx.ui
 import com.discord.views.CheckedSetting
+import com.discord.views.RadioManager
 import com.discord.widgets.servers.NotificationMuteSettingsView
-import com.discord.widgets.settings.OptimisticMutation
+import com.discord.widgets.settings.SettingsStrings
+import com.discord.widgets.settings.WidgetMuteSettingsSheet
 import rx.Observable
-import rx.Subscription
-import rx.functions.Action1
 
 class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_notification_settings) {
-    data class State(
-        val channelId: Long,
-        val channelName: String,
-        val muted: Boolean = false,
-        val muteEndTime: String? = null,
-        val messageNotifications: Int = ModelNotificationSettings.FREQUENCY_UNSET,
-        val showSystemSettings: Boolean = false,
-    )
 
-    private var subscription: Subscription? = null
-    private var optimistic: OptimisticMutation<State>? = null
+    private lateinit var radioManager: RadioManager
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        view.findViewById<Toolbar>(R.id.action_bar_toolbar)?.apply {
-            setTitle(R.string.notification_settings)
-            setNavigationOnClickListener { parentFragmentManager.popBackStack() }
-        }
-        view.findViewById<View>(R.id.channel_notification_settings_system).setOnClickListener {
-            onOpenSystemSettings?.invoke(requireChannelId())
-        }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        subscription = stateSource?.invoke(requireChannelId())?.distinctUntilChanged()?.subscribe { state ->
-            val mutation = optimistic ?: OptimisticMutation(state, ::render, ::showError).also { optimistic = it }
-            mutation.accept(state)
-        }
-    }
-
-    override fun onStop() { subscription?.unsubscribe(); subscription = null; super.onStop() }
-
-    private fun render(state: State) {
-        val root = view ?: return
-        root.findViewById<Toolbar>(R.id.action_bar_toolbar)?.subtitle = state.channelName
-        val showSystemSettings = state.showSystemSettings || requireArguments().getBoolean(ARG_SHOW_SYSTEM)
-        root.findViewById<View>(R.id.channel_notification_settings_system).visibility = if (showSystemSettings) View.VISIBLE else View.GONE
-        root.findViewById<NotificationMuteSettingsView>(R.id.mute_settings).updateView(
-            NotificationMuteSettingsView.ViewState(
-                state.muted, state.muteEndTime, "Mute ${state.channelName}", "Unmute ${state.channelName}",
-                getString(R.string.form_label_mobile_channel_muted), R.string.form_label_mobile_channel_muted_until,
-                getString(R.string.form_label_mobile_channel_override_mute),
+    override fun onViewBound(view: View) {
+        super.onViewBound(view)
+        setActionBarDisplayHomeAsUpEnabled()
+        setActionBarTitle(R.string.notification_settings)
+        radioManager = RadioManager(
+            listOf(
+                view.findViewById<CheckedSetting>(R.id.frequency_radio_all),
+                view.findViewById<CheckedSetting>(R.id.frequency_radio_mentions),
+                view.findViewById<CheckedSetting>(R.id.frequency_radio_nothing),
             ),
-            { update(state.copy(muted = true)) }, { update(state.copy(muted = false, muteEndTime = null)) },
         )
-        bind(root, R.id.frequency_radio_all, state.messageNotifications == 0, 0)
-        bind(root, R.id.frequency_radio_mentions, state.messageNotifications == 1, 1)
-        bind(root, R.id.frequency_radio_nothing, state.messageNotifications == 2, 2)
-    }
-
-    private fun bind(root: View, id: Int, checked: Boolean, frequency: Int) {
-        root.findViewById<CheckedSetting>(id).apply {
-            setOnCheckedListener(null); isChecked = checked
-            setOnCheckedListener(Action1 { if (it) update(requireNotNull(optimistic).state.copy(messageNotifications = frequency)) })
+        view.findViewById<View>(R.id.channel_notification_settings_system).apply {
+            isVisible = arguments?.takeIf { it.containsKey(ARG_SHOW_SYSTEM) }?.getBoolean(ARG_SHOW_SYSTEM)
+                ?: mostRecentIntent.getBooleanExtra(ARG_SHOW_SYSTEM, false)
+            setOnClickListener { openSystemNotificationSettings(it.context) }
         }
     }
 
-    private fun update(next: State) = optimistic?.submit(next) { value, done ->
-        onMutation?.invoke(value.channelId, value) { result ->
-            view?.post { done(result) } ?: done(result)
-        } ?: done(Result.success(Unit))
+    override fun onViewBoundOrOnResume() {
+        super.onViewBoundOrOnResume()
+        Model.observe(requireChannelId()).ui(this).subscribe { model ->
+            if (model == null) activity?.finish() else render(model)
+        }
     }
 
-    private fun showError(error: Throwable) {
-        view?.post { onError?.invoke(error) ?: Toast.makeText(requireContext(), R.string.notification_settings_update_failed, Toast.LENGTH_SHORT).show() }
+    private fun render(model: Model) {
+        val root = view ?: return
+        val channel = model.channel
+        val isTextChannel = channel.isTextChannel()
+        val isCategory = channel.isCategory()
+        val supportsMute = isTextChannel || isCategory
+
+        setActionBarSubtitle(channel.getDisplayNameOrDefault(requireContext()))
+        root.findViewById<NotificationMuteSettingsView>(R.id.mute_settings).apply {
+            isVisible = supportsMute
+            updateView(
+                NotificationMuteSettingsView.ViewState(
+                    model.channelIsMuted,
+                    model.channelMuteEndTime,
+                    if (isTextChannel) {
+                        SettingsStrings.render(
+                            requireContext(),
+                            R.string.mute_channel,
+                            "name" to channel.getDisplayNameOrDefault(requireContext()),
+                        )
+                    } else {
+                        getString(R.string.mute_category)
+                    },
+                    if (isTextChannel) {
+                        SettingsStrings.render(
+                            requireContext(),
+                            R.string.unmute_channel,
+                            "name" to channel.getDisplayNameOrDefault(requireContext()),
+                        )
+                    } else {
+                        getString(R.string.unmute_category)
+                    },
+                    getString(R.string.form_label_mobile_channel_muted),
+                    if (isTextChannel) {
+                        R.string.form_label_mobile_channel_muted_until
+                    } else {
+                        R.string.form_label_mobile_category_muted_until
+                    },
+                    getString(
+                        if (isTextChannel) {
+                            R.string.form_label_mobile_channel_override_mute
+                        } else {
+                            R.string.form_label_mobile_category_override_mute
+                        },
+                    ),
+                ),
+                { WidgetMuteSettingsSheet.showForChannel(channel.id, parentFragmentManager) },
+                { StoreStream.getUserGuildSettings().setChannelMuted(requireContext(), channel.id, false) },
+            )
+        }
+        root.findViewById<View>(R.id.frequency_top_divider).isVisible = supportsMute
+
+        configureRadio(root.findViewById(R.id.frequency_radio_all), model, ModelNotificationSettings.FREQUENCY_ALL)
+        configureRadio(root.findViewById(R.id.frequency_radio_mentions), model, ModelNotificationSettings.FREQUENCY_MENTIONS)
+        configureRadio(root.findViewById(R.id.frequency_radio_nothing), model, ModelNotificationSettings.FREQUENCY_NOTHING)
+        root.findViewById<CheckedSetting>(R.id.frequency_radio_all).isVisible = supportsMute
+        root.findViewById<CheckedSetting>(R.id.frequency_radio_mentions).setText(
+            getString(
+                if (channel.isStageVoiceChannel()) {
+                    R.string.form_label_live_stages_only
+                } else {
+                    R.string.form_label_only_mentions
+                },
+            ),
+        )
+
+        if (channel.isGuildForumChannel() && model.canAccessRedesignedForumChannels) {
+            configureForum(root, model)
+        } else {
+            root.findViewById<LinearLayout>(R.id.forum_channel_notification_settings).isVisible = false
+            root.findViewById<TextView>(R.id.frequency_subheader).isVisible = false
+        }
     }
 
-    private fun requireChannelId() = requireArguments().getLong(ARG_CHANNEL_ID)
+    private fun configureRadio(radio: CheckedSetting, model: Model, frequency: Int) {
+        radio.setContainerClickListener(null)
+        radio.setDisabledTooltip(null)
+        if (model.isGuildMuted || model.channelIsMuted) {
+            radio.setDisabledTooltip(R.string.channel_or_guild_muted)
+        } else {
+            radio.setContainerClickListener {
+                StoreStream.getUserGuildSettings().setChannelFrequency(it.context, model.channel, frequency)
+            }
+        }
+        radio.setSubtext(
+            if (model.isAboveNotifyAllSize && frequency == ModelNotificationSettings.FREQUENCY_ALL) {
+                getString(R.string.large_guild_notify_all_messages_description)
+            } else {
+                null
+            },
+        )
+        val selected = model.notificationSetting == frequency
+        radio.setButtonAlpha(if (selected && model.notificationSettingIsInherited) RADIO_DIMMED_ALPHA else 1f)
+        if (selected) radioManager.setChecked(radio)
+    }
+
+    private fun configureForum(root: View, model: Model) {
+        root.findViewById<LinearLayout>(R.id.forum_channel_notification_settings).isVisible = true
+        root.findViewById<TextView>(R.id.frequency_header).setText(R.string.forum_message_notifications)
+        root.findViewById<TextView>(R.id.frequency_subheader).apply {
+            isVisible = true
+            setText(R.string.forum_message_notifications_description)
+        }
+        root.findViewById<CheckedSetting>(R.id.frequency_all_posts).apply {
+            setOnCheckedListener(null)
+            isChecked = when (model.forumPostNotificationSetting) {
+                ModelNotificationSettings.FORUM_THREAD_CREATED_ON -> true
+                ModelNotificationSettings.FORUM_THREAD_CREATED_OFF -> false
+                else -> model.parentNotificationSetting == ModelNotificationSettings.FREQUENCY_ALL
+            }
+            setOnCheckedListener { checked ->
+                val setting = if (checked) {
+                    ModelNotificationSettings.FORUM_THREAD_CREATED_ON
+                } else {
+                    ModelNotificationSettings.FORUM_THREAD_CREATED_OFF
+                }
+                val flags = setting or
+                    ((model.channelOverrideFlags ?: 0) and ModelNotificationSettings.FORUM_THREAD_CREATED_MASK.inv())
+                StoreStream.getUserGuildSettings().setChannelNotificationFlags(context, model.channel, flags)
+            }
+        }
+    }
+
+    private fun openSystemNotificationSettings(context: Context) {
+        runCatching {
+            context.startActivity(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+            )
+        }
+    }
+
+    private fun requireChannelId() =
+        arguments?.takeIf { it.containsKey(ARG_CHANNEL_ID) }?.getLong(ARG_CHANNEL_ID)
+            ?: mostRecentIntent.getLongExtra(ARG_CHANNEL_ID, -1L)
+
+    internal data class Model(
+        val channel: Channel,
+        val channelIsMuted: Boolean,
+        val channelMuteEndTime: String?,
+        val isGuildMuted: Boolean,
+        val notificationSetting: Int,
+        val channelOverrideFlags: Int?,
+        val forumPostNotificationSetting: Int?,
+        val parentNotificationSetting: Int?,
+        val notificationSettingIsInherited: Boolean,
+        val isAboveNotifyAllSize: Boolean,
+        val canAccessRedesignedForumChannels: Boolean,
+    ) {
+        companion object {
+            private const val FORUM_REDESIGN_EXPERIMENT = "2022-03_android_forum_channel_redesign"
+
+            fun observe(channelId: Long): Observable<Model?> =
+                StoreStream.getChannels().observeChannel(channelId).switchMap { channel ->
+                    if (channel == null) return@switchMap Observable.just<Model?>(null)
+                    Observable.combineLatest(
+                        StoreStream.getThreadsJoined().observeJoinedThread(channel.id),
+                        StoreStream.getChannels().observeChannel(channel.parentId),
+                        StoreStream.getGuilds().observeGuild(channel.guildId),
+                        StoreStream.getUserGuildSettings().observeGuildSettings(channel.guildId),
+                        StoreStream.getGuildProfiles().observeGuildProfile(channel.guildId),
+                        StoreStream.getExperiments().observeGuildExperiment(
+                            FORUM_REDESIGN_EXPERIMENT,
+                            channel.guildId,
+                            false,
+                        ),
+                    ) { joinedThread, parent, guild, settings, profile, forumExperiment ->
+                        guild?.let {
+                            create(
+                                channel,
+                                parent,
+                                it,
+                                settings,
+                                joinedThread,
+                                profile?.data?.approximateMemberCount,
+                                forumExperiment?.bucket == 1,
+                            )
+                        }
+                    }
+                }.distinctUntilChanged()
+
+            internal fun create(
+                channel: Channel,
+                parentChannel: Channel?,
+                guild: Guild,
+                guildSettings: ModelNotificationSettings,
+                joinedThread: StoreThreadsJoined.JoinedThread?,
+                approximateMemberCount: Int?,
+                canAccessRedesignedForumChannels: Boolean,
+            ): Model {
+                val override = guildSettings.getChannelOverride(channel.id)
+                val parentNotificationSetting = notificationLevel(guildSettings, parentChannel, guild)
+                val notificationSetting = if (channel.isThread()) {
+                    when (
+                        threadNotificationSetting(
+                            joinedThread,
+                            isMuted(guildSettings, parentChannel),
+                            parentNotificationSetting,
+                        )
+                    ) {
+                        THREAD_SETTING_MENTIONS -> ModelNotificationSettings.FREQUENCY_MENTIONS
+                        THREAD_SETTING_NOTHING -> ModelNotificationSettings.FREQUENCY_NOTHING
+                        else -> ModelNotificationSettings.FREQUENCY_ALL
+                    }
+                } else {
+                    ChannelNotificationSettingsUtils.computeNotificationSetting(guild, channel, guildSettings)
+                }
+                return Model(
+                    channel = channel,
+                    channelIsMuted = if (channel.isThread()) joinedThread?.muted == true else override?.isMuted == true,
+                    channelMuteEndTime = if (channel.isThread()) {
+                        joinedThread?.muteConfig?.endTime
+                    } else {
+                        override?.muteEndTime
+                    },
+                    isGuildMuted = guildSettings.isMuted,
+                    notificationSetting = notificationSetting,
+                    channelOverrideFlags = override?.flags,
+                    forumPostNotificationSetting = override?.getForumPostNotificationSetting(),
+                    parentNotificationSetting = parentNotificationSetting,
+                    notificationSettingIsInherited = notificationSetting == ModelNotificationSettings.FREQUENCY_UNSET,
+                    isAboveNotifyAllSize = (approximateMemberCount ?: 0) > 2_500,
+                    canAccessRedesignedForumChannels = canAccessRedesignedForumChannels,
+                )
+            }
+
+            private fun notificationLevel(
+                settings: ModelNotificationSettings,
+                channel: Channel?,
+                guild: Guild,
+            ): Int? {
+                if (channel == null) return guild.defaultMessageNotifications
+                val channelLevel = settings.getChannelOverride(channel.id)?.messageNotifications
+                    ?.takeUnless { it == ModelNotificationSettings.FREQUENCY_UNSET }
+                val parentLevel = settings.getChannelOverride(channel.parentId)?.messageNotifications
+                    ?.takeUnless { it == ModelNotificationSettings.FREQUENCY_UNSET }
+                return channelLevel ?: parentLevel
+                    ?: settings.messageNotifications.takeUnless { it == ModelNotificationSettings.FREQUENCY_UNSET }
+                    ?: guild.defaultMessageNotifications
+            }
+
+            private fun isMuted(settings: ModelNotificationSettings, channel: Channel?): Boolean =
+                settings.isMuted || channel != null && (
+                    settings.getChannelOverride(channel.parentId)?.isMuted == true ||
+                        settings.getChannelOverride(channel.id)?.isMuted == true
+                    )
+
+            private fun threadNotificationSetting(
+                joinedThread: StoreThreadsJoined.JoinedThread?,
+                parentMuted: Boolean,
+                parentSetting: Int?,
+            ): Int = when {
+                joinedThread == null -> THREAD_SETTING_NOTHING
+                joinedThread.flags and THREAD_FLAG_ALL_MESSAGES != 0 -> THREAD_SETTING_ALL
+                joinedThread.flags and THREAD_FLAG_ONLY_MENTIONS != 0 -> THREAD_SETTING_MENTIONS
+                joinedThread.flags and THREAD_FLAG_NO_MESSAGES != 0 || parentMuted -> THREAD_SETTING_NOTHING
+                parentSetting == ModelNotificationSettings.FREQUENCY_MENTIONS -> THREAD_SETTING_MENTIONS
+                parentSetting == ModelNotificationSettings.FREQUENCY_NOTHING -> THREAD_SETTING_NOTHING
+                else -> THREAD_SETTING_ALL
+            }
+        }
+    }
 
     companion object {
         const val ROUTE = "channel/{channelId}/notifications"
-        private const val ARG_CHANNEL_ID = "channel_id"
-        @JvmField var stateSource: ((Long) -> Observable<State>)? = null
-        @JvmField var onMutation: ((Long, State, (Result<Unit>) -> Unit) -> Unit)? = null
-        @JvmField var onOpenSystemSettings: ((Long) -> Unit)? = null
-        @JvmField var onError: ((Throwable) -> Unit)? = null
-        fun newInstance(channelId: Long, showSystemSettings: Boolean = false) = WidgetChannelNotificationSettings().apply {
-            arguments = argumentsOf(channelId, showSystemSettings)
-        }
+        private const val ARG_CHANNEL_ID = "com.discord.intent.extra.EXTRA_CHANNEL_ID"
+        private const val ARG_SHOW_SYSTEM = "SHOW_SYSTEM_SETTING"
+        private const val RADIO_DIMMED_ALPHA = 0.3f
+        private const val THREAD_FLAG_ALL_MESSAGES = 2
+        private const val THREAD_FLAG_ONLY_MENTIONS = 4
+        private const val THREAD_FLAG_NO_MESSAGES = 8
+        private const val THREAD_SETTING_ALL = 2
+        private const val THREAD_SETTING_MENTIONS = 4
+        private const val THREAD_SETTING_NOTHING = 8
 
-        /** Opens the screen as a top-level destination, as the reference's `launch` does. */
+        fun newInstance(channelId: Long, showSystemSettings: Boolean = false) =
+            WidgetChannelNotificationSettings().apply {
+                arguments = argumentsOf(channelId, showSystemSettings)
+            }
+
         @JvmStatic
         @JvmOverloads
         fun launch(context: Context, channelId: Long, showSystemSettings: Boolean = false) {
@@ -114,6 +354,5 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
             putLong(ARG_CHANNEL_ID, channelId)
             putBoolean(ARG_SHOW_SYSTEM, showSystemSettings)
         }
-        private const val ARG_SHOW_SYSTEM = "show_system_settings"
     }
 }

@@ -170,7 +170,7 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
         markAsRead.visibility =
             if (channel.isTextChannel() || channel.isCategory()) View.VISIBLE else View.GONE
         markAsRead.setOnClickAndDismissListener {
-            StoreStream.getReadStates().markAsRead(channel.id)
+            StoreStream.getMessageAck().ack(channel.id, isLockedAck = false, clearLock = true)
         }
 
         developerDivider.visibility = if (model.isDeveloper) View.VISIBLE else View.GONE

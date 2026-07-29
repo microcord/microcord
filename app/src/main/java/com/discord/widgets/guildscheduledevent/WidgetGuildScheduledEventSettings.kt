@@ -12,7 +12,6 @@ import android.text.format.DateUtils
 import android.view.View
 import android.widget.TextView
 import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
 import com.discord.R
 import com.discord.api.guildscheduledevent.GuildScheduledEventEntityType
 import com.discord.app.AppFragment
@@ -56,12 +55,22 @@ class WidgetGuildScheduledEventSettings : AppFragment(R.layout.widget_guild_sche
     private lateinit var next: MaterialButton
     private var currentState: GuildScheduledEventSettingsViewModel.ViewState.Initialized? = null
 
-    private val previewLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK || result.resultCode == RESULT_QUIT) {
-            activity?.setResult(result.resultCode, result.data)
+    private val previewLauncher = WidgetPreviewGuildScheduledEvent.registerForResult(
+        this,
+        onEventCreated = { channelId, eventId, eventCreated ->
+            activity?.let { host ->
+                host.setResult(Activity.RESULT_OK)
+                if (eventCreated) {
+                    WidgetGuildScheduledEventCreateSuccess.launch(host, channelId, guildId, eventId)
+                }
+                host.finish()
+            }
+        },
+        onQuit = {
+            activity?.setResult(RESULT_QUIT)
             activity?.finish()
-        }
-    }
+        },
+    )
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)

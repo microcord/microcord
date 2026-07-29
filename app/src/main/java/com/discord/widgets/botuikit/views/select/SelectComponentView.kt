@@ -12,12 +12,12 @@ import com.discord.api.botuikit.ComponentType
 import com.discord.models.botuikit.ActionInteractionComponentState
 import com.discord.models.botuikit.SelectMessageComponent
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.view.extensions.setEnabledAlpha
 import com.discord.views.typing.TypingDots
 import com.discord.widgets.botuikit.ComponentProvider
 import com.discord.widgets.botuikit.views.ComponentActionListener
 import com.discord.widgets.botuikit.views.ComponentView
-import com.discord.widgets.botuikit.views.setEmojiOrHide
-import com.discord.widgets.botuikit.views.setEnabledAlpha
+import com.discord.widgets.botuikit.views.ComponentViewUtils
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.flexbox.FlexboxLayout
 import com.google.android.material.textview.MaterialTextView
@@ -53,7 +53,9 @@ class SelectComponentView @JvmOverloads constructor(
                 selectionRoot.visibility = View.GONE
                 text.setTextColor(ColorCompat.getThemedColor(context, R.attr.colorInteractiveNormal))
                 text.text = selected.label
-                icon.setEmojiOrHide(selected.emoji, component.emojiAnimationsEnabled)
+                ComponentViewUtils.run {
+                    icon.setEmojiOrHide(selected.emoji, component.emojiAnimationsEnabled)
+                }
             }
             else -> {
                 text.visibility = View.GONE

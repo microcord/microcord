@@ -2,6 +2,7 @@ package com.discord.widgets.servers
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
@@ -14,6 +15,8 @@ import com.discord.app.AppFragment
 import com.discord.app.AppViewFlipper
 import com.discord.app.AppViewModel
 import com.discord.app.appViewModels
+import com.discord.dialogs.ImageUploadDialog
+import com.discord.media_picker.MediaPicker
 import com.discord.i18n.i18nPlural
 import com.discord.models.domain.emoji.ModelEmojiCustom
 import com.discord.models.domain.emoji.ModelEmojiGuild
@@ -21,6 +24,7 @@ import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
 import com.discord.models.user.CoreUser
 import com.discord.models.user.User
+import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
@@ -30,7 +34,10 @@ import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.premium.PremiumUtils
+import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
+import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.user.UserUtils.getUserNameWithDiscriminator
 import com.discord.utilities.view.extensions.setGrayscale
@@ -58,11 +65,6 @@ import rx.Observable
  * - **Unavailable emoji are greyed out, not hidden.** When a guild loses boost tiers its extra emoji
  *   stop working but remain listed; the row renders them desaturated and dimmed.
  *
- * ### Deliberate degradations
- * - **Upload is unavailable.** It needs `MGImages.prepareImageUpload` / `requestDataUrl` and
- *   `com.discord.dialogs.ImageUploadDialog`, neither of which this project has reconstructed
- *   (`docs/parity-audit/followups.md`). The button is disabled rather than opening a picker that
- *   could never finish. Listing, renaming and deleting are complete.
  */
 class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_emojis) {
 
@@ -77,6 +79,15 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
 
     private lateinit var viewFlipper: AppViewFlipper
     private var adapter: Adapter? = null
+    private var uploadName = "emoji_1"
+    private val mediaPickerProvider by lazy {
+        object : MediaPicker.Provider {
+            override fun requireContext() = this@WidgetServerSettingsEmojis.requireContext()
+            override fun getImageFile() = imageFile
+            override fun startActivityForResult(intent: Intent, requestCode: Int) =
+                this@WidgetServerSettingsEmojis.startActivityForResult(intent, requestCode)
+        }
+    }
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -114,6 +125,8 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
             is ServerSettingsEmojisViewModel.ViewState.Loaded -> {
                 setActionBarSubtitle(viewState.guildName)
                 viewFlipper.displayedChild = VIEW_INDEX_CONTENT
+                uploadName = defaultUploadName(viewState.items)
+                adapter?.onUploadEmoji = ::openMediaChooser
                 adapter?.onEmojiItemClicked = { view, emoji ->
                     WidgetServerSettingsEmojisEdit.launch(
                         view.context,
@@ -125,6 +138,33 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
                 adapter?.setData(viewState.items)
             }
         }
+    }
+
+    override fun onImageChosen(uri: Uri, mimeType: String) {
+        super.onImageChosen(uri, mimeType)
+        ImageUploadDialog.show(
+            parentFragmentManager,
+            uri,
+            mediaPickerProvider,
+            mimeType,
+            ::uploadEmoji,
+            ImageUploadDialog.PreviewType.EMOJI,
+        )
+    }
+
+    override fun onImageCropped(uri: Uri, mimeType: String) {
+        super.onImageCropped(uri, mimeType)
+        MGImages.requestDataUrl(context, uri, mimeType, ::uploadEmoji)
+    }
+
+    private fun uploadEmoji(dataUrl: String) {
+        val api = RestAPI.apiOrNull ?: return
+        api.postGuildEmoji(guildId, RestAPIParams.PostGuildEmoji(uploadName, dataUrl))
+            .restSubscribeOn()
+            .ui(this)
+            .appSubscribe(WidgetServerSettingsEmojis::class.java, context) {
+                StoreStream.getGuildEmojis().fetchGuildEmoji(guildId)
+            }
     }
 
     /** One row of the list. The list mixes four kinds, so the type is a sealed hierarchy. */
@@ -184,6 +224,7 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
     class Adapter(recycler: RecyclerView) : MGRecyclerAdapterSimple<Item>(recycler) {
 
         var onEmojiItemClicked: ((View, ModelEmojiGuild) -> Unit)? = null
+        var onUploadEmoji: () -> Unit = {}
 
         override fun onCreateViewHolder(
             parent: ViewGroup,
@@ -220,10 +261,8 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
                     "count" to header.emojiMax,
                     "maxSize" to EMOJI_MAX_FILESIZE_KB,
                 )
-                // No upload path exists yet — see the screen's KDoc. Disabled rather than opening a
-                // picker whose result could not be turned into a data URL.
-                upload.isEnabled = false
-                upload.setOnClickListener(null)
+                upload.isEnabled = true
+                upload.setOnClickListener { adapter.onUploadEmoji() }
             }
         }
 
@@ -331,6 +370,9 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
 
         private const val VIEW_INDEX_LOADING = 0
         private const val VIEW_INDEX_CONTENT = 1
+
+        internal fun defaultUploadName(items: List<Item>) =
+            "emoji_${items.count { it is Item.EmojiItem } + 1}"
 
         fun newInstance(guildId: Long) = WidgetServerSettingsEmojis().apply {
             arguments = Bundle().apply { putLong(INTENT_EXTRA_GUILD_ID, guildId) }

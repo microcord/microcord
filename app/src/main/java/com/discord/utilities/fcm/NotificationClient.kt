@@ -104,7 +104,7 @@ object NotificationClient {
 
     @Synchronized
     fun updateSettings(settings: SettingsV2, isBackgrounded: Boolean) {
-        this.settings.set(settings, true)
+        this.settings.set(settings, persist = isBackgrounded)
         this.isBackgrounded = isBackgrounded
     }
 
