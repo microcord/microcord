@@ -71,6 +71,7 @@ class StoreRtcConnection(
         fun setUserMuted(userId: Long, muted: Boolean)
         fun setUserOutputVolume(userId: Long, volume: Float)
         fun setUserOffScreen(userId: Long, offScreen: Boolean)
+        fun setFocusedParticipant(userId: Long?)
 
         object NoOp : RtcConnectionController {
             override fun connect(voiceServer: VoiceServer, channelId: Long, guildId: Long?, sessionId: String) = Unit
@@ -79,6 +80,7 @@ class StoreRtcConnection(
             override fun setUserMuted(userId: Long, muted: Boolean) = Unit
             override fun setUserOutputVolume(userId: Long, volume: Float) = Unit
             override fun setUserOffScreen(userId: Long, offScreen: Boolean) = Unit
+            override fun setFocusedParticipant(userId: Long?) = Unit
         }
     }
 
@@ -118,12 +120,22 @@ class StoreRtcConnection(
         BehaviorSubject.create(null as RtcConnection.Metadata?)
     private var rtcConnectionMetadata: RtcConnection.Metadata? = null
 
-    private val connectionStateSubject =
-        SerializedSubject<Boolean, Boolean>(BehaviorSubject.create(false))
+    private val connectionStateSubject = SerializedSubject<RtcConnection.StateChange, RtcConnection.StateChange>(
+        BehaviorSubject.create(
+            RtcConnection.StateChange(RtcConnection.State.Disconnected(false), null),
+        ),
+    )
 
-    /** `true` while the transport reports a live media connection. */
-    val connectionState: Observable<Boolean> =
+    private val stateChanges: Observable<RtcConnection.StateChange> =
         connectionStateSubject.computationLatest().distinctUntilChanged()
+
+    /** Compatibility projection for existing consumers that only distinguish connected or not. */
+    @get:JvmName("getConnectedState")
+    val connectionState: Observable<Boolean> =
+        stateChanges.map { it.state == RtcConnection.State.RtcConnected }.distinctUntilChanged()
+
+    /** Full 126.21 connection state, including transition metadata. */
+    fun getConnectionState(): Observable<RtcConnection.StateChange> = stateChanges
 
     private var currentVoiceState = VoiceStateUpdate(null, null, false, false, false, null)
     private var selectedVoiceChannel: Channel? = null
@@ -241,9 +253,24 @@ class StoreRtcConnection(
         dispatcher.schedule { voicePropsTracker?.handleOnSpeaking(userId, isSpeaking) }
     }
 
+    fun onStateChange(stateChange: RtcConnection.StateChange) {
+        connectionStateSubject.onNext(stateChange)
+        if (stateChange.state == RtcConnection.State.RtcConnected) {
+            listeners.forEach(Listener::onConnected)
+        } else {
+            listeners.forEach(Listener::onConnecting)
+        }
+    }
+
+    fun updateFocusedParticipant(userId: Long?) = rtcConnectionController.setFocusedParticipant(userId)
+
     fun onConnectedChanged(connected: Boolean) {
-        connectionStateSubject.onNext(connected)
-        if (connected) listeners.forEach(Listener::onConnected) else listeners.forEach(Listener::onConnecting)
+        onStateChange(
+            RtcConnection.StateChange(
+                if (connected) RtcConnection.State.RtcConnected else RtcConnection.State.RtcDisconnected,
+                rtcConnectionController.metadata,
+            ),
+        )
         dispatcher.schedule { updateMetadata() }
     }
 

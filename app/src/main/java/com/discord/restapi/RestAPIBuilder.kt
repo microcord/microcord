@@ -1,6 +1,7 @@
 package com.discord.restapi
 
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
+import com.discord.models.domain.Model
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
@@ -53,6 +54,7 @@ class RestAPIBuilder(
     private fun gson(serializeNulls: Boolean): Gson = GsonBuilder()
         .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
         .registerDiscordApiTypeAdapters()
+        .registerTypeAdapterFactory(Model.TypeAdapterFactory())
         // A channel reorder must be able to write `"parent_id": null` to move a channel out of its
         // category while still omitting the key when the parent is unchanged, which the default
         // reflective adapter cannot express.

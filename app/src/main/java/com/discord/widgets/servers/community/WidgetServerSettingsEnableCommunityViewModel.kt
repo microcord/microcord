@@ -40,7 +40,7 @@ class WidgetServerSettingsEnableCommunityViewModel(
     storeStateObservable: Observable<StoreState> = observeStoreState(guildId),
     private val updateGuild: (Long, RestAPIParams.UpdateGuild) -> Observable<com.discord.api.guild.Guild>? =
         { id, params -> RestAPI.apiOrNull?.updateGuild(id, params) },
-    private val updateRole: (Long, Long, RestAPIParams.Role) -> Observable<Void>? =
+    private val updateRole: (Long, Long, RestAPIParams.Role) -> Observable<Void?>? =
         { id, roleId, params -> RestAPI.apiOrNull?.updateRole(id, roleId, params) },
 ) : AppViewModel<WidgetServerSettingsEnableCommunityViewModel.ViewState>(ViewState.Uninitialized) {
 

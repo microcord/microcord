@@ -79,7 +79,7 @@ data class GuildSubscriptionPayload(
  */
 class StoreGuildSubscriptions(
     private val observationDeck: ObservationDeck,
-    private val dispatcher: Dispatcher? = null,
+    private val dispatcher: Dispatcher,
     /** Wire to `StoreGuildSelected::getSelectedGuildId`. */
     private val getSelectedGuildId: () -> Long = { 0L },
     /** Wire to the RTC connection's guild, so a voice session keeps its subscription. */
@@ -93,12 +93,6 @@ class StoreGuildSubscriptions(
         onChange = { guildId, subscriptions -> emit(GuildSubscriptionPayload(guildId, subscriptions)) },
         delayScheduler = unsubscribeDelayScheduler,
     )
-
-    /** Shorthand for tests and for call sites that only need the emission callback. */
-    constructor(
-        observationDeck: ObservationDeck,
-        onSubscription: (GuildSubscriptionPayload) -> Unit,
-    ) : this(observationDeck, null, { 0L }, { 0L }, onSubscription)
 
     private val events = PublishSubject.create<GuildSubscriptionPayload>()
     private var rangesSnapshot: Map<Long, Map<Long, List<IntRange>>> = emptyMap()
@@ -234,8 +228,7 @@ class StoreGuildSubscriptions(
     }
 
     private fun schedule(block: () -> Unit) {
-        val dispatcher = dispatcher
-        if (dispatcher == null) block() else dispatcher.schedule(block)
+        dispatcher.schedule(block)
     }
 
     /**

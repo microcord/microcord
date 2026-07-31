@@ -5,6 +5,7 @@ import androidx.fragment.app.FragmentManager
 import com.discord.api.channel.Channel
 import com.discord.api.guildjoinrequest.GuildJoinRequest
 import com.discord.app.AppViewModel
+import com.discord.models.domain.ModelApplicationStream
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.guild.Guild
 import com.discord.panels.PanelState
@@ -21,7 +22,9 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.time.Clock
 import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.user.UserUtils.getAgeMs
+import com.discord.widgets.guildscheduledevent.GuildIdsWithActiveEventsModel
 import com.discord.widgets.guilds.list.GuildsListStoreHooks.GuildStream
+import com.discord.widgets.stage.GuildIdsWithVisibleStageInstanceModel
 import com.discord.widgets.tabs.NavigationTab
 import rx.Observable
 import rx.subjects.PublishSubject
@@ -412,7 +415,14 @@ class WidgetGuildsListViewModel(
             GuildsListStoreHooks.lurkingGuildIds(),
             StoreStream.getExpandedGuildFolders().observeOpenFolderIds(),
             StoreStream.getUsers().observeMe().distinctUntilChanged().map { it.getAgeMs(clock) < NEW_USER_AGE_MS },
-            GuildsListStoreHooks.applicationStreams(),
+            Observable.combineLatest(
+                StoreStream.getApplicationStreaming().observeStreamsByUser(),
+                StoreStream.getAuthentication().observeIsAuthed(),
+            ) { streams, isAuthed ->
+                if (!isAuthed) emptyList() else streams.values
+                    .filterIsInstance<ModelApplicationStream.GuildStream>()
+                    .map { GuildStream(it.guildId, it.channelId) }
+            },
             StoreStream.getPermissions().observePermissionsForAllChannels(),
             StoreStream.getNavigation().observeLeftPanelState().map { it == PanelState.Open },
             StoreStream.getTabsNavigation().observeSelectedTab().map { it == NavigationTab.HOME },
@@ -446,7 +456,7 @@ class WidgetGuildsListViewModel(
 
         private fun observeFirstChunk(): Observable<Chunk> = Observable.combineLatest(
             StoreStream.getGuildSelected().observeSelectedGuildId(),
-            GuildsListStoreHooks.selectedVoiceChannelId(),
+            StoreStream.getVoiceChannelSelected().observeSelectedVoiceChannelId(),
             StoreStream.getUserGuildSettings().observeGuildSettings(),
             StoreStream.getReadStates().getUnreadGuildIds(),
             // Mention counts churn per message; half a second of coalescing is invisible on a badge.
@@ -476,8 +486,8 @@ class WidgetGuildsListViewModel(
             GuildsListStoreHooks.guildJoinRequests(),
             GuildsListStoreHooks.pendingGuilds(),
             StoreStream.getGuilds().observeGuildIds(),
-            GuildsListStoreHooks.guildIdsWithActiveStageEvents(),
-            GuildsListStoreHooks.guildIdsWithActiveScheduledEvents(),
+            GuildIdsWithVisibleStageInstanceModel.observe(),
+            GuildIdsWithActiveEventsModel.observe(),
             StoreStream.getChannels().observeGuildAndPrivateChannels(),
             GuildsListStoreHooks.discordHubClicked(),
         ) { guildJoinRequests, pendingGuilds, guildIds, stageEvents, scheduledEvents, channels, hubClicked ->

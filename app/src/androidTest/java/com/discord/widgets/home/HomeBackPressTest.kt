@@ -4,11 +4,13 @@ import android.content.Intent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.appcompat.widget.Toolbar
+import androidx.lifecycle.ViewModelProvider
 import com.discord.R
 import com.discord.app.AppActivity
 import com.discord.panels.OverlappingPanelsLayout
 import com.discord.stores.AuthNavigationState
 import com.discord.stores.StoreStream
+import com.discord.widgets.chat.input.AppFlexInputViewModel
 import com.discord.widgets.tabs.NavigationTab
 import com.discord.widgets.tabs.WidgetTabsHost
 import com.discord.utilities.toolbar.getNavigationIconView
@@ -73,6 +75,49 @@ class HomeBackPressTest {
         instrumentation.runOnMainSync { requireNotNull(toolbar.getNavigationIconView()).performClick() }
 
         awaitPanel(panels, OverlappingPanelsLayout.Panel.START)
+        instrumentation.runOnMainSync(activity::finish)
+    }
+
+    @Test
+    fun openingEitherSidePanelDismissesInputWithoutReopeningItOnClose() {
+        val activity = launchLoggedInShell()
+        val panels = homePanels(activity)
+        lateinit var flexInput: AppFlexInputViewModel
+        val keyboardEvents = mutableListOf<AppFlexInputViewModel.Event>()
+        instrumentation.runOnMainSync {
+            flexInput = ViewModelProvider(activity).get(AppFlexInputViewModel::class.java)
+        }
+        val subscription = flexInput.observeEvents().subscribe(keyboardEvents::add)
+
+        instrumentation.runOnMainSync {
+            panels.setStartPanelLockState(OverlappingPanelsLayout.LockState.UNLOCKED)
+            panels.setEndPanelLockState(OverlappingPanelsLayout.LockState.UNLOCKED)
+            panels.closePanels()
+        }
+        awaitPanel(panels, OverlappingPanelsLayout.Panel.CENTER)
+
+        instrumentation.runOnMainSync {
+            flexInput.showExpressionTray()
+            keyboardEvents.clear()
+            panels.openStartPanel()
+        }
+        awaitPanel(panels, OverlappingPanelsLayout.Panel.START)
+        assertFalse(flexInput.requireViewState().expressionTrayShown)
+
+        instrumentation.runOnMainSync { panels.closePanels() }
+        awaitPanel(panels, OverlappingPanelsLayout.Panel.CENTER)
+        assertFalse(keyboardEvents.contains(AppFlexInputViewModel.Event.ShowKeyboard))
+
+        instrumentation.runOnMainSync {
+            flexInput.showExpressionTray()
+            keyboardEvents.clear()
+            panels.openEndPanel()
+        }
+        awaitPanel(panels, OverlappingPanelsLayout.Panel.END)
+        assertFalse(flexInput.requireViewState().expressionTrayShown)
+        assertFalse(keyboardEvents.contains(AppFlexInputViewModel.Event.ShowKeyboard))
+
+        subscription.unsubscribe()
         instrumentation.runOnMainSync(activity::finish)
     }
 

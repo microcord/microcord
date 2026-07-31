@@ -38,6 +38,7 @@ import com.discord.widgets.chat.list.actions.MessageActionCoordinator
 import com.discord.widgets.chat.list.actions.MessageActions
 import com.discord.widgets.chat.list.actions.WidgetChatListActions
 import com.discord.widgets.chat.list.reactions.WidgetManageReactions
+import com.discord.widgets.chat.list.sheet.WidgetApplicationCommandBottomSheet
 import com.discord.widgets.guild_automod.WidgetReportIssueWithAutoMod
 import com.discord.widgets.guild_role_subscriptions.entrypoint.WidgetGuildRoleSubscriptionEntryPoint
 import com.discord.widgets.guilds.profile.WidgetGuildProfileSheet
@@ -60,7 +61,18 @@ class WidgetChatListAdapterEventsHandler(
         interactionUserId: Long,
         applicationId: Long,
         messageNonce: String?,
-    ) -> Unit = { _, _, _, _, _, _, _ -> },
+    ) -> Unit = { interactionId, guildId, channelId, messageId, userId, applicationId, nonce ->
+        WidgetApplicationCommandBottomSheet.show(
+            host.parentFragmentManager,
+            interactionId,
+            messageId,
+            channelId,
+            guildId,
+            userId,
+            applicationId,
+            nonce,
+        )
+    },
     private val openUrlActions: (String) -> Unit = {},
 ) : WidgetChatListAdapter.EventHandler {
 

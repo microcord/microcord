@@ -5,7 +5,6 @@ import android.widget.LinearLayout
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import com.discord.R
 import com.discord.api.botuikit.SelectItem
-import com.discord.widgets.botuikit.replaceViews
 import com.discord.widgets.botuikit.views.ComponentActionListener
 import com.discord.widgets.botuikit.views.select.ComponentContext
 import com.discord.widgets.botuikit.views.select.SelectComponentBottomSheet
@@ -42,7 +41,7 @@ class WidgetChatListAdapterItemBotComponentRow(
 
         val views = botEntry.messageComponents.mapIndexedNotNull { index, component ->
             adapter.botUiComponentProvider
-                .getConfiguredComponentView(this, component, componentRoot, index) as? View
+                .getConfiguredComponentView(this, component, componentRoot, index)
         }
         componentRoot.replaceViews(views)
     }

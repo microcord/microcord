@@ -14,10 +14,14 @@ import com.discord.app.AppFragment
 import com.discord.app.AppPermissionsRequests
 import com.discord.stores.StoreStream
 import com.discord.utilities.permissions.PermissionUtils
-import com.discord.widgets.stage.StageChannelJoinHelper
+import com.discord.utilities.user.UserUtils.isNewUser
+import com.discord.widgets.chat.list.TextInVoiceFeatureFlag
 import com.discord.widgets.stage.StageChannelAPI
+import com.discord.widgets.stage.StageChannelJoinHelper
 import com.discord.widgets.stage.start.WidgetModeratorStartStage
 import com.discord.widgets.voice.call.callAndLaunch
+import com.discord.widgets.voice.fullscreen.WidgetGuildCallOnboardingSheet
+import com.discord.widgets.voice.fullscreen.WidgetCallFullscreen
 import com.discord.widgets.voice.sheet.WidgetVoiceBottomSheet
 
 /**
@@ -74,7 +78,10 @@ object VoiceUtils {
                 fragmentManager = fragmentManager,
             )
             channel.isStageVoiceChannel() -> handleStageChannel(channel, context, fragmentManager)
-            else -> showControls(channel, fragmentManager)
+            !WidgetGuildCallOnboardingSheet.hasUserSeenVoiceChannelOnboarding(context) &&
+                StoreStream.getUsers().getMe().isNewUser() ->
+                WidgetGuildCallOnboardingSheet.show(fragmentManager, channel.id)
+            else -> showControls(channel, context, fragmentManager)
         }
     }
 
@@ -168,7 +175,7 @@ object VoiceUtils {
             return
         }
         appPermissionsRequests.requestMicrophone(onFailure = null) {
-            connectAndShowControls(channel, fragmentManager)
+            connectAndShowControls(channel, context, fragmentManager)
             onEventStarted()
         }
     }
@@ -176,17 +183,24 @@ object VoiceUtils {
     /**
      * Joins [channel] and brings up its controls for scheduled-event entry points.
      *
-     * The reference opens `WidgetCallPreviewFullscreen` / `WidgetCallFullscreen` instead whenever
-     * the text-in-voice feature flag is on. Neither that flag nor a `TextInVoiceFeatureFlag`
-     * equivalent exists in this reconstruction, so the bottom sheet — the flag-off path — is always
-     * used.
+     * Text-in-voice routes an already connected channel to the fullscreen call. An unconnected
+     * channel still uses the join sheet because the separate preview screen is outside this slice.
      */
-    private fun connectAndShowControls(channel: Channel, fragmentManager: FragmentManager) {
+    private fun connectAndShowControls(
+        channel: Channel,
+        context: Context,
+        fragmentManager: FragmentManager,
+    ) {
         StoreStream.getVoiceChannelSelected().selectVoiceChannel(channel.id).subscribe({}, {})
-        showControls(channel, fragmentManager)
+        showControls(channel, context, fragmentManager)
     }
 
-    private fun showControls(channel: Channel, fragmentManager: FragmentManager) {
+    private fun showControls(channel: Channel, context: Context, fragmentManager: FragmentManager) {
+        val activeChannelId = StoreStream.getVoiceChannelSelected().getSelectedVoiceChannelId()
+        if (TextInVoiceFeatureFlag.isEnabled(channel.guildId) && activeChannelId == channel.id) {
+            WidgetCallFullscreen.launch(context, channel.id, animate = true)
+            return
+        }
         WidgetVoiceBottomSheet.show(
             fragmentManager,
             channel.id,

@@ -12,19 +12,3 @@ class WidgetChannelSettingsPermissionsOverviewViewModel(isStageChannel: Boolean)
         if (tab in state.availableTabs) updateViewState(state.copy(selectedTab = tab))
     }
 }
-
-private fun generateInitialViewState(isStageChannel: Boolean) =
-    if (isStageChannel) {
-        WidgetChannelSettingsPermissionsOverviewViewModel.ViewState(
-            WidgetChannelSettingsPermissionsOverviewViewModel.Tab.MODERATOR,
-            listOf(
-                WidgetChannelSettingsPermissionsOverviewViewModel.Tab.MODERATOR,
-                WidgetChannelSettingsPermissionsOverviewViewModel.Tab.ADVANCED,
-            ),
-        )
-    } else {
-        WidgetChannelSettingsPermissionsOverviewViewModel.ViewState(
-            WidgetChannelSettingsPermissionsOverviewViewModel.Tab.ADVANCED,
-            listOf(WidgetChannelSettingsPermissionsOverviewViewModel.Tab.ADVANCED),
-        )
-    }

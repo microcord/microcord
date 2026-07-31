@@ -14,6 +14,7 @@ import com.discord.utilities.fcm.NotificationClient
 import com.discord.utilities.lifecycle.ApplicationProvider
 import com.discord.utilities.lifecycle.Backgrounded
 import com.discord.utilities.notifications.NotificationRenderer
+import com.discord.utilities.voice.VoiceEngineForegroundService
 
 /**
  * Posts the system notification that tells the user a stage moderator has invited them to speak.
@@ -44,13 +45,16 @@ class StageChannelNotifications(
         val context = ApplicationProvider.get()
         val notification = createChannelNotificationBuilder(context, channel)
             .setContentText(context.getString(R.string.stage_speak_invite_header))
-            // The reference attaches Accept and Decline actions here, built from
-            // `VoiceEngineForegroundService.stageInviteAckPendingIntent`. Neither
-            // `VoiceEngineForegroundService` nor `VoiceEngineNotificationBuilder` exists in this
-            // reconstruction, so the notification currently informs without acting — tapping it
-            // is the only way to respond. Add the two actions when `utilities/voice` lands; the
-            // strings `stage_speak_invite_accept` and `stage_speak_invite_decline` are already in
-            // res and `StageChannelAPI.ackInvitationToSpeak` is the call they must make.
+            .addAction(
+                0,
+                context.getString(R.string.stage_speak_invite_accept),
+                VoiceEngineForegroundService.stageInviteAckPendingIntent(context, channelId, true),
+            )
+            .addAction(
+                0,
+                context.getString(R.string.stage_speak_invite_decline),
+                VoiceEngineForegroundService.stageInviteAckPendingIntent(context, channelId, false),
+            )
             .build()
         Notifications.InvitedToSpeak.notify(context, notification)
     }

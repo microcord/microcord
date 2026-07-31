@@ -2,11 +2,14 @@ package com.discord.widgets.guilds.profile
 
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
 import android.view.ViewStub
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.cardview.widget.CardView
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.constraintlayout.widget.ConstraintSet
 import androidx.fragment.app.FragmentManager
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -41,11 +44,6 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
     private var actionsRoot: View? = null
 
     override fun getContentViewResId() = R.layout.widget_guild_profile_sheet
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        setBottomSheetCollapsedStateDisabled()
-    }
 
     override fun bindSubscriptions(compositeSubscription: CompositeSubscription) {
         viewModel.observeViewState().ui(this)
@@ -109,6 +107,34 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
             }
             visibility = if (url == null) View.GONE else View.VISIBLE
             if (url != null) MGImages.setImage(this, url)
+            if (url == null) constrainIconToParent(root) else constrainIconToBanner(root)
+        }
+    }
+
+    private fun constrainIconToBanner(root: View) {
+        val layout = root.findViewById<ConstraintLayout>(R.id.guild_profile_sheet_constraint_layout)
+        val icon = root.findViewById<CardView>(R.id.guild_profile_sheet_icon_card)
+        val banner = root.findViewById<View>(R.id.guild_profile_sheet_banner)
+        ConstraintSet().apply {
+            clone(layout)
+            clear(icon.id, ConstraintSet.TOP)
+            clear(icon.id, ConstraintSet.BOTTOM)
+            connect(icon.id, ConstraintSet.TOP, banner.id, ConstraintSet.BOTTOM)
+            connect(icon.id, ConstraintSet.BOTTOM, banner.id, ConstraintSet.BOTTOM)
+            applyTo(layout)
+        }
+    }
+
+    private fun constrainIconToParent(root: View) {
+        val layout = root.findViewById<ConstraintLayout>(R.id.guild_profile_sheet_constraint_layout)
+        val icon = root.findViewById<CardView>(R.id.guild_profile_sheet_icon_card)
+        val topMargin = (icon.layoutParams as? ViewGroup.MarginLayoutParams)?.topMargin ?: 0
+        ConstraintSet().apply {
+            clone(layout)
+            clear(icon.id, ConstraintSet.TOP)
+            clear(icon.id, ConstraintSet.BOTTOM)
+            connect(icon.id, ConstraintSet.TOP, layout.id, ConstraintSet.TOP, topMargin)
+            applyTo(layout)
         }
     }
 

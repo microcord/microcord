@@ -42,6 +42,26 @@ class RestEndpointContractTest {
     // -- Guild CRUD ---------------------------------------------------------------------------
 
     @Test
+    fun defaultGuildCreationMatchesCreateScreenPayload() {
+        enqueueObject()
+        api.createGuild(
+            RestAPIParams.CreateGuild(
+                name = "Fixture Guild",
+                icon = "data:image/png;base64,fixture",
+                channels = emptyList(),
+                systemChannelId = 11L,
+            ),
+        ).toBlocking().first()
+
+        val body = json(takeRequest("POST", "/api/v9/guilds"))
+        assertEquals(setOf("name", "icon", "channels", "system_channel_id"), body.keySet())
+        assertEquals("Fixture Guild", body["name"].asString)
+        assertEquals("data:image/png;base64,fixture", body["icon"].asString)
+        assertTrue(body["channels"].asJsonArray.isEmpty)
+        assertEquals(11L, body["system_channel_id"].asLong)
+    }
+
+    @Test
     fun guildCreateReadUpdateDeleteMatchWireContract() {
         enqueueObject()
         api.createGuild(

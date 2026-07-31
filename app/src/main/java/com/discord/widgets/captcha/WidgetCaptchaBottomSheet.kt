@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.view.View
 import android.widget.TextView
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.setFragmentResult
 import androidx.fragment.app.setFragmentResultListener
@@ -105,8 +104,8 @@ class WidgetCaptchaBottomSheet : AppBottomSheet() {
 
         // hCaptcha is the normal path; reCAPTCHA is only chosen when the server names it, or when
         // no site key came back at all and there is nothing to run hCaptcha against.
-        val request = if (siteKey != null && errorBody?.captchaService != CaptchaService.RECAPTCHA) {
-            CaptchaHelper.CaptchaRequest.HCaptcha(siteKey, activity, errorBody?.captchaRqdata)
+        val request = if (siteKey != null && errorBody?.captchaService == CaptchaService.HCAPTCHA) {
+            CaptchaHelper.CaptchaRequest.HCaptcha(requireNotNull(siteKey), activity, errorBody?.captchaRqdata)
         } else {
             CaptchaHelper.CaptchaRequest.ReCaptcha(activity)
         }

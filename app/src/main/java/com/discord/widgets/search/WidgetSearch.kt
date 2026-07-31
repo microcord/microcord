@@ -69,13 +69,18 @@ class WidgetSearch : AppFragment(R.layout.widget_search) {
 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
+        setOnBackPressed(handler = {
+            val activity = appActivity ?: return@setOnBackPressed false
+            activity.finish()
+            true
+        })
         viewModel.observeViewState().ui(this).subscribe(::configureUI)
         configureSearchInput()
 
         sendQueryFab.setOnClickListener { sendQuery() }
         searchInput.setStartIconOnClickListener {
             hideKeyboard(it)
-            requireActivity().onBackPressed()
+            requireAppActivity().onBackPressedDispatcher.onBackPressed()
         }
     }
 

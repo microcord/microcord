@@ -7,6 +7,7 @@ import com.discord.widgets.stage.model.AnalyticsDiscoverySource
 import com.discord.widgets.stage.model.AnalyticsDiscoverySourceValues
 import com.discord.widgets.stage.model.StageChannel
 import com.discord.widgets.stage.settings.LiveStageNotificationBadgeTooltip
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -50,8 +51,13 @@ class StageExactPathContractsTest {
 
     @Test
     fun exactFileFacadesAndTooltipIdentityAreRetained() {
+        val paths = listOf(
+            "widgets/stage/model/DiscoveryModelKt.kt",
+            "widgets/stage/settings/LiveStageNotificationBadgeTooltipKt.kt",
+        )
         val source: AnalyticsDiscoverySource = AnalyticsDiscoverySourceValues.FEATURED
 
+        assertEquals(paths, paths.filter { File("src/main/java/com/discord/$it").isFile })
         assertEquals(6, source)
         assertEquals(
             "com.discord.widgets.stage.model.DiscoveryModelKt",

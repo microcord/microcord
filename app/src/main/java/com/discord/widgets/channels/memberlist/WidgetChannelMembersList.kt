@@ -19,9 +19,11 @@ import com.discord.stores.StoreChannelMembers
 import com.discord.panels.PanelState
 import com.discord.restapi.RestAPIParams
 import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rest.RestAPIAbortMessages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.widgets.channels.WidgetGroupInviteFriends
+import com.discord.widgets.channels.memberlist.adapter.ChannelMembersListAdapter
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.utilities.views.StickyHeaderItemDecoration
 import rx.Observable
@@ -31,7 +33,8 @@ class WidgetChannelMembersList : AppFragment(R.layout.widget_channel_members_lis
     data class State(
         val channel: Channel?,
         val panelOpen: Boolean,
-        val rows: List<ChannelMemberListRow>,
+        val listItems: WidgetChannelMembersListViewModel.MemberList,
+        val isThreadJoined: Boolean = false,
     )
 
     private data class ThreadBase(
@@ -42,24 +45,29 @@ class WidgetChannelMembersList : AppFragment(R.layout.widget_channel_members_lis
         val guild: Guild?,
     )
 
+    private data class GuildBase(
+        val members: Map<Long, GuildMember>,
+        val presences: Map<Long, Presence>,
+        val guild: Guild?,
+        val permissions: Long?,
+    )
+
     private lateinit var recycler: RecyclerView
     private lateinit var adapter: ChannelMembersListAdapter
     private lateinit var viewModel: WidgetChannelMembersListViewModel
     private var subscription: Subscription? = null
-    private var state = State(null, false, emptyList())
-    private var subscribedThread: Channel? = null
-    private var panelChannel: Channel? = null
-    private var panelOpen = false
+    private var eventSubscription: Subscription? = null
+    private var state = State(null, false, EmptyMemberList)
     private val updateRange = Runnable { updateVisibleRange() }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        adapter = ChannelMembersListAdapter(
-            onUserClicked ?: ::showUser,
-            onAddMemberClicked ?: ::addGroupMember,
-            onJoinLeaveThreadClicked ?: ::toggleThreadMembership,
-            onUserLongClicked ?: ::showUser,
-        )
+        adapter = ChannelMembersListAdapter().apply {
+            setOnUserClicked(onUserClicked ?: ::showUser)
+            setOnUserLongClicked(onUserLongClicked ?: ::showUser)
+            setOnAddMemberClicked(onAddMemberClicked ?: ::addGroupMember)
+            setOnJoinLeaveThreadClicked(onJoinLeaveThreadClicked ?: ::toggleThreadMembership)
+        }
         recycler = view as RecyclerView
         recycler.layoutManager = LinearLayoutManager(requireContext())
         recycler.adapter = adapter
@@ -87,9 +95,22 @@ class WidgetChannelMembersList : AppFragment(R.layout.widget_channel_members_lis
         subscription = viewModel.observeViewState().subscribe { next ->
             activity?.runOnUiThread {
                 when (next) {
-                    WidgetChannelMembersListViewModel.ViewState.Empty -> show(State(null, false, emptyList()))
+                    WidgetChannelMembersListViewModel.ViewState.Empty -> show(State(null, false, EmptyMemberList))
                     is WidgetChannelMembersListViewModel.ViewState.Loaded ->
-                        show(State(next.channel, next.isOpen, next.listItems))
+                        show(State(next.channel, next.isOpen, next.listItems, next.isThreadJoined))
+                }
+            }
+        }
+        eventSubscription = viewModel.observeEvents().subscribe { event ->
+            activity?.runOnUiThread {
+                when (event) {
+                    is WidgetChannelMembersListViewModel.Event.Error -> {
+                        val message = RestAPIAbortMessages.getAbortCodeMessageResId(event.code)
+                            ?: R.string.network_error_bad_request
+                        android.widget.Toast.makeText(requireContext(), message, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    WidgetChannelMembersListViewModel.Event.ScrollToTop -> recycler.scrollToPosition(0)
+                    WidgetChannelMembersListViewModel.Event.UpdateRanges -> recycler.post(updateRange)
                 }
             }
         }
@@ -98,25 +119,15 @@ class WidgetChannelMembersList : AppFragment(R.layout.widget_channel_members_lis
     override fun onStop() {
         subscription?.unsubscribe()
         subscription = null
+        eventSubscription?.unsubscribe()
+        eventSubscription = null
         recycler.removeCallbacks(updateRange)
-        setThreadSubscribed(null)
-        if (panelOpen) notifyPanelOpen(panelChannel, false)
-        panelChannel = null
-        panelOpen = false
         super.onStop()
     }
 
     private fun show(next: State) {
         state = next
-        if (panelChannel?.id != next.channel?.id || panelOpen != next.panelOpen) {
-            if (panelOpen && panelChannel?.id != next.channel?.id) notifyPanelOpen(panelChannel, false)
-            notifyPanelOpen(next.channel, next.panelOpen)
-            panelChannel = next.channel
-            panelOpen = next.panelOpen
-        }
-        adapter.submitList(next.rows)
-        val channel = next.channel
-        setThreadSubscribed(channel?.takeIf { next.panelOpen && isThread(it) })
+        adapter.setData(next.listItems.listId, next.listItems, true)
         if (next.panelOpen) recycler.post(updateRange)
     }
 
@@ -128,21 +139,7 @@ class WidgetChannelMembersList : AppFragment(R.layout.widget_channel_members_lis
         val last = manager.findLastVisibleItemPosition().takeIf { it >= first } ?: return
         val visible = last - first + 1
         val range = maxOf(0, first - visible)..(last + visible)
-        onGuildRangeChanged?.invoke(channel, range) ?: StoreStream.updateMemberRange(channel, range)
-    }
-
-    private fun setThreadSubscribed(channel: Channel?) {
-        if (subscribedThread?.id == channel?.id) return
-        subscribedThread?.let { onThreadSubscriptionChanged?.invoke(it, false) }
-        subscribedThread = channel
-        channel?.let {
-            onThreadSubscriptionChanged?.invoke(it, true)
-                ?: StoreStream.getGuildSubscriptions().subscribeThread(it.guildId, it.id)
-        }
-    }
-
-    private fun notifyPanelOpen(channel: Channel?, open: Boolean) {
-        onPanelOpenChanged?.invoke(channel, open) ?: StoreStream.updateMemberPanel(channel, open)
+        onGuildRangeChanged?.invoke(channel, range) ?: viewModel.updateSubscriptionsForChannel(range)
     }
 
     private fun addGroupMember() {
@@ -157,13 +154,16 @@ class WidgetChannelMembersList : AppFragment(R.layout.widget_channel_members_lis
 
     private fun toggleThreadMembership() {
         val channel = state.channel?.takeIf(::isThread) ?: return
-        val joined = state.rows.filterIsInstance<ChannelMemberListRow.JoinLeaveThread>().firstOrNull()?.joined ?: return
+        val joined = state.isThreadJoined
         val request = if (joined) {
             RestAPI.api.leaveThread(channel.id, "Member List")
         } else {
             RestAPI.api.joinThread(channel.id, "Member List", RestAPIParams.EmptyBody())
         }
-        request.restSubscribeOn().appSubscribe(WidgetChannelMembersList::class.java) { }
+        request.restSubscribeOn().appSubscribe(
+            WidgetChannelMembersList::class.java,
+            errorHandler = { viewModel.emitError(it.code) },
+        ) { }
     }
 
     private fun defaultStateSource(): Observable<State> {
@@ -173,21 +173,25 @@ class WidgetChannelMembersList : AppFragment(R.layout.widget_channel_members_lis
     ) { channel, panelState -> channel to (panelState == PanelState.Open || panelState == PanelState.Opening) }
         .switchMap { (channel, panelOpen) ->
             when {
-                channel == null -> Observable.just(State(null, panelOpen, emptyList()))
+                channel == null -> Observable.just(State(null, panelOpen, EmptyMemberList))
                 channel.type == Channel.DM || channel.type == Channel.GROUP_DM -> Observable.combineLatest(
                     StoreStream.getUsers().observeAllUsers(),
                     StoreStream.getPresences().observeAllPresences(),
                     StoreStream.getUsers().observeMe(emitEmpty = true),
                     StoreStream.getApplicationStreaming().observeStreamsByUser(),
                 ) { users, presences, me, streams ->
-                    State(channel, panelOpen, ChannelMemberListRows.privateChannel(
+                    val resolvedUsers = users + listOfNotNull(me).associateBy(User::id)
+                    State(
                         channel,
-                        users,
-                        presences,
-                        canAddMembers = channel.type == Channel.GROUP_DM,
-                        currentUser = me,
-                        streamingUserIds = streams.keys,
-                    ))
+                        panelOpen,
+                        generateGroupDmMemberListItems(
+                            channel,
+                            resolvedUsers,
+                            presences,
+                            streams,
+                            canInvite = channel.type == Channel.GROUP_DM,
+                        ),
+                    )
                 }
                 isThread(channel) -> Observable.combineLatest(
                     Observable.combineLatest(
@@ -215,22 +219,29 @@ class WidgetChannelMembersList : AppFragment(R.layout.widget_channel_members_lis
                         StoreStream.getThreadMembers().observeThreadMembers(channel.id),
                         StoreStream.getThreadsJoined().observeJoinedThread(channel.id),
                         StoreStream.getApplicationStreaming().observeStreamsByUser(),
-                    ) { memberIds, joined, streams -> Triple(memberIds, joined != null, streams.keys) },
+                    ) { memberIds, joined, streams -> Triple(memberIds, joined, streams) },
                 ) { base, thread ->
                     val requester = StoreStream.getGuildMemberRequester()
                     thread.first.filter { it !in base.users }.forEach { requester.queueRequest(channel.guildId, it) }
                     requester.performQueuedRequests()
-                    State(channel, panelOpen, ChannelMemberListRows.thread(
-                        channel.memberListId ?: channel.id.toString(),
-                        base.guild?.ownerId ?: 0,
-                        thread.first.ifEmpty { channel.memberIdsPreview.orEmpty().toSet() },
-                        base.users,
-                        base.members,
-                        base.presences,
-                        base.roles,
-                        joined = thread.second,
-                        streamingUserIds = thread.third,
-                    ))
+                    State(
+                        channel,
+                        panelOpen,
+                        generateThreadMemberListItems(
+                            channel,
+                            base.roles,
+                            base.guild,
+                            base.members,
+                            base.users,
+                            base.presences,
+                            thread.third,
+                            thread.first,
+                            thread.second,
+                            StoreStream.getGuilds(),
+                            StoreStream.getCustomEmojis(),
+                        ),
+                        isThreadJoined = thread.second != null,
+                    )
                 }
                 else -> StoreStream.getGuilds().observeRoles(channel.guildId).switchMap { roles ->
                     val listId = StoreChannelMembers.computeMemberListId(channel, roles)
@@ -244,54 +255,58 @@ class WidgetChannelMembersList : AppFragment(R.layout.widget_channel_members_lis
                             StoreStream.getGuilds().observeGuildMembers(channel.guildId),
                             StoreStream.getPresences().observeAllPresences(),
                             StoreStream.getGuilds().observeGuild(channel.guildId),
-                        ) { members, presences, guild -> Triple(members, presences, guild) },
+                            StoreStream.getPermissions().observePermissionsForChannel(channel.id),
+                        ) { members, presences, guild, permissions ->
+                            GuildBase(members, presences, guild, permissions)
+                        },
                         StoreStream.getApplicationStreaming().observeStreamsByUser(),
                     ) { lazyState, guildState, streams ->
                         val (list, users) = lazyState
-                        val (members, presences, guild) = guildState
-                        val rows = list?.let {
-                            ChannelMemberListRows.guild(
+                        val items = list?.let {
+                            generateGuildMemberListItems(
                                 it,
-                                channel.guildId,
-                                guild?.ownerId ?: 0,
-                                users,
-                                members,
-                                presences,
+                                guildState.guild,
+                                channel,
                                 roles,
-                                streams.keys,
+                                canInvite = com.discord.utilities.permissions.PermissionUtils.can(
+                                    com.discord.api.permission.Permission.CREATE_INSTANT_INVITE,
+                                    guildState.permissions,
+                                ),
+                                isThreadJoined = false,
+                                storeGuilds = StoreStream.getGuilds(),
+                                storeCustomEmojis = StoreStream.getCustomEmojis(),
+                                users = users,
+                                guildMembers = guildState.members,
+                                presences = guildState.presences,
+                                streamingUserIds = streams.keys,
                             )
-                        } ?: if (members.isEmpty()) {
-                            ChannelMemberListRows.loading(listId)
-                        } else {
-                            ChannelMemberListRows.loadedGuild(
-                                listId, guild?.ownerId ?: 0,
-                                users.filterKeys(members.keys::contains), members, presences, roles, streams.keys,
-                            )
-                        }
-                        State(channel, panelOpen, rows)
+                        } ?: PrivateChannelMemberListItems(
+                            listId,
+                            ChannelMemberListRows.loading(listId).map(ChannelMemberListRow::toAdapterItem),
+                        )
+                        State(channel, panelOpen, items)
                     }
                 }
             }
         }
-        return Observable.combineLatest(base, StoreStream.getUserRelationships().observe()) { current, relationships ->
-            current.copy(rows = current.rows.filterNot { row ->
-                row is ChannelMemberListRow.Member && relationships[row.user.id] == BLOCKED_RELATIONSHIP
-            })
-        }
+        return base
     }
 
     companion object {
         @JvmField var stateSource: (() -> Observable<State>)? = null
         @JvmField var onGuildRangeChanged: ((Channel, IntRange) -> Unit)? = null
-        @JvmField var onThreadSubscriptionChanged: ((Channel, Boolean) -> Unit)? = null
-        @JvmField var onPanelOpenChanged: ((Channel?, Boolean) -> Unit)? = null
         @JvmField var onUserClicked: ((Long) -> Unit)? = null
         @JvmField var onUserLongClicked: ((Long) -> Unit)? = null
         @JvmField var onAddMemberClicked: (() -> Unit)? = null
         @JvmField var onJoinLeaveThreadClicked: (() -> Unit)? = null
 
         private const val RANGE_DEBOUNCE_MS = 100L
-        private const val BLOCKED_RELATIONSHIP = 2
+        private object EmptyMemberList : WidgetChannelMembersListViewModel.MemberList {
+            override val listId = ""
+            override val size = 0
+            override fun get(index: Int) = throw IndexOutOfBoundsException("Index: $index")
+            override fun getHeaderPositionForItem(itemPosition: Int): Int? = null
+        }
         private fun isThread(channel: Channel) = channel.type == Channel.ANNOUNCEMENT_THREAD ||
             channel.type == Channel.PUBLIC_THREAD || channel.type == Channel.PRIVATE_THREAD
     }

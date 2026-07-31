@@ -452,6 +452,5 @@ class WidgetChatListAdapterItemSystemMessage(
          * Reference: `WidgetChatListAdapterItemAutoModSystemMessageEmbedKt`. Inlined here so this
          * row does not depend on a file another wave owns.
          */
-        private const val AUTOMOD_EMBED_FLAGGED_MESSAGE_ID = "flagged_message_id"
     }
 }

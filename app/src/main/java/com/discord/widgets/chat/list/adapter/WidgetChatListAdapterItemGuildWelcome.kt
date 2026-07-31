@@ -85,6 +85,3 @@ class WidgetChatListAdapterItemGuildWelcome @JvmOverloads constructor(
                 "?utm_source=discord&utm_medium=blog&utm_campaign=2020-06_help-new-user&utm_content=--t%3Apm"
     }
 }
-
-/** A guild is no longer treated as new after thirty days. */
-internal const val OLD_GUILD_AGE_THRESHOLD: Long = 2_592_000_000L

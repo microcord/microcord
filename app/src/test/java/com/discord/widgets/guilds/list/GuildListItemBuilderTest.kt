@@ -1,5 +1,7 @@
 package com.discord.widgets.guilds.list
 
+import com.discord.api.channel.Channel
+import com.discord.api.permission.Permission
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.guild.Guild
 import com.discord.stores.StoreGuildsSorted
@@ -138,12 +140,54 @@ class GuildListItemBuilderTest {
         assertFalse(muted.filterIsInstance<GuildListItem.GuildItem>().single().isUnread)
     }
 
+    @Test fun voiceStageEventAndStreamIndicatorsComeOnlyFromTheirOwnState() {
+        val voice = channel(11L, 1L, Channel.GUILD_VOICE)
+        val stage = channel(22L, 2L, Channel.GUILD_STAGE_VOICE)
+        val base = storeState(
+            sortedGuilds = listOf(singleton(1), singleton(2), singleton(3), singleton(4)),
+            channelIds = mapOf(1L to listOf(11L), 2L to listOf(22L), 4L to listOf(44L)),
+            channels = mapOf(11L to voice, 22L to stage),
+        )
+
+        val empty = GuildListItemBuilder.buildItems(base).filterIsInstance<GuildListItem.GuildItem>()
+        assertTrue(empty.none { it.isConnectedToVoice || it.isConnectedToStageChannel ||
+            it.hasActiveStageChannel || it.hasActiveScheduledEvent || it.hasOngoingApplicationStream })
+
+        val indicators = GuildListItemBuilder.buildItems(
+            base.copy(
+                selectedVoiceChannelId = stage.id,
+                guildIdsWithActiveStageEvents = setOf(3L),
+                guildIdsWithActiveScheduledEvents = setOf(4L),
+                applicationStreams = listOf(GuildsListStoreHooks.GuildStream(1L, 11L)),
+                allChannelPermissions = mapOf(11L to Permission.VIEW_CHANNEL),
+            ),
+        ).filterIsInstance<GuildListItem.GuildItem>().associateBy { it.guild.id }
+
+        assertTrue(indicators.getValue(2L).isConnectedToVoice)
+        assertTrue(indicators.getValue(2L).isConnectedToStageChannel)
+        assertFalse(indicators.getValue(1L).isConnectedToStageChannel)
+        assertTrue(indicators.getValue(3L).hasActiveStageChannel)
+        assertTrue(indicators.getValue(4L).hasActiveScheduledEvent)
+        assertTrue(indicators.getValue(1L).hasOngoingApplicationStream)
+    }
+
     private fun singleton(guildId: Long) = StoreGuildsSorted.Entry.SingletonGuild(guild(guildId))
 
     private fun folder(id: Long, guildIds: List<Long>) =
         StoreGuildsSorted.Entry.Folder(id, guildIds.map(::guild), null, "Folder $id")
 
     private fun guild(id: Long) = Guild(id = id, name = "Guild $id")
+
+    private fun channel(id: Long, guildId: Long, type: Int) = Channel(
+        topic = null, type = type, guildId = guildId, name = "channel", lastMessageId = 0L,
+        id = id, ownerId = 0L, recipientIds = null, recipients = null, position = 0,
+        permissionOverwrites = null, userLimit = 0, bitrate = 0, icon = null,
+        originChannelId = 0L, applicationId = 0L, nicks = null, nsfw = false, parentId = 0L,
+        memberListId = null, rateLimitPerUser = 0, defaultAutoArchiveDuration = null,
+        rtcRegion = null, flags = null, guildHashes = null, availableTags = null,
+        appliedTags = null, threadMetadata = null, messageCount = null, memberCount = null,
+        memberIdsPreview = null, member = null,
+    )
 
     private fun mutedSettings() = ModelNotificationSettings(muted = true, guildId = 1L)
 
@@ -157,6 +201,7 @@ class GuildListItemBuilderTest {
         unavailableGuilds: Set<Long> = emptySet(),
         lurkingGuildIds: Set<Long> = emptySet(),
         guildSettings: Map<Long, ModelNotificationSettings> = emptyMap(),
+        channels: Map<Long, Channel> = emptyMap(),
         isNewUser: Boolean = false,
         showHubSparkle: Boolean = false,
     ) = WidgetGuildsListViewModel.StoreState(
@@ -175,7 +220,7 @@ class GuildListItemBuilderTest {
         lurkingGuildIds = lurkingGuildIds,
         guildIdsWithActiveStageEvents = emptySet(),
         guildIdsWithActiveScheduledEvents = emptySet(),
-        channels = emptyMap(),
+        channels = channels,
         openFolderIds = openFolderIds,
         isNewUser = isNewUser,
         applicationStreams = emptyList(),

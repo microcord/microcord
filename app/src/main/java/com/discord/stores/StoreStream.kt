@@ -59,6 +59,7 @@ import com.discord.utilities.media.AppSoundManager
 import com.discord.utilities.networking.NetworkMonitor
 import com.discord.rtcconnection.VoiceTransport
 import com.discord.utilities.cache.SharedPreferencesProvider
+import com.discord.utilities.billing.BillingUtils
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
 import com.discord.utilities.persister.Persister
@@ -229,7 +230,7 @@ class StoreStream private constructor(
     private val channelMembers = StoreChannelMembers(observationDeck) { guildId, roleId ->
         guilds.getGuildRolesInternal()[guildId]?.get(roleId)
     }
-    private val guildSubscriptions = StoreGuildSubscriptions(observationDeck)
+    private val guildSubscriptions = StoreGuildSubscriptions(observationDeck, dispatcher)
     private val guildsSorted = StoreGuildsSorted(observationDeck, dispatcher)
     private val expandedGuildFolders = StoreExpandedGuildFolders(dispatcher, observationDeck)
     private val collapsedChannelCategories = StoreCollapsedChannelCategories(dispatcher, observationDeck)
@@ -483,6 +484,16 @@ class StoreStream private constructor(
     )
     private val applicationStreamPreviews = StoreApplicationStreamPreviews(dispatcher, clock)
     private val embeddedActivities = StoreEmbeddedActivities(observationDeck)
+    private val applications = StoreApplication(
+        dispatcher,
+        observationDeck,
+        restApi = { if (::restApi.isInitialized) restApi else null },
+    )
+    private val applicationAssets = StoreApplicationAssets(
+        dispatcher,
+        observationDeck,
+        restApi = { if (::restApi.isInitialized) restApi else null },
+    )
     private val entitlements = StoreEntitlements(
         dispatcher = dispatcher,
         observationDeck = observationDeck,
@@ -493,6 +504,8 @@ class StoreStream private constructor(
         dispatcher = dispatcher,
         restApi = { if (::restApi.isInitialized) restApi else null },
         clock = clock,
+        analytics = BillingUtils.paymentFlowAnalytics,
+        verifyPurchases = BillingUtils::verifyPurchases,
     )
     private val googlePlaySkuDetails = StoreGooglePlaySkuDetails(observationDeck, dispatcher)
     private val subscriptions = StoreSubscriptions(
@@ -770,6 +783,8 @@ class StoreStream private constructor(
         localActionComponentState,
         applicationInteractions,
         embeddedActivities,
+        applications,
+        applicationAssets,
         applicationStreamPreviews,
         entitlements,
         googlePlayPurchases,
@@ -2523,6 +2538,8 @@ class StoreStream private constructor(
         messageAck.handlePreLogout()
         mentions.handlePreLogout()
         embeddedActivities.handlePreLogout()
+        applications.handlePreLogout()
+        applicationAssets.handlePreLogout()
         subscriptions.handlePreLogout()
         paymentSources.handlePreLogout()
         guildJoinRequests.reset()
@@ -2994,6 +3011,8 @@ class StoreStream private constructor(
         @JvmStatic fun getInteractions() = requireInstance().applicationInteractions
         @JvmStatic fun getLocalActionComponentState() = requireInstance().localActionComponentState
         @JvmStatic fun getEmbeddedActivities() = requireInstance().embeddedActivities
+        @JvmStatic fun getApplication() = requireInstance().applications
+        @JvmStatic fun getApplicationAssets() = requireInstance().applicationAssets
         @JvmStatic fun getApplicationStreamPreviews() = requireInstance().applicationStreamPreviews
         @JvmStatic fun getEntitlements() = requireInstance().entitlements
         @JvmStatic fun getGooglePlayPurchases() = requireInstance().googlePlayPurchases

@@ -8,7 +8,7 @@ lifecycleRuntimeKtx = "2.6.1"
 appcompat = "1.2.0"
 fragment = "1.3.0"
 material = "1.3.0"
-billing = "4.0.0"
+billing = "5.2.1"
 cardview = "1.0.0"
 constraintlayout = "2.0.4"
 dynamicanimation = "1.0.0"
@@ -24,6 +24,7 @@ swiperefreshlayout = "1.1.0"
 viewpager2 = "1.0.0"
 browser = "1.3.0"
 cameraview = "2.7.2"
+camerakit = "1.0.0-beta3.10"
 colorpicker = "1.1.0"
 flexinput = "0.10.9"
 ucrop = "2.2.6"
@@ -69,6 +70,7 @@ lottie = { group = "com.airbnb.android", name = "lottie", version.ref = "lottie"
 apng = { group = "com.linecorp", name = "apng", version.ref = "apng" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
 cameraview = { group = "com.otaliastudios", name = "cameraview", version.ref = "cameraview" }
+camerakit = { group = "com.github.CameraKit", name = "camerakit-android", version.ref = "camerakit" }
 colorpicker = { group = "com.jaredrummler", name = "colorpicker", version.ref = "colorpicker" }
 flexinput = { group = "com.github.lytefast", name = "flex-input", version.ref = "flexinput" }
 ucrop = { group = "com.github.yalantis", name = "ucrop", version.ref = "ucrop" }

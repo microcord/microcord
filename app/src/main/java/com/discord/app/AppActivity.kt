@@ -59,6 +59,7 @@ import com.discord.widgets.auth.WidgetAuthRequiredAction
 import com.discord.widgets.auth.WidgetAuthResetPassword
 import com.discord.widgets.auth.WidgetAuthUndeleteAccount
 import com.discord.widgets.tabs.WidgetTabsHost
+import com.discord.widgets.voice.fullscreen.WidgetCallFullscreen
 import java.util.Locale
 import kotlin.math.roundToInt
 import rx.Subscription
@@ -599,6 +600,19 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
         .resourceId
 
     class Main : AppActivity()
+
+    /** Dedicated single-task host for the active fullscreen call surface. */
+    class Call : AppActivity() {
+        override fun onCreate(savedInstanceState: Bundle?) {
+            intent.putExtra(AppScreenRouter.EXTRA_SCREEN, WidgetCallFullscreen::class.java)
+            super.onCreate(savedInstanceState)
+        }
+
+        override fun onNewIntent(intent: Intent) {
+            intent.putExtra(AppScreenRouter.EXTRA_SCREEN, WidgetCallFullscreen::class.java)
+            super.onNewIntent(intent)
+        }
+    }
 
     companion object {
         private const val STATE_PENDING_INTENT = "pending_launch_intent"

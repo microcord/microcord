@@ -10,6 +10,11 @@ import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.time.Clock
 import com.discord.utilities.user.UserUtils.getAgeMs
 import com.discord.utilities.user.UserUtils.hasPhone
+import com.discord.utilities.analytics.AnalyticsTracker
+import com.discord.utilities.analytics.Traits
+import com.discord.widgets.contact_sync.AndroidContactsProvider
+import com.discord.widgets.contact_sync.ContactSyncFlowAnalytics
+import com.discord.widgets.contact_sync.ContactSyncUpsellSheet
 
 /**
  * Contact-sync upsell state and the daily background contact upload.
@@ -30,22 +35,20 @@ class StoreContactSync(
     private val experimentsStore: StoreExperiments,
     private val userSettingsStore: StoreUserSettings,
     private val api: () -> RestAPIInterface? = { null },
-    /**
-     * `utilities/contacts/ContactsFetcher.fetchContacts` — the hashed phone numbers to upload.
-     * Not reconstructed yet; the inert default means the upload posts an empty list, which the
-     * server treats as "no contacts" rather than as an error.
-     */
-    private val fetchContacts: () -> Set<String> = ::emptySet,
+    /** Optional test replacement for the device contact reader. */
+    private val fetchContacts: (() -> Set<String>)? = null,
     /** `StoreNotices.requestToShow(createContactSyncNotice())`. */
-    private val requestToShowUpsellNotice: () -> Unit = {},
+    private val requestToShowUpsellNotice: (() -> Unit)? = null,
 ) : StoreV2() {
     private val dismissState = HashMap<String, Boolean>()
     private val dismissStateCache = Persister<Map<String, Boolean>>(DISMISS_STATE_CACHE_KEY, HashMap())
     private val uploadTimestampCache = Persister(LAST_UPLOAD_TIME_CACHE_KEY, 0L)
     private var shouldTryUploadContacts = false
+    private lateinit var context: Context
 
     override fun init(context: Context) {
         super.init(context)
+        this.context = context
         dismissState.putAll(dismissStateCache.get())
         // The Kryo-backed dismissal predates the session-durable one; carry it across once so an
         // upgrading install does not see the upsell again.
@@ -91,13 +94,17 @@ class StoreContactSync(
         if (upsellDismissed == true && upsellShownServerSide != true) {
             userSettingsStore.updateContactSyncShown()
         }
-        if (shouldShowUpsell) requestToShowUpsellNotice()
+        if (shouldShowUpsell) {
+            requestToShowUpsellNotice?.invoke()
+                ?: StoreStream.getNotices().requestToShow(createContactSyncNotice())
+        }
         if (shouldTryUploadContacts) backgroundUploadContacts()
     }
 
     fun backgroundUploadContacts() {
         val api = api() ?: return
-        val entries = fetchContacts().map { contact ->
+        val contacts = fetchContacts?.invoke() ?: AndroidContactsProvider.allContactPhoneNumbers(context)
+        val entries = contacts.map { contact ->
             RestAPIParams.ContactEntry(contact, contact, mapOf("number" to contact))
         }
         api.uploadContacts(
@@ -137,6 +144,19 @@ class StoreContactSync(
             dismissState.clear()
             markChanged()
         }
+    }
+
+    private fun createContactSyncNotice() = StoreNotices.Notice(
+        name = NOTICE_NAME,
+        priority = 0,
+        persist = true,
+    ) { activity ->
+        AnalyticsTracker.openPopout("Contact Sync", Traits.Location(page = "Release Upsell"))
+        ContactSyncFlowAnalytics.trackStart(
+            additionalProps = mapOf("location_page" to "Release Upsell"),
+        )
+        ContactSyncUpsellSheet.show(activity.supportFragmentManager)
+        true
     }
 
     companion object {

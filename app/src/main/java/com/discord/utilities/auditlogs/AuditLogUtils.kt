@@ -33,10 +33,8 @@ object AuditLogUtils {
     /**
      * Every action type the client knows how to render, in the reference's declaration order.
      *
-     * Two things depend on the order and on the exact membership: the action-filter list is built
-     * by mapping this list, and `WidgetServerSettingsAuditLog` **drops** any entry whose action type
-     * is absent — a server-side action this build predates is silently hidden rather than rendered
-     * as "Unknown action".
+     * The action-filter list depends on both the order and exact membership. Future server actions
+     * are intentionally absent from the filter but remain visible in the log as "Unknown action".
      *
      * Recovered from `AuditLogUtils$ALL_ACTION_TYPES$2` at bytecode level (48 entries).
      */
@@ -66,7 +64,7 @@ object AuditLogUtils {
      * and stage channels, and the concrete kind is the `type` change's new value.
      */
     @StringRes
-    private fun getEntryTitle(auditLogEntry: ModelAuditLogEntry): Int =
+    internal fun getEntryTitle(auditLogEntry: ModelAuditLogEntry): Int =
         when (val actionTypeId = auditLogEntry.actionTypeId) {
             1 -> R.string.guild_settings_audit_log_guild_update
 

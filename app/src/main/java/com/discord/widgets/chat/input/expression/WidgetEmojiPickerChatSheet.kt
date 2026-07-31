@@ -54,6 +54,16 @@ class WidgetEmojiPickerChatSheet : WidgetExpressionPickerSheet(), WidgetEmojiPic
         onBackspace?.invoke()
     }
 
+    internal fun bindCallbacks(
+        listener: EmojiPickerListener?,
+        onBackspace: (() -> Unit)?,
+        onCancel: (() -> Unit)?,
+    ) {
+        this.listener = listener
+        this.onBackspace = onBackspace
+        setOnCancel(onCancel)
+    }
+
     companion object {
         private const val SHEET_HEIGHT_FRACTION = 0.9
 
@@ -67,9 +77,7 @@ class WidgetEmojiPickerChatSheet : WidgetExpressionPickerSheet(), WidgetEmojiPic
             arguments = Bundle().apply {
                 putSerializable(EmojiPickerNavigator.ARG_EMOJI_PICKER_CONTEXT_TYPE, emojiPickerContextType)
             }
-            this.listener = listener
-            this.onBackspace = onBackspace
-            setOnCancel(onCancel)
+            bindCallbacks(listener, onBackspace, onCancel)
             show(fragmentManager, WidgetEmojiPickerChatSheet::class.java.simpleName)
         }
     }

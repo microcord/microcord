@@ -7,7 +7,6 @@ import com.discord.stores.StoreUserConnections
 import com.discord.utilities.platform.Platform
 import com.discord.utilities.time.Clock
 import com.discord.utilities.user.UserUtils.getAgeMs
-import java.util.concurrent.TimeUnit
 
 /**
  * Decides whether to offer "connect your PlayStation account".
@@ -37,8 +36,7 @@ class PlaystationUpsellManager(
 
     private fun hasBeenShown(): Boolean = sharedPreferences.getBoolean(SHOWN_CACHE_KEY, false)
 
-    private fun isAccountOldEnough(user: User): Boolean =
-        user.getAgeMs(clock) > MIN_ACCOUNT_AGE_MS
+    private fun isAccountOldEnough(user: User): Boolean = user.getAgeMs(clock) > 604_800_000L
 
     /**
      * `Loading` is treated as "already connected" — an unknown connection list must never produce
@@ -53,6 +51,5 @@ class PlaystationUpsellManager(
 
     companion object {
         private const val SHOWN_CACHE_KEY = "HAS_PLAYSTATION_UPSELL_BEEN_SHOWN"
-        private val MIN_ACCOUNT_AGE_MS = TimeUnit.DAYS.toMillis(7)
     }
 }

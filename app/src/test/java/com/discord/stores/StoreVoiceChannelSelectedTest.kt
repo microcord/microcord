@@ -1,6 +1,7 @@
 package com.discord.stores
 
 import com.discord.api.channel.Channel
+import com.discord.api.voice.state.VoiceState
 import com.discord.models.domain.ModelApplicationStream
 import com.discord.models.domain.ModelPayload
 import com.discord.rtcconnection.RtcConnection
@@ -17,6 +18,57 @@ import rx.schedulers.TestScheduler
 class StoreVoiceChannelSelectedTest {
 
     @Test
+    fun leaveMoveAndLogoutClearOrMoveTheSelection() {
+        val scheduler = TestScheduler()
+        val dispatcher = Dispatcher(scheduler)
+        val deck = ObservationDeck()
+        val users = StoreUser(dispatcher = dispatcher, observationDeck = deck)
+        val guilds = StoreGuilds(users, dispatcher, deck)
+        val channels = StoreChannels(dispatcher, deck)
+        val voiceStates = StoreVoiceStates({ _, _, _ -> }, deck)
+        val permissions = StorePermissions(users, channels, guilds, deck)
+        val sounds = mutableListOf<StoreVoiceChannelSelected.Sound>()
+        val audioInputEnabled = mutableListOf<Boolean>()
+        val store = StoreVoiceChannelSelected(
+            dispatcher = dispatcher,
+            clock = Clock { 0L },
+            observationDeck = deck,
+            channels = channels,
+            voiceStates = voiceStates,
+            permissions = permissions,
+            getMeId = { 1L },
+            playSound = { sounds += it },
+            setAudioInputEnabled = { audioInputEnabled += it },
+        )
+        dispatcher.registerDispatchHandlers(
+            StoreV2DispatchHandler(listOf(users, guilds, channels, voiceStates, permissions, store), deck),
+        )
+        val payload = ModelPayload().apply {
+            sessionId = "session"
+            privateChannels = listOf(channel(10L), channel(20L))
+        }
+        dispatcher.schedule {
+            channels.handleConnectionOpen(payload)
+            store.handleConnectionOpen(payload)
+            store.handleStreamTargeted(ModelApplicationStream.CallStream(10L, 2L).encodedStreamKey)
+            store.handleVoiceStateUpdates(voiceState(20L))
+        }
+        scheduler.triggerActions()
+        assertEquals(20L, store.getSelectedVoiceChannelId())
+
+        dispatcher.schedule { store.handleVoiceStateUpdates(voiceState(null)) }
+        scheduler.triggerActions()
+        assertEquals(0L, store.getSelectedVoiceChannelId())
+
+        dispatcher.schedule {
+            store.handleStreamTargeted(ModelApplicationStream.CallStream(10L, 2L).encodedStreamKey)
+            store.handleAuthToken(null)
+        }
+        scheduler.triggerActions()
+        assertEquals(0L, store.getSelectedVoiceChannelId())
+    }
+
+    @Test
     fun streamTargetingAndConnectedAfkCameraCorrectionMatchReference() {
         val scheduler = TestScheduler()
         val dispatcher = Dispatcher(scheduler)
@@ -27,6 +79,7 @@ class StoreVoiceChannelSelectedTest {
         val voiceStates = StoreVoiceStates({ _, _, _ -> }, deck)
         val permissions = StorePermissions(users, channels, guilds, deck)
         val sounds = mutableListOf<StoreVoiceChannelSelected.Sound>()
+        val audioInputEnabled = mutableListOf<Boolean>()
         val selectedVideoDevices = mutableListOf<String?>()
         var hasSelectedVideoInputDevice = true
         val store = StoreVoiceChannelSelected(
@@ -38,7 +91,7 @@ class StoreVoiceChannelSelectedTest {
             permissions = permissions,
             getMeId = { 1L },
             playSound = { sounds += it },
-            setAudioInputEnabled = {},
+            setAudioInputEnabled = { audioInputEnabled += it },
             getAfkChannelId = { guildId -> if (guildId == 5L) 20L else null },
             hasSelectedVideoInputDevice = { hasSelectedVideoInputDevice },
             selectVideoInputDevice = {
@@ -123,6 +176,22 @@ class StoreVoiceChannelSelectedTest {
         memberCount = null,
         memberIdsPreview = null,
         member = null,
+    )
+
+    private fun voiceState(channelId: Long?) = VoiceState(
+        userId = 1L,
+        suppress = false,
+        sessionId = "session",
+        selfMute = false,
+        selfDeaf = false,
+        selfVideo = false,
+        selfStream = false,
+        mute = false,
+        guildId = 0L,
+        deaf = false,
+        member = null,
+        requestToSpeakTimestamp = null,
+        channelId = channelId,
     )
 
     companion object {

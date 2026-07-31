@@ -17,6 +17,7 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.voice.VoiceChannelJoinability
 import com.discord.utilities.voice.VoiceChannelJoinabilityUtils
 import com.discord.widgets.stage.sheet.WidgetStageAudienceBlockedBottomSheet
+import com.discord.widgets.voice.fullscreen.WidgetCallFullscreen
 import rx.Subscription
 
 /**
@@ -32,17 +33,6 @@ object StageChannelJoinHelper {
     private const val RELATIONSHIP_TYPE_BLOCKED = 2
 
     private var lurkSubscription: Subscription? = null
-
-    /**
-     * Opens the fullscreen call surface after a successful join.
-     *
-     * The reference calls `WidgetCallFullscreen.launch(context, channelId, true, …)` directly.
-     * `WidgetCallFullscreen` is being reconstructed in the voice slice; until it lands this stays
-     * a no-op and joining a stage connects without navigating. **Assign this once the screen
-     * exists** — one line, at the same place `StoreStream` installs its other widget callbacks.
-     */
-    @JvmField
-    var launchFullscreenCall: ((Context, Long) -> Unit)? = null
 
     /**
      * Shown when the guild has hit its video-participant cap.
@@ -97,7 +87,14 @@ object StageChannelJoinHelper {
 
             voiceChannelSelectedStore.selectVoiceChannel(channelId)
                 .appSubscribe(StageChannelJoinHelper::class.java, context) {
-                    if (launchFullscreen) launchFullscreenCall?.invoke(context, channelId)
+                    if (launchFullscreen) {
+                        WidgetCallFullscreen.launch(
+                            context,
+                            channelId,
+                            connectOnLaunch = true,
+                            animate = true,
+                        )
+                    }
                     onCompleted()
                 }
         }

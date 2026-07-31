@@ -44,8 +44,8 @@ open class WidgetCaptcha : AppFragment(R.layout.widget_captcha) {
         val activity = requireActivity()
         CaptchaHelper.captchaRqtoken = errorBody?.captchaRqtoken
 
-        val request = if (siteKey != null && errorBody?.captchaService != CaptchaService.RECAPTCHA) {
-            CaptchaHelper.CaptchaRequest.HCaptcha(siteKey, activity, errorBody?.captchaRqdata)
+        val request = if (siteKey != null && errorBody?.captchaService == CaptchaService.HCAPTCHA) {
+            CaptchaHelper.CaptchaRequest.HCaptcha(requireNotNull(siteKey), activity, errorBody?.captchaRqdata)
         } else {
             CaptchaHelper.CaptchaRequest.ReCaptcha(activity)
         }
@@ -182,11 +182,3 @@ open class WidgetCaptcha : AppFragment(R.layout.widget_captcha) {
         }
     }
 }
-
-/**
- * Whether the API answered this request with a captcha challenge.
- *
- * Reference: `WidgetCaptchaKt.isCaptchaError`, which tests for the `captcha_key` entry in the
- * response's error map.
- */
-fun RestApiError.isCaptchaError(): Boolean = CaptchaHelper.CAPTCHA_KEY in messages

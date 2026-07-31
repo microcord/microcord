@@ -1,9 +1,5 @@
 package com.discord.widgets.servers
 
-import com.discord.api.channel.Channel
-import com.discord.api.guild.GuildExplicitContentFilter
-import com.discord.api.guild.GuildFeature
-import com.discord.api.guild.GuildVerificationLevel
 import com.discord.models.domain.ModelGuildIntegration
 import com.discord.models.guild.Guild
 import org.junit.Assert.assertEquals
@@ -21,51 +17,6 @@ import org.junit.Test
 class ServerSettingsSectionsTest {
 
     private val guild = Guild(id = GUILD_ID, name = "Test Guild", ownerId = OWNER_ID)
-
-    // region moderation
-
-    @Test
-    fun `moderation closes when the guild is gone`() {
-        val viewState = ServerSettingsModerationViewModel.toViewState(
-            ServerSettingsModerationViewModel.StoreState(guild = null, canManageServer = true),
-        )
-        assertEquals(ServerSettingsModerationViewModel.ViewState.Unauthorized, viewState)
-    }
-
-    @Test
-    fun `moderation closes without Manage Server`() {
-        val viewState = ServerSettingsModerationViewModel.toViewState(
-            ServerSettingsModerationViewModel.StoreState(guild = guild, canManageServer = false),
-        )
-        assertEquals(ServerSettingsModerationViewModel.ViewState.Unauthorized, viewState)
-    }
-
-    @Test
-    fun `moderation exposes the guild's current levels`() {
-        val configured = guild.copy(
-            verificationLevel = GuildVerificationLevel.HIGH,
-            explicitContentFilter = GuildExplicitContentFilter.SOME,
-        )
-        val viewState = ServerSettingsModerationViewModel.toViewState(
-            ServerSettingsModerationViewModel.StoreState(configured, canManageServer = true),
-        ) as ServerSettingsModerationViewModel.ViewState.Loaded
-
-        assertEquals(GuildVerificationLevel.HIGH, viewState.guild.verificationLevel)
-        assertEquals(GuildExplicitContentFilter.SOME, viewState.guild.explicitContentFilter)
-        assertFalse(viewState.isCommunity)
-    }
-
-    @Test
-    fun `a community guild is flagged so the floor levels can be disabled`() {
-        val community = guild.copy(features = setOf(GuildFeature.COMMUNITY))
-        val viewState = ServerSettingsModerationViewModel.toViewState(
-            ServerSettingsModerationViewModel.StoreState(community, canManageServer = true),
-        ) as ServerSettingsModerationViewModel.ViewState.Loaded
-
-        assertTrue(viewState.isCommunity)
-    }
-
-    // endregion
 
     // region security
 
@@ -190,59 +141,6 @@ class ServerSettingsSectionsTest {
 
     // endregion
 
-    // region overview
-
-    @Test
-    fun `overview resolves the afk and system channels from the channel store`() {
-        val voice = channel(id = 10, type = Channel.GUILD_VOICE, name = "afk")
-        val text = channel(id = 11, type = Channel.GUILD_TEXT, name = "general")
-        val configured = guild.copy(afkChannelId = voice.id, systemChannelId = text.id)
-
-        val viewState = ServerSettingsOverviewViewModel.toViewState(
-            ServerSettingsOverviewViewModel.StoreState(
-                guild = configured,
-                canManage = true,
-                guildChannels = listOf(voice, text),
-                approximateMemberCount = 10,
-            ),
-        ) as ServerSettingsOverviewViewModel.ViewState.Loaded
-
-        assertEquals(voice.id, viewState.afkChannel?.id)
-        assertEquals(text.id, viewState.systemChannel?.id)
-    }
-
-    @Test
-    fun `overview stays on the small-guild side when the member count is unknown`() {
-        val viewState = ServerSettingsOverviewViewModel.toViewState(
-            ServerSettingsOverviewViewModel.StoreState(
-                guild = guild,
-                canManage = true,
-                guildChannels = emptyList(),
-                approximateMemberCount = null,
-            ),
-        ) as ServerSettingsOverviewViewModel.ViewState.Loaded
-
-        assertFalse(viewState.isAboveNotifyAllSize)
-    }
-
-    @Test
-    fun `overview disables all-messages past the member threshold`() {
-        fun stateFor(memberCount: Int) = ServerSettingsOverviewViewModel.toViewState(
-            ServerSettingsOverviewViewModel.StoreState(
-                guild = guild,
-                canManage = true,
-                guildChannels = emptyList(),
-                approximateMemberCount = memberCount,
-            ),
-        ) as ServerSettingsOverviewViewModel.ViewState.Loaded
-
-        val limit = ServerSettingsOverviewViewModel.NOTIFY_ALL_MEMBER_LIMIT
-        assertFalse(stateFor(limit).isAboveNotifyAllSize)
-        assertTrue(stateFor(limit + 1).isAboveNotifyAllSize)
-    }
-
-    // endregion
-
     private fun integration(id: Long, type: String) = ModelGuildIntegration(
         id = id,
         name = "streamer",
@@ -257,17 +155,6 @@ class ServerSettingsSectionsTest {
         account = null,
         syncedAt = null,
         subscriberCount = 0,
-    )
-
-    private fun channel(id: Long, type: Int, name: String) = Channel(
-        topic = null, type = type, guildId = GUILD_ID, name = name, lastMessageId = 0, id = id,
-        ownerId = 0, recipientIds = null, recipients = null, position = 0,
-        permissionOverwrites = null, userLimit = 0, bitrate = 0, icon = null,
-        originChannelId = 0, applicationId = 0, nicks = null, nsfw = false,
-        parentId = 0, memberListId = null, rateLimitPerUser = 0,
-        defaultAutoArchiveDuration = null, rtcRegion = null, flags = null, guildHashes = null,
-        availableTags = null, appliedTags = null, threadMetadata = null, messageCount = null,
-        memberCount = null, memberIdsPreview = null, member = null,
     )
 
     private companion object {

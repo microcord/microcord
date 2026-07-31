@@ -19,7 +19,7 @@ class WidgetGuildJoinCaptchaBottomSheet : AppBottomSheet() {
     private val requestKey by lazy { requireArguments().getString(ARG_REQUEST_KEY).orEmpty() }
     @Suppress("DEPRECATION")
     private val errorBody by lazy {
-        requireArguments().getSerializable(ARG_ERROR) as? CaptchaErrorBody ?: CaptchaErrorBody()
+        requireArguments().getSerializable(ARG_CAPTCHA_ERROR_BODY) as? CaptchaErrorBody ?: CaptchaErrorBody()
     }
 
     override fun getContentViewResId() = R.layout.widget_guild_join_captcha_bottom_sheet
@@ -75,8 +75,8 @@ class WidgetGuildJoinCaptchaBottomSheet : AppBottomSheet() {
     }
 
     companion object {
+        private const val ARG_CAPTCHA_ERROR_BODY = "INTENT_EXTRA_CAPTCHA_ERROR_BODY"
         private const val ARG_REQUEST_KEY = "INTENT_EXTRA_REQUEST_CODE"
-        private const val ARG_ERROR = "INTENT_EXTRA_CAPTCHA_ERROR_BODY"
         private const val RESULT_TOKEN = "INTENT_EXTRA_CAPTCHA_TOKEN"
         private const val RESULT_RQTOKEN = "INTENT_EXTRA_CAPTCHA_RQTOKEN"
 
@@ -85,7 +85,7 @@ class WidgetGuildJoinCaptchaBottomSheet : AppBottomSheet() {
             WidgetGuildJoinCaptchaBottomSheet().apply {
                 arguments = Bundle().apply {
                     putString(ARG_REQUEST_KEY, requestKey)
-                    putSerializable(ARG_ERROR, error)
+                    putSerializable(ARG_CAPTCHA_ERROR_BODY, error)
                 }
             }.show(fragmentManager, WidgetGuildJoinCaptchaBottomSheet::class.java.name)
         }

@@ -5,13 +5,13 @@ import android.content.Intent
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppFragment
-import com.discord.app.AppLog
 import com.discord.app.AppScreenRouter
 import com.discord.utilities.analytics.AnalyticsTracker
+import com.discord.widgets.guilds.create.WidgetCreationIntent
+import com.discord.widgets.guilds.create.WidgetGuildCreate
 import com.google.android.material.button.MaterialButton
 
 /**
@@ -68,11 +68,12 @@ open class WidgetGuildTemplates : AppFragment(R.layout.widget_nux_guild_template
 
     /**
      * "Create My Own" skips straight past the intent question, because the user has already told us
-     * they do not want a template — that is what [GuildCreateOptions.showChannelPrompt] encodes.
+     * they do not want a template — that is what [WidgetGuildCreate.Options.showChannelPrompt]
+     * encodes.
      */
     private fun selectTemplate(guildTemplate: GuildTemplate) {
         val args = this.args
-        val options = GuildCreateOptions(
+        val options = WidgetGuildCreate.Options(
             analyticsLocation = args.location,
             template = guildTemplate.templateType,
             showChannelPrompt = guildTemplate.templateType == StockGuildTemplate.CREATE,
@@ -81,13 +82,13 @@ open class WidgetGuildTemplates : AppFragment(R.layout.widget_nux_guild_template
         )
         if (args.guildTemplate.skipCreationIntent) {
             AnalyticsTracker.openModal("Create Guild Step 2", options.analyticsLocation)
-            navigation.showGuildCreate(this, options)
+            WidgetGuildCreate.showFragment(this, options)
         } else {
             trackPostRegistrationTransition(
                 GuildTemplateAnalytics.STEP_GUILD_TEMPLATE,
                 GuildTemplateAnalytics.STEP_CREATION_INTENT,
             )
-            navigation.showCreationIntent(this, args.trigger, options)
+            WidgetCreationIntent.show(this, args.trigger, options)
         }
     }
 
@@ -101,16 +102,6 @@ open class WidgetGuildTemplates : AppFragment(R.layout.widget_nux_guild_template
 
     companion object {
         private const val INTENT_ARGS_KEY = "intent_args_key"
-
-        /**
-         * Where the picker goes next.
-         *
-         * Guild creation lives in `widgets/guilds/create`, which is outside this package's ownership.
-         * Keep this seam until those two screens are reconstructed; the NUX-owned join destination is
-         * launched directly.
-         */
-        @JvmStatic
-        var navigation: Navigation = LoggingNavigation
 
         fun launch(context: Context, args: GuildCreateArgs) {
             AppScreenRouter.launch(
@@ -142,37 +133,4 @@ open class WidgetGuildTemplates : AppFragment(R.layout.widget_nux_guild_template
             )
         }
     }
-
-    interface Navigation {
-        fun showCreationIntent(fragment: Fragment, trigger: CreateGuildTrigger, options: GuildCreateOptions)
-        fun showGuildCreate(fragment: Fragment, options: GuildCreateOptions)
-    }
-
-    private object LoggingNavigation : Navigation {
-        override fun showCreationIntent(
-            fragment: Fragment,
-            trigger: CreateGuildTrigger,
-            options: GuildCreateOptions,
-        ) {
-            AppLog.w("WidgetCreationIntent is not reconstructed; dropping $trigger / $options")
-        }
-
-        override fun showGuildCreate(fragment: Fragment, options: GuildCreateOptions) {
-            AppLog.w("WidgetGuildCreate is not reconstructed; dropping $options")
-        }
-    }
 }
-
-/**
- * What [WidgetGuildTemplates] hands to guild creation once a template is chosen.
- *
- * Mirrors the reference's `WidgetGuildCreate.Options`; declared here because `WidgetGuildCreate`
- * does not exist yet. Move it onto that class when it does.
- */
-data class GuildCreateOptions(
-    val analyticsLocation: String,
-    val template: StockGuildTemplate,
-    val showChannelPrompt: Boolean,
-    val customTitle: String,
-    val closeWithResult: Boolean,
-)

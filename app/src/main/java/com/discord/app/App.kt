@@ -6,6 +6,7 @@ import com.discord.dialogs.WidgetMaskedLinksDialog
 import com.discord.stores.StoreStream
 import com.discord.utilities.analytics.AnalyticsDeviceResourceUsageMonitor
 import com.discord.utilities.analytics.AdvertisingIdProvider
+import com.discord.utilities.billing.GooglePlayBillingManager
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.lifecycle.ActivityProvider
 import com.discord.utilities.lifecycle.ApplicationProvider
@@ -16,6 +17,7 @@ import com.discord.utilities.logging.BootLogEvent
 import com.discord.utilities.notices.NoticeBuilders
 import com.discord.utilities.persister.PersisterConfig
 import com.discord.utilities.time.ClockFactory
+import com.discord.utilities.voice.VoiceEngineServiceController
 import java.util.concurrent.atomic.AtomicBoolean
 
 class App : Application() {
@@ -46,6 +48,8 @@ class App : Application() {
         AnalyticsDeviceResourceUsageMonitor.start()
         AdvertisingIdProvider.initialize(this)
         StoreStream.initialize(this)
+        GooglePlayBillingManager.init(this)
+        VoiceEngineServiceController.INSTANCE.init(this)
     }
 
     override fun onTrimMemory(level: Int) {

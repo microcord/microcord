@@ -174,7 +174,7 @@ internal object GuildListItemBuilder {
             applicationStatus = storeState.guildJoinRequests[guildId]?.applicationStatus,
             isPendingGuild = isPendingGuild,
             hasActiveStageChannel = storeState.guildIdsWithActiveStageEvents.contains(guildId),
-            isConnectedToStageChannel = selectedVoiceChannel?.isStageVoiceChannel() == true,
+            isConnectedToStageChannel = isConnectedToVoice && selectedVoiceChannel?.isStageVoiceChannel() == true,
             hasActiveScheduledEvent = storeState.guildIdsWithActiveScheduledEvents.contains(guildId),
         )
     }
@@ -200,6 +200,7 @@ internal object GuildListItemBuilder {
                 isAnyGuildConnectedToVoice = isAnyGuildConnectedToVoice ||
                     storeState.channelIds[guild.id]?.contains(storeState.selectedVoiceChannelId) == true
                 isAnyGuildConnectedToStageChannel = isAnyGuildConnectedToStageChannel ||
+                    storeState.channelIds[guild.id]?.contains(storeState.selectedVoiceChannelId) == true &&
                     storeState.channels[storeState.selectedVoiceChannelId]?.isStageVoiceChannel() == true
                 isUnread = isUnread || (
                     storeState.unreadGuildIds.contains(guild.id) &&

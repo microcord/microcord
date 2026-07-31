@@ -12,6 +12,7 @@ import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.time.Clock
 import com.discord.utilities.time.ClockFactory
 import com.discord.widgets.home.WidgetHome
+import com.discord.widgets.voice.fullscreen.WidgetCallFullscreen
 import java.util.PriorityQueue
 import java.util.concurrent.TimeUnit
 import kotlin.reflect.KClass
@@ -327,14 +328,8 @@ class StoreNotices(
         private const val PASSIVE_DELAY_PERIOD_MS = 21_600_000L
         private const val ONE_YEAR_MS = 31_536_000_000L
 
-        /**
-         * Where an un-scoped notice is allowed to appear.
-         *
-         * The reference also lists `WidgetCallFullscreen`, which this project has not
-         * reconstructed; add it here when it lands or notices will be suppressed during a call
-         * instead of shown over it.
-         */
-        private val DEFAULT_VALID_SCREENS: List<KClass<out AppComponent>> = listOf(WidgetHome::class)
+        private val DEFAULT_VALID_SCREENS: List<KClass<out AppComponent>> =
+            listOf(WidgetHome::class, WidgetCallFullscreen::class)
 
         /**
          * Builds and shows a [Dialog]. Stands in for the reference's

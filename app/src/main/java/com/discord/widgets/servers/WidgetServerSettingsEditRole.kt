@@ -1,7 +1,6 @@
 package com.discord.widgets.servers
 
 import android.content.Context
-import android.content.DialogInterface
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PorterDuff
@@ -38,8 +37,6 @@ import com.discord.widgets.settings.SettingsNavigation
 import com.discord.widgets.settings.StatefulViews
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputLayout
-import com.jaredrummler.android.colorpicker.ColorPickerDialog
-import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import rx.Observable
 
 class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
@@ -48,6 +45,7 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
     private val state = StatefulViews(R.id.edit_role_name)
     private lateinit var roleName: TextInputLayout
     private lateinit var save: FloatingActionButton
+    private var currentModel: Model? = null
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -58,6 +56,19 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
         state.setupUnsavedChangesConfirmation(this)
         state.setupTextWatcherWithSaveAction(this, save, roleName)
         save.hide()
+        parentFragmentManager.setFragmentResultListener(
+            RoleColorPickerDialog.REQUEST_KEY,
+            viewLifecycleOwner,
+        ) { _, result ->
+            currentModel?.let { model ->
+                patchRole(
+                    model,
+                    RestAPIParams.Role.createWithRole(model.role).apply {
+                        color = result.getInt(RoleColorPickerDialog.RESULT_COLOR)
+                    },
+                )
+            }
+        }
     }
 
     override fun onViewBoundOrOnResume() {
@@ -68,7 +79,13 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
         }
     }
 
+    override fun onDestroyView() {
+        currentModel = null
+        super.onDestroyView()
+    }
+
     private fun configureUI(model: Model?) {
+        currentModel = model
         if (model == null) {
             appActivity?.finish()
             return
@@ -173,40 +190,8 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
     }
 
     private fun launchColorPicker(model: Model) {
-        val configured = ColorPickerDialog.newBuilder()
-            .setDialogTitle(R.string.role_color)
-            .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
-            .setColor(RoleUtils.getRoleColor(model.role, requireContext()))
-            .setShowAlphaSlider(false)
-            .setAllowPresets(false)
-            .create()
-        val picker = object : ColorPickerDialog() {
-            override fun onStart() {
-                super.onStart()
-                (dialog as? androidx.appcompat.app.AlertDialog)?.setButton(
-                    DialogInterface.BUTTON_NEUTRAL,
-                    getString(R.string.reset),
-                ) { _, _ ->
-                    patchRole(model, RestAPIParams.Role.createWithRole(model.role).apply { color = 0 })
-                    dismiss()
-                }
-            }
-        }.apply {
-            arguments = configured.arguments
-            setColorPickerDialogListener(object : ColorPickerDialogListener {
-                override fun onColorSelected(dialogId: Int, color: Int) {
-                    patchRole(
-                        model,
-                        RestAPIParams.Role.createWithRole(model.role).apply {
-                            this.color = color and 0xFFFFFF
-                        },
-                    )
-                }
-
-                override fun onDialogDismissed(dialogId: Int) = Unit
-            })
-        }
-        picker.show(parentFragmentManager, DIALOG_TAG_COLOR_PICKER)
+        RoleColorPickerDialog.newInstance(RoleUtils.getRoleColor(model.role, requireContext()))
+            .show(parentFragmentManager, DIALOG_TAG_COLOR_PICKER)
         hideKeyboard()
     }
 

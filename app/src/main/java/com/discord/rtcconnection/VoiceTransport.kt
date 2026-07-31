@@ -264,6 +264,7 @@ class VoiceTransport(
                 networkMonitor = networkMonitor,
                 mutedUsers = mutedUsers,
                 userVolumes = userVolumes,
+                enableMediaSinkWants = true,
                 loggingTagPrefix = "Voice",
             )
             created.addListener(VoiceConnectionListener())
@@ -296,6 +297,10 @@ class VoiceTransport(
 
         override fun setUserOffScreen(userId: Long, offScreen: Boolean) {
             connection?.setUserOffScreen(userId, offScreen)
+        }
+
+        override fun setFocusedParticipant(userId: Long?) {
+            connection?.setFocusedParticipant(userId)
         }
 
         fun describe(): Map<String, Any?> = connection?.describe() ?: emptyMap()
@@ -336,7 +341,6 @@ class VoiceTransport(
         StoreStreamRtcConnection.StreamConnectionController {
 
         private var connection: RtcConnection? = null
-        private var focusedParticipant: Long? = null
         private var channelId: Long? = null
         private var sessionId: String? = null
 
@@ -367,6 +371,7 @@ class VoiceTransport(
                 rtcConnectionType = RtcConnection.Type.Stream(streamOwnerId),
                 networkMonitor = networkMonitor,
                 parentMediaSessionId = voiceController.metadata?.mediaSessionId,
+                enableMediaSinkWants = true,
                 loggingTagPrefix = "Stream",
                 streamKey = streamKey,
             )
@@ -386,25 +391,14 @@ class VoiceTransport(
             connection = null
             channelId = null
             sessionId = null
-            focusedParticipant = null
         }
 
         override fun setUserOutputVolume(userId: Long, volume: Float) {
             connection?.setUserOutputVolume(userId, volume)
         }
 
-        /**
-         * Marks the previously focused participant as off-screen and the new one as on-screen.
-         *
-         * The reference additionally renegotiates the encoder's target resolution through
-         * `MediaSinkWantsManager`, which is not reconstructed yet, so the sender is told who is
-         * visible but not yet asked to change quality.
-         */
         override fun setFocusedParticipant(userId: Long?) {
-            val current = connection ?: return
-            focusedParticipant?.takeIf { it != userId }?.let { current.setUserOffScreen(it, true) }
-            userId?.let { current.setUserOffScreen(it, false) }
-            focusedParticipant = userId
+            connection?.setFocusedParticipant(userId)
         }
 
         fun setScreenshare(permissionResultData: Intent?, thumbnailEmitter: ThumbnailEmitter?) {
@@ -421,6 +415,10 @@ class VoiceTransport(
                 storeStreamRtcConnection.handleStreamRtcConnectionStateChange(connected)
                 storeStreamRtcConnection.handleMediaSessionIdReceived(stateChange.metadata?.mediaSessionId)
             }
+        }
+
+        override fun onQualityUpdate(quality: RtcConnection.Quality) {
+            dispatcher.schedule { storeStreamRtcConnection.handleQualityUpdate(quality) }
         }
     }
 

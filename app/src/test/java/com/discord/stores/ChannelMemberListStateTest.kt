@@ -78,7 +78,7 @@ class ChannelMemberListStateTest {
 
     @Test fun subscriptionsExpandChunksAndDedupePayloads() {
         val payloads = mutableListOf<GuildSubscriptionPayload>()
-        val store = StoreGuildSubscriptions(deck, payloads::add)
+        val store = StoreGuildSubscriptions(deck, dispatcher, onSubscription = payloads::add)
         register(store)
         dispatcher.schedule { store.handlePanelOpened(1, 10) }
         dispatcher.schedule { store.handlePanelOpened(1, 10) }
@@ -90,6 +90,27 @@ class ChannelMemberListStateTest {
 
         dispatcher.schedule { store.handlePanelClosed(1, 10) }
         assertEquals(emptyMap<Long, List<List<Int>>>(), payloads.last().channels)
+    }
+
+    @Test fun subscriptionPayloadPreservesEveryGatewayField() {
+        val gateway = GuildSubscriptionPayload(
+            1,
+            GuildSubscriptions(
+                channels = mapOf(10L to listOf(0 until 100)),
+                typing = true,
+                activities = true,
+                members = setOf(20L),
+                threads = true,
+                threadMemberLists = listOf(30L),
+            ),
+        ).toGatewayPayload()
+
+        assertEquals(mapOf(10L to listOf(listOf(0, 99))), gateway.channels)
+        assertEquals(true, gateway.typing)
+        assertEquals(true, gateway.activities)
+        assertEquals(listOf(20L), gateway.members)
+        assertEquals(true, gateway.threads)
+        assertEquals(listOf(30L), gateway.threadMemberLists)
     }
 
     private fun register(store: StoreV2) =

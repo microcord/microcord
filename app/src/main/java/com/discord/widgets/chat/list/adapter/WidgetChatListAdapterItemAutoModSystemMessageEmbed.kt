@@ -92,10 +92,10 @@ class WidgetChatListAdapterItemAutoModSystemMessageEmbed(
      * so the name renders as a plain tappable run.
      */
     private fun configureFooter(entry: AutoModSystemMessageEmbedEntry) {
-        val channelId = entry.embed.fieldValue(FIELD_CHANNEL_ID)?.toLongOrNull()
+        val channelId = entry.embed.fieldValue(AUTOMOD_EMBED_FIELD_CHANNEL_ID)?.toLongOrNull()
         val channel = channelId?.let { StoreStream.getChannels().getChannel(it) }
         val channelName = channel?.getDisplayNameOrDefault(footerText.context).orEmpty()
-        val ruleName = entry.embed.fieldValue(FIELD_RULE_NAME).orEmpty()
+        val ruleName = entry.embed.fieldValue(AUTOMOD_EMBED_FIELD_RULE_NAME).orEmpty()
 
         footerText.text = I18nSpans
             .render(
@@ -160,8 +160,6 @@ class WidgetChatListAdapterItemAutoModSystemMessageEmbed(
     )
 
     private companion object {
-        private const val FIELD_CHANNEL_ID = "channel_id"
-        private const val FIELD_RULE_NAME = "rule_name"
         private const val CHANNEL_HOOK = "channelHook"
 
         private fun MessageEmbed.fieldValue(name: String): String? =

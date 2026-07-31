@@ -1,7 +1,9 @@
 package com.discord.utilities.rx
 
+import com.discord.models.domain.ModelUserRelationship
 import com.discord.utilities.error.RestApiError
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
@@ -16,6 +18,8 @@ import rx.Observable
 import rx.Subscription
 import rx.plugins.RxJavaHooks
 import rx.schedulers.Schedulers
+import rx.schedulers.TestScheduler
+import rx.subjects.PublishSubject
 
 /**
  * The error funnel is the point of `appSubscribe`: a stream failure must be classified, offered to
@@ -139,6 +143,35 @@ class ObservableExtensionsTest {
         Observable.from(listOf("a" to 1, "b" to 2)).toMap().subscribe { result = it }
 
         assertEquals(mapOf("a" to 1, "b" to 2), result)
+    }
+
+    @Test
+    fun leadingEdgeThrottleRetainsTheLatestStoreChangeInABurst() {
+        val scheduler = TestScheduler()
+        RxJavaHooks.setOnComputationScheduler { scheduler }
+        try {
+            val relationships = PublishSubject.create<Map<Long, Int>>()
+            val seen = mutableListOf<Map<Long, Int>>()
+            relationships.leadingEdgeThrottle(1, TimeUnit.SECONDS).subscribe { seen += it }
+
+            relationships.onNext(emptyMap())
+            val incoming = mapOf(42L to ModelUserRelationship.TYPE_INVITE_INCOMING)
+            val accepted = mapOf(42L to ModelUserRelationship.TYPE_FRIEND)
+            relationships.onNext(incoming)
+            assertEquals(listOf(emptyMap<Long, Int>()), seen)
+
+            scheduler.advanceTimeBy(1, TimeUnit.SECONDS)
+            assertEquals(listOf(emptyMap(), incoming), seen)
+
+            relationships.onNext(accepted)
+            relationships.onNext(emptyMap())
+            assertEquals(listOf(emptyMap(), incoming, accepted), seen)
+
+            scheduler.advanceTimeBy(1, TimeUnit.SECONDS)
+            assertEquals(listOf(emptyMap(), incoming, accepted, emptyMap()), seen)
+        } finally {
+            RxJavaHooks.reset()
+        }
     }
 
     @Test

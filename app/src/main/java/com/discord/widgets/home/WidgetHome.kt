@@ -38,10 +38,12 @@ import com.discord.api.channel.isGuildTextChannel
 import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isSystemDM
 import com.discord.app.appViewModels
+import com.discord.app.appActivityViewModels
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.toolbar.positionUnreadCountView
+import com.discord.widgets.chat.input.AppFlexInputViewModel
 import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventUpsellBottomSheet
 import com.discord.widgets.playstation.WidgetPlaystationIntegrationUpsellBottomSheet
 import com.discord.widgets.user.calls.PrivateCallLauncher
@@ -50,6 +52,7 @@ import rx.Subscription
 
 class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessages.Host, WidgetChatList.Host {
     private val viewModel: WidgetHomeViewModel by appViewModels { WidgetHomeViewModel() }
+    private val flexInputViewModel: AppFlexInputViewModel by appActivityViewModels { AppFlexInputViewModel() }
 
     private lateinit var panels: HomePanelsLayout
     private var navigationSubscription: Subscription? = null
@@ -58,6 +61,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
     private var mentionSubscription: Subscription? = null
     private var unreadCount = 0
     private var initialChannelShown = false
+    private var startPanelState: PanelState = PanelState.Closed
+    private var endPanelState: PanelState = PanelState.Closed
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         // A restored WidgetChatList needs its container before child restoration advances.
@@ -66,15 +71,29 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
         }
         super.onViewCreated(view, savedInstanceState)
         panels = view.findViewById(R.id.overlapping_panels)
+        startPanelState = PanelState.Closed
+        endPanelState = PanelState.Closed
         initialChannelShown = savedInstanceState != null
+        view.findViewById<View>(R.id.widget_home_panel_center_overlay).apply {
+            visibility = if (
+                childFragmentManager.findFragmentById(R.id.widget_home_panel_center_overlay) != null
+            ) View.VISIBLE else View.GONE
+            if (visibility == View.VISIBLE) bringToFront()
+        }
         // Registered here rather than in onViewBound so `panels` is already resolved, and before the
         // child transactions below so this stays behind WidgetTabsHost in the registry.
         setOnBackPressed(::handleBackPressed)
         panels.registerStartPanelStateListeners(
-            OverlappingPanelsLayout.PanelStateListener { StoreStream.getNavigation().setLeftPanelState(it) },
+            OverlappingPanelsLayout.PanelStateListener {
+                startPanelState = dismissChatInputWhenPanelOpens(startPanelState, it)
+                StoreStream.getNavigation().setLeftPanelState(it)
+            },
         )
         panels.registerEndPanelStateListeners(
-            OverlappingPanelsLayout.PanelStateListener { StoreStream.getNavigation().setRightPanelState(it) },
+            OverlappingPanelsLayout.PanelStateListener {
+                endPanelState = dismissChatInputWhenPanelOpens(endPanelState, it)
+                StoreStream.getNavigation().setRightPanelState(it)
+            },
         )
         if (childFragmentManager.findFragmentByTag(GUILDS_TAG) == null) {
             childFragmentManager.commitNow { replace(R.id.widget_guilds, WidgetGuildsList(), GUILDS_TAG) }
@@ -189,6 +208,15 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
             OverlappingPanelsLayout.Panel.END -> panels.closePanels()
         }
         return true
+    }
+
+    private fun dismissChatInputWhenPanelOpens(previous: PanelState, current: PanelState): PanelState {
+        val opening = current == PanelState.Opening || current == PanelState.Open
+        if (opening && previous != PanelState.Opening && previous != PanelState.Open) {
+            flexInputViewModel.hideExpressionTray()
+            hideKeyboard()
+        }
+        return current
     }
 
     /**
@@ -336,6 +364,11 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
         StoreStream.getMessagesLoader().jumpToMessage(channelId, messageId)
     }
     private fun openPins(channelId: Long) {
+        if (!isAdded || view == null || childFragmentManager.isStateSaved) return
+        val overlay = requireView().findViewById<View>(R.id.widget_home_panel_center_overlay)
+        panels.closePanels()
+        overlay.visibility = View.VISIBLE
+        overlay.bringToFront()
         childFragmentManager.commit {
             replace(R.id.widget_home_panel_center_overlay, WidgetChannelPinnedMessages.newInstance(channelId))
             addToBackStack("pins")

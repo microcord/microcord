@@ -1,14 +1,11 @@
 package com.discord.widgets.chat.input.sticker
 
 import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppComponent
 import com.discord.utilities.recycler.DiffCreator
-import com.discord.views.sticker.StickerView
-import com.discord.widgets.chat.input.emoji.GuildIcon
 
 /**
  * The horizontal tab rail under the sticker grid: "Frequently used", then one tab per guild, then
@@ -82,67 +79,5 @@ class StickerCategoryAdapter(
             items,
             newItems,
         )
-    }
-}
-
-/** The three tab layouts. Each shows a 3dp brand-coloured overline when it is the selected one. */
-sealed class StickerCategoryViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-
-    // `<include android:id="@+id/overline" …>` overrides the included root's own id, so the
-    // 3dp selection bar answers to R.id.overline, not to the id declared inside that layout.
-    protected val overline: View = itemView.findViewById(R.id.overline)
-
-    protected fun setSelected(isSelected: Boolean) {
-        overline.visibility = if (isSelected) View.VISIBLE else View.GONE
-    }
-
-    class Recent(itemView: View) : StickerCategoryViewHolder(itemView) {
-        fun configure(item: StickerCategoryItem.RecentItem, onRecentClicked: () -> Unit) {
-            setSelected(item.isSelected)
-            itemView.setOnClickListener { onRecentClicked() }
-            itemView.contentDescription =
-                itemView.context.getString(R.string.sticker_picker_categories_recent)
-        }
-    }
-
-    class Pack(itemView: View) : StickerCategoryViewHolder(itemView) {
-        private val avatar: StickerView =
-            itemView.findViewById(R.id.sticker_category_item_pack_avatar)
-
-        fun configure(
-            item: StickerCategoryItem.PackItem,
-            onPackClicked: (StickerCategoryItem.PackItem) -> Unit,
-        ) {
-            avatar.setSticker(item.pack.coverSticker, NEVER_ANIMATE)
-            // The listener goes on the StickerView, not the item view: StickerView.setOnClickListener
-            // forwards to whichever inner view is actually drawing the sticker.
-            avatar.setOnClickListener { onPackClicked(item) }
-            avatar.contentDescription = item.pack.name
-            itemView.setOnClickListener { onPackClicked(item) }
-            setSelected(item.isSelected)
-        }
-
-        private companion object {
-            /**
-             * [com.discord.utilities.stickers.StickerUtils.NEVER_ANIMATE] — a rail of animating
-             * pack covers would compete with the grid for attention (and for decoder threads).
-             */
-            const val NEVER_ANIMATE = 2
-        }
-    }
-
-    class Guild(itemView: View) : StickerCategoryViewHolder(itemView) {
-        private val guildIcon: GuildIcon =
-            itemView.findViewById(R.id.sticker_category_item_guild_icon)
-
-        fun configure(
-            item: StickerCategoryItem.GuildItem,
-            onGuildClicked: (StickerCategoryItem.GuildItem) -> Unit,
-        ) {
-            guildIcon.updateView(item.guild)
-            setSelected(item.isSelected)
-            itemView.setOnClickListener { onGuildClicked(item) }
-            itemView.contentDescription = item.guild.name
-        }
     }
 }

@@ -117,6 +117,12 @@ class OAuth2AuthorizeTest {
     }
 
     @Test
+    fun `a decorative denied permission follows real requested permissions`() {
+        assertFalse(WidgetOauth2Authorize.shouldAppendFakeScope(0))
+        assertTrue(WidgetOauth2Authorize.shouldAppendFakeScope(1))
+    }
+
+    @Test
     fun `oauth redirects reject schemes that can address local or embedded content`() {
         assertTrue(WidgetOauth2Authorize.isSafeRedirect("https://example.com/callback?code=secret"))
         assertTrue(WidgetOauth2Authorize.isSafeRedirect("example-app://callback?code=secret"))

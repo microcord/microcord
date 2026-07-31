@@ -206,7 +206,7 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
                     "count" to header.emojiMax,
                     "maxSize" to EMOJI_MAX_FILESIZE_KB,
                 )
-                upload.setOnClickListener { adapter.onUploadEmoji() }
+                upload.setOnClickListener { upload.post { adapter.onUploadEmoji() } }
             }
         }
 

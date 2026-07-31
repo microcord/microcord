@@ -9,6 +9,18 @@ import org.junit.Test
 
 class StickerPackStoreSheetAnalyticsTest {
     @Test
+    fun `view type ordinals and analytics values match 126 21`() {
+        assertEquals(
+            listOf(
+                "Sticker Popout View All",
+                "Sticker Search View All",
+                "Sticker Pack View All",
+            ),
+            StickerPackStoreSheetViewType.values().map { it.analyticsValue },
+        )
+    }
+
+    @Test
     fun `fields and component order match the reference`() {
         val sticker = Sticker(
             id = 1L,

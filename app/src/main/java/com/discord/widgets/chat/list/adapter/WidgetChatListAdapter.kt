@@ -658,15 +658,3 @@ class WidgetChatListAdapter @JvmOverloads constructor(
         }
     }
 }
-
-/**
- * Whether [message] mentions the viewer, directly, through one of their roles, or via `@everyone`.
- *
- * Returns false outright when the surface has turned message-level mention highlighting off.
- */
-fun WidgetChatListAdapter.isUserMentioned(message: Message): Boolean {
-    if (!mentionMeMessageLevelHighlighting) return false
-    if (message.mentionEveryone == true) return true
-    if (message.mentions.orEmpty().any { it.id == data.userId }) return true
-    return message.mentionRoles.orEmpty().any { data.myRoleIds.contains(it) }
-}

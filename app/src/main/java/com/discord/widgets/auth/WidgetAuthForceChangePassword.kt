@@ -3,6 +3,7 @@ package com.discord.widgets.auth
 import android.view.View
 import android.widget.ImageView
 import com.discord.R
+import com.discord.stores.StoreStream
 import com.discord.views.LoadingButton
 import com.google.android.material.textfield.TextInputLayout
 
@@ -16,6 +17,10 @@ class WidgetAuthForceChangePassword :
             setText(getString(R.string.update_password))
             setOnClickListener { changePassword() }
         }
+        setOnBackPressed(handler = {
+            StoreStream.getAuthentication().logout()
+            true
+        })
     }
 
     private fun changePassword() {

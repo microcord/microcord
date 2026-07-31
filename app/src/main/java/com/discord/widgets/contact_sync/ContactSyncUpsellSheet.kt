@@ -8,6 +8,8 @@ import com.discord.R
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppLog
 import com.discord.app.appActivityViewModels
+import com.discord.utilities.analytics.AnalyticsTracker
+import com.discord.utilities.analytics.Traits
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.view.text.LinkifiedTextView
@@ -29,7 +31,9 @@ class ContactSyncUpsellSheet : AppBottomSheet() {
 
     private val viewModel: WidgetContactSyncViewModel by appActivityViewModels {
         WidgetContactSyncViewModel(
-            mode = WidgetContactSync.getContactSyncModeFromIntent(requireAppActivity()),
+            mode = ContactSyncMode.DEFAULT,
+            allowPhone = false,
+            allowEmail = false,
             captchaLauncher = {
                 AppLog.e("Invalid CAPTCHA: We shouldn't be interacting with CAPTCHA on this screen.")
             },
@@ -53,6 +57,7 @@ class ContactSyncUpsellSheet : AppBottomSheet() {
         nextButton = view.findViewById(R.id.contact_sync_upsell_next_button)
         skipButton = view.findViewById(R.id.contact_sync_upsell_skip_button)
         discoveryInfo.setContactSyncLearnMoreText(R.string.contact_sync_learn_more) {
+            AnalyticsTracker.openPopout("Contact Sync", Traits.Location(page = "Contact Sync Learn More"))
             ContactSyncPermissionsSheet.show(parentFragmentManager)
         }
     }

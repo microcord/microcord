@@ -11,6 +11,7 @@ import com.discord.stores.StoreUser
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
 import com.discord.utilities.permissions.PermissionUtils
+import com.discord.widgets.servers.creator_monetization_eligibility.CreatorMonetizationCountryAllowlist
 import rx.Observable
 
 /**
@@ -31,13 +32,8 @@ class GuildRoleSubscriptionsFeatureFlag(
     private val storeUser: StoreUser = StoreStream.getUsers(),
     private val storePermissions: StorePermissions = StoreStream.getPermissions(),
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
-    /**
-     * Reference: `CreatorMonetizationCountryAllowlist.isUserInEligibleCountry()`, which lives in
-     * `widgets/servers/creator_monetization_eligibility` and has not been reconstructed. Until it
-     * exists a non-monetisable guild's owner cannot reach the settings screen, which is the safe
-     * direction: the alternative would advertise a flow the backend would reject.
-     */
-    private val isUserInEligibleCountry: () -> Boolean = { false },
+    private val isUserInEligibleCountry: () -> Boolean =
+        CreatorMonetizationCountryAllowlist.INSTANCE::isUserInEligibleCountry,
 ) {
 
     // region experiment gates

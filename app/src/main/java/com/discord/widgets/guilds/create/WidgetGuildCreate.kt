@@ -9,6 +9,7 @@ import android.os.Parcel
 import android.os.Parcelable
 import android.view.View
 import android.widget.Toast
+import androidx.core.os.BundleCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.ViewModel
@@ -73,10 +74,9 @@ open class WidgetGuildCreate(
         }
     }
 
-    @Suppress("DEPRECATION")
     protected val options: Options by lazy {
-        arguments?.getParcelable(EXTRA_OPTIONS)
-            ?: mostRecentIntent.getParcelableExtra(EXTRA_OPTIONS)
+        arguments?.let { BundleCompat.getParcelable(it, EXTRA_OPTIONS, Options::class.java) }
+            ?: mostRecentIntent.extras?.let { BundleCompat.getParcelable(it, EXTRA_OPTIONS, Options::class.java) }
             ?: error("Missing guild creation options")
     }
 

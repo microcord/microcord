@@ -34,6 +34,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.BROADCAST_STICKY" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -233,6 +234,11 @@
                 android:resource="@xml/shortcuts" />
         </activity>
         <activity
+            android:name="com.discord.app.AppActivity$Call"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTask" />
+        <activity
             android:name="com.discord.app.AppActionActivity"
             android:exported="true"
             android:launchMode="standard"
@@ -300,13 +306,17 @@
         </receiver>
 
         <service
-            android:name="com.discord.overlay.OverlayService"
+            android:name="com.discord.utilities.voice.DiscordOverlayService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Displays user-enabled voice call controls over other apps" />
         </service>
+        <service
+            android:name="com.discord.utilities.voice.VoiceEngineForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
 
         <!-- Google Assistant App Actions fulfillment (res/xml/actions.xml). -->
         <meta-data

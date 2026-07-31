@@ -75,6 +75,7 @@ class StoreAuditLog(
         val filter: AuditLogFilter = AuditLogFilter.emptyFilter(),
         val deletedTargets: Map<ModelAuditLogEntry.TargetType, MutableMap<Long, CharSequence?>> = emptyMap(),
         val isLoading: Boolean = false,
+        val hasError: Boolean = false,
     )
 
     private var state = AuditLogState()
@@ -102,7 +103,7 @@ class StoreAuditLog(
     /** Switches guild if needed, and requests the first page if none is held. */
     fun fetchAuditLogIfNeeded(guildId: Long) = dispatcher.schedule {
         val isDifferentGuild = guildId != state.guildId
-        val needsFirstPage = state.entries == null && !state.isLoading
+        val needsFirstPage = state.entries == null && !state.isLoading && !state.hasError
         if (isDifferentGuild) clearStateInternal()
         if (isDifferentGuild || needsFirstPage) fetchAuditLogs(guildId, state.filter)
     }
@@ -113,13 +114,19 @@ class StoreAuditLog(
 
     /** Changing a filter drops the entries so the next fetch starts from the top. */
     fun setAuditLogFilterUserId(userId: Long) = dispatcher.schedule {
-        if (userId != state.filter.userFilter) state = state.copy(entries = null)
+        if (userId != state.filter.userFilter) {
+            cutoffTimestamp = null
+            state = state.copy(entries = null, hasError = false)
+        }
         state = state.copy(filter = state.filter.copy(userFilter = userId))
         markChanged()
     }
 
     fun setAuditLogFilterActionId(actionId: Int) = dispatcher.schedule {
-        if (actionId != state.filter.actionFilter) state = state.copy(entries = null)
+        if (actionId != state.filter.actionFilter) {
+            cutoffTimestamp = null
+            state = state.copy(entries = null, hasError = false)
+        }
         state = state.copy(filter = state.filter.copy(actionFilter = actionId))
         markChanged()
     }
@@ -146,12 +153,13 @@ class StoreAuditLog(
 
     @StoreThread
     private fun fetchAuditLogs(guildId: Long, filter: AuditLogFilter) {
+        if (state.isLoading) return
         val before = state.entries?.lastOrNull()?.id
         // First request: seed the cutoff so `before == null` does not read as "already fetched".
         if (cutoffTimestamp == null) cutoffTimestamp = 0L
         if (before == cutoffTimestamp) return
         cutoffTimestamp = before
-        state = state.copy(guildId = guildId, isLoading = true)
+        state = state.copy(guildId = guildId, isLoading = true, hasError = false)
         markChanged()
 
         val api = restApi() ?: return handleFetchFailureInternal()
@@ -173,7 +181,8 @@ class StoreAuditLog(
 
     @StoreThread
     internal fun handleFetchFailureInternal() {
-        state = state.copy(isLoading = false)
+        cutoffTimestamp = null
+        state = state.copy(isLoading = false, hasError = true)
         markChanged()
     }
 
@@ -200,6 +209,7 @@ class StoreAuditLog(
         state = state.copy(
             entries = state.entries.orEmpty() + transformed,
             isLoading = false,
+            hasError = false,
         )
         markChanged()
     }

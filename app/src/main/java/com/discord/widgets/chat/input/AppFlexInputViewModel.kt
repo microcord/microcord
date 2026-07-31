@@ -50,7 +50,8 @@ class AppFlexInputViewModel : AppViewModel<AppFlexInputViewModel.ViewState>(View
     }
 
     fun toggleExpressionTray() {
-        if (!hideExpressionTray()) showExpressionTray()
+        if (requireViewState().expressionTrayShown) showKeyboardAndHideExpressionTray()
+        else showExpressionTray()
     }
 
     /**

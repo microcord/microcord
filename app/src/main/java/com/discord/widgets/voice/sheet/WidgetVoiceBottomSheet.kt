@@ -18,7 +18,6 @@ import com.discord.app.AppToast
 import com.discord.app.appViewModels
 import com.discord.rtcconnection.mediaengine.MediaEngineConnection
 import com.discord.stores.StoreAudioManagerV2
-import com.discord.stores.StoreNotices
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreVoiceParticipants
 import com.discord.utilities.color.ColorCompat
@@ -41,6 +40,7 @@ import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.widgets.voice.VoiceStoreAccess
 import com.discord.widgets.voice.controls.AnchoredVoiceControlsView
 import com.discord.widgets.voice.model.CameraState
+import com.discord.widgets.voice.fullscreen.WidgetCallFullscreen
 import com.discord.widgets.voice.stream.StreamNavigator
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.button.MaterialButton
@@ -52,7 +52,7 @@ import rx.Subscription
  * Before you join it lists who is already in the channel and offers Join / Join with video. Once
  * you are connected it becomes the call's control surface, hosting [AnchoredVoiceControlsView].
  * A call that turns into a video call — or a stage — outgrows the sheet and is handed off to the
- * fullscreen surface via [Navigation.launchFullscreenCall].
+ * fullscreen surface via [WidgetCallFullscreen].
  */
 class WidgetVoiceBottomSheet : AppBottomSheet() {
 
@@ -405,12 +405,12 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
                 // about to stop owning.
                 viewModelEventSubscription?.unsubscribe()
                 dismiss()
-                Navigation.launchFullscreenCall(requireContext(), event.channelId, event.streamKey)
+                WidgetCallFullscreen.launch(requireContext(), event.channelId, streamKey = event.streamKey)
             }
             is WidgetVoiceBottomSheetViewModel.Event.LaunchStageChannel -> {
                 viewModelEventSubscription?.unsubscribe()
                 dismiss()
-                Navigation.launchFullscreenCall(requireContext(), event.channelId, null)
+                WidgetCallFullscreen.launch(requireContext(), event.channelId, animate = true)
             }
             is WidgetVoiceBottomSheetViewModel.Event.AccessibilityAnnouncement ->
                 view?.announceForAccessibility(getString(event.announcementResId))
@@ -447,29 +447,13 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
     }
 
     private fun enqueueOverlayNux() {
-        StoreStream.getNotices().requestToShow(
-            StoreNotices.Notice(
-                name = WidgetNoticeNuxOverlay.NOTICE_NAME,
-                priority = 0,
-                persist = true,
-                show = { activity ->
-                    WidgetNoticeNuxOverlay().show(
-                        activity.supportFragmentManager,
-                        WidgetNoticeNuxOverlay.NOTICE_NAME,
-                    )
-                    true
-                },
-            ),
-        )
+        WidgetNoticeNuxOverlay.enqueue()
     }
 
     /**
      * Remaining destinations whose reference classes do not exist in the target yet.
      */
     object Navigation {
-        @JvmField
-        var launchFullscreenCall: (Context, Long, String?) -> Unit = { _, _, _ -> }
-
         @JvmField
         var showCameraCapacityDialog: (AppBottomSheet, Int) -> Unit = { _, _ -> }
 

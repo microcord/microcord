@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
 import androidx.fragment.app.Fragment
-import com.discord.app.AppLog
+import com.discord.utilities.voice.VoiceEngineServiceController
 
 /**
  * The single place a screen share is requested from and its permission result is handled.
@@ -24,21 +24,11 @@ object StreamNavigator {
      */
     private const val START_SCREENSHARE_REQUEST_CODE = 420
 
-    /**
-     * Hands the consent token to the media engine so it actually starts publishing.
-     *
-     * In the reference this is `VoiceEngineServiceController.getINSTANCE().startStream(intent)`.
-     * That controller is part of the RTC transport, which is being reconstructed separately, so it
-     * installs itself here. While it is absent the consent dialog still runs and is still consented
-     * to — no stream is published, and the attempt is logged rather than swallowed.
-     */
-    @JvmStatic
-    var startStreamHandler: ((Intent) -> Unit)? = null
-
     /** Asks the system for screen-capture consent on [fragment]'s behalf. */
     @JvmStatic
     fun requestStartStream(fragment: Fragment?) {
-        val context = fragment?.context ?: return
+        fragment ?: return
+        val context = fragment.requireContext()
         val projectionManager =
             context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         fragment.startActivityForResult(
@@ -69,16 +59,6 @@ object StreamNavigator {
 
     /** Publishes the stream using the consent token obtained by [requestStartStream]. */
     @JvmStatic
-    fun startStream(consentIntent: Intent) {
-        val handler = startStreamHandler
-        if (handler == null) {
-            AppLog.w(
-                "StreamNavigator",
-                "screen capture was consented to but no media engine is installed; " +
-                    "StreamNavigator.startStreamHandler is unassigned",
-            )
-            return
-        }
-        handler(consentIntent)
-    }
+    fun startStream(consentIntent: Intent) =
+        VoiceEngineServiceController.INSTANCE.startStream(consentIntent)
 }

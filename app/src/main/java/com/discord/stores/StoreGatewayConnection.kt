@@ -287,17 +287,7 @@ class StoreGatewayConnection(
         guildSubscriptionsSubscription?.unsubscribe()
         guildSubscriptionsSubscription = stream.getGuildSubscriptionsInternal().observeSubscriptions()
             .subscribe({ payload ->
-                socket.updateGuildSubscriptions(
-                    payload.guildId,
-                    GuildSubscriptions(
-                        channels = payload.channels,
-                        typing = true,
-                        activities = true,
-                        members = null,
-                        threads = null,
-                        threadMemberLists = null,
-                    ),
-                )
+                socket.updateGuildSubscriptions(payload.guildId, payload.toGatewayPayload())
             }, {})
     }
 

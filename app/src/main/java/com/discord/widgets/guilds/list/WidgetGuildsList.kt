@@ -24,8 +24,10 @@ import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.widgets.channels.list.WidgetChannelListUnreads
+import com.discord.widgets.guilds.create.CreateGuildTrigger
 import com.discord.widgets.guilds.contextmenu.WidgetFolderContextMenu
 import com.discord.widgets.guilds.contextmenu.WidgetGuildContextMenu
+import com.discord.widgets.nux.WidgetGuildTemplates
 import com.discord.widgets.tabs.TabsHostBottomNavigationView
 
 /**
@@ -227,17 +229,14 @@ class WidgetGuildsList : AppFragment(R.layout.widget_guilds_list), WidgetGuildLi
 /**
  * Sidebar destinations that do not exist in this project yet.
  *
- * `WidgetGuildTemplates` (guild creation), `WidgetNavigationHelp` and
- * `WidgetChannelsListItemChannelActions` have not been reconstructed, so the "+", "?" and DM
- * long-press routes have nowhere to go. Each default is a no-op — the row is still shown and still
- * reports its click, it simply does not navigate. **Install these from app start-up and delete the
- * field as each screen lands.**
+ * `WidgetNavigationHelp` and `WidgetChannelsListItemChannelActions` have not been reconstructed, so
+ * the "?" and DM long-press routes have nowhere to go. Install those callbacks from app start-up
+ * and delete each field as its screen lands.
  */
 object GuildsListNavigation {
 
-    /** `WidgetGuildTemplates.launch(context, CreateGuildTrigger.IN_APP, false)`. */
-    @Volatile
-    var showCreateGuild: (Context) -> Unit = {}
+    fun showCreateGuild(context: Context) =
+        WidgetGuildTemplates.launch(context, CreateGuildTrigger.IN_APP, false)
 
     /** `WidgetNavigationHelp.show(fragmentManager)`. */
     @Volatile

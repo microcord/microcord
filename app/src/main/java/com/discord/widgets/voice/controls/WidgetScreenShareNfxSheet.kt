@@ -9,6 +9,7 @@ import com.discord.R
 import com.discord.app.AppBottomSheet
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.widgets.voice.sheet.WidgetVoiceBottomSheet
+import com.discord.widgets.voice.fullscreen.WidgetCallFullscreen
 import com.discord.widgets.voice.stream.StreamNavigator
 import java.io.Serializable
 
@@ -50,9 +51,9 @@ class WidgetScreenShareNfxSheet : AppBottomSheet() {
         super.onActivityResult(requestCode, resultCode, data)
         StreamNavigator.handleActivityResult(requestCode, resultCode, data) { consentIntent ->
             StreamNavigator.startStream(consentIntent)
-            // The reference additionally re-enters `WidgetCallFullscreen` here when it is not
-            // already the top screen. That fragment is being reconstructed separately; once it
-            // exists, launch it from this branch.
+            if (requireActivity() !is com.discord.app.AppActivity.Call) {
+                WidgetCallFullscreen.launch(requireContext(), channelId)
+            }
             dismiss()
         }
     }

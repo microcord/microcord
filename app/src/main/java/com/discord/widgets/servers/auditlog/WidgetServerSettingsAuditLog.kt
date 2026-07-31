@@ -59,6 +59,8 @@ class WidgetServerSettingsAuditLog : AppFragment(R.layout.widget_server_settings
     private lateinit var resultsFlipper: AppViewFlipper
     private lateinit var userFilter: TextView
     private lateinit var actionFilter: TextView
+    private lateinit var noLogsTitle: TextView
+    private lateinit var noLogsBody: TextView
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -81,6 +83,8 @@ class WidgetServerSettingsAuditLog : AppFragment(R.layout.widget_server_settings
         resultsFlipper = view.findViewById(R.id.server_settings_audit_logs_view_results_flipper)
         userFilter = view.findViewById(R.id.server_settings_audit_logs_user_filter)
         actionFilter = view.findViewById(R.id.server_settings_audit_logs_action_filter)
+        noLogsTitle = view.findViewById(R.id.no_logs_title)
+        noLogsBody = view.findViewById(R.id.no_logs_body)
 
         userFilter.setOnClickListener {
             WidgetServerSettingsAuditLogFilter.show(it.context, guildId, FILTER_TYPE_USER)
@@ -166,6 +170,13 @@ class WidgetServerSettingsAuditLog : AppFragment(R.layout.widget_server_settings
     private fun configureUI(model: Model) {
         when (model) {
             is Model.Loading -> viewFlipper.displayedChild = VIEW_INDEX_LOGS_LOADING
+            is Model.Error -> {
+                adapter?.configure(emptyList())
+                viewFlipper.displayedChild = VIEW_INDEX_LOGS_CONTENT
+                resultsFlipper.displayedChild = RESULTS_VIEW_INDEX_NO_LOGS
+                noLogsTitle.setText(R.string.guild_settings_label_audit_log_error_title)
+                noLogsBody.setText(R.string.guild_settings_label_audit_log_error_body)
+            }
             // Losing View Audit Log while the screen is open is the same as never having reached it.
             is Model.Unauthorized -> appActivity?.onBackPressed()
             is Model.Loaded -> {
@@ -173,6 +184,8 @@ class WidgetServerSettingsAuditLog : AppFragment(R.layout.widget_server_settings
                 viewFlipper.displayedChild = VIEW_INDEX_LOGS_CONTENT
                 userFilter.text = model.usernameFilterText
                 actionFilter.text = model.actionFilterText
+                noLogsTitle.setText(R.string.guild_settings_label_audit_log_empty_title)
+                noLogsBody.setText(R.string.guild_settings_label_audit_log_empty_body)
                 // An empty result is not an empty log — it usually means the filters exclude
                 // everything, so the empty view sits *inside* the loaded state.
                 resultsFlipper.displayedChild = if (model.auditLogEntryItems.isEmpty()) {
@@ -188,6 +201,9 @@ class WidgetServerSettingsAuditLog : AppFragment(R.layout.widget_server_settings
 
         /** The first page has not arrived. Distinct from "arrived and empty". */
         object Loading : Model()
+
+        /** The request or response parser failed, so loading has reached a terminal state. */
+        object Error : Model()
 
         /**
          * The user may not read this guild's audit log any more.
@@ -255,6 +271,7 @@ class WidgetServerSettingsAuditLog : AppFragment(R.layout.widget_server_settings
                 if (!PermissionUtils.can(Permission.VIEW_AUDIT_LOG, guildPermissions)) {
                     return Unauthorized
                 }
+                if (auditLogState.hasError) return Error
                 val entries = auditLogState.entries
                 if (entries == null || guild == null) return Loading
 
@@ -262,10 +279,6 @@ class WidgetServerSettingsAuditLog : AppFragment(R.layout.widget_server_settings
 
                 val items = mutableListOf<MGRecyclerDataPayload>()
                 for (entry in entries) {
-                    // An action type this build does not know about is dropped rather than shown as
-                    // "Unknown action" — the sentence would carry no information at all.
-                    if (entry.actionTypeId !in AuditLogUtils.ALL_ACTION_TYPES) continue
-
                     val actor = auditLogState.users[entry.userId]
                     items.add(
                         WidgetServerSettingsAuditLogAdapter.AuditLogEntryItem(

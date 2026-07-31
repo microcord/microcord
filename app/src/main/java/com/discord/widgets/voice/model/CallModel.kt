@@ -129,6 +129,12 @@ data class CallModel(
             val audioManagerState: StoreAudioManagerV2.State,
         )
 
+        private data class Supplemental(
+            val guildScheduledEvents: List<GuildScheduledEvent>,
+            val embeddedActivities: Map<Long, EmbeddedActivity>,
+            val applications: Map<Long, Application>,
+        )
+
         private fun observeChunk(channel: Channel): Observable<Chunk> =
             Observable.combineLatest(
                 StoreStream.getUsers().observeMeId(),
@@ -179,7 +185,7 @@ data class CallModel(
 
         private fun observeModel(channelId: Long, channel: Channel): Observable<CallModel> {
             val experiments = StoreStream.getExperiments()
-            return Observable.combineLatest(
+            val model = Observable.combineLatest(
                 observeChunk(channel),
                 StoreStream.getApplicationStreaming().observeActiveStream(),
                 VoiceStoreAccess.observeRtcConnectionMetadata(),
@@ -215,17 +221,39 @@ data class CallModel(
                     streamFeedbackTriggerRateDenominator = streamFeedbackTriggerRateDenominator,
                     audioManagerState = chunk.audioManagerState,
                     voiceChannelJoinability = voiceChannelJoinability,
-                    // The reference additionally combines
-                    // `StoreGuildScheduledEvents.observeGuildScheduledEvents(guildId)` filtered to
-                    // this channel, `StoreEmbeddedActivities.observeEmbeddedActivitiesForChannel`
-                    // and `StoreApplication.observeApplications`. None of those three stores exists
-                    // in this reconstruction yet, so the event banner and the embedded-activity
-                    // tiles render empty. Wire them here when the stores land.
                     guildScheduledEvents = emptyList(),
                     embeddedActivitiesForChannel = emptyMap(),
                     applications = emptyMap(),
                 )
             }
+            return Observable.combineLatest(model, observeSupplemental(channel)) { base, supplemental ->
+                base.copy(
+                    guildScheduledEvents = supplemental.guildScheduledEvents,
+                    embeddedActivitiesForChannel = supplemental.embeddedActivities,
+                    applications = supplemental.applications,
+                )
+            }
+        }
+
+        private fun observeSupplemental(channel: Channel): Observable<Supplemental> {
+            val events = if (channel.guildId > 0L) {
+                StoreStream.getGuildScheduledEvents()
+                    .observeGuildScheduledEvents(channel.guildId)
+                    .map { guildEvents -> guildEvents.filter { it.channelId == channel.id } }
+            } else {
+                Observable.just(emptyList())
+            }
+            return Observable.combineLatest(
+                events,
+                StoreStream.getEmbeddedActivities().observeEmbeddedActivitiesForChannel(channel.id),
+            ) { guildEvents, embeddedActivities -> guildEvents to embeddedActivities }
+                .switchMap { (guildEvents, embeddedActivities) ->
+                    val applicationStore = StoreStream.getApplication()
+                    embeddedActivities.keys.forEach(applicationStore::fetchIfNonexisting)
+                    applicationStore.observeApplications(embeddedActivities.keys).map { applications ->
+                        Supplemental(guildEvents, embeddedActivities, applications)
+                    }
+                }
         }
 
         /**
@@ -279,10 +307,4 @@ data class CallModel(
             audioManagerState = audioManagerState,
         )
     }
-}
-
-enum class CameraState {
-    CAMERA_ON,
-    CAMERA_OFF,
-    CAMERA_DISABLED,
 }

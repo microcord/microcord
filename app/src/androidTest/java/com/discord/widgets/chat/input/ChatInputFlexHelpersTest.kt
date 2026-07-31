@@ -1,10 +1,12 @@
 package com.discord.widgets.chat.input
 
+import android.content.Context
 import android.net.Uri
 import android.os.Parcel
 import android.text.TextUtils
 import android.view.ContextThemeWrapper
 import android.view.View
+import androidx.appcompat.widget.AppCompatImageButton
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.discord.R
@@ -80,8 +82,35 @@ class ChatInputFlexHelpersTest {
         }
     }
 
+    @Test
+    fun expressionTrayButtonAlwaysMatchesTrayState() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val context = themedContext()
+            val button = RecordingImageButton(context)
+
+            configureExpressionTrayButton(button, true)
+            assertEquals(context.getString(R.string.show_keyboard), button.contentDescription)
+            assertEquals(R.drawable.ic_keyboard_24dp, button.imageResource)
+            assertTrue(!button.isActivated && !button.isSelected)
+
+            configureExpressionTrayButton(button, false)
+            assertEquals(context.getString(R.string.toggle_emoji_keyboard), button.contentDescription)
+            assertEquals(R.drawable.ic_emoji_24dp, button.imageResource)
+            assertTrue(!button.isActivated && !button.isSelected)
+        }
+    }
+
     private fun themedContext() = ContextThemeWrapper(
         InstrumentationRegistry.getInstrumentation().targetContext,
         R.style.AppTheme_Dark,
     )
+}
+
+private class RecordingImageButton(context: Context) : AppCompatImageButton(context) {
+    var imageResource = 0
+
+    override fun setImageResource(resId: Int) {
+        imageResource = resId
+        super.setImageResource(resId)
+    }
 }

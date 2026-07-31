@@ -68,6 +68,7 @@ dependencies {
     implementation(libs.androidx.work.runtime)
     implementation(libs.exoplayer.core)
     implementation(libs.exoplayer.ui)
+    implementation(libs.camerakit)
     implementation(libs.cameraview)
     implementation(libs.colorpicker)
     implementation(libs.flexbox)

@@ -4876,6 +4876,29 @@ complete. Remaining deficits: `chat` 111, `servers` 40, `channels` 23, `settings
 `botuikit`, plus one each in `contact_sync` and `playstation`. Structural coverage remains an upper
 bound pending renewed behavioral auditing.
 
+## 2026-07-29 fifth twenty-agent widget closure wave
+
+The fifth wave split consolidated chat input/list/entry classes into exact 126.21 paths, completed
+application-command sheets, member verification, server/community/settings/guild/channel/voice paths,
+and closed exact paths for hubs, scheduled events, forums, user, stage, bot UI and guild-role
+subscriptions. Notification/store graph reachability and overlay/voice prerequisites also advanced.
+`DiscordOverlayService` correctly remained blocked because the current RTC store exposes only Boolean
+connection state rather than the reference `RtcConnection.StateChange` needed by `launchForConnect`.
+
+Integration repairs covered gifting state/Rx typing, member-verification loaded-state filtering,
+AppFragment argument/menu APIs, private-call lambda return type, API-21 exception construction,
+nullable push-token unregister, asynchronous store tests, and Android/JVM fixture limitations.
+
+Verification: production Kotlin compiles, all 1,440 unit tests pass, `assembleDebug` passes, and
+`lintDebug` passes with baseline-covered findings only.
+
+Measured exact-path widget coverage is now **1,071 / 1,155 (92.7%)**, up from 929 / 1,155. **84 exact
+paths remain**. Target contains 1,156 widget Kotlin files; 36 of 45 widget packages are structurally
+complete. Remaining deficits: `chat` 37, `servers` 33, `guilds` 4, `voice` 4, `captcha` 2, and one
+each in `home`, `auth`, `contact_sync`, and `playstation`. Structural coverage remains an upper bound;
+the remaining file count includes synthetic facades and consolidated classes identified by the chat
+and channel residual audits.
+
 ## 2026-07-30 parallel widget completion wave
 
 A 21-agent disjoint-ownership wave completed exact root and subtree work across chat input/list/actions,
@@ -4988,3 +5011,56 @@ Two restoration defects found while reproducing the old path were fixed at their
 Verification: the full unit suite passes; forced `lintDebug --rerun-tasks` passes with only the
 recovered-resource baseline; all four `NestedBackPressTest` cases and the focused direct-auth
 phone-input lifecycle test pass on Android 16.
+
+## 2026-07-30 sixth widget closure wave
+
+The sixth disjoint-ownership wave split the remaining chat entry/adapter/input paths, completed
+server monetization, role-subscription, boost and member-verification surfaces, and closed residual
+channel, captcha, contact-sync, PlayStation, home, bot UI, stage and voice prerequisite paths.
+Integration fixed four source API/import/nullability mismatches, exact Kotlin JVM facade names, and
+the creator-monetization API-v9 fixture expectations.
+
+Verification: production Kotlin compiles; all 1,492 unit tests pass; `assembleDebug` and `lintDebug`
+pass with baseline-covered findings only. No live backend or device was used.
+
+After the residual chat/server mini-wave, measured physical source-path widget coverage is
+**1,144 / 1,155 (99.0%)**. **11 source filenames remain**; the target contains 1,229 widget Kotlin
+files. Four unmatched filenames already emit the exact reference JVM classes from consolidated Kotlin
+files: `WidgetContactSyncViewModelKt`, `PanelLayout`, `PlaystationExperimentUtilsKt`, and
+`WidgetServerSettingsEnableCommunityViewModelKt`. Seven behavioral blockers remain.
+
+Highest-value resumable work:
+
+- `app/src/main/java/com/discord/widgets/servers/guildboost/{GuildBoostViewModel,WidgetGuildBoost}.kt` | matching Vineflower paths | remains blocked on `GooglePlayBillingManager`; do not create an inert purchase screen.
+- `app/src/main/java/com/discord/widgets/voice/fullscreen/{WidgetCallFullscreen,WidgetCallFullscreenViewModel,WidgetCallPreviewFullscreen,WidgetCallPreviewFullscreenViewModel}.kt` | matching Vineflower paths | blocked on the foreground voice service, call activity route, `CallSoundManager`, `ScreenShareManager`, notification builder and complete `CallModel`; build that prerequisite slice first.
+- `app/src/main/java/com/discord/widgets/auth/WidgetOauth2AuthorizeSamsung.kt` | matching Vineflower/JADX paths | blocked on `SamsungConnectActivity`, its Samsung AIDL bridge, manifest route, and project-owned Samsung credentials; do not copy official credentials or create an inert authorization screen.
+
+## 2026-07-30 fullscreen voice vertical slice
+
+The service/UI dependency cycle is closed end to end. `StoreApplication` and
+`StoreApplicationAssets` are now part of `StoreStream`; `CallModel` consumes live scheduled events,
+embedded activities, and application records. Stream RTC quality and the reference media-sink focus
+negotiation are restored through both RTC controller implementations.
+
+The active and preview fullscreen view models and fragments now own real state, controls, participant
+rendering, stage/event handling, NSFW/text-in-voice behavior, accessibility, and Back transitions.
+`AppActivity.Call` and every existing call/stage/screen-share entry point route to the dedicated call
+task. The concrete overlay service and foreground voice service are manifest-registered; notification
+actions, call sounds, screen-share previews, wake/proximity locks, immutable pending intents, and stage
+invite accept/decline actions are connected. The service controller is initialized once after
+`StoreStream` and drives foreground binding plus overlay open/close from RTC state.
+
+Verification: production Kotlin compiles; all 1,514 unit tests pass; `assembleDebug` and `lintDebug`
+pass with baseline-covered findings only. No live backend or device was used.
+
+Physical widget source-path coverage is now **1,148 / 1,155 (99.4%)**. Seven filenames remain, but
+`WidgetContactSyncViewModelKt`, `PanelLayout`, `PlaystationExperimentUtilsKt`, and
+`WidgetServerSettingsEnableCommunityViewModelKt` already exist as exact compiled JVM classes from
+consolidated Kotlin sources. The three real structural blockers are Samsung OAuth and the two guild
+boost billing screens.
+
+Resumable tasks:
+
+- `app/src/main/java/com/discord/widgets/servers/guildboost/{GuildBoostViewModel,WidgetGuildBoost}.kt` | matching Vineflower paths | reconstruct `GooglePlayBillingManager` against the installed billing dependency first; then build the purchase state machine and screen, never an inert shell.
+- `app/src/main/java/com/discord/widgets/auth/WidgetOauth2AuthorizeSamsung.kt` | matching Vineflower/JADX paths | requires a project-owned Samsung client configuration plus `SamsungConnectActivity`/AIDL bridge and manifest route; official recovered credentials are forbidden.
+- `app/src/main/java/com/discord/widgets/voice/fullscreen/**`, `utilities/voice/**`, `rtcconnection/**` | matching reference paths | on an ARM64 device, verify voice join/leave, camera focus, screen-share start/stop and thumbnail upload, overlay permission/open/close, notification mute/deafen/disconnect, stage invite actions, process backgrounding, and service teardown.

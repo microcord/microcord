@@ -6,16 +6,23 @@ import com.discord.api.friendsuggestions.FriendSuggestionReasonType
 import com.discord.api.user.User
 import com.discord.models.phone.PhoneCountryCode
 import com.discord.restapi.RestAPIInterface
+import com.discord.utilities.error.RestApiError
 import com.discord.utilities.time.Clock
 import com.discord.widgets.contact_sync.WidgetContactSyncViewModel.Item
 import com.discord.widgets.contact_sync.WidgetContactSyncViewModel.StoreState
 import com.discord.widgets.contact_sync.WidgetContactSyncViewModel.ViewState
 import com.discord.widgets.contact_sync.WidgetContactSyncViewModel.Views
 import java.lang.reflect.Proxy
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import retrofit2.HttpException
+import retrofit2.Response
 import rx.Observable
 
 class ContactSyncTest {
@@ -129,6 +136,30 @@ class ContactSyncTest {
         assertFalse(viewModel.requireViewState().allowEmail)
     }
 
+    @Test fun `phone captcha requires the reference captcha key`() {
+        val oldGate = ContactSyncDependencies.isPhoneVerifyCaptchaEnabled
+        var launched: RestApiError? = null
+        val viewModel = viewModel(ContactSyncMode.DEFAULT) { launched = it }
+        val events = mutableListOf<WidgetContactSyncViewModel.Event>()
+        val subscription = viewModel.observeEvents().subscribe(events::add)
+        ContactSyncDependencies.isPhoneVerifyCaptchaEnabled = { true }
+        try {
+            val captcha = httpError(
+                """{"captcha_key":["captcha-required"],"captcha_sitekey":"site-key"}""",
+            )
+            viewModel.handlePhoneSubmittedErrorForTest(captcha)
+            assertSame(captcha, launched)
+
+            launched = null
+            viewModel.handlePhoneSubmittedErrorForTest(httpError("""{"captcha_sitekey":"site-key"}"""))
+            assertNull(launched)
+            assertEquals(listOf(WidgetContactSyncViewModel.Event.PhoneInvalid), events)
+        } finally {
+            subscription.unsubscribe()
+            ContactSyncDependencies.isPhoneVerifyCaptchaEnabled = oldGate
+        }
+    }
+
     // endregion
 
     // region analytics
@@ -203,7 +234,10 @@ class ContactSyncTest {
         }
     }
 
-    private fun viewModel(mode: ContactSyncMode) = WidgetContactSyncViewModel(
+    private fun viewModel(
+        mode: ContactSyncMode,
+        captchaLauncher: (RestApiError) -> Unit = {},
+    ) = WidgetContactSyncViewModel(
         mode = mode,
         restAPI = stubRestApi(),
         // The store feed is exercised separately; the flow tests drive the view model directly.
@@ -213,7 +247,17 @@ class ContactSyncTest {
             clock = MutableClock(0L),
             analytics = ContactSyncAnalytics.None,
         ),
-        captchaLauncher = {},
+        captchaLauncher = captchaLauncher,
+    )
+
+    private fun WidgetContactSyncViewModel.handlePhoneSubmittedErrorForTest(error: RestApiError) {
+        javaClass.getDeclaredMethod("handlePhoneSubmittedError", RestApiError::class.java).apply {
+            isAccessible = true
+        }.invoke(this, error)
+    }
+
+    private fun httpError(json: String): RestApiError = RestApiError.from(
+        HttpException(Response.error<Any>(400, json.toResponseBody("application/json".toMediaType()))),
     )
 
     /** Every REST method answers with a stream that never emits, so no call has a side effect. */

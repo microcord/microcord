@@ -48,6 +48,15 @@ object WidgetHomeHeaderManager {
         @DrawableRes val trailingDrawable: Int? = null,
     )
 
+    internal data class MenuState(
+        val search: Boolean = false,
+        val sidePanel: Boolean = false,
+        val threadBrowser: Boolean = false,
+        val startCall: Boolean = false,
+        val startVideoCall: Boolean = false,
+        val stopCall: Boolean = false,
+    )
+
     fun configure(widgetHome: WidgetHome, model: WidgetHomeModel, binding: WidgetHomeBinding) {
         val channel = model.channel
         widgetHome.lockCloseRightPanel(
@@ -90,7 +99,7 @@ object WidgetHomeHeaderManager {
             setPresence(model.dmPresence)
         }
         binding.root.findViewById<TextView>(R.id.home_toolbar_unread_count)?.let { unread ->
-            unread.setTextAndVisibilityBy(model.unreadCount.takeIf { it > 0 }?.toString())
+            unread.setTextAndVisibilityBy(unreadCountText(model.unreadCount))
             toolbar?.positionUnreadCountView(unread)
         }
         configureThreadBrowserIconBehavior(toolbar, model, channel, context)
@@ -134,29 +143,58 @@ object WidgetHomeHeaderManager {
 
     private fun configureMenu(model: WidgetHomeModel, resources: Resources, menu: Menu) {
         val channel = model.channel
-        val smallScreen = resources.displayMetrics.widthPixels <= SMALL_SCREEN_WIDTH_DP * resources.displayMetrics.density
-        val showThreadBrowser = model.threadExperimentEnabled && model.threadCount > 0 &&
-            !isChannelNsfwGated(model.isChannelNsfw, model.isNsfwUnConsented, model.nsfwAllowed)
+        val state = menuState(
+            channelType = channel?.type,
+            isArchivedThread = channel?.isArchivedThread() == true,
+            isSystemDm = channel?.isSystemDM() == true,
+            isCallConnected = model.isCallConnected,
+            isSmallScreen = resources.displayMetrics.widthPixels <=
+                SMALL_SCREEN_WIDTH_DP * resources.displayMetrics.density,
+            threadExperimentEnabled = model.threadExperimentEnabled,
+            threadCount = model.threadCount,
+            isChannelNsfw = model.isChannelNsfw,
+            isNsfwUnconsented = model.isNsfwUnConsented,
+            nsfwAllowed = model.nsfwAllowed,
+        )
+        menu.setHeaderActions(state.search, state.sidePanel, state.threadBrowser)
+        menu.findItem(R.id.menu_chat_start_call).isVisible = state.startCall
+        menu.findItem(R.id.menu_chat_start_video_call).isVisible = state.startVideoCall
+        menu.findItem(R.id.menu_chat_stop_call).isVisible = state.stopCall
+    }
 
-        when (channel?.type) {
-            Channel.DM, Channel.GROUP_DM -> menu.setHeaderActions(search = false, sidePanel = true, threads = false)
-            Channel.GUILD_TEXT, Channel.GUILD_ANNOUNCEMENT, Channel.GUILD_FORUM -> menu.setHeaderActions(
-                search = !smallScreen || !model.threadExperimentEnabled,
+    internal fun menuState(
+        channelType: Int?,
+        isArchivedThread: Boolean = false,
+        isSystemDm: Boolean = false,
+        isCallConnected: Boolean = false,
+        isSmallScreen: Boolean = false,
+        threadExperimentEnabled: Boolean = false,
+        threadCount: Int = 0,
+        isChannelNsfw: Boolean = false,
+        isNsfwUnconsented: Boolean = false,
+        nsfwAllowed: NsfwAllowance? = null,
+    ): MenuState {
+        val showThreadBrowser = threadExperimentEnabled && threadCount > 0 &&
+            !isChannelNsfwGated(isChannelNsfw, isNsfwUnconsented, nsfwAllowed)
+        val header = when (channelType) {
+            Channel.DM, Channel.GROUP_DM, Channel.DIRECTORY -> MenuState(sidePanel = true)
+            Channel.GUILD_TEXT, Channel.GUILD_ANNOUNCEMENT, Channel.GUILD_FORUM -> MenuState(
+                search = !isSmallScreen || !threadExperimentEnabled,
                 sidePanel = true,
-                threads = showThreadBrowser,
+                threadBrowser = showThreadBrowser,
             )
-            Channel.ANNOUNCEMENT_THREAD, Channel.PUBLIC_THREAD, Channel.PRIVATE_THREAD -> menu.setHeaderActions(
-                search = !smallScreen,
-                sidePanel = channel.isArchivedThread().not(),
-                threads = false,
+            Channel.ANNOUNCEMENT_THREAD, Channel.PUBLIC_THREAD, Channel.PRIVATE_THREAD -> MenuState(
+                search = !isSmallScreen,
+                sidePanel = !isArchivedThread,
             )
-            Channel.DIRECTORY -> menu.setHeaderActions(search = false, sidePanel = true, threads = false)
+            else -> MenuState()
         }
-
-        val callablePrivateChannel = channel?.isPrivate() == true && !channel.isSystemDM()
-        menu.findItem(R.id.menu_chat_start_call).isVisible = !model.isCallConnected && callablePrivateChannel
-        menu.findItem(R.id.menu_chat_start_video_call).isVisible = !model.isCallConnected && callablePrivateChannel
-        menu.findItem(R.id.menu_chat_stop_call).isVisible = model.isCallConnected && callablePrivateChannel
+        val privateChannel = channelType == Channel.DM || channelType == Channel.GROUP_DM
+        return header.copy(
+            startCall = !isCallConnected && privateChannel && !isSystemDm,
+            startVideoCall = !isCallConnected && privateChannel && !isSystemDm,
+            stopCall = isCallConnected && !isSystemDm,
+        )
     }
 
     private fun Menu.setHeaderActions(search: Boolean, sidePanel: Boolean, threads: Boolean) {
@@ -240,6 +278,8 @@ object WidgetHomeHeaderManager {
         isNsfwUnConsented: Boolean,
         nsfwAllowed: NsfwAllowance?,
     ): Boolean = isChannelNsfw && (isNsfwUnConsented || nsfwAllowed == NsfwAllowance.DISALLOWED)
+
+    internal fun unreadCountText(unreadCount: Int): String? = unreadCount.takeIf { it > 0 }?.toString()
 
     private val TITLE_OPENS_SIDE_PANEL_TYPES = setOf(
         Channel.DM,

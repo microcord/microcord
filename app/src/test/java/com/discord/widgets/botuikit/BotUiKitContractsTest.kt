@@ -68,7 +68,8 @@ class BotUiKitContractsTest {
 
         assertEquals("nope", row.childError()?.errorMessage)
         assertEquals(option, select.selectedOptions.single())
-        assertEquals(3, button.index)
+        val componentIndex: ComponentIndex = button.index
+        assertEquals(3, componentIndex)
         assertTrue(button.hasEmoji())
         assertFalse(button.hasIcon())
         assertTrue(button.copy(style = ButtonStyle.LINK).hasIcon())

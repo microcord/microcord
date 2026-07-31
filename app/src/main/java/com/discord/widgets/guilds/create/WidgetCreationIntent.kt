@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import androidx.core.os.BundleCompat
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
@@ -14,9 +15,12 @@ import com.google.android.material.card.MaterialCardView
 
 class WidgetCreationIntent : AppFragment(R.layout.widget_creation_intent) {
 
-    @Suppress("DEPRECATION")
     private val args: CreationIntentArgs by lazy {
-        requireNotNull(arguments?.getParcelable(INTENT_ARGS_KEY)) { "Missing creation intent arguments" }
+        requireNotNull(
+            arguments?.let {
+                BundleCompat.getParcelable(it, INTENT_ARGS_KEY, CreationIntentArgs::class.java)
+            },
+        ) { "Missing creation intent arguments" }
     }
 
     override fun onViewBound(view: View) {

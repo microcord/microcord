@@ -72,6 +72,7 @@ class RtcConnection(
     private val userVolumes: MutableMap<Long, Float> = LinkedHashMap(),
     /** Media session of the voice connection a Go Live stream belongs to. */
     private val parentMediaSessionId: String? = null,
+    private val enableMediaSinkWants: Boolean = false,
     loggingTagPrefix: String,
     val streamKey: String? = null,
 ) {
@@ -230,6 +231,7 @@ class RtcConnection(
 
     private var mediaEnginePrepareSubscription: Subscription? = null
     private var networkSubscription: Subscription? = null
+    private var mediaSinkWantsSubscription: Subscription? = null
 
     private var hostname: String? = null
     private var port: Int? = null
@@ -242,6 +244,17 @@ class RtcConnection(
 
     private val socketListener = SocketListener()
     private val mediaEngineConnectionListener = EngineConnectionListener()
+    private val mediaSinkWantsManager = if (enableMediaSinkWants) {
+        MediaSinkWantsManager(
+            selfUserId = userId,
+            executor = mediaEngine.mediaEngineThreadExecutor,
+            listener = MediaSinkWantsManager.Listener { participantId, audioSsrc, videoSsrc, metadata ->
+                announceUserVideo(participantId, audioSsrc.toInt(), videoSsrc, metadata)
+            },
+        )
+    } else {
+        null
+    }
 
     init {
         breadcrumb("Created RtcConnection. GuildID: $guildId ChannelID: $channelId")
@@ -255,6 +268,17 @@ class RtcConnection(
             )
         listeners += object : DefaultListener() {
             override fun onStateChange(stateChange: StateChange) = connectionStateSubject.onNext(stateChange)
+        }
+        mediaSinkWantsSubscription = mediaSinkWantsManager?.let { manager ->
+            Observable.combineLatest(
+                manager.observeWants(),
+                connectionStateSubject,
+            ) { wants, stateChange -> wants to stateChange.state }
+                .subscribe { (wants, state) ->
+                    if (state == State.RtcConnected) {
+                        socket?.sendMediaSinkWants(wants.mapValues { it.value.value })
+                    }
+                }
         }
     }
 
@@ -319,6 +343,10 @@ class RtcConnection(
             return
         }
         connection.setUserOffScreen(userId, offScreen)
+    }
+
+    fun setFocusedParticipant(userId: Long?) {
+        mediaSinkWantsManager?.setFocusedParticipant(userId)
     }
 
     /**
@@ -467,6 +495,9 @@ class RtcConnection(
         mediaEnginePrepareSubscription = null
         networkSubscription?.unsubscribe()
         networkSubscription = null
+        mediaSinkWantsSubscription?.unsubscribe()
+        mediaSinkWantsSubscription = null
+        mediaSinkWantsManager?.clear()
         statsCollector?.stop()
         statsCollector = null
         mediaEngineConnection?.destroy()
@@ -632,6 +663,7 @@ class RtcConnection(
                 isMuted = isUserMuted(userId),
                 volume = userVolume(userId),
             )
+            mediaSinkWantsManager?.updateAudioSsrc(userId, ssrc.toLong())
             listeners.forEach { it.onUserCreated(this@RtcConnection, userId) }
         }
 
@@ -639,13 +671,33 @@ class RtcConnection(
             videoQuality.onVideoStreamStarted(videoSsrc.toLong())
             if (userId == this@RtcConnection.userId) return
 
-            val metadata = streams
-                ?.firstOrNull { it.ssrc == videoSsrc && it.maxResolution != null }
-                ?.let { stream ->
-                    val resolution = requireNotNull(stream.maxResolution)
-                    VideoMetadata(userId, resolution.width, resolution.height, stream.maxFrameRate, resolution.type)
-                }
-            announceUserVideo(userId, audioSsrc, videoSsrc.toLong(), metadata)
+            val manager = mediaSinkWantsManager
+            if (manager != null) {
+                manager.updateAudioSsrc(userId, audioSsrc.toLong())
+                manager.updateVideoStreams(
+                    userId,
+                    streams?.map { it.copy(active = videoSsrc > 0) }
+                        ?.ifEmpty { null }
+                        ?: listOf(
+                            Payloads.Stream(
+                                type = "video",
+                                rid = "100",
+                                quality = 100,
+                                ssrc = videoSsrc,
+                                rtxSsrc = videoSsrc + 1,
+                                active = videoSsrc > 0,
+                            ),
+                        ),
+                )
+            } else {
+                val metadata = streams
+                    ?.firstOrNull { it.ssrc == videoSsrc && it.maxResolution != null }
+                    ?.let { stream ->
+                        val resolution = requireNotNull(stream.maxResolution)
+                        VideoMetadata(userId, resolution.width, resolution.height, stream.maxFrameRate, resolution.type)
+                    }
+                announceUserVideo(userId, audioSsrc, videoSsrc.toLong(), metadata)
+            }
         }
 
         override fun onUserDisconnect(userId: Long) {
@@ -653,12 +705,18 @@ class RtcConnection(
                 videoQuality.inboundReport(userId.toString())
                     ?.let { report -> reportVideoStreamEnded(userId, report, RECEIVER) }
             }
+            mediaSinkWantsManager?.removeUser(userId)
         }
 
         override fun onMediaSinkWants(wants: Map<String, Int>) {
-            // Encode-quality negotiation is only active when a MediaSinkWantsManager is attached;
-            // that component is not reconstructed yet, so the wants are recorded and ignored.
-            AppLog.i(loggingTag, "remote MediaSinkWants: ${wants.size} entries")
+            if (mediaSinkWantsManager == null) return
+            val want = videoSsrc.takeIf { it != 0L }
+                ?.let { wants[it.toString()] }
+                ?.takeIf { it > 0 }
+                ?: wants["any"]?.takeIf { it > 0 }
+                ?: 100
+            AppLog.i(loggingTag, "remote MediaSinkWants: $wants, decided on encode quality $want")
+            mediaEngineConnection?.setEncodingQuality(MediaSinkWantsManager.encodingQualityForWant(want))
         }
 
         /**
@@ -672,6 +730,7 @@ class RtcConnection(
 
             mediaEngineConnection?.destroy()
             mediaEngineConnection?.removeListener(mediaEngineConnectionListener)
+            mediaSinkWantsManager?.clear()
 
             val offlineForMs = networkLossTime?.let { clock.currentTimeMillis() - it } ?: 0L
             val willReconnect = !(code == WS_NORMAL_CLOSURE || offlineForMs > MAX_OFFLINE_RESUME_MS)
@@ -782,6 +841,7 @@ class RtcConnection(
                 }
                 addTransportProperties(properties)
                 emitAnalyticsEvent(AnalyticsEvent.VOICE_CONNECTION_SUCCESS, properties)
+                mediaSinkWantsManager?.setConnection(mediaEngineConnection)
             }
         }
 
@@ -840,6 +900,7 @@ class RtcConnection(
                         streams = streams.map { it.toPayloadStream() },
                     )
                 }
+                mediaSinkWantsManager?.refresh()
             }
             listeners.forEach { it.onVideoStream(userId, streamId, audioSsrc, videoSsrc, rtxSsrc) }
         }

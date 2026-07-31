@@ -1,19 +1,22 @@
 package com.discord.widgets.chat.pins
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
-import android.view.ViewGroup
 import androidx.appcompat.widget.Toolbar
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
+import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isPrivate
+import com.discord.app.AppActivity
 import com.discord.app.AppFragment
 import com.discord.app.BackPressHandlerRegistry
 import com.discord.models.guild.Guild
 import com.discord.models.message.Message
 import com.discord.stores.StorePinnedMessages
+import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.widgets.chat.list.ThreadSpineItemDecoration
@@ -49,12 +52,17 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
     private var subscription: Subscription? = null
     private var adapter: WidgetChatListAdapter? = null
     private var pinnedMessages: Map<Long, Message> = emptyMap()
+    private var channel: Channel? = null
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        val host = host()
         val channelId = requireArguments().getLong(ARG_CHANNEL_ID)
-        val channel = host.channelForPins(channelId)
+        val channel = host()?.channelForPins(channelId) ?: StoreStream.getChannels().getChannel(channelId)
+        if (channel == null) {
+            close()
+            return
+        }
+        this.channel = channel
 
         val recycler = view.findViewById<RecyclerView>(R.id.channel_pinned_messages_recycler)
         val chatAdapter = MGRecyclerAdapter.configure<ChatListEntry, WidgetChatListAdapter>(
@@ -62,43 +70,47 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
                 recycler,
                 this,
                 parentFragmentManager,
-                PinnedMessagesEventHandler(host, channelId),
+                PinnedMessagesEventHandler(),
             ),
         )
         recycler.addItemDecoration(ThreadSpineItemDecoration(requireContext(), chatAdapter))
         adapter = chatAdapter
 
-        view.findDescendant(Toolbar::class.java)?.apply {
-            setTitle(R.string.pinned_messages)
-            subtitle = channel?.name
-            setNavigationOnClickListener { parentFragmentManager.popBackStack() }
+        setActionBarDisplayHomeAsUpEnabled()
+        setActionBarTitle(R.string.pinned_messages)
+        setActionBarSubtitle(channel.getDisplayNameOrDefault(requireContext(), includePrefix = false))
+        view.findViewById<Toolbar>(R.id.action_bar_toolbar).setNavigationOnClickListener { close() }
+        parentFragment?.view?.findViewById<View>(R.id.widget_home_panel_center_overlay)?.apply {
+            visibility = View.VISIBLE
+            bringToFront()
         }
-        setOnBackPressed(handler = {
-            val handled = parentFragmentManager.backStackEntryCount > 0
-            if (handled) parentFragmentManager.popBackStack()
-            handled
-        }, priority = BackPressHandlerRegistry.DEFAULT_PRIORITY - 1)
-
-        val context = requireContext()
-        subscription = host.pinnedMessagesStore().observeForChannel(channelId).subscribe(
-            { messages ->
-                view.post {
-                    pinnedMessages = messages.orEmpty().associateBy(Message::id)
-                    chatAdapter.data = model(context, channelId, channel, messages)
-                }
-            },
-            { /* Keep the loading state: a failed fetch is not an empty pin list. */ },
-        )
+        view.isFocusableInTouchMode = true
+        view.requestFocus()
+        setActionBarTitleAccessibilityViewFocused()
+        setOnBackPressed(::close, priority = BackPressHandlerRegistry.DEFAULT_PRIORITY - 1)
     }
 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
+        val channel = channel ?: return
+        val boundView = view ?: return
+        val channelId = channel.id
+        subscription?.unsubscribe()
+        subscription = observeModel(requireContext(), channelId, channel, pinnedStore()).subscribe { (messages, data) ->
+            boundView.post {
+                if (view !== boundView) return@post
+                pinnedMessages = messages.associateBy(Message::id)
+                adapter?.data = data
+            }
+        }
         adapter?.setHandlers()
     }
 
     override fun onPause() {
-        adapter?.disposeHandlers()
         super.onPause()
+        subscription?.unsubscribe()
+        subscription = null
+        adapter?.disposeHandlers()
     }
 
     override fun onDestroyView() {
@@ -107,26 +119,33 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
         adapter?.dispose()
         adapter = null
         pinnedMessages = emptyMap()
+        channel = null
         super.onDestroyView()
+        parentFragment?.view?.findViewById<View>(R.id.widget_home_panel_center_overlay)?.visibility = View.GONE
+        (parentFragment as? AppFragment)?.bindToolbar()
     }
 
-    private fun host(): Host = (parentFragment as? Host) ?: (activity as? Host)
-        ?: error("WidgetChannelPinnedMessages host must implement Host")
+    private fun host(): Host? = (parentFragment as? Host) ?: (activity as? Host)
 
-    private fun <T : View> View.findDescendant(type: Class<T>): T? {
-        if (type.isInstance(this)) return type.cast(this)
-        if (this !is ViewGroup) return null
-        for (index in 0 until childCount) getChildAt(index).findDescendant(type)?.let { return it }
-        return null
+    private fun pinnedStore(): StorePinnedMessages = host()?.pinnedMessagesStore() ?: StoreStream.getPinnedMessages()
+
+    private fun close(): Boolean {
+        if (parentFragment is Host && parentFragmentManager.backStackEntryCount > 0) {
+            parentFragmentManager.popBackStack()
+        } else {
+            activity?.finish()
+        }
+        return true
     }
 
-    private inner class PinnedMessagesEventHandler(
-        private val host: Host,
-        private val channelId: Long,
-    ) : WidgetChatListAdapter.EventHandler {
+    private inner class PinnedMessagesEventHandler : WidgetChatListAdapter.EventHandler {
 
-        override fun onMessageClicked(message: Message, isThreadStarterMessage: Boolean) =
-            host.jumpToPinnedMessage(channelId, message.id)
+        override fun onMessageClicked(message: Message, isThreadStarterMessage: Boolean) {
+            host()?.jumpToPinnedMessage(message.channelId, message.id) ?: run {
+                StoreStream.getMessagesLoader().jumpToMessage(message.channelId, message.id)
+                returnToMain()
+            }
+        }
 
         override fun onMessageLongClicked(
             message: Message,
@@ -135,16 +154,31 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
         ) {
             WidgetChatListActions.showForPin(
                 childFragmentManager,
-                channelId,
+                message.channelId,
                 message.id,
-                actionInput(message, channelId),
+                actionInput(message, message.channelId),
             )
         }
 
         override fun onStickerClicked(message: Message, sticker: com.discord.api.sticker.BaseSticker) =
-            host.jumpToPinnedMessage(channelId, message.id)
+            onMessageClicked(message, false)
 
-        override fun onThreadClicked(channel: Channel) = StoreStream.selectChannel(channel.guildId, channel.id)
+        override fun onThreadClicked(channel: Channel) {
+            StoreStream.selectChannel(channel.guildId, channel.id)
+            if (host() != null) close() else returnToMain()
+        }
+
+        override fun onUrlLongClicked(url: String) =
+            com.discord.widgets.chat.WidgetUrlActions.launch(parentFragmentManager, url)
+    }
+
+    private fun returnToMain() {
+        StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE, true)
+        startActivity(
+            Intent(requireContext(), AppActivity.Main::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        )
+        activity?.finish()
     }
 
     override fun messageActionCoordinator(): MessageActionCoordinator =
@@ -152,7 +186,8 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
 
     override fun messageForAction(channelId: Long, messageId: Long): Message? = pinnedMessages[messageId]
 
-    override fun channelForAction(channelId: Long): Channel? = host().channelForPins(channelId)
+    override fun channelForAction(channelId: Long): Channel? =
+        host()?.channelForPins(channelId) ?: StoreStream.getChannels().getChannel(channelId)
 
     override fun requestMessageEdit(message: Message, coordinator: MessageActionCoordinator) = Unit
 
@@ -161,7 +196,7 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
     }
 
     private fun actionInput(message: Message, channelId: Long): MessageActions.Input {
-        val channel = host().channelForPins(channelId)
+        val channel = channelForAction(channelId)
         return MessageActions.Input(
             authorId = message.author?.id,
             currentUserId = StoreStream.getUsers().getMe().id,
@@ -201,9 +236,8 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
         }
 
         /**
-         * The rows for a pinned-messages list: the loading indicator while the fetch is in flight,
-         * the empty state when the channel has no pins, otherwise every pinned message separated by
-         * a hairline.
+         * The reference keeps a dormant null/loading branch, but a valid channel receives an empty
+         * list until REST completes. Loaded messages are separated by a hairline.
          */
         internal fun rows(
             emptyText: String,
@@ -231,41 +265,48 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
 
         private fun model(
             context: Context,
-            channelId: Long,
-            channel: Channel?,
+            channel: Channel,
             messages: List<Message>?,
         ): WidgetChatListAdapter.Data {
-            val resolved = channel ?: StoreStream.getChannels().getChannel(channelId)
             val emptyText = context.getString(
-                if (resolved?.isPrivate() == true) R.string.no_pins_in_dm else R.string.no_pins_in_channel,
+                if (channel.isPrivate()) R.string.no_pins_in_dm else R.string.no_pins_in_channel,
             )
-            val rows = rows(emptyText, resolved?.let(::pinnedRowState), messages)
-            if (resolved == null) return UnresolvedChannel(channelId, rows)
+            val rows = rows(emptyText, pinnedRowState(channel), messages)
             val meId = StoreStream.getUsers().getMe().id
             return Model(
-                channel = resolved,
-                guild = StoreStream.getGuilds().getGuild(resolved.guildId),
+                channel = channel,
+                guild = StoreStream.getGuilds().getGuild(channel.guildId),
                 userId = meId,
                 channelNames = StoreStream.getChannels().getChannelNames(),
                 list = rows,
-                myRoleIds = StoreStream.getGuilds().getMembers()[resolved.guildId]?.get(meId)
+                myRoleIds = StoreStream.getGuilds().getMembers()[channel.guildId]?.get(meId)
                     ?.getRoles()?.toSet().orEmpty(),
             )
         }
+
+        private fun observeModel(
+            context: Context,
+            channelId: Long,
+            channel: Channel,
+            store: StorePinnedMessages,
+        ): rx.Observable<Pair<List<Message>, WidgetChatListAdapter.Data>> {
+            val updates = rx.Observable.merge(
+                listOf(
+                    StoreStream.getUsers().observeMeId().map { Unit },
+                    StoreStream.getGuilds().observeRoles(channel.guildId).map { Unit },
+                    StoreStream.getGuilds().observeComputed(channel.guildId).map { Unit },
+                    StoreStream.getGuilds().observeGuild(channel.guildId).map { Unit },
+                    StoreStream.getChannels().observeNames().map { Unit },
+                    StoreStream.getPermissions().observePermissionsForChannel(channelId).map { Unit },
+                    StoreStream.getUserSettings().observeIsAnimatedEmojisEnabled(false).map { Unit },
+                    StoreStream.getUserSettings().observeIsAutoPlayGifsEnabled(false).map { Unit },
+                    StoreStream.getUserSettings().observeIsRenderEmbedsEnabled().map { Unit },
+                ),
+            )
+            return rx.Observable.combineLatest(store.observeForChannel(channelId), updates) { messages, _ ->
+                messages to model(context, channel, messages)
+            }.distinctUntilChanged()
+        }
     }
 
-    /** Fallback for the window between opening the screen and the channel resolving. */
-    private class UnresolvedChannel(
-        override val channelId: Long,
-        override val list: List<ChatListEntry>,
-    ) : WidgetChatListAdapter.Data {
-        override val channelNames: Map<Long, String> = emptyMap()
-        override val guild: Guild? = null
-        override val guildId: Long = 0L
-        override val myRoleIds: Set<Long> = emptySet()
-        override val newMessagesMarkerMessageId: Long = 0L
-        override val oldestMessageId: Long = 0L
-        override val userId: Long = 0L
-        override val isSpoilerClickAllowed: Boolean = false
-    }
 }

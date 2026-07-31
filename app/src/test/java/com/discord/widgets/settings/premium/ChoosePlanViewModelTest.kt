@@ -1,5 +1,6 @@
 package com.discord.widgets.settings.premium
 
+import com.android.billingclient.api.BillingFlowParams
 import com.android.billingclient.api.SkuDetails
 import com.discord.api.premium.SubscriptionInterval
 import com.discord.utilities.billing.GooglePlaySku
@@ -7,7 +8,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
+import org.json.JSONObject
+import sun.misc.Unsafe
 
 class ChoosePlanViewModelTest {
     @Test
@@ -82,10 +86,55 @@ class ChoosePlanViewModelTest {
         assertEquals(listOf(larger), rows.map { it.displaySku })
     }
 
+    @Test
+    fun `subscription replacement preserves token account and reference proration`() {
+        val old = details(GooglePlaySku.PREMIUM_TIER_2_MONTHLY).values.single()
+        val upgrade = details(GooglePlaySku.PREMIUM_TIER_2_YEARLY).values.single()
+        val downgrade = skuDetails("lower", 1_990_000)
+
+        val upgradeParams = ChoosePlanViewModel.billingFlowParams(upgrade, old, "purchase-token", "account-hash")
+        val downgradeParams = ChoosePlanViewModel.billingFlowParams(downgrade, old, "purchase-token", null)
+
+        assertEquals(BillingFlowParams.ProrationMode.IMMEDIATE_WITH_TIME_PRORATION, hidden<Int>(upgradeParams, "zza"))
+        assertEquals(BillingFlowParams.ProrationMode.DEFERRED, hidden<Int>(downgradeParams, "zza"))
+        assertEquals("purchase-token", hidden<String>(upgradeParams, "zzd"))
+        assertEquals("account-hash", hidden<String>(upgradeParams, "zzb"))
+        assertSame(upgrade, hidden<ArrayList<SkuDetails>>(upgradeParams, "zzf").single())
+        assertThrows(IllegalArgumentException::class.java) {
+            ChoosePlanViewModel.billingFlowParams(upgrade, oldDetails = old)
+        }
+    }
+
     private fun details(vararg skus: GooglePlaySku): Map<String, SkuDetails> =
         skus.associate { sku ->
-            sku.skuName to SkuDetails(
-                """{"productId":"${sku.skuName}","type":"subs","title":"${sku.name}","description":"${sku.name}","price":"${'$'}9.99","price_amount_micros":9990000,"price_currency_code":"USD","subscriptionPeriod":"P1M"}""",
-            )
+            sku.skuName to skuDetails(sku.skuName, 9_990_000)
         }
+
+    private fun skuDetails(sku: String, priceAmountMicros: Long): SkuDetails =
+        (unsafe.allocateInstance(SkuDetails::class.java) as SkuDetails).also { details ->
+            SkuDetails::class.java.getDeclaredField("zza").apply { isAccessible = true }.set(details, sku)
+            SkuDetails::class.java.getDeclaredField("zzb").apply { isAccessible = true }
+                .set(details, object : JSONObject() {
+                    override fun optString(name: String?): String = when (name) {
+                        "productId" -> sku
+                        "type" -> "subs"
+                        "title", "description" -> sku
+                        else -> ""
+                    }
+
+                    override fun optLong(name: String?): Long =
+                        if (name == "price_amount_micros") priceAmountMicros else 0
+                })
+        }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun <T> hidden(params: BillingFlowParams, method: String): T =
+        params.javaClass.getDeclaredMethod(method).invoke(params) as T
+
+    private companion object {
+        val unsafe: Unsafe = Unsafe::class.java.getDeclaredField("theUnsafe").run {
+            isAccessible = true
+            get(null) as Unsafe
+        }
+    }
 }

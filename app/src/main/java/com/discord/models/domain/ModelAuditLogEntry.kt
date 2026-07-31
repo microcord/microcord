@@ -412,25 +412,50 @@ class ModelAuditLogEntry : Model {
         }
 
         @JvmStatic
-        fun getTargetType(actionTypeId: Int): TargetType = when {
-            actionTypeId == ACTION_ALL -> TargetType.ALL
-            actionTypeId <= 1 -> TargetType.GUILD
-            actionTypeId <= 12 || actionTypeId == ACTION_MESSAGE_BULK_DELETE -> TargetType.CHANNEL
-            actionTypeId <= 15 -> TargetType.CHANNEL_OVERWRITE
-            actionTypeId <= 28 ||
-                actionTypeId == ACTION_MESSAGE_DELETE ||
-                actionTypeId == ACTION_MESSAGE_PIN ||
-                actionTypeId == ACTION_MESSAGE_UNPIN -> TargetType.USER
-            actionTypeId <= 32 -> TargetType.ROLE
-            actionTypeId <= 42 -> TargetType.INVITE
-            actionTypeId <= 52 -> TargetType.WEBHOOK
-            actionTypeId <= 62 -> TargetType.EMOJI
-            actionTypeId <= 82 -> TargetType.INTEGRATION
-            actionTypeId <= 85 -> TargetType.STAGE_INSTANCE
-            actionTypeId <= 92 -> TargetType.STICKER
-            actionTypeId <= 102 -> TargetType.GUILD_SCHEDULED_EVENT
-            actionTypeId <= 112 -> TargetType.THREAD
-            else -> TargetType.ALL
+        fun getTargetType(actionTypeId: Int): TargetType = when (actionTypeId) {
+            ACTION_ALL -> TargetType.ALL
+            ACTION_GUILD_UPDATE -> TargetType.GUILD
+            ACTION_CHANNEL_CREATE,
+            ACTION_CHANNEL_UPDATE,
+            ACTION_CHANNEL_DELETE,
+            ACTION_MESSAGE_BULK_DELETE,
+            -> TargetType.CHANNEL
+            ACTION_CHANNEL_OVERWRITE_CREATE,
+            ACTION_CHANNEL_OVERWRITE_UPDATE,
+            ACTION_CHANNEL_OVERWRITE_DELETE,
+            -> TargetType.CHANNEL_OVERWRITE
+            ACTION_MEMBER_KICK,
+            ACTION_MEMBER_PRUNE,
+            ACTION_MEMBER_BAN_ADD,
+            ACTION_MEMBER_BAN_REMOVE,
+            ACTION_MEMBER_UPDATE,
+            ACTION_MEMBER_ROLE_UPDATE,
+            ACTION_MEMBER_MOVE,
+            ACTION_MEMBER_DISCONNECT,
+            ACTION_BOT_ADD,
+            ACTION_MESSAGE_DELETE,
+            ACTION_MESSAGE_PIN,
+            ACTION_MESSAGE_UNPIN,
+            -> TargetType.USER
+            ACTION_ROLE_CREATE, ACTION_ROLE_UPDATE, ACTION_ROLE_DELETE -> TargetType.ROLE
+            ACTION_INVITE_CREATE, ACTION_INVITE_UPDATE, ACTION_INVITE_DELETE -> TargetType.INVITE
+            ACTION_WEBHOOK_CREATE, ACTION_WEBHOOK_UPDATE, ACTION_WEBHOOK_DELETE -> TargetType.WEBHOOK
+            ACTION_EMOJI_CREATE, ACTION_EMOJI_UPDATE, ACTION_EMOJI_DELETE -> TargetType.EMOJI
+            ACTION_INTEGRATION_CREATE,
+            ACTION_INTEGRATION_UPDATE,
+            ACTION_INTEGRATION_DELETE,
+            -> TargetType.INTEGRATION
+            ACTION_STAGE_INSTANCE_CREATE,
+            ACTION_STAGE_INSTANCE_UPDATE,
+            ACTION_STAGE_INSTANCE_DELETE,
+            -> TargetType.STAGE_INSTANCE
+            ACTION_STICKER_CREATE, ACTION_STICKER_UPDATE, ACTION_STICKER_DELETE -> TargetType.STICKER
+            ACTION_GUILD_SCHEDULED_EVENT_CREATE,
+            ACTION_GUILD_SCHEDULED_EVENT_UPDATE,
+            ACTION_GUILD_SCHEDULED_EVENT_DELETE,
+            -> TargetType.GUILD_SCHEDULED_EVENT
+            ACTION_THREAD_CREATE, ACTION_THREAD_UPDATE, ACTION_THREAD_DELETE -> TargetType.THREAD
+            else -> TargetType.UNKNOWN
         }
     }
 }

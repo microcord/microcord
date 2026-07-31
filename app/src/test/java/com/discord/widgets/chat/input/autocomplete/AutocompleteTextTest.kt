@@ -4,6 +4,7 @@ import com.discord.api.channel.Channel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.util.TreeSet
 
 class AutocompleteTextTest {
 
@@ -94,5 +95,27 @@ class AutocompleteTextTest {
         assertEquals(2, flattened.size)
         assertEquals("<#1>", flattened[0].getInputReplacement())
         assertEquals("@everyone", flattened[1].getInputReplacement())
+    }
+
+    @Test
+    fun exactAutocompleteUtilitiesKeepReferenceOrderingAndMergeSemantics() {
+        assertEquals(2, GlobalRoleAutocompletable.everyone.getSortIndex())
+
+        val target = mutableMapOf(
+            LeadingIdentifier.MENTION to TreeSet<Autocompletable>(AutocompletableComparator()).apply {
+                add(GlobalRoleAutocompletable.everyone)
+            },
+        )
+        target.merge(
+            mapOf(
+                LeadingIdentifier.MENTION to TreeSet<Autocompletable>(AutocompletableComparator()).apply {
+                    add(GlobalRoleAutocompletable.here)
+                },
+            ),
+        )
+
+        assertEquals(listOf("@everyone", "@here"), target.getValue(LeadingIdentifier.MENTION).map {
+            it.getInputReplacement()
+        })
     }
 }

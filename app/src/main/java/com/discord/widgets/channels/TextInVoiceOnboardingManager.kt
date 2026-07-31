@@ -13,17 +13,17 @@ class TextInVoiceOnboardingManager {
     fun shouldShowTextInVoiceOnboarding(userId: Long, guildId: Long?): Boolean =
         guildId != null &&
             TextInVoiceFeatureFlag.isEnabled(guildId) &&
-            !StoreStream.getNotices().hasSeen(NOTICE_NAME) &&
-            clock.currentTimeMillis() >= SnowflakeUtils.DISCORD_EPOCH + (userId ushr 22) + MIN_VIEW_AGE_MS
+            !StoreStream.getNotices().hasSeen(NOTICE_NAME_TEXT_IN_VOICE_ONBOARDED) &&
+            clock.currentTimeMillis() >= SnowflakeUtils.DISCORD_EPOCH + (userId ushr 22) + MIN_VIEW_AGE_IN_MS
 
     fun markSeen() {
-        StoreStream.getNotices().markSeen(NOTICE_NAME)
+        StoreStream.getNotices().markSeen(NOTICE_NAME_TEXT_IN_VOICE_ONBOARDED)
     }
 
     fun show(onCtaClicked: () -> Unit) {
         StoreStream.getNotices().requestToShow(
             StoreNotices.Notice(
-                name = NOTICE_NAME,
+                name = NOTICE_NAME_TEXT_IN_VOICE_ONBOARDED,
                 requestedShowTimestamp = 0L,
                 priority = 0,
                 persist = true,
@@ -36,10 +36,5 @@ class TextInVoiceOnboardingManager {
                 true
             },
         )
-    }
-
-    private companion object {
-        const val MIN_VIEW_AGE_MS = 604_800_000L
-        const val NOTICE_NAME = "NOTICE_NAME_TEXT_IN_VOICE_ONBOARDED"
     }
 }

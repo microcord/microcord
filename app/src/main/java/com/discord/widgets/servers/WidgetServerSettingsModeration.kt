@@ -7,27 +7,21 @@ import android.view.View
 import android.widget.TextView
 import com.discord.R
 import com.discord.api.guild.GuildExplicitContentFilter
-import com.discord.api.guild.GuildFeature
 import com.discord.api.guild.GuildVerificationLevel
-import com.discord.api.permission.Permission
 import com.discord.app.AppFragment
 import com.discord.app.AppToast
-import com.discord.app.AppViewModel
 import com.discord.app.appViewModels
 import com.discord.models.guild.Guild
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
-import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
-import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.views.CheckedSetting
 import com.discord.views.RadioManager
 import com.discord.widgets.settings.SettingsNavigation
 import com.discord.widgets.settings.SettingsStrings
-import rx.Observable
 
 /**
  * "Moderation" server settings: the verification level and the explicit-content filter.
@@ -170,6 +164,11 @@ class WidgetServerSettingsModeration : AppFragment(R.layout.widget_server_settin
             }
     }
 
+    /** Exact 126.21 state shape retained for the nested JVM contract. */
+    internal data class Model(val guild: Guild) {
+        companion object
+    }
+
     companion object {
         private const val INTENT_EXTRA_GUILD_ID = "INTENT_EXTRA_GUILD_ID"
         private const val INVALID_GUILD_ID = -1L
@@ -198,71 +197,11 @@ class WidgetServerSettingsModeration : AppFragment(R.layout.widget_server_settin
         }
 
         fun launch(context: Context, guildId: Long) {
+            StoreStream.getAnalytics().onGuildSettingsPaneViewed("MODERATION", guildId)
             SettingsNavigation.launch(
                 context,
                 WidgetServerSettingsModeration::class.java,
                 Intent().putExtra(INTENT_EXTRA_GUILD_ID, guildId),
-            )
-        }
-    }
-}
-
-/**
- * State for [WidgetServerSettingsModeration].
- *
- * Reference: `WidgetServerSettingsModeration.Model`, whose `get` emits `null` — closing the screen —
- * unless the user owns the guild or holds Manage Server *at the guild's required MFA elevation*.
- */
-class ServerSettingsModerationViewModel(
-    guildId: Long,
-    storeStateObservable: Observable<StoreState> = observeStoreState(guildId),
-) : AppViewModel<ServerSettingsModerationViewModel.ViewState>(ViewState.Uninitialized) {
-
-    data class StoreState(val guild: Guild?, val canManageServer: Boolean)
-
-    sealed class ViewState {
-        object Uninitialized : ViewState()
-
-        /** The guild is gone, or the user may not manage it. The screen closes itself. */
-        object Unauthorized : ViewState()
-
-        data class Loaded(val guild: Guild) : ViewState() {
-            val isCommunity: Boolean get() = guild.hasFeature(GuildFeature.COMMUNITY)
-        }
-    }
-
-    init {
-        storeStateObservable.computationLatest().distinctUntilChanged().ui(this).subscribe {
-            updateViewState(toViewState(it))
-        }
-    }
-
-    companion object {
-        internal fun toViewState(storeState: StoreState): ViewState {
-            val guild = storeState.guild
-            return if (guild == null || !storeState.canManageServer) {
-                ViewState.Unauthorized
-            } else {
-                ViewState.Loaded(guild)
-            }
-        }
-
-        fun observeStoreState(guildId: Long): Observable<StoreState> = Observable.combineLatest(
-            StoreStream.getGuilds().observeGuild(guildId),
-            StoreStream.getUsers().observeMe(),
-            StoreStream.getPermissions().observePermissionsForGuild(guildId),
-        ) { guild, meUser, guildPermissions ->
-            StoreState(
-                guild = guild,
-                canManageServer = guild != null && (
-                    guild.isOwner(meUser.id) ||
-                        PermissionUtils.canAndIsElevated(
-                            Permission.MANAGE_GUILD,
-                            guildPermissions,
-                            meUser.mfaEnabled,
-                            guild.mfaLevel,
-                        )
-                    ),
             )
         }
     }

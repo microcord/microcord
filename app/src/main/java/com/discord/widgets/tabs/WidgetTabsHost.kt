@@ -350,14 +350,6 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
         WidgetSettings.onSetStatus = {
             withActiveChildManager(WidgetUserStatusSheet::show)
         }
-        WidgetSettings.onBlockedUsers = {
-            withActiveChildManager { manager ->
-                manager.commit {
-                    replace(R.id.widget_tabs_host_user_settings, WidgetSettingsBlockedUsers())
-                    addToBackStack("blocked_users")
-                }
-            }
-        }
         WidgetSettings.onLogout = { StoreStream.getAuthentication().logout() }
         WidgetSettingsBlockedUsers.onProfile = { user ->
             withActiveChildManager { WidgetUserSheet.show(user.id, it) }
@@ -378,7 +370,6 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
         WidgetUserMutualFriends.onFriendSelected = null
         WidgetUserMutualGuilds.onGuildSelected = null
         WidgetSettings.onSetStatus = null
-        WidgetSettings.onBlockedUsers = null
         WidgetSettings.onLogout = null
         WidgetSettingsBlockedUsers.onProfile = {}
     }

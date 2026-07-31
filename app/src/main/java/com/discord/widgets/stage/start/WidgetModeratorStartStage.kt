@@ -14,6 +14,7 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.views.calls.CallEventsButtonView
 import com.discord.widgets.stage.sheet.WidgetStageStartEventBottomSheet
+import com.discord.widgets.voice.fullscreen.WidgetCallFullscreen
 
 /**
  * The screen a moderator lands on when they enter a stage channel that is not live yet: start now,
@@ -96,23 +97,18 @@ class WidgetModeratorStartStage : AppFragment(R.layout.widget_moderator_start_st
      * not come back to a start menu for a stage that is now live.
      */
     private fun launchStageCall(channelId: Long) {
-        launchFullscreenCall?.invoke(requireContext(), channelId)
+        WidgetCallFullscreen.launch(
+            requireContext(),
+            channelId,
+            connectOnLaunch = true,
+            animate = true,
+        )
         activity?.finish()
     }
 
     companion object {
         private const val EXTRA_CHANNEL_ID = "com.discord.intent.extra.EXTRA_CHANNEL_ID"
         private const val EXTRA_GUILD_ID = "com.discord.intent.extra.EXTRA_GUILD_ID"
-
-        /**
-         * Opens the fullscreen stage call. The reference calls
-         * `WidgetCallFullscreen.launch(context, channelId, isStageCall = true, …)` directly;
-         * `WidgetCallFullscreen` is not reconstructed yet, so the voice slice installs it here the
-         * same way it does on `StageChannelJoinHelper`. Until then starting a stage leaves the user
-         * on the channel with no fullscreen surface.
-         */
-        @JvmStatic
-        var launchFullscreenCall: ((Context, Long) -> Unit)? = null
 
         @JvmStatic
         fun launch(context: Context, channelId: Long, guildId: Long) {

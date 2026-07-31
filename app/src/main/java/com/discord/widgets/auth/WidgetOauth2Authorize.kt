@@ -94,7 +94,7 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
             R.id.oauth_authorize_deny,
             R.id.oauth_authorize_loading_cancel,
             R.id.oauth_authorize_unsupported_cancel,
-        ).forEach { id -> view.findViewById<MaterialButton>(id).setOnClickListener { finishCancelled() } }
+        ).forEach { id -> view.findViewById<MaterialButton>(id).setOnClickListener { cancelFromUser() } }
 
         // Backing out of an authorization must leave nothing behind: the app that sent the user
         // here is a separate task, and returning to a half-finished consent screen is confusing.
@@ -173,8 +173,11 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
             return
         }
 
-        // A single decorative row when there is nothing real to list, so the panel is never empty.
-        val filler = if (permissions.isEmpty()) listOf(PermissionModel(fakeText = randomFakeScopeText())) else emptyList()
+        val filler = if (shouldAppendFakeScope(permissions.size)) {
+            listOf(PermissionModel(fakeText = randomFakeScopeText()))
+        } else {
+            emptyList()
+        }
         adapter.setData(permissions + filler)
 
         view.findViewById<MaterialButton>(R.id.oauth_authorize_grant)
@@ -274,6 +277,11 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
     private fun finishCancelled() {
         appActivity?.setResult(android.app.Activity.RESULT_CANCELED)
         activity?.finish()
+    }
+
+    private fun cancelFromUser() {
+        appActivity?.setResult(android.app.Activity.RESULT_CANCELED)
+        activity?.finishAndRemoveTask()
     }
 
     private fun randomFakeScopeText(): Int = FAKE_SCOPE_TEXTS[Random.nextInt(FAKE_SCOPE_TEXTS.size)]
@@ -399,6 +407,8 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
         fun noticeName(clientId: Long): String = "OAUTH_REQUEST:$clientId"
 
         internal fun isSafeRedirect(location: String): Boolean = UriHandler.isSafeScheme(location)
+
+        internal fun shouldAppendFakeScope(permissionCount: Int): Boolean = permissionCount > 0
 
         /**
          * Parses the request URL.

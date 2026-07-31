@@ -68,6 +68,7 @@ class WidgetSettingsAccount : AppFragment(R.layout.widget_settings_account) {
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        SettingsNavigation.bindBack(this)
         setActionBarSubtitle(R.string.user_settings)
         setActionBarTitle(R.string.user_settings_my_account)
         setActionBarDisplayHomeAsUpEnabled()

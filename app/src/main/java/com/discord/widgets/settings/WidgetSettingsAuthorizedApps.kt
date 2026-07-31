@@ -31,8 +31,6 @@ class WidgetSettingsAuthorizedApps : AppFragment(R.layout.widget_settings_author
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        setActionBarTitle(R.string.authorized_apps)
-        setActionBarSubtitle(R.string.user_settings)
         setActionBarDisplayHomeAsUpEnabled()
         SettingsNavigation.bindBack(this)
         view.findViewById<RecyclerView>(R.id.authorized_apps_list).adapter = adapter

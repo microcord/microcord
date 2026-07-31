@@ -28,6 +28,7 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.time.Clock
 import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.user.UserUtils.isNewUser
+import com.discord.widgets.channels.ChannelOnboardingManager
 import com.discord.widgets.playstation.PlaystationUpsellManager
 import rx.Observable
 import rx.subjects.PublishSubject
@@ -51,7 +52,7 @@ import rx.subjects.PublishSubject
  */
 class WidgetHomeViewModel(
     private val storeNavigation: StoreNavigation = StoreStream.getNavigation(),
-    private val storeGuildWelcomeScreens: StoreGuildWelcomeScreens? = StoreStream.getGuildWelcomeScreens(),
+    private val storeGuildWelcomeScreens: StoreGuildWelcomeScreens = StoreStream.getGuildWelcomeScreens(),
     storeExperiments: StoreExperiments = StoreStream.getExperiments(),
     storeGuilds: StoreGuilds = StoreStream.getGuilds(),
     storePermissions: StorePermissions = StoreStream.getPermissions(),
@@ -66,6 +67,7 @@ class WidgetHomeViewModel(
     ),
     navigationPanelActionObservable: Observable<StoreNavigation.PanelAction> =
         storeNavigation.getNavigationPanelAction(),
+    private val channelOnboardingManager: ChannelOnboardingManager = ChannelOnboardingManager(),
     private val sharedPreferences: SharedPreferences = SharedPreferencesProvider.get(),
     private val clock: Clock = ClockFactory.get(),
     private val playstationUpsellManager: PlaystationUpsellManager =
@@ -185,11 +187,10 @@ class WidgetHomeViewModel(
         // Lurking a guild means previewing it without joining, which is exactly when its welcome
         // screen is worth showing. The content may not be loaded yet, so the first pass kicks off
         // the fetch and a later emission shows the sheet.
-        val welcomeScreens = storeGuildWelcomeScreens
-        if (storeState.guildInfo.isLurking && welcomeScreens?.hasWelcomeScreenBeenSeen(guildId) == false) {
+        if (storeState.guildInfo.isLurking && !storeGuildWelcomeScreens.hasWelcomeScreenBeenSeen(guildId)) {
             when (welcomeScreenState) {
                 is StoreGuildWelcomeScreens.State.Loaded -> eventSubject.onNext(Event.ShowGuildWelcomeSheet(guildId))
-                null -> welcomeScreens.fetchIfNonexisting(guildId)
+                null -> storeGuildWelcomeScreens.fetchIfNonexisting(guildId)
                 else -> Unit
             }
         }
@@ -197,7 +198,13 @@ class WidgetHomeViewModel(
         // At most one of these per emission, in this order.
         val guild = storeState.guildInfo.guild
         when {
-            shouldShowChannelOnboardingSheet(previousLeftPanelState, leftPanelState, guildId, isNewUser) ->
+            shouldShowChannelOnboardingSheet(
+                previousLeftPanelState,
+                leftPanelState,
+                guildId,
+                isNewUser,
+                channelOnboardingManager.hasUserSeenChannelOnboarding(),
+            ) ->
                 eventSubject.onNext(Event.ShowChannelOnboardingSheet)
 
             shouldShowGuildEventUpsell(storeState.guildInfo.canManageEvents, storeState.isInEventsUpsellExperiment) -> {
@@ -227,17 +234,6 @@ class WidgetHomeViewModel(
      * Channel onboarding is offered at the moment the guild list finishes opening for a new user in
      * a guild — never mid-swipe, which is why both the previous and the current panel state matter.
      */
-    private fun shouldShowChannelOnboardingSheet(
-        previousLeftPanelState: PanelState?,
-        leftPanelState: PanelState,
-        guildId: Long,
-        isNewUser: Boolean,
-    ): Boolean = previousLeftPanelState == PanelState.Opening &&
-        leftPanelState == PanelState.Open &&
-        guildId != 0L &&
-        isNewUser &&
-        !hasUserSeenChannelOnboarding()
-
     private fun shouldShowGuildEventUpsell(canManageEvents: Boolean, isInEventsUpsellExperiment: Boolean): Boolean =
         canManageEvents &&
             !sharedPreferences.getBoolean(GUILD_EVENT_UPSELL_CACHE_KEY, false) &&
@@ -250,17 +246,25 @@ class WidgetHomeViewModel(
         private const val EVENTS_UPSELL_EXPERIMENT = "2021-09_events_upsell"
         private const val PLAYSTATION_EXPERIMENT = "2021-12_connected_accounts_playstation"
 
+        internal fun shouldShowChannelOnboardingSheet(
+            previousLeftPanelState: PanelState?,
+            leftPanelState: PanelState,
+            guildId: Long,
+            isNewUser: Boolean,
+            hasUserSeenChannelOnboarding: Boolean,
+        ): Boolean = previousLeftPanelState == PanelState.Opening &&
+            leftPanelState == PanelState.Open &&
+            guildId != 0L &&
+            isNewUser &&
+            !hasUserSeenChannelOnboarding
+
         /**
          * Seams for managers this project has not reconstructed yet. Each defaults to "already
          * shown / cannot show", so the corresponding sheet stays silent rather than being offered
          * with nothing behind it.
          *
-         * * `ChannelOnboardingManager.hasUserSeenChannelOnboarding`
          * * `GuildRoleSubscriptionOnboardingUpsellManager.canShow` / `setHasBeenShown`
          */
-        @JvmField
-        var hasUserSeenChannelOnboarding: () -> Boolean = { true }
-
         @JvmField
         var guildRoleSubscriptionUpsellCanShow: (Guild) -> Boolean = { false }
 

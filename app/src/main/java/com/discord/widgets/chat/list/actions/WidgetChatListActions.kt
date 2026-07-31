@@ -39,10 +39,10 @@ import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.user.UserUtils.discriminatorWithPadding
 import com.discord.utilities.textprocessing.node.EditedMessageNode
+import com.discord.widgets.chat.managereactions.WidgetManageReactions
 import com.discord.widgets.chat.list.CreateThreadsFeatureFlag
 import com.discord.widgets.chat.list.NewThreadsPermissionsFeatureFlag
 import com.discord.widgets.chat.list.ViewThreadsFeatureFlag
-import com.discord.widgets.chat.list.reactions.WidgetManageReactions
 import com.discord.widgets.mobile_reports.ReportsFeatureFlag
 import com.discord.widgets.mobile_reports.WidgetMobileReports
 import com.discord.widgets.notice.WidgetNoticeDialog

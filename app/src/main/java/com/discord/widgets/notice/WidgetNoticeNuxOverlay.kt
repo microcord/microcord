@@ -4,6 +4,7 @@ import android.content.Context
 import android.view.View
 import com.discord.R
 import com.discord.app.AppDialog
+import com.discord.stores.StoreNotices
 import com.discord.stores.StoreStream
 import com.google.android.material.button.MaterialButton
 
@@ -42,5 +43,20 @@ class WidgetNoticeNuxOverlay : AppDialog(R.layout.widget_notice_nux_overlay) {
          */
         @JvmStatic
         var openOverlaySetting: ((Context) -> Unit)? = null
+
+        @JvmStatic
+        fun enqueue() {
+            StoreStream.getNotices().requestToShow(
+                StoreNotices.Notice(
+                    name = NOTICE_NAME,
+                    priority = 0,
+                    persist = true,
+                    show = { activity ->
+                        WidgetNoticeNuxOverlay().show(activity.supportFragmentManager, NOTICE_NAME)
+                        true
+                    },
+                ),
+            )
+        }
     }
 }

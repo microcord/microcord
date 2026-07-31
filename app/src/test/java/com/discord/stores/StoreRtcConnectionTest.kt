@@ -13,12 +13,25 @@ import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.After
+import org.junit.Before
 import org.junit.BeforeClass
 import org.junit.Test
 import rx.Observable
+import rx.observers.TestSubscriber
+import rx.plugins.RxJavaHooks
+import rx.schedulers.Schedulers
 import rx.schedulers.TestScheduler
 
 class StoreRtcConnectionTest {
+
+    @Before
+    fun setUpSchedulers() {
+        RxJavaHooks.setOnComputationScheduler { Schedulers.immediate() }
+    }
+
+    @After
+    fun resetSchedulers() = RxJavaHooks.reset()
 
     @Test
     fun selectionAndServerUpdatesConnectInEitherArrivalOrder() {
@@ -95,6 +108,38 @@ class StoreRtcConnectionTest {
         assertEquals(1, properties["total_speaker_count"])
     }
 
+    @Test
+    fun fullConnectionStatePreservesTransitionsWhileBooleanConsumersStillWork() {
+        val harness = Harness()
+        val changes = TestSubscriber<RtcConnection.StateChange>()
+        val connected = TestSubscriber<Boolean>()
+        harness.store.getConnectionState().subscribe(changes)
+        harness.store.connectionState.subscribe(connected)
+
+        val metadata = RtcConnection.Metadata("connection", "media", CHANNEL_ID, GUILD_ID, null)
+        val connecting = RtcConnection.StateChange(RtcConnection.State.Authenticating, metadata)
+        harness.store.onStateChange(connecting)
+        harness.store.onStateChange(connecting)
+        harness.controller.metadata = metadata
+        harness.store.onConnectedChanged(true)
+
+        changes.assertValues(
+            RtcConnection.StateChange(RtcConnection.State.Disconnected(false), null),
+            connecting,
+            RtcConnection.StateChange(RtcConnection.State.RtcConnected, metadata),
+        )
+        connected.assertValues(false, true)
+    }
+
+    @Test
+    fun focusedParticipantReachesRtcController() {
+        val harness = Harness()
+
+        harness.store.updateFocusedParticipant(600L)
+
+        assertEquals(600L, harness.controller.recordedFocusedParticipant)
+    }
+
     private class Harness(preferredRegion: String? = null) {
         private val scheduler = TestScheduler()
         private val dispatcher = Dispatcher(scheduler).apply {
@@ -139,7 +184,8 @@ class StoreRtcConnectionTest {
 
     private class FakeRtcController : StoreRtcConnection.RtcConnectionController {
         val connections = mutableListOf<Connection>()
-        override val metadata: RtcConnection.Metadata? = null
+        var recordedFocusedParticipant: Long? = null
+        override var metadata: RtcConnection.Metadata? = null
 
         override fun connect(server: VoiceServer, channelId: Long, guildId: Long?, sessionId: String) {
             connections += Connection(channelId, guildId, sessionId)
@@ -149,6 +195,9 @@ class StoreRtcConnectionTest {
         override fun setUserMuted(userId: Long, muted: Boolean) = Unit
         override fun setUserOutputVolume(userId: Long, volume: Float) = Unit
         override fun setUserOffScreen(userId: Long, offScreen: Boolean) = Unit
+        override fun setFocusedParticipant(userId: Long?) {
+            recordedFocusedParticipant = userId
+        }
     }
 
     private data class Connection(val channelId: Long, val guildId: Long?, val sessionId: String)

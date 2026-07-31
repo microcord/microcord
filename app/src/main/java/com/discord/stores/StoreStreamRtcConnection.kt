@@ -4,9 +4,11 @@ import com.discord.models.domain.ModelApplicationStream
 import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.StreamCreateOrUpdate
 import com.discord.models.domain.StreamServerUpdate
+import com.discord.rtcconnection.RtcConnection
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
 import rx.Observable
+import rx.subjects.BehaviorSubject
 
 /**
  * The *second* RTC connection: the one that carries a screen share.
@@ -90,6 +92,7 @@ class StoreStreamRtcConnection(
     private var sessionId: String? = null
     private var streamOwner: Long? = null
     private var streamVolume: Float = MAX_STREAM_VOLUME
+    private val connectionQuality = BehaviorSubject.create(RtcConnection.Quality.UNKNOWN)
 
     fun getState(): State = stateSnapshot
 
@@ -172,6 +175,12 @@ class StoreStreamRtcConnection(
 
     fun observeStreamVolume(): Observable<Float> =
         observationDeck.connectRx(this) { getStreamVolume() }.distinctUntilChanged()
+
+    fun observeConnectionQuality(): Observable<RtcConnection.Quality> =
+        connectionQuality.distinctUntilChanged()
+
+    @StoreThread
+    fun handleQualityUpdate(quality: RtcConnection.Quality) = connectionQuality.onNext(quality)
 
     fun updateFocusedParticipant(focusedParticipant: Long?) =
         streamConnectionController.setFocusedParticipant(focusedParticipant)

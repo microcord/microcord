@@ -719,14 +719,14 @@ interface RestAPIInterface {
         @Path("channelId") channelId: Long,
         @Path("messageId") messageId: Long,
         @Path(value = "reaction", encoded = true) reaction: String,
-    ): Observable<Void>
+    ): Observable<Void?>
 
     @DELETE("channels/{channelId}/messages/{messageId}/reactions/{reaction}/@me")
     fun removeSelfReaction(
         @Path("channelId") channelId: Long,
         @Path("messageId") messageId: Long,
         @Path(value = "reaction", encoded = true) reaction: String,
-    ): Observable<Void>
+    ): Observable<Void?>
 
     @DELETE("channels/{channelId}/messages/{messageId}/reactions/{reaction}/{userId}")
     fun removeReaction(
@@ -734,13 +734,13 @@ interface RestAPIInterface {
         @Path("messageId") messageId: Long,
         @Path(value = "reaction", encoded = true) reaction: String,
         @Path("userId") userId: Long,
-    ): Observable<Void>
+    ): Observable<Void?>
 
     @DELETE("channels/{channelId}/messages/{messageId}/reactions")
     fun removeAllReactions(
         @Path("channelId") channelId: Long,
         @Path("messageId") messageId: Long,
-    ): Observable<Void>
+    ): Observable<Void?>
 
     @GET("channels/{channelId}/messages/{messageId}/reactions/{emoji}")
     fun getReactionUsers(
@@ -988,19 +988,19 @@ interface RestAPIInterface {
         @Path("guildId") guildId: Long,
         @Path("roleId") roleId: Long,
         @Body body: RestAPIParams.Role,
-    ): Observable<Void>
+    ): Observable<Void?>
 
     @PATCH("guilds/{guildId}/roles")
     fun batchUpdateRole(
         @Path("guildId") guildId: Long,
         @Body body: List<RestAPIParams.Role>,
-    ): Observable<Void>
+    ): Observable<Void?>
 
     @DELETE("guilds/{guildId}/roles/{roleId}")
     fun deleteRole(
         @Path("guildId") guildId: Long,
         @Path("roleId") roleId: Long,
-    ): Observable<Void>
+    ): Observable<Void?>
 
     @GET("guilds/{guildId}/roles/{roleId}/member-ids")
     fun getGuildRoleMemberIds(
@@ -1088,7 +1088,7 @@ interface RestAPIInterface {
     fun reorderChannels(
         @Path("guildId") guildId: Long,
         @Body body: List<RestAPIParams.ChannelPosition>,
-    ): Observable<Void>
+    ): Observable<Void?>
 
     @GET("guilds/{guildId}/messages/search")
     fun searchGuildMessages(

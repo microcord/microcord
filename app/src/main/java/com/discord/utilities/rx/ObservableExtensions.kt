@@ -4,6 +4,7 @@ package com.discord.utilities.rx
 
 import android.content.Context
 import com.discord.app.AppComponent
+import com.discord.stores.utilities.LeadingEdgeThrottle
 import com.discord.utilities.dimmer.DimmerView
 import com.discord.utilities.error.RestApiError
 import java.io.IOException
@@ -161,13 +162,12 @@ fun <T> Observable<T>.withDimmer(dimmer: DimmerView?, delay: Long = 300L): Obser
         .doOnUnsubscribe { dimmer?.setDimmed(false) }
 
 /**
- * Emit the first value of each [windowDuration] window immediately, then ignore the rest of it.
+ * Emit the first value immediately, then the newest value received during [windowDuration].
  *
- * Reference `leadingEdgeThrottle`, which lifts a custom `LeadingEdgeThrottle` operator; RxJava 1's
- * `throttleFirst` has exactly this contract.
+ * This preserves store changes that arrive during a burst instead of dropping them permanently.
  */
 fun <T> Observable<T>.leadingEdgeThrottle(windowDuration: Long, timeUnit: TimeUnit): Observable<T> =
-    throttleFirst(windowDuration, timeUnit)
+    lift(LeadingEdgeThrottle(windowDuration, timeUnit))
 
 /**
  * Subscribe with the app's error funnel.

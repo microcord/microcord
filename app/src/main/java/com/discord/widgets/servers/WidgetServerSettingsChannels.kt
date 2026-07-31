@@ -135,8 +135,7 @@ class WidgetServerSettingsChannels : AppFragment(R.layout.widget_server_settings
                 WidgetServerSettingsChannels::class.java,
                 requireContext(),
                 errorHandler = { configureUI(model) },
-                onNext = {},
-                onCompleted = { AppToast.show(this, R.string.saved_settings) },
+                onNext = { _: Void? -> AppToast.show(this, R.string.channel_order_updated) },
             )
     }
 

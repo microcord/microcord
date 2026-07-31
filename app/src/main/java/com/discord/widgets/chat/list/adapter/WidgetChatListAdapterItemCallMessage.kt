@@ -275,6 +275,9 @@ class WidgetChatListAdapterItemCallMessage(
     }
 
     companion object {
+        /** The pile shows at most three faces before collapsing the rest into a "+N" bubble. */
+        private const val MAX_USERS_SHOWN: Int = 3
+
         /**
          * Who is in the call. Reconstruction seam: `StoreVoiceParticipants` exists but is not
          * published by `StoreStream`, so until something installs a real source every call card
@@ -286,9 +289,6 @@ class WidgetChatListAdapterItemCallMessage(
             { Observable.just(emptyMap()) }
     }
 }
-
-/** The pile shows at most three faces before collapsing the rest into a "+N" bubble. */
-private const val MAX_USERS_SHOWN: Int = 3
 
 /** Measured from the reference's own layout constants. */
 private const val COLON_WIDTH_DP = 3.047619f

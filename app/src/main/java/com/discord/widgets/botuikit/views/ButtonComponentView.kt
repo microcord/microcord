@@ -97,10 +97,6 @@ class ButtonComponentView @JvmOverloads constructor(
     }
 }
 
-fun ButtonMessageComponent.hasEmoji(): Boolean = emoji != null
-
-fun ButtonMessageComponent.hasIcon(): Boolean = style == ButtonStyle.LINK
-
 internal fun buttonLabelPaddingDp(hasLabel: Boolean, hasEmoji: Boolean, hasIcon: Boolean): Pair<Int, Int> =
     if (!hasLabel) 0 to if (hasEmoji && hasIcon) 8 else 16
     else (if (hasEmoji) 8 else 16) to (if (hasIcon) 8 else 16)

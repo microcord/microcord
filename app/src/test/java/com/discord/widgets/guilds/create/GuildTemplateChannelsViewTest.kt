@@ -27,6 +27,7 @@ class GuildTemplateChannelsViewTest {
             "Manti's server",
             WidgetGuildCreateViewModel.formatGuildName("{username}'s server", "Manti"),
         )
+        assertEquals(11L, StockGuildTemplate.CREATE.getSystemChannelId())
     }
 
     @Test

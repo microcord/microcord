@@ -22,50 +22,48 @@ enum class StockGuildTemplate {
 
     fun getChannels(resources: Resources): List<RestAPIParams.CreateGuildChannel> = with(resources) {
         when (this@StockGuildTemplate) {
-            FRIEND_GROUP -> category(text, 100, TEXT, system(general), normal(game), normal(music)) +
-                category(voice, 200, VOICE, normal(lounge), normal(streamRoom))
-            STUDY_GROUP -> category(information, 100, TEXT, normal(welcome), normal(notes)) +
-                category(text, 200, TEXT, system(general), normal(homework), normal(session), normal(offTopic)) +
-                category(voice, 300, VOICE, normal(lounge), normal(studyRoom(1)), normal(studyRoom(2)))
-            GAMING_GROUP -> category(text, 100, TEXT, system(general), normal(clips)) +
-                category(voice, 200, VOICE, normal(lobby), normal(gaming))
-            CONTENT_CREATOR -> category(information, 100, TEXT, normal(welcome), normal(announcements)) +
-                category(text, 200, TEXT, system(general), normal(events), normal(ideas)) +
-                category(voice, 300, VOICE, normal(lounge), normal(communityHangout), normal(streamRoom))
-            CLUB -> category(information, 100, TEXT, normal(welcome), normal(announcements)) +
-                category(text, 200, TEXT, system(general), normal(meetingPlans)) +
-                category(voice, 300, VOICE, normal(lounge), normal(meetingRoom))
-            LOCAL_COMMUNITY -> category(information, 100, TEXT, normal(welcome), normal(announcements), normal(resourceChannel)) +
-                category(text, 200, TEXT, system(general), normal(meetingPlans), normal(offTopic)) +
-                category(voice, 300, VOICE, normal(lounge), normal(meetingRoom))
-            HUB_SCHOOL_CLUB -> category(information, 100, TEXT, normal(welcome), normal(announcements), normal(resourceChannel)) +
-                category(text, 200, TEXT, system(general), normal(introductions), normal(offTopic)) +
-                category(voice, 300, VOICE, normal(lounge), normal(meetingRoom1), normal(meetingRoom2))
-            HUB_STUDY_GROUP -> category(info, 100, TEXT, normal(notes), normal(help)) +
-                category(chat, 200, TEXT, normal(introductions), system(general), normal(offTopic)) +
-                category(voice, 300, VOICE, normal(lounge), normal(studyRoom(1)), normal(studyRoom(2)))
-            CLASS -> category(info, 100, TEXT, normal(assignments), normal(help), normal(resourceChannel)) +
-                category(chat, 200, TEXT, normal(introductions), system(general), normal(offTopic)) +
-                category(voice, 300, VOICE, normal(lounge), normal(studyRoom(1)), normal(studyRoom(2)))
-            SOCIAL -> category(chat, 200, TEXT, normal(introductions), system(general), normal(offTopic), normal(meetups)) +
-                category(voice, 300, VOICE, normal(couches), normal(movieRoom), normal(unnumberedStudyRoom))
-            MAJOR -> category(info, 100, TEXT, normal(resourceChannel), normal(help)) +
-                category(chat, 200, TEXT, normal(introductions), system(general), normal(offTopic)) +
-                category(voice, 300, VOICE, normal(lounge), normal(studyRoom(1)), normal(studyRoom(2)))
-            DORM -> category(info, 100, TEXT, normal(dormNews)) +
-                category(chat, 200, TEXT, normal(introductions), system(general), normal(offTopic)) +
-                category(voice, 300, VOICE, normal(lounge), normal(movieRoom), normal(couches))
+            FRIEND_GROUP -> createCategorySection(text, 100, TEXT, system(general), normal(game), normal(music)) +
+                createCategorySection(voice, 200, VOICE, normal(lounge), normal(streamRoom))
+            STUDY_GROUP -> createCategorySection(information, 100, TEXT, normal(welcome), normal(notes)) +
+                createCategorySection(text, 200, TEXT, system(general), normal(homework), normal(session), normal(offTopic)) +
+                createCategorySection(voice, 300, VOICE, normal(lounge), normal(studyRoom(1)), normal(studyRoom(2)))
+            GAMING_GROUP -> createCategorySection(text, 100, TEXT, system(general), normal(clips)) +
+                createCategorySection(voice, 200, VOICE, normal(lobby), normal(gaming))
+            CONTENT_CREATOR -> createCategorySection(information, 100, TEXT, normal(welcome), normal(announcements)) +
+                createCategorySection(text, 200, TEXT, system(general), normal(events), normal(ideas)) +
+                createCategorySection(voice, 300, VOICE, normal(lounge), normal(communityHangout), normal(streamRoom))
+            CLUB -> createCategorySection(information, 100, TEXT, normal(welcome), normal(announcements)) +
+                createCategorySection(text, 200, TEXT, system(general), normal(meetingPlans)) +
+                createCategorySection(voice, 300, VOICE, normal(lounge), normal(meetingRoom))
+            LOCAL_COMMUNITY -> createCategorySection(information, 100, TEXT, normal(welcome), normal(announcements), normal(resourceChannel)) +
+                createCategorySection(text, 200, TEXT, system(general), normal(meetingPlans), normal(offTopic)) +
+                createCategorySection(voice, 300, VOICE, normal(lounge), normal(meetingRoom))
+            HUB_SCHOOL_CLUB -> createCategorySection(information, 100, TEXT, normal(welcome), normal(announcements), normal(resourceChannel)) +
+                createCategorySection(text, 200, TEXT, system(general), normal(introductions), normal(offTopic)) +
+                createCategorySection(voice, 300, VOICE, normal(lounge), normal(meetingRoom1), normal(meetingRoom2))
+            HUB_STUDY_GROUP -> createCategorySection(info, 100, TEXT, normal(notes), normal(help)) +
+                createCategorySection(chat, 200, TEXT, normal(introductions), system(general), normal(offTopic)) +
+                createCategorySection(voice, 300, VOICE, normal(lounge), normal(studyRoom(1)), normal(studyRoom(2)))
+            CLASS -> createCategorySection(info, 100, TEXT, normal(assignments), normal(help), normal(resourceChannel)) +
+                createCategorySection(chat, 200, TEXT, normal(introductions), system(general), normal(offTopic)) +
+                createCategorySection(voice, 300, VOICE, normal(lounge), normal(studyRoom(1)), normal(studyRoom(2)))
+            SOCIAL -> createCategorySection(chat, 200, TEXT, normal(introductions), system(general), normal(offTopic), normal(meetups)) +
+                createCategorySection(voice, 300, VOICE, normal(couches), normal(movieRoom), normal(unnumberedStudyRoom))
+            MAJOR -> createCategorySection(info, 100, TEXT, normal(resourceChannel), normal(help)) +
+                createCategorySection(chat, 200, TEXT, normal(introductions), system(general), normal(offTopic)) +
+                createCategorySection(voice, 300, VOICE, normal(lounge), normal(studyRoom(1)), normal(studyRoom(2)))
+            DORM -> createCategorySection(info, 100, TEXT, normal(dormNews)) +
+                createCategorySection(chat, 200, TEXT, normal(introductions), system(general), normal(offTopic)) +
+                createCategorySection(voice, 300, VOICE, normal(lounge), normal(movieRoom), normal(couches))
             CREATE -> emptyList()
         }
     }
 
-    fun getSystemChannelId(): Long = SYSTEM_CHANNEL_ID
+    fun getSystemChannelId(): Long = 11L
 
     private companion object {
         const val TEXT = 0
         const val VOICE = 2
-        const val CATEGORY = 4
-        const val SYSTEM_CHANNEL_ID = 11L
 
         fun Resources.value(@StringRes id: Int) = getString(id)
         val Resources.text get() = value(R.string.guild_template_name_category_text)
@@ -109,15 +107,5 @@ enum class StockGuildTemplate {
         fun normal(name: String) = ChannelTemplate.NormalChannel(name)
         fun system(name: String) = ChannelTemplate.SystemChannel(name)
 
-        fun category(
-            name: String,
-            id: Long,
-            channelType: Int,
-            vararg channels: ChannelTemplate,
-        ): List<RestAPIParams.CreateGuildChannel> = listOf(
-            RestAPIParams.CreateGuildChannel(CATEGORY, id, name, null, null, null),
-        ) + channels.map { channel ->
-            RestAPIParams.CreateGuildChannel(channelType, channel.id, channel.name, id, null, null)
-        }
     }
 }

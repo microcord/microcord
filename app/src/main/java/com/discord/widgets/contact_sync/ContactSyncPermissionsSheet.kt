@@ -27,6 +27,8 @@ class ContactSyncPermissionsSheet : AppBottomSheet() {
     private val viewModel: WidgetContactSyncViewModel by appActivityViewModels {
         WidgetContactSyncViewModel(
             mode = WidgetContactSync.getContactSyncModeFromIntent(requireAppActivity()),
+            allowPhone = false,
+            allowEmail = false,
             captchaLauncher = {
                 // Nothing on this sheet submits a phone number, so a captcha here means the shared
                 // view model was driven from somewhere unexpected.

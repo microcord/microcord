@@ -9,9 +9,15 @@ import android.widget.TextView
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.appViewModels
+import com.discord.models.guild.Guild
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.permissions.ManageGuildContext
 import com.discord.utilities.rx.ui
 import com.discord.widgets.servers.auditlog.WidgetServerSettingsAuditLog
+import com.discord.widgets.servers.community.WidgetServerSettingsCommunityOverview
+import com.discord.widgets.servers.community.WidgetServerSettingsEnableCommunitySteps
+import com.discord.widgets.servers.creator_monetization_eligibility.onboarding.WidgetServerSettingsCreatorMonetizationOnboarding
+import com.discord.widgets.servers.guild_role_subscription.payments.WidgetServerSettingsGuildRoleSubscriptionEarnings
 import com.discord.widgets.servers.settings.invites.WidgetServerSettingsInstantInvites
 import com.discord.widgets.servers.settings.members.WidgetServerSettingsMembers
 import com.discord.widgets.settings.SettingsNavigation
@@ -122,7 +128,9 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
             model.canManageGuildRoleSubscriptions && model.hasGuildRoleSubscriptions
         bindOption(
             R.id.server_settings_guild_role_subscription_get_started,
-            model.canManageGuildRoleSubscriptions && !model.hasGuildRoleSubscriptions,
+            model.canManageGuildRoleSubscriptions &&
+                !model.hasGuildRoleSubscriptions &&
+                !model.isCreatorMonetizable,
         )
         bindOption(R.id.server_settings_guild_role_subscription_basic_info, showSubscriptionSections)
         bindOption(R.id.server_settings_guild_role_subscription_tiers, showSubscriptionSections)
@@ -147,6 +155,9 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
         bindDestination(R.id.server_settings_roles_option) {
             WidgetServerSettingsRoles.launch(it.context, guildId)
         }
+        bindDestination(R.id.server_settings_option_channels) {
+            WidgetServerSettingsChannels.launch(it.context, guildId)
+        }
         bindDestination(R.id.server_settings_option_overview) {
             WidgetServerSettingsOverview.launch(it.context, guildId)
         }
@@ -167,6 +178,18 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
         }
         bindDestination(R.id.server_settings_emojis_option) {
             WidgetServerSettingsEmojis.launch(it.context, guildId)
+        }
+        bindDestination(R.id.server_settings_community_overview_option) {
+            WidgetServerSettingsCommunityOverview.launch(it.context, guildId)
+        }
+        bindDestination(R.id.server_settings_enable_community_option) {
+            WidgetServerSettingsEnableCommunitySteps.launch(it.context, guildId)
+        }
+        bindDestination(R.id.server_settings_guild_role_subscription_get_started) {
+            WidgetServerSettingsCreatorMonetizationOnboarding.launch(it.context, guildId)
+        }
+        bindDestination(R.id.server_settings_guild_role_subscription_earnings) {
+            WidgetServerSettingsGuildRoleSubscriptionEarnings.launch(it.context)
         }
     }
 
@@ -190,6 +213,16 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
         }
     }
 
+    /** Exact 126.21 state shape retained for callers that depend on the nested JVM path. */
+    internal data class Model(
+        val guild: Guild,
+        val manageGuildContext: ManageGuildContext,
+        val canManageGuildRoleSubscriptions: Boolean,
+        val hasGuildRoleSubscriptions: Boolean,
+    ) {
+        companion object
+    }
+
     companion object {
         private const val INTENT_EXTRA_GUILD_ID = "INTENT_EXTRA_GUILD_ID"
         private const val INVALID_GUILD_ID = -1L
@@ -206,6 +239,7 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
             R.id.server_settings_option_audit_log,
             R.id.server_settings_members_option,
             R.id.server_settings_roles_option,
+            R.id.server_settings_option_channels,
             R.id.server_settings_option_overview,
             R.id.server_settings_option_moderation,
             R.id.server_settings_option_security,
@@ -213,6 +247,10 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
             R.id.server_settings_option_integrations,
             R.id.server_settings_instant_invites_option,
             R.id.server_settings_emojis_option,
+            R.id.server_settings_community_overview_option,
+            R.id.server_settings_enable_community_option,
+            R.id.server_settings_guild_role_subscription_get_started,
+            R.id.server_settings_guild_role_subscription_earnings,
         )
 
         /** Section container → the option rows inside it. */

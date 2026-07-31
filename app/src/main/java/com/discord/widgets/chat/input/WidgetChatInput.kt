@@ -14,6 +14,7 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.widget.AppCompatImageButton
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.RecyclerView
@@ -42,6 +43,7 @@ import com.discord.widgets.chat.input.autocomplete.ChatInputAutocompletables
 import com.discord.widgets.chat.input.autocomplete.InputAutocomplete
 import com.discord.widgets.chat.input.emoji.EmojiPickerContextType
 import com.discord.widgets.chat.input.emoji.WidgetEmojiPicker
+import com.discord.widgets.chat.input.expression.WidgetExpressionTray
 import com.google.android.material.button.MaterialButton
 import com.lytefast.flexinput.InputListener
 import com.lytefast.flexinput.fragment.FlexInputFragment
@@ -80,7 +82,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     private var uploadCaptchaSubscription: Subscription? = null
     private var mentionSubscription: Subscription? = null
     private var input: FlexEditText? = null
-    private var expressionTray: View? = null
+    private var expressionTray: WidgetExpressionTray? = null
     private var autocomplete: InputAutocomplete? = null
     private var attachments: WidgetChatInputAttachments? = null
 
@@ -162,6 +164,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             .ui(this)
             .subscribe({ configureUI(it) }, { /* a render failure must not kill the composer */ })
         autocomplete?.onViewBoundOrOnResume()
+        flexInputViewModel.viewState?.let { renderExpressionTray(it.expressionTrayShown) }
     }
 
     override fun onStart() {
@@ -240,7 +243,10 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val editText = flexView.findViewById<FlexEditText>(com.lytefast.flexinput.R.id.text_input)
         input = editText
         editText.addTextChangedListener(watcher)
-        editText.setOnClickListener { flexInputViewModel.hideExpressionTray() }
+        // Public FlexInput also closes its own tray from a touch listener. Remove that competing
+        // state writer; every close now routes through AppFlexInputViewModel.
+        editText.setOnTouchListener(null)
+        editText.setOnClickListener { flexInputViewModel.showKeyboardAndHideExpressionTray() }
         editText.setOnEditorActionListener { _, actionId, _ ->
             if (actionId and 0xff == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) {
                 flex.onSend()
@@ -287,8 +293,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
      * have no reference to this fragment.
      */
     private fun bindExpressionTray(flex: FlexInputFragment, flexView: View) {
-        expressionTray = flexView.findViewById(R.id.emoji_container)
-        val button = flexView.findViewById<View>(R.id.emoji_btn)
+        val button = flexView.findViewById<AppCompatImageButton>(R.id.emoji_btn)
 
         attachments = WidgetChatInputAttachments(
             flexInputFragment = flex,
@@ -297,14 +302,15 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 override fun onEmojiPicked(emoji: Emoji) = this@WidgetChatInput.onEmojiPicked(emoji)
             },
             onBackspacePressed = ::onEmojiBackspace,
-        ).also { it.configureFlexInputFragment(this) }
+        )
+        expressionTray = attachments?.configureFlexInputFragment(this)
 
         button.visibility = View.VISIBLE
         button.setOnClickListener { flexInputViewModel.toggleExpressionTray() }
 
         flexInputViewModel.observeViewState()
             .ui(this)
-            .subscribe({ button.isSelected = it.expressionTrayShown }, { /* leave the button as-is */ })
+            .subscribe({ renderExpressionTray(it.expressionTrayShown) }, { /* leave the tray as-is */ })
         flexInputViewModel.observeEvents()
             .ui(this)
             .subscribe(
@@ -323,6 +329,19 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 },
                 { /* keyboard state is best-effort */ },
             )
+    }
+
+    private fun renderExpressionTray(shown: Boolean) {
+        val flex = childFragmentManager.findFragmentById(R.id.chat_input_widget) as? FlexInputFragment ?: return
+        val flexView = flex.view ?: return
+        val button = flexView.findViewById<AppCompatImageButton>(R.id.emoji_btn) ?: return
+
+        flexView.findViewById<View>(R.id.emoji_container).visibility =
+            if (shown) View.VISIBLE else View.GONE
+        configureExpressionTrayButton(button, shown)
+        flexView.findViewById<View>(R.id.default_window_insets_handler)?.visibility =
+            if (shown) View.GONE else View.VISIBLE
+        expressionTray?.takeIf { it.isAdded }?.isShown(shown)
     }
 
     override fun onEmojiPicked(emoji: Emoji) {
@@ -703,4 +722,14 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
 
         fun requestMention(userId: Long) = mentionRequests.onNext(userId)
     }
+}
+
+internal fun configureExpressionTrayButton(button: AppCompatImageButton, shown: Boolean) {
+    button.setImageResource(if (shown) R.drawable.ic_keyboard_24dp else R.drawable.ic_emoji_24dp)
+    button.contentDescription = button.context.getString(
+        if (shown) R.string.show_keyboard else R.string.toggle_emoji_keyboard,
+    )
+    // 126.21 changes the drawable and description; it does not use selected/activated selectors.
+    button.isSelected = false
+    button.isActivated = false
 }

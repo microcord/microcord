@@ -147,6 +147,9 @@ class WidgetExpressionTray : AppFragment(R.layout.widget_expression_tray), Widge
         expressionTrayViewModel.observeEvents()
             .ui(this)
             .appSubscribe(WidgetExpressionTray::class.java, onNext = ::handleEvent)
+        (parentFragmentManager.findFragmentByTag(WidgetEmojiPickerChatSheet::class.java.simpleName)
+            as? WidgetEmojiPickerChatSheet)?.let(::bindEmojiPickerSheet)
+        flexInputViewModel.viewState?.let { isShown(it.expressionTrayShown) }
     }
 
     private fun initializeExpressionTabToViewsMap(view: View) {
@@ -244,12 +247,8 @@ class WidgetExpressionTray : AppFragment(R.layout.widget_expression_tray), Widge
             ExpressionTrayViewModel.Event.ShowEmojiPickerSheet -> {
                 onEmojiSearchOpenedListener?.invoke()
                 AnalyticsTracker.chatInputComponentViewed(ChatInputComponentTypes.EMOJI_SEARCH)
-                WidgetEmojiPickerChatSheet.show(
-                    fragmentManager = parentFragmentManager,
-                    listener = emojiPickerListener,
-                    onBackspace = { onBackspacePressedListener?.onBackspacePressed() },
-                    onCancel = { if (isAdded) flexInputViewModel.showKeyboardAndHideExpressionTray() },
-                )
+                WidgetEmojiPickerChatSheet.show(parentFragmentManager, null)
+                    .also(::bindEmojiPickerSheet)
             }
 
             ExpressionTrayViewModel.Event.ShowGifPickerSheet -> {
@@ -263,6 +262,14 @@ class WidgetExpressionTray : AppFragment(R.layout.widget_expression_tray), Widge
 
             is ExpressionTrayViewModel.Event.ShowStickerPicker -> handleShowStickerPicker(event)
         }
+    }
+
+    private fun bindEmojiPickerSheet(sheet: WidgetEmojiPickerChatSheet) {
+        sheet.bindCallbacks(
+            listener = emojiPickerListener,
+            onBackspace = { onBackspacePressedListener?.onBackspacePressed() },
+            onCancel = { if (isAdded) flexInputViewModel.showKeyboardAndHideExpressionTray() },
+        )
     }
 
     private fun handleShowStickerPicker(event: ExpressionTrayViewModel.Event.ShowStickerPicker) {

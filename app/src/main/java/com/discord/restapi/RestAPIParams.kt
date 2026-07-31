@@ -20,18 +20,12 @@ import com.discord.models.domain.ModelMemberVerificationForm
 import com.discord.models.domain.ModelMuteConfig
 import com.discord.models.domain.ModelSubscription
 import com.discord.nullserializable.NullSerializable
-import com.google.gson.JsonElement
-import com.google.gson.JsonNull
-import com.google.gson.JsonObject
-import com.google.gson.JsonSerializationContext
-import com.google.gson.JsonSerializer
 import com.google.gson.TypeAdapter
 import com.google.gson.annotations.JsonAdapter
 import com.google.gson.annotations.SerializedName
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
-import java.lang.reflect.Type
 import java.util.Locale
 
 /**
@@ -163,8 +157,10 @@ object RestAPIParams {
      * One entry of the `PATCH guilds/{guildId}/channels` reorder payload.
      *
      * [Serializer] is registered in [RestAPIBuilder] because [PARENT_ID_NONE] must be written as an
-     * explicit JSON `null` (move to root) while an absent parent must be omitted entirely.
+     * explicit JSON `null` (move to root) while an absent parent must be omitted entirely. Snowflakes
+     * are strings on the current wire contract; positions remain integers.
      */
+    @JsonAdapter(ChannelPosition.Serializer::class)
     class ChannelPosition(
         val id: Long,
         val position: Int,
@@ -174,24 +170,47 @@ object RestAPIParams {
             const val PARENT_ID_NONE = -1L
         }
 
-        class Serializer : JsonSerializer<ChannelPosition> {
-            override fun serialize(
-                src: ChannelPosition?,
-                typeOfSrc: Type?,
-                context: JsonSerializationContext?,
-            ): JsonElement? {
-                if (src == null || typeOfSrc != ChannelPosition::class.java) return null
-                return JsonObject().apply {
-                    addProperty("id", src.id)
-                    addProperty("position", src.position)
-                    src.parentId?.let { parentId ->
-                        if (parentId == ChannelPosition.PARENT_ID_NONE) {
-                            add("parent_id", JsonNull.INSTANCE)
-                        } else {
-                            addProperty("parent_id", parentId)
-                        }
+        class Serializer : TypeAdapter<ChannelPosition>() {
+            override fun write(writer: JsonWriter, value: ChannelPosition?) {
+                if (value == null) {
+                    writer.nullValue()
+                    return
+                }
+                writer.beginObject()
+                writer.name("id").value(value.id.toString())
+                writer.name("position").value(value.position)
+                value.parentId?.let { parentId ->
+                    writer.name("parent_id")
+                    if (parentId == PARENT_ID_NONE) {
+                        val serializeNulls = writer.serializeNulls
+                        writer.serializeNulls = true
+                        writer.nullValue()
+                        writer.serializeNulls = serializeNulls
+                    } else {
+                        writer.value(parentId.toString())
                     }
                 }
+                writer.endObject()
+            }
+
+            override fun read(reader: JsonReader): ChannelPosition? {
+                if (reader.peek() == JsonToken.NULL) return null.also { reader.nextNull() }
+                var id = 0L
+                var position = 0
+                var parentId: Long? = null
+                reader.beginObject()
+                while (reader.hasNext()) when (reader.nextName()) {
+                    "id" -> id = reader.nextString().toLong()
+                    "position" -> position = reader.nextInt()
+                    "parent_id" -> parentId = if (reader.peek() == JsonToken.NULL) {
+                        PARENT_ID_NONE.also { reader.nextNull() }
+                    } else {
+                        reader.nextString().toLong()
+                    }
+                    else -> reader.skipValue()
+                }
+                reader.endObject()
+                return ChannelPosition(id, position, parentId)
             }
         }
     }
@@ -625,9 +644,10 @@ object RestAPIParams {
     class Ring(val recipients: List<Long>?)
 
     /**
-     * `POST/PATCH guilds/{guildId}/roles[/{roleId}]` body. The reference declares every property as
-     * mutable so callers can build a role patch incrementally.
+     * `POST/PATCH guilds/{guildId}/roles[/{roleId}]` body. Properties stay mutable like the reference;
+     * the adapter emits permission bitfields and role snowflakes as strings for the current API.
      */
+    @JsonAdapter(Role.Serializer::class)
     class Role(
         var hoist: Boolean? = null,
         var name: String? = null,
@@ -638,6 +658,48 @@ object RestAPIParams {
         var id: Long = 0L,
         var icon: String? = null,
     ) {
+        class Serializer : TypeAdapter<Role>() {
+            override fun write(writer: JsonWriter, value: Role?) {
+                if (value == null) {
+                    writer.nullValue()
+                    return
+                }
+                writer.beginObject()
+                value.hoist?.let { writer.name("hoist").value(it) }
+                value.name?.let { writer.name("name").value(it) }
+                value.mentionable?.let { writer.name("mentionable").value(it) }
+                value.color?.let { writer.name("color").value(it) }
+                value.position?.let { writer.name("position").value(it) }
+                value.permissions?.let { writer.name("permissions").value(it.toString()) }
+                if (value.id != 0L) writer.name("id").value(value.id.toString())
+                value.icon?.let { writer.name("icon").value(it) }
+                writer.endObject()
+            }
+
+            override fun read(reader: JsonReader): Role? {
+                if (reader.peek() == JsonToken.NULL) return null.also { reader.nextNull() }
+                val role = Role()
+                reader.beginObject()
+                while (reader.hasNext()) when (reader.nextName()) {
+                    "hoist" -> role.hoist = reader.nextBoolean()
+                    "name" -> role.name = reader.nextString()
+                    "mentionable" -> role.mentionable = reader.nextBoolean()
+                    "color" -> role.color = reader.nextInt()
+                    "position" -> role.position = reader.nextInt()
+                    "permissions" -> role.permissions = reader.nextString().toLong()
+                    "id" -> role.id = reader.nextString().toLong()
+                    "icon" -> role.icon = if (reader.peek() == JsonToken.NULL) {
+                        null.also { reader.nextNull() }
+                    } else {
+                        reader.nextString()
+                    }
+                    else -> reader.skipValue()
+                }
+                reader.endObject()
+                return role
+            }
+        }
+
         companion object {
             fun createForPosition(id: Long, position: Int) = Role(position = position, id = id)
 

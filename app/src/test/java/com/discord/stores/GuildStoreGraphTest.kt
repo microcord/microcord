@@ -263,7 +263,7 @@ class GuildStoreGraphTest {
 
     @Test fun selectingAGuildRequestsTypingActivitiesAndThreads() {
         val payloads = mutableListOf<GuildSubscriptionPayload>()
-        val subscriptions = StoreGuildSubscriptions(deck, payloads::add)
+        val subscriptions = StoreGuildSubscriptions(deck, dispatcher, onSubscription = payloads::add)
         register(subscriptions)
 
         dispatcher.schedule { subscriptions.handleGuildSelect(1) }
@@ -303,7 +303,7 @@ class GuildStoreGraphTest {
 
     @Test fun individualMemberSubscriptionsAreReferenceCounted() {
         val payloads = mutableListOf<GuildSubscriptionPayload>()
-        val subscriptions = StoreGuildSubscriptions(deck, payloads::add)
+        val subscriptions = StoreGuildSubscriptions(deck, dispatcher, onSubscription = payloads::add)
         register(subscriptions)
 
         dispatcher.schedule {
@@ -314,6 +314,18 @@ class GuildStoreGraphTest {
 
         // Two holders, one emission: the second subscribe is already covered by the first.
         assertEquals(1, payloads.size)
+        assertEquals(setOf(20L), payloads.single().subscriptions.members)
+    }
+
+    @Test fun publicUserSubscriptionMutatesOnlyWhenDispatched() {
+        val payloads = mutableListOf<GuildSubscriptionPayload>()
+        val subscriptions = StoreGuildSubscriptions(deck, dispatcher, onSubscription = payloads::add)
+        register(subscriptions)
+
+        subscriptions.subscribeUser(1, 20)
+        assertEquals(emptyList<GuildSubscriptionPayload>(), payloads)
+
+        scheduler.triggerActions()
         assertEquals(setOf(20L), payloads.single().subscriptions.members)
     }
 

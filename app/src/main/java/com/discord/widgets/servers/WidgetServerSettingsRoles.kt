@@ -90,6 +90,8 @@ class WidgetServerSettingsRoles : AppFragment(R.layout.widget_server_settings_ro
                     .map { it[created.id] }
                     .filter { it != null }
                     .map { it!! }
+                    // The create already succeeded; store synchronization is not a network failure.
+                    .onErrorResumeNext(Observable.empty())
             }
             .takeSingleUntilTimeout(emitError = false)
             .ui(this)

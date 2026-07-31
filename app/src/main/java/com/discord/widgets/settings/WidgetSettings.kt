@@ -22,7 +22,6 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.uri.UriHandler
 import com.discord.views.StatusView
 import com.discord.widgets.settings.account.WidgetSettingsAccount
-import com.discord.widgets.settings.account.WidgetSettingsBlockedUsers
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.user.Badge
 import com.discord.widgets.user.WidgetUserStatusSheet
@@ -36,14 +35,9 @@ import com.google.android.material.shape.ShapeAppearanceModel
  *
  * Reference: `com.discord.widgets.settings.WidgetSettings` + `SettingsViewModel`.
  *
- * Two deliberate divergences from the reference are recorded here:
+ * One deliberate divergence from the reference is recorded here:
  *
- * 1. **`blocked_users` row.** The recovered `widget_settings.xml` in this project carries a
- *    `blocked_users` row that the reference layout does **not** have — the reference reaches
- *    `WidgetSettingsBlockedUsers` from `WidgetSettingsAccount` (`widget_settings_account.xml`).
-     *    It remains bound for compatibility with the recovered layout; the account screen also
-     *    exposes the reference destination.
- * 2. **[hideUnavailableRows]** has no reference counterpart. The reference shows every row and gates
+ * **[hideUnavailableRows]** has no reference counterpart. The reference shows every row and gates
  *    only `developer_options*`, `nitro_settings_container`, `role_subscriptions`,
  *    `nitro_gifting_badge` and `notification_upsell`. Rows here are hidden when their destination
  *    screen does not exist yet, so the screen has no dead taps; every id in [implementedRouteIds]
@@ -86,12 +80,6 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
             append(")")
         }
 
-        view.findViewById<View>(R.id.blocked_users).setOnClickListener {
-            onBlockedUsers?.invoke() ?: parentFragmentManager.commit {
-                replace(this@WidgetSettings.id, WidgetSettingsBlockedUsers())
-                addToBackStack(WidgetSettingsBlockedUsers::class.java.name)
-            }
-        }
         bindRoute(view, R.id.account, ::WidgetSettingsAccount)
         bindRoute(view, R.id.authorized_apps, ::WidgetSettingsAuthorizedApps)
         bindRoute(view, R.id.text_images_settings, ::WidgetSettingsMedia)
@@ -260,7 +248,6 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
 
         /** Rows whose destination screen exists; everything else is hidden by [hideUnavailableRows]. */
         internal val implementedRouteIds = setOf(
-            R.id.blocked_users,
             R.id.account,
             R.id.authorized_apps,
             R.id.text_images_settings,
@@ -280,7 +267,6 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
          * working default; the reference has no equivalent indirection.
          */
         @JvmField var onSetStatus: (() -> Unit)? = null
-        @JvmField var onBlockedUsers: (() -> Unit)? = null
         @JvmField var onLogout: (() -> Unit)? = null
 
         internal fun displayName(user: MeUser) = if (user.discriminator == 0) {

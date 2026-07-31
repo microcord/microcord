@@ -26,6 +26,7 @@ dependencyResolutionManagement {
                 includeGroup("com.github.discord")
                 includeGroup("com.github.mmin18")
                 includeGroup("com.github.franmontiel")
+                includeGroup("com.github.CameraKit")
             }
         }
     }

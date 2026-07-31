@@ -20,7 +20,7 @@ data class GooglePlayInAppSku(
      *
      * Populate from Manticord-owned configuration in Phase 13 via [InAppSkuConfig.installSkuIds].
      */
-    val skuId: Long? = null,
+    var skuId: Long? = null,
 )
 
 /**
@@ -35,15 +35,20 @@ object InAppSkuConfig {
     @Volatile
     private var skuIdsByProductId: Map<String, Long> = emptyMap()
 
-    /** `true` once Manticord-owned SKU ids have been supplied. */
-    val isInstalled: Boolean get() = skuIdsByProductId.isNotEmpty()
+    /** `true` once every configured Play gift has a Manticord-owned Discord SKU id. */
+    val isInstalled: Boolean get() = premiumGifts.all { it.skuId != null }
 
     fun installSkuIds(skuIdsByProductId: Map<String, Long>) {
-        this.skuIdsByProductId = skuIdsByProductId
+        val productIds = premiumGifts.mapTo(LinkedHashSet(), GooglePlayInAppSku::paymentGatewaySkuId)
+        require(skuIdsByProductId.keys == productIds) { "SKU ids must be supplied for every Play gift product." }
+        require(skuIdsByProductId.values.all { it > 0L }) { "SKU ids must be positive." }
+        this.skuIdsByProductId = skuIdsByProductId.toMap()
+        premiumGifts.forEach { it.skuId = skuIdsByProductId[it.paymentGatewaySkuId] }
     }
 
     fun clear() {
         skuIdsByProductId = emptyMap()
+        premiumGifts.forEach { it.skuId = null }
     }
 
     internal fun skuIdFor(paymentGatewaySkuId: String): Long? = skuIdsByProductId[paymentGatewaySkuId]

@@ -44,11 +44,3 @@ fun String.replaceAutocompleteDataWithServerValues(
     }
     return result
 }
-
-/**
- * Collapses the per-identifier candidate buckets into one list, preserving bucket order.
- *
- * Reference: `InputAutocompletablesKt.flatten`.
- */
-fun Map<LeadingIdentifier, List<Autocompletable>>.flatten(): List<Autocompletable> =
-    values.flatten()

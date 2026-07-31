@@ -7,6 +7,16 @@ import org.junit.Test
 
 class AppFlexInputViewModelTest {
     @Test
+    fun lifecycleKeyboardHideDoesNotLoseTheOpenTrayState() {
+        val viewModel = AppFlexInputViewModel()
+
+        viewModel.showExpressionTray()
+        viewModel.hideKeyboard()
+
+        assertTrue(viewModel.requireViewState().expressionTrayShown)
+    }
+
+    @Test
     fun expressionTrayTransitionsMatchThePublicFlexInputBridge() {
         val viewModel = AppFlexInputViewModel()
         val events = mutableListOf<AppFlexInputViewModel.Event>()
@@ -21,9 +31,20 @@ class AppFlexInputViewModelTest {
         assertFalse(viewModel.hideExpressionTray())
         assertFalse(viewModel.requireViewState().expressionTrayShown)
 
+        viewModel.toggleExpressionTray()
+        viewModel.toggleExpressionTray()
+        viewModel.toggleExpressionTray()
+        assertTrue(viewModel.requireViewState().expressionTrayShown)
+
         viewModel.showKeyboardAndHideExpressionTray()
         assertEquals(
-            listOf(AppFlexInputViewModel.Event.HideKeyboard, AppFlexInputViewModel.Event.ShowKeyboard),
+            listOf(
+                AppFlexInputViewModel.Event.HideKeyboard,
+                AppFlexInputViewModel.Event.HideKeyboard,
+                AppFlexInputViewModel.Event.ShowKeyboard,
+                AppFlexInputViewModel.Event.HideKeyboard,
+                AppFlexInputViewModel.Event.ShowKeyboard,
+            ),
             events,
         )
     }

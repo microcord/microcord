@@ -9,7 +9,7 @@ class WidgetAuthAgeGated : AuthFragment(R.layout.widget_auth_age_gated, AuthRout
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         view.findViewById<MaterialButton>(R.id.auth_register_underage_button)
-            .setOnClickListener { actions.navigate(AuthRoute.LOGIN) }
+            .setOnClickListener { actions.close() }
     }
 
     override fun render(state: AuthUiState) {

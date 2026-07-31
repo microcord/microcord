@@ -1,5 +1,6 @@
 package com.discord.utilities.voice
 
+import android.content.Context
 import android.content.Intent
 import androidx.annotation.StringRes
 import com.discord.R
@@ -14,9 +15,12 @@ import com.discord.stores.StoreStream
 import com.discord.stores.StoreVoiceChannelSelected
 import com.discord.stores.utilities.leadingEdgeThrottle
 import com.discord.utilities.rx.computationLatest
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.view.ToastManager
 import com.discord.widgets.voice.model.CallModel
 import java.util.concurrent.TimeUnit
 import rx.Observable
+import rx.Subscription
 
 /**
  * Produces and controls the state consumed by the voice foreground service.
@@ -31,17 +35,15 @@ class VoiceEngineServiceController(
     private val voiceChannelSelectedStore: StoreVoiceChannelSelected,
     rtcConnectionStore: StoreRtcConnection,
     connectionStates: Observable<RtcConnection.StateChange> =
-        rtcConnectionStore.connectionState.map { connected ->
-            RtcConnection.StateChange(
-                if (connected) RtcConnection.State.RtcConnected else RtcConnection.State.RtcDisconnected,
-                rtcConnectionStore.getRtcConnectionMetadata(),
-            )
-        },
+        rtcConnectionStore.getConnectionState(),
     private val setScreenshare: (Intent?) -> Unit = { permissionIntent ->
         checkNotNull(VoiceTransport.getOrNull()) { "Voice transport is not initialized" }
             .setScreenshare(permissionIntent)
     },
 ) {
+    private var serviceBinding: VoiceEngineForegroundService.Connection? = null
+    private var serviceSubscription: Subscription? = null
+
     internal val notificationDataObservable: Observable<NotificationData> = connectionStates
         .switchMap { stateChange ->
             val state = stateChange.state
@@ -84,9 +86,53 @@ class VoiceEngineServiceController(
     internal fun onToggleSelfMute(): StoreMediaSettings.SelfMuteFailure? =
         mediaSettingsStore.toggleSelfMuted()
 
-    fun startStream(permissionIntent: Intent) = setScreenshare(permissionIntent)
+    fun init(context: Context) {
+        val appContext = context.applicationContext
+        VoiceEngineForegroundService.onDisconnect = ::onDisconnect
+        VoiceEngineForegroundService.onToggleSelfDeafen = ::onToggleSelfDeafen
+        VoiceEngineForegroundService.onToggleSelfMute = {
+            if (onToggleSelfMute() == StoreMediaSettings.SelfMuteFailure.CANNOT_USE_VAD) {
+                ToastManager().show(appContext, R.string.vad_permission_small)
+            }
+        }
+        val binding = VoiceEngineForegroundService.Connection(appContext)
+        serviceBinding = binding
+        serviceSubscription?.unsubscribe()
+        notificationDataObservable.appSubscribe(
+            errorClass = VoiceEngineServiceController::class.java,
+            subscriptionHandler = { serviceSubscription = it },
+        ) { data ->
+            if (data.rtcConnectionState is RtcConnection.State.Disconnected) {
+                DiscordOverlayService.launchForClose(appContext)
+                VoiceEngineForegroundService.stopForegroundAndUnbind(binding)
+            } else {
+                VoiceEngineForegroundService.startForegroundAndBind(
+                    connection = binding,
+                    title = appContext.getString(data.stateString),
+                    subtitle = data.channelName,
+                    selfMute = data.isSelfMuted,
+                    selfDeafen = data.isSelfDeafened,
+                    selfStream = data.isSelfStreaming,
+                    channelId = data.channelId,
+                    guildId = data.guildId,
+                    isProximityLockEnabled = data.proximityLockEnabled,
+                    canSpeak = data.canSpeak,
+                )
+                if (data.rtcConnectionState == RtcConnection.State.RtcConnected) {
+                    DiscordOverlayService.launchForVoice(appContext)
+                }
+            }
+        }
+    }
 
-    fun stopStream() = setScreenshare(null)
+    fun startStream(permissionIntent: Intent) {
+        serviceBinding?.let { VoiceEngineForegroundService.startStream(it, permissionIntent) }
+            ?: setScreenshare(permissionIntent)
+    }
+
+    fun stopStream() {
+        serviceBinding?.let { VoiceEngineForegroundService.stopStream(it) } ?: setScreenshare(null)
+    }
 
     internal data class NotificationData(
         val rtcConnectionState: RtcConnection.State,

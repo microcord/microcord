@@ -14,6 +14,7 @@ import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.persister.Persister
+import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
@@ -47,7 +48,7 @@ class StoreUserSettings(
     private val dispatcher: Dispatcher,
     private val accessibilityStore: StoreAccessibility,
     private val preferences: SharedPreferences = SharedPreferencesProvider.get(),
-    private val api: () -> RestAPIInterface? = { null },
+    private val api: () -> RestAPIInterface? = { RestAPI.apiOrNull },
     private val clock: Clock = ClockFactory.get(),
 ) : Store() {
     private val shouldRenderEmbedsSubject = subject<Boolean>()

@@ -1,31 +1,40 @@
 package com.discord.widgets.settings.premium
 
+import com.android.billingclient.api.BillingFlowParams
 import com.android.billingclient.api.Purchase
 import com.android.billingclient.api.SkuDetails
 import com.discord.R
 import com.discord.api.premium.SubscriptionInterval
+import com.discord.app.AppLog
 import com.discord.app.AppViewModel
 import com.discord.models.domain.ModelSubscription
+import com.discord.stores.PendingDowngrade
 import com.discord.stores.StoreGooglePlayPurchases
 import com.discord.stores.StoreGooglePlaySkuDetails
+import com.discord.stores.StoreStream
 import com.discord.stores.StoreSubscriptions
+import com.discord.utilities.analytics.AnalyticsTracker
+import com.discord.utilities.analytics.Traits
+import com.discord.utilities.billing.GooglePlayBillingManager
 import com.discord.utilities.billing.GooglePlaySku
 import com.discord.utilities.billing.GooglePlaySku.Section
+import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
+import com.discord.utilities.user.UserUtils
 import rx.Observable
+import rx.functions.Func4
+import rx.subjects.PublishSubject
 
-/**
- * Plan-list state independent of the Play billing client.
- *
- * The missing billing manager owns querying and checkout. This class only projects snapshots that
- * manager/store code can supply, so an unavailable billing integration cannot look purchasable.
- */
 class ChoosePlanViewModel(
     private val viewType: WidgetChoosePlan.ViewType,
     private val oldSkuName: String?,
-    storeObservable: Observable<StoreState>,
+    storeObservable: Observable<StoreState> = observeStores(),
+    purchaseEvents: Observable<StoreGooglePlayPurchases.Event> =
+        StoreStream.getGooglePlayPurchases().observeEvents(),
 ) : AppViewModel<ChoosePlanViewModel.ViewState>(ViewState.Loading) {
+    private val eventSubject = PublishSubject.create<Event>()
+    private var locationTrait: Traits.Location? = null
 
     data class StoreState(
         val skuDetailsState: StoreGooglePlaySkuDetails.State,
@@ -47,14 +56,153 @@ class ChoosePlanViewModel(
         ) : ViewState()
     }
 
+    sealed class Event {
+        data class CompleteSkuPurchase(val skuName: String, val planName: String) : Event()
+        data class ErrorSkuPurchase(@androidx.annotation.StringRes val message: Int) : Event()
+        data class StartSkuPurchase(val billingParams: BillingFlowParams) : Event()
+    }
+
     init {
+        GooglePlayBillingManager.queryPurchases()
+        GooglePlayBillingManager.querySkuDetails()
         storeObservable
             .computationLatest()
             .ui(this)
-            .subscribe { updateViewState(viewStateFor(viewType, oldSkuName, it)) }
+            .appSubscribe(javaClass) { updateViewState(viewStateFor(viewType, oldSkuName, it)) }
+        purchaseEvents.ui(this).appSubscribe(javaClass, onNext = ::handlePurchaseEvent)
+    }
+
+    fun observeEvents(): Observable<Event> = eventSubject
+
+    fun buy(
+        sku: GooglePlaySku,
+        oldSkuName: String? = null,
+        locationTrait: Traits.Location,
+        fromStep: String,
+    ) {
+        val loaded = viewState as? ViewState.Loaded ?: return
+        val newDetails = loaded.skuDetails[sku.skuName]
+        val oldDetails = oldSkuName?.let(loaded.skuDetails::get)
+        val subscriptionTrait = Traits.Subscription.withGatewayPlanId(sku.skuName)
+        this.locationTrait = locationTrait
+        if (newDetails == null || oldSkuName != null && oldDetails == null) {
+            trackPayment("payment_flow_failed", locationTrait, subscriptionTrait)
+            AppLog.e("Purchase details not found. oldSku=$oldSkuName; newSku=${sku.skuName}")
+            eventSubject.onNext(Event.ErrorSkuPurchase(R.string.billing_error_purchase_details_not_found))
+            return
+        }
+
+        var oldPurchaseToken: String? = null
+        if (oldSkuName != null && oldDetails != null && oldSkuName != sku.skuName) {
+            val purchase = loaded.purchases.firstOrNull { oldSkuName in it.skus }
+            if (purchase == null || purchase.purchaseToken.isEmpty()) {
+                purchaseFailed(locationTrait, subscriptionTrait, "Subscription without matching purchase: $oldSkuName")
+                return
+            }
+            oldPurchaseToken = purchase.purchaseToken
+            val mode = replacementMode(oldDetails, newDetails)
+            if (mode == BillingFlowParams.ProrationMode.DEFERRED) {
+                val subscriptionId = loaded.subscriptions
+                    .firstOrNull { it.paymentGatewayPlanId == oldSkuName }
+                    ?.id
+                if (subscriptionId == null) {
+                    purchaseFailed(locationTrait, subscriptionTrait, "No subscription for downgrade: $oldSkuName")
+                    return
+                }
+                StoreStream.getGooglePlayPurchases().updatePendingDowngrade(
+                    PendingDowngrade(purchase.purchaseToken, subscriptionId, sku.skuName),
+                )
+            }
+        }
+        val params = billingFlowParams(
+            newDetails,
+            oldDetails?.takeIf { oldPurchaseToken != null },
+            oldPurchaseToken,
+            UserUtils.getObfuscatedUserId(StoreStream.getUsers().getMeInternal().id),
+        )
+        trackPayment(
+            "payment_flow_step",
+            locationTrait,
+            subscriptionTrait,
+            mapOf("to_step" to "external_payment", "from_step" to fromStep),
+        )
+        eventSubject.onNext(Event.StartSkuPurchase(params))
+    }
+
+    internal fun handlePurchaseEvent(event: StoreGooglePlayPurchases.Event) {
+        val loaded = viewState as? ViewState.Loaded ?: return
+        when (event) {
+            is StoreGooglePlayPurchases.Event.PurchaseQuerySuccess -> {
+                val subscription = Traits.Subscription.withGatewayPlanId(event.newSkuName)
+                val planName = loaded.skuDetails[event.newSkuName]?.description ?: return
+                trackPayment("payment_flow_completed", locationTrait, subscription)
+                eventSubject.onNext(Event.CompleteSkuPurchase(event.newSkuName, planName))
+            }
+            is StoreGooglePlayPurchases.Event.PurchaseQueryFailure -> {
+                val subscription = Traits.Subscription.withGatewayPlanId(event.newSkuName)
+                trackPayment("payment_flow_failed", locationTrait, subscription)
+                AppLog.e("Purchase query failure: ${event.newSkuName}")
+                eventSubject.onNext(Event.ErrorSkuPurchase(R.string.billing_error_purchase))
+            }
+        }
+    }
+
+    private fun purchaseFailed(location: Traits.Location, subscription: Traits.Subscription, message: String) {
+        trackPayment("payment_flow_failed", location, subscription)
+        AppLog.e(message)
+        eventSubject.onNext(Event.ErrorSkuPurchase(R.string.billing_error_purchase))
+    }
+
+    private fun trackPayment(
+        event: String,
+        location: Traits.Location?,
+        subscription: Traits.Subscription,
+        extra: Map<String, Any> = emptyMap(),
+    ) {
+        val properties = extra.toMutableMap()
+        location?.serializeTo(properties)
+        subscription.serializeTo(properties)
+        AnalyticsTracker.tracker.track(event, properties)
     }
 
     companion object {
+        private fun observeStores(): Observable<StoreState> = Observable.combineLatest(
+            StoreStream.getGooglePlaySkuDetails().observeState(),
+            StoreStream.getGooglePlayPurchases().observeState(),
+            StoreStream.getGooglePlayPurchases().observeQueryState(),
+            StoreStream.getSubscriptions().observeSubscriptions(),
+            Func4 { skuDetails, purchases, query, subscriptions ->
+                StoreState(skuDetails, purchases, query, subscriptions)
+            },
+        )
+
+        internal fun replacementMode(oldDetails: SkuDetails, newDetails: SkuDetails): Int =
+            if (newDetails.priceAmountMicros < oldDetails.priceAmountMicros) {
+                BillingFlowParams.ProrationMode.DEFERRED
+            } else {
+                BillingFlowParams.ProrationMode.IMMEDIATE_WITH_TIME_PRORATION
+            }
+
+        internal fun billingFlowParams(
+            newDetails: SkuDetails,
+            oldDetails: SkuDetails? = null,
+            oldPurchaseToken: String? = null,
+            obfuscatedAccountId: String? = null,
+        ): BillingFlowParams = BillingFlowParams.newBuilder()
+            .setSkuDetails(newDetails)
+            .apply {
+                if (obfuscatedAccountId != null) setObfuscatedAccountId(obfuscatedAccountId)
+                if (oldDetails != null) {
+                    setSubscriptionUpdateParams(
+                        BillingFlowParams.SubscriptionUpdateParams.newBuilder()
+                            .setOldPurchaseToken(requireNotNull(oldPurchaseToken))
+                            .setReplaceProrationMode(replacementMode(oldDetails, newDetails))
+                            .build(),
+                    )
+                }
+            }
+            .build()
+
         internal fun viewStateFor(
             viewType: WidgetChoosePlan.ViewType,
             oldSkuName: String?,

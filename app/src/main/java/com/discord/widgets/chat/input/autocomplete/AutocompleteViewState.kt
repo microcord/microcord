@@ -1,9 +1,6 @@
 package com.discord.widgets.chat.input.autocomplete
 
 import com.discord.widgets.chat.input.AutocompleteStickerItem
-import com.discord.models.commands.Application
-import com.discord.models.commands.ApplicationCommand
-import com.discord.models.commands.ApplicationCommandOption
 
 /**
  * What the autocomplete surface above the composer should show.
@@ -34,14 +31,4 @@ sealed class AutocompleteViewState {
 
     /** Skeleton rows while an application's commands are being fetched. */
     data class LoadingItems(val numberLoadingItems: Int) : AutocompleteViewState()
-}
-
-sealed class SelectedCommandViewState {
-    object Hidden : SelectedCommandViewState()
-
-    data class SelectedCommand(
-        val command: ApplicationCommand,
-        val option: ApplicationCommandOption?,
-        val application: Application,
-    ) : SelectedCommandViewState()
 }

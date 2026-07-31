@@ -13,21 +13,21 @@ import com.discord.api.permission.Permission
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppFragment
 import com.discord.app.AppToast
-import com.discord.app.AppViewModel
 import com.discord.app.appViewModels
 import com.discord.dialogs.ImageUploadDialog
 import com.discord.i18n.i18nPlural
 import com.discord.media_picker.MediaPicker
 import com.discord.models.guild.Guild
+import com.discord.models.user.MeUser
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
+import com.discord.stores.StoreGuildProfiles
 import com.discord.stores.StoreStream
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
-import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.view.extensions.getTextOrEmpty
@@ -41,7 +41,6 @@ import com.discord.widgets.settings.StatefulViews
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputLayout
-import rx.Observable
 
 /**
  * "Overview" server settings: name and icon, AFK channel and timeout, system channel and its
@@ -125,7 +124,7 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
         afkTimeout = view.findViewById(R.id.afk_timeout)
         afkTimeoutWrap = view.findViewById(R.id.afk_timeout_wrap)
         systemChannel = view.findViewById(R.id.system_channel)
-        systemChannelWrap = view.findViewById(R.id.system_channel_wrap)
+        systemChannelWrap = view.findViewById(R.id.systemChannel)
         systemChannelJoin = view.findViewById(R.id.system_channel_join)
         systemChannelJoinReplies = view.findViewById(R.id.system_channel_join_replies)
         systemChannelBoost = view.findViewById(R.id.system_channel_boost)
@@ -163,7 +162,10 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
-        viewModel.observeViewState().ui(this).subscribe(::configureUI)
+        viewModel.observeViewState().ui(this).appSubscribe(
+            WidgetServerSettingsOverview::class.java,
+            onNext = ::configureUI,
+        )
     }
 
     private fun configureUI(viewState: ServerSettingsOverviewViewModel.ViewState) {
@@ -326,7 +328,7 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
             "tierStatusUrl" to "",
         )
 
-        val animatedUpsell = requireView().findViewById<View>(R.id.animated_banner_upsell_container)
+        val animatedUpsell = requireView().findViewById<View>(R.id.animated_banner_upsell)
         animatedUpsell.visibility =
             if (guild.canHaveAnimatedBanner()) View.VISIBLE else View.GONE
         requireView().findViewById<TextView>(R.id.animated_banner_upsell_text).setText(
@@ -533,6 +535,30 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
         state.configureSaveActionView(save)
     }
 
+    /** Exact 126.21 state shape retained for the nested JVM contract. */
+    internal class Model(
+        val guild: Guild,
+        me: MeUser,
+        val afkChannelModel: Channel?,
+        val systemChannelModel: Channel?,
+        permissions: Long?,
+        guildProfile: StoreGuildProfiles.GuildProfileData?,
+    ) {
+        val isOwner = guild.isOwner(me.id)
+        val canManage = isOwner || PermissionUtils.canAndIsElevated(
+            Permission.MANAGE_GUILD,
+            permissions,
+            me.mfaEnabled,
+            guild.mfaLevel,
+        )
+        private val approximateMemberCount = guildProfile?.data?.approximateMemberCount
+        val isAboveNotifyAllSize =
+            approximateMemberCount != null &&
+                approximateMemberCount > ServerSettingsOverviewViewModel.NOTIFY_ALL_MEMBER_LIMIT
+
+        companion object
+    }
+
     companion object {
         private const val INTENT_EXTRA_GUILD_ID = "INTENT_EXTRA_GUILD_ID"
         private const val INTENT_EXTRA_OPEN_AVATAR_PICKER = "INTENT_EXTRA_OPEN_AVATAR_PICKER"
@@ -590,95 +616,13 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
 
         @JvmOverloads
         fun launch(context: Context, guildId: Long, openAvatarPicker: Boolean = false) {
+            StoreStream.getAnalytics().onGuildSettingsPaneViewed("OVERVIEW", guildId)
             SettingsNavigation.launch(
                 context,
                 WidgetServerSettingsOverview::class.java,
                 Intent()
                     .putExtra(INTENT_EXTRA_GUILD_ID, guildId)
                     .putExtra(INTENT_EXTRA_OPEN_AVATAR_PICKER, openAvatarPicker),
-            )
-        }
-    }
-}
-
-/**
- * State for [WidgetServerSettingsOverview].
- *
- * Reference: `WidgetServerSettingsOverview.Model`, which resolves the AFK and system channels from
- * `StoreChannels` rather than trusting the ids on the guild, and reads the member count from
- * `StoreGuildProfiles` to decide whether "All messages" may be offered.
- */
-class ServerSettingsOverviewViewModel(
-    guildId: Long,
-    storeStateObservable: Observable<StoreState> = observeStoreState(guildId),
-) : AppViewModel<ServerSettingsOverviewViewModel.ViewState>(ViewState.Uninitialized) {
-
-    data class StoreState(
-        val guild: Guild?,
-        val canManage: Boolean,
-        val guildChannels: List<Channel>,
-        val approximateMemberCount: Int?,
-    )
-
-    sealed class ViewState {
-        object Uninitialized : ViewState()
-        object Unauthorized : ViewState()
-
-        data class Loaded(
-            val guild: Guild,
-            val afkChannel: Channel?,
-            val systemChannel: Channel?,
-            val isAboveNotifyAllSize: Boolean,
-        ) : ViewState()
-    }
-
-    init {
-        storeStateObservable.computationLatest().distinctUntilChanged().ui(this).subscribe {
-            updateViewState(toViewState(it))
-        }
-    }
-
-    companion object {
-        /**
-         * Above this many members Discord forces the default notification level to mentions-only.
-         * Reference: `WidgetServerSettingsOverview.Model`'s `isAboveNotifyAllSize`.
-         */
-        internal const val NOTIFY_ALL_MEMBER_LIMIT = 2500
-
-        internal fun toViewState(storeState: StoreState): ViewState {
-            val guild = storeState.guild
-            if (guild == null || !storeState.canManage) return ViewState.Unauthorized
-            val byId = storeState.guildChannels.associateBy { it.id }
-            return ViewState.Loaded(
-                guild = guild,
-                afkChannel = guild.afkChannelId?.let { byId[it] },
-                systemChannel = guild.systemChannelId?.let { byId[it] },
-                // An unknown member count is treated as small, matching the reference's null branch.
-                isAboveNotifyAllSize =
-                    (storeState.approximateMemberCount ?: 0) > NOTIFY_ALL_MEMBER_LIMIT,
-            )
-        }
-
-        fun observeStoreState(guildId: Long): Observable<StoreState> = Observable.combineLatest(
-            StoreStream.getGuilds().observeGuild(guildId),
-            StoreStream.getUsers().observeMe(),
-            StoreStream.getPermissions().observePermissionsForGuild(guildId),
-            StoreStream.getChannels().observeChannelsForGuild(guildId),
-            StoreStream.getGuildProfiles().observeGuildProfile(guildId),
-        ) { guild, meUser, guildPermissions, channels, guildProfile ->
-            StoreState(
-                guild = guild,
-                canManage = guild != null && (
-                    guild.isOwner(meUser.id) ||
-                        PermissionUtils.canAndIsElevated(
-                            Permission.MANAGE_GUILD,
-                            guildPermissions,
-                            meUser.mfaEnabled,
-                            guild.mfaLevel,
-                        )
-                    ),
-                guildChannels = channels.values.toList(),
-                approximateMemberCount = guildProfile?.data?.approximateMemberCount,
             )
         }
     }

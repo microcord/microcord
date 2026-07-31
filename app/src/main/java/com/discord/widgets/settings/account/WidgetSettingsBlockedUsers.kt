@@ -12,6 +12,7 @@ import com.discord.app.AppViewFlipper
 import com.discord.widgets.friends.BlockedUsersState
 import com.discord.widgets.friends.FriendUserUi
 import com.discord.utilities.icon.IconUtils
+import com.discord.widgets.settings.SettingsNavigation
 import rx.Observable
 import rx.Subscription
 
@@ -23,6 +24,7 @@ class WidgetSettingsBlockedUsers : AppFragment(R.layout.widget_settings_blocked_
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        SettingsNavigation.bindBack(this)
         setActionBarTitle(R.string.user_settings_blocked_users)
         setActionBarDisplayHomeAsUpEnabled()
         viewModel = ViewModelProvider(this)[WidgetSettingsBlockedUsersViewModel::class.java]

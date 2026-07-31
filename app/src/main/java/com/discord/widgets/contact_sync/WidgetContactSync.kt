@@ -9,19 +9,23 @@ import android.view.animation.AnimationUtils
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.analytics.generated.traits.TrackImpressionMetadata
+import com.discord.analytics.generated.traits.TrackImpressionMetadataReceiver
 import com.discord.app.AppActivity
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.app.AppViewFlipper
+import com.discord.app.LoggingConfig
 import com.discord.app.appActivityViewModels
 import com.discord.i18n.FormatUtils
 import com.discord.stores.StoreStream
+import com.discord.utilities.analytics.AnalyticsTracker
+import com.discord.utilities.analytics.Traits
 import com.discord.utilities.captcha.CaptchaHelper
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
-import com.discord.utilities.rx.ui
 import com.discord.utilities.view.ToastManager
 import com.discord.utilities.view.extensions.getTextOrEmpty
 import com.discord.utilities.view.text.LinkifiedTextView
@@ -33,6 +37,7 @@ import com.discord.widgets.contact_sync.WidgetContactSyncViewModel.Event
 import com.discord.widgets.contact_sync.WidgetContactSyncViewModel.ToolbarConfig
 import com.discord.widgets.contact_sync.WidgetContactSyncViewModel.ViewState
 import com.discord.widgets.contact_sync.WidgetContactSyncViewModel.Views
+import com.discord.widgets.captcha.WidgetCaptcha
 import com.discord.widgets.phone.WidgetPhoneCountryCodeBottomSheet
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputLayout
@@ -54,12 +59,24 @@ import com.google.android.material.textfield.TextInputLayout
  *    is respected — the screen switches to explaining how to grant it in Settings rather than
  *    re-prompting;
  *  - nothing read from the address book is logged, kept in the view state, or written to disk.
- *
- * KNOWN DEPENDENCY: `AndroidManifest.xml` declares no runtime permissions at all, `READ_CONTACTS`
- * included, so `requestContacts` is auto-denied today and this screen correctly parks on its
- * "needs permission" state. It becomes functional the moment the manifest fix lands.
  */
 class WidgetContactSync : AppFragment(R.layout.widget_contact_sync) {
+
+    private val contactSyncFlowMetadata = TrackImpressionMetadata(impressionGroup = "contact_sync_flow")
+    override val loggingConfig = LoggingConfig(
+        impressionSchemaProvider = {
+            val type = when (displayedChildIndex) {
+                Views.VIEW_LANDING.ordinal -> "impression_contact_sync_start"
+                Views.VIEW_ADD_PHONE.ordinal -> "impression_user_add_phone"
+                Views.VIEW_NAME_INPUT.ordinal -> "impression_contact_sync_input_name"
+                Views.VIEW_SUGGESTIONS.ordinal,
+                Views.VIEW_SUGGESTIONS_EMPTY.ordinal,
+                -> "impression_contact_sync_suggestions"
+                else -> null
+            }
+            type?.let { ContactSyncImpression(it, contactSyncFlowMetadata) }
+        },
+    )
 
     private val viewModel: WidgetContactSyncViewModel by appActivityViewModels {
         WidgetContactSyncViewModel(
@@ -69,6 +86,8 @@ class WidgetContactSync : AppFragment(R.layout.widget_contact_sync) {
             captchaLauncher = { error -> launchCaptchaFlow(error) },
         )
     }
+
+    private val captchaLauncher = WidgetCaptcha.registerForResult(this, ::submitPhoneNumber)
 
     private val toastManager = ToastManager()
 
@@ -134,6 +153,7 @@ class WidgetContactSync : AppFragment(R.layout.widget_contact_sync) {
         landingDiscoveryInfo.setContactSyncLearnMoreText(
             R.string.contact_sync_permissions_description_android,
         ) {
+            AnalyticsTracker.openPopout("Contact Sync", Traits.Location(page = "Contact Sync Learn More"))
             ContactSyncPermissionsSheet.show(parentFragmentManager)
         }
     }
@@ -225,6 +245,7 @@ class WidgetContactSync : AppFragment(R.layout.widget_contact_sync) {
         addPhoneInput.setCountryCode(viewState.countryCode)
 
         suggestionsInviteButton.setOnClickListener { button ->
+            AnalyticsTracker.friendAddViewed("Invite")
             shareInviteText(button.context, viewState.username)
         }
         suggestionsSkipButton.setOnClickListener { viewModel.skip() }
@@ -307,6 +328,7 @@ class WidgetContactSync : AppFragment(R.layout.widget_contact_sync) {
 
         viewFlipper.setDisplayedChild(targetIndex)
         displayedChildIndex = targetIndex
+        appLogger.logImpression()
     }
 
     // endregion
@@ -352,22 +374,13 @@ class WidgetContactSync : AppFragment(R.layout.widget_contact_sync) {
         viewModel.onPhoneNumberSubmitted(addPhoneInput.getTextOrEmpty(), captchaPayload)
     }
 
-    /**
-     * Solves the captcha the phone endpoint demanded and retries the submission with the token.
-     *
-     * The reference routes this through `WidgetCaptcha` and an `ActivityResultLauncher`; that screen
-     * does not exist here, so the challenge is shown by [CaptchaHelper] directly. A challenge the
-     * user closes completes without a token and simply leaves the phone step as it was.
-     */
     private fun launchCaptchaFlow(error: RestApiError) {
-        val siteKey = error.captchaSitekey ?: return
-        CaptchaHelper.tryShowCaptcha(
-            CaptchaHelper.CaptchaRequest.HCaptcha(siteKey, requireActivity()),
+        WidgetCaptcha.processErrorsForCaptcha(
+            requireContext(),
+            captchaLauncher,
+            error.messages.keys.toMutableList(),
+            error,
         )
-            .ui(this)
-            .appSubscribe(WidgetContactSync::class.java) { token ->
-                submitPhoneNumber(CaptchaHelper.CaptchaPayload(token, error.captchaRqtoken))
-            }
     }
 
     private fun requestContactsPermissions() {
@@ -433,16 +446,10 @@ class WidgetContactSync : AppFragment(R.layout.widget_contact_sync) {
         private const val CONTACTS_PERMISSION = "contacts"
         private const val DISCORD_URL = "https://discord.com"
 
-        /**
-         * The reference casts the extra without a null check and therefore throws when the sheets
-         * are shown from an activity that never carried it — which is exactly what happens when the
-         * upsell appears on the friends list. Defaulting to [ContactSyncMode.DEFAULT] is a
-         * deliberate divergence: the sheets are correct in that mode and a crash there is not.
-         */
+        @Suppress("DEPRECATION")
         @JvmStatic
         fun getContactSyncModeFromIntent(appActivity: AppActivity): ContactSyncMode =
-            appActivity.mostRecentIntent.getSerializableExtra(INTENT_EXTRA_MODE) as? ContactSyncMode
-                ?: ContactSyncMode.DEFAULT
+            appActivity.mostRecentIntent.getSerializableExtra(INTENT_EXTRA_MODE) as ContactSyncMode
 
         @JvmStatic
         fun getPhoneDiscoverableFromIntent(appActivity: AppActivity): Boolean =
@@ -469,4 +476,9 @@ class WidgetContactSync : AppFragment(R.layout.widget_contact_sync) {
             AppScreenRouter.launch(context, WidgetContactSync::class.java, extras)
         }
     }
+
+    private data class ContactSyncImpression(
+        @Transient override val analyticsSchemaTypeName: String,
+        override val trackImpressionMetadata: TrackImpressionMetadata,
+    ) : TrackImpressionMetadataReceiver
 }

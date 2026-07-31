@@ -16,7 +16,6 @@ import com.discord.app.AppLog
 import com.discord.i18n.setI18nText
 import com.discord.models.domain.emoji.Emoji
 import com.discord.utilities.analytics.AnalyticsTracker
-import com.discord.utilities.rx.ui
 import com.discord.widgets.chat.input.attachments.AttachmentBottomSheet
 import com.discord.widgets.chat.input.emoji.EmojiPickerListener
 import com.discord.widgets.chat.input.expression.WidgetExpressionTray
@@ -92,7 +91,7 @@ class WidgetChatInputAttachments(
         configureFlexInputContentPages(canCreateThread = false)
         configurePreviewAdapter(fragment)
         configureKeyboardContent(fragment)
-        return configureExpressionTray(fragment)
+        return configureExpressionTray()
     }
 
     private fun configurePreviewAdapter(fragment: AppFragment) {
@@ -201,7 +200,7 @@ class WidgetChatInputAttachments(
      * Puts [WidgetExpressionTray] into FlexInput's emoji slot and connects its three callbacks back
      * to the composer's own `EditText`.
      */
-    private fun configureExpressionTray(fragment: AppFragment): WidgetExpressionTray? {
+    private fun configureExpressionTray(): WidgetExpressionTray? {
         val chatInput = flexInputFragment.view
             ?.findViewById<View>(com.lytefast.flexinput.R.id.text_input) as? android.widget.TextView
             ?: return null
@@ -233,17 +232,6 @@ class WidgetChatInputAttachments(
 
         flexInputFragment.setEmojiFragment(tray)
 
-        // The tray is only *told* it is showing once the state that shows it has been applied, so
-        // its "opened" analytics and scroll-to-top do not fire for a tray nobody can see.
-        flexInputViewModel.observeViewState()
-            .ui(fragment)
-            .subscribe(
-                { state ->
-                    if (state.expressionTrayShown) flexInputFragment.showEmojiTray() else flexInputFragment.hideEmojiTray()
-                    if (tray.isAdded) tray.isShown(state.expressionTrayShown)
-                },
-                { /* the tray keeps its current visibility */ },
-            )
         return tray
     }
 

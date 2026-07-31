@@ -23,7 +23,8 @@ import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.user.UserUtils.getUserNameWithDiscriminator
-import com.discord.widgets.phone.PhoneCountryCodes
+import com.discord.widgets.captcha.isCaptchaError
+import com.discord.widgets.user.phone.WidgetUserPhoneManage
 import java.util.concurrent.TimeUnit
 import rx.Observable
 import rx.subjects.PublishSubject
@@ -227,7 +228,7 @@ class WidgetContactSyncViewModel(
         restAPI.userAddPhone(
             RestAPIParams.Phone(
                 phone = phoneNumber,
-                source = PHONE_SOURCE_CONTACT_SYNC,
+                source = WidgetUserPhoneManage.Source.CONTACT_SYNC.source,
                 captchaKey = captchaPayload?.captchaKey,
                 captchaRqtoken = captchaPayload?.captchaRqtoken,
             ),
@@ -370,9 +371,7 @@ class WidgetContactSyncViewModel(
             .ui(this)
             .appSubscribe(
                 errorClass = WidgetContactSyncViewModel::class.java,
-                // The connection call above already surfaces a failure; a second toast for the same
-                // user action would be noise. Reference behaviour.
-                errorHandler = { },
+                errorHandler = { handleContactsEnableError(it) },
             ) { }
     }
 
@@ -397,7 +396,7 @@ class WidgetContactSyncViewModel(
         )
         // Recorded before the call so a failure still counts against the daily upload budget, which
         // is what stops a broken account from re-uploading on every launch.
-        ContactSyncDependencies.contactSync?.setContactSyncUploadTimestamp(ClockFactory.get().currentTimeMillis())
+        StoreStream.getContactSync().setContactSyncUploadTimestamp(ClockFactory.get().currentTimeMillis())
         restAPI.uploadContacts(payload)
             .restSubscribeOn()
             .ui(this)
@@ -488,7 +487,7 @@ class WidgetContactSyncViewModel(
     /** Dismisses the release upsell for good, locally and server-side. */
     @MainThread
     fun dismissUpsell() {
-        ContactSyncDependencies.contactSync?.dismissUpsell()
+        StoreStream.getContactSync().dismissUpsell()
         StoreStream.getUserSettings().updateContactSyncShown()
     }
 
@@ -526,7 +525,7 @@ class WidgetContactSyncViewModel(
      */
     @MainThread
     private fun handlePhoneSubmittedError(error: RestApiError) {
-        if (ContactSyncDependencies.isPhoneVerifyCaptchaEnabled() && error.isCaptchaRequired) {
+        if (ContactSyncDependencies.isPhoneVerifyCaptchaEnabled() && error.isCaptchaError()) {
             captchaLauncher(error)
             return
         }
@@ -682,7 +681,7 @@ class WidgetContactSyncViewModel(
     private fun handleComplete() {
         val viewState = this.viewState ?: return
         if (viewState.mode == ContactSyncMode.ONBOARDING) {
-            ContactSyncDependencies.onOnboardingCompleted()
+            StoreStream.getNux().setContactSyncCompleted(true)
         }
         eventsSubject.onNext(Event.Completed)
     }
@@ -699,9 +698,6 @@ class WidgetContactSyncViewModel(
         private const val CONTACTS_PERMISSION = "contacts"
         private const val PERMISSION_REQUESTED_STEP = "Contacts Permission Requested"
 
-        /** `WidgetUserPhoneManage.Source.CONTACT_SYNC` — that screen does not exist yet. */
-        private const val PHONE_SOURCE_CONTACT_SYNC = "contact_sync"
-
         /** `user_settings.friend_discovery_flags` bits. */
         private const val FLAG_DISCOVERABLE_BY_PHONE = 2
         private const val FLAG_DISCOVERABLE_BY_EMAIL = 4
@@ -713,30 +709,27 @@ class WidgetContactSyncViewModel(
          * Throttled on the leading edge because three stores feed it and a `READY` burst would
          * otherwise rebuild the state several times in a row.
          *
-         * `StorePhone` and `StoreUserConnections` are not reachable from `StoreStream` yet (see
-         * [ContactSyncDependencies]); the deck is connected to whichever sources do exist, so the
-         * state still refreshes on user changes and simply holds the fallbacks for the rest.
+         * The three stores are observed together so READY produces one stable state after the
+         * leading-edge throttle.
          */
         @JvmStatic
         fun observeStores(
             observationDeck: ObservationDeck = ObservationDeckProvider.get(),
         ): Observable<StoreState> {
             val users = StoreStream.getUsers()
-            val phone = PhoneCountryCodes.store
-            val userConnections = ContactSyncDependencies.userConnections
-            val sources = listOfNotNull<ObservationDeck.UpdateSource>(users, phone, userConnections)
-                .toTypedArray()
-            return observationDeck.connectRx(*sources)
+            val phone = StoreStream.getPhone()
+            val userConnections = StoreStream.getUserConnections()
+            return observationDeck.connectRx(users, phone, userConnections)
                 .leadingEdgeThrottle(1L, TimeUnit.SECONDS)
                 .map {
                     val me = users.getMe()
                     StoreState(
                         userPhone = me.phoneNumber,
                         username = me.getUserNameWithDiscriminator().toString(),
-                        countryCode = phone?.getCountryCode() ?: PhoneCountryCode.DEFAULT_COUNTRY_CODE,
+                        countryCode = phone.getCountryCode(),
                         // `lastOrNull`, not `firstOrNull`: an account can hold more than one
                         // `contacts` connection and the most recent one is authoritative.
-                        contactsConnection = userConnections?.getConnectedAccounts()
+                        contactsConnection = userConnections.getConnectedAccounts()
                             ?.lastOrNull { it.type == CONTACTS_PLATFORM_TYPE },
                     )
                 }

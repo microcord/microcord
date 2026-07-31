@@ -1,11 +1,30 @@
 package com.discord.widgets.guilds.profile
 
 import com.discord.models.domain.emoji.ModelEmojiCustom
+import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WidgetGuildProfileSheetEmojisAdapterTest {
+    @Test fun `profile sheet keeps reference scrolling and banner dependent icon geometry`() {
+        val projectRoot = sequenceOf(File("."), File(".."))
+            .first { File(it, "app/src/main").isDirectory }
+        val source = File(
+            projectRoot,
+            "app/src/main/java/com/discord/widgets/guilds/profile/WidgetGuildProfileSheet.kt",
+        ).readText()
+        val layout = File(projectRoot, "app/src/main/res/layout/widget_guild_profile_sheet.xml").readText()
+
+        assertFalse(source.contains("setBottomSheetCollapsedStateDisabled()"))
+        assertTrue(layout.contains("<androidx.core.widget.NestedScrollView"))
+        assertTrue(layout.contains("android:layout_height=\"wrap_content\""))
+        assertTrue(source.contains("if (url == null) constrainIconToParent(root) else constrainIconToBanner(root)"))
+        assertTrue(source.contains("connect(icon.id, ConstraintSet.TOP, layout.id, ConstraintSet.TOP, topMargin)"))
+        assertTrue(source.contains("connect(icon.id, ConstraintSet.BOTTOM, banner.id, ConstraintSet.BOTTOM)"))
+    }
+
     @Test fun `overflow replaces the final emoji and caps its count`() {
         val emojis = (1L..120L).map(::emoji)
 

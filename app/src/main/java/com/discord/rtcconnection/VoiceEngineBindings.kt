@@ -66,6 +66,7 @@ class LiveRtcConnectionController(
             networkMonitor = networkMonitor,
             mutedUsers = mutedUsers,
             userVolumes = userVolumes,
+            enableMediaSinkWants = true,
             loggingTagPrefix = "StoreRtcConnection",
         )
         rtcConnection = connection
@@ -96,6 +97,10 @@ class LiveRtcConnectionController(
 
     override fun setUserOffScreen(userId: Long, offScreen: Boolean) {
         rtcConnection?.setUserOffScreen(userId, offScreen)
+    }
+
+    override fun setFocusedParticipant(userId: Long?) {
+        rtcConnection?.setFocusedParticipant(userId)
     }
 }
 

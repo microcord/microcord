@@ -309,20 +309,3 @@ open class StickerPickerViewModel(
             }.distinctUntilChanged()
     }
 }
-
-/** The picker embedded in the chat input's expression tray. */
-class StickerPickerInlineViewModel(
-    locale: Locale,
-    initialStickerPackId: Long,
-) : StickerPickerViewModel(locale, initialStickerPackId)
-
-/**
- * The picker inside [WidgetStickerPickerSheet].
- *
- * A separate class purely so the sheet and the inline tray get *separate* activity-scoped instances
- * — otherwise typing a search in the sheet would rewrite the tray behind it.
- */
-class StickerPickerSheetViewModel(
-    locale: Locale,
-    initialStickerPackId: Long,
-) : StickerPickerViewModel(locale, initialStickerPackId)
