@@ -3,8 +3,7 @@ package com.discord.widgets.settings.developer
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
-import com.discord.R
-import com.discord.views.experiments.ExperimentOverrideView
+import com.discord.databinding.ExperimentOverridesListItemBinding
 
 class ExperimentOverridesAdapter : RecyclerView.Adapter<ExperimentOverridesAdapter.ExperimentViewHolder>() {
     interface Item {
@@ -25,19 +24,16 @@ class ExperimentOverridesAdapter : RecyclerView.Adapter<ExperimentOverridesAdapt
 
     override fun getItemCount() = items.size
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ExperimentViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.experiment_overrides_list_item, parent, false)
-            .findViewById<ExperimentOverrideView>(R.id.experiment_overrides_list_item_experiment_override_view)
-        return ExperimentViewHolder(view)
-    }
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = ExperimentViewHolder(
+        ExperimentOverridesListItemBinding.inflate(LayoutInflater.from(parent.context), parent, false),
+    )
 
     override fun onBindViewHolder(holder: ExperimentViewHolder, position: Int) = holder.bind(items[position])
 
     class ExperimentViewHolder(
-        private val view: ExperimentOverrideView,
-    ) : RecyclerView.ViewHolder(view) {
-        fun bind(item: Item) = view.configure(
+        private val binding: ExperimentOverridesListItemBinding,
+    ) : RecyclerView.ViewHolder(binding.root) {
+        fun bind(item: Item) = binding.experimentOverridesListItemExperimentOverrideView.configure(
             item.name,
             item.apiName,
             item.overrideBucket,

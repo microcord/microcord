@@ -4,8 +4,6 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.view.View
 import android.view.ViewGroup
-import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
@@ -15,17 +13,17 @@ import com.discord.BuildConfig
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.appViewModels
+import com.discord.databinding.WidgetSettingsBinding
 import com.discord.models.user.MeUser
 import com.discord.stores.StoreStream
 import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.rx.ui
 import com.discord.utilities.uri.UriHandler
-import com.discord.views.StatusView
 import com.discord.widgets.settings.account.WidgetSettingsAccount
+import com.discord.widgets.settings.developer.WidgetSettingsDeveloper
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.user.Badge
 import com.discord.widgets.user.WidgetUserStatusSheet
-import com.discord.widgets.user.profile.UserProfileHeaderView
 import com.discord.widgets.user.profile.UserProfileHeaderViewModel
 import com.google.android.material.shape.MaterialShapeDrawable
 import com.google.android.material.shape.ShapeAppearanceModel
@@ -52,13 +50,16 @@ import com.google.android.material.shape.ShapeAppearanceModel
 class WidgetSettings : AppFragment(R.layout.widget_settings) {
 
     private val viewModel: SettingsViewModel by appViewModels { SettingsViewModel() }
+    private var _binding: WidgetSettingsBinding? = null
+    private val binding get() = requireNotNull(_binding)
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        _binding = WidgetSettingsBinding.bind(view)
         configureToolbar()
-        hideUnavailableRows(view)
+        hideUnavailableRows()
 
-        view.findViewById<View>(R.id.set_status_container).apply {
+        binding.setStatusContainer.apply {
             contentDescription = getString(R.string.set_status)
             isFocusable = true
             setOnClickListener {
@@ -66,12 +67,12 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
             }
         }
 
-        view.findViewById<UserProfileHeaderView>(R.id.user_settings_profile_header_view).apply {
+        binding.userSettingsProfileHeaderView.apply {
             setOnBadgeClick(Badge.onBadgeClick(parentFragmentManager, requireContext()))
             setOnBannerPress { viewModel.toggleAllowAnimationInReducedMotion() }
         }
 
-        view.findViewById<TextView>(R.id.app_info_header).text = buildString {
+        binding.appInfoHeader.text = buildString {
             append(getString(R.string.app_information))
             append(" - ")
             append(BuildConfig.VERSION_NAME)
@@ -80,40 +81,46 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
             append(")")
         }
 
-        bindRoute(view, R.id.account, ::WidgetSettingsAccount)
-        bindRoute(view, R.id.authorized_apps, ::WidgetSettingsAuthorizedApps)
-        bindRoute(view, R.id.text_images_settings, ::WidgetSettingsMedia)
-        bindRoute(view, R.id.appearance, ::WidgetSettingsAppearance)
-        bindRoute(view, R.id.language, ::WidgetSettingsLanguage)
-        bindRoute(view, R.id.accessibility, ::WidgetSettingsAccessibility)
-        bindRoute(view, R.id.behavior, ::WidgetSettingsBehavior)
-        bindRoute(view, R.id.activity_status, ::WidgetSettingsActivityStatus)
-        bindRoute(view, R.id.notifications, ::WidgetSettingsNotifications)
-        bindRoute(view, R.id.privacy, ::WidgetSettingsPrivacy)
+        bindRoute(binding.account, ::WidgetSettingsAccount)
+        bindRoute(binding.authorizedApps, ::WidgetSettingsAuthorizedApps)
+        bindRoute(binding.textImagesSettings, ::WidgetSettingsMedia)
+        bindRoute(binding.appearance, ::WidgetSettingsAppearance)
+        bindRoute(binding.language, ::WidgetSettingsLanguage)
+        bindRoute(binding.accessibility, ::WidgetSettingsAccessibility)
+        bindRoute(binding.behavior, ::WidgetSettingsBehavior)
+        bindRoute(binding.activityStatus, ::WidgetSettingsActivityStatus)
+        bindRoute(binding.notifications, ::WidgetSettingsNotifications)
+        bindRoute(binding.privacy, ::WidgetSettingsPrivacy)
+        bindRoute(binding.developerOptions, ::WidgetSettingsDeveloper)
         // Voice persists every setting `StoreMediaSettings` backs; the OpenSL ES section and the
         // microphone test are hidden inside it because `StoreStream` publishes no media engine yet.
-        bindRoute(view, R.id.voice, ::WidgetSettingsVoice)
+        bindRoute(binding.voice, ::WidgetSettingsVoice)
 
-        view.findViewById<View>(R.id.support).setOnClickListener {
+        binding.support.setOnClickListener {
             UriHandler.handle(it.context, SUPPORT_URL)
         }
-        view.findViewById<View>(R.id.acknowledgements).setOnClickListener {
+        binding.acknowledgements.setOnClickListener {
             UriHandler.handle(it.context, ACKNOWLEDGEMENTS_URL)
         }
-        view.findViewById<View>(R.id.notification_upsell_enable).setOnClickListener {
+        binding.notificationUpsellEnable.setOnClickListener {
             openSystemNotificationSettings(it.context)
         }
-        view.findViewById<View>(R.id.notification_upsell_dismiss).setOnClickListener {
+        binding.notificationUpsellDismiss.setOnClickListener {
             viewModel.dismissPushNotificationUpsell()
         }
 
         listOf(
-            R.id.user_settings_header,
-            R.id.nitro_header,
-            R.id.app_settings_header,
-            R.id.developer_options_header,
-            R.id.app_info_header,
-        ).forEach { id -> ViewCompat.setAccessibilityHeading(view.findViewById(id), true) }
+            binding.userSettingsHeader,
+            binding.nitroHeader,
+            binding.appSettingsHeader,
+            binding.developerOptionsHeader,
+            binding.appInfoHeader,
+        ).forEach { ViewCompat.setAccessibilityHeading(it, true) }
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun onViewBoundOrOnResume() {
@@ -126,8 +133,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
             // `UserProfileHeaderView` only renders the loaded state; there is nothing to show for
             // any other one.
             if (state is UserProfileHeaderViewModel.ViewState.Loaded) {
-                view?.findViewById<UserProfileHeaderView>(R.id.user_settings_profile_header_view)
-                    ?.updateViewState(state)
+                _binding?.userSettingsProfileHeaderView?.updateViewState(state)
             }
         }
     }
@@ -156,24 +162,20 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
     }
 
     private fun configureLoaded(model: SettingsViewModel.ViewState.Loaded) {
-        val root = view ?: return
-        root.findViewById<StatusView>(R.id.settings_status_view).setPresence(model.presence)
-        root.findViewById<TextView>(R.id.settings_presence_text)
-            .setText(PresenceUtils.getStatusStringResForPresence(model.presence))
-        root.findViewById<UserProfileHeaderView>(R.id.user_settings_profile_header_view)
-            .contentDescription = displayName(model.meUser)
+        if (_binding == null) return
+        binding.settingsStatusView.setPresence(model.presence)
+        binding.settingsPresenceText.setText(PresenceUtils.getStatusStringResForPresence(model.presence))
+        binding.userSettingsProfileHeaderView.contentDescription = displayName(model.meUser)
 
-        val staffVisibility = if (model.isStaffOrAlpha) View.VISIBLE else View.GONE
-        root.findViewById<View>(R.id.developer_options_divider).visibility = staffVisibility
-        root.findViewById<View>(R.id.developer_options_header).visibility = staffVisibility
-        // `WidgetSettingsDeveloper` is missing, so the row stays hidden even for staff accounts.
-        root.findViewById<View>(R.id.developer_options).visibility = View.GONE
+        binding.developerOptionsDivider.visibility = View.VISIBLE
+        binding.developerOptionsHeader.visibility = View.VISIBLE
+        binding.developerOptions.visibility = View.VISIBLE
 
-        root.findViewById<TextView>(R.id.role_subscriptions).visibility =
+        binding.roleSubscriptions.visibility =
             if (model.showRoleSubscriptionsButton) View.VISIBLE else View.GONE
 
         // The recovered layout names this view `nitroGiftingBadge`, not `nitro_gifting_badge`.
-        val badge = root.findViewById<TextView>(R.id.nitroGiftingBadge)
+        val badge = binding.nitroGiftingBadge
         if (model.promoCount > 0) {
             badge.text = model.promoCount.toString()
             badge.background = MaterialShapeDrawable(
@@ -189,7 +191,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         }
 
         val notificationsBlocked = !NotificationManagerCompat.from(requireContext()).areNotificationsEnabled()
-        root.findViewById<LinearLayout>(R.id.notification_upsell).visibility =
+        binding.notificationUpsell.visibility =
             if (notificationsBlocked && !model.pushNotificationUpsellDismissed) View.VISIBLE else View.GONE
     }
 
@@ -213,7 +215,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         runCatching { context.startActivity(intent) }
     }
 
-    private fun hideUnavailableRows(view: View) {
+    private fun hideUnavailableRows() {
         val keep = setOf(
             R.id.user_settings_header,
             R.id.set_status_container,
@@ -225,15 +227,15 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
             R.id.acknowledgements,
             *implementedRouteIds.toTypedArray(),
         )
-        val rows = view.findViewById<View>(R.id.user_settings_header).parent as ViewGroup
+        val rows = binding.userSettingsHeader.parent as ViewGroup
         for (index in 0 until rows.childCount) {
             val child = rows.getChildAt(index)
             child.visibility = if (child.id in keep) View.VISIBLE else View.GONE
         }
     }
 
-    private fun bindRoute(view: View, rowId: Int, destination: () -> Fragment) {
-        view.findViewById<View>(rowId).setOnClickListener {
+    private fun bindRoute(row: View, destination: () -> Fragment) {
+        row.setOnClickListener {
             val fragment = destination()
             parentFragmentManager.commit {
                 replace(this@WidgetSettings.id, fragment)
@@ -259,6 +261,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
             R.id.notifications,
             R.id.privacy,
             R.id.voice,
+            R.id.developer_options,
         )
 
         /**

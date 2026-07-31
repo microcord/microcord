@@ -751,8 +751,7 @@ class WidgetUserSheetViewModel(
                 showIncomingRequest = showActions &&
                     relationshipType == ModelUserRelationship.TYPE_INVITE_INCOMING,
                 showMore = showActions,
-                // Profile editing remains available from Settings, not from a user popout.
-                showEditProfile = false,
+                showEditProfile = isMe,
             )
         }
     }

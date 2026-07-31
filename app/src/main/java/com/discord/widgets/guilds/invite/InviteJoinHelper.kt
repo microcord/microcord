@@ -13,7 +13,9 @@ import com.discord.utilities.error.RestApiError
 import com.discord.utilities.guilds.MemberVerificationUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.filterNull
 import com.discord.utilities.rx.restSubscribeOn
+import com.discord.utilities.rx.takeSingleUntilTimeout
 import com.discord.utilities.rx.ui
 
 /**
@@ -98,10 +100,34 @@ object InviteJoinHelper {
             AppLog.i("Invite guild ${guild?.id} has a membership gate; no gate screen exists yet.")
         }
 
-        navigateToGuild(invite)
-
         val channel = invite.channel
-        if (channel != null && (channel.isVoiceChannel() || channel.isStageVoiceChannel())) {
+        if (channel == null) {
+            navigateToGuild(invite)
+            onInviteFlowFinished(invite)
+            return
+        }
+
+        StoreStream.getChannels().observeChannel(channel.id)
+            .filterNull()
+            .takeSingleUntilTimeout()
+            .ui(fragment)
+            .appSubscribe(
+                errorClass = InviteJoinHelper::class.java,
+                errorHandler = { onInviteFlowFinished(invite) },
+            ) { resolvedChannel ->
+                invite.channel = resolvedChannel
+                navigateToJoinedChannel(fragment, invite, onInviteFlowFinished)
+            }
+    }
+
+    private fun navigateToJoinedChannel(
+        fragment: AppFragment,
+        invite: ModelInvite,
+        onInviteFlowFinished: (ModelInvite) -> Unit,
+    ) {
+        val channel = invite.channel ?: return onInviteFlowFinished(invite)
+        navigateToGuild(invite)
+        if (channel.isVoiceChannel() || channel.isStageVoiceChannel()) {
             fragment.requestMicrophone(onFailure = { onInviteFlowFinished(invite) }) {
                 navigateToChannel(invite)
                 onInviteFlowFinished(invite)
@@ -119,7 +145,9 @@ object InviteJoinHelper {
      * yet, and the reference has the same ordering problem.
      */
     private fun navigateToGuild(invite: ModelInvite) {
-        invite.guild?.id?.let { StoreStream.getGuildSelected().set(it) }
+        invite.guild?.id
+            ?.takeIf { StoreStream.getGuilds().getGuild(it) != null }
+            ?.let { StoreStream.getGuildSelected().set(it) }
         // Reference: WidgetGuildScheduledEventDetailsBottomSheet.enqueue(event.id). That screen is
         // not reconstructed; the invite still lands on the guild.
     }

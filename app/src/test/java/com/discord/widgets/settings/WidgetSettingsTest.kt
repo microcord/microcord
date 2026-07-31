@@ -46,6 +46,7 @@ class WidgetSettingsTest {
             com.discord.R.id.notifications,
             com.discord.R.id.privacy,
             com.discord.R.id.voice,
+            com.discord.R.id.developer_options,
         ), WidgetSettings.implementedRouteIds)
     }
 

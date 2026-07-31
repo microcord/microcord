@@ -388,14 +388,7 @@ class StoreStream private constructor(
         restApi = { if (::restApi.isInitialized) restApi else null },
         handleThreadCreateOrUpdate = { thread -> handleThreadCreateOrUpdateInternal(thread) },
     )
-    /**
-     * Mention counting and the read-state ack ledger.
-     *
-     * [StoreMessageAck.ackRequest] is deliberately inert: this reconstruction's [StoreReadStates]
-     * owns the `POST /channels/{id}/messages/{id}/ack` call (see its `ackRequest` above), and
-     * posting from both stores would double-ack every channel. `StoreMessageAck` still tracks the
-     * ledger locally and feeds [StoreMentions], which is what the mention badges need.
-     */
+    /** Mention counting and automatic acknowledgement feed the authoritative read-state ledger. */
     private val messageAck: StoreMessageAck = StoreMessageAck(
         dispatcher,
         observationDeck,
@@ -403,7 +396,7 @@ class StoreStream private constructor(
         messages,
         messagesMostRecent,
         meId = { users.getMeInternal().id },
-        ackRequest = { _, _, _, _ -> },
+        ackRequest = readStates::acknowledge,
         threadAckState = { channelId ->
             val channel = channels.findChannelByIdInternal(channelId)
                 ?: channels.getChannelsByIdInternal()[channelId]
@@ -1341,7 +1334,7 @@ class StoreStream private constructor(
                 meUserId = { users.getMe().id },
             ),
         )
-        messageAck.init(channelsSelected.observeId(), chat, messagesLoader)
+        messageAck.init(channelsSelected.observeResolvedSelectedChannel(), chat, messagesLoader)
         stageChannelSelfPresence.init()
         NotificationStore.resolver = { notifications }
         WidgetChatListAdapterItemCallMessage.voiceParticipants = { channelId -> voiceParticipants.get(channelId) }

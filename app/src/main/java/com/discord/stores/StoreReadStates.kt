@@ -372,6 +372,19 @@ class StoreReadStates(
         }
     }
 
+    /** Applies the automatic cursor selected by [StoreMessageAck] and clears selected-channel UI. */
+    fun acknowledge(channelId: Long, messageId: Long, isLockedAck: Boolean, mentionCount: Int) {
+        dispatcher.schedule {
+            val existing = acks[channelId]
+            if (existing?.isLockedAck == true && !isLockedAck) return@schedule
+            val ack = Ack(messageId, viewed = true, isLockedAck = isLockedAck)
+            updateAck(channelId, ack)
+            if (unreadMarker.marker.channelId == channelId) clearMarker()
+            recomputeUnreadIds()
+            postAck(channelId, ack, mentionCount)
+        }
+    }
+
     /**
      * Mark the channel unread starting at [messageId].
      *

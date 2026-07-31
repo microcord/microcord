@@ -2,18 +2,18 @@ package com.discord.widgets.user
 
 import android.os.Bundle
 import android.view.View
-import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.app.AppDialog
+import com.discord.databinding.WidgetKickUserBinding
 import com.discord.i18n.i18nFormat
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.view.extensions.getTextOrEmpty
-import com.google.android.material.textfield.TextInputLayout
+import rx.Observable
 
 /**
  * Confirms kicking a member out of a guild, with an optional audit-log reason.
@@ -25,23 +25,20 @@ class WidgetKickUser : AppDialog(R.layout.widget_kick_user) {
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        val binding = WidgetKickUserBinding.bind(view)
         val userName = argumentsOrDefault.getString(EXTRA_USER_NAME, "").orEmpty()
         val guildId = argumentsOrDefault.getLong(EXTRA_GUILD_ID, -1L)
         val userId = argumentsOrDefault.getLong(EXTRA_USER_ID, -1L)
 
-        view.findViewById<TextView>(R.id.kick_user_title).text =
-            view.i18nFormat(R.string.kick_user_title, "user" to userName)
-        view.findViewById<TextView>(R.id.kick_user_body).text =
-            view.i18nFormat(R.string.kick_user_body, "user" to userName)
+        binding.kickUserTitle.text = view.i18nFormat(R.string.kick_user_title, "user" to userName)
+        binding.kickUserBody.text = view.i18nFormat(R.string.kick_user_body, "user" to userName)
 
-        view.findViewById<View>(R.id.kick_user_cancel).setOnClickListener { dismiss() }
-        view.findViewById<View>(R.id.kick_user_confirm).setOnClickListener {
+        binding.kickUserCancel.setOnClickListener { dismiss() }
+        binding.kickUserConfirm.setOnClickListener {
             // A blank reason is omitted rather than sent as an empty audit-log header.
-            val reason = view.findViewById<TextInputLayout>(R.id.kick_user_reason)
-                .getTextOrEmpty()
-                .asAuditLogReason()
+            val reason = binding.kickUserReason.getTextOrEmpty().asAuditLogReason()
 
-            RestAPI.api.kickGuildMember(guildId, userId, reason)
+            completeNoContent(RestAPI.api.kickGuildMember(guildId, userId, reason))
                 .restSubscribeOn()
                 .ui(this)
                 .appSubscribe(
@@ -53,6 +50,7 @@ class WidgetKickUser : AppDialog(R.layout.widget_kick_user) {
                         view.i18nFormat(R.string.kick_user_confirmed, "user" to userName),
                         Toast.LENGTH_SHORT,
                     ).show()
+                    parentFragmentManager.setFragmentResult(REQUEST_KEY_KICKED, Bundle.EMPTY)
                     dismiss()
                 }
         }
@@ -62,6 +60,7 @@ class WidgetKickUser : AppDialog(R.layout.widget_kick_user) {
         private const val EXTRA_USER_NAME = "com.discord.intent.extra.EXTRA_USER_NAME"
         private const val EXTRA_GUILD_ID = "com.discord.intent.extra.EXTRA_GUILD_ID"
         private const val EXTRA_USER_ID = "com.discord.intent.extra.EXTRA_USER_ID"
+        const val REQUEST_KEY_KICKED = "WidgetKickUser.KICKED"
 
         @JvmStatic
         fun launch(userName: String, guildId: Long, userId: Long, fragmentManager: FragmentManager) {
@@ -80,3 +79,6 @@ class WidgetKickUser : AppDialog(R.layout.widget_kick_user) {
             launch(userName, guildId, userId, fragmentManager)
     }
 }
+
+internal fun completeNoContent(request: Observable<Void>): Observable<Unit> =
+    request.map { Unit }.defaultIfEmpty(Unit)

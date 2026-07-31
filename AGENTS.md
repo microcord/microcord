@@ -125,6 +125,9 @@ invalid decompiler constructs into the target.
   adapter row, and layout variant used by the feature.
 - Match view state, visibility, interaction, scrolling, animation, lifecycle,
   restoration, accessibility, loading, empty, and error behavior.
+- Preserve the reference navigation chrome and exit behavior on every screen.
+  Nested destinations must expose the same toolbar Up button and Back-stack
+  behavior as the original; omit them only when the reference does.
 - A placeholder may exist only during active development and must be recorded
   in `PLAN.md`; no phase can be marked done while one remains.
 
@@ -145,6 +148,8 @@ invalid decompiler constructs into the target.
 - Import resources in the order defined by `PLAN.md`.
 - Let AGP regenerate `R` and view bindings.
 - Do not copy decompiled `R`, `BuildConfig`, or binding classes.
+- Use generated view bindings whenever a layout provides one. Use `findViewById`
+  only when binding is genuinely unavailable or cannot represent the dynamic view.
 - Avoid numeric resource IDs in code.
 - Preserve qualifiers, accessibility text, RTL behavior, and large-font layouts.
 - Record material XML changes made solely for modern AAPT compatibility.

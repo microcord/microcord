@@ -71,7 +71,9 @@ class StoreUser(
     @StoreThread fun handleGuildScheduledEventUsersFetch(users: List<ApiUser>) = users.forEach(::updateUser)
     @StoreThread fun handleFriendSuggestionCreate(user: ApiUser) = updateUser(user)
     @StoreThread fun handleFriendSuggestionsLoaded(users: List<ApiUser>) = users.forEach(::updateUser)
-    @StoreThread fun handlePresenceUpdate(presence: Presence) = presence.user?.takeIf { it.username.isNotEmpty() }?.let(::updateUser)
+    @StoreThread fun handlePresenceUpdate(presence: Presence) = presence.user
+        ?.takeIf(::isCompletePresenceUser)
+        ?.let(::updateUser)
     @StoreThread fun handleUserRelationshipAdd(relationship: ModelUserRelationship) = relationship.user?.let(::updateUser)
     @StoreThread fun handleMessageCreateOrUpdate(message: Message) {
         message.author?.let(::updateUser)
@@ -231,3 +233,5 @@ class StoreUser(
         )
     }
 }
+
+internal fun isCompletePresenceUser(user: ApiUser): Boolean = (user.discriminator as String?) != null

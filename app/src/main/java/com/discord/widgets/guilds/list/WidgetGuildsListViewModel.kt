@@ -460,7 +460,7 @@ class WidgetGuildsListViewModel(
             StoreStream.getUserGuildSettings().observeGuildSettings(),
             StoreStream.getReadStates().getUnreadGuildIds(),
             // Mention counts churn per message; half a second of coalescing is invisible on a badge.
-            StoreStream.getReadStates().getMentionCountsByChannel()
+            StoreStream.getMentions().observeMentionCounts()
                 .leadingEdgeThrottle(500L, TimeUnit.MILLISECONDS)
                 .distinctUntilChanged(),
             StoreStream.getChannels().observeIds(true),

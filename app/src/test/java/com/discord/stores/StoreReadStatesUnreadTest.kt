@@ -110,6 +110,32 @@ class StoreReadStatesUnreadTest {
         assertEquals(setOf(10L), store.getUnreadChannelIdsSnapshot())
     }
 
+    @Test
+    fun automaticAckClearsUnreadStateAndSelectedChannelMarker() {
+        val older = snowflake(1_600_000_000_000L)
+        val newest = snowflake(1_650_000_000_000L)
+        val store = store()
+        dispatcher.schedule {
+            store.handleConnectionOpen(readPayload(false, ModelReadState(10, older, 0, 1)))
+            store.updateUnreadInputs(
+                StoreReadStates.Inputs(
+                    channelPermissions = mapOf(10L to VIEW_CHANNEL),
+                    channels = mapOf(10L to channel(10, guildId = 20)),
+                    recentMessageIds = mapOf(10L to newest),
+                ),
+            )
+            store.updateUnreadMarker(StoreReadStates.Unread.Marker(10, older), 1)
+        }
+        scheduler.triggerActions()
+
+        store.acknowledge(10, newest, isLockedAck = false, mentionCount = 0)
+        scheduler.triggerActions()
+
+        assertEquals(newest, store.getAck(10)?.messageId)
+        assertEquals(emptySet<Long>(), store.getUnreadChannelIdsSnapshot())
+        assertEquals(0, store.getUnreadMarkerSnapshot().count)
+    }
+
     // -- thread and voice unreads ---------------------------------------------------------------
 
     @Test

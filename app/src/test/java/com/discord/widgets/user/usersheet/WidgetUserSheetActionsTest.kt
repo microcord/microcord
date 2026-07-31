@@ -70,13 +70,15 @@ class WidgetUserSheetActionsTest {
     }
 
     @Test
-    fun `current and system user popouts expose no actions or edit`() {
-        listOf(visibility(isMe = true), visibility(isSystemUser = true)).forEach { visibility ->
+    fun `current user popout exposes profile editing but no social actions`() {
+        visibility(isMe = true).let { visibility ->
             assertFalse(visibility.showActions)
             assertFalse(visibility.showMessage)
             assertFalse(visibility.showMore)
-            assertFalse(visibility.showEditProfile)
+            assertTrue(visibility.showEditProfile)
         }
+
+        assertFalse(visibility(isSystemUser = true).showEditProfile)
     }
 
     @Test

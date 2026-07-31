@@ -1,6 +1,7 @@
 package com.discord.stores
 
 import com.discord.api.channel.Channel
+import com.discord.api.channel.isManaged
 import com.discord.api.channel.isThread
 import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelReadState
@@ -167,33 +168,42 @@ class StoreMessageAck @JvmOverloads constructor(
      * on the scroll event alone.
      */
     fun init(
-        selectedChannelId: Observable<Long>,
+        selectedChannel: Observable<StoreChannelsSelected.ResolvedSelectedChannel>,
         chat: StoreChat,
         messagesLoader: StoreMessagesLoader,
     ) {
         autoAckSubscription?.unsubscribe()
-        val candidates = selectedChannelId.distinctUntilChanged().switchMap { channelId ->
+        val candidates = selectedChannel.distinctUntilChanged().switchMap { selected ->
+            val channelId = selected.id
             if (channelId <= 0L) {
                 Observable.just(0L)
             } else {
                 Observable.combineLatest(
-                    storeMessages.getAllDetached(),
+                    storeMessages.getAllDetached().debounce(50L, TimeUnit.MILLISECONDS),
                     messagesLoader.getMessagesLoadedState(channelId)
                         .map { !it.isLoadingMessages && it.isInitialMessagesLoaded }
                         .distinctUntilChanged(),
                     chat.observeInteractionState().filter { it.channelId == channelId },
                     observeForChannel(channelId),
                 ) { detachedChannels, isLoadingSettled, interactionState, existingAck ->
-                    val ackable = interactionState.isAtBottomIgnoringTouch() &&
-                        isLoadingSettled &&
-                        channelId !in detachedChannels &&
-                        existingAck?.isLockedAck != true
+                    val isAtBottom = interactionState.isAtBottomIgnoringTouch()
+                    val isDetached = channelId in detachedChannels
+                    val isManaged = selected.maybeChannel?.isManaged() == true
+                    val isLocked = existingAck?.isLockedAck == true
+                    val ackable = shouldAutoAck(
+                        isAtBottom = isAtBottom,
+                        isLoadingSettled = isLoadingSettled,
+                        isDetached = isDetached,
+                        isManaged = isManaged,
+                        isLocked = isLocked,
+                    )
                     if (ackable) interactionState.channelId else 0L
                 }
             }
         }
         postPendingAck(
             getPendingAck(candidates.computationLatest().debounce(AUTO_ACK_DEBOUNCE_MS, TimeUnit.MILLISECONDS)),
+            retainSubscription = true,
         )
     }
 
@@ -358,7 +368,11 @@ class StoreMessageAck @JvmOverloads constructor(
      * [mentionCount] is only non-zero for mark-unread, where the client already knows how many
      * mentions it is re-creating and tells the server rather than making it recompute.
      */
-    private fun postPendingAck(pendingAcks: Observable<PendingAck>, mentionCount: Int = 0) {
+    private fun postPendingAck(
+        pendingAcks: Observable<PendingAck>,
+        mentionCount: Int = 0,
+        retainSubscription: Boolean = false,
+    ) {
         val subscription = pendingAcks
             .filter { it != PendingAck.EMPTY }
             .computationLatest()
@@ -367,7 +381,7 @@ class StoreMessageAck @JvmOverloads constructor(
                 ackRequest(channelId, ack.messageId, ack.isLockedAck, mentionCount)
             }, { })
         // Only the long-lived auto-ack pipeline is retained; one-shot acks complete on their own.
-        if (mentionCount == 0) autoAckSubscription = subscription
+        if (retainSubscription) autoAckSubscription = subscription
     }
 
     private fun observeThreadAckState(channelId: Long): Observable<ThreadAckState?> =
@@ -412,6 +426,15 @@ class StoreMessageAck @JvmOverloads constructor(
 
         private const val AUTO_ACK_DEBOUNCE_MS = 500L
         private const val MARK_UNREAD_TIMEOUT_MS = 10L
+
+        internal fun shouldAutoAck(
+            isAtBottom: Boolean,
+            isLoadingSettled: Boolean,
+            isDetached: Boolean,
+            isManaged: Boolean,
+            isLocked: Boolean,
+        ): Boolean = isAtBottom && isLoadingSettled && !isDetached && !isManaged && !isLocked
+
 
         fun ThreadAckState?.isNonThreadChannel(): Boolean = this is ThreadAckState.NotThread
 

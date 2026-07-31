@@ -12,11 +12,12 @@ import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.AppLog
 import com.discord.app.AppScreenRouter
+import com.discord.databinding.WidgetSettingsDeveloperBinding
 import com.discord.stores.StoreStream
 import com.discord.utilities.cache.SharedPreferencesProvider
+import com.discord.utilities.experiments.ExperimentRegistry
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
-import com.discord.views.CheckedSetting
 import com.hammerandchisel.libdiscord.Discord
 import java.text.DateFormat
 import java.util.Date
@@ -24,14 +25,18 @@ import java.util.Date
 class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) {
     private lateinit var experiments: ExperimentOverridesAdapter
     private lateinit var notices: NoticeAdapter
+    private var _binding: WidgetSettingsDeveloperBinding? = null
+    private val binding get() = requireNotNull(_binding)
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        _binding = WidgetSettingsDeveloperBinding.bind(view)
         setActionBarTitle(R.string.developer_options)
+        setActionBarDisplayHomeAsUpEnabled()
         experiments = ExperimentOverridesAdapter()
         notices = NoticeAdapter(StoreStream.getNotices()::clearSeen)
-        view.findViewById<RecyclerView>(R.id.developer_settings_experiments).adapter = experiments
-        val noticesView = view.findViewById<RecyclerView>(R.id.developer_settings_notices)
+        binding.developerSettingsExperiments.adapter = experiments
+        val noticesView = binding.developerSettingsNotices
         noticesView.adapter = notices
         ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT) {
             override fun onMove(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder) = false
@@ -41,37 +46,46 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
         }).attachToRecyclerView(noticesView)
 
         val preferences = SharedPreferencesProvider.get()
-        view.findViewById<CheckedSetting>(R.id.settings_developer_screenshot_bug_reporting).apply {
+        binding.settingsDeveloperScreenshotBugReporting.apply {
             isChecked = preferences.getBoolean(PREF_SCREENSHOT_REPORTING, false)
             setOnCheckedListener { preferences.edit().putBoolean(PREF_SCREENSHOT_REPORTING, it).apply() }
         }
-        view.findViewById<View>(R.id.developer_settings_crash_kotlin).setOnClickListener {
+        binding.developerSettingsCrashKotlin.setOnClickListener {
             throw RuntimeException("This is a developer triggered crash.")
         }
-        view.findViewById<View>(R.id.developer_settings_crash_discord_nonfatal).setOnClickListener {
+        binding.developerSettingsCrashDiscordNonfatal.setOnClickListener {
             runCatching { throw RuntimeException("This is a developer triggered crash (caught).") }
                 .onFailure { AppLog.e("setupCrashes", it) }
         }
-        view.findViewById<View>(R.id.developer_settings_crash_discord_jnibridge).setOnClickListener {
+        binding.developerSettingsCrashDiscordJnibridge.setOnClickListener {
             Discord(requireContext()).crash()
         }
-        view.findViewById<View>(R.id.developer_settings_simulate_gateway_reconnect).setOnClickListener {
+        binding.developerSettingsSimulateGatewayReconnect.setOnClickListener {
             StoreStream.getGatewayConnection().simulateReconnectForTesting()
         }
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
         val store = StoreStream.getExperiments()
         store.observeOverrides().ui(this).appSubscribe(javaClass) { overrides ->
-            experiments.setData(overrides.toSortedMap().map { (name, bucket) ->
+            experiments.setData(ExperimentRegistry.registeredExperiments.values.map { registered ->
                 object : ExperimentOverridesAdapter.Item {
-                    override val name = name
-                    override val apiName = name
-                    override val overrideBucket = bucket
-                    override val bucketDescriptions = (0..bucket.coerceAtLeast(1)).map(Int::toString)
-                    override val onOverrideBucketSelected: (Int) -> Unit = { store.setOverride(name, it) }
-                    override val onOverrideBucketCleared: () -> Unit = { store.clearOverride(name) }
+                    override val name = registered.readableName
+                    override val apiName = registered.name
+                    override val overrideBucket = overrides[registered.name]
+                    override val bucketDescriptions = registered.buckets
+                    override val onOverrideBucketSelected: (Int) -> Unit = {
+                        store.setOverride(registered.name, it)
+                    }
+                    override val onOverrideBucketCleared: () -> Unit = {
+                        store.clearOverride(registered.name)
+                    }
                 }
             })
         }

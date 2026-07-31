@@ -30,7 +30,6 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.view.extensions.setForwardingWindowInsetsListener
 import com.discord.widgets.auth.WidgetOauth2Authorize
 import com.discord.widgets.auth.WidgetRemoteAuth
-import com.discord.widgets.channels.memberlist.WidgetChannelMembersList
 import com.discord.widgets.directories.WidgetDirectoriesSearch
 import com.discord.widgets.friends.WidgetFriendsAdd
 import com.discord.widgets.friends.WidgetFriendsAddById
@@ -94,7 +93,7 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
         // Registered before any child fragment is committed so the tabs host keeps the first look at
         // every back press. WidgetHome consumes every press it is offered, so it has to sort after
         // us or a back press on another tab would drive the hidden home panels instead.
-        setOnBackPressed(viewModel::handleBackPress)
+        setOnBackPressed(::handleBackPress)
         installCrossScreenNavigation()
         installTabFragments()
     }
@@ -308,9 +307,6 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
         // toolbar's add-friend item goes through `WidgetFriendsAdd.show` (which also emits the
         // "Add Friend Modal" analytics event), rows open `WidgetUserSheet` directly, and
         // `WidgetFriendsAddById` registers its own `WidgetCaptcha.registerForResult` launcher.
-        WidgetChannelMembersList.onUserClicked = { userId ->
-            withActiveChildManager { WidgetUserSheet.show(userId, it) }
-        }
         WidgetUserStatusSheet.onCustomStatus = {
             withActiveChildManager { manager ->
                 manager.commit {
@@ -328,6 +324,14 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
         }
     }
 
+    private fun handleBackPress(): Boolean {
+        if (childFragmentManager.backStackEntryCount > 0) {
+            childFragmentManager.popBackStack()
+            return true
+        }
+        return viewModel.handleBackPress()
+    }
+
     private inline fun withActiveChildManager(action: (FragmentManager) -> Unit) {
         if (!isAdded || view == null || !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
         val manager = childFragmentManager
@@ -335,7 +339,6 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
     }
 
     private fun clearCrossScreenNavigation() {
-        WidgetChannelMembersList.onUserClicked = null
         WidgetUserStatusSheet.onCustomStatus = null
         WidgetSettings.onSetStatus = null
         WidgetSettings.onLogout = null

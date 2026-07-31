@@ -12,8 +12,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.core.widget.ImageViewCompat
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.discord.R
 import com.discord.views.ThemedColor
 import com.google.android.material.textfield.TextInputEditText
@@ -70,8 +70,8 @@ class SearchInputView @JvmOverloads constructor(context: Context, attrs: Attribu
             }
         }
         editText.addTextChangedListener(watcher)
-        fragment.viewLifecycleOwner.lifecycle.addObserver(object : DefaultLifecycleObserver {
-            override fun onDestroy(owner: LifecycleOwner) {
+        fragment.viewLifecycleOwner.lifecycle.addObserver(LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_DESTROY) {
                 editText.removeTextChangedListener(watcher)
             }
         })

@@ -140,6 +140,16 @@ class GuildListItemBuilderTest {
         assertFalse(muted.filterIsInstance<GuildListItem.GuildItem>().single().isUnread)
     }
 
+    @Test fun incomingDmMentionCreatesABadgedPrivateChannelRow() {
+        val dm = channel(10L, 0L, Channel.DM)
+        val item = GuildListItemBuilder.buildItems(
+            storeState(privateChannels = mapOf(dm.id to dm), mentionCounts = mapOf(dm.id to 1)),
+        ).filterIsInstance<GuildListItem.PrivateChannelItem>().single()
+
+        assertEquals(dm.id, item.channel.id)
+        assertEquals(1, item.mentionCount)
+    }
+
     @Test fun voiceStageEventAndStreamIndicatorsComeOnlyFromTheirOwnState() {
         val voice = channel(11L, 1L, Channel.GUILD_VOICE)
         val stage = channel(22L, 2L, Channel.GUILD_STAGE_VOICE)
@@ -202,6 +212,7 @@ class GuildListItemBuilderTest {
         lurkingGuildIds: Set<Long> = emptySet(),
         guildSettings: Map<Long, ModelNotificationSettings> = emptyMap(),
         channels: Map<Long, Channel> = emptyMap(),
+        privateChannels: Map<Long, Channel> = emptyMap(),
         isNewUser: Boolean = false,
         showHubSparkle: Boolean = false,
     ) = WidgetGuildsListViewModel.StoreState(
@@ -212,7 +223,7 @@ class GuildListItemBuilderTest {
         mentionCounts = mentionCounts,
         channelIds = channelIds,
         unavailableGuilds = unavailableGuilds,
-        privateChannels = emptyMap(),
+        privateChannels = privateChannels,
         sortedGuilds = sortedGuilds,
         guildJoinRequests = emptyMap(),
         pendingGuilds = emptyList(),

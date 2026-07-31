@@ -321,7 +321,7 @@ data class WidgetChannelListModel(
                 StoreStream.getChannels().observeChannelsForGuild(PRIVATE_CHANNELS_GUILD_ID),
                 StoreStream.getChannelsSelected().observeId(),
                 StoreStream.getPresences().observeAllPresences(),
-                StoreStream.getReadStates().getMentionCountsByChannel(),
+                StoreStream.getMentions().observeMentionCounts(),
                 ChannelListSources.streamingUserIds(),
                 StoreStream.getUserGuildSettings().observeGuildSettings(PRIVATE_CHANNELS_GUILD_ID),
                 StoreStream.getMessagesMostRecent().observeRecentMessageIds(),
@@ -429,7 +429,7 @@ data class WidgetChannelListModel(
             Observable.combineLatest(
                 StoreStream.getChannelsSelected().observeSelectedChannel(),
                 ChannelListSources.selectedVoiceChannelId(),
-                StoreStream.getReadStates().getMentionCountsByChannel(),
+                StoreStream.getMentions().observeMentionCounts(),
                 StoreStream.getReadStates().getUnreadChannelIds(),
                 StoreStream.getCollapsedChannelCategories().observeCollapsedCategories(guildId),
             ) { selectedChannel, voiceChannelId, mentionCounts, unreadIds, collapsed ->
