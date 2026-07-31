@@ -57,4 +57,14 @@ class MGImagesChangeDetectorTest {
         assertTrue(detector.track(viewA, listOf("b", "a")))
         assertTrue(detector.track(viewA, emptyList<String>()))
     }
+
+    @Test
+    fun distinctDetectorRebuildsWhenAnimationPolicyChanges() {
+        val detector = MGImages.DistinctChangeDetector()
+        val urls = listOf("data:image/gif;base64,AAAA")
+
+        assertTrue(detector.track(viewA, urls to false))
+        assertFalse(detector.track(viewA, urls to false))
+        assertTrue(detector.track(viewA, urls to true))
+    }
 }

@@ -27,14 +27,13 @@ class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRe
     private val launcher = activity.registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { grantResults ->
-        if (grantResults.containsValue(false)) {
-            onDenied?.invoke(grantResults)
-        } else {
-            onGranted?.invoke()
-        }
+        val granted = areAllGranted(grantResults)
+        val grantedCallback = onGranted
+        val deniedCallback = onDenied
         onDenied = null
         onGranted = null
         requestStartedAtMillis = 0L
+        if (granted) grantedCallback?.invoke() else deniedCallback?.invoke(grantResults)
     }
 
     @MainThread
@@ -156,5 +155,8 @@ class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRe
 
         fun mediaPermissions(sdkInt: Int): Array<String> =
             galleryPermissions(sdkInt) + cameraPermissions(sdkInt)
+
+        internal fun areAllGranted(grantResults: Map<String, Boolean>): Boolean =
+            grantResults.isNotEmpty() && grantResults.values.all { it }
     }
 }

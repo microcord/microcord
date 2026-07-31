@@ -134,9 +134,10 @@ object MGImages {
         useSmallCache: Boolean = false,
         transform: ((ImageRequestBuilder) -> Unit)? = null,
         changeDetector: ChangeDetector = AlwaysUpdateChangeDetector,
+        autoPlayAnimations: Boolean = true,
     ) {
         val urls = if (url.isNullOrBlank()) emptyList() else listOf(url)
-        setImage(view, urls, width, height, useSmallCache, transform, changeDetector, null)
+        setImage(view, urls, width, height, useSmallCache, transform, changeDetector, null, autoPlayAnimations)
     }
 
     /**
@@ -156,8 +157,9 @@ object MGImages {
         transform: ((ImageRequestBuilder) -> Unit)? = null,
         changeDetector: ChangeDetector = AlwaysUpdateChangeDetector,
         controllerListener: ControllerListener<ImageInfo>? = null,
+        autoPlayAnimations: Boolean = true,
     ) {
-        if (!changeDetector.track(view, urls)) return
+        if (!changeDetector.track(view, urls to autoPlayAnimations)) return
         if (urls.isEmpty()) {
             getDrawee(view).controller = null
             return
@@ -170,7 +172,7 @@ object MGImages {
         val controller = Fresco.newDraweeControllerBuilder()
             .setOldController(getDrawee(view).controller)
             .setControllerListener(controllerListener)
-            .setAutoPlayAnimations(true)
+            .setAutoPlayAnimations(autoPlayAnimations)
             .setFirstAvailableImageRequests(requests)
             .build()
         getDrawee(view).controller = controller

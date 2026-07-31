@@ -46,6 +46,7 @@ class WidgetNoticeDialog : AppDialog(R.layout.widget_notice_dialog) {
 
     /** Click handlers keyed by view id, plus [ON_SHOW] for a one-shot bind hook. */
     var listenerMap: Map<Int, (View) -> Unit>? = null
+    var dismissOnClick: ((Int) -> Boolean)? = null
 
     var onDismiss: (() -> Unit)? = null
 
@@ -118,7 +119,7 @@ class WidgetNoticeDialog : AppDialog(R.layout.widget_notice_dialog) {
         listenerMap?.forEach { (viewId, listener) ->
             view.findViewById<View>(viewId)?.setOnClickListener {
                 listener(view)
-                dismiss()
+                if (dismissOnClick?.invoke(viewId) != false) dismiss()
             }
         }
         if (context != null) listenerMap?.get(ON_SHOW)?.invoke(view)
@@ -240,10 +241,12 @@ class WidgetNoticeDialog : AppDialog(R.layout.widget_notice_dialog) {
             tag: String? = null,
             bodyTextAlignment: Int = View.TEXT_ALIGNMENT_TEXT_START,
             onDismiss: (() -> Unit)? = null,
+            dismissOnClick: ((Int) -> Boolean)? = null,
         ) {
             val dialog = WidgetNoticeDialog()
             dialog.listenerMap = listenerMap
             dialog.onDismiss = onDismiss
+            dialog.dismissOnClick = dismissOnClick
             dialog.arguments = Bundle().apply {
                 putCharSequence(ARG_HEADER_TEXT, headerText)
                 putCharSequence(ARG_BODY_TEXT, bodyText)
@@ -279,6 +282,7 @@ class WidgetNoticeDialog : AppDialog(R.layout.widget_notice_dialog) {
             isPassword: Boolean = false,
             okText: CharSequence? = null,
             shouldHideKeyboard: Boolean = false,
+            inputValidator: ((String) -> CharSequence?)? = null,
         ) {
             val inputLayout = if (isPassword) {
                 R.layout.view_input_modal_password
@@ -286,13 +290,23 @@ class WidgetNoticeDialog : AppDialog(R.layout.widget_notice_dialog) {
                 R.layout.view_input_modal_text_no_suggestions
             }
             var input: TextInputLayout? = null
+            var inputValid = true
             val listeners = mutableMapOf<Int, (View) -> Unit>(
                 ON_SHOW to { view ->
-                    input = view.findViewById<TextInputLayout>(R.id.view_input)?.also { it.hint = hintText }
+                    input = view.findViewById<TextInputLayout>(R.id.view_input)?.also {
+                        it.hint = hintText
+                        if (isPassword) it.editText?.isSaveEnabled = false
+                    }
                 },
                 R.id.notice_ok to { view ->
-                    if (shouldHideKeyboard) activity.hideKeyboard(view)
-                    onOKClicked(view.context, input?.editText?.text?.toString().orEmpty())
+                    val value = input?.editText?.text?.toString().orEmpty()
+                    val error = inputValidator?.invoke(value)
+                    input?.error = error
+                    inputValid = error == null
+                    if (inputValid) {
+                        if (shouldHideKeyboard) activity.hideKeyboard(view)
+                        onOKClicked(view.context, value)
+                    }
                 },
             )
             onCancelClicked?.let { cancel ->
@@ -310,6 +324,7 @@ class WidgetNoticeDialog : AppDialog(R.layout.widget_notice_dialog) {
                 listenerMap = listeners,
                 belowLayoutId = inputLayout,
                 cancelable = cancelable,
+                dismissOnClick = { viewId -> viewId != R.id.notice_ok || inputValid },
             )
         }
 

@@ -1,15 +1,14 @@
 package com.discord.widgets.auth
 
-import android.text.InputType
 import android.view.View
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import com.discord.R
+import com.discord.app.AppActivity
 import com.discord.i18n.i18nRender
 import com.discord.views.phone.PhoneOrEmailInputView
+import com.discord.widgets.notice.WidgetNoticeDialog
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 
 class WidgetAuthLogin : AuthFragment(R.layout.widget_auth_login, AuthRoute.LOGIN) {
@@ -40,33 +39,19 @@ class WidgetAuthLogin : AuthFragment(R.layout.widget_auth_login, AuthRoute.LOGIN
     }
 
     private fun showTokenLoginDialog() {
-        val tokenInput = TextInputEditText(requireContext()).apply {
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            isSingleLine = true
-        }
-        val wrapper = TextInputLayout(requireContext()).apply {
-            hint = getString(R.string.manticord_token)
-            addView(tokenInput)
-        }
-        val dialog = AlertDialog.Builder(requireContext())
-            .setTitle(R.string.manticord_login_with_token)
-            .setView(wrapper)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.login, null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val token = tokenInput.text?.toString().orEmpty()
-                wrapper.error = AuthUiRules.token(token)["token"]
-                if (wrapper.error == null) {
-                    tokenInput.text?.clear()
-                    dialog.dismiss()
-                    submit(AuthAction.TokenLogin(token))
-                }
-            }
-        }
-        dialog.setOnDismissListener { tokenInput.text?.clear() }
-        dialog.show()
+        val activity = appActivity as? AppActivity ?: return
+        WidgetNoticeDialog.showInputModal(
+            activity = activity,
+            headerText = getString(R.string.manticord_login_with_token),
+            bodyText = "",
+            hintText = getString(R.string.manticord_token),
+            onOKClicked = { _, token -> submit(AuthAction.TokenLogin(token)) },
+            cancelable = true,
+            isPassword = true,
+            okText = getString(R.string.login),
+            shouldHideKeyboard = true,
+            inputValidator = { AuthUiRules.token(it)["token"] },
+        )
     }
 
     override fun captureState() = model.update { it.copy(identifier = input.getTextOrEmpty()) }

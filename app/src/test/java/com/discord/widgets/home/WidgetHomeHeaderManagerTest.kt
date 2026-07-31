@@ -2,11 +2,14 @@ package com.discord.widgets.home
 
 import com.discord.api.channel.Channel
 import com.discord.api.user.NsfwAllowance
+import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.w3c.dom.Element
 
 class WidgetHomeHeaderManagerTest {
 
@@ -60,6 +63,60 @@ class WidgetHomeHeaderManagerTest {
         assertTrue(connectedDm.stopCall)
         assertFalse(systemDm.startCall)
         assertFalse(systemDm.stopCall)
+    }
+
+    @Test
+    fun `pins survive every message header transition without changing existing actions`() {
+        val supported = listOf(
+            Channel.GUILD_TEXT,
+            Channel.GUILD_ANNOUNCEMENT,
+            Channel.DM,
+            Channel.GROUP_DM,
+            Channel.ANNOUNCEMENT_THREAD,
+            Channel.PUBLIC_THREAD,
+            Channel.PRIVATE_THREAD,
+            Channel.GUILD_VOICE,
+        )
+
+        supported.forEach { type ->
+            val state = WidgetHomeHeaderManager.menuState(type)
+            assertTrue("pins hidden for channel type $type", state.pins)
+            assertTrue("pins disabled for channel type $type", state.pinsEnabled)
+        }
+        assertFalse(WidgetHomeHeaderManager.menuState(Channel.GUILD_FORUM).pins)
+        assertFalse(WidgetHomeHeaderManager.menuState(Channel.DIRECTORY).pins)
+        assertTrue(WidgetHomeHeaderManager.menuState(Channel.DM).sidePanel)
+        assertTrue(WidgetHomeHeaderManager.menuState(Channel.DM).startCall)
+        assertTrue(WidgetHomeHeaderManager.menuState(Channel.GUILD_TEXT).search)
+    }
+
+    @Test
+    fun `nsfw gate disables visible pins`() {
+        val state = WidgetHomeHeaderManager.menuState(
+            channelType = Channel.GUILD_TEXT,
+            isChannelNsfw = true,
+            isNsfwUnconsented = true,
+            nsfwAllowed = NsfwAllowance.DISALLOWED,
+        )
+
+        assertTrue(state.pins)
+        assertFalse(state.pinsEnabled)
+    }
+
+    @Test
+    fun `toolbar declares one persistent accessible tinted pin action`() {
+        val root = sequenceOf(File("."), File("..")).first { File(it, "app/src/main").isDirectory }
+        val menu = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+            .parse(File(root, "app/src/main/res/menu/menu_chat_toolbar.xml"))
+        val pins = (0 until menu.getElementsByTagName("item").length)
+            .map { menu.getElementsByTagName("item").item(it) as Element }
+            .filter { it.getAttribute("android:id") == "@+id/menu_chat_pins" }
+
+        assertEquals(1, pins.size)
+        assertEquals("@drawable/ic_pin_24dp", pins.single().getAttribute("android:icon"))
+        assertEquals("@string/pinned_messages", pins.single().getAttribute("android:title"))
+        assertEquals("?attr/colorInteractiveNormal", pins.single().getAttribute("app:iconTint"))
+        assertEquals("always", pins.single().getAttribute("app:showAsAction"))
     }
 
     @Test

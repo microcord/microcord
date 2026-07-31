@@ -119,7 +119,12 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
             else -> IconUtils.getForUserBanner(state.user.id, hash, size, state.shouldAnimateBanner)
         }
         banner.aspectRatio = if (url == null) 5f else 2.5f
-        MGImages.setImage(banner, url, changeDetector = bannerChangeDetector)
+        MGImages.setImage(
+            banner,
+            url,
+            changeDetector = bannerChangeDetector,
+            autoPlayAnimations = state.shouldAutoPlayBanner,
+        )
         updateBannerColor(state)
         banner.setOnClickListener { onBannerPress() }
         bannerEdit.setOnClickListener { onBannerPress() }

@@ -26,9 +26,9 @@ import rx.subjects.PublishSubject
  * Per-guild notification settings: mute state, notification frequency, channel overrides and the
  * "hide muted channels" preference.
  *
- * Every setter is a REST write. Local state is *not* updated optimistically — the server echoes the
- * change back over the gateway as `USER_GUILD_SETTINGS_UPDATE`, and writing locally first would let
- * a stale response resurrect settings the gateway already superseded.
+ * Guild writes wait for the gateway echo. Private-channel overrides are optimistic because their
+ * dedicated endpoint returns the complete private-channel settings object; a failed current write
+ * restores the prior object, while a newer write or gateway update wins.
  */
 class StoreUserGuildSettings(
     private val dispatcher: Dispatcher,
@@ -88,6 +88,8 @@ class StoreUserGuildSettings(
     private var guildsToHideMutedChannelsInSnapshot: Set<Long> = emptySet()
     private val eventSubject = PublishSubject.create<Event>()
     private var recomputeSettingsSubscription: Subscription? = null
+    private val pendingPrivateWriteRevisions = HashMap<Long, Long>()
+    private var nextPrivateWriteRevision = 0L
 
     /** Bound by `StoreStream` once the REST stack exists; every setter is inert until then. */
     private var restApi: RestAPIInterface? = null
@@ -116,6 +118,7 @@ class StoreUserGuildSettings(
         recomputeSettingsSubscription = null
         guildSettings.clear()
         guildsToHideMutedChannelsIn.clear()
+        pendingPrivateWriteRevisions.clear()
         guildSettingsCache.clear(persist = true)
         hiddenMutedChannelsCache.clear(persist = true)
         markChanged()
@@ -176,6 +179,7 @@ class StoreUserGuildSettings(
         recomputeSettingsSubscription?.unsubscribe()
         settings.forEach { setting ->
             val computed = setting.copyAndRecomputeTransientFields(clock)
+            pendingPrivateWriteRevisions.remove(computed.guildId)
             if (guildSettings[computed.guildId] != computed) {
                 guildSettings[computed.guildId] = computed
                 markChanged()
@@ -324,7 +328,54 @@ class StoreUserGuildSettings(
     ) {
         val api = restApi ?: return
         val channelId = userGuildSettings.channelOverrides?.keys?.firstOrNull()
-        api.updateUserGuildSettings(guildId, userGuildSettings)
+        if (guildId == PRIVATE_CHANNELS_GUILD_ID && channelId != null) {
+            dispatcher.schedule {
+                val previous = guildSettings[guildId] ?: ModelNotificationSettings(guildId = guildId)
+                val update = requireNotNull(userGuildSettings.channelOverrides?.get(channelId))
+                val revision = ++nextPrivateWriteRevision
+                pendingPrivateWriteRevisions[guildId] = revision
+                guildSettings[guildId] = previous.withChannelOverride(
+                    channelId,
+                    update.muted,
+                    update.muteConfig,
+                    update.messageNotifications,
+                    update.flags,
+                    clock,
+                )
+                markChanged()
+                requestUserGuildSettings(api, guildId, userGuildSettings)
+                    .restSubscribeOn()
+                    .ui()
+                    .appSubscribe(
+                        StoreUserGuildSettings::class.java,
+                        context,
+                        errorHandler = {
+                            dispatcher.schedule {
+                                privateChannelRollback(
+                                    pendingPrivateWriteRevisions[guildId],
+                                    revision,
+                                    previous,
+                                )?.let { restored ->
+                                    pendingPrivateWriteRevisions.remove(guildId)
+                                    guildSettings[guildId] = restored
+                                    markChanged()
+                                }
+                            }
+                        },
+                    ) { confirmed ->
+                        dispatcher.schedule {
+                            if (pendingPrivateWriteRevisions[guildId] == revision) {
+                                pendingPrivateWriteRevisions.remove(guildId)
+                                handleGuildSettings(listOf(confirmed))
+                            }
+                        }
+                        analytics.onNotificationSettingsUpdated(confirmed, channelId)
+                        eventSubject.onNext(Event.SettingsUpdated(settingsUpdateType))
+                    }
+            }
+            return
+        }
+        requestUserGuildSettings(api, guildId, userGuildSettings)
             .restSubscribeOn()
             .ui()
             .appSubscribe(StoreUserGuildSettings::class.java, context) { notifSettings ->
@@ -393,6 +444,7 @@ class StoreUserGuildSettings(
     }
 
     companion object {
+        private const val PRIVATE_CHANNELS_GUILD_ID = 0L
         const val GUILD_SETTINGS_CACHE_KEY = "STORE_SETTINGS_USER_GUILD_V6"
         const val HIDDEN_MUTED_CHANNELS_CACHE_KEY = "STORE_SHOW_HIDE_MUTED_CHANNELS_V2"
 
@@ -401,3 +453,19 @@ class StoreUserGuildSettings(
         private const val THREAD_FLAG_NO_MESSAGES = 8
     }
 }
+
+internal fun requestUserGuildSettings(
+    api: RestAPIInterface,
+    guildId: Long,
+    settings: RestAPIParams.UserGuildSettings,
+): Observable<ModelNotificationSettings> = if (guildId == 0L) {
+    api.updatePrivateChannelSettings(settings)
+} else {
+    api.updateUserGuildSettings(guildId, settings)
+}
+
+internal fun privateChannelRollback(
+    currentRevision: Long?,
+    failedRevision: Long,
+    previous: ModelNotificationSettings,
+): ModelNotificationSettings? = previous.takeIf { currentRevision == failedRevision }

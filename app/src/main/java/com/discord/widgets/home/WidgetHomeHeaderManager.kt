@@ -31,6 +31,7 @@ import com.discord.widgets.channels.WidgetGroupInviteFriends
 import com.discord.widgets.channels.invite.GroupInviteFriendsSheet
 import com.discord.widgets.channels.invite.GroupInviteFriendsSheetFeatureFlag
 import com.discord.widgets.channels.threads.browser.WidgetThreadBrowser
+import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.friends.WidgetFriendsAdd
 import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
 import com.discord.widgets.search.WidgetSearch
@@ -52,6 +53,8 @@ object WidgetHomeHeaderManager {
         val search: Boolean = false,
         val sidePanel: Boolean = false,
         val threadBrowser: Boolean = false,
+        val pins: Boolean = false,
+        val pinsEnabled: Boolean = false,
         val startCall: Boolean = false,
         val startVideoCall: Boolean = false,
         val stopCall: Boolean = false,
@@ -157,6 +160,10 @@ object WidgetHomeHeaderManager {
             nsfwAllowed = model.nsfwAllowed,
         )
         menu.setHeaderActions(state.search, state.sidePanel, state.threadBrowser)
+        menu.findItem(R.id.menu_chat_pins).apply {
+            isVisible = state.pins
+            isEnabled = state.pinsEnabled
+        }
         menu.findItem(R.id.menu_chat_start_call).isVisible = state.startCall
         menu.findItem(R.id.menu_chat_start_video_call).isVisible = state.startVideoCall
         menu.findItem(R.id.menu_chat_stop_call).isVisible = state.stopCall
@@ -176,6 +183,7 @@ object WidgetHomeHeaderManager {
     ): MenuState {
         val showThreadBrowser = threadExperimentEnabled && threadCount > 0 &&
             !isChannelNsfwGated(isChannelNsfw, isNsfwUnconsented, nsfwAllowed)
+        val showPins = channelType in PINNED_MESSAGES_CHANNEL_TYPES
         val header = when (channelType) {
             Channel.DM, Channel.GROUP_DM, Channel.DIRECTORY -> MenuState(sidePanel = true)
             Channel.GUILD_TEXT, Channel.GUILD_ANNOUNCEMENT, Channel.GUILD_FORUM -> MenuState(
@@ -191,6 +199,8 @@ object WidgetHomeHeaderManager {
         }
         val privateChannel = channelType == Channel.DM || channelType == Channel.GROUP_DM
         return header.copy(
+            pins = showPins,
+            pinsEnabled = showPins && !isChannelNsfwGated(isChannelNsfw, isNsfwUnconsented, nsfwAllowed),
             startCall = !isCallConnected && privateChannel && !isSystemDm,
             startVideoCall = !isCallConnected && privateChannel && !isSystemDm,
             stopCall = isCallConnected && !isSystemDm,
@@ -221,6 +231,7 @@ object WidgetHomeHeaderManager {
                 else if (channel.isGuildTextyChannel()) WidgetSearch.launchForGuild(channel.guildId, context)
             }
             R.id.menu_chat_side_panel -> widgetHome.getPanelLayout().openEndPanel()
+            R.id.menu_chat_pins -> WidgetChannelPinnedMessages.show(context, model.channelId)
             R.id.menu_chat_start_call -> launcher.launchVoiceCall(model.channelId)
             R.id.menu_chat_start_group -> inviteToChannel(widgetHome, model.channel)
             R.id.menu_chat_start_video_call -> launcher.launchVideoCall(model.channelId)
@@ -287,5 +298,16 @@ object WidgetHomeHeaderManager {
         Channel.GUILD_ANNOUNCEMENT,
         Channel.GUILD_FORUM,
         Channel.GUILD_TEXT,
+    )
+
+    private val PINNED_MESSAGES_CHANNEL_TYPES = setOf(
+        Channel.DM,
+        Channel.GROUP_DM,
+        Channel.GUILD_TEXT,
+        Channel.GUILD_ANNOUNCEMENT,
+        Channel.ANNOUNCEMENT_THREAD,
+        Channel.PUBLIC_THREAD,
+        Channel.PRIVATE_THREAD,
+        Channel.GUILD_VOICE,
     )
 }

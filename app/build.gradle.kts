@@ -78,6 +78,8 @@ dependencies {
     }
     implementation(libs.fresco)
     implementation(libs.fresco.drawee.span)
+    implementation(libs.fresco.animated.gif)
+    implementation(libs.fresco.animated.webp)
     implementation(libs.photo.drawee.view)
     implementation(libs.gson)
     implementation(libs.kronos.android)

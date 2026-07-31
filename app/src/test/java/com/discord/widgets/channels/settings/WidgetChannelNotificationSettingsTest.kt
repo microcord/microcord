@@ -48,10 +48,37 @@ class WidgetChannelNotificationSettingsTest {
         assertFalse(model.notificationSettingIsInherited)
     }
 
-    private fun channel(id: Long, type: Int, parentId: Long = 0) = Channel(
+    @Test
+    fun privateChannelUsesOnlyItsPrivateOverride() {
+        val dm = channel(id = 40, type = Channel.DM, guildId = 0)
+        val settings = ModelNotificationSettings(
+            isSuppressEveryone = true,
+            isSuppressRoles = true,
+            isMobilePush = false,
+            messageNotifications = ModelNotificationSettings.FREQUENCY_ALL,
+            guildId = 0,
+            channelOverrides = listOf(
+                ModelNotificationSettings.ChannelOverride(
+                    muted = true,
+                    messageNotifications = ModelNotificationSettings.FREQUENCY_UNSET,
+                    channelId = dm.id,
+                ),
+            ),
+        )
+
+        val model = WidgetChannelNotificationSettings.Model.createPrivate(dm, settings)
+
+        assertTrue(model.channelIsMuted)
+        assertEquals(ModelNotificationSettings.FREQUENCY_ALL, model.notificationSetting)
+        assertTrue(model.notificationSettingIsInherited)
+        assertFalse(model.isGuildMuted)
+        assertFalse(model.canAccessRedesignedForumChannels)
+    }
+
+    private fun channel(id: Long, type: Int, parentId: Long = 0, guildId: Long = 10) = Channel(
         topic = null,
         type = type,
-        guildId = 10,
+        guildId = guildId,
         name = "channel-$id",
         lastMessageId = 0,
         id = id,

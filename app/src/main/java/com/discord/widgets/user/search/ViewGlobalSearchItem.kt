@@ -18,6 +18,10 @@ import androidx.core.content.ContextCompat
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.models.user.User
+import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
+import com.discord.views.GuildView
 import com.discord.views.StatusView
 import com.facebook.drawee.view.SimpleDraweeView
 
@@ -28,6 +32,7 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
 ) : ConstraintLayout(context, attrs, defStyleAttr) {
     private val description: TextView
     private val group: TextView
+    private val guildIcon: GuildView
     private val icon: SimpleDraweeView
     private val mentions: TextView
     private val name: TextView
@@ -39,14 +44,23 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
         requireNotNull<View>(findViewById(R.id.guideline))
         description = requireNotNull(findViewById(R.id.item_description_tv))
         group = requireNotNull(findViewById(R.id.item_group_tv))
+        guildIcon = requireNotNull(findViewById(R.id.item_guild_icon))
         icon = requireNotNull(findViewById(R.id.item_icon_iv))
         mentions = requireNotNull(findViewById(R.id.item_mentions_tv))
         name = requireNotNull(findViewById(R.id.item_name_tv))
         unread = requireNotNull(findViewById(R.id.item_unread))
         status = requireNotNull(findViewById(R.id.item_status))
+        MGImages.setRoundingParams(
+            icon,
+            0f,
+            circle = true,
+            overlayColor = ColorCompat.getThemedColor(context, R.attr.colorBackgroundPrimary),
+        )
     }
 
     fun configure(data: WidgetGlobalSearchModel.ItemDataPayload) {
+        guildIcon.visibility = View.GONE
+        icon.visibility = View.VISIBLE
         mentions.setTextAndVisibility(data.mentions.takeIf { it > 0 }?.toString())
         unread.visibility = if (data.unread) View.VISIBLE else View.GONE
     }
@@ -92,11 +106,9 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
     fun onConfigure(data: WidgetGlobalSearchModel.ItemGuild) {
         configure(data)
         status.visibility = View.GONE
-        val hash = data.guild.icon
-        icon.setImageURI(
-            if (hash == null) "asset://asset/images/default_icon.jpg"
-            else "https://cdn.discordapp.com/icons/${data.guild.id}/$hash.webp",
-        )
+        icon.visibility = View.GONE
+        guildIcon.visibility = View.VISIBLE
+        guildIcon.configure(IconUtils.getForGuild(data.guild), data.guild.shortName)
         name.text = styledText(data.matchedResult, data.guild.name)
         group.setTextAndVisibility(null)
         description.setTextAndVisibility(null)

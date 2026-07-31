@@ -10,6 +10,7 @@ import com.discord.models.member.GuildMember
 import com.discord.models.presence.Presence
 import com.discord.models.user.MeUser
 import com.discord.models.user.User
+import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
@@ -60,6 +61,10 @@ class UserProfileHeaderViewModel @JvmOverloads constructor(
             val showMediumAvatar = hasGuildMemberAvatar && !hasNickname
             val showSmallAvatar = hasGuildMemberAvatar && hasNickname
             val shouldAnimateBanner = !reducedMotionEnabled || allowAnimationInReducedMotion
+            val effectiveBanner = guildMember?.bannerHash ?: banner
+            val shouldAutoPlayBanner = shouldAnimateBanner && effectiveBanner?.let {
+                IconUtils.isDataUrlForGif(it) || IconUtils.isImageHashAnimated(it)
+            } == true
             val shouldShowGIFTag = reducedMotionEnabled && !allowAnimationInReducedMotion && banner?.startsWith("a_") == true
             val isProfileLoaded = userProfile != UserProfile()
             val avatarColorId by lazy { user.avatar ?: user.discriminator.toString() }

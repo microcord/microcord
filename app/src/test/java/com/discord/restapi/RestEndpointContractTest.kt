@@ -1,6 +1,7 @@
 package com.discord.restapi
 
 import com.discord.api.presence.ClientStatus
+import com.discord.stores.requestUserGuildSettings
 import com.google.gson.JsonParser
 import okhttp3.CookieJar
 import okhttp3.mockwebserver.MockResponse
@@ -40,6 +41,25 @@ class RestEndpointContractTest {
     fun stopServer() = server.shutdown()
 
     // -- Guild CRUD ---------------------------------------------------------------------------
+
+    @Test
+    fun privateChannelNotificationOverrideUsesExactEndpointAndPayload() {
+        enqueueObject()
+        requestUserGuildSettings(
+            api,
+            0L,
+            RestAPIParams.UserGuildSettings(
+                42L,
+                RestAPIParams.UserGuildSettings.ChannelOverride(muted = true, muteConfig = null),
+            ),
+        ).toBlocking().first()
+
+        val body = json(takeRequest("PATCH", "/api/v9/users/@me/guilds/@me/settings"))
+        assertEquals(setOf("channel_overrides"), body.keySet())
+        val override = body["channel_overrides"].asJsonObject["42"].asJsonObject
+        assertEquals(setOf("muted"), override.keySet())
+        assertTrue(override["muted"].asBoolean)
+    }
 
     @Test
     fun defaultGuildCreationMatchesCreateScreenPayload() {

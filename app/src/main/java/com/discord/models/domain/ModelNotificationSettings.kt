@@ -30,6 +30,44 @@ class ModelNotificationSettings(
 
     fun getChannelOverride(channelId: Long) = channelOverrides.firstOrNull { it.channelId == channelId }
 
+    internal fun withChannelOverride(
+        channelId: Long,
+        muted: Boolean?,
+        muteConfig: ModelMuteConfig?,
+        messageNotifications: Int?,
+        flags: Int?,
+        clock: Clock,
+    ): ModelNotificationSettings {
+        val current = getChannelOverride(channelId)
+        val replacement = ChannelOverride(
+            muted = muted ?: current?.rawMuted ?: false,
+            muteConfig = if (muted != null) muteConfig else current?.muteConfig,
+            derivedMute = isMuted(
+                muted ?: current?.rawMuted ?: false,
+                if (muted != null) muteConfig else current?.muteConfig,
+                clock.currentTimeMillis(),
+            ),
+            messageNotifications = messageNotifications
+                ?: current?.messageNotifications
+                ?: FREQUENCY_UNSET,
+            flags = flags ?: current?.flags ?: NEW_FORUM_POSTS_UNSET,
+            channelId = channelId,
+        )
+        return ModelNotificationSettings(
+            isSuppressEveryone,
+            isSuppressRoles,
+            this.muted,
+            this.muteConfig,
+            derivedMute,
+            isMobilePush,
+            this.messageNotifications,
+            guildId,
+            channelOverrides.filterNot { it.channelId == channelId } + replacement,
+            version,
+            notifyHighlights,
+        )
+    }
+
     fun getNextMuteEndTimeMs(clock: Clock): Long {
         val endTimes = mutableListOf<Long>()
         muteConfig?.endTimeMs?.let(endTimes::add)
@@ -61,6 +99,7 @@ class ModelNotificationSettings(
     ) {
         val isMuted: Boolean get() = derivedMute
         val muteEndTime: String? get() = muteConfig?.endTime
+        internal val rawMuted: Boolean get() = muted
 
         fun getForumPostNotificationSetting(): Int = when {
             flags and FORUM_THREAD_CREATED_OFF == FORUM_THREAD_CREATED_OFF -> FORUM_THREAD_CREATED_OFF

@@ -198,8 +198,10 @@ class WidgetUserSheet : AppBottomSheet() {
         root.findViewById<UserProfileHeaderView>(R.id.user_sheet_profile_header_view).updateViewState(
             UserProfileHeaderViewModel.ViewState.Loaded(
                 state.user,
-                state.guildMember?.bannerHash ?: state.user.banner,
-                state.user.bannerColor,
+                state.guildMember?.bannerHash
+                    ?: state.userProfile.user.banner?.value
+                    ?: state.user.banner,
+                state.userProfile.user.bannerColor?.value ?: state.user.bannerColor,
                 state.guildMember,
                 listOfNotNull(state.guildMember),
                 state.presence,

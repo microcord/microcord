@@ -163,6 +163,10 @@ class IconUtilsTest {
         )
         assertNull(IconUtils.getForUserBanner(42L, null))
         assertNull(IconUtils.getForUserBanner(42L, "  "))
+        assertEquals(
+            "https://cdn.discordapp.com/banners/42/a_b.$staticExtension?size=512",
+            IconUtils.getForUserBanner(42L, "a_b", 500, allowAnimation = false),
+        )
     }
 
     // ------------------------------------------------------------------ guild member assets
@@ -176,6 +180,10 @@ class IconUtilsTest {
         assertEquals(
             "https://cdn.discordapp.com/guilds/1/users/2/banners/a_hash.gif",
             IconUtils.getForGuildMemberBanner("a_hash", 1L, 2L, allowAnimation = true),
+        )
+        assertEquals(
+            "https://cdn.discordapp.com/guilds/1/users/2/banners/a_hash.$staticExtension",
+            IconUtils.getForGuildMemberBanner("a_hash", 1L, 2L, allowAnimation = false),
         )
         assertNull(IconUtils.getForGuildMember("hash", 0L, 2L))
         assertNull(IconUtils.getForGuildMember("hash", 1L, 0L))

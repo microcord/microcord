@@ -2,6 +2,7 @@ package com.discord.widgets.chat.input
 
 import android.content.Context
 import android.os.Bundle
+import android.os.Environment
 import android.view.LayoutInflater
 import android.view.GestureDetector
 import android.view.KeyEvent
@@ -11,7 +12,10 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.core.view.inputmethod.InputContentInfoCompat
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.discord.R
 import com.discord.api.sticker.Sticker
 import com.discord.app.AppFragment
@@ -24,17 +28,23 @@ import com.discord.widgets.chat.input.emoji.EmojiPickerListener
 import com.discord.widgets.chat.input.expression.WidgetExpressionTray
 import com.discord.widgets.chat.input.sticker.StickerPickerListener
 import com.lytefast.flexinput.InputListener
+import com.lytefast.flexinput.FlexInputCoordinator
 import com.lytefast.flexinput.adapters.AddContentPagerAdapter
 import com.lytefast.flexinput.adapters.AttachmentPreviewAdapter
 import com.lytefast.flexinput.adapters.EmptyListAdapter
+import com.lytefast.flexinput.adapters.FileListAdapter
+import com.lytefast.flexinput.adapters.PhotoCursorAdapter
 import com.lytefast.flexinput.fragment.CameraFragment
 import com.lytefast.flexinput.fragment.FilesFragment
 import com.lytefast.flexinput.fragment.FlexInputFragment
 import com.lytefast.flexinput.fragment.PhotosFragment
 import com.lytefast.flexinput.model.Attachment
 import com.lytefast.flexinput.model.Attachment.Companion.toAttachment
+import com.lytefast.flexinput.model.Photo
 import com.lytefast.flexinput.utils.SelectionAggregator
 import com.lytefast.flexinput.utils.SelectionCoordinator
+import java.io.File
+import kotlinx.coroutines.launch
 
 /**
  * Everything the composer needs from FlexInput: the attachment pages, the attachment preview strip,
@@ -284,12 +294,52 @@ class WidgetChatInputAttachments(
         }
     }
 
-    class DiscordFilesFragment : FilesFragment() {
+    open class DiscordFilesFragment : FilesFragment() {
+        private var grantedSelectionCoordinator: SelectionCoordinator<Attachment<Any>, Attachment<File>>? = null
+
+        override fun hasPermissions(vararg requiredPermissionList: String): Boolean =
+            appFragment()?.hasGallery() == true
+
         override fun newPermissionsRequestAdapter(onClickListener: View.OnClickListener): EmptyListAdapter =
-            PermissionsEmptyListAdapter(onClickListener)
+            PermissionsEmptyListAdapter(View.OnClickListener { requestGallery() })
+
+        private fun requestGallery() {
+            requestGalleryPermission(::refreshAfterGrant)
+        }
+
+        protected open fun requestGalleryPermission(onGranted: () -> Unit) =
+            appFragment()?.requestGallery(onGranted)
+
+        internal fun refreshAfterGrant() {
+            val context = context ?: return
+            val recyclerView = view?.findViewById<RecyclerView>(com.lytefast.flexinput.R.id.list) ?: return
+            grantedSelectionCoordinator?.close()
+            val coordinator = SelectionCoordinator<Attachment<Any>, Attachment<File>>()
+            flexInputCoordinator()?.selectionAggregator?.registerSelectionCoordinator(coordinator)
+            grantedSelectionCoordinator = coordinator
+            val adapter = FileListAdapter(context.contentResolver, coordinator)
+            recyclerView.adapter = adapter
+            val swipeRefresh = view?.findViewById<SwipeRefreshLayout>(com.lytefast.flexinput.R.id.swipeRefreshLayout)
+            fun loadFiles() {
+                viewLifecycleOwner.lifecycleScope.launch {
+                    adapter.load(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS))
+                    swipeRefresh?.isRefreshing = false
+                }
+            }
+            swipeRefresh?.setOnRefreshListener(::loadFiles)
+            loadFiles()
+        }
+
+        override fun onDestroyView() {
+            grantedSelectionCoordinator?.close()
+            grantedSelectionCoordinator = null
+            super.onDestroyView()
+        }
     }
 
-    class DiscordMediaFragment : PhotosFragment() {
+    open class DiscordMediaFragment : PhotosFragment() {
+        private var grantedSelectionCoordinator: SelectionCoordinator<Attachment<Any>, Photo>? = null
+
         override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? =
             super.onCreateView(inflater, container, savedInstanceState).also { view ->
                 if (!hasPermissions()) view?.post(::requestGallery)
@@ -302,11 +352,45 @@ class WidgetChatInputAttachments(
             PermissionsEmptyListAdapter(View.OnClickListener { requestGallery() })
 
         private fun requestGallery() {
-            appFragment()?.requestGallery { reloadAfterGrant() }
+            requestGalleryPermission(::refreshAfterGrant)
+        }
+
+        protected open fun requestGalleryPermission(onGranted: () -> Unit) =
+            appFragment()?.requestGallery(onGranted)
+
+        internal fun refreshAfterGrant() {
+            val context = context ?: return
+            val recyclerView = view?.findViewById<RecyclerView>(com.lytefast.flexinput.R.id.list) ?: return
+            grantedSelectionCoordinator?.close()
+            val coordinator = SelectionCoordinator<Attachment<Any>, Photo>()
+            flexInputCoordinator()?.selectionAggregator?.registerSelectionCoordinator(coordinator)
+            grantedSelectionCoordinator = coordinator
+            val thumbnailSide = resources.displayMetrics.widthPixels / MEDIA_GRID_COLUMNS
+            recyclerView.layoutManager = GridLayoutManager(context, MEDIA_GRID_COLUMNS)
+            val adapter = PhotoCursorAdapter(
+                context.contentResolver,
+                coordinator,
+                thumbnailSide,
+                thumbnailSide,
+            )
+            recyclerView.adapter = adapter
+            recyclerView.invalidateItemDecorations()
+            view?.findViewById<SwipeRefreshLayout>(com.lytefast.flexinput.R.id.swipeRefreshLayout)?.let { swipeRefresh ->
+                swipeRefresh.setOnRefreshListener {
+                    adapter.loadPhotos()
+                    swipeRefresh.isRefreshing = false
+                }
+            }
+        }
+
+        override fun onDestroyView() {
+            grantedSelectionCoordinator?.close()
+            grantedSelectionCoordinator = null
+            super.onDestroyView()
         }
     }
 
-    class DiscordCameraFragment : CameraFragment() {
+    open class DiscordCameraFragment : CameraFragment() {
         override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
             super.onViewCreated(view, savedInstanceState)
             if (!hasPermissions()) view.post(::requestPermissionClick)
@@ -316,7 +400,18 @@ class WidgetChatInputAttachments(
             appFragment()?.hasCamera() == true
 
         override fun requestPermissionClick() {
-            appFragment()?.requestCamera { reloadAfterGrant() }
+            requestCameraPermission(::refreshAfterGrant)
+        }
+
+        protected open fun requestCameraPermission(onGranted: () -> Unit) =
+            appFragment()?.requestCamera(onGranted)
+
+        internal fun refreshAfterGrant() {
+            if (view == null) return
+            permissionsContainer.visibility = View.GONE
+            cameraContainer.visibility = View.VISIBLE
+            cameraView.onStart()
+            cameraView.onResume()
         }
     }
 
@@ -333,6 +428,7 @@ class WidgetChatInputAttachments(
     private companion object {
         const val SOURCE_KEYBOARD = "keyboard"
         const val SOURCE_MEDIA_PICKER = "media_picker"
+        const val MEDIA_GRID_COLUMNS = 3
 
         val R_DRAWABLE_IMAGE = com.lytefast.flexinput.R.drawable.ic_image_24dp
         val R_DRAWABLE_FILE = com.lytefast.flexinput.R.drawable.ic_file_24dp
@@ -346,7 +442,6 @@ class WidgetChatInputAttachments(
 private fun Fragment.appFragment(): AppFragment? =
     generateSequence(parentFragment) { it.parentFragment }.filterIsInstance<AppFragment>().firstOrNull()
 
-private fun Fragment.reloadAfterGrant() {
-    if (!isAdded) return
-    parentFragmentManager.beginTransaction().detach(this).attach(this).commitAllowingStateLoss()
-}
+@Suppress("UNCHECKED_CAST")
+private fun Fragment.flexInputCoordinator(): FlexInputCoordinator<Any>? =
+    parentFragment?.parentFragment as? FlexInputCoordinator<Any>

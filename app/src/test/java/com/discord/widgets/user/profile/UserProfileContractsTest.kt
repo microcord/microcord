@@ -75,6 +75,60 @@ class UserProfileContractsTest {
         assertTrue(rebuilt.allowAnimationInReducedMotion)
     }
 
+    @Test
+    fun profileBannerAnimationHonorsReducedMotionAndBannerSource() {
+        val animated = loaded(banner = "a_banner", reducedMotion = false)
+        assertTrue(animated.shouldAnimateBanner)
+        assertTrue(animated.shouldAutoPlayBanner)
+        assertFalse(animated.shouldShowGIFTag)
+
+        val reduced = loaded(banner = "a_banner", reducedMotion = true)
+        assertFalse(reduced.shouldAutoPlayBanner)
+        assertTrue(reduced.shouldShowGIFTag)
+        assertTrue(reduced.copy(allowAnimationInReducedMotion = true).shouldAutoPlayBanner)
+
+        assertFalse(loaded(banner = "banner", reducedMotion = false).shouldAutoPlayBanner)
+        assertFalse(loaded(banner = "data:image/gif;base64,AAAA", reducedMotion = true).shouldAutoPlayBanner)
+
+        val guildBanner = reduced.copy(
+            banner = null,
+            guildMember = GuildMember(
+                color = 0,
+                hoistRoleId = 0,
+                roles = emptyList(),
+                nick = null,
+                premiumSince = null,
+                pending = false,
+                joinedAt = null,
+                guildId = 10,
+                userId = 2,
+                bannerHash = "a_guild",
+            ),
+            allowAnimationInReducedMotion = true,
+        )
+        assertTrue(guildBanner.shouldAutoPlayBanner)
+        assertFalse(guildBanner.shouldShowGIFTag)
+    }
+
+    private fun loaded(banner: String?, reducedMotion: Boolean) = UserProfileHeaderViewModel.ViewState.Loaded(
+        user = CoreUser(id = 2, username = "target"),
+        banner = banner,
+        bannerColorHex = null,
+        guildMember = null,
+        guildMembersForAka = emptyList(),
+        presence = null,
+        streamContext = null,
+        userProfile = UserProfile(),
+        isMeUserPremium = false,
+        isMeUserVerified = true,
+        allowAnimatedEmojis = true,
+        showPresence = true,
+        editable = false,
+        reducedMotionEnabled = reducedMotion,
+        allowAnimationInReducedMotion = false,
+        isMe = false,
+    )
+
     private fun meUser() = MeUser(
         1, "me", null, null, false, false, 1, PremiumTier.TIER_1,
         null, false, true, null, 0, 0, null, NsfwAllowance.UNKNOWN, null, null,

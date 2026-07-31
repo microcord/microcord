@@ -25,6 +25,7 @@ import com.discord.widgets.guilds.list.WidgetGuildsList
 import com.discord.widgets.guilds.join.WidgetGuildWelcomeSheet
 import com.discord.widgets.chat.list.WidgetChatList
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapterItemCallMessage
+import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.quickmentions.WidgetQuickMentionsDialog
 import com.discord.widgets.search.WidgetSearch
 import com.discord.api.channel.Channel
@@ -46,9 +47,9 @@ import com.discord.widgets.chat.input.AppFlexInputViewModel
 import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventUpsellBottomSheet
 import com.discord.widgets.notice.WidgetNoticeNuxSamsungLink
 import com.discord.widgets.playstation.WidgetPlaystationIntegrationUpsellBottomSheet
+import com.discord.widgets.settings.WidgetMuteSettingsSheet
 import com.discord.widgets.user.calls.PrivateCallLauncher
 import com.discord.widgets.accessibility.AccessibilityDetectionNavigator
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import rx.Subscription
 
 class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
@@ -264,6 +265,18 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         }
         val callableDm = channel.isPrivate() && !channel.isSystemDM()
         val selectedVoiceChannelId = StoreStream.getVoiceChannelSelected().getSelectedVoiceChannelId()
+        val pinState = WidgetHomeHeaderManager.menuState(
+            channelType = channel.type,
+            isCallConnected = callableDm && selectedVoiceChannelId == channel.id,
+            isChannelNsfw = channel.nsfw,
+            isNsfwUnconsented = channel.nsfw &&
+                !StoreStream.getGuildsNsfw().isGuildNsfwGateAgreed(channel.guildId),
+            nsfwAllowed = StoreStream.getUsers().getMe().nsfwAllowance,
+        )
+        toolbar.menu.findItem(R.id.menu_chat_pins)?.apply {
+            isVisible = pinState.pins
+            isEnabled = pinState.pinsEnabled
+        }
         toolbar.menu.findItem(R.id.menu_chat_start_call)?.isVisible = callableDm && selectedVoiceChannelId == 0L
         toolbar.menu.findItem(R.id.menu_chat_start_video_call)?.isVisible = callableDm && selectedVoiceChannelId == 0L
         toolbar.menu.findItem(R.id.menu_chat_stop_call)?.isVisible = callableDm && selectedVoiceChannelId == channel.id
@@ -274,6 +287,9 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                 R.id.menu_chat_start_video_call -> true.also { privateCallLauncher().launchVideoCall(channel.id) }
                 R.id.menu_chat_stop_call -> true.also {
                     StoreStream.getVoiceChannelSelected().selectVoiceChannel(0L).subscribe({}, {})
+                }
+                R.id.menu_chat_pins -> true.also {
+                    WidgetChannelPinnedMessages.show(requireContext(), channel.id)
                 }
                 R.id.menu_chat_side_panel -> true.also { panels.openEndPanel() }
                 else -> false
@@ -360,16 +376,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     }
 
     private fun openMuteSettings(channelId: Long) {
-        val channel = StoreStream.getChannels().getChannel(channelId) ?: return
-        val settings = StoreStream.getUserGuildSettings()
-        val muted = settings.getGuildSettings()[channel.guildId]
-            ?.getChannelOverride(channelId)?.isMuted == true
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.notification_settings)
-            .setItems(arrayOf(getString(if (muted) R.string.unmute else R.string.mute))) { _, _ ->
-                settings.setChannelMuted(requireContext(), channelId, !muted)
-            }
-            .show()
+        WidgetMuteSettingsSheet.showForChannel(channelId, childFragmentManager)
     }
 
     private fun <T : View> View.findDescendant(type: Class<T>): T? {

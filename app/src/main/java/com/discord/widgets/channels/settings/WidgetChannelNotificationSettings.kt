@@ -13,6 +13,7 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isCategory
 import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isStageVoiceChannel
 import com.discord.api.channel.isTextChannel
 import com.discord.api.channel.isThread
@@ -23,6 +24,7 @@ import com.discord.models.guild.Guild
 import com.discord.stores.StoreThreadsJoined
 import com.discord.stores.StoreStream
 import com.discord.utilities.channel.ChannelNotificationSettingsUtils
+import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.views.CheckedSetting
 import com.discord.views.RadioManager
@@ -55,14 +57,16 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
-        Model.observe(requireChannelId()).ui(this).subscribe { model ->
-            if (model == null) activity?.finish() else render(model)
-        }
+        Model.observe(requireChannelId()).ui(this)
+            .appSubscribe(WidgetChannelNotificationSettings::class.java, requireContext()) { model ->
+                if (model == null) activity?.finish() else render(model)
+            }
     }
 
     private fun render(model: Model) {
         val root = view ?: return
         val channel = model.channel
+        val isPrivate = channel.isPrivate()
         val isTextChannel = channel.isTextChannel()
         val isCategory = channel.isCategory()
         val supportsMute = isTextChannel || isCategory
@@ -74,7 +78,9 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
                 NotificationMuteSettingsView.ViewState(
                     model.channelIsMuted,
                     model.channelMuteEndTime,
-                    if (isTextChannel) {
+                    if (isPrivate) {
+                        getString(R.string.mute_conversation)
+                    } else if (isTextChannel) {
                         SettingsStrings.render(
                             requireContext(),
                             R.string.mute_channel,
@@ -83,7 +89,9 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
                     } else {
                         getString(R.string.mute_category)
                     },
-                    if (isTextChannel) {
+                    if (isPrivate) {
+                        getString(R.string.unmute_conversation)
+                    } else if (isTextChannel) {
                         SettingsStrings.render(
                             requireContext(),
                             R.string.unmute_channel,
@@ -92,25 +100,40 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
                     } else {
                         getString(R.string.unmute_category)
                     },
-                    getString(R.string.form_label_mobile_channel_muted),
-                    if (isTextChannel) {
+                    getString(
+                        if (isPrivate) R.string.form_label_mobile_dm_muted
+                        else R.string.form_label_mobile_channel_muted,
+                    ),
+                    if (isPrivate) {
+                        R.string.form_label_mobile_dm_muted_until
+                    } else if (isTextChannel) {
                         R.string.form_label_mobile_channel_muted_until
                     } else {
                         R.string.form_label_mobile_category_muted_until
                     },
-                    getString(
-                        if (isTextChannel) {
+                    if (isPrivate) {
+                        null
+                    } else {
+                        getString(if (isTextChannel) {
                             R.string.form_label_mobile_channel_override_mute
                         } else {
                             R.string.form_label_mobile_category_override_mute
-                        },
-                    ),
+                        })
+                    },
                 ),
                 { WidgetMuteSettingsSheet.showForChannel(channel.id, parentFragmentManager) },
                 { StoreStream.getUserGuildSettings().setChannelMuted(requireContext(), channel.id, false) },
             )
         }
         root.findViewById<View>(R.id.frequency_top_divider).isVisible = supportsMute
+
+        root.findViewById<View>(R.id.channel_settings_notifications_frequency_wrap).isVisible = !isPrivate
+        root.findViewById<View>(R.id.channel_notification_settings_system).isVisible =
+            !isPrivate && root.findViewById<View>(R.id.channel_notification_settings_system).isVisible
+        if (isPrivate) {
+            root.findViewById<LinearLayout>(R.id.forum_channel_notification_settings).isVisible = false
+            return
+        }
 
         configureRadio(root.findViewById(R.id.frequency_radio_all), model, ModelNotificationSettings.FREQUENCY_ALL)
         configureRadio(root.findViewById(R.id.frequency_radio_mentions), model, ModelNotificationSettings.FREQUENCY_MENTIONS)
@@ -215,6 +238,11 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
             fun observe(channelId: Long): Observable<Model?> =
                 StoreStream.getChannels().observeChannel(channelId).switchMap { channel ->
                     if (channel == null) return@switchMap Observable.just<Model?>(null)
+                    if (channel.isPrivate()) {
+                        return@switchMap StoreStream.getUserGuildSettings()
+                            .observeGuildSettings(PRIVATE_CHANNELS_GUILD_ID)
+                            .map { createPrivate(channel, it) }
+                    }
                     Observable.combineLatest(
                         StoreStream.getThreadsJoined().observeJoinedThread(channel.id),
                         StoreStream.getChannels().observeChannel(channel.parentId),
@@ -240,6 +268,32 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
                         }
                     }
                 }.distinctUntilChanged()
+
+            internal fun createPrivate(
+                channel: Channel,
+                settings: ModelNotificationSettings,
+            ): Model {
+                val override = settings.getChannelOverride(channel.id)
+                val overrideFrequency = override?.messageNotifications
+                    ?.takeUnless { it == ModelNotificationSettings.FREQUENCY_UNSET }
+                return Model(
+                    channel = channel,
+                    channelIsMuted = override?.isMuted == true,
+                    channelMuteEndTime = override?.muteEndTime,
+                    isGuildMuted = false,
+                    notificationSetting = overrideFrequency
+                        ?: settings.messageNotifications.takeUnless {
+                            it == ModelNotificationSettings.FREQUENCY_UNSET
+                        }
+                        ?: ModelNotificationSettings.FREQUENCY_MENTIONS,
+                    channelOverrideFlags = override?.flags,
+                    forumPostNotificationSetting = null,
+                    parentNotificationSetting = settings.messageNotifications,
+                    notificationSettingIsInherited = overrideFrequency == null,
+                    isAboveNotifyAllSize = false,
+                    canAccessRedesignedForumChannels = false,
+                )
+            }
 
             internal fun create(
                 channel: Channel,
@@ -327,6 +381,7 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
         const val ROUTE = "channel/{channelId}/notifications"
         private const val ARG_CHANNEL_ID = "com.discord.intent.extra.EXTRA_CHANNEL_ID"
         private const val ARG_SHOW_SYSTEM = "SHOW_SYSTEM_SETTING"
+        private const val PRIVATE_CHANNELS_GUILD_ID = 0L
         private const val RADIO_DIMMED_ALPHA = 0.3f
         private const val THREAD_FLAG_ALL_MESSAGES = 2
         private const val THREAD_FLAG_ONLY_MENTIONS = 4

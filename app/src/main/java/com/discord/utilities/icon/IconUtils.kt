@@ -29,7 +29,7 @@ import com.facebook.imagepipeline.request.ImageRequestBuilder
  * - `STATIC_IMAGE_EXTENSION` lives in `utilities/string/StringUtilsKt` in the reference. That file
  *   has not been reconstructed yet, so the value is exposed here as [staticImageExtension].
  */
-object IconUtils {
+object IconUtils  {
 
     const val ANIMATED_IMAGE_EXTENSION = "gif"
     const val DEFAULT_ICON = "asset://asset/images/default_icon.jpg"
@@ -162,7 +162,7 @@ object IconUtils {
         allowAnimation: Boolean = false,
     ): String? {
         if (bannerHash.isNullOrBlank()) return null
-        val extension = getImageExtension(bannerHash, allowAnimation)
+        val extension = getBannerImageExtension(bannerHash, allowAnimation)
         return withSize("$CDN_HOST/banners/$userId/$bannerHash.$extension", size)
     }
 
@@ -218,12 +218,15 @@ object IconUtils {
         allowAnimation: Boolean = false,
     ): String? {
         if (guildMemberBanner.isNullOrBlank() || guildId == 0L || userId == 0L) return null
-        val extension = getImageExtension(guildMemberBanner, allowAnimation)
+        val extension = getBannerImageExtension(guildMemberBanner, allowAnimation)
         return withSize(
             "$CDN_HOST/guilds/$guildId/users/$userId/banners/$guildMemberBanner.$extension",
             size,
         )
     }
+
+    private fun getBannerImageExtension(imageHash: String, allowAnimation: Boolean): String =
+        if (allowAnimation && isImageHashAnimated(imageHash)) ANIMATED_IMAGE_EXTENSION else staticImageExtension
 
     // ---------------------------------------------------------------------------------------
     // Guild icon, banner and splash

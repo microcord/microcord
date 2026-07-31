@@ -37,8 +37,8 @@ import rx.subjects.PublishSubject
  * GROUP_DM, CATEGORY are all mapped, `UNKNOWN` is not) and from what `WidgetMuteSettingsSheet`
  * reads out of the state. It is the least-corroborated part of this slice.
  *
- * `StoreThreadsJoined` exists in this project but `StoreStream` does not expose it, so the thread
- * mute state arrives through [joinedThreadSource], which defaults to "not a joined thread".
+ * Thread mute state comes from `StoreThreadsJoined`, so reopening after rotation reflects the
+ * persisted joined-thread flags instead of falling back to an unmuted row.
  */
 class MuteSettingsSheetViewModel(
     val guildId: Long,
@@ -190,7 +190,7 @@ class MuteSettingsSheetViewModel(
             guildId: Long,
             channelId: Long,
             joinedThreadSource: (Long) -> Observable<StoreThreadsJoined.JoinedThread?> =
-                { Observable.just(null) },
+                { StoreStream.getThreadsJoined().observeJoinedThread(it) },
         ): Observable<StoreState> = Observable.combineLatest(
             StoreStream.getGuilds().observeGuild(guildId),
             StoreStream.getChannels().observeChannel(channelId),

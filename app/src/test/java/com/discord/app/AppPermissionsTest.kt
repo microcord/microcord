@@ -44,6 +44,13 @@ class AppPermissionsTest {
     }
 
     @Test
+    fun permissionResultDispatchesGrantOnlyWhenEveryRequestedPermissionWasGranted() {
+        assertFalse(AppPermissions.areAllGranted(emptyMap()))
+        assertFalse(AppPermissions.areAllGranted(mapOf("images" to true, "video" to false)))
+        assertTrue(AppPermissions.areAllGranted(mapOf("images" to true, "video" to true)))
+    }
+
+    @Test
     fun manifestDeclaresOnlyCurrentMediaPermissions() {
         val document = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
             .newDocumentBuilder().parse(File("src/main/AndroidManifest.xml"))

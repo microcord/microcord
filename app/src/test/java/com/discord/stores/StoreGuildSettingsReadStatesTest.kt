@@ -11,6 +11,8 @@ import java.nio.file.Files
 import org.junit.AfterClass
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
 import org.junit.Test
@@ -41,6 +43,38 @@ class StoreGuildSettingsReadStatesTest {
         dispatcher.schedule { store.setHideMutedChannels(2, true) }
         scheduler.triggerActions()
         assertEquals(setOf(2L), store.getGuildsToHideMutedChannelsIn())
+    }
+
+    @Test
+    fun privateChannelOverrideIsOptimisticAndOnlyCurrentFailureRollsBack() {
+        val previous = ModelNotificationSettings(
+            isSuppressEveryone = true,
+            isMobilePush = false,
+            guildId = 0,
+            channelOverrides = listOf(
+                ModelNotificationSettings.ChannelOverride(channelId = 8, muted = true),
+            ),
+        )
+
+        val optimistic = previous.withChannelOverride(
+            channelId = 9,
+            muted = true,
+            muteConfig = null,
+            messageNotifications = ModelNotificationSettings.FREQUENCY_NOTHING,
+            flags = null,
+            clock = { 1_000L },
+        )
+
+        assertTrue(requireNotNull(optimistic.getChannelOverride(9)).isMuted)
+        assertEquals(
+            ModelNotificationSettings.FREQUENCY_NOTHING,
+            optimistic.getChannelOverride(9)?.messageNotifications,
+        )
+        assertTrue(requireNotNull(optimistic.getChannelOverride(8)).isMuted)
+        assertTrue(optimistic.isSuppressEveryone)
+        assertFalse(optimistic.isMobilePush)
+        assertSame(previous, privateChannelRollback(2, 2, previous))
+        assertNull(privateChannelRollback(3, 2, previous))
     }
 
     @Test
