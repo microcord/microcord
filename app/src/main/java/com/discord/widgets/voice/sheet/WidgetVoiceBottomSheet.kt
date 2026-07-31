@@ -16,6 +16,9 @@ import com.discord.api.channel.Channel
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppToast
 import com.discord.app.appViewModels
+import com.discord.dialogs.CameraCapacityDialog
+import com.discord.dialogs.GuildVideoAtCapacityDialog
+import com.discord.dialogs.audio.AudioOutputSelectionDialog
 import com.discord.rtcconnection.mediaengine.MediaEngineConnection
 import com.discord.stores.StoreAudioManagerV2
 import com.discord.stores.StoreStream
@@ -37,7 +40,6 @@ import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.notice.WidgetNoticeNuxOverlay
 import com.discord.widgets.settings.WidgetSettingsVoice
 import com.discord.widgets.user.usersheet.WidgetUserSheet
-import com.discord.widgets.voice.VoiceStoreAccess
 import com.discord.widgets.voice.controls.AnchoredVoiceControlsView
 import com.discord.widgets.voice.model.CameraState
 import com.discord.widgets.voice.fullscreen.WidgetCallFullscreen
@@ -351,7 +353,7 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
     }
 
     private fun onSpeakerButtonPressed() {
-        VoiceStoreAccess.toggleSpeakerOutput()
+        AudioOutputSelectionDialog.show(parentFragmentManager)
     }
 
     private fun handleEvent(event: WidgetVoiceBottomSheetViewModel.Event) {
@@ -379,9 +381,9 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
             is WidgetVoiceBottomSheetViewModel.Event.ShowRequestCameraPermissionsDialog ->
                 requestVideoCallPermissions { viewModel.onCameraPermissionsGranted() }
             is WidgetVoiceBottomSheetViewModel.Event.ShowCameraCapacityDialog ->
-                Navigation.showCameraCapacityDialog(this, event.maxVideoChannelUsers)
+                CameraCapacityDialog.show(parentFragmentManager, event.maxVideoChannelUsers)
             is WidgetVoiceBottomSheetViewModel.Event.ShowGuildVideoAtCapacityDialog ->
-                Navigation.showGuildVideoAtCapacityDialog(this)
+                GuildVideoAtCapacityDialog.show(parentFragmentManager)
             is WidgetVoiceBottomSheetViewModel.Event.ShowNoiseCancellationBottomSheet ->
                 WidgetNoiseCancellationBottomSheet.show(this)
             is WidgetVoiceBottomSheetViewModel.Event.ShowOverlayNux ->
@@ -454,12 +456,6 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
      * Remaining destinations whose reference classes do not exist in the target yet.
      */
     object Navigation {
-        @JvmField
-        var showCameraCapacityDialog: (AppBottomSheet, Int) -> Unit = { _, _ -> }
-
-        @JvmField
-        var showGuildVideoAtCapacityDialog: (AppBottomSheet) -> Unit = {}
-
         @JvmField
         var enqueueCallFeedback: (Long, String?, String?, Long, Int) -> Unit = { _, _, _, _, _ -> }
 

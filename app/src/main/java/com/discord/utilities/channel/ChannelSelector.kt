@@ -4,8 +4,10 @@ import android.content.Context
 import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.api.channel.Channel
+import com.discord.api.channel.getDMRecipient
 import com.discord.api.channel.isStageVoiceChannel
 import com.discord.api.channel.isVoiceChannel
+import com.discord.restapi.RestAPIParams
 import com.discord.stores.Dispatcher
 import com.discord.stores.SelectedChannelAnalyticsLocation
 import com.discord.stores.StoreNavigation
@@ -123,21 +125,28 @@ class ChannelSelector(
             }
     }
 
-    /**
-     * Open the DM with [userId], creating it if the viewer has never messaged them.
-     *
-     * **Deviation:** the reference calls `RestAPI.createOrFetchDM`, which reuses an existing 1:1 DM
-     * from the store and otherwise POSTs and pushes the result through the gateway subject. That
-     * ingest seam is private to this project's `StoreStream`, so the create is delegated to
-     * `StoreStream.createPrivateChannel`, which performs the same POST and the same store insert.
-     * The endpoint is idempotent for a 1:1 DM, so the only difference is one extra request when the
-     * DM already exists.
-     */
-    fun findAndSetDirectMessage(context: Context, userId: Long) {
-        if (userId <= 0L) return
-        StoreStream.createPrivateChannel(listOf(userId)) { result ->
-            result.getOrNull()?.let { channel -> findAndSet(context, channel.id) }
-        }
+    /** Open the existing DM with [userId], or create and ingest it before selecting it. */
+    @JvmOverloads
+    fun findAndSetDirectMessage(context: Context, userId: Long, onSelected: () -> Unit = {}) {
+        routeDirectMessage(
+            userId = userId,
+            findExistingChannelId = { recipientId ->
+                StoreStream.getChannels().getChannelsForGuild(0L).values
+                    .firstOrNull { it.getDMRecipient()?.id == recipientId }
+                    ?.id
+            },
+            createChannel = { recipientId, completed ->
+                RestAPI.api.userCreateChannel(RestAPIParams.CreateChannel(recipientId))
+                    .computationBuffered()
+                    .ui()
+                    .appSubscribe(ChannelSelector::class.java, context) { channel ->
+                        StoreStream.getGatewayConnection().channelCreateOrUpdate.onNext(channel)
+                        completed(channel.id)
+                    }
+            },
+            selectChannel = { guildId, channelId -> selectChannel(guildId, channelId) },
+            onSelected = onSelected,
+        )
     }
 
     /**
@@ -297,4 +306,19 @@ class ChannelSelector(
             "ChannelSelector.init() must be called from StoreStream before any navigation."
         }
     }
+}
+
+internal fun routeDirectMessage(
+    userId: Long,
+    findExistingChannelId: (Long) -> Long?,
+    createChannel: (Long, (Long) -> Unit) -> Unit,
+    selectChannel: (Long, Long) -> Unit,
+    onSelected: () -> Unit,
+) {
+    if (userId <= 0L) return
+    val select: (Long) -> Unit = { channelId ->
+        selectChannel(0L, channelId)
+        onSelected()
+    }
+    findExistingChannelId(userId)?.let(select) ?: createChannel(userId, select)
 }

@@ -51,23 +51,27 @@ class StickerPickerViewStateBuilderTest {
     }
 
     @Test
-    fun `standard packs are hidden from a user who cannot send them`() {
+    fun `standard packs are visible to non premium users`() {
         val viewState = build(state(meUser = user(PremiumTier.NONE)))
             as StickerPickerViewModel.ViewState.Stickers
 
         assertTrue(
-            viewState.stickerItems.none {
+            viewState.stickerItems.any {
                 it is HeaderItem && it.headerType is HeaderType.PackItem
             },
         )
-        assertTrue(viewState.stickerItems.none { it.key == "sticker:${PACK_STICKER.id}" })
+        assertTrue(viewState.stickerItems.any { it.key == "sticker:${PACK_STICKER.id}" })
     }
 
     @Test
     fun `a user with neither nitro nor guild stickers gets the nitro pitch`() {
         val promo = sticker(id = StickerPickerViewStateBuilder.EMPTY_STATE_STICKER_IDS[0])
         val viewState = build(
-            state(guildStickers = emptyMap(), meUser = user(PremiumTier.NONE)),
+            state(
+                guildStickers = emptyMap(),
+                enabledStickerPacks = emptyList(),
+                meUser = user(PremiumTier.NONE),
+            ),
             resolveSticker = { id -> promo.takeIf { it.id == id } },
         )
 

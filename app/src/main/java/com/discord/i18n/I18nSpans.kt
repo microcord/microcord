@@ -4,6 +4,7 @@ import android.content.Context
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.StyleSpan
+import android.text.style.StrikethroughSpan
 import android.text.style.URLSpan
 import android.widget.TextView
 import androidx.annotation.StringRes
@@ -37,6 +38,10 @@ object I18nSpans {
     /** `**bold**`, non greedy so two runs in one string do not merge. */
     private val BOLD = Regex("""\*\*(.+?)\*\*""", RegexOption.DOT_MATCHES_ALL)
 
+    private val ITALIC_UNDERSCORE = Regex("""\b_((?:__|\\[\s\S]|[^\\_])+?)_\b""")
+    private val ITALIC_STAR = Regex("""\*(?=\S)((?:\*\*|\s+(?:[^*\s]|\*\*)|[^\s*])+?)\*(?!\*)""")
+    private val STRIKETHROUGH = Regex("""~~(?=\S)([\s\S]*?\S)~~""")
+
     /**
      * Substitutes [args] into [template] and converts the surviving markdown into spans.
      *
@@ -51,6 +56,9 @@ object I18nSpans {
         val builder = SpannableStringBuilder(source)
         applyInline(builder, MASKED_LINK) { match -> URLSpan(match.groupValues[2]) }
         applyInline(builder, BOLD) { StyleSpan(android.graphics.Typeface.BOLD) }
+        applyInline(builder, ITALIC_UNDERSCORE) { StyleSpan(android.graphics.Typeface.ITALIC) }
+        applyInline(builder, ITALIC_STAR) { StyleSpan(android.graphics.Typeface.ITALIC) }
+        applyInline(builder, STRIKETHROUGH) { StrikethroughSpan() }
         return builder
     }
 

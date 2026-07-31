@@ -175,6 +175,9 @@ object NotificationClient {
     fun displaySystem(context: Context, data: NotificationData, settings: SettingsV2 = getSettings()): Boolean =
         settings.isEnabled && renderer.render(context, data, settings)
 
+    fun displaySent(context: Context, channelId: Long, channelName: String, success: Boolean) =
+        renderer.displaySent(context, channelId, channelName, success)
+
     /**
      * Removes every notification shown for [channelId].
      *

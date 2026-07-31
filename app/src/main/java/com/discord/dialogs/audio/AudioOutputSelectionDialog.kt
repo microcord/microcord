@@ -5,11 +5,11 @@ import android.widget.RadioGroup
 import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.app.AppDialog
-import com.discord.app.AppLog
 import com.discord.app.AppViewModel
 import com.discord.app.appViewModels
 import com.discord.rtcconnection.audio.DiscordAudioManager
 import com.discord.stores.StoreAudioManagerV2
+import com.discord.stores.StoreStream
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.color.setDrawableColor
 import com.discord.utilities.rx.appSubscribe
@@ -117,7 +117,8 @@ class AudioOutputSelectionDialog : AppDialog(R.layout.audio_output_selection_dia
  * the enum's `value` ordering is load-bearing.
  */
 class AudioOutputSelectionDialogViewModel(
-    private val storeAudioManager: StoreAudioManagerV2? = audioManagerProvider?.invoke(),
+    private val storeAudioManager: StoreAudioManagerV2 = StoreStream.getAudioManagerV2(),
+    storeStateObservable: Observable<StoreAudioManagerV2.State> = storeAudioManager.observeAudioManagerState(),
 ) : AppViewModel<AudioOutputSelectionDialogViewModel.ViewState>(ViewState.Uninitialized) {
 
     sealed class ViewState {
@@ -134,19 +135,14 @@ class AudioOutputSelectionDialogViewModel(
     }
 
     init {
-        val store = storeAudioManager
-        if (store == null) {
-            AppLog.w("StoreAudioManagerV2 is not published on StoreStream; audio output chooser is inert.")
-        } else {
-            store.observeAudioManagerState()
-                .computationLatest()
-                .ui(this)
-                .appSubscribe(AudioOutputSelectionDialogViewModel::class.java) { handleStoreState(it) }
-        }
+        storeStateObservable
+            .computationLatest()
+            .ui(this)
+            .appSubscribe(AudioOutputSelectionDialogViewModel::class.java) { handleStoreState(it) }
     }
 
     fun selectOutputDevice(device: DiscordAudioManager.DeviceTypes) {
-        storeAudioManager?.selectOutputDevice(device)
+        storeAudioManager.selectOutputDevice(device)
     }
 
     private fun handleStoreState(storeState: StoreAudioManagerV2.State) {
@@ -167,16 +163,4 @@ class AudioOutputSelectionDialogViewModel(
         )
     }
 
-    companion object {
-        /**
-         * Supplies the audio store.
-         *
-         * The reference reads `StoreStream.getAudioManagerV2()`; this project builds
-         * `StoreAudioManagerV2` but `StoreStream` neither constructs nor exposes it, so the chooser
-         * routes through this hook. **Assign it when the store is wired** — until then the dialog
-         * shows the four rows in their default (unavailable) state and selecting does nothing.
-         */
-        @JvmStatic
-        var audioManagerProvider: (() -> StoreAudioManagerV2)? = null
-    }
 }

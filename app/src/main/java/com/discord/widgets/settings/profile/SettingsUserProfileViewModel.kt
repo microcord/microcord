@@ -31,6 +31,7 @@ import com.discord.utilities.textprocessing.node.SpoilerNode
 import com.discord.widgets.user.profile.UserProfileHeaderViewModel
 import rx.Observable
 import rx.subjects.PublishSubject
+import java.io.Serializable
 
 class SettingsUserProfileViewModel(
     private val guildId: Long?,
@@ -40,7 +41,17 @@ class SettingsUserProfileViewModel(
     private val bioParser: Parser<MessageRenderContext, Node<MessageRenderContext>, MessageParseState> =
         DiscordParser.createParser(false, false),
     storeStateObservable: Observable<StoreState> = observeStoreState(guildId),
+    initialDraft: Draft? = null,
 ) : AppViewModel<SettingsUserProfileViewModel.ViewState>() {
+
+    data class Draft(
+        val avatar: NullSerializable<String>?,
+        val banner: NullSerializable<String>?,
+        val bannerColor: NullSerializable<String>?,
+        val nickname: String?,
+        val bio: String?,
+        val isEditingBio: Boolean,
+    ) : Serializable
 
     data class StoreState(
         val user: MeUser,
@@ -67,7 +78,7 @@ class SettingsUserProfileViewModel(
         ) : ViewState() {
             val isDirty = currentAvatar != null || currentBannerImage != null ||
                 currentBannerColorHex != null ||
-                currentBio != (meMember?.bio ?: user.bio).orEmpty() ||
+                currentBio.orEmpty() != (if (meMember != null) meMember.bio else user.bio).orEmpty() ||
                 (meMember != null && currentNickname.orEmpty() != meMember.nick.orEmpty())
             val showSaveFab = isDirty && !isEditingBio
             val isBioChanged = currentBio != user.bio
@@ -101,6 +112,7 @@ class SettingsUserProfileViewModel(
 
     private val eventSubject = PublishSubject.create<Event>()
     private val revealedBioIndices = linkedSetOf<Int>()
+    private var restoredDraft = initialDraft
 
     init {
         StoreStream.getUsers().observeMe().take(1).computationLatest().ui(this)
@@ -115,7 +127,12 @@ class SettingsUserProfileViewModel(
 
     @MainThread
     private fun handleStoreState(storeState: StoreState) {
-        updateViewState(nextViewState(viewState as? ViewState.Loaded, storeState, ::parseBio))
+        var state = nextViewState(viewState as? ViewState.Loaded, storeState, ::parseBio)
+        restoredDraft?.let { draft ->
+            state = restoreDraft(state, draft, ::parseBio)
+            restoredDraft = null
+        }
+        updateViewState(state)
     }
 
     @MainThread fun updateAvatar(value: String?) = update { copy(currentAvatar = value.serializable()) }
@@ -184,29 +201,47 @@ class SettingsUserProfileViewModel(
         }
         .distinctUntilChanged()
 
+    fun draft(): Draft? = (viewState as? ViewState.Loaded)?.let {
+        Draft(
+            it.currentAvatar,
+            it.currentBannerImage,
+            it.currentBannerColorHex,
+            it.currentNickname,
+            it.currentBio,
+            it.isEditingBio,
+        )
+    }
+
+    @MainThread
+    fun restoreDraft(draft: Draft) {
+        val state = viewState as? ViewState.Loaded
+        if (state == null) {
+            restoredDraft = draft
+            return
+        }
+        updateViewState(restoreDraft(state, draft, ::parseBio))
+    }
+
     @MainThread
     fun saveChanges(context: Context) {
         val state = viewState as? ViewState.Loaded ?: return
         val request = guildId?.let { id ->
-            api.updateMeGuildMember(
-                id,
-                PatchGuildMemberBody(
-                    state.currentNickname,
-                    state.currentAvatar,
-                    state.currentBannerImage,
-                    state.currentBio,
-                ),
-            ).map<Any> { member -> state.copy(meMember = GuildMember.from(member, id)) }
-        } ?: api.patchUser(
-            PatchUserBody(
-                state.currentAvatar,
-                state.currentBannerImage,
-                state.currentBannerColorHex,
-                if (state.isBioChanged) state.currentBio.serializable() else null,
-            ),
-        ).map<Any> { user ->
+            api.updateMeGuildMember(id, guildMemberPatch(state)).map<Any> { member ->
+                state.copy(
+                    meMember = GuildMember.from(member, id),
+                    currentAvatar = null,
+                    currentBannerImage = null,
+                    currentBannerColorHex = null,
+                )
+            }
+        } ?: api.patchUser(userPatch(state)).map<Any> { user ->
             storeUserProfile.updateUser(user)
-            state.copy(user = merge(state.user, user))
+            state.copy(
+                user = merge(state.user, user),
+                currentAvatar = null,
+                currentBannerImage = null,
+                currentBannerColorHex = null,
+            )
         }
         request.restSubscribeOn().ui(this).appSubscribe(
             SettingsUserProfileViewModel::class.java,
@@ -234,7 +269,11 @@ class SettingsUserProfileViewModel(
             storeState: StoreState,
             parseBio: (String) -> List<Node<MessageRenderContext>> = { emptyList() },
         ): ViewState.Loaded {
-            val bio = current?.currentBio ?: (storeState.meMember?.bio ?: storeState.user.bio)
+            val bio = current?.currentBio ?: if (storeState.meMember != null) {
+                storeState.meMember.bio.orEmpty()
+            } else {
+                storeState.user.bio
+            }
             val user = storeState.userProfile.user
                 .takeIf { it.id == storeState.user.id }
                 ?.let { merge(storeState.user, it) }
@@ -254,6 +293,34 @@ class SettingsUserProfileViewModel(
                 canEditNickname = storeState.guildChannelsInfo.canChangeNickname,
             )
         }
+
+        internal fun userPatch(state: ViewState.Loaded) = PatchUserBody(
+            state.currentAvatar,
+            state.currentBannerImage,
+            state.currentBannerColorHex,
+            if (state.isBioChanged) state.currentBio.serializable() else null,
+        )
+
+        internal fun guildMemberPatch(state: ViewState.Loaded) = PatchGuildMemberBody(
+            state.currentNickname,
+            state.currentAvatar,
+            state.currentBannerImage,
+            state.currentBio,
+        )
+
+        internal fun restoreDraft(
+            state: ViewState.Loaded,
+            draft: Draft,
+            parseBio: (String) -> List<Node<MessageRenderContext>> = { emptyList() },
+        ) = state.copy(
+            currentAvatar = draft.avatar,
+            currentBannerImage = draft.banner,
+            currentBannerColorHex = draft.bannerColor,
+            currentNickname = draft.nickname,
+            currentBio = draft.bio,
+            bioAst = draft.bio?.let(parseBio),
+            isEditingBio = draft.isEditingBio,
+        )
 
         private fun observeStoreState(guildId: Long?): Observable<StoreState> =
             StoreStream.getUsers().observeMe().flatMap { user ->

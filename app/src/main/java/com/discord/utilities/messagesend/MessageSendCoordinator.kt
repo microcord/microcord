@@ -16,6 +16,7 @@ import com.discord.stores.StorePendingReplies
 import com.discord.utilities.attachments.UploadAttachment
 import com.discord.utilities.captcha.CaptchaHelper
 import com.discord.utilities.rest.FileUpload
+import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rest.SendUtils
 import com.discord.utilities.time.Clock
 import java.util.concurrent.ConcurrentHashMap
@@ -42,6 +43,7 @@ import rx.subjects.AsyncSubject
  */
 class MessageSendCoordinator @JvmOverloads constructor(
     private val api: RestAPIInterface,
+    private val reactNativeApi: RestAPIInterface = RestAPI.reactNativeApiOrNull ?: api,
     private val now: () -> Long = System::currentTimeMillis,
     private val nonceGenerator: NonceGenerator = NonceGenerator(now),
     private val contentResolver: ContentResolver? = null,
@@ -367,6 +369,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
             executorService = queueExecutor,
             clock = Clock { now() },
             api = api,
+            reactNativeApi = reactNativeApi,
             retryScheduler = retryScheduler,
         )
     }
@@ -376,6 +379,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
         !input.canSend -> MessageResult.ValidationError("Missing send permission")
         input.communicationDisabled -> MessageResult.ValidationError("Communication disabled")
         !input.attachments.isNullOrEmpty() -> null
+        !input.stickers.isNullOrEmpty() -> null
         else -> validateContent(input.content)
     }
 

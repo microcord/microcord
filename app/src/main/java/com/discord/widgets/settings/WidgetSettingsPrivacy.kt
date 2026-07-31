@@ -19,10 +19,12 @@ import com.discord.models.user.MeUser
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUserConnections
+import com.discord.stores.StoreUserSettings
 import com.discord.utilities.accessibility.AccessibilityUtils
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.analytics.Traits
 import com.discord.utilities.dimmer.DimmerView
+import com.discord.utilities.error.RestApiError
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
@@ -69,6 +71,7 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
     private val viewModel: SettingsPrivacyViewModel by appViewModels { SettingsPrivacyViewModel() }
 
     private var existingServersDialog: AlertDialog? = null
+    private var shownConsentError: Throwable? = null
 
     private lateinit var dimmer: DimmerView
     private lateinit var explicitContentRadios: List<CheckedSetting>
@@ -212,7 +215,7 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
 
     private fun configureUI(viewState: SettingsPrivacyViewModel.ViewState) {
         when (viewState) {
-            // Consents arrive over REST, so the screen genuinely has nothing to show until then.
+            // READY supplies the local settings; the consent endpoint completes the model.
             is SettingsPrivacyViewModel.ViewState.Loading -> dimmer.setDimmed(true)
             is SettingsPrivacyViewModel.ViewState.Loaded -> {
                 dimmer.setDimmed(false)
@@ -426,7 +429,19 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
         val context = context ?: return
         privacyControls.visibility = View.VISIBLE
 
-        usageStatistics.setChecked(viewState.consents.usageStatistics.consented, false)
+        viewState.consentError?.takeUnless { it === shownConsentError }?.let {
+            shownConsentError = it
+            AppToast.show(context, RestApiError.from(it).displayString(context))
+        }
+        if (viewState.consentError == null) shownConsentError = null
+
+        val consents = viewState.consents
+        usageStatistics.visibility = if (consents == null) View.GONE else View.VISIBLE
+        personalization.visibility = if (consents == null) View.GONE else View.VISIBLE
+        if (consents == null) return
+
+        usageStatistics.isEnabled = viewState.consentError == null
+        usageStatistics.setChecked(consents.usageStatistics.consented, false)
         usageStatistics.setOnCheckedListener(
             Action1 { consented ->
                 usageStatistics.isEnabled = false
@@ -448,7 +463,8 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
             },
         )
 
-        personalization.setChecked(viewState.consents.personalization.consented, false)
+        personalization.isEnabled = viewState.consentError == null
+        personalization.setChecked(consents.personalization.consented, false)
         personalization.setOnCheckedListener(
             Action1 { consented ->
                 personalization.isEnabled = false
@@ -510,7 +526,13 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
     }
 
     private fun toggleConsent(consented: Boolean, consentType: String, toggle: CheckedSetting) {
-        val api = RestAPI.apiOrNull ?: return
+        val api = RestAPI.apiOrNull
+        if (api == null) {
+            toggle.setChecked(!consented, false)
+            toggle.isEnabled = true
+            AppToast.show(context, R.string.error_occurred_try_again)
+            return
+        }
         val body = if (consented) {
             RestAPIParams.Consents(grant = listOf(consentType))
         } else {
@@ -662,12 +684,12 @@ class SettingsPrivacyViewModel(
         val contactSyncConnection: ConnectedAccount?,
         val showContactSync: Boolean,
         val userDiscoveryFlags: Int,
-        val consents: Consents,
+        val consentState: StoreUserSettings.ConsentState,
         val harvestState: HarvestState?,
     )
 
     sealed class ViewState {
-        /** Consents have not been read yet; the screen dims rather than showing false consent. */
+        /** Local settings have not emitted yet. Consent loading does not block the rest of the page. */
         object Loading : ViewState()
 
         data class Loaded(
@@ -679,7 +701,8 @@ class SettingsPrivacyViewModel(
             val contactSyncConnection: ConnectedAccount?,
             val showContactSync: Boolean,
             val userDiscoveryFlags: Int,
-            val consents: Consents,
+            val consents: Consents?,
+            val consentError: Throwable?,
             /** `null` while the harvest status is still being read. */
             val harvestState: HarvestState?,
         ) : ViewState()
@@ -714,18 +737,26 @@ class SettingsPrivacyViewModel(
         private const val CONTACT_SYNC_EXPERIMENT = "2021-04_contact_sync_android_main"
         private const val CONTACT_SYNC_CONNECTION_TYPE = "contacts"
 
-        internal fun toViewState(storeState: StoreState): ViewState = ViewState.Loaded(
-            isMeVerified = storeState.me.isVerified,
-            isMeStaff = storeState.me.isStaff,
-            explicitContentFilter = storeState.explicitContentFilter,
-            defaultRestrictedGuilds = storeState.defaultRestrictedGuilds,
-            friendSourceFlags = storeState.friendSourceFlags,
-            contactSyncConnection = storeState.contactSyncConnection,
-            showContactSync = storeState.showContactSync,
-            userDiscoveryFlags = storeState.userDiscoveryFlags,
-            consents = storeState.consents,
-            harvestState = storeState.harvestState,
-        )
+        internal fun toViewState(storeState: StoreState): ViewState {
+            val consents = when (val state = storeState.consentState) {
+                is StoreUserSettings.ConsentState.Loading -> state.current
+                is StoreUserSettings.ConsentState.Loaded -> state.consents
+                is StoreUserSettings.ConsentState.Failed -> state.current
+            }
+            return ViewState.Loaded(
+                isMeVerified = storeState.me.isVerified,
+                isMeStaff = storeState.me.isStaff,
+                explicitContentFilter = storeState.explicitContentFilter,
+                defaultRestrictedGuilds = storeState.defaultRestrictedGuilds,
+                friendSourceFlags = storeState.friendSourceFlags,
+                contactSyncConnection = storeState.contactSyncConnection,
+                showContactSync = storeState.showContactSync,
+                userDiscoveryFlags = storeState.userDiscoveryFlags,
+                consents = consents,
+                consentError = (storeState.consentState as? StoreUserSettings.ConsentState.Failed)?.error,
+                harvestState = storeState.harvestState,
+            )
+        }
 
         fun observeStoreState(): Observable<StoreState> {
             val userSettings = StoreStream.getUserSettings()
@@ -755,9 +786,9 @@ class SettingsPrivacyViewModel(
             return localState.switchMap { local ->
                 Observable.combineLatest(
                     Observable.just(local),
-                    userSettings.observeConsents(),
+                    userSettings.observeConsentState(),
                     observeHarvestState(local.me),
-                ) { localState, consents, harvestState ->
+                ) { localState, consentState, harvestState ->
                     StoreState(
                         me = localState.me,
                         explicitContentFilter = localState.explicitContentFilter,
@@ -766,7 +797,7 @@ class SettingsPrivacyViewModel(
                         contactSyncConnection = localState.contactSyncConnection,
                         showContactSync = localState.showContactSync,
                         userDiscoveryFlags = localState.userDiscoveryFlags,
-                        consents = consents,
+                        consentState = consentState,
                         harvestState = harvestState,
                     )
                 }

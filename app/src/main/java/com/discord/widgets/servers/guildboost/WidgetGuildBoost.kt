@@ -76,7 +76,7 @@ class WidgetGuildBoost : AppFragment(R.layout.widget_server_boost_status) {
                     2,
                     "#" to 2,
                 ))
-            setOnClickListener { AppScreenRouter.launch(context, WidgetSettingsPremium::class.java) }
+            setOnClickListener { WidgetSettingsPremium.launch(context) }
         }
         levelBackgrounds = listOf(
             view.findViewById(R.id.boost_bar_tier_0_iv),
@@ -135,7 +135,7 @@ class WidgetGuildBoost : AppFragment(R.layout.widget_server_boost_status) {
                     .configure(state.meUser.premiumTier, false)
                 requireView().findViewById<GuildBoostMarketingView>(R.id.boost_status_premium_marketing)
                     .configure(state.meUser.premiumTier) {
-                        AppScreenRouter.launch(requireContext(), WidgetSettingsPremium::class.java)
+                        WidgetSettingsPremium.launch(requireContext())
                     }
             }
         }
@@ -216,7 +216,7 @@ class WidgetGuildBoost : AppFragment(R.layout.widget_server_boost_status) {
                     .setMessage(event.bodyStringRes)
                     .setNegativeButton(R.string.cancel, null)
                     .setPositiveButton(R.string.billing_manage_subscription) { _, _ ->
-                        AppScreenRouter.launch(requireContext(), WidgetSettingsPremium::class.java)
+                        WidgetSettingsPremium.launch(requireContext())
                     }.show()
         }
     }

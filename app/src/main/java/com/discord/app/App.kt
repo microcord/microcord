@@ -3,6 +3,7 @@ package com.discord.app
 import android.app.Application
 import androidx.appcompat.app.AppCompatDelegate
 import com.discord.dialogs.WidgetMaskedLinksDialog
+import com.discord.screenshot_detection.ScreenshotDetector
 import com.discord.stores.StoreStream
 import com.discord.utilities.analytics.AnalyticsDeviceResourceUsageMonitor
 import com.discord.utilities.analytics.AdvertisingIdProvider
@@ -31,6 +32,7 @@ class App : Application() {
         ApplicationProvider.init(this)
         ActivityProvider.init(this)
         ClockFactory.init()
+        ScreenshotDetector.instance = ScreenshotDetector(this, AppLog, SharedPreferencesProvider.get())
         Backgrounded.init(this)
         PersisterConfig.init(this, ClockFactory.get())
         MGImagesConfig.init(this)
@@ -41,7 +43,7 @@ class App : Application() {
         // Without this `StoreNotices.dialogPresenter` stays null, every dialog-backed notice
         // reports "did not show", and it stays queued forever with nothing user-visible.
         NoticeBuilders.install()
-        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
         BootLog.record(BootLogEvent.PLATFORM_READY)
         System.loadLibrary("dsti")
         BootLog.record(BootLogEvent.NATIVE_READY)

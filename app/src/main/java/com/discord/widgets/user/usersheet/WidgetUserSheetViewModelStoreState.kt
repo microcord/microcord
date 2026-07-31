@@ -14,6 +14,7 @@ import com.discord.stores.StoreChannels
 import com.discord.stores.StoreGuilds
 import com.discord.stores.StoreMediaSettings
 import com.discord.stores.StorePermissions
+import com.discord.stores.StoreStageChannels
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUser
 import com.discord.stores.StoreUserNotes
@@ -25,6 +26,7 @@ import com.discord.stores.StoreVoiceStates
 import com.discord.utilities.rx.leadingEdgeThrottle
 import com.discord.utilities.streams.StreamContext
 import com.discord.widgets.user.presence.ModelRichPresence
+import com.discord.widgets.stage.StageRoles
 import java.util.concurrent.TimeUnit
 import rx.Observable
 
@@ -54,13 +56,9 @@ object WidgetUserSheetViewModelStoreState {
      * @param channelId the channel the sheet was opened from, or `null`.
      * @param guildId the guild to scope nickname, roles and moderation to. When `null` it is taken
      *   from [channelId]'s channel, so a sheet opened from a guild channel is still guild-scoped.
-     * @param storeVoiceChannelSelected my current voice channel. `StoreStream` publishes no
-     *   accessor, so the default is `null` and the sheet reports me as not connected — which hides
-     *   the per-user voice settings.
-     * @param storeVoiceStates voice states per channel. Same situation; the default reports none,
-     *   which hides the server mute/deafen/move actions.
-     * @param storeMediaSettings my local audio settings. Same situation; the default reports the
-     *   user unmuted at full volume.
+     * @param storeVoiceChannelSelected my current voice channel.
+     * @param storeVoiceStates voice states per channel.
+     * @param storeMediaSettings my local audio settings.
      * @param streamContextService resolves the user's Go Live stream. The reference passes
      *   `StreamContextService`, which is not reconstructed; the default reports no stream.
      * @param observeCanDisableCommunication the timeout feature gate. Reference:
@@ -74,15 +72,16 @@ object WidgetUserSheetViewModelStoreState {
         guildId: Long?,
         storeUser: StoreUser = StoreStream.getUsers(),
         storeChannels: StoreChannels = StoreStream.getChannels(),
-        storeVoiceChannelSelected: StoreVoiceChannelSelected? = null,
+        storeVoiceChannelSelected: StoreVoiceChannelSelected? = StoreStream.getVoiceChannelSelected(),
         storeUserProfile: StoreUserProfile = StoreStream.getUserProfiles(),
         storeUserRelationships: StoreUserRelationships = StoreStream.getUserRelationships(),
-        storeVoiceStates: StoreVoiceStates? = null,
+        storeVoiceStates: StoreVoiceStates? = StoreStream.getVoiceStates(),
         storeGuilds: StoreGuilds = StoreStream.getGuilds(),
-        storeMediaSettings: StoreMediaSettings? = null,
+        storeMediaSettings: StoreMediaSettings? = StoreStream.getMediaSettings(),
         storeUserPresence: StoreUserPresence = StoreStream.getPresences(),
         storePermissions: StorePermissions = StoreStream.getPermissions(),
         storeUserNotes: StoreUserNotes = StoreStream.getUserNotes(),
+        storeStageChannels: StoreStageChannels = StoreStream.getStageChannels(),
         streamContextService: (Long) -> Observable<StreamContext?> = { Observable.just(null) },
         observeCanDisableCommunication: (Long) -> Observable<Boolean> = { Observable.just(false) },
     ): Observable<WidgetUserSheetViewModel.StoreState?> {
@@ -140,6 +139,15 @@ object WidgetUserSheetViewModelStoreState {
                 // it, not the target's.
                 val stageChannel = bootstrap.selectedVoiceChannel
                     ?.takeIf { it.isStageVoiceChannel() }
+                val userStageRoles: Observable<StageRoles?> = stageChannel
+                    ?.let { storeStageChannels.observeUserRoles(user.id, it.id) }
+                    ?: Observable.just(null)
+                val userRequestToSpeakState = stageChannel
+                    ?.let { storeStageChannels.observeUserRequestToSpeakState(user.id, it.id) }
+                    ?: Observable.just(StageRequestToSpeakState.NONE)
+                val myStageRoles: Observable<StageRoles?> = stageChannel
+                    ?.let { storeStageChannels.observeMyRoles(it.id) }
+                    ?: Observable.just(null)
 
                 combineInputs(
                     computedMembers,
@@ -154,6 +162,9 @@ object WidgetUserSheetViewModelStoreState {
                     storeUserProfile.observeUserProfile(user.id),
                     storeUserRelationships.observe(user.id),
                     storeUserNotes.observeUserNote(user.id),
+                    userStageRoles,
+                    userRequestToSpeakState,
+                    myStageRoles,
                     canDisableCommunication,
                 ) { inputs ->
                     inputs.toStoreState(user, bootstrap.me, bootstrap.channel, stageChannel)
@@ -187,7 +198,7 @@ object WidgetUserSheetViewModelStoreState {
     )
 
     /**
-     * The thirteen second-stage sources, carried as one value.
+     * The sixteen second-stage sources, carried as one value.
      *
      * RxJava 1 stops providing typed `combineLatest` overloads well below this arity, and the
      * reference reaches for its own `ObservableCombineLatestOverloadsKt` for the same reason. This
@@ -206,6 +217,9 @@ object WidgetUserSheetViewModelStoreState {
         val userProfile: UserProfile,
         val userRelationshipType: Int?,
         val userNote: StoreUserNotes.UserNoteState,
+        val userStageRoles: StageRoles?,
+        val userRequestToSpeakState: StageRequestToSpeakState,
+        val myStageRoles: StageRoles?,
         val canDisableCommunication: Boolean,
     )
 
@@ -234,13 +248,13 @@ object WidgetUserSheetViewModelStoreState {
         userRelationshipType = userRelationshipType,
         userNoteFetchState = userNote,
         stageChannel = stageChannel,
-        // Reference: `StoreStageChannels.observeUserRequestToSpeakState`. That store does not
-        // exist here, so nobody ever appears to be requesting to speak.
-        userRequestToSpeakState = StageRequestToSpeakState.NONE,
+        userStageRoles = userStageRoles,
+        userRequestToSpeakState = userRequestToSpeakState,
+        myStageRoles = myStageRoles,
         canDisableCommunication = canDisableCommunication,
     )
 
-    /** Thirteen-source `combineLatest`, built from the four-source overload RxJava 1 does provide. */
+    /** Sixteen-source `combineLatest`, built from RxJava's iterable overload. */
     @Suppress("UNCHECKED_CAST", "LongParameterList")
     private fun <R> combineInputs(
         computedMembers: Observable<Map<Long, GuildMember>>,
@@ -255,6 +269,9 @@ object WidgetUserSheetViewModelStoreState {
         userProfile: Observable<UserProfile>,
         userRelationshipType: Observable<Int?>,
         userNote: Observable<StoreUserNotes.UserNoteState>,
+        userStageRoles: Observable<StageRoles?>,
+        userRequestToSpeakState: Observable<StageRequestToSpeakState>,
+        myStageRoles: Observable<StageRoles?>,
         canDisableCommunication: Observable<Boolean>,
         combine: (Inputs) -> R,
     ): Observable<R> = Observable.combineLatest(
@@ -271,6 +288,9 @@ object WidgetUserSheetViewModelStoreState {
             userProfile,
             userRelationshipType,
             userNote,
+            userStageRoles,
+            userRequestToSpeakState,
+            myStageRoles,
             canDisableCommunication,
         ),
     ) { values ->
@@ -288,7 +308,10 @@ object WidgetUserSheetViewModelStoreState {
                 userProfile = values[9] as UserProfile,
                 userRelationshipType = values[10] as Int?,
                 userNote = values[11] as StoreUserNotes.UserNoteState,
-                canDisableCommunication = values[12] as Boolean,
+                userStageRoles = values[12] as StageRoles?,
+                userRequestToSpeakState = values[13] as StageRequestToSpeakState,
+                myStageRoles = values[14] as StageRoles?,
+                canDisableCommunication = values[15] as Boolean,
             ),
         )
     }

@@ -19,6 +19,7 @@ import com.google.android.material.R as MaterialR
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.discord.utilities.view.text.TextWatcher
 import rx.subjects.PublishSubject
 import rx.subjects.Subject
 import rx.subscriptions.CompositeSubscription
@@ -110,6 +111,7 @@ abstract class AppBottomSheet(
     override fun onDestroyView() {
         setPeekHeightBottomView(null)
         bottomSheetBehavior?.removeBottomSheetCallback(bottomSheetCallback)
+        TextWatcher.reset(this)
         super.onDestroyView()
     }
 

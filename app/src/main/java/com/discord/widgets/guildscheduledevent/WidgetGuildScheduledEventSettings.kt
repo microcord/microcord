@@ -12,6 +12,8 @@ import android.text.format.DateUtils
 import android.view.View
 import android.widget.TextView
 import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.fragment.app.Fragment
 import com.discord.R
 import com.discord.api.guildscheduledevent.GuildScheduledEventEntityType
 import com.discord.app.AppFragment
@@ -220,6 +222,23 @@ class WidgetGuildScheduledEventSettings : AppFragment(R.layout.widget_guild_sche
                     existingEventId?.let { putExtra(EXTRA_EVENT_ID, it) }
                 }
             AppScreenRouter.launchForResult(context, launcher, WidgetGuildScheduledEventSettings::class.java, extras)
+        }
+
+        fun registerForResult(
+            fragment: Fragment,
+            onFinished: () -> Unit,
+            onQuit: () -> Unit,
+        ): ActivityResultLauncher<Intent> = fragment.registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult(),
+        ) { result ->
+            handleResult(result.resultCode, onFinished, onQuit)
+        }
+
+        internal fun handleResult(resultCode: Int, onFinished: () -> Unit, onQuit: () -> Unit) {
+            when (resultCode) {
+                Activity.RESULT_OK -> onFinished()
+                RESULT_QUIT -> onQuit()
+            }
         }
     }
 }

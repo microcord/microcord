@@ -81,7 +81,7 @@ class WidgetSettingsGuildBoost : AppFragment(R.layout.widget_settings_boost) {
                 }
                 upsell.configure(state.userPremiumTier, state.sampleGuildItems.isNotEmpty())
                 marketing.configure(state.userPremiumTier) {
-                    AppScreenRouter.launch(requireContext(), WidgetSettingsPremium::class.java)
+                    WidgetSettingsPremium.launch(requireContext())
                 }
                 handlePendingAction(state.pendingAction)
             }

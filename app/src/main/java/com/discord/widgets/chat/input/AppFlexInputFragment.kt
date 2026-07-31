@@ -17,6 +17,7 @@ import org.xmlpull.v1.XmlPullParser
 /** Restores the XML attributes that the public FlexInput build loses on fragment recreation. */
 class AppFlexInputFragment : FlexInputFragment() {
     private var inflatedFromXml = false
+    var onAttachmentsCleared: () -> Unit = {}
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -40,7 +41,13 @@ class AppFlexInputFragment : FlexInputFragment() {
 
     override fun onDestroyView() {
         inflatedFromXml = false
+        onAttachmentsCleared = {}
         super.onDestroyView()
+    }
+
+    override fun clearAttachments() {
+        super.clearAttachments()
+        onAttachmentsCleared()
     }
 
     override fun onCreateView(

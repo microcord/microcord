@@ -13,6 +13,7 @@ import com.discord.app.AppFragment
 import com.discord.app.AppViewFlipper
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
+import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.analytics.Traits
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
@@ -21,6 +22,9 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.rx.ui
 import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
+import com.discord.widgets.channels.WidgetGroupInviteFriends
+import com.discord.widgets.channels.invite.GroupInviteFriendsSheet
+import com.discord.widgets.channels.invite.GroupInviteFriendsSheetFeatureFlag
 import com.discord.widgets.contact_sync.ContactSyncFlowAnalytics
 import com.discord.widgets.contact_sync.WidgetContactSync
 import com.discord.widgets.tabs.NavigationTab
@@ -71,8 +75,9 @@ class WidgetFriendsList : AppFragment(R.layout.widget_friends_list) {
         adapter.onClickSuggestedHeaderExpandCollapse = { viewModel.handleClickSuggestedHeader() }
         adapter.onClickCall = { user -> viewModel.launchVoiceCall(user.id) }
         adapter.onClickChat = { user ->
-            StoreStream.openDm(user.id)
-            StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE)
+            ChannelSelector.getInstance().findAndSetDirectMessage(requireContext(), user.id) {
+                StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE)
+            }
         }
         adapter.onClickAcceptFriend = { user ->
             viewModel.acceptFriendRequest(user.id, user.username)
@@ -162,15 +167,18 @@ class WidgetFriendsList : AppFragment(R.layout.widget_friends_list) {
                         WidgetFriendsAdd.show(requireContext(), source = ANALYTICS_SOURCE)
                     R.id.menu_friends_contact_sync ->
                         launchContactSync(requireContext(), LOCATION_ICON)
+                    R.id.menu_friends_start_group ->
+                        if (GroupInviteFriendsSheetFeatureFlag.INSTANCE.isEnabled()) {
+                            GroupInviteFriendsSheet.show(parentFragmentManager, source = ANALYTICS_SOURCE)
+                        } else {
+                            WidgetGroupInviteFriends.launch(requireContext(), ANALYTICS_SOURCE)
+                        }
                     else -> Unit
                 }
             },
             onConfigured = { menu: Menu ->
                 menu.findItem(R.id.menu_friends_contact_sync)?.isVisible = showContactSyncIcon
-                // The reference offers "start a group DM" here. Its two destinations
-                // (`WidgetGroupInviteFriends` and `GroupInviteFriendsSheet`) are not reconstructed
-                // yet, so the item is hidden rather than left as a button that leads nowhere.
-                menu.findItem(R.id.menu_friends_start_group)?.isVisible = false
+                menu.findItem(R.id.menu_friends_start_group)?.isVisible = true
             },
         )
     }

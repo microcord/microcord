@@ -30,6 +30,7 @@ import com.discord.utilities.view.text.LinkifiedTextView
 import com.discord.widgets.channels.WidgetChannelTopicViewModel.Event
 import com.discord.widgets.channels.WidgetChannelTopicViewModel.ViewState
 import com.discord.widgets.channels.settings.WidgetChannelGroupDMSettings
+import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.user.WidgetUserMutualGuilds
 import com.facebook.drawee.span.DraweeSpanStringBuilder
@@ -293,10 +294,7 @@ class WidgetChannelTopic : AppFragment(R.layout.widget_channel_topic) {
 
         menu.menu.findItem(R.id.menu_private_channel_sidebar_pinned_messages)
             .setOnMenuItemClickListener {
-                // The pins screen has to be hosted by WidgetHome (it implements
-                // WidgetChannelPinnedMessages.Host), so it is opened through the same seam the
-                // sidebar's pin button uses rather than as a standalone screen.
-                WidgetChannelSidebarActions.onPins?.invoke(channelId)
+                WidgetChannelPinnedMessages.show(requireContext(), channelId)
                 true
             }
 

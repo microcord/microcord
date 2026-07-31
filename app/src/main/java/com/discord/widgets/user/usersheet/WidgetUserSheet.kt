@@ -3,6 +3,7 @@ package com.discord.widgets.user.usersheet
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -13,13 +14,18 @@ import androidx.core.view.ViewCompat
 import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.FragmentManager
 import com.discord.R
+import com.discord.api.channel.isDM
+import com.discord.app.AppActivity
 import com.discord.app.AppBottomSheet
+import com.discord.dialogs.useractions.UserActionsDialog
 import com.discord.app.AppLog
 import com.discord.app.appViewModels
 import com.discord.i18n.i18nFormat
-import com.discord.models.domain.ModelUserRelationship
+import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUserNotes
+import com.discord.utilities.channel.ChannelSelector
+import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.appSubscribe
@@ -32,9 +38,13 @@ import com.discord.widgets.guildcommunicationdisabled.start.WidgetDisableGuildCo
 import com.discord.widgets.guildcommunicationdisabled.start.WidgetEnableGuildCommunication
 import com.discord.widgets.roles.RolesListView
 import com.discord.widgets.servers.WidgetServerSettingsEditMember
+import com.discord.widgets.stage.usersheet.UserProfileStageActionsView
+import com.discord.widgets.tabs.WidgetTabsHost
 import com.discord.widgets.user.Badge
 import com.discord.widgets.user.WidgetBanUser
 import com.discord.widgets.user.WidgetKickUser
+import com.discord.widgets.user.WidgetUserMutualFriends
+import com.discord.widgets.user.WidgetUserMutualGuilds
 import com.discord.widgets.user.presence.ViewHolderUserRichPresence
 import com.discord.widgets.user.profile.UserProfileAdminView
 import com.discord.widgets.user.profile.UserProfileConnectionsView
@@ -88,6 +98,29 @@ class WidgetUserSheet : AppBottomSheet() {
     private var settingNote = false
     private var noteDirty = false
 
+    private val messageNavigator by lazy(LazyThreadSafetyMode.NONE) {
+        UserSheetMessageNavigator(
+            findExistingDm = { userId ->
+                StoreStream.getChannels().getAllChannels().values.firstOrNull { channel ->
+                    channel.isDM() && channel.recipients?.singleOrNull()?.id == userId
+                }?.id
+            },
+            createDm = { userId, completed ->
+                StoreStream.createPrivateChannel(listOf(userId)) { result ->
+                    completed(result.map { it.id })
+                }
+            },
+            selectDm = { channelId ->
+                ChannelSelector.getInstance().findAndSet(requireContext(), channelId)
+            },
+            closeSheet = ::dismiss,
+            selectHome = {
+                StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE)
+            },
+            ensureHomeActivity = ::ensureHomeActivity,
+        )
+    }
+
     override fun getContentViewResId() = R.layout.widget_user_sheet
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -97,6 +130,7 @@ class WidgetUserSheet : AppBottomSheet() {
         view.findViewById<UserProfileHeaderView>(R.id.user_sheet_profile_header_view)
             .setOnBadgeClick(Badge.onBadgeClick(parentFragmentManager, requireContext()))
         bindAdminView(view.findViewById(R.id.user_sheet_admin_view))
+        bindStageActions(view)
         bindVoiceSettings(view)
         markAccessibilityHeadings(view)
 
@@ -140,12 +174,24 @@ class WidgetUserSheet : AppBottomSheet() {
         configureHeader(root, loaded)
         configureRichPresence(root, loaded)
         configureProfileActionButtons(root, loaded)
+        configureStageActions(root, loaded)
         configureAboutMe(root, loaded)
         configureVoiceSection(root, loaded)
         configureGuildSection(root, loaded)
         configureConnectionsSection(root, loaded)
         configureNote(root, loaded)
         configureDeveloperSection(root, loaded)
+
+        if (!viewModel.openPopoutLogged && loaded.profileLoaded) {
+            val activity = loaded.richPresence?.primaryActivity
+            AnalyticsTracker.openUserSheet(
+                loaded.hasPremiumCustomization,
+                activity?.name,
+                activity?.platform,
+                loaded.guildMember,
+            )
+            viewModel.openPopoutLogged = true
+        }
     }
 
     private fun configureHeader(root: View, state: WidgetUserSheetViewModel.ViewState.Loaded) {
@@ -215,29 +261,18 @@ class WidgetUserSheet : AppBottomSheet() {
         root: View,
         state: WidgetUserSheetViewModel.ViewState.Loaded,
     ) {
-        val actionable = !state.isMe && !state.user.isSystemUser
-        val relationship = state.userRelationshipType
-
-        root.setVisible(R.id.user_sheet_profile_actions_container, actionable)
-        root.setVisible(R.id.user_sheet_profile_actions_divider, actionable)
-        root.setVisible(R.id.user_sheet_message_action_button, actionable)
-        // Calling requires a DM; a blocked user cannot be called.
-        val callable = actionable && relationship != ModelUserRelationship.TYPE_BLOCKED
-        root.setVisible(R.id.user_sheet_call_action_button, callable)
-        root.setVisible(R.id.user_sheet_video_action_button, callable)
-        root.setVisible(
-            R.id.user_sheet_add_friend_action_button,
-            actionable && relationship == ModelUserRelationship.TYPE_NONE,
-        )
-        root.setVisible(
-            R.id.user_sheet_pending_friend_request_action_button,
-            relationship == ModelUserRelationship.TYPE_INVITE_OUTGOING,
-        )
-        val incoming = relationship == ModelUserRelationship.TYPE_INVITE_INCOMING
-        root.setVisible(R.id.user_sheet_incoming_friend_request_header, incoming)
-        root.setVisible(R.id.user_sheet_friend_request_incoming_container, incoming)
-        root.setVisible(R.id.user_sheet_more_button, actionable)
-        root.setVisible(R.id.user_sheet_profile_edit_container, state.isMe)
+        val visibility = state.actionVisibility
+        root.setVisible(R.id.user_sheet_profile_actions_container, visibility.showActions)
+        root.setVisible(R.id.user_sheet_profile_actions_divider, visibility.showActions)
+        root.setVisible(R.id.user_sheet_message_action_button, visibility.showMessage)
+        root.setVisible(R.id.user_sheet_call_action_button, visibility.showCall)
+        root.setVisible(R.id.user_sheet_video_action_button, visibility.showVideo)
+        root.setVisible(R.id.user_sheet_add_friend_action_button, visibility.showAddFriend)
+        root.setVisible(R.id.user_sheet_pending_friend_request_action_button, visibility.showPendingRequest)
+        root.setVisible(R.id.user_sheet_incoming_friend_request_header, visibility.showIncomingRequest)
+        root.setVisible(R.id.user_sheet_friend_request_incoming_container, visibility.showIncomingRequest)
+        root.setVisible(R.id.user_sheet_more_button, visibility.showMore)
+        root.setVisible(R.id.user_sheet_profile_edit_container, visibility.showEditProfile)
         // Reference also offers "Add to Server" for bots; `WidgetOAuthAuthorize` is not
         // reconstructed, so the row stays hidden rather than leading nowhere.
         root.setVisible(R.id.user_sheet_profile_add_to_server_container, false)
@@ -331,14 +366,8 @@ class WidgetUserSheet : AppBottomSheet() {
             updateViewState(
                 state.connectionsViewState,
                 { _, _, url -> UriHandler.handle(context, url) },
-                {
-                    dismiss()
-                    onMutualGuilds?.invoke(state.user.id)
-                },
-                {
-                    dismiss()
-                    onMutualFriends?.invoke(state.user.id)
-                },
+                { WidgetUserMutualGuilds.show(requireContext(), state.user.id) },
+                { WidgetUserMutualFriends.show(requireContext(), state.user) },
             )
         }
     }
@@ -377,8 +406,7 @@ class WidgetUserSheet : AppBottomSheet() {
 
     private fun bindActionButtons(view: View) {
         view.findViewById<View>(R.id.user_sheet_message_action_button).setOnClickListener {
-            dismiss()
-            onMessage?.invoke(argumentsOrDefault.getLong(ARG_USER_ID))
+            viewModel.launchMessage()
         }
         view.findViewById<View>(R.id.user_sheet_call_action_button)
             .setOnClickListener { viewModel.launchVoiceCall() }
@@ -395,12 +423,20 @@ class WidgetUserSheet : AppBottomSheet() {
         view.findViewById<View>(R.id.user_sheet_friend_request_ignore_button)
             .setOnClickListener { viewModel.removeRelationship(R.string.friend_request_ignored) }
         view.findViewById<View>(R.id.user_sheet_more_button).setOnClickListener {
-            onMore?.invoke(
+            UserActionsDialog.show(
+                parentFragmentManager,
                 argumentsOrDefault.getLong(ARG_USER_ID),
-                (viewModel.viewState as? WidgetUserSheetViewModel.ViewState.Loaded)
-                    ?.userRelationshipType ?: ModelUserRelationship.TYPE_NONE,
+                argumentsOrDefault.getLong(ARG_CHANNEL_ID),
             )
         }
+    }
+
+    private fun configureStageActions(root: View, state: WidgetUserSheetViewModel.ViewState.Loaded) {
+        val actions = root.findViewById<UserProfileStageActionsView>(
+            R.id.user_sheet_profile_stage_actions_view,
+        )
+        actions.updateView(state.stageViewState)
+        root.findViewById<View>(R.id.user_sheet_profile_stage_actions_card).visibility = actions.visibility
     }
 
     private fun bindAdminView(view: UserProfileAdminView) {
@@ -478,6 +514,8 @@ class WidgetUserSheet : AppBottomSheet() {
             is WidgetUserSheetViewModel.Event.ShowFriendRequestErrorToast ->
                 toast(relationshipErrorMessage(event.abortCode, event.username))
 
+            is WidgetUserSheetViewModel.Event.LaunchMessage -> messageNavigator.open(event.userId)
+
             is WidgetUserSheetViewModel.Event.LaunchVoiceCall -> {
                 dismiss()
                 onCall?.invoke(event.channelId, false)
@@ -541,6 +579,37 @@ class WidgetUserSheet : AppBottomSheet() {
         findViewById<View>(id).visibility = if (visible) View.VISIBLE else View.GONE
     }
 
+    private fun bindStageActions(view: View) {
+        view.findViewById<UserProfileStageActionsView>(R.id.user_sheet_profile_stage_actions_view)
+            .apply {
+                setOnInviteToSpeak {
+                    val isMe = (viewModel.viewState as? WidgetUserSheetViewModel.ViewState.Loaded)?.isMe == true
+                    if (isMe) {
+                        requestMicrophone(
+                            onFailure = { toast(getString(R.string.stage_channel_permission_microphone_denied)) },
+                            onSuccess = { viewModel.setUserSuppressedInChannel(false) },
+                        )
+                    } else {
+                        viewModel.inviteUserToSpeak()
+                    }
+                }
+                setOnMoveToAudience { viewModel.setUserSuppressedInChannel(true) }
+            }
+    }
+
+    private fun ensureHomeActivity() {
+        if (parentFragmentManager.hasVisibleTabsHost()) return
+        startActivity(
+            Intent(requireContext(), AppActivity.Main::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        )
+    }
+
+    private fun FragmentManager.hasVisibleTabsHost(): Boolean = fragments.any { fragment ->
+        fragment.isVisible &&
+            (fragment is WidgetTabsHost || fragment.childFragmentManager.hasVisibleTabsHost())
+    }
+
     companion object {
         private const val ARG_USER_ID = "ARG_USER_ID"
         private const val ARG_CHANNEL_ID = "ARG_CHANNEL_ID"
@@ -554,15 +623,11 @@ class WidgetUserSheet : AppBottomSheet() {
          * `widgets/user`. Each is a seam, not a state channel — the sheet's own state is entirely
          * inside its view model.
          */
+        @Deprecated("Message navigation is owned by WidgetUserSheet")
         @JvmField var onMessage: ((Long) -> Unit)? = null
 
         /** `(channelId, isVideo)`; installed by whoever owns [com.discord.widgets.user.calls.PrivateCallLauncher]. */
         @JvmField var onCall: ((Long, Boolean) -> Unit)? = null
-        @JvmField var onMutualFriends: ((Long) -> Unit)? = null
-        @JvmField var onMutualGuilds: ((Long) -> Unit)? = null
-
-        /** Opens the overflow action sheet; reference destination is `b.a.a.d.a`. */
-        @JvmField var onMore: ((Long, Int) -> Unit)? = null
 
         /**
          * Opens the sheet.
@@ -598,5 +663,23 @@ class WidgetUserSheet : AppBottomSheet() {
         /** Legacy two-argument entry point kept for existing call sites. */
         @JvmStatic
         fun show(userId: Long, fragmentManager: FragmentManager) = show(fragmentManager, userId)
+    }
+}
+
+internal class UserSheetMessageNavigator(
+    private val findExistingDm: (Long) -> Long?,
+    private val createDm: (Long, (Result<Long>) -> Unit) -> Unit,
+    private val selectDm: (Long) -> Unit,
+    private val closeSheet: () -> Unit,
+    private val selectHome: () -> Unit,
+    private val ensureHomeActivity: () -> Unit,
+) {
+    fun open(userId: Long) {
+        findExistingDm(userId)?.let(selectDm) ?: createDm(userId) { result ->
+            result.onSuccess(selectDm)
+        }
+        closeSheet()
+        selectHome()
+        ensureHomeActivity()
     }
 }

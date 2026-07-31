@@ -83,6 +83,7 @@ class GatewaySocket(
     private val scheduler: GatewayScheduler,
     private val discovery: GatewayDiscovery,
     private val webSocketFactory: GatewayWebSocketFactory,
+    private val gatewaySocketLogger: GatewaySocketLogger = NoopGatewaySocketLogger,
     private val jitter: () -> Double = Math::random,
 ) {
     private enum class State { DISCONNECTED, DISCOVERING, CONNECTING, IDENTIFYING, RESUMING, CONNECTED }
@@ -260,6 +261,9 @@ class GatewaySocket(
                     try {
                         decoder.decode(bytes).forEach(::handleMessage)
                     } catch (error: Throwable) {
+                        if (gatewaySocketLogger.logLevel == GatewaySocketLogger.LogLevel.VERBOSE) {
+                            runCatching { gatewaySocketLogger.logMessageInflateFailed(error) }
+                        }
                         logError("inflate/parse failure: ${error.javaClass.simpleName}", error)
                         reconnect("Gateway inflate/parse failure: ${error.javaClass.simpleName}", immediate = false)
                     }
@@ -314,6 +318,9 @@ class GatewaySocket(
     }
 
     private fun handleMessage(json: String) {
+        if (gatewaySocketLogger.logLevel == GatewaySocketLogger.LogLevel.VERBOSE) {
+            runCatching { gatewaySocketLogger.logInboundMessage(GatewayLogRedactor.redact(json)) }
+        }
         val incoming = incomingParser.parse(json)
         incoming.seq?.let { sequence = it }
         when (incoming.opcode) {
@@ -465,7 +472,15 @@ class GatewaySocket(
      */
     private fun <T> send(opcode: Opcode, data: T?, omitNulls: Boolean = false) {
         val serializer = if (omitNulls) gsonOmitNulls else gson
-        socket?.send(serializer.toJson(Outgoing(opcode.apiInt, data)))
+        val rawMessage = try {
+            serializer.toJson(Outgoing(opcode, data))
+        } catch (error: Throwable) {
+            logError("gateway serialization failed for opcode ${opcode.apiInt}", error)
+            scheduleReconnect("Gateway serialization failed")
+            return
+        }
+        runCatching { gatewaySocketLogger.logOutboundMessage(GatewayLogRedactor.redact(rawMessage)) }
+        if (socket?.send(rawMessage) != true) scheduleReconnect("Gateway send failed")
     }
 
     private fun logInfo(message: String) { runCatching { Log.i(TAG, message) } }

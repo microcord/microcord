@@ -1,6 +1,5 @@
 package com.discord.dialogs
 
-import android.content.Context
 import android.os.Bundle
 import android.view.View
 import android.widget.RelativeLayout
@@ -10,6 +9,7 @@ import com.discord.R
 import com.discord.app.AppDialog
 import com.discord.i18n.i18nRender
 import com.discord.stores.StoreStream
+import com.discord.widgets.settings.premium.WidgetSettingsPremium
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.switchmaterial.SwitchMaterial
 
@@ -59,7 +59,7 @@ class ImageUploadFailedDialog : AppDialog(R.layout.image_upload_failed_dialog) {
         view.findViewById<RelativeLayout>(R.id.image_upload_failed_nitro_wrapper).visibility =
             if (isUserPremium) View.GONE else View.VISIBLE
         view.findViewById<MaterialButton>(R.id.image_upload_failed_nitro).setOnClickListener {
-            openPremiumSettings?.invoke(it.context)
+            WidgetSettingsPremium.launch(it.context)
             dismiss()
         }
 
@@ -87,16 +87,6 @@ class ImageUploadFailedDialog : AppDialog(R.layout.image_upload_failed_dialog) {
         private const val PARAM_IS_USER_PREMIUM = "PARAM_IS_USER_PREMIUM"
         private const val PARAM_CAN_COMPRESS = "PARAM_CAN_COMPRESS"
         private const val PARAM_MAX_FILE_SIZE_MB = "PARAM_MAX_FILE_SIZE_MB"
-
-        /**
-         * Opens Nitro settings.
-         *
-         * The reference calls `WidgetSettingsPremium.launch(context)` and records a
-         * `File Upload Popout (w/ Compression)` analytics location. Neither that screen nor
-         * `AnalyticsTracker` exists in this project yet, so the navigation is injected.
-         */
-        @JvmStatic
-        var openPremiumSettings: ((Context) -> Unit)? = null
 
         /**
          * The upload ceiling is quoted from a fixed set of tier strings, so an unexpected limit

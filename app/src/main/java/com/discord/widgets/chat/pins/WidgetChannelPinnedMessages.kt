@@ -2,9 +2,7 @@ package com.discord.widgets.chat.pins
 
 import android.content.Context
 import android.content.Intent
-import android.os.Bundle
 import android.view.View
-import androidx.appcompat.widget.Toolbar
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
@@ -12,7 +10,8 @@ import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isPrivate
 import com.discord.app.AppActivity
 import com.discord.app.AppFragment
-import com.discord.app.BackPressHandlerRegistry
+import com.discord.app.AppScreenRouter
+import com.discord.app.AppTransitionActivity
 import com.discord.models.guild.Guild
 import com.discord.models.message.Message
 import com.discord.stores.StorePinnedMessages
@@ -43,12 +42,6 @@ import rx.Subscription
  */
 class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_messages), WidgetChatListActions.Host {
 
-    interface Host {
-        fun pinnedMessagesStore(): StorePinnedMessages
-        fun channelForPins(channelId: Long): Channel?
-        fun jumpToPinnedMessage(channelId: Long, messageId: Long)
-    }
-
     private var subscription: Subscription? = null
     private var adapter: WidgetChatListAdapter? = null
     private var pinnedMessages: Map<Long, Message> = emptyMap()
@@ -56,10 +49,10 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        val channelId = requireArguments().getLong(ARG_CHANNEL_ID)
-        val channel = host()?.channelForPins(channelId) ?: StoreStream.getChannels().getChannel(channelId)
+        val channelId = mostRecentIntent.getLongExtra(INTENT_EXTRA_CHANNEL_ID, 0L)
+        val channel = StoreStream.getChannels().getChannel(channelId)
         if (channel == null) {
-            close()
+            requireActivity().finish()
             return
         }
         this.channel = channel
@@ -79,15 +72,6 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
         setActionBarDisplayHomeAsUpEnabled()
         setActionBarTitle(R.string.pinned_messages)
         setActionBarSubtitle(channel.getDisplayNameOrDefault(requireContext(), includePrefix = false))
-        view.findViewById<Toolbar>(R.id.action_bar_toolbar).setNavigationOnClickListener { close() }
-        parentFragment?.view?.findViewById<View>(R.id.widget_home_panel_center_overlay)?.apply {
-            visibility = View.VISIBLE
-            bringToFront()
-        }
-        view.isFocusableInTouchMode = true
-        view.requestFocus()
-        setActionBarTitleAccessibilityViewFocused()
-        setOnBackPressed(::close, priority = BackPressHandlerRegistry.DEFAULT_PRIORITY - 1)
     }
 
     override fun onViewBoundOrOnResume() {
@@ -96,7 +80,7 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
         val boundView = view ?: return
         val channelId = channel.id
         subscription?.unsubscribe()
-        subscription = observeModel(requireContext(), channelId, channel, pinnedStore()).subscribe { (messages, data) ->
+        subscription = observeModel(requireContext(), channelId, channel, StoreStream.getPinnedMessages()).subscribe { (messages, data) ->
             boundView.post {
                 if (view !== boundView) return@post
                 pinnedMessages = messages.associateBy(Message::id)
@@ -121,30 +105,13 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
         pinnedMessages = emptyMap()
         channel = null
         super.onDestroyView()
-        parentFragment?.view?.findViewById<View>(R.id.widget_home_panel_center_overlay)?.visibility = View.GONE
-        (parentFragment as? AppFragment)?.bindToolbar()
-    }
-
-    private fun host(): Host? = (parentFragment as? Host) ?: (activity as? Host)
-
-    private fun pinnedStore(): StorePinnedMessages = host()?.pinnedMessagesStore() ?: StoreStream.getPinnedMessages()
-
-    private fun close(): Boolean {
-        if (parentFragment is Host && parentFragmentManager.backStackEntryCount > 0) {
-            parentFragmentManager.popBackStack()
-        } else {
-            activity?.finish()
-        }
-        return true
     }
 
     private inner class PinnedMessagesEventHandler : WidgetChatListAdapter.EventHandler {
 
         override fun onMessageClicked(message: Message, isThreadStarterMessage: Boolean) {
-            host()?.jumpToPinnedMessage(message.channelId, message.id) ?: run {
-                StoreStream.getMessagesLoader().jumpToMessage(message.channelId, message.id)
-                returnToMain()
-            }
+            StoreStream.getMessagesLoader().jumpToMessage(message.channelId, message.id)
+            returnToMain()
         }
 
         override fun onMessageLongClicked(
@@ -165,7 +132,7 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
 
         override fun onThreadClicked(channel: Channel) {
             StoreStream.selectChannel(channel.guildId, channel.id)
-            if (host() != null) close() else returnToMain()
+            returnToMain()
         }
 
         override fun onUrlLongClicked(url: String) =
@@ -187,7 +154,7 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
     override fun messageForAction(channelId: Long, messageId: Long): Message? = pinnedMessages[messageId]
 
     override fun channelForAction(channelId: Long): Channel? =
-        host()?.channelForPins(channelId) ?: StoreStream.getChannels().getChannel(channelId)
+        StoreStream.getChannels().getChannel(channelId)
 
     override fun requestMessageEdit(message: Message, coordinator: MessageActionCoordinator) = Unit
 
@@ -229,10 +196,16 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
     ) : WidgetChatListAdapter.Data
 
     companion object {
-        private const val ARG_CHANNEL_ID = "channel_id"
+        internal const val INTENT_EXTRA_CHANNEL_ID = "INTENT_EXTRA_CHANNEL_ID"
+        internal val TRANSITION = AppTransitionActivity.Transition.TYPE_SLIDE_HORIZONTAL
 
-        fun newInstance(channelId: Long) = WidgetChannelPinnedMessages().apply {
-            arguments = Bundle().apply { putLong(ARG_CHANNEL_ID, channelId) }
+        fun show(context: Context, channelId: Long) {
+            AppScreenRouter.launch(
+                context,
+                WidgetChannelPinnedMessages::class.java,
+                Intent().putExtra(INTENT_EXTRA_CHANNEL_ID, channelId),
+                TRANSITION,
+            )
         }
 
         /**

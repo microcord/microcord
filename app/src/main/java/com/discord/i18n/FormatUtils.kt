@@ -4,6 +4,7 @@ import android.content.Context
 import android.view.View
 import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
+import java.util.Locale
 
 /**
  * Discord's translated strings do not use Android's positional format arguments.
@@ -35,7 +36,7 @@ object FormatUtils {
         } else {
             PLACEHOLDER.replace(template) { match ->
                 val name = match.groupValues[1]
-                if (args.containsKey(name)) args.getValue(name).toString() else match.value
+                args[name]?.toString() ?: match.value
             }
         }
         return stripHookMarkers(substituted)
@@ -44,6 +45,12 @@ object FormatUtils {
     @JvmStatic
     fun format(template: CharSequence, vararg args: Pair<String, Any?>): String =
         format(template, args.toMap())
+
+    internal fun formatOrdered(template: CharSequence, args: Array<out Any?>): String {
+        if (args.isEmpty()) return stripHookMarkers(template.toString())
+        val positional = PLACEHOLDER.replace(template, "%s")
+        return stripHookMarkers(String.format(Locale.getDefault(), positional, *args))
+    }
 
     private fun stripHookMarkers(text: String): String =
         if (text.contains(HOOK_MARKER)) text.replace(HOOK_MARKER, "") else text

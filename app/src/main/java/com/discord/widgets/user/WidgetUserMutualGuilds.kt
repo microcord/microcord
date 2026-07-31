@@ -1,5 +1,7 @@
 package com.discord.widgets.user
 
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -7,16 +9,17 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
-import androidx.appcompat.widget.Toolbar
-import androidx.fragment.app.Fragment
 import com.discord.app.AppFragment
 import androidx.lifecycle.Lifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.app.AppScreenRouter
 import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
+import com.discord.stores.StoreStream
+import com.discord.widgets.tabs.NavigationTab
 import com.facebook.drawee.view.SimpleDraweeView
 import rx.Observable
 import rx.Subscription
@@ -34,7 +37,7 @@ class WidgetUserMutualGuilds : AppFragment(R.layout.widget_user_mutual_guilds) {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        view.findViewById<Toolbar>(R.id.action_bar_toolbar)?.setNavigationOnClickListener { parentFragmentManager.popBackStack() }
+        setActionBarDisplayHomeAsUpEnabled()
         view.findViewById<RecyclerView>(R.id.user_mutual_guilds_recycler_view).apply {
             layoutManager = LinearLayoutManager(requireContext()); adapter = this@WidgetUserMutualGuilds.adapter
         }
@@ -49,13 +52,12 @@ class WidgetUserMutualGuilds : AppFragment(R.layout.widget_user_mutual_guilds) {
     override fun onStop() { subscription?.unsubscribe(); subscription = null; super.onStop() }
 
     private fun show(state: State) {
-        val toolbar = requireView().findViewById<Toolbar>(R.id.action_bar_toolbar)
         when (state) {
-            State.Loading -> { toolbar?.setTitle(R.string.mutual_guilds); adapter.rows = emptyList() }
+            State.Loading -> { setActionBarTitle(R.string.mutual_guilds); adapter.rows = emptyList() }
             is State.Error -> adapter.rows = listOf(Row.Empty(state.message ?: getString(R.string.no_mutual_guilds)))
             is State.Loaded -> {
-                toolbar?.title = resources.getQuantityString(R.plurals.user_profile_mutual_guilds_count, state.guilds.size, state.guilds.size)
-                toolbar?.subtitle = state.username
+                setActionBarTitle(resources.getQuantityString(R.plurals.user_profile_mutual_guilds_count, state.guilds.size, state.guilds.size))
+                setActionBarSubtitle(state.username)
                 adapter.rows = state.guilds.map(Row::GuildRow).ifEmpty { listOf(Row.Empty(getString(R.string.no_mutual_guilds))) }
             }
         }
@@ -82,7 +84,11 @@ class WidgetUserMutualGuilds : AppFragment(R.layout.widget_user_mutual_guilds) {
     private inner class GuildHolder(view: View) : RecyclerView.ViewHolder(view) {
         fun bind(item: MutualGuild) {
             val guild = item.guild
-            itemView.setOnClickListener { onGuildSelected?.invoke(guild.id) }
+            itemView.setOnClickListener {
+                StoreStream.getTabsNavigation().selectTab(NavigationTab.HOME, true)
+                StoreStream.selectGuild(guild.id)
+                requireActivity().finish()
+            }
             itemView.contentDescription = guild.name
             itemView.findViewById<TextView>(R.id.user_profile_adapter_item_server_name).text = guild.name
             itemView.findViewById<SimpleDraweeView>(R.id.user_profile_adapter_item_server_image).apply {
@@ -114,9 +120,15 @@ class WidgetUserMutualGuilds : AppFragment(R.layout.widget_user_mutual_guilds) {
     }
 
     companion object {
-        private const val ARG_USER_ID = "user_id"
+        private const val ARG_USER_ID = "com.discord.intent.extra.EXTRA_USER_ID"
         @JvmField var stateSource: ((Long) -> Observable<State>)? = null
-        @JvmField var onGuildSelected: ((Long) -> Unit)? = null
         fun newInstance(userId: Long) = WidgetUserMutualGuilds().apply { arguments = Bundle().apply { putLong(ARG_USER_ID, userId) } }
+
+        @JvmStatic
+        fun show(context: Context, userId: Long) = AppScreenRouter.launch(
+            context,
+            WidgetUserMutualGuilds::class.java,
+            Intent().putExtra(ARG_USER_ID, userId),
+        )
     }
 }

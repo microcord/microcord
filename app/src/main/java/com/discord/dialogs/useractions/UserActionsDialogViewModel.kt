@@ -89,7 +89,7 @@ class UserActionsDialogViewModel(
     }
 
     fun blockUser() {
-        val api = RestAPI.apiOrNull ?: return
+        val api = RestAPI.apiOrNull ?: return emitGenericFailure()
         api.addRelationship(
             userId,
             RestAPIParams.UserRelationship(type = ModelUserRelationship.TYPE_BLOCKED),
@@ -104,7 +104,7 @@ class UserActionsDialogViewModel(
     }
 
     fun removeRelationship(@StringRes successMessageStringRes: Int) {
-        val api = RestAPI.apiOrNull ?: return
+        val api = RestAPI.apiOrNull ?: return emitGenericFailure()
         api.removeRelationship(userId, relationshipContext(LOCATION_USER_PROFILE))
             .restSubscribeOn()
             .ui(this)

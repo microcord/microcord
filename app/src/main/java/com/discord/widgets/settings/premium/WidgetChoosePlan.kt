@@ -24,6 +24,7 @@ import com.discord.utilities.analytics.Traits
 import com.discord.utilities.billing.GooglePlayBillingManager
 import com.discord.utilities.billing.GooglePlaySku
 import com.discord.utilities.dimmer.DimmerView
+import com.discord.utilities.premium.BlockRussianPurchasesUtils
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.utilities.view.ToastManager
@@ -203,6 +204,7 @@ class WidgetChoosePlan : AppFragment(R.layout.widget_choose_plan) {
             locationTrait: Traits.Location,
             subscriptionTrait: Traits.Subscription? = null,
         ) {
+            if (BlockRussianPurchasesUtils.showDialog()) return
             val intent = Intent()
                 .putExtra(RESULT_OLD_SKU_NAME, oldSkuName)
                 .putExtra(RESULT_LOCATION_TRAIT, locationTrait)

@@ -15,12 +15,20 @@ import com.discord.gateway.io.Identify
 import com.discord.gateway.io.IdentifyClientState
 import com.discord.gateway.io.IncomingParser
 import com.discord.gateway.io.Outgoing
+import com.discord.gateway.rest.RestApi
+import com.discord.gateway.rest.RestClient
+import com.discord.gateway.rest.RestConfig
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.models.domain.ModelGateway
+import com.discord.restapi.RequiredHeadersInterceptor
+import com.discord.restapi.RestAPIBuilder
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
 import java.lang.reflect.Proxy
+import okhttp3.CookieJar
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -58,15 +66,75 @@ class GatewayContractTest {
 
     @Test
     fun controlPayloadsUseExactWireNamesAndExplicitNullData() {
-        assertEquals("{\"op\":7,\"d\":null}", gson.toJson(Outgoing<Any>(7)))
+        assertEquals("{\"op\":7,\"d\":null}", gson.toJson(Outgoing(7)))
         val identify = gson.toJsonTree(
             Identify("token", 100, true, 351, emptyMap(), IdentifyClientState(emptyMap(), 0, 1, 2)),
         ).asJsonObject
         assertTrue(identify.has("client_state"))
-        assertTrue(identify["client_state"].asJsonObject.has("user_guild_settings_version"))
-        assertFalse(identify["client_state"].asJsonObject.has("useruser_guild_settings_version"))
+        assertTrue(identify["client_state"].asJsonObject.has("useruser_guild_settings_version"))
+        assertFalse(identify["client_state"].asJsonObject.has("user_guild_settings_version"))
         val nullableState = gson.toJsonTree(Identify("token", 100, true, 351, emptyMap(), null)).asJsonObject
         assertTrue(nullableState["client_state"].isJsonNull)
+    }
+
+    @Test
+    fun exactGatewayJvmClassesAreConsolidatedAndLogsAreRedacted() {
+        val nestedPayloads = listOf(
+            "ApplicationCommandRequest", "CallConnect", "CreateStream", "DeleteStream",
+            "ForumUnreadsRequest", "ForumUnreadsRequestThread", "GuildMembersRequest",
+            "GuildSubscriptions", "GuildSubscriptionsUpdate", "Identify", "IdentifyClientState",
+            "PresenceUpdate", "Resume", "StreamPing", "VoiceStateUpdate",
+            "VoiceStateUpdateNoPreferredRegion", "WatchStream",
+        )
+        listOf(
+            "com.discord.gateway.GatewayEventHandler",
+            "com.discord.gateway.GatewaySocketLogger",
+            "com.discord.gateway.io.Incoming",
+            "com.discord.gateway.io.Outgoing",
+            "com.discord.gateway.io.OutgoingPayload",
+            "com.discord.gateway.rest.RestApi",
+            "com.discord.gateway.rest.RestClient",
+            "com.discord.gateway.rest.RestConfig",
+        ).forEach { assertEquals(it, Class.forName(it).name) }
+        nestedPayloads.forEach {
+            assertEquals("com.discord.gateway.io.OutgoingPayload\$$it", Class.forName("com.discord.gateway.io.OutgoingPayload\$$it").name)
+        }
+        assertThrows(ClassNotFoundException::class.java) { Class.forName("com.discord.gateway.io.Identify") }
+
+        val redacted = GatewayLogRedactor.redact(
+            """{"op":2,"d":{"token":"secret","nested":{"content":"private"},"safe":7}}""",
+        )
+        assertFalse(redacted.contains("secret"))
+        assertFalse(redacted.contains("private"))
+        assertTrue(redacted.contains("<redacted>"))
+        assertTrue(redacted.contains("\"safe\":7"))
+    }
+
+    @Test
+    fun gatewayRestContractUsesVersionedDiscoveryAndRejectsMissingUrl() {
+        val provider = object : RequiredHeadersInterceptor.HeadersProvider {
+            override fun getAuthToken(): String? = null
+            override fun getFingerprint(): String? = null
+            override fun getLocale(): String? = null
+            override fun getAcceptLanguages(): String? = null
+            override fun getUserAgent(): String = "fixture"
+            override fun getSpotifyToken(): String? = null
+        }
+        val server = MockWebServer()
+        try {
+            val config = RestConfig(server.url("/api/").toString(), provider)
+            assertTrue(config.optionalInterceptors.isEmpty())
+            RestClient::class.java.getDeclaredField("restApi").apply {
+                isAccessible = true
+                set(null, RestAPIBuilder(config.baseUrl, CookieJar.NO_COOKIES).build(RestApi::class.java))
+            }
+            server.enqueue(MockResponse().setBody("{}"))
+
+            assertThrows(IllegalArgumentException::class.java) { RestClient.getGateway().toBlocking().single() }
+            assertEquals("/api/v9/gateway", server.takeRequest().path)
+        } finally {
+            server.shutdown()
+        }
     }
 
     @Test

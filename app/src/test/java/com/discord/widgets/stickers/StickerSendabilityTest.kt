@@ -18,23 +18,21 @@ import org.junit.Test
 class StickerSendabilityTest {
 
     @Test
-    fun `standard stickers need nitro`() {
+    fun `standard stickers are available at every premium tier`() {
         assertEquals(
-            StickerSendability.SENDABLE_WITH_PREMIUM,
+            StickerSendability.SENDABLE,
             getStickerSendability(standard, user(PremiumTier.NONE)),
         )
         assertEquals(
             StickerSendability.SENDABLE,
             getStickerSendability(standard, user(PremiumTier.TIER_2)),
         )
-        // TIER_0 is the grandfathered tier that also unlocks the premium packs.
         assertEquals(
             StickerSendability.SENDABLE,
             getStickerSendability(standard, user(PremiumTier.TIER_0)),
         )
-        // Nitro Classic does not.
         assertEquals(
-            StickerSendability.SENDABLE_WITH_PREMIUM,
+            StickerSendability.SENDABLE,
             getStickerSendability(standard, user(PremiumTier.TIER_1)),
         )
     }

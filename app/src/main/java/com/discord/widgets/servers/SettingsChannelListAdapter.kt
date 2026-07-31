@@ -8,7 +8,6 @@ import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayName
-import com.discord.app.AppLog
 import com.discord.utilities.mg_recycler.CategoricalDragAndDropAdapter
 import com.discord.utilities.mg_recycler.DragAndDropHelper
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
@@ -67,6 +66,7 @@ class SettingsChannelListAdapter(
     var onClickListener: ((Long) -> Unit)? = null
 
     private var onPositionUpdateListener: ((Map<Long, UpdatedPosition>) -> Unit)? = null
+    private var originalRows: List<CategoricalDragAndDropAdapter.Payload> = emptyList()
 
     init {
         if (isDraggable) {
@@ -76,6 +76,11 @@ class SettingsChannelListAdapter(
 
     fun setPositionUpdateListener(listener: (Map<Long, UpdatedPosition>) -> Unit) {
         onPositionUpdateListener = listener
+    }
+
+    override fun setData(data: List<CategoricalDragAndDropAdapter.Payload>) {
+        originalRows = data.toList()
+        super.setData(data)
     }
 
     override fun onCreateViewHolder(
@@ -101,54 +106,14 @@ class SettingsChannelListAdapter(
     }
 
     override fun computeChangedPositions(): Map<String, Int> {
-        val changedPositions = HashMap<Long, Int>()
-        val changedParentIds = HashMap<Long, Long>()
-        var currentCategoryId: Long? = null
-
-        dataCopy.forEachIndexed { index, payload ->
-            val id = payload.idOrNull() ?: 0L
-            if (payload.type == TYPE_CATEGORY) currentCategoryId = id.takeIf { it > 0L }
-            val parentId = (payload as? ChannelItem)?.parentId?.takeIf { it > 0L }
-
-            if (origPositions[payload.key] != index && payload.canBeManaged()) {
-                changedPositions[id] = index
-                if (parentId != currentCategoryId && payload.type == TYPE_CHANNEL) {
-                    changedParentIds[id] = currentCategoryId ?: NO_CATEGORY
-                }
-            }
-        }
-
-        handleChangedPositions(changedPositions, changedParentIds)
+        val updates = GuildChannelsSort.changedPositions(originalRows, dataCopy)
+            .mapValues { (_, update) -> UpdatedPosition(update.position, update.parentId) }
+        onPositionUpdateListener?.invoke(updates)
         // Positions are reported through the listener above, not through the base class.
         return emptyMap()
     }
 
     override fun onNewPositions(newPositions: Map<String, Int>) = Unit
-
-    private fun handleChangedPositions(
-        changedPositions: Map<Long, Int>,
-        changedParentIds: Map<Long, Long>,
-    ) {
-        val updates = changedPositions.mapValues { (channelId, position) ->
-            UpdatedPosition(position, changedParentIds[channelId])
-        }
-        onPositionUpdateListener?.invoke(updates)
-    }
-
-    private fun CategoricalDragAndDropAdapter.Payload.idOrNull(): Long? = when (this) {
-        is ChannelItem -> channel.id
-        is CategoryItem -> id
-        else -> {
-            AppLog.e("Invalid type: $type")
-            null
-        }
-    }
-
-    private fun CategoricalDragAndDropAdapter.Payload.canBeManaged(): Boolean = when (this) {
-        is ChannelItem -> canManageCategoryOfChannel
-        is CategoryItem -> canManageCategory
-        else -> false
-    }
 
     private class CategoryListItem(
         adapter: SettingsChannelListAdapter,
@@ -228,7 +193,5 @@ class SettingsChannelListAdapter(
         const val TYPE_CHANNEL = 0
         const val TYPE_CATEGORY = 1
 
-        /** Sent for a channel dragged out of every category. */
-        private const val NO_CATEGORY = -1L
     }
 }

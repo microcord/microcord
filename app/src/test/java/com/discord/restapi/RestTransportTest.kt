@@ -74,6 +74,21 @@ class RestTransportTest {
     }
 
     @Test
+    fun reactNativeInterceptorIsScopedAndAddsStickerSendMetadata() {
+        server.enqueue(MockResponse().setBody("ok"))
+        val client = OkHttpClient.Builder()
+            .addInterceptor(ReactNativeHeadersInterceptor)
+            .build()
+
+        client.newCall(request("/rn-sticker")).execute().close()
+
+        val sent = server.takeRequest()
+        assertEquals(ReactNativeRequestMetadata.USER_AGENT, sent.getHeader("User-Agent"))
+        assertFalse(sent.getHeader("X-Super-Properties").isNullOrBlank())
+        assertFalse(sent.getHeader("X-Discord-Timezone").isNullOrBlank())
+    }
+
+    @Test
     fun offlineSuperPropertiesCanUseAGeneratedAdvertiserId() {
         val fakeAdvertiserId = UUID.randomUUID().toString()
         AnalyticSuperProperties.setAdvertiserId(fakeAdvertiserId)

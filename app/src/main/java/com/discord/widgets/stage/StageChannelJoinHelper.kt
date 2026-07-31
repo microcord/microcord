@@ -6,6 +6,7 @@ import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.app.AppLog
 import com.discord.app.AppToast
+import com.discord.dialogs.GuildVideoAtCapacityDialog
 import com.discord.stores.StoreChannels
 import com.discord.stores.StoreGuilds
 import com.discord.stores.StoreLurking
@@ -33,16 +34,6 @@ object StageChannelJoinHelper {
     private const val RELATIONSHIP_TYPE_BLOCKED = 2
 
     private var lurkSubscription: Subscription? = null
-
-    /**
-     * Shown when the guild has hit its video-participant cap.
-     *
-     * The reference opens a dedicated notice dialog here (an obfuscated `b.a.a.m.k` in the
-     * decompile, so its class is not recoverable by name). Defaults to the same toast the other
-     * un-joinable cases use so the press is never silently swallowed.
-     */
-    @JvmField
-    var onGuildVideoAtCapacity: ((Context, FragmentManager) -> Unit)? = null
 
     @Suppress("LongParameterList")
     @MainThread
@@ -187,8 +178,7 @@ object StageChannelJoinHelper {
             VoiceChannelJoinability.PERMISSIONS_MISSING ->
                 AppToast.show(context, R.string.channel_locked)
             VoiceChannelJoinability.GUILD_VIDEO_AT_CAPACITY ->
-                onGuildVideoAtCapacity?.invoke(context, fragmentManager)
-                    ?: AppToast.show(context, R.string.unable_to_join_channel_full)
+                GuildVideoAtCapacityDialog.show(fragmentManager)
             VoiceChannelJoinability.CHANNEL_FULL ->
                 AppToast.show(context, R.string.unable_to_join_channel_full)
             VoiceChannelJoinability.CHANNEL_DOES_NOT_EXIST ->

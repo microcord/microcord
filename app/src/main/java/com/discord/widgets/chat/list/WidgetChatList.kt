@@ -23,12 +23,12 @@ import com.discord.widgets.chat.list.adapter.WidgetChatListAdapterEventsHandler
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapterItemCallMessage
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.model.WidgetChatListModel
+import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 
 /** Owns the live message adapter and consumes the reference chat-list model. */
 class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListActions.Host {
 
     interface Host {
-        fun openPinnedMessages(channelId: Long)
         fun openCallMessage(channelId: Long, status: WidgetChatListAdapterItemCallMessage.CallStatus)
     }
 
@@ -105,7 +105,7 @@ class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListAct
             host = this,
             flexInputViewModel = flexInputViewModel,
             messageActionCoordinator = coordinator,
-            openPins = { channelId -> requireChatHost().openPinnedMessages(channelId) },
+            openPins = { channelId -> WidgetChannelPinnedMessages.show(requireContext(), channelId) },
             openCall = { channelId, status -> requireChatHost().openCallMessage(channelId, status) },
         )
         val created = MGRecyclerAdapter.configure<ChatListEntry, WidgetChatListAdapter>(

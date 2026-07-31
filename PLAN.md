@@ -778,74 +778,117 @@ updates, persistence, and logout.
 
 ### Phase 9: Notifications and Background Work
 
-Status: **NOT STARTED**
+Status: **IN PROGRESS**
 
-- [ ] Notification preferences and suppression rules.
+- [x] Notification preferences and suppression rules.
 - [ ] FCM registration using project-owned configuration.
-- [ ] Message/call notification rendering and grouping.
-- [ ] Notification actions, deletion, and cancellation.
-- [ ] Foreground/background lifecycle behavior.
-- [ ] Direct share targets and download completion handling.
+- [x] Message/call notification rendering and grouping.
+- [x] Notification actions, deletion, and cancellation.
+- [x] Foreground/background lifecycle behavior.
+- [x] Direct share targets and download completion handling.
+
+Implemented: `StoreNotifications` is live in `StoreStream`; provider-neutral push
+payload parsing, local/Gateway rendering, grouping/cache, Android 13 permission
+handling, guarded reply/read/delete actions, notice hosting, and the CallAction,
+MessageSend, and TimedMute workers are present. Focused store, payload, utility,
+worker, and notice-host tests exist. Project-owned FCM token delivery and a full
+notification/action device matrix remain open.
 
 Exit criteria: notifications respect foreground state, channel/guild settings,
 permissions, account state, and Android version requirements.
 
 ### Phase 10: Settings and Account Management
 
-Status: **NOT STARTED**
+Status: **IN PROGRESS**
 
-- [ ] Appearance, theme, locale, font scale, and accessibility.
-- [ ] Privacy, safety, media, text/image, behavior, and notifications.
-- [ ] Voice/video device and processing settings.
+- [x] Appearance, theme, locale, font scale, and accessibility.
+- [x] Privacy, safety, media, text/image, behavior, and notifications.
+- [x] Voice/video device and processing settings.
 - [ ] Account profile, email, phone, password, sessions, and deletion flows.
-- [ ] Authorized applications and connections.
-- [ ] Developer diagnostics without secret leakage.
+- [x] Authorized applications and connections.
+- [x] Developer diagnostics without secret leakage.
+
+Implemented: the settings hierarchy and full-screen routing now cover account,
+profile, privacy/safety, appearance, accessibility, voice, notifications,
+authorized apps, connections, MFA, billing, and diagnostics with real store/REST
+flows. Unit coverage includes settings routes, account/MFA contracts, profile,
+privacy, connections, billing, and optimistic writes; focused privacy cold-launch
+instrumentation passed on device. Remaining seams include provider-backed Spotify,
+some nullable-clear/store utility paths, session-management evidence, unreachable
+premium/gift dialog owners, and broad device validation.
 
 Exit criteria: settings restore correctly, synchronize where required, and
 apply without unnecessary process restarts.
 
 ### Phase 11: Voice, Calls, and Video
 
-Status: **NOT STARTED**
+Status: **IN PROGRESS**
 
-- [ ] Voice selection and Gateway voice-state/server coordination.
-- [ ] RTC connection state machine.
-- [ ] Audio input/output selection, mute, deaf, volume, VAD, and AEC.
-- [ ] Incoming/private calls and ringing state.
-- [ ] Call activity, bottom sheet, and fullscreen UI.
-- [ ] Camera capture, video sinks, participant streams, and offscreen policy.
-- [ ] Screen sharing and media-projection foreground service.
-- [ ] Reconnect, region selection, statistics, and diagnostics.
+- [x] Voice selection and Gateway voice-state/server coordination.
+- [x] RTC connection state machine.
+- [x] Audio input/output selection, mute, deaf, volume, VAD, and AEC.
+- [x] Incoming/private calls and ringing state.
+- [x] Call activity, bottom sheet, and fullscreen UI.
+- [x] Camera capture, video sinks, participant streams, and offscreen policy.
+- [x] Screen sharing and media-projection foreground service.
+- [x] Reconnect, region selection, statistics, and diagnostics.
+
+Implemented: `VoiceTransport`, RTC/media/audio stores, voice sheets, incoming and
+private calls, active/preview fullscreen screens, dedicated call activity,
+foreground voice and overlay services, camera/video sinks, stream focus, call
+sounds, and screen-share previews/actions are connected. Native lifecycle checks
+passed on Android 16 x86_64 before the fullscreen slice; the fullscreen slice has
+unit/build/lint evidence but no live-backend or ARM64 end-to-end call exercise.
+Voice remains open until join/move/reconnect, device switching, video, screen
+sharing, overlay, backgrounding, and teardown are validated on device.
 
 Exit criteria: voice, private calls, video, and screen sharing survive activity
 recreation, background transitions, device changes, and network reconnects.
 
 ### Phase 12: Extended Feature Parity
 
-Status: **NOT STARTED**
+Status: **IN PROGRESS**
 
-- [ ] Search and quick switcher.
-- [ ] Threads and forums.
-- [ ] Emoji, stickers, GIFs, embeds, and media viewer/player.
-- [ ] Scheduled events and stage channels.
-- [ ] Guild creation, invites, templates, onboarding, and discovery.
-- [ ] Moderation, audit log, member verification, and community settings.
+- [x] Search and quick switcher.
+- [x] Threads and forums.
+- [x] Emoji, stickers, GIFs, embeds, and media viewer/player.
+- [x] Scheduled events and stage channels.
+- [x] Guild creation, invites, templates, onboarding, and discovery.
+- [x] Moderation, audit log, member verification, and community settings.
 - [ ] Roles, permissions, integrations, webhooks, and server settings.
 - [ ] Hubs, reports, safety flows, and remaining manifest routes.
+
+Implemented structural and tested slices now cover the major listed clusters,
+including the search/GIF/expression stores, thread/forum flows, scheduled-event
+location and stage moderation, group invites, hubs/directories, reports, audit
+logs, community/member verification, roles, permissions, and server settings.
+Physical widget source coverage is 1,150/1,155; four unmatched filenames emit the
+exact reference JVM classes from consolidated Kotlin. Structural coverage remains
+an upper bound: Spotify lacks a provider, webhooks/integration and manifest-route
+behavior is not fully re-audited, several store/utility seams remain, and the
+feature/device regression matrix is incomplete.
 
 Exit criteria: every first-party layout and manifest route is implemented,
 explicitly obsolete for 126.21 behavior, or documented as blocked.
 
 ### Phase 13: Billing and External Integrations
 
-Status: **NOT STARTED**
+Status: **IN PROGRESS**
 
 - [ ] Project-owned Firebase configuration.
 - [ ] Project-owned OAuth/Google Sign-In clients if still applicable.
 - [ ] App Links for the new application ID.
-- [ ] Google Play Billing integration and project-owned products.
-- [ ] Subscriptions, entitlements, gifts, and boosts.
-- [ ] Analytics/crash reporting with privacy-safe project configuration.
+- [x] Google Play Billing integration; project-owned products remain unconfigured.
+- [x] Subscriptions, entitlements, gifts, and boosts.
+- [x] Privacy-safe provider-neutral analytics; external sinks remain disabled.
+
+Implemented: Billing 5.2.1 runtime management, purchase/SKU stores, plan
+selection, subscriptions, entitlements, gifting, boosts, and checkout handoff are
+present and fail closed without Manticord-owned products. Analytics, super
+properties, resource monitoring, and legitimate GAID retrieval are implemented
+without recovered credentials. Project-owned Firebase/FCM, dynamic links/App
+Links, OAuth clients, products, and crash-reporting transport remain open.
+Samsung OAuth is explicitly out of scope and is not a blocker.
 
 Exit criteria: external integrations use only Manticord-owned credentials and
 degrade safely when an official signing/package relationship is unavailable.
@@ -872,32 +915,36 @@ and debug/release APKs install and run on representative devices.
 Agents should split rows only when implementation begins. Do not pre-create a
 large issue hierarchy without work attached.
 
-Coverage figures are measured, from the 2026-07-26 audit in
-`docs/parity-audit/`. A row is not `DONE` until its coverage is complete and its
-listed defects are cleared — compiling and inflating is not parity.
+The 2026-07-26 figures are retained in `docs/parity-audit/` as the campaign
+baseline, but are superseded here by later measured checkpoints. The latest full
+recorded verification is 1,635 unit tests plus `assembleDebug`, `lintDebug`, and
+`compileDebugAndroidTestKotlin`; it did not include a connected-device or live
+backend run. Where no fresh full-surface recount exists, the ledger says so rather
+than carrying the obsolete baseline percentage. A row is not `DONE` until its
+behavioral/runtime blockers are cleared.
 
 | Area | Status | Measured coverage | Notes |
 | --- | --- | --- | --- |
 | Build/XML shell | DONE | — | Phase 0 baseline holds |
 | Native media load | DONE | — | ARM64 runtime waived by user decision |
-| Resources/themes | IN PROGRESS | 134/134 layout classes resolve; **34 of 518 `<enum>` and 0 of 130 `<flag>` attr children** | `cs_view_type` dead across 39 layouts |
-| Custom views | IN PROGRESS | 69/76 classes present; **32 inert**, 13 behavior defects | No inflation crash |
-| Dispatcher/stores | IN PROGRESS | **51 of 187** stores; `StoreStream` wires **36 of 145**; `stores/utilities` **0 of 9** | 99 missing, 37 partial |
-| REST | IN PROGRESS | **42 of 264** endpoints; **17 of 107** request bodies | `missing_endpoints.txt` |
-| Gateway | IN PROGRESS | **44 of 83** events; opcodes 21/21; `OutgoingPayload` 0 of 16 | 39 events discarded as raw JSON |
-| Models/DTOs | IN PROGRESS | `api/**` **158 of 286**; `models/**` **59 of 149**; adapters **20 of 39** | Core DTOs verified field-exact |
-| Utilities | IN PROGRESS | **57 files vs 416** classes; ~62 of 108 subpackages at 0% | `IconUtils`, textprocessing, `mg_recycler` absent |
-| App framework | IN PROGRESS | `AppFragment`/`AppBottomSheet`/`AppDialog`/router **absent** | Every screen hand-rolls the base contract |
-| Authentication | IN PROGRESS | `widgets/auth` **3 of 21** files | Only token login reaches the store |
-| Navigation/deep links | IN PROGRESS | 9 of 12 nav handlers absent | `WidgetTos` route crashes; 4 live dead-ends |
-| Guilds/channels | IN PROGRESS | channels **31 of 114**; guilds **7 of 75** | 13 of 20 row types never produced |
-| Messages/uploads | IN PROGRESS | chat **40 of 277** | 33 of 46 row types unimplemented; no send pipeline in the store |
-| Users/relationships | IN PROGRESS | user+friends **28 of 68** | Sheet inert; typing never sent; settings never persisted |
-| Settings/servers | NOT STARTED | settings **10 of 69**; servers **9 of 108** | 4 target files are inert placeholders |
-| Voice/calls/video | NOT STARTED | voice **13 of 66**; stage **2 of 31** | 8 voice stores absent; existing views are shells |
-| Notifications | NOT STARTED | `StoreNotifications` exists but is **dead code** | Never constructed, never reset on logout |
-| Extended guild features | NOT STARTED | scheduled events **9 of 47**; role subs **4 of 42**; hubs **0 of 54**; directories **0 of 16** | 24 widget packages at 0% |
-| Billing/integrations | NOT STARTED | 0% | Cannot reuse official products |
+| Resources/themes | IN PROGRESS | 1,228 layout variants retained; all first-party attr enums/flags restored | Runtime/qualifier/accessibility matrix not complete |
+| Custom views | IN PROGRESS | **76/76** first-party classes present; 13 audited defects fixed | No fresh behavioral recount of formerly inert views |
+| Dispatcher/stores | IN PROGRESS | No fresh 187-store recount | Broad graph now includes voice, notifications, analytics, search/GIF/expression, directories, billing, and social/admin stores; residual seams remain |
+| REST | IN PROGRESS | **264/264** unique endpoints; **108/108** request bodies | Endpoint set diff has 0 missing; live backend remains opt-in |
+| Gateway | IN PROGRESS | **83/83** reference dispatch events typed; 21/21 opcodes represented | Destination-store behavior has not been fully re-audited |
+| Models/DTOs | IN PROGRESS | 39 adapters plus 3 factories at the measured data-wave checkpoint | Later DTO/model additions are not freshly recounted |
+| Utilities | IN PROGRESS | No fresh full-surface recount | Major text, image, permission, send, recycler, URI, billing, notification, and voice utilities now exist; residual seams are tracked in followups |
+| App framework | IN PROGRESS | Base fragment/sheet/dialog, router, back registry, permissions, and direct-screen activity stack present | Device regression remains incomplete |
+| Authentication | IN PROGRESS | Credential, MFA, captcha, remote-auth, OAuth, verification, and required-action flows present | Samsung OAuth excluded; remaining provider/runtime gaps prevent `DONE` |
+| Navigation/deep links | IN PROGRESS | Reference routes represented, including query/search, remote auth, guild templates, discovery, mutuals, pins, and call activities | Full route/device matrix not complete |
+| Guilds/channels | IN PROGRESS | Included in the **1,150/1,155** physical widget-path checkpoint | Runtime reorder, permissions, panels, and persistence still need broad device validation |
+| Messages/uploads | IN PROGRESS | All 45 reference chat entry types mapped; queue/send/upload/search/GIF/expression surfaces present | Offline/reconnect/live upload and media regressions remain open |
+| Users/relationships | IN PROGRESS | User/friends package paths structurally closed in the widget campaign | Provider and device behavior remain incomplete |
+| Notifications/background work | IN PROGRESS | Store, renderer/actions, provider-neutral payloads, and 3 first-party workers present | Project-owned FCM and full device/action validation remain open |
+| Settings/account | IN PROGRESS | Settings/account source surfaces and focused unit/instrumentation checks present | Provider, residual dialog/seam, and device gaps remain |
+| Voice/calls/video | IN PROGRESS | Fullscreen active/preview, call activity, services, overlay, video and screen-share surfaces present | No ARM64/live end-to-end fullscreen call validation |
+| Extended features | IN PROGRESS | Widgets **1,150/1,155 physical paths**; 4 unmatched names emitted by consolidated files | Structural upper bound; Spotify/provider and behavioral gaps remain |
+| Billing/integrations | IN PROGRESS | Billing 5.2.1, purchase/SKU stores, premium/gift/boost flows, analytics and GAID present | Manticord-owned products/providers absent; purchase path fails closed |
 
 ## Parity Audit (2026-07-26)
 
@@ -916,15 +963,19 @@ divergences from the reference that must **not** be "corrected" by a later parit
 pass, and the least-corroborated reconstructions that need DEX/smali
 re-verification. Append to it; do not delete an item until it is done.
 
-Headline result: the target is roughly **11% of the reference widget surface**,
-**27% of stores**, **16% of REST**, and **53% of gateway events**. Several phases
-previously marked `DONE` were closed on compile/inflate evidence rather than
-behavior, and have been reopened above with their specific defects.
+Historical baseline result: the target was roughly **11% of the reference widget
+surface**, **27% of stores**, **16% of REST**, and **53% of gateway events** on
+2026-07-26. The current measured checkpoints are **1,150/1,155 physical widget
+paths** (four unmatched names emitted by consolidated files), **264/264 REST
+endpoints**, **108/108 request bodies**, and **83/83 typed gateway events**. No
+fresh complete store count or behavioral-parity percentage exists; the build and
+test evidence does not replace the remaining runtime audit.
 
-### Cross-cutting defects
+### Historical cross-cutting defects
 
-These are correctness bugs live in shipping surfaces, not missing features. The
-full list with locations is in `docs/parity-audit/README.md`. The most damaging:
+This table is the 2026-07-26 audit baseline and is retained as historical evidence;
+many entries were subsequently fixed. Use the current ledger and recent progress
+journal/followups for active status.
 
 | Defect | Effect |
 | --- | --- |
@@ -940,9 +991,9 @@ full list with locations is in `docs/parity-audit/README.md`. The most damaging:
 | Logout omits `Persister.reset()` + `prefs.clear()` | Prior-account state survives logout |
 | Off-thread `markChanged` throws | Crash where the reference only logs |
 
-### Live dead-ends
+### Historical live dead-ends
 
-User-reachable paths that lead nowhere: the channel sidebar **Search** button
+These were the user-reachable dead ends measured on 2026-07-26: the channel sidebar **Search** button
 (`onSearch` never assigned), `Channel.DIRECTORY` rows (open the ordinary chat
 surface), the **Blocked users** settings row (force-hidden, callback never
 invoked), and the `/template/`, `discord.new`, `/discovery`, `/query/` deep links
@@ -1094,6 +1145,7 @@ or observable behavior. Small implementation details do not belong here.
 | 2026-07-22 | Require complete store/model fields and complete views | Partial models and placeholder UI cannot provide feature parity | Every slice must inventory and verify its full structural surface |
 | 2026-07-23 | Allow scoped JitPack access for recovered uCrop and FlexInput artifacts | Reference-compatible versions are unavailable from Google and Maven Central | Repository content filtering permits only `com.github.yalantis` and `com.github.lytefast` |
 | 2026-07-31 | Replace FlexInput's unavailable CameraKit `1.0.0-beta3.10` transitive with upstream JitPack `v1.0.0-beta3.11` | The original Bintray artifact is absent from Google and Maven Central and beta3.10 does not build on JitPack; beta3.11 preserves the `CameraKitView.ErrorListener` signature, camera APIs used by FlexInput, and resource attrs | Keep the unavailable CameraKit/JPEGKit transitives excluded, install CameraKit explicitly, and admit `com.github.CameraKit` through the scoped JitPack filter |
+| 2026-07-31 | Port Aliucord `DefaultStickers` behavior natively | The user explicitly requested default sticker access beyond stock 126.21 behavior | Standard packs/categories are shown to non-Nitro users, standard stickers are sendable, and only non-premium `sticker_ids` sends use a dedicated RN-metadata REST client; no Aliucord API or dependency is included |
 | 2026-07-23 | Install upstream SimpleAST 2.8.0 with the reference 2.6.0 rule surface | Recovered behavior uniquely matches 2.6.0, but JitPack no longer serves that artifact; 2.8.0 is the available API-compatible upstream AAR | Public source is not reconstructed; Discord rules must omit post-2.6 diff behavior |
 | 2026-07-23 | Use JADX MCP for decompiled reference inspection | The connected JADX server provides direct class, method, field, and cross-reference evidence | Exported Java/DEX file inspection is fallback-only when MCP lacks a body |
 | 2026-07-24 | Use public WebRTC `104.5112.10`, APNG `1.11.0`, and scoped RealtimeBlurView commit `82df3520b4` for recovered view contracts | These are the available public artifacts matching the reconstructed Java APIs closely enough for Phase 1 | Exact `libdiscord.so` compatibility remains a Phase 2 runtime requirement |
@@ -1202,6 +1254,18 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-07-30 | OpenCode | Integrated the sixth parallel widget closure wave across chat exact paths, server monetization/boost/member verification, channels, auth/captcha/contact sync, PlayStation, home, bot UI, stage and voice prerequisites; then closed six residual chat facades and seven unblocked server role-subscription/member-verification paths | Production Kotlin compiles; all 1,492 unit tests, `assembleDebug`, and `lintDebug` pass; no live backend or device used | Physical source-path widget coverage is 1,144/1,155 (99.0%), leaving 11 filenames; four already emit the exact reference JVM classes from consolidated Kotlin files. Seven real blockers remain: Samsung OAuth, two billing-dependent boost screens, and four fullscreen voice screens |
 | 2026-07-30 | OpenCode | Completed the fullscreen voice vertical slice: wired application stores and live `CallModel` supplements, restored RTC stream quality and media-sink focus negotiation, implemented active/preview call state machines and screens, dedicated call activity/routing, overlay service, foreground voice service/controller, call sounds, screen-share previews, private notification actions and stage invite actions | Production Kotlin compiles; all 1,514 unit tests, `assembleDebug`, and `lintDebug` pass; no live backend or device used | Physical widget source coverage is 1,148/1,155 (99.4%); four unmatched filenames already emit exact JVM classes. Runtime-check call/video/screen-share/overlay/service teardown on ARM64 before claiming voice behavior parity; only Samsung OAuth and two billing-dependent boost screens remain structurally blocked |
 | 2026-07-31 | OpenCode | Fixed audit-log REST decoding by installing the reference streaming `Model` adapter, pinned all 47 Discord 126.21 action/type/target/title mappings from bytecode evidence, and kept future codes visible as unknown rows | `javap -p -c` verified enum ordinals and action tables; the 48-row JSON fixture passes `jq`; `git diff --check` passes. Gradle and live backend intentionally not used | Run `AuditLogContractTest` with the next coordinator-owned unit-test batch |
+| 2026-07-31 | OpenCode | Ran a multi-agent runtime-regression closure: fixed saved-state pins navigation and right-panel overlay ordering; server reorder/role/reaction nullable-`Void` success handling; guild-subscription dispatcher threading; overview include roots; audit-log loading/action decoding; settings hierarchy/Back; guild creation parcelables; guild-sheet geometry; friend/member live updates; search Back; false guild voice icons; privacy REST wiring; authorized-app headers; FlexInput camera resource collision; deterministic chat emoji/keyboard state; sidebar IME dismissal; semantic button tints; Billing 5.2.1 Android-14 compatibility; complete guild-boost checkout | Production Kotlin compiles; all 1,552 unit tests, `assembleDebug`, and `lintDebug` pass; no live backend used in automated checks | Physical widget source coverage is 1,150/1,155 (99.6%); four unmatched filenames already emit exact JVM classes, leaving only Samsung OAuth externally blocked. Device-retest the reported flows and fullscreen voice lifecycle |
+| 2026-07-31 | OpenCode | Ran a missing-surface reconstruction wave: recovered first-party dialogs and urgent-message flow, seven search/GIF/expression stores, three background workers, gateway REST/payload/logging glue, bot component and domain model adapters, null serialization, screenshot/i18n/app infrastructure, high-value utilities, live privacy consent terminal states, exact channel ordering diagnostics/optimism, profile media actions, dedicated animated pins route, user-sheet DM actions, mutual full-screen routing, friends DM selection, and member-list request/render wiring | Production Kotlin compiles; all 1,613 unit tests, `assembleDebug`, `lintDebug`, and `compileDebugAndroidTestKotlin` pass; no device attached and no live backend used | Continue from the ranked remaining ledger in `docs/parity-audit/followups.md`; highest behavioral gaps are Samsung OAuth, stage moderation actions, group-invite flow, scheduled-event location selection, Spotify provider, push/dynamic-link provider integration, residual dialog entry-point wiring, and ARM64/device regression |
+| 2026-07-31 | OpenCode | Closed the next runtime/missing-feature wave: marshalled dimmer mutations to main, removed FlexInput attachment-preview resource collision, restored API-aware media permissions, corrected channel drag deltas and production-client diagnostics, implemented stage user-sheet moderation, group-invite friends, scheduled-event location selection, residual dialog reachability, user-sheet/friends DM navigation and mutual routes | Production Kotlin compiles; all 1,635 unit tests, `assembleDebug`, `lintDebug`, and `compileDebugAndroidTestKotlin` pass; no live backend used | Samsung OAuth is explicitly out of scope per user. Remaining work is provider integration (Spotify, project FCM/dynamic links), a few store/utility seams, unreachable premium/gift dialog call sites, and device validation using `ChannelReorder` diagnostics |
+| 2026-07-31 | OpenCode | Fixed device-reported infrastructure regressions and continued parity: `withDimmer` UI-thread marshalling, FlexInput preview layout collision, version-aware gallery/camera permissions, production-path channel reorder delta/diagnostics, stage moderation actions, group invite friends, event location selection, dialog entry-point reachability, profile media results, user-sheet/friends DM selection, mutual full-screen routes and current-user popout actions | Production Kotlin compiles; all 1,635 unit tests, `assembleDebug`, `lintDebug`, `compileDebugAndroidTestKotlin`, and `git diff --check` pass | Samsung OAuth remains excluded. If channel reorder still fails, capture the sanitized `ChannelReorder` request/error lines; remaining feature work is Spotify/provider integration, store/utility seams, unreachable premium/gift dialog owners, and ARM64 regression |
+| 2026-07-31 | OpenCode | Corrected three runtime-disproved behaviors: channel reorder now retains generation-aware optimistic ordering across stale store snapshots, Privacy & Safety handles cold REST installation plus 200/204/error terminal states, and Pinned Messages uses horizontal activity transitions rather than vertical slide | Full unit suite, `assembleDebug`, `lintDebug`, and Android-test compilation pass; focused privacy instrumentation passed twice on the physical device | Continue device regression; overlapping reorder generations and failure rollback are covered deterministically |
+| 2026-07-31 | OpenCode | Updated phase statuses 9-13 to `IN PROGRESS`; fixed FlexInput's theme-less Fresco file placeholder, routed image attachments through the canonical `MessageSendCoordinator`/`MessageQueue`, increased Kotlin daemon heap for clean builds, and stopped Privacy consent loading from blocking the entire local-settings screen | Recovered icon inflates cleanly on device; PNG multipart/queue device test and focused consent unit tests pass; rebuilt APK installed with `adb install -r` and cold-launched on device `188b1209` | Retest Privacy UI and image send on the installed APK; consent rows remain hidden only while their finite GET is pending. Preserve `ChannelReorder` logs for any remaining reorder failure |
+| 2026-07-31 | OpenCode | Fixed the actual Privacy cold-start deadlock by seeding explicit-content, default-guild-restriction, and friend-source BehaviorSubjects with the same values used by reset, allowing the screen's `combineLatest` to emit before READY refreshes them | Rebuilt APK installed with `adb install -r`; user confirmed Privacy & Safety now opens correctly on device `188b1209` | Continue device regression for image sends and channel reorder |
+| 2026-07-31 | OpenCode | Made client-data guild-hash handling null-safe for partial emoji/sticker gateway updates, preventing the Main-StoreThread crash after emoji changes | Focused emoji/sticker partial-payload and sendability tests pass; rebuilt APK installed with `adb install -r` on device `188b1209` | Continue emoji/sticker device regression; DEX confirms 126.21 has no sticker-unlock experiment and standard stickers remain Nitro-gated |
+| 2026-07-31 | OpenCode | Natively ported Aliucord's requested `DefaultStickers` behavior and fixed attachment-only composer visibility: non-Nitro users see/send standard packs, sticker-only messages pass validation and use scoped RN request metadata, and Send follows text-or-attachment selection count | Focused picker/sendability/queue/coordinator/header tests and `assembleDebug` pass; APK installed with `adb install -r` on device `188b1209` | Device-check standard sticker send and attachment add/remove visibility; RN metadata is isolated to non-premium sticker-id sends |
+| 2026-07-31 | OpenCode | Fixed the Friends Message action to reuse an existing 1:1 DM or wait for DM creation/ingestion, then select guild `0`, select the DM channel, and finally switch Home/close panels; added direct cached and asynchronous ordering tests | Reference Friends callback, `ChannelSelector`, and `RestAPI.createOrFetchDM` ordering verified against Vineflower/JADX; `git diff --check` passes. Gradle, live backend, and device intentionally not used | Run `ChannelSelectorDirectMessageTest` in the next coordinator-owned unit-test batch and device-check both existing and first-message DM rows |
+| 2026-07-31 | OpenCode | Fixed FlexInput gallery/camera runtime permissions: API 33+ direct MediaStore gallery uses `READ_MEDIA_IMAGES`/`READ_MEDIA_VIDEO`, API 23-32 uses capped `READ_EXTERNAL_STORAGE`, camera uses `CAMERA`, obsolete write storage was removed, and Discord FlexInput page subclasses now request through `AppFragment` before exposing content while the system chooser remains permission-free | Direct API/manifest contract tests added and `git diff --check` passes; focused Gradle run is blocked by the unrelated raw `Observable` at `WidgetGroupInviteFriends.kt:409` | Run `AppPermissionsTest` after the concurrent group-invite compile error is fixed, then device-check deny/grant/permanent-deny behavior on API 32 and 33+ |
+| 2026-07-31 | OpenCode | Reconciled Phases 9-13 and the parity ledger against the latest progress/followups and current test surface; replaced the 2026-07-26 counts with measured REST, Gateway, widget-path, and test checkpoints and recorded Samsung OAuth as out of scope | Documentation-only change; `git diff --check -- PLAN.md` passes. No Gradle, device, or live-backend check run | Continue provider integration, residual store/utility seams, and ARM64/device regression without marking these phases done |
 
 ## Agent Handoff Template
 

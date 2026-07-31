@@ -18,6 +18,7 @@ import com.discord.app.AppScreenRouter
 import com.discord.app.AppToast
 import com.discord.models.guild.Guild
 import com.discord.models.user.MeUser
+import com.discord.restapi.ChannelReorderDiagnostics
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
 import com.discord.utilities.dimmer.DimmerView
@@ -38,9 +39,22 @@ import rx.functions.Func7
 import rx.subjects.BehaviorSubject
 import java.util.LinkedHashMap
 
+internal fun submitChannelReorder(
+    guildId: Long,
+    newPositions: Map<Long, SettingsChannelListAdapter.UpdatedPosition>,
+): Observable<Void?> = RestAPI.apiSerializeNulls.reorderChannels(
+    guildId,
+    newPositions.map { (channelId, update) ->
+        RestAPIParams.ChannelPosition(channelId, update.position, update.parentId)
+    },
+).doOnNext { ChannelReorderDiagnostics.recordSuccess() }
+    .doOnError(ChannelReorderDiagnostics::recordFailure)
+
 class WidgetServerSettingsChannels : AppFragment(R.layout.widget_server_settings_channels) {
     private val channelSortTypeSubject = BehaviorSubject.create(-1)
+    private val orderWrites = ChannelOrderWriteState()
     private var adapter: SettingsChannelListAdapter? = null
+    private var latestServerModel: Model? = null
     private lateinit var dimmer: DimmerView
     private lateinit var createChannel: FloatingActionButton
 
@@ -72,9 +86,11 @@ class WidgetServerSettingsChannels : AppFragment(R.layout.widget_server_settings
             appActivity?.onBackPressedDispatcher?.onBackPressed()
             return
         }
-        setActionBarDisplayHomeAsUpEnabled(!model.isSorting)
-        setActionBarTitle(if (model.isSorting) R.string.sorting else R.string.channels)
-        setActionBarSubtitle(model.guild.name)
+        latestServerModel = model
+        val displayedModel = model.withChannels(orderWrites.apply(model.allChannels))
+        setActionBarDisplayHomeAsUpEnabled(!displayedModel.isSorting)
+        setActionBarTitle(if (displayedModel.isSorting) R.string.sorting else R.string.channels)
+        setActionBarSubtitle(displayedModel.guild.name)
         setActionBarOptionsMenu(
             R.menu.menu_channel_sort,
             onSelected = { item ->
@@ -86,28 +102,28 @@ class WidgetServerSettingsChannels : AppFragment(R.layout.widget_server_settings
                 }
             },
             onConfigured = { menu: Menu ->
-                menu.findItem(R.id.menu_sort_channel).isVisible = !model.isSorting
-                menu.findItem(R.id.menu_sort_done).isVisible = model.isSorting
+                menu.findItem(R.id.menu_sort_channel).isVisible = !displayedModel.isSorting
+                menu.findItem(R.id.menu_sort_done).isVisible = displayedModel.isSorting
             },
         )
         createChannel.apply {
-            if (model.isSorting) hide() else show()
+            if (displayedModel.isSorting) hide() else show()
             setOnClickListener {
                 WidgetServerSettingsChannelsFabMenuFragment.show(
-                    model.guild.id,
+                    displayedModel.guild.id,
                     childFragmentManager,
-                ) { if (!model.isSorting) show() }
+                ) { if (!displayedModel.isSorting) show() }
                 hide()
             }
         }
-        adapter?.setData(model.items)
-        adapter?.setPositionUpdateListener { reorderChannels(model, it) }
-        adapter?.onClickListener = if (model.isSorting) {
+        adapter?.setData(displayedModel.items)
+        adapter?.setPositionUpdateListener { reorderChannels(displayedModel, it) }
+        adapter?.onClickListener = if (displayedModel.isSorting) {
             {}
         } else {
             { channelId ->
-                if (PermissionUtils.can(Permission.MANAGE_CHANNELS, model.channelPermissions[channelId])) {
-                    val channel = model.channels[channelId]
+                if (PermissionUtils.can(Permission.MANAGE_CHANNELS, displayedModel.channelPermissions[channelId])) {
+                    val channel = displayedModel.channels[channelId]
                     if (channel?.isVoiceChannel() == true) {
                         WidgetVoiceChannelSettings.launch(channelId, requireContext())
                     } else {
@@ -123,19 +139,25 @@ class WidgetServerSettingsChannels : AppFragment(R.layout.widget_server_settings
         newPositions: Map<Long, SettingsChannelListAdapter.UpdatedPosition>,
     ) {
         if (newPositions.isEmpty()) return
-        RestAPI.api.reorderChannels(
-            model.guild.id,
-            newPositions.map { (channelId, update) ->
-                RestAPIParams.ChannelPosition(channelId, update.position, update.parentId)
-            },
-        ).restSubscribeOn()
+        val updates = newPositions.mapValues { (_, update) ->
+            GuildChannelsSort.PositionUpdate(update.position, update.parentId)
+        }
+        val serverChannels = latestServerModel?.allChannels ?: model.allChannels
+        val revision = orderWrites.begin(orderWrites.apply(serverChannels), updates)
+        submitChannelReorder(model.guild.id, newPositions)
+            .restSubscribeOn()
             .withDimmer(dimmer, 0L)
             .ui(this)
             .appSubscribe(
                 WidgetServerSettingsChannels::class.java,
                 requireContext(),
-                errorHandler = { configureUI(model) },
-                onNext = { _: Void? -> AppToast.show(this, R.string.channel_order_updated) },
+                errorHandler = { error ->
+                    if (orderWrites.failure(revision)) latestServerModel?.let(::configureUI)
+                },
+                onNext = {
+                    orderWrites.success(revision)
+                    AppToast.show(this, R.string.channel_order_updated)
+                },
             )
     }
 
@@ -145,7 +167,28 @@ class WidgetServerSettingsChannels : AppFragment(R.layout.widget_server_settings
         val isSorting: Boolean,
         val channels: Map<Long, Channel>,
         val channelPermissions: Map<Long, Long>,
+        val allChannels: Map<Long, Channel>,
     ) {
+        fun withChannels(updatedChannels: Map<Long, Channel>): Model {
+            if (updatedChannels === allChannels) return this
+            val updatedItems = items.map { item ->
+                when (item) {
+                    is SettingsChannelListAdapter.CategoryItem -> updatedChannels[item.id]
+                        ?.let { item.copy(pos = it.position) }
+                        ?: item
+                    is SettingsChannelListAdapter.ChannelItem -> updatedChannels[item.channel.id]
+                        ?.let { item.copy(channel = it, parentId = it.parentId) }
+                        ?: item
+                    else -> item
+                }
+            }
+            return copy(
+                items = GuildChannelsSort.sortedRows(updatedItems),
+                channels = channels.mapValues { (id, channel) -> updatedChannels[id] ?: channel },
+                allChannels = updatedChannels,
+            )
+        }
+
         companion object {
             fun observe(guildId: Long, channelTypeObservable: Observable<Int>): Observable<Model?> {
                 val stores = StoreStream
@@ -241,7 +284,14 @@ class WidgetServerSettingsChannels : AppFragment(R.layout.widget_server_settings
                     }
                 }
                 (textChannels + voiceChannels).forEach { item -> grouped[item.parentId]?.add(item) }
-                return Model(guild, grouped.values.flatten(), isSorting, sortedChannels, channelPermissions)
+                return Model(
+                    guild,
+                    grouped.values.flatten(),
+                    isSorting,
+                    sortedChannels,
+                    channelPermissions,
+                    guildChannels + categories.associateBy(Channel::id),
+                )
             }
 
             internal fun sortedGuildChannels(

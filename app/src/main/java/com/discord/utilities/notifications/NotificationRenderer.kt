@@ -104,6 +104,33 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
     fun setIgnoreNextClearForAck(channelId: Long, shouldIgnore: Boolean) =
         cache.setIgnoreNextClearForAck(channelId, shouldIgnore)
 
+    @SuppressLint("MissingPermission", "NotificationPermission")
+    fun displaySent(context: Context, channelId: Long, channelName: String, success: Boolean) {
+        if (!canNotify(context)) return
+        initNotificationChannels(context)
+        val text = context.getString(
+            if (success) R.string.notification_reply_success else R.string.notification_reply_failed,
+        ).replace("{recipient}", channelName)
+        val data = NotificationData(
+            kind = NotificationKind.MESSAGE,
+            channelId = channelId,
+            title = channelName,
+            body = text,
+            authGeneration = 0,
+        )
+        NotificationManagerCompat.from(context).notify(
+            NotificationCache.notificationId(channelId),
+            NotificationCompat.Builder(context, CHANNEL_MESSAGES)
+                .setAutoCancel(true)
+                .setSmallIcon(R.drawable.ic_notifications_white_24dp)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setContentText(text)
+                .setContentIntent(contentIntent(context, data))
+                .setTimeoutAfter(REPLY_STATUS_TIMEOUT_MS)
+                .build(),
+        )
+    }
+
     fun cancel(context: Context, notificationId: Int) {
         if (notificationId > 0) NotificationManagerCompat.from(context).cancel(notificationId)
     }
@@ -172,6 +199,7 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
             context,
             NotificationActionReceiver::class.java,
         ).putExtra(NotificationActionReceiver.EXTRA_CHANNEL_ID, data.channelId)
+            .putExtra(NotificationActionReceiver.EXTRA_CHANNEL_NAME, data.title)
             .putExtra(NotificationActionReceiver.EXTRA_NOTIFICATION_ID, NotificationCache.notificationId(data.channelId))
             .putExtra(NotificationActionReceiver.EXTRA_AUTH_GENERATION, data.authGeneration)
         val pending = PendingIntent.getBroadcast(context, requestCode(data, 2), intent, mutableReplyFlags())
@@ -221,6 +249,7 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
         const val CHANNEL_GENERAL = NotificationClient.NOTIF_GENERAL
 
         private const val LIGHT_PERIOD_MS = 1_500
+        private const val REPLY_STATUS_TIMEOUT_MS = 3_000L
 
         private val NotificationKind.channelId: String get() = when (this) {
             NotificationKind.MESSAGE -> CHANNEL_MESSAGES

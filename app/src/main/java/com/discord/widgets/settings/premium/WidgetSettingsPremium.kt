@@ -1,5 +1,7 @@
 package com.discord.widgets.settings.premium
 
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.LinearLayout
@@ -7,9 +9,11 @@ import android.widget.TextView
 import androidx.cardview.widget.CardView
 import com.discord.R
 import com.discord.app.AppFragment
+import com.discord.app.AppScreenRouter
 import com.discord.app.AppViewFlipper
 import com.discord.models.domain.ModelSubscription
 import com.discord.models.domain.premium.SubscriptionPlanType
+import com.discord.utilities.premium.BlockRussianPurchasesUtils
 import com.discord.views.ActiveSubscriptionView
 import com.discord.views.premium.AccountCreditView
 import com.google.android.material.button.MaterialButton
@@ -196,6 +200,8 @@ class WidgetSettingsPremium : AppFragment(R.layout.widget_settings_premium) {
     }
 
     companion object {
+        private const val INTENT_SCROLL_TO_SECTION = "intent_section"
+        private const val ANALYTICS_LOCATION_SECTION = "analytics_location_section"
         const val RESULT_ACTION = "premium_settings_action"
         const val RESULT_ACTION_NAME = "action"
         const val RESULT_VIEW_TYPE = "result_view_type"
@@ -217,5 +223,21 @@ class WidgetSettingsPremium : AppFragment(R.layout.widget_settings_premium) {
             SubscriptionPlanType.NONE_6_MONTH.planId,
             SubscriptionPlanType.NONE_YEAR.planId,
         )
+
+        @JvmOverloads
+        fun launch(
+            context: Context,
+            scrollToSection: Int? = null,
+            locationSection: String? = null,
+        ) {
+            if (BlockRussianPurchasesUtils.showDialog()) return
+            AppScreenRouter.launch(
+                context,
+                WidgetSettingsPremium::class.java,
+                Intent()
+                    .putExtra(INTENT_SCROLL_TO_SECTION, scrollToSection)
+                    .putExtra(ANALYTICS_LOCATION_SECTION, locationSection),
+            )
+        }
     }
 }

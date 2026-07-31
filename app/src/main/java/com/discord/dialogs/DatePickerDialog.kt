@@ -26,6 +26,19 @@ class DatePickerDialog : AppDialog(R.layout.dialog_date_picker) {
     private var selectedDateMillis: Long = 0
     private var dateChanged: Boolean = false
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        selectedDateMillis = savedInstanceState?.getLong(STATE_SELECTED_DATE)
+            ?: argumentsOrDefault.getLong(ARG_INITIAL_DATE)
+        dateChanged = savedInstanceState?.getBoolean(STATE_DATE_CHANGED) ?: false
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putLong(STATE_SELECTED_DATE, selectedDateMillis)
+        outState.putBoolean(STATE_DATE_CHANGED, dateChanged)
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
         if (onDateSelected == null) {
@@ -36,8 +49,6 @@ class DatePickerDialog : AppDialog(R.layout.dialog_date_picker) {
         val view = requireView()
         view.findViewById<TextView>(R.id.dialog_date_picker_title).text =
             argumentsOrDefault.getCharSequence(ARG_LABEL, "")
-
-        selectedDateMillis = argumentsOrDefault.getLong(ARG_INITIAL_DATE)
 
         val picker = view.findViewById<DatePicker>(R.id.dialog_date_picker_input)
         picker.maxDate = argumentsOrDefault.getLong(ARG_MAX_DATE)
@@ -72,6 +83,8 @@ class DatePickerDialog : AppDialog(R.layout.dialog_date_picker) {
         private const val ARG_LABEL = "label"
         private const val ARG_INITIAL_DATE = "initial_date"
         private const val ARG_MAX_DATE = "max_date"
+        private const val STATE_SELECTED_DATE = "selected_date"
+        private const val STATE_DATE_CHANGED = "date_changed"
 
         /** Nobody using Discord was born more than 150 years ago. */
         private const val MIN_DATE_YEARS_AGO = 150

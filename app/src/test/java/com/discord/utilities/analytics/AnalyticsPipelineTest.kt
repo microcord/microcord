@@ -4,6 +4,8 @@ import com.discord.analytics.generated.traits.TrackGuild
 import com.discord.analytics.generated.traits.TrackNetworkMetadata
 import com.discord.analytics.generated.events.network_action.TrackNetworkActionUserLogin
 import com.discord.api.science.Science
+import com.discord.api.activity.ActivityPlatform
+import com.discord.models.member.GuildMember
 import com.discord.utilities.time.Clock
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -169,6 +171,43 @@ class AnalyticsPipelineTest {
         )
 
         assertEquals(200L, schema.trackNetworkMetadata?.statusCode)
+    }
+
+    @Test
+    fun `user sheet analytics carries stage profile traits`() {
+        val sink = RecordingSink()
+        AnalyticsSink.install(sink)
+        AnalyticsTracker.tracker.setTrackingData("token")
+
+        AnalyticsTracker.openUserSheet(
+            hasPremiumCustomization = true,
+            gameName = "Game",
+            gamePlatform = ActivityPlatform.XBOX,
+            guildMember = GuildMember(
+                color = 0,
+                hoistRoleId = 0,
+                roles = null,
+                nick = "Nick",
+                premiumSince = null,
+                pending = false,
+                joinedAt = null,
+                guildId = 1,
+                userId = 2,
+                avatarHash = "avatar",
+                bannerHash = "banner",
+                bio = "bio",
+            ),
+        )
+        AnalyticsTracker.tracker.setTrackingData("token")
+
+        val event = sink.events.last() as Science.Event.MapObject
+        assertEquals("open_popout", event.type)
+        assertEquals("User Sheet", event.properties["type"])
+        assertEquals("xbox", event.properties["game_platform"])
+        assertEquals(true, event.properties["has_nickname"])
+        assertEquals(true, event.properties["has_guild_member_avatar"])
+        assertEquals(true, event.properties["has_guild_member_banner"])
+        assertEquals(true, event.properties["has_guild_member_bio"])
     }
 
     private class TrackImpressionWithGuild :

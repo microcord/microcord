@@ -36,6 +36,7 @@ import com.discord.models.domain.ModelSession
 import com.discord.models.domain.ModelGuildFolder
 import com.discord.models.domain.ModelGuildMemberListUpdate
 import com.discord.models.domain.ModelMessageDelete
+import com.discord.models.domain.ModelMuteConfig
 import com.discord.models.domain.ModelUserNote
 import com.discord.gateway.GatewayCancellable
 import com.discord.gateway.GatewayDiscovery
@@ -71,6 +72,7 @@ import com.discord.utilities.notifications.NotificationData
 import com.discord.utilities.notifications.NotificationKind
 import com.discord.utilities.notifications.NotificationRenderer
 import com.discord.utilities.notifications.NotificationSource
+import com.discord.utilities.fcm.NotificationClient
 import com.discord.widgets.settings.NotificationStore
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapterItemCallMessage
 import com.discord.widgets.chat.input.ChatInputGuardActions
@@ -226,6 +228,15 @@ class StoreStream private constructor(
         onResolvedChannelChanged = ::handleResolvedChannelChanged,
     )
     private val guildsNsfw = StoreGuildsNsfw(dispatcher, channels, observationDeck)
+    private val search = StoreSearch(this, dispatcher, guildsNsfw, users, observationDeck, channels, guilds)
+    private val gifPicker = StoreGifPicker(
+        dispatcher,
+        userSettingsSystem,
+        restAPI = { if (::restApi.isInitialized) restApi else null },
+        observationDeck = observationDeck,
+    )
+    private val expressionPickerNavigation = StoreExpressionPickerNavigation(observationDeck, dispatcher)
+    private val expressionSuggestions = StoreExpressionSuggestions(observationDeck, dispatcher, clock)
     private val maskedLinks = StoreMaskedLinks(dispatcher, channelsSelected, userRelationships)
     private val channelMembers = StoreChannelMembers(observationDeck) { guildId, roleId ->
         guilds.getGuildRolesInternal()[guildId]?.get(roleId)
@@ -621,11 +632,16 @@ class StoreStream private constructor(
     private val callsIncoming = StoreCallsIncoming(dispatcher, users, observationDeck)
     private val calls = StoreCalls(
         callConnectRequest = { channelId -> gatewayConnection.callConnect(channelId) },
-        // `POST /channels/{id}/call/ring` and `/stop-ringing` are not declared on RestAPIInterface
-        // yet, so ringing is inert. Call *state* (and therefore the call-message participant pile)
-        // is fully live because it arrives over CALL_CREATE/CALL_UPDATE.
-        ringRequest = { _, _, _ -> },
-        stopRingingRequest = { _, _, _ -> },
+        ringRequest = { channelId, messageId, recipients ->
+            RestAPI.apiOrNull?.ring(
+                channelId, RestAPIParams.Ring(recipients), callContext(messageId),
+            )?.subscribeOn(Schedulers.io())?.subscribe({}, {})
+        },
+        stopRingingRequest = { channelId, messageId, recipients ->
+            RestAPI.apiOrNull?.stopRinging(
+                channelId, RestAPIParams.Ring(recipients), callContext(messageId),
+            )?.subscribeOn(Schedulers.io())?.subscribe({}, {})
+        },
         onStopRingingWithoutCall = { channelId -> callsIncoming.removeIncomingCall(channelId) },
     )
     private val applicationStreaming: StoreApplicationStreaming = StoreApplicationStreaming(
@@ -816,6 +832,9 @@ class StoreStream private constructor(
         // Cross-cutting
         experiments,
         guildsNsfw,
+        gifPicker,
+        expressionPickerNavigation,
+        expressionSuggestions,
         maskedLinks,
         mediaFavorites,
         notificationUpsells,
@@ -901,6 +920,7 @@ class StoreStream private constructor(
         ChatInputStoreBindings.joinedThreads = threadsActiveJoined::observeActiveJoinedThreadsChannelsForGuild
         ChatInputStoreBindings.isLurking = lurking::isLurkingObs
         ChatInputStoreBindings.threadDraftState = threadDraft::observeDraftState
+        com.discord.widgets.search.SearchStoreProvider.install(search.asWidgetStore())
         ChatInputGuardActions.joinGuildAsMember = { guildId, onSuccess, onFailure ->
             lurking.postJoinGuildAsMember(guildId, { onSuccess() }, onFailure)
         }
@@ -973,6 +993,7 @@ class StoreStream private constructor(
             .subscribe(gatewayConnection::handleRtcConnectionLive)
         BootLog.record(BootLogEvent.REST_READY)
         authentication.bindApi(api)
+        userSettings.bindApi(api)
         guildProfiles.bindApi(api)
         guildWelcomeScreens.bindApi(api)
         lurking.bindApi(api)
@@ -1145,7 +1166,50 @@ class StoreStream private constructor(
                 true
             }.getOrDefault(false)
         }
+        MessageWorkerActions.isAuthenticated = authentication::isAuthed
+        MessageWorkerActions.isConnected = { networkMonitor.getState() == NetworkMonitor.State.ONLINE }
         MessageWorkerActions.isCurrentAuthGeneration = { it == authGeneration }
+        MessageWorkerActions.sendDirectReply = { channelId, channelName, content, nonce, stickerId ->
+            runCatching {
+                restApi.sendMessage(
+                    channelId,
+                    RestAPIParams.Message(
+                        content = content,
+                        nonce = nonce,
+                        stickerIds = stickerId.takeIf { it != -1L }?.let(::listOf),
+                    ),
+                ).subscribeOn(Schedulers.io()).toBlocking().single().also {
+                    analytics.ackMessage(channelId)
+                    NotificationClient.displaySent(applicationContext, channelId, channelName, true)
+                }
+                true
+            }.getOrElse {
+                NotificationClient.displaySent(applicationContext, channelId, channelName, false)
+                false
+            }
+        }
+        MessageWorkerActions.declineCall = { channelId, messageId ->
+            runCatching {
+                restApi.stopRinging(
+                    channelId, RestAPIParams.Ring(null), callContext(messageId),
+                ).subscribeOn(Schedulers.io()).toCompletable().await()
+                true
+            }.getOrDefault(false)
+        }
+        MessageWorkerActions.timedMute = { guildId, channelId, untilTimestampMs ->
+            runCatching {
+                val settings = restApi.updateUserGuildSettings(
+                    guildId,
+                    RestAPIParams.UserGuildSettings(
+                        channelId,
+                        RestAPIParams.UserGuildSettings.ChannelOverride(true, ModelMuteConfig(untilTimestampMs)),
+                    ),
+                ).subscribeOn(Schedulers.io()).toBlocking().single()
+                NotificationClient.clear(channelId, applicationContext)
+                analytics.onNotificationSettingsUpdated(settings, channelId)
+                true
+            }.getOrDefault(false)
+        }
         configureSocialUi()
         messagesLoader.observeChunks().subscribe { chunk ->
             dispatcher.schedule {
@@ -1384,6 +1448,13 @@ class StoreStream private constructor(
     }
 
     fun handleConnectionOpen(payload: ModelPayload) = dispatcher.schedule { handleConnectionOpenInternal(payload) }
+
+    @StoreThread
+    fun handleSearchFinish(searchState: com.discord.utilities.search.network.state.SearchState) {
+        channels.handleSearchFinish(searchState.threads.orEmpty())
+        permissions.handleSearchFinish(searchState.hits)
+        threadsJoined.handleSearchFinish(searchState.threads, searchState.threadMembers)
+    }
 
     fun handleUserSettingsUpdate(userSettings: ModelUserSettings) = dispatcher.schedule {
         this.userSettings.handleUserSettingsUpdate(userSettings)
@@ -2074,6 +2145,10 @@ class StoreStream private constructor(
         "{\"location\":\"$location\"}".toByteArray(), android.util.Base64.NO_WRAP,
     )
 
+    private fun callContext(messageId: Long): String = android.util.Base64.encodeToString(
+        "{\"message_id\":$messageId}".toByteArray(), android.util.Base64.NO_WRAP,
+    )
+
     private fun scheduleBackgroundMessageSend(canReplayAttachments: Boolean) {
         if (!::applicationContext.isInitialized) return
         val request = OneTimeWorkRequest.Builder(BackgroundMessageSendWorker::class.java)
@@ -2360,6 +2435,7 @@ class StoreStream private constructor(
         messageState.handleChannelSelected()
         notifications.handleChannelSelected(channelId)
         messageAck.handleChannelSelected()
+        expressionSuggestions.handleChannelSelected()
         mentions.handleChannelSelected(channelId)
         calls.handleChannelSelect(channelId)
         channelConversions.handleChannelSelected(channelId)
@@ -2858,16 +2934,11 @@ class StoreStream private constructor(
             override fun getUserAgent() = USER_AGENT
             override fun getSpotifyToken(): String? = null
         }
-        return RestAPIBuilder(API_BASE_URL, CookieJars.persistent(context)).build(
-            RestAPIInterface::class.java,
-            interceptors = listOf(RequiredHeadersInterceptor(headers), RestAPI.buildAnalyticsInterceptor()),
-            clientName = "main",
-        ).also {
-            restApi = it
-            // Publishes the one authenticated client for stores whose `restApi` seam defaults to
-            // `RestAPI.apiOrNull`. Until this call they no-op rather than crash.
-            RestAPI.install(it)
-        }
+        val builder = RestAPIBuilder(API_BASE_URL, CookieJars.persistent(context))
+        val interceptors = listOf(RequiredHeadersInterceptor(headers), RestAPI.buildAnalyticsInterceptor())
+        val api = RestAPI.install(builder, interceptors)
+        restApi = api
+        return api
     }
 
     companion object {
@@ -3045,6 +3116,10 @@ class StoreStream private constructor(
         @JvmStatic fun getExperiments() = requireInstance().experiments
         @JvmStatic fun getAnalytics() = requireInstance().analytics
         @JvmStatic fun getGuildsNsfw() = requireInstance().guildsNsfw
+        @JvmStatic fun getSearch() = requireInstance().search
+        @JvmStatic fun getGifPicker() = requireInstance().gifPicker
+        @JvmStatic fun getExpressionPickerNavigation() = requireInstance().expressionPickerNavigation
+        @JvmStatic fun getExpressionSuggestions() = requireInstance().expressionSuggestions
         @JvmStatic fun getMaskedLinks() = requireInstance().maskedLinks
         @JvmStatic fun getMediaFavorites() = requireInstance().mediaFavorites
         @JvmStatic fun getNotificationUpsells() = requireInstance().notificationUpsells

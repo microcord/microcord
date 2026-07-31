@@ -5064,3 +5064,181 @@ Resumable tasks:
 - `app/src/main/java/com/discord/widgets/servers/guildboost/{GuildBoostViewModel,WidgetGuildBoost}.kt` | matching Vineflower paths | reconstruct `GooglePlayBillingManager` against the installed billing dependency first; then build the purchase state machine and screen, never an inert shell.
 - `app/src/main/java/com/discord/widgets/auth/WidgetOauth2AuthorizeSamsung.kt` | matching Vineflower/JADX paths | requires a project-owned Samsung client configuration plus `SamsungConnectActivity`/AIDL bridge and manifest route; official recovered credentials are forbidden.
 - `app/src/main/java/com/discord/widgets/voice/fullscreen/**`, `utilities/voice/**`, `rtcconnection/**` | matching reference paths | on an ARM64 device, verify voice join/leave, camera focus, screen-share start/stop and thumbnail upload, overlay permission/open/close, notification mute/deafen/disconnect, stage invite actions, process backgrounding, and service teardown.
+
+## 2026-07-31 runtime regression closure and billing completion
+
+Parallel runtime passes fixed the reported crashes and false errors at their shared contracts: fragment
+transactions now reject saved-state pins launches; successful empty REST writes use platform-nullable
+`Void`; guild member subscriptions mutate only on the dispatcher; server overview resolves the correct
+include roots; and audit logs decode all 47 reference action codes while exposing terminal loading/error
+states.
+
+Navigation and presentation fixes cover settings parent stacks, guild creation parcelables, bannerless
+guild-sheet geometry, right-panel pinned overlay ordering, dedicated search Back, authorized-app headers,
+live friend/member projections, and stale guild voice indicators. The chat expression tray now has one
+emoji/keyboard state owner, and opening either sidebar dismisses the IME/tray. A stale recovered
+`fragment_camera.xml` no longer overrides FlexInput's required layout; CameraKit beta3.10 supplies its
+public runtime classes. Shared Material button semantic tints were restored without per-screen colors.
+
+Google Play Billing moved from reference 4.0.0 to **5.2.1**, the earliest compatible release that
+sets Android 14 dynamic-receiver flags while retaining the reference `SkuDetails` API. The billing
+manager, verification/runtime lifecycle, plan selection, guild-boost state machine, screen, and checkout
+handoff are complete and fail closed when Manticord-owned Play products are unconfigured.
+
+Verification: production Kotlin compiles; all 1,552 unit tests pass; `assembleDebug`, `lintDebug`, and
+`git diff --check` pass. No live backend actions were performed by automated checks.
+
+Physical widget source-path coverage is **1,150 / 1,155 (99.6%)**. Four unmatched filenames
+(`WidgetContactSyncViewModelKt`, `PanelLayout`, `PlaystationExperimentUtilsKt`, and
+`WidgetServerSettingsEnableCommunityViewModelKt`) already exist as exact compiled JVM classes from
+consolidated sources. The only real remaining widget blocker is `WidgetOauth2AuthorizeSamsung`, which
+requires project-owned Samsung credentials plus its activity/AIDL integration.
+
+Resumable tasks:
+
+- `app/src/main/java/com/discord/widgets/auth/WidgetOauth2AuthorizeSamsung.kt` | matching reference paths | implement only after project-owned Samsung client credentials and integration approval exist; never reuse recovered official credentials.
+- Device regression pass | current APK | retest pins from the right panel, expression tray repeated open/close, sidebar keyboard dismissal, camera tab, member/friend live updates, audit logs, privacy, role/channel writes, guild creation/profile sheet, search Back, guild voice indicators, and Billing startup on Android 14+.
+
+## 2026-07-31 missing-surface wave and remaining parity report
+
+The reconstruction wave added real state and behavior rather than exact-path markers: search input/query/data,
+GIF and expression-navigation/suggestion stores are now in `StoreStream`; CallAction, MessageSend and TimedMute
+workers are present; gateway discovery/config/payload/logging glue is typed and redacted; dialog restoration and
+actions, urgent-message handling, bot component adapters, streaming settings models, null serialization,
+screenshot detection, i18n hooks, intent/logging/notification/text utilities and profile media flows are wired.
+
+The runtime-reported paths were re-derived again from bytecode: Privacy & Safety now treats REST success,
+empty/204 and errors as terminal; channel ordering uses exact drag deltas, explicit-null parent serialization,
+optimistic overlays and sanitized `ChannelReorder` Logcat diagnostics; pins use a dedicated full-screen activity
+with `TYPE_SLIDE_POP_VERTICAL`; FlexInput reinstalls emoji state subscriptions after resume; user-sheet/friends
+Message actions select existing or asynchronously-created DMs in the correct order; mutual friends/guilds use
+full-screen routes; current-user popouts hide Edit; and default-profile avatar/banner activity results survive
+recreation.
+
+Verification: production Kotlin compiles; all **1,613** unit tests pass; `assembleDebug`, `lintDebug`,
+`compileDebugAndroidTestKotlin`, and `git diff --check` pass. No ADB device was attached, so connected tests and
+manual runtime validation were not run.
+
+### Ranked remaining work
+
+1. **Samsung OAuth remains externally blocked.** `WidgetOauth2AuthorizeSamsung`, `SamsungConnectActivity`, the
+   Samsung AIDL bridge and manifest route require project-owned Samsung client credentials. Recovered official
+   credentials must never be reused.
+2. **Stage user-sheet moderation is still incomplete.** `WidgetUserSheetViewModel.setUserSuppressedInChannel()`
+   and `inviteUserToSpeak()` are still no-ops. Reference sources: user sheet plus `StoreStageChannels`; implement
+   speaker/audience mutations, REST errors and analytics together.
+3. **Group invite friends is missing.** Friends UI still lacks the reference `WidgetGroupInviteFriends` /
+   `GroupInviteFriendsSheet` flow. Build the selector, permission/filter model and invite submission as one slice.
+4. **Scheduled-event location selection is incomplete.** The details extras flow reports that the owning location
+   selection screen is absent even though supporting views/view model exist. Build the screen and route before
+   exposing the action.
+5. **Spotify integration has no provider.** `StoreSpotify` remains inert without the reference-shaped
+   `SpotifyApiClient`; restore provider authorization/playback state without official credentials.
+6. **Provider-owned platform integrations remain.** Push token registration is inert until project-owned FCM
+   configuration exists; dynamic links need a replacement provider; API 33+ screenshot URI access needs a
+   reviewed media-permission/runtime path.
+7. **Residual dialog entry points need wiring.** Capacity dialogs still have caller-side no-op/toast fallbacks;
+   accessibility, Russian-purchase, Samsung-link, user-actions and audio-output dialogs need a final call-site
+   reachability pass; overlay settings cannot yet scroll directly to its toggle.
+8. **Store/utility cleanups with real behavior impact remain.** `StoreMessageAck` still documents an inert request
+   seam, `StoreEmoji` lacks the full unicode bundle model, and `GuildBoostUtils` awaits the reference-shaped
+   utility REST wrapper. Do these only with their consumers, not as standalone facades.
+9. **Device parity is unverified.** On ARM64, retest channel/role writes with `ChannelReorder` diagnostics, privacy,
+   pins animation/Back, FlexInput resume/camera, profile image picking, DM routing, mutual screens, members/friends,
+   audit logs, Billing startup, and the complete voice/video/screen-share/overlay/service lifecycle.
+
+Raw exact-path inventory still reports large `analytics` and `databinding` deficits; these are generated/obfuscated
+analytics classes and AGP-generated bindings and must not be copied. Many `utilities`, `api`, `models` and `stores`
+path differences are Kotlin consolidations or compiler facades; close only gaps proven behavioral by callers,
+fixtures or runtime evidence.
+
+## 2026-07-31 follow-up feature closure
+
+Closed from the prior ranked list: stage speaker/audience moderation, group-invite friends, scheduled-event
+location selection, and residual capacity/accessibility/Russian-purchase/Samsung-NUX/user-action/audio-output
+dialog entry points. Samsung OAuth itself is explicitly excluded by user direction and is no longer tracked as
+work.
+
+Runtime infrastructure fixes in the same slice:
+
+- `withDimmer` marshals every view mutation to Android main while retaining source scheduler semantics.
+- FlexInput's dependency-owned attachment-preview layout is no longer shadowed by a stale app layout.
+- Gallery/camera permissions follow API 23-32 legacy read, API 33+ images/video, and `CAMERA`; obsolete write
+  storage is not requested.
+- Channel reordering now uses reference flat-index/original-position deltas and the actual production REST client.
+  Sanitized Logcat lines use tag `ChannelReorder` and report request shape plus response/error without tokens.
+- Stage user-sheet actions use the null-serializing voice-state client and exact analytics/dismissal ordering.
+
+Verification: production Kotlin compiles; all **1,635** unit tests pass; `assembleDebug`, `lintDebug`,
+`compileDebugAndroidTestKotlin`, and `git diff --check` pass.
+
+### Remaining work after this wave
+
+1. **Spotify provider:** implement the replacement `SpotifyApiClient` and authorization/playback state without
+   recovered official credentials.
+2. **Project-owned platform providers:** connect FCM token registration and dynamic links only when project
+   configuration exists; verify screenshot/media permission behavior on API 33+.
+3. **Store/utility seams:** close `StoreMessageAck`'s inert request seam, restore the full unicode emoji bundle,
+   and implement `GuildBoostUtils` with the reference-shaped utility REST wrapper when their consumers are active.
+4. **Unreachable premium/gift dialogs:** obfuscated dialogs found by call-site audit remain deferred where their
+   owning premium/gift entry point is absent. Build each with that entry point, not as an isolated shell.
+5. **Device regression:** verify media picker/permissions and attachment previews, dimmer threading, channel
+   reorder using `ChannelReorder` logs, privacy, pins animation, emoji resume, profile picker, DM/mutual navigation,
+   stage moderation, group invites, event location, dialogs, and voice lifecycle on an attached ARM64 device.
+
+## 2026-07-31 device-log follow-up
+
+Closed the wrong-thread `withDimmer` path by scheduling only view mutations on Android main. Removed the stale
+app-owned FlexInput attachment-preview layout so the dependency's `SimpleDraweeView` root is packaged. Gallery
+and camera tabs now request only the permission appropriate to the platform version and keep obsolete write
+storage disabled.
+
+Channel ordering now executes the same drag path in tests and production, compares flat drag indices with the
+server's original channel positions, uses the null-serializing production REST client, and emits sanitized Logcat
+under tag `ChannelReorder`. If runtime still shows an unknown error, the required evidence is the adjacent
+`request` and `response`/`error` lines from that tag; they contain no token or private content.
+
+Also completed in this pass: stage suppress/invite-to-speak mutations and analytics, group-invite friends,
+scheduled-event location selection, residual dialog entry points, default-profile avatar/banner result handling,
+current-user popout action hiding, user-sheet/friends DM routing, and full-screen mutual friends/guilds routes.
+
+Verification: production Kotlin compiles; all **1,635** unit tests pass; `assembleDebug`, `lintDebug`,
+`compileDebugAndroidTestKotlin`, and `git diff --check` pass. Samsung OAuth is intentionally out of scope.
+
+### Runtime corrections after device retest
+
+- Channel ordering keeps the latest generation's optimistic target while stale store snapshots arrive, clears it
+  only when authoritative state matches, and rolls back only the matching failed generation.
+- Privacy consent no longer captures an unavailable REST client and treats 204 completion as terminal; cold-launch
+  instrumentation passed twice on the attached device.
+- Pinned Messages enters/exits with the reference horizontal activity animation, not a bottom-sheet-style vertical
+  transition.
+
+### Device session: privacy and image uploads
+
+- FlexInput's Fresco placeholder now uses a recovered theme-independent `ic_file_24dp`; direct resource inflation
+  on device no longer reports unresolved theme attributes.
+- Image attachments use the same `MessageSendCoordinator`/`MessageQueue` multipart path as ordinary sends rather
+  than the divergent direct uploader. A PNG MockWebServer device test passes without sending a live message.
+- Privacy no longer blocks the whole settings screen on consent loading. Local privacy settings render immediately;
+  usage-statistics and personalization rows appear when `GET users/@me/consent` completes. Focused consent tests pass.
+- The current debug APK was rebuilt, installed with `adb install -r`, and cold-launched on device `188b1209`.
+
+Final Privacy root cause: three local `StoreUserSettings` BehaviorSubjects had no initial values, so the screen's
+`combineLatest` could wait forever when READY did not re-emit after reinstall. They now start with the same values
+used by store reset and are replaced by READY immediately. User confirmed the installed screen works on device.
+
+Emoji/sticker gateway updates may omit `guild_hashes` even though Kotlin metadata marks the field non-null. The
+client-data hash predicate now accepts a nullable hash and ignores incomplete hash updates; emoji/sticker content
+stores still receive the event. Focused regression tests pass and the rebuilt APK is installed.
+
+Sticker experiment audit: exhaustive Vineflower/JADX/DEX string and `StoreExperiments` call-site inspection found
+no sticker-unlock experiment in 126.21. `StickerUtils.getStickerSendability` and picker/autocomplete bytecode gate
+standard stickers on premium; guild stickers are free in their own guild and require premium externally. The target
+keeps that verified behavior.
+
+User override applied afterward: Aliucord `DefaultStickers` behavior is ported directly with no Aliucord APIs.
+Standard packs/categories render for non-Nitro users, standard stickers are sendable, and sticker-only payloads are
+valid. A dedicated REST client replaces request metadata with the pinned patch's RN values only when a non-premium
+message contains `sticker_ids`; ordinary text, attachments, edits, commands, and every other REST call stay on the
+normal client. Attachment-only messages now expose Send, and removing the last attachment hides it again.

@@ -5,12 +5,15 @@ import android.graphics.Typeface
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.style.StyleSpan
+import android.text.style.StrikethroughSpan
 import android.text.style.URLSpan
 import android.view.View
 import androidx.annotation.ColorInt
 import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import com.discord.utilities.spans.ClickableSpan
+import android.text.style.ForegroundColorSpan
+import java.util.Locale
 
 /**
  * One `(hookName)` target inside a translated string.
@@ -19,11 +22,21 @@ import com.discord.utilities.spans.ClickableSpan
  * ship an empty label (`$[](usernameHook)`) and expect the screen to supply the words as well as the
  * behaviour.
  */
-data class Hook(
-    val text: CharSequence? = null,
-    val spans: List<Any> = emptyList(),
-    val onClick: ((View) -> Unit)? = null,
-)
+class Hook(
+    var text: CharSequence? = null,
+    spans: List<Any> = emptyList(),
+    var onClick: ((View) -> Unit)? = null,
+    @ColorInt var clickColor: Int? = null,
+) {
+    val spans: MutableList<Any> = spans.toMutableList()
+
+    var replacementText: CharSequence?
+        get() = text
+        set(value) { text = value }
+
+    val styles: MutableList<Any>
+        get() = spans
+}
 
 /**
  * The hook layer on top of [I18nSpans].
@@ -72,6 +85,40 @@ object I18nHooks {
         val filled = fillHookLabels(template.toString(), hooks, boldHooks)
         val rendered = I18nSpans.render(filled, *args.map { it.key to it.value }.toTypedArray())
         return bindHooks(rendered, hooks, boldHooks)
+    }
+
+    /** Reference-shaped formatter entry point backed by a mutable [RenderContext]. */
+    @JvmStatic
+    fun format(
+        template: CharSequence,
+        formatArgs: Array<out Any?>,
+        initializer: RenderContext.() -> Unit,
+    ): CharSequence {
+        val renderContext = RenderContext().apply {
+            orderedArguments = formatArgs.toList()
+            initializer()
+        }
+        var source = if (renderContext.args.isNotEmpty()) {
+            FormatUtils.format(template, renderContext.args)
+        } else {
+            FormatUtils.formatOrdered(template, formatArgs)
+        }
+        if (renderContext.uppercase) source = source.uppercase(Locale.ROOT)
+
+        val boldHooks = mutableSetOf<String>()
+        val rendered = SpannableStringBuilder(
+            I18nSpans.render(fillHookLabels(source, renderContext.hooks, boldHooks)),
+        )
+        renderContext.boldColor?.let { color ->
+            rendered.getSpans(0, rendered.length, StyleSpan::class.java)
+                .filter { it.style == Typeface.BOLD }
+                .forEach { rendered.setSpan(ForegroundColorSpan(color), rendered.getSpanStart(it), rendered.getSpanEnd(it), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE) }
+        }
+        renderContext.strikethroughColor?.let { color ->
+            rendered.getSpans(0, rendered.length, StrikethroughSpan::class.java)
+                .forEach { rendered.setSpan(ForegroundColorSpan(color), rendered.getSpanStart(it), rendered.getSpanEnd(it), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE) }
+        }
+        return bindHooks(rendered, renderContext.hooks, boldHooks)
     }
 
     /** Discord's plurals use `{count}` or the bare `{#}` token for the quantity. */
@@ -138,7 +185,7 @@ object I18nHooks {
             hook.spans.forEach { builder.setSpan(it, start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE) }
             hook.onClick?.let { onClick ->
                 builder.setSpan(
-                    ClickableSpan(null, underline = false, onClickListener = onClick),
+                    ClickableSpan(hook.clickColor, underline = false, onClickListener = onClick),
                     start,
                     end,
                     Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,

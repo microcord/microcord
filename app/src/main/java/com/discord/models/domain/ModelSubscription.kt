@@ -1,5 +1,7 @@
 package com.discord.models.domain
 
+import com.discord.models.domain.premium.SubscriptionPlanType
+import com.discord.utilities.time.TimeUtils
 import com.google.gson.annotations.SerializedName
 
 data class ModelSubscription(
@@ -70,7 +72,17 @@ data class ModelSubscription(
 
     fun hasPlan(planId: Long) = items.any { it.planId == planId }
     fun hasAnyOfPlans(planIds: Set<Long>) = items.any { it.planId in planIds }
+    fun getAccountHoldEstimatedExpirationTimestamp() = TimeUtils.addDaysToDate(currentPeriodEnd, 30)
+    fun getPlanType(): SubscriptionPlanType = SubscriptionPlanType.from(premiumBasePlanId)
     fun isAppleSubscription() = PaymentGateway.from(paymentGateway) == PaymentGateway.APPLE
     fun isGoogleSubscription() = PaymentGateway.from(paymentGateway) == PaymentGateway.GOOGLE
     fun isMobileManaged() = isAppleSubscription() || isGoogleSubscription()
+    fun isNonePlan() = when (getPlanType()) {
+        SubscriptionPlanType.NONE_MONTH,
+        SubscriptionPlanType.NONE_YEAR,
+        SubscriptionPlanType.NONE_3_MONTH,
+        SubscriptionPlanType.NONE_6_MONTH,
+        -> true
+        else -> false
+    }
 }

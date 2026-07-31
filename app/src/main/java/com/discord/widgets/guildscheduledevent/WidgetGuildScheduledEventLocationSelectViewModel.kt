@@ -3,9 +3,11 @@ package com.discord.widgets.guildscheduledevent
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isStageVoiceChannel
 import com.discord.api.channel.isVoiceChannel
+import com.discord.api.guild.GuildFeature
+import com.discord.api.guildscheduledevent.GuildScheduledEvent
 import com.discord.api.guildscheduledevent.GuildScheduledEventEntityType
-import com.discord.api.guildscheduledevent.GuildScheduledEventStatus
 import com.discord.app.AppViewModel
+import com.discord.models.guild.Guild
 import com.discord.stores.StoreChannels
 import com.discord.stores.StoreGuildScheduledEvents
 import com.discord.stores.StoreGuilds
@@ -13,6 +15,7 @@ import com.discord.stores.StorePermissions
 import com.discord.stores.StoreStream
 import com.discord.utilities.guildscheduledevent.GuildScheduledEventUtilities
 import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
 import rx.Observable
 
@@ -24,7 +27,23 @@ class WidgetGuildScheduledEventLocationSelectViewModel(
     guildsStore: StoreGuilds = StoreStream.getGuilds(),
     permissionsStore: StorePermissions = StoreStream.getPermissions(),
     guildScheduledEventsStore: StoreGuildScheduledEvents = StoreStream.getGuildScheduledEvents(),
+    storeStateObservable: Observable<StoreState> = observeStores(
+        guildId,
+        existingGuildScheduledEventId,
+        guildsStore,
+        channelsStore,
+        permissionsStore,
+        guildScheduledEventsStore,
+    ),
 ) : AppViewModel<WidgetGuildScheduledEventLocationSelectViewModel.ViewState>() {
+
+    data class StoreState(
+        val guild: Guild?,
+        val channels: Map<Long, Channel>,
+        val channelPermissions: Map<Long, Long>,
+        val guildPermissions: Long?,
+        val existingGuildScheduledEvent: GuildScheduledEvent?,
+    )
 
     sealed class ViewState {
         object Invalid : ViewState()
@@ -41,63 +60,45 @@ class WidgetGuildScheduledEventLocationSelectViewModel(
         ) : ViewState()
     }
 
+    internal var currentStoreState: StoreState? = null
+        private set
+
     init {
-        Observable.combineLatest(
-            guildsStore.observeGuild(guildId),
-            channelsStore.observeChannelsForGuild(guildId),
-            permissionsStore.observeChannelPermissionsForGuild(guildId),
-            permissionsStore.observePermissionsForGuild(guildId),
-            guildScheduledEventsStore.observeGuildScheduledEvent(existingGuildScheduledEventId, guildId),
-        ) { guild, channels, channelPermissions, guildPermissions, existingEvent ->
-            if (guild == null) return@combineLatest ViewState.Invalid
-            val availableChannels = channels.filterValues { channel ->
-                GuildScheduledEventUtilities.canStartEventInChannel(channel, channelPermissions[channel.id])
-            }
-            val voiceIds = availableChannels.values.filter(Channel::isVoiceChannel).mapTo(linkedSetOf(), Channel::id)
-            val stageIds = availableChannels.values.filter(Channel::isStageVoiceChannel).mapTo(linkedSetOf(), Channel::id)
-            val initialChannel = (existingEvent?.channelId ?: initialChannelId)?.let(channels::get)
-            val type = existingEvent?.entityType ?: when {
-                initialChannel?.isStageVoiceChannel() == true -> GuildScheduledEventEntityType.STAGE_INSTANCE
-                initialChannel?.isVoiceChannel() == true -> GuildScheduledEventEntityType.VOICE
-                stageIds.isNotEmpty() -> GuildScheduledEventEntityType.STAGE_INSTANCE
-                voiceIds.isNotEmpty() -> GuildScheduledEventEntityType.VOICE
-                else -> GuildScheduledEventEntityType.EXTERNAL
-            }
-            val selectedChannel = initialChannel ?: when (type) {
-                GuildScheduledEventEntityType.STAGE_INSTANCE -> stageIds.firstOrNull()?.let(channels::get)
-                GuildScheduledEventEntityType.VOICE -> voiceIds.firstOrNull()?.let(channels::get)
-                else -> null
-            }
-            ViewState.Valid(
-                selectedLocationOption = type,
-                selectedChannel = selectedChannel,
-                externalLocation = existingEvent?.entityMetadata?.location.orEmpty(),
-                availableChannels = availableChannels,
-                availableVoiceChannelIds = voiceIds,
-                availableStageChannelIds = stageIds,
-                canCreateExternalEvent = GuildScheduledEventUtilities.canCreateExternalEvent(guildPermissions),
-                showStageOptionIfUnavailable = existingEvent?.entityType == GuildScheduledEventEntityType.STAGE_INSTANCE,
-                canChangeChannel = existingEvent?.status != GuildScheduledEventStatus.ACTIVE,
-            )
-        }
-            .ui(this)
-            .appSubscribe(WidgetGuildScheduledEventLocationSelectViewModel::class.java) { updateViewState(it) }
+        storeStateObservable.computationLatest().ui(this)
+            .appSubscribe(WidgetGuildScheduledEventLocationSelectViewModel::class.java, onNext = ::handleStoreState)
+    }
+
+    internal fun handleStoreState(storeState: StoreState) {
+        currentStoreState = storeState
+        updateViewState(
+            reduce(
+                initialChannelId,
+                existingGuildScheduledEventId,
+                storeState,
+                viewState as? ViewState.Valid,
+            ),
+        )
     }
 
     fun selectChannel(channelId: Long) {
         val state = viewState as? ViewState.Valid ?: return
-        val channel = state.availableChannels[channelId] ?: return
+        val channel = currentStoreState?.channels?.get(channelId) ?: return
         updateViewState(state.copy(selectedChannel = channel))
     }
 
     fun selectLocationOption(locationOption: GuildScheduledEventEntityType) {
         val state = viewState as? ViewState.Valid ?: return
         if (state.selectedLocationOption == locationOption) return
-        val selected = when (locationOption) {
-            GuildScheduledEventEntityType.STAGE_INSTANCE -> state.availableStageChannelIds.firstOrNull()
-            GuildScheduledEventEntityType.VOICE -> state.availableVoiceChannelIds.firstOrNull()
+        val initialChannel = initialChannelId?.let { currentStoreState?.channels?.get(it) }
+        val selected = when {
+            locationOption == GuildScheduledEventEntityType.VOICE && initialChannel?.isVoiceChannel() == true -> initialChannel
+            locationOption == GuildScheduledEventEntityType.STAGE_INSTANCE && initialChannel?.isStageVoiceChannel() == true -> initialChannel
+            locationOption == GuildScheduledEventEntityType.VOICE ->
+                state.availableChannels.values.firstOrNull(Channel::isVoiceChannel)
+            locationOption == GuildScheduledEventEntityType.STAGE_INSTANCE ->
+                state.availableChannels.values.firstOrNull(Channel::isStageVoiceChannel)
             else -> null
-        }?.let(state.availableChannels::get)
+        }
         updateViewState(
             state.copy(
                 selectedLocationOption = locationOption,
@@ -110,5 +111,89 @@ class WidgetGuildScheduledEventLocationSelectViewModel(
     fun setExternalLocation(location: String) {
         val state = viewState as? ViewState.Valid ?: return
         updateViewState(state.copy(externalLocation = location))
+    }
+
+    companion object {
+        internal fun reduce(
+            initialChannelId: Long?,
+            existingGuildScheduledEventId: Long?,
+            storeState: StoreState,
+            current: ViewState.Valid? = null,
+        ): ViewState.Valid {
+            val canCreateExternalEvent = GuildScheduledEventUtilities.canCreateExternalEvent(storeState.guildPermissions)
+            val availableChannels = storeState.channels.filterValues { channel ->
+                GuildScheduledEventUtilities.canStartEventInChannel(
+                    channel,
+                    storeState.channelPermissions[channel.id],
+                )
+            }
+            val availableVoiceChannelIds = HashSet<Long>()
+            val availableStageChannelIds = HashSet<Long>()
+            availableChannels.values.forEach { channel ->
+                when {
+                    channel.isVoiceChannel() -> availableVoiceChannelIds += channel.id
+                    channel.isStageVoiceChannel() -> availableStageChannelIds += channel.id
+                }
+            }
+
+            val isEditing = existingGuildScheduledEventId != null
+            val selectedChannelId = current?.selectedChannel?.id
+                ?: if (isEditing) storeState.existingGuildScheduledEvent?.channelId else initialChannelId
+            val selectedChannel = availableChannels[selectedChannelId]
+            val requestedType = current?.selectedLocationOption
+                ?: storeState.existingGuildScheduledEvent?.entityType
+                ?: getEntityTypeForChannel(selectedChannel)
+            val selectedLocationOption = when (requestedType) {
+                GuildScheduledEventEntityType.STAGE_INSTANCE ->
+                    requestedType.takeUnless { availableStageChannelIds.isEmpty() }
+                        ?: GuildScheduledEventEntityType.NONE
+                GuildScheduledEventEntityType.VOICE ->
+                    requestedType.takeUnless { availableVoiceChannelIds.isEmpty() }
+                        ?: GuildScheduledEventEntityType.NONE
+                GuildScheduledEventEntityType.EXTERNAL ->
+                    requestedType.takeIf { canCreateExternalEvent } ?: GuildScheduledEventEntityType.NONE
+                else -> requestedType
+            }
+            val externalLocation = current?.externalLocation
+                ?: if (isEditing && selectedChannelId == null) {
+                    storeState.existingGuildScheduledEvent?.entityMetadata?.location
+                } else null
+
+            return ViewState.Valid(
+                selectedLocationOption = selectedLocationOption,
+                selectedChannel = selectedChannel,
+                externalLocation = externalLocation.orEmpty(),
+                availableChannels = availableChannels,
+                availableVoiceChannelIds = availableVoiceChannelIds,
+                availableStageChannelIds = availableStageChannelIds,
+                canCreateExternalEvent = canCreateExternalEvent,
+                showStageOptionIfUnavailable = storeState.guild?.features?.contains(GuildFeature.COMMUNITY) == true,
+                canChangeChannel = !isEditing ||
+                    storeState.existingGuildScheduledEvent?.let(ScheduledEventUi::timing) != GuildScheduledEventTiming.LIVE,
+            )
+        }
+
+        private fun getEntityTypeForChannel(channel: Channel?): GuildScheduledEventEntityType = when {
+            channel?.isVoiceChannel() == true -> GuildScheduledEventEntityType.VOICE
+            channel?.isStageVoiceChannel() == true -> GuildScheduledEventEntityType.STAGE_INSTANCE
+            else -> GuildScheduledEventEntityType.NONE
+        }
+
+        private fun observeStores(
+            guildId: Long,
+            existingGuildScheduledEventId: Long?,
+            guildsStore: StoreGuilds,
+            channelsStore: StoreChannels,
+            permissionsStore: StorePermissions,
+            guildScheduledEventsStore: StoreGuildScheduledEvents,
+        ): Observable<StoreState> = Observable.combineLatest(
+            guildsStore.observeGuild(guildId),
+            channelsStore.observeChannelsForGuild(guildId),
+            permissionsStore.observeChannelPermissionsForGuild(guildId),
+            permissionsStore.observePermissionsForGuild(guildId),
+            guildScheduledEventsStore.observeGuildScheduledEvent(existingGuildScheduledEventId, guildId),
+        ) { guild, channels, channelPermissions, guildPermissions, existingEvent ->
+            StoreState(guild, channels, channelPermissions, guildPermissions, existingEvent)
+        }
     }
 }

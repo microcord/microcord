@@ -36,9 +36,9 @@ enum class StickerSendability {
  * Belongs in `utilities/stickers/StickerUtils`; it is here only because that file is concurrently
  * owned by the sticker-animation work. Move it when that lands.
  *
- * Rules: a standard (Discord-published) sticker needs Nitro. A guild sticker is free inside its own
- * guild; anywhere else it needs both Nitro and the USE_EXTERNAL_STICKERS permission — except in a
- * DM, where the permission does not apply.
+ * Default Discord stickers are enabled for everyone. A guild sticker is free inside its own guild;
+ * anywhere else it needs both Nitro and the USE_EXTERNAL_STICKERS permission — except in a DM,
+ * where the permission does not apply.
  */
 @JvmOverloads
 fun getStickerSendability(
@@ -49,9 +49,7 @@ fun getStickerSendability(
 ): StickerSendability {
     val canUsePremium = with(UserUtils) { meUser.canUsePremiumStickers }
     return when (sticker.type) {
-        StickerType.STANDARD ->
-            if (canUsePremium) StickerSendability.SENDABLE
-            else StickerSendability.SENDABLE_WITH_PREMIUM
+        StickerType.STANDARD -> StickerSendability.SENDABLE
 
         StickerType.GUILD -> when {
             sticker.available == false -> StickerSendability.SENDABLE_WITH_PREMIUM_GUILD

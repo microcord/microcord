@@ -9,12 +9,20 @@ package com.discord.app
  */
 interface AppPermissionsRequests {
 
-    /** `true` when the media permission group (camera + storage) is already granted. */
+    /** `true` when both direct gallery access and the camera are already granted. */
     fun hasMedia(): Boolean
+
+    fun hasGallery(): Boolean = hasMedia()
+
+    fun hasCamera(): Boolean = hasMedia()
 
     fun requestVideoCallPermissions(onSuccess: () -> Unit)
 
     fun requestMedia(onSuccess: () -> Unit)
+
+    fun requestGallery(onSuccess: () -> Unit) = requestMedia(onSuccess)
+
+    fun requestCamera(onSuccess: () -> Unit) = requestCameraQRScanner(onSuccess)
 
     fun requestMediaDownload(onSuccess: () -> Unit)
 

@@ -8,6 +8,7 @@ import com.discord.R
 import com.discord.app.AppDialog
 import com.discord.utilities.view.recycler.MaxHeightRecyclerView
 import com.discord.utilities.views.SimpleRecyclerAdapter
+import com.discord.utilities.views.SimpleRecyclerAdapter.Companion.addThemedDivider
 import com.google.android.material.button.MaterialButton
 
 /**
@@ -29,12 +30,16 @@ class SelectorDialog : AppDialog(R.layout.dialog_simple_selector) {
         view.findViewById<MaterialButton>(R.id.dialog_cancel).setOnClickListener { dismiss() }
 
         val options = argumentsOrDefault.getCharSequenceArray(ARG_OPTIONS) ?: return
-        view.findViewById<MaxHeightRecyclerView>(R.id.dialog_selections).adapter =
-            SimpleRecyclerAdapter(options.toList()) { inflater, parent ->
+        view.findViewById<MaxHeightRecyclerView>(R.id.dialog_selections).apply {
+            adapter = SimpleRecyclerAdapter(options.toList()) { inflater, parent ->
                 OptionViewHolder(
                     inflater.inflate(R.layout.dialog_simple_selector_item, parent, false) as TextView,
                 )
             }
+            setHasFixedSize(false)
+            isNestedScrollingEnabled = false
+            addThemedDivider()
+        }
     }
 
     override fun onPause() {

@@ -1,5 +1,7 @@
 package com.discord.widgets.user
 
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -7,19 +9,19 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
-import androidx.appcompat.widget.Toolbar
-import androidx.fragment.app.Fragment
 import com.discord.app.AppFragment
 import androidx.lifecycle.Lifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.app.AppScreenRouter
 import com.discord.models.guild.Guild
 import com.discord.models.presence.Presence
 import com.discord.models.user.User
 import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.StatusView
+import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.facebook.drawee.view.SimpleDraweeView
 import rx.Observable
 import rx.Subscription
@@ -42,7 +44,7 @@ class WidgetUserMutualFriends : AppFragment(R.layout.widget_user_mutual_friends)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        view.findViewById<Toolbar>(R.id.action_bar_toolbar)?.setNavigationOnClickListener { parentFragmentManager.popBackStack() }
+        setActionBarDisplayHomeAsUpEnabled()
         view.findViewById<RecyclerView>(R.id.user_mutual_friends_recycler_view).apply {
             layoutManager = LinearLayoutManager(requireContext())
             adapter = this@WidgetUserMutualFriends.adapter
@@ -59,13 +61,12 @@ class WidgetUserMutualFriends : AppFragment(R.layout.widget_user_mutual_friends)
     override fun onStop() { subscription?.unsubscribe(); subscription = null; super.onStop() }
 
     private fun show(state: State) {
-        val toolbar = requireView().findViewById<Toolbar>(R.id.action_bar_toolbar)
         when (state) {
-            State.Loading -> { toolbar?.setTitle(R.string.mutual_friends); adapter.rows = emptyList() }
+            State.Loading -> { setActionBarTitle(R.string.mutual_friends); adapter.rows = emptyList() }
             is State.Error -> adapter.rows = listOf(Row.Empty(state.message ?: getString(R.string.no_mutual_friends)))
             is State.Loaded -> {
-                toolbar?.title = resources.getQuantityString(R.plurals.user_profile_mutual_friends_count, state.friends.size, state.friends.size)
-                toolbar?.subtitle = state.username
+                setActionBarTitle(resources.getQuantityString(R.plurals.user_profile_mutual_friends_count, state.friends.size, state.friends.size))
+                setActionBarSubtitle(state.username)
                 adapter.rows = state.friends.map(Row::FriendRow).ifEmpty { listOf(Row.Empty(getString(R.string.no_mutual_friends))) }
             }
         }
@@ -94,7 +95,7 @@ class WidgetUserMutualFriends : AppFragment(R.layout.widget_user_mutual_friends)
 
     private inner class FriendHolder(view: View) : RecyclerView.ViewHolder(view) {
         fun bind(friend: Friend) {
-            itemView.setOnClickListener { onFriendSelected?.invoke(friend.user.id) }
+            itemView.setOnClickListener { WidgetUserSheet.show(parentFragmentManager, friend.user.id) }
             itemView.contentDescription = friend.user.username
             itemView.findViewById<TextView>(R.id.user_profile_adapter_item_friend_user_name).text = friend.user.username
             itemView.findViewById<StatusView>(R.id.user_profile_adapter_item_friend_status).setPresence(friend.presence)
@@ -134,9 +135,15 @@ class WidgetUserMutualFriends : AppFragment(R.layout.widget_user_mutual_friends)
     }
 
     companion object {
-        private const val ARG_USER_ID = "user_id"
+        private const val ARG_USER_ID = "com.discord.intent.extra.EXTRA_USER_ID"
         @JvmField var stateSource: ((Long) -> Observable<State>)? = null
-        @JvmField var onFriendSelected: ((Long) -> Unit)? = null
         fun newInstance(userId: Long) = WidgetUserMutualFriends().apply { arguments = Bundle().apply { putLong(ARG_USER_ID, userId) } }
+
+        @JvmStatic
+        fun show(context: Context, user: User) = AppScreenRouter.launch(
+            context,
+            WidgetUserMutualFriends::class.java,
+            Intent().putExtra(ARG_USER_ID, user.id),
+        )
     }
 }

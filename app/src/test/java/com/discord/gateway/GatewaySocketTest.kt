@@ -137,11 +137,24 @@ class GatewaySocketTest {
         )
     }
 
+    @Test
+    fun verboseSocketLoggingRedactsSessionAndToken() {
+        val harness = Harness()
+        harness.connectReady(sequence = 1, sessionId = "fixture-session")
+
+        assertTrue(harness.socket.sent.any { it.contains("fixture-token") })
+        assertFalse(harness.logger.outbound.joinToString().contains("fixture-token"))
+        assertFalse(harness.logger.inbound.joinToString().contains("fixture-session"))
+        assertTrue(harness.logger.outbound.any { it.contains("<redacted>") })
+        assertTrue(harness.logger.inbound.any { it.contains("<redacted>") })
+    }
+
     private class Harness {
         val scheduler = FakeScheduler()
         val fixture = ZlibFixture()
         val factory = FakeSocketFactory(fixture)
         val handler = RecordingHandler()
+        val logger = RecordingLogger()
         val gateway = GatewaySocket(
             identifyDataProvider = {
                 IdentifyData(
@@ -154,6 +167,7 @@ class GatewaySocketTest {
             scheduler = scheduler,
             discovery = GatewayDiscovery { ModelGateway("wss://gateway.example") },
             webSocketFactory = factory,
+            gatewaySocketLogger = logger,
             jitter = { 1.0 },
         )
 
@@ -173,6 +187,16 @@ class GatewaySocketTest {
             scheduler.runCurrent()
             assertTrue(gateway.isSessionEstablished())
         }
+    }
+
+    private class RecordingLogger : GatewaySocketLogger {
+        override val logLevel = GatewaySocketLogger.LogLevel.VERBOSE
+        val inbound = mutableListOf<String>()
+        val outbound = mutableListOf<String>()
+
+        override fun logInboundMessage(rawMessage: String) { inbound += rawMessage }
+        override fun logMessageInflateFailed(throwable: Throwable) = Unit
+        override fun logOutboundMessage(rawMessage: String) { outbound += rawMessage }
     }
 
     private class RecordingHandler : GatewayEventHandler {

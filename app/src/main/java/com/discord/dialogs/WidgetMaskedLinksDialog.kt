@@ -62,7 +62,7 @@ class WidgetMaskedLinksDialog : AppDialog(R.layout.widget_masked_links_dialog) {
             openAndDismiss(v.context, url)
         }
         view.findViewById<TextView>(R.id.masked_links_trust_domain).setOnClickListener { v ->
-            UriHandler.trustDomainHandler?.invoke(url)
+            StoreStream.getMaskedLinks().trustDomain(url)
             openAndDismiss(v.context, url)
         }
     }

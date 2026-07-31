@@ -40,8 +40,6 @@ import com.discord.widgets.settings.WidgetSettings
 import com.discord.widgets.settings.account.WidgetSettingsBlockedUsers
 import com.discord.widgets.status.WidgetGlobalStatusIndicatorState
 import com.discord.widgets.user.WidgetUserMentions
-import com.discord.widgets.user.WidgetUserMutualFriends
-import com.discord.widgets.user.WidgetUserMutualGuilds
 import com.discord.widgets.user.WidgetUserSetCustomStatus
 import com.discord.widgets.user.WidgetUserStatusSheet
 import com.discord.widgets.user.search.WidgetGlobalSearchDialog
@@ -321,32 +319,6 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
                 }
             }
         }
-        WidgetUserSheet.onMutualFriends = { userId ->
-            withActiveChildManager { manager ->
-                manager.commit {
-                    replace(activeTabContainerId(), WidgetUserMutualFriends.newInstance(userId))
-                    addToBackStack("mutual_friends")
-                }
-            }
-        }
-        WidgetUserSheet.onMutualGuilds = { userId ->
-            withActiveChildManager { manager ->
-                manager.commit {
-                    replace(activeTabContainerId(), WidgetUserMutualGuilds.newInstance(userId))
-                    addToBackStack("mutual_guilds")
-                }
-            }
-        }
-        WidgetUserMutualFriends.onFriendSelected = { userId ->
-            withActiveChildManager { WidgetUserSheet.show(userId, it) }
-        }
-        WidgetUserMutualGuilds.onGuildSelected = { guildId ->
-            withActiveChildManager { manager ->
-                manager.popBackStack()
-                StoreStream.getTabsNavigation().selectTab(NavigationTab.HOME, true)
-                StoreStream.selectGuild(guildId)
-            }
-        }
         WidgetSettings.onSetStatus = {
             withActiveChildManager(WidgetUserStatusSheet::show)
         }
@@ -365,10 +337,6 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
     private fun clearCrossScreenNavigation() {
         WidgetChannelMembersList.onUserClicked = null
         WidgetUserStatusSheet.onCustomStatus = null
-        WidgetUserSheet.onMutualFriends = null
-        WidgetUserSheet.onMutualGuilds = null
-        WidgetUserMutualFriends.onFriendSelected = null
-        WidgetUserMutualGuilds.onGuildSelected = null
         WidgetSettings.onSetStatus = null
         WidgetSettings.onLogout = null
         WidgetSettingsBlockedUsers.onProfile = {}

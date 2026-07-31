@@ -45,12 +45,8 @@ object StageChannelAPI {
             channelId = channel.id,
             suppress = isSuppressed,
         )
-        // The reference issues the @me call through a null-serialising Gson so that the omitted
-        // `request_to_speak_timestamp` is sent as an explicit null and the raised hand is cleared
-        // server-side. This project has no `apiSerializeNulls` client yet, so a hand raised
-        // immediately before being moved to the audience can survive the round trip.
         return if (userId == meId) {
-            RestAPI.api.updateMyVoiceStates(channel.guildId, body)
+            RestAPI.apiSerializeNulls.updateMyVoiceStates(channel.guildId, body)
         } else {
             RestAPI.api.updateUserVoiceStates(channel.guildId, userId, body)
         }

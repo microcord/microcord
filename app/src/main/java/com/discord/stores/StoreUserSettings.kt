@@ -24,6 +24,7 @@ import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.time.TimeUtils
 import java.util.concurrent.TimeUnit
 import rx.Observable
+import rx.Subscriber
 import rx.Subscription
 import rx.subjects.BehaviorSubject
 import rx.subjects.SerializedSubject
@@ -51,12 +52,19 @@ class StoreUserSettings(
     private val api: () -> RestAPIInterface? = { RestAPI.apiOrNull },
     private val clock: Clock = ClockFactory.get(),
 ) : Store() {
+    sealed class ConsentState {
+        data class Loading(val current: Consents?) : ConsentState()
+        data class Loaded(val consents: Consents) : ConsentState()
+        data class Failed(val current: Consents?, val error: Throwable) : ConsentState()
+    }
+
     private val shouldRenderEmbedsSubject = subject<Boolean>()
-    private val explicitContentFilterSubject = subject<Int>()
-    private val defaultGuildsRestrictedSubject = subject<Boolean>()
-    private val friendSourceFlagsSubject = subject<ModelUserSettings.FriendSourceFlags>()
+    private val explicitContentFilterSubject = subject(ModelUserSettings.EXPLICIT_CONTENT_FILTER_DISABLED)
+    private val defaultGuildsRestrictedSubject = subject(false)
+    private val friendSourceFlagsSubject = subject(ModelUserSettings.FriendSourceFlags())
     private val friendDiscoveryFlagsSubject = subject(0)
     private val customStatusSubject = subject<ModelCustomStatusSetting>()
+    private val consentStateSubject = subject<ConsentState>(ConsentState.Loading(null))
     private val restrictedGuildIdsPublisher = Persister("RESTRICTED_GUILD_IDS", arrayListOf<Long>())
     private val guildFoldersPublisher = Persister("STORE_SETTINGS_FOLDERS_V1", arrayListOf<ModelGuildFolder>())
     private val allowAnimatedEmojisPublisher = Persister("STORE_SETTINGS_ALLOW_ANIMATED_EMOJIS", true)
@@ -68,6 +76,10 @@ class StoreUserSettings(
     private var contactSyncUpsellShown: Boolean? = null
     private var customStatus = ModelCustomStatusSetting.CLEAR
     private var customStatusExpiration: Subscription? = null
+    @Volatile private var consentsFetch: Subscription? = null
+    @Volatile private var currentConsents: Consents? = null
+    @Volatile private var consentApi: RestAPIInterface? = null
+    @Volatile private var consentRequested = false
 
     override fun init(context: Context) {
         initForTesting()
@@ -76,6 +88,23 @@ class StoreUserSettings(
     internal fun initForTesting() {
         shouldRenderEmbedsSubject.onNext(getIsRenderEmbedsEnabled())
         updateAllowAccessibilityDetectionInternal(allowAccessibilityDetectionPublisher.get())
+    }
+
+    @Synchronized
+    fun bindApi(api: RestAPIInterface) {
+        if (consentApi !== api) {
+            consentsFetch?.unsubscribe()
+            consentsFetch = null
+        }
+        consentApi = api
+        if (consentRequested) fetchConsents()
+    }
+
+    @Synchronized
+    internal fun restoreApiForTesting(api: RestAPIInterface?) {
+        consentsFetch?.unsubscribe()
+        consentsFetch = null
+        consentApi = api
     }
 
     // region reads
@@ -157,13 +186,9 @@ class StoreUserSettings(
             }
         }
 
-    /**
-     * The privacy consents the account has granted. Failures fall back to [Consents.DEFAULT]
-     * (nothing consented) so a network error can never be read as consent.
-     */
-    fun observeConsents(): Observable<Consents> {
-        val api = api() ?: return Observable.just(Consents.DEFAULT)
-        return api.getConsents().onErrorReturn { Consents.DEFAULT }.restSubscribeOn()
+    fun observeConsentState(): Observable<ConsentState> = Observable.defer {
+        fetchConsents()
+        consentStateSubject.computationLatest().distinctUntilChanged()
     }
 
     // endregion
@@ -171,7 +196,10 @@ class StoreUserSettings(
     // region gateway input
 
     @StoreThread
-    fun handleConnectionOpen(userSettings: ModelUserSettings) = handleUserSettings(userSettings)
+    fun handleConnectionOpen(userSettings: ModelUserSettings) {
+        handleUserSettings(userSettings)
+        fetchConsents()
+    }
 
     @StoreThread
     fun handleUserSettingsUpdate(userSettings: ModelUserSettings) = handleUserSettings(userSettings)
@@ -356,6 +384,11 @@ class StoreUserSettings(
     @StoreThread
     internal fun reset() {
         StoreThreadScheduler.assertCurrentThread()
+        consentsFetch?.unsubscribe()
+        consentsFetch = null
+        currentConsents = null
+        consentRequested = false
+        consentStateSubject.onNext(ConsentState.Loading(null))
         contactSyncUpsellShown = null
         shouldRenderEmbedsSubject.onNext(true)
         explicitContentFilterSubject.onNext(ModelUserSettings.EXPLICIT_CONTENT_FILTER_DISABLED)
@@ -366,6 +399,51 @@ class StoreUserSettings(
         customStatusSubject.onNext(customStatus)
         customStatusExpiration?.unsubscribe()
         customStatusExpiration = null
+    }
+
+    @Synchronized
+    private fun fetchConsents() {
+        consentRequested = true
+        if (consentsFetch?.isUnsubscribed == false) return
+        val api = consentApi ?: api()
+        if (api == null) {
+            consentStateSubject.onNext(
+                ConsentState.Failed(currentConsents, IllegalStateException("Privacy consent service is unavailable.")),
+            )
+            return
+        }
+        consentsFetch?.unsubscribe()
+        consentStateSubject.onNext(ConsentState.Loading(currentConsents))
+        val subscriber = object : Subscriber<Consents>() {
+            private var emitted = false
+
+            override fun onNext(consents: Consents) {
+                emitted = true
+                currentConsents = consents
+                consentStateSubject.onNext(ConsentState.Loaded(consents))
+            }
+
+            override fun onError(error: Throwable) {
+                consentsFetch = null
+                consentStateSubject.onNext(ConsentState.Failed(currentConsents, error))
+            }
+
+            override fun onCompleted() {
+                consentsFetch = null
+                if (!emitted) {
+                    consentStateSubject.onNext(
+                        ConsentState.Failed(
+                            currentConsents,
+                            IllegalStateException("Privacy consent response was empty."),
+                        ),
+                    )
+                }
+            }
+        }
+        consentsFetch = subscriber
+        Observable.defer { api.getConsents() }
+            .restSubscribeOn()
+            .subscribe(subscriber)
     }
 
     /**

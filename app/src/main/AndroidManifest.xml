@@ -59,14 +59,15 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
-    <!-- Superseded by scoped storage; AppPermissions treats it as granted from API 29. -->
-    <uses-permission
-        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
-    <!-- Not grantable from API 33; the media picker needs READ_MEDIA_* there (tracked follow-up). -->
+    <!-- Direct FlexInput MediaStore browsing. System photo/document pickers need no broad access. -->
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        tools:node="remove" />
     <!-- Required from API 33 or NotificationManagerCompat silently drops every notification. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -239,6 +240,14 @@
             android:exported="false"
             android:launchMode="singleTask" />
         <activity
+            android:name="com.discord.app.AppActivity$IncomingCall"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:showOnLockScreen="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
+        <activity
             android:name="com.discord.app.AppActionActivity"
             android:exported="true"
             android:launchMode="standard"
@@ -317,6 +326,14 @@
             android:name="com.discord.utilities.voice.VoiceEngineForegroundService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
+        <service
+            android:name="com.discord.app.DiscordConnectService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Connects an app-owned voice deep link while awaiting the gateway" />
+        </service>
 
         <!-- Google Assistant App Actions fulfillment (res/xml/actions.xml). -->
         <meta-data

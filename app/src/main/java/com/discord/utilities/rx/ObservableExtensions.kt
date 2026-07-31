@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import retrofit2.HttpException
 import rx.Observable
+import rx.Scheduler
 import rx.Subscription
 import rx.android.schedulers.AndroidSchedulers
 import rx.schedulers.Schedulers
@@ -155,11 +156,30 @@ fun <K, V> Observable<Pair<K, V>>.toMap(): Observable<Map<K, V>> =
  */
 @JvmOverloads
 fun <T> Observable<T>.withDimmer(dimmer: DimmerView?, delay: Long = 300L): Observable<T> =
-    doOnSubscribe { dimmer?.setDimmed(true) }
+    withDimmer(delay, { dimmer?.setDimmed(it) })
+
+internal fun <T> Observable<T>.withDimmer(
+    delay: Long,
+    setDimmed: (Boolean) -> Unit,
+    dimmerScheduler: Scheduler = AndroidSchedulers.mainThread(),
+): Observable<T> =
+    doOnSubscribe { dimmerScheduler.schedule { setDimmed(true) } }
         .delaySubscription(delay, TimeUnit.MILLISECONDS)
-        .doOnNext { dimmer?.setDimmed(false) }
-        .doOnError { dimmer?.setDimmed(false) }
-        .doOnUnsubscribe { dimmer?.setDimmed(false) }
+        .doOnNext { dimmerScheduler.schedule { setDimmed(false) } }
+        .doOnError { dimmerScheduler.schedule { setDimmed(false) } }
+        .doOnCompleted { dimmerScheduler.schedule { setDimmed(false) } }
+        .doOnUnsubscribe { dimmerScheduler.schedule { setDimmed(false) } }
+
+private fun Scheduler.schedule(action: () -> Unit) {
+    val worker = createWorker()
+    worker.schedule {
+        try {
+            action()
+        } finally {
+            worker.unsubscribe()
+        }
+    }
+}
 
 /**
  * Emit the first value immediately, then the newest value received during [windowDuration].

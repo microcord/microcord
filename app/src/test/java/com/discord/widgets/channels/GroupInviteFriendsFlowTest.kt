@@ -36,11 +36,17 @@ class GroupInviteFriendsFlowTest {
 
     @Test
     fun `sheet rows mirror checked users`() {
-        val rows = GroupInviteFriendsSheetAdapter.FriendItem.createItems(listOf(amy, bob), setOf(bob))
+        val rows = GroupInviteFriendsSheetAdapter.FriendItem.createItems(listOf(amy, bob), setOf(bob.id))
 
         assertFalse(rows[0].isSelected)
         assertTrue(rows[1].isSelected)
         assertEquals(listOf("1", "2"), rows.map { it.key })
+    }
+
+    @Test
+    fun `friend search is trimmed and case insensitive`() {
+        assertTrue(GroupInviteFriendsSheetViewModel.matchesSearch(amy, "  aMY "))
+        assertFalse(GroupInviteFriendsSheetViewModel.matchesSearch(amy, "bob"))
     }
 
     @Test
@@ -52,10 +58,37 @@ class GroupInviteFriendsFlowTest {
 
         assertEquals(
             listOf(bob),
-            GroupInviteFriendsSheetViewModel.excludeUsersAlreadyInChannel(
+            GroupInviteFriendsSheetViewModel.eligibleUsers(
                 linkedMapOf(amy.id to amy, bob.id to bob),
                 channel,
             ),
+        )
+    }
+
+    @Test
+    fun `existing recipients and self reduce selectable group slots`() {
+        val channel = Gson().fromJson(
+            """{"id":"9","type":3,"recipients":[{"id":"1","username":"Amy","discriminator":"0001"}]}""",
+            Channel::class.java,
+        )
+
+        assertEquals(8, GroupInviteFriendsSheetViewModel.availableSelectionCount(10, channel))
+        assertEquals(9, GroupInviteFriendsSheetViewModel.availableSelectionCount(10, null))
+    }
+
+    @Test
+    fun `submission is disabled while loading and enabled after selection`() {
+        assertFalse(
+            GroupInviteFriendsSheetViewModel.ViewState(
+                checkedUsers = setOf(amy),
+                status = GroupInviteFriendsSheetViewModel.Status.LOADING,
+            ).canSubmit,
+        )
+        assertTrue(
+            GroupInviteFriendsSheetViewModel.ViewState(
+                checkedUsers = setOf(amy),
+                status = GroupInviteFriendsSheetViewModel.Status.READY,
+            ).canSubmit,
         )
     }
 

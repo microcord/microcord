@@ -33,9 +33,8 @@ import java.io.IOException
  *
  * Reference: `com/discord/utilities/images/MGImages.java`.
  *
- * The uCrop-based `requestImageCrop` and `prepareImageUpload` entry points are intentionally absent
- * until `com.discord.media_picker` and `com.discord.dialogs.ImageUploadDialog` exist in this
- * project; see the handoff notes.
+ * Image picking and crop activity results are owned by `com.discord.media_picker`; this object
+ * handles image display and conversion only.
  */
 object MGImages {
 
@@ -274,26 +273,35 @@ object MGImages {
     /**
      * Reads [uri] through the content resolver and hands a `data:` URL to [resultCallback].
      *
-     * The reference surfaces read failures as an `avatar_convert_failure_mobile` toast through
-     * `AppToast`; that helper has not been reconstructed yet, so failures are logged instead.
+     * Read failures are logged and returned through [onError] so the owning screen can show its
+     * context-specific error.
      */
     fun requestDataUrl(
         context: Context?,
         uri: Uri,
         mimeType: String,
         resultCallback: ((String) -> Unit)?,
+        onError: (Exception) -> Unit = {},
     ) {
-        if (context == null) return
         try {
-            context.contentResolver?.openInputStream(uri)?.use { stream ->
+            val resolvedContext = context ?: throw IllegalStateException("Image request has no context")
+            val stream = resolvedContext.contentResolver.openInputStream(uri)
+                ?: throw IOException("Unable to open selected image")
+            stream.use {
                 resultCallback?.invoke(imageEncoder.getDataUrl(mimeType, stream))
             }
         } catch (e: IOException) {
             Log.w(TAG, "Unable to convert image to a data url", e)
+            onError(e)
         } catch (e: IllegalStateException) {
             Log.w(TAG, "Unable to convert image to a data url", e)
+            onError(e)
         } catch (e: NullPointerException) {
             Log.w(TAG, "Unable to convert image to a data url", e)
+            onError(e)
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Unable to read selected image", e)
+            onError(e)
         }
     }
 

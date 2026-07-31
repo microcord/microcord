@@ -17,6 +17,7 @@ import androidx.fragment.app.Fragment
 import com.discord.R
 import com.discord.i18n.i18nFormat
 import com.discord.utilities.view.ToastManager
+import com.discord.utilities.view.text.TextWatcher
 import com.discord.views.ToolbarTitleLayout
 import java.io.File
 import java.io.IOException
@@ -101,6 +102,7 @@ abstract class AppFragment : Fragment, AppComponent, AppPermissionsRequests, App
 
     override fun onDestroyView() {
         appActivity?.backPressHandlers?.remove(backPressKey)
+        TextWatcher.reset(this)
         super.onDestroyView()
     }
 
@@ -260,6 +262,10 @@ abstract class AppFragment : Fragment, AppComponent, AppPermissionsRequests, App
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        handleMediaPickerActivityResult(requestCode, resultCode, data)
+    }
+
+    protected fun handleMediaPickerActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         val context = context ?: return
         when (val result = AppMediaPicker.handleActivityResult(context, requestCode, resultCode, data)) {
             null, AppMediaPicker.Result.Cancelled -> Unit
@@ -301,11 +307,21 @@ abstract class AppFragment : Fragment, AppComponent, AppPermissionsRequests, App
 
     override fun hasMedia(): Boolean = requireAppActivity().appPermissions.hasMedia()
 
+    override fun hasGallery(): Boolean = requireAppActivity().appPermissions.hasGallery()
+
+    override fun hasCamera(): Boolean = requireAppActivity().appPermissions.hasCamera()
+
     override fun requestVideoCallPermissions(onSuccess: () -> Unit) =
         requireAppActivity().appPermissions.requestVideoCallPermissions(onSuccess)
 
     override fun requestMedia(onSuccess: () -> Unit) =
         requireAppActivity().appPermissions.requestMedia(onSuccess)
+
+    override fun requestGallery(onSuccess: () -> Unit) =
+        requireAppActivity().appPermissions.requestGallery(onSuccess)
+
+    override fun requestCamera(onSuccess: () -> Unit) =
+        requireAppActivity().appPermissions.requestCamera(onSuccess)
 
     override fun requestMediaDownload(onSuccess: () -> Unit) =
         requireAppActivity().appPermissions.requestMediaDownload(onSuccess)

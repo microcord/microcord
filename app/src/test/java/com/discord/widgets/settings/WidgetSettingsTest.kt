@@ -2,8 +2,14 @@ package com.discord.widgets.settings
 
 import com.discord.api.premium.PremiumTier
 import com.discord.api.user.NsfwAllowance
+import com.discord.models.domain.Consent
+import com.discord.models.domain.Consents
 import com.discord.models.user.MeUser
+import com.discord.stores.StoreUserSettings
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WidgetSettingsTest {
@@ -43,8 +49,47 @@ class WidgetSettingsTest {
         ), WidgetSettings.implementedRouteIds)
     }
 
+    @Test fun `privacy terminal failure leaves loading and exposes the exact error`() {
+        val error = IllegalStateException("consent unavailable")
+        val state = SettingsPrivacyViewModel.toViewState(
+            privacyState(StoreUserSettings.ConsentState.Failed(null, error)),
+        )
+
+        assertTrue(state is SettingsPrivacyViewModel.ViewState.Loaded)
+        state as SettingsPrivacyViewModel.ViewState.Loaded
+        assertNull(state.consents)
+        assertSame(error, state.consentError)
+    }
+
+    @Test fun `privacy loading and cached terminal values drive loading exactly`() {
+        assertEquals(
+            SettingsPrivacyViewModel.ViewState.Loading,
+            SettingsPrivacyViewModel.toViewState(
+                privacyState(StoreUserSettings.ConsentState.Loading(null)),
+            ),
+        )
+        val consents = Consents(Consent(true), Consent(false))
+        val loaded = SettingsPrivacyViewModel.toViewState(
+            privacyState(StoreUserSettings.ConsentState.Failed(consents, IllegalStateException("offline"))),
+        ) as SettingsPrivacyViewModel.ViewState.Loaded
+        assertEquals(consents, loaded.consents)
+    }
+
     private fun user(discriminator: Int) = MeUser(
         1, "mantikafasi", null, null, false, false, discriminator, PremiumTier.NONE,
         null, false, true, null, 0, 0, null, NsfwAllowance.UNKNOWN, null, null,
     )
+
+    private fun privacyState(consentState: StoreUserSettings.ConsentState) =
+        SettingsPrivacyViewModel.StoreState(
+            me = user(0),
+            explicitContentFilter = 2,
+            defaultRestrictedGuilds = true,
+            friendSourceFlags = null,
+            contactSyncConnection = null,
+            showContactSync = false,
+            userDiscoveryFlags = 0,
+            consentState = consentState,
+            harvestState = null,
+        )
 }

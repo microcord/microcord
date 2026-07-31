@@ -90,12 +90,12 @@ class ChatInputFlexHelpersTest {
 
             configureExpressionTrayButton(button, true)
             assertEquals(context.getString(R.string.show_keyboard), button.contentDescription)
-            assertEquals(R.drawable.ic_keyboard_24dp, button.imageResource)
+            assertEquals(R.drawable.ic_keyboard_24dp, button.recordedImageResource)
             assertTrue(!button.isActivated && !button.isSelected)
 
             configureExpressionTrayButton(button, false)
             assertEquals(context.getString(R.string.toggle_emoji_keyboard), button.contentDescription)
-            assertEquals(R.drawable.ic_emoji_24dp, button.imageResource)
+            assertEquals(R.drawable.ic_emoji_24dp, button.recordedImageResource)
             assertTrue(!button.isActivated && !button.isSelected)
         }
     }
@@ -107,10 +107,10 @@ class ChatInputFlexHelpersTest {
 }
 
 private class RecordingImageButton(context: Context) : AppCompatImageButton(context) {
-    var imageResource = 0
+    var recordedImageResource = 0
 
     override fun setImageResource(resId: Int) {
-        imageResource = resId
+        recordedImageResource = resId
         super.setImageResource(resId)
     }
 }

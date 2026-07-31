@@ -14,7 +14,6 @@ import android.widget.ScrollView
 import androidx.activity.OnBackPressedCallback
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
@@ -24,6 +23,7 @@ import androidx.lifecycle.Lifecycle
 import com.discord.R
 import com.discord.databinding.ActivityAppBinding
 import com.discord.models.domain.ModelUserSettings
+import com.discord.screenshot_detection.ScreenshotDetector
 import com.discord.stores.IntentRouteResult
 import com.discord.stores.MainRoute
 import com.discord.stores.RequiredAction
@@ -31,10 +31,12 @@ import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreNotices
 import com.discord.stores.StoreStream
 import com.discord.utilities.intent.AppIntentParser
+import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.uri.UriHandler
+import com.discord.utilities.user.UserUtils.isStaff
 import com.discord.views.ThemedColor
 import com.discord.views.ToolbarTitleLayout
 import com.discord.widgets.auth.AuthAction
@@ -58,8 +60,10 @@ import com.discord.widgets.auth.WidgetAuthRegisterIdentity
 import com.discord.widgets.auth.WidgetAuthRequiredAction
 import com.discord.widgets.auth.WidgetAuthResetPassword
 import com.discord.widgets.auth.WidgetAuthUndeleteAccount
+import com.discord.widgets.bugreports.WidgetBugReport
 import com.discord.widgets.tabs.WidgetTabsHost
 import com.discord.widgets.voice.fullscreen.WidgetCallFullscreen
+import com.discord.widgets.voice.call.WidgetVoiceCallIncoming
 import java.util.Locale
 import kotlin.math.roundToInt
 import rx.Subscription
@@ -74,10 +78,12 @@ import rx.subjects.Subject
  * back-press dispatch, new-intent fan-out, and restarting itself when a locale/theme/font-scale
  * change makes the current themed context stale.
  */
-open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
+open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
     private lateinit var binding: ActivityAppBinding
     private var routeSubscription: Subscription? = null
     private var settingsSubscription: Subscription? = null
+    private var screenshotSubscription: Subscription? = null
+    private var screenshotUserSubscription: Subscription? = null
     private var noticeSubscription: Subscription? = null
     private var pendingNotice: StoreNotices.Notice? = null
     private var stopBootLog: (() -> Unit)? = null
@@ -235,6 +241,24 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
         settingsSubscription = userSettings.observeSettings(true)
             .bindToComponentLifecycle(this)
             .subscribe { settings -> runOnUiThread { onUserSettingsChanged(settings.locale, settings.theme, settings.fontScale) } }
+        ScreenshotDetector.instance?.let { detector ->
+            screenshotSubscription = detector.screenshots
+                .bindToComponentLifecycle(this)
+                .subscribe { screenshot ->
+                    runOnUiThread { WidgetBugReport.launch(this, screenshot.uri, screenshot.filename) }
+                }
+            screenshotUserSubscription = StoreStream.getUsers().observeMe(true)
+                .map { it.isStaff }
+                .distinctUntilChanged()
+                .bindToComponentLifecycle(this)
+                .subscribe { isStaff ->
+                    runOnUiThread {
+                        val settingEnabled = SharedPreferencesProvider.get()
+                            .getBoolean(PREF_BUG_REPORTING_ENABLED, true)
+                        detector.setEnabled(isStaff && settingEnabled)
+                    }
+                }
+        }
         tryShowPendingNotice()
     }
 
@@ -243,6 +267,10 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
         unsubscribeSignal.onNext(null)
         settingsSubscription?.unsubscribe()
         settingsSubscription = null
+        screenshotSubscription?.unsubscribe()
+        screenshotSubscription = null
+        screenshotUserSubscription?.unsubscribe()
+        screenshotUserSubscription = null
     }
 
     override fun onStop() {
@@ -302,7 +330,10 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
         // against a torn-down host throws IllegalArgumentException. Neither should crash the app.
         try {
             if (supportFragmentManager.backStackEntryCount > 0) supportFragmentManager.popBackStack()
-            else finish()
+            else {
+                markBackNavigation()
+                finish()
+            }
         } catch (e: IllegalArgumentException) {
             AppLog.d("Back press could not be completed", e)
         } catch (e: IllegalStateException) {
@@ -465,6 +496,9 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
         if (this !is Main) {
             AppScreenRouter.screenOf(intent)?.let { screen ->
                 directScreen = true
+                @Suppress("DEPRECATION")
+                (intent.getSerializableExtra(AppScreenRouter.EXTRA_TRANSITION) as? AppTransitionActivity.Transition)
+                    ?.let { transitionAnimations = it.animations }
                 showScreen(screen, intent)
                 return
             }
@@ -614,8 +648,22 @@ open class AppActivity : AppCompatActivity(), AppComponent, AuthUiActions {
         }
     }
 
+    /** Lock-screen-capable host for an incoming private call. */
+    class IncomingCall : AppActivity() {
+        override fun onCreate(savedInstanceState: Bundle?) {
+            intent.putExtra(AppScreenRouter.EXTRA_SCREEN, WidgetVoiceCallIncoming::class.java)
+            super.onCreate(savedInstanceState)
+        }
+
+        override fun onNewIntent(intent: Intent) {
+            intent.putExtra(AppScreenRouter.EXTRA_SCREEN, WidgetVoiceCallIncoming::class.java)
+            super.onNewIntent(intent)
+        }
+    }
+
     companion object {
         private const val STATE_PENDING_INTENT = "pending_launch_intent"
+        private const val PREF_BUG_REPORTING_ENABLED = "prefs_ss_bug_reporting_enabled"
 
         /** Discord's own "I forgot my password" help article. */
         private const val PASSWORD_HELP_URL =

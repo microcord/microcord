@@ -12,6 +12,8 @@ import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.SeekBar
 import android.widget.TextView
+import androidx.annotation.IdRes
+import androidx.core.widget.NestedScrollView
 import com.discord.R
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppFragment
@@ -141,6 +143,20 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
             view.findViewById(R.id.settings_voice_video_header),
             view.findViewById(R.id.settings_voice_opensl_header),
         ).forEach(AccessibilityUtils::setViewIsHeading)
+
+        val targetResId = mostRecentIntent.getIntExtra(ARG_TARGET_RES_ID, 0)
+        if (targetResId != 0) {
+            val target = view.findViewById<View>(targetResId)
+            target.post {
+                (target.parent?.parent as? NestedScrollView)?.smoothScrollTo(0, target.top)
+                if (target === overlayToggle &&
+                    mostRecentIntent.getBooleanExtra(ARG_TARGET_AUTO_TOGGLE, false) &&
+                    !overlayToggle.isChecked
+                ) {
+                    overlayToggle.setChecked(true, true)
+                }
+            }
+        }
     }
 
     override fun onViewBoundOrOnResume() {
@@ -354,6 +370,8 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
     }
 
     companion object {
+        private const val ARG_TARGET_RES_ID = "ARG_TARGET_RES_ID"
+        private const val ARG_TARGET_AUTO_TOGGLE = "ARG_TARGET_AUTO_TOGGLE"
         private const val OVERLAY_PERMISSION_REQUEST_CODE = 2552
 
         /** Sensitivity is stored as dBFS in −100..0; the seek bar spans 0..100. */
@@ -413,8 +431,20 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
             return normalizedMax * 10f.pow(decibels / 20f)
         }
 
-        fun launch(context: Context) {
-            SettingsNavigation.launch(context, WidgetSettingsVoice::class.java)
+        @JvmOverloads
+        fun launch(
+            context: Context,
+            @IdRes targetResId: Int? = null,
+            isTargetAutoToggle: Boolean = false,
+        ) {
+            SettingsNavigation.launch(
+                context,
+                WidgetSettingsVoice::class.java,
+                Intent().apply {
+                    targetResId?.let { putExtra(ARG_TARGET_RES_ID, it) }
+                    if (isTargetAutoToggle) putExtra(ARG_TARGET_AUTO_TOGGLE, true)
+                },
+            )
         }
     }
 }

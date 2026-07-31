@@ -28,6 +28,6 @@ data class GuildRoleSubscriptionBenefit(
     val emojiName: String?,
     val name: String,
     val refType: GuildRoleSubscriptionBenefitType,
-    val description: String? = null,
-    val refId: Long? = null,
+    val description: String?,
+    val refId: Long?,
 )

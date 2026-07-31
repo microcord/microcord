@@ -1,6 +1,10 @@
 package com.discord.utilities.messagesend
 
 import com.discord.api.message.Message as ApiMessage
+import com.discord.api.sticker.Sticker
+import com.discord.api.sticker.StickerFormatType
+import com.discord.api.sticker.StickerType
+import com.discord.api.user.User
 import com.discord.models.commands.Application
 import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.models.message.Message
@@ -30,6 +34,7 @@ class MessageQueueTest {
 
     private val clock = MutableClock()
     private val restApi = RecordingRestApi()
+    private val reactNativeApi = RecordingRestApi()
     private val backoffScheduler = ManualBackoffScheduler()
     private val timerScheduler = TestScheduler()
     private val settled = mutableListOf<Pair<String, MessageResult>>()
@@ -40,6 +45,7 @@ class MessageQueueTest {
         executorService = DirectExecutorService(),
         clock = clock,
         api = restApi.api,
+        reactNativeApi = reactNativeApi.api,
         networkBackoff = testBackoff(backoffScheduler),
         retryScheduler = timerScheduler,
     )
@@ -190,6 +196,35 @@ class MessageQueueTest {
         )
 
         assertEquals("555", request.requestId)
+    }
+
+    @Test
+    fun `non premium sticker sends use only the react native client`() {
+        queue.enqueue(
+            MessageRequest.Send(
+                message = localMessage("5150").copy(
+                    content = "",
+                    author = User(id = 1L, username = "me"),
+                    stickers = listOf(
+                        Sticker(
+                            id = 9L,
+                            packId = 2L,
+                            guildId = null,
+                            name = "wave",
+                            description = "",
+                            formatType = StickerFormatType.PNG,
+                            tags = "wave",
+                            type = StickerType.STANDARD,
+                        ),
+                    ),
+                ),
+                onCompleted = { _, _ -> },
+                attemptTimestamp = clock.now,
+            ),
+        )
+
+        assertTrue(restApi.sendCalls.isEmpty())
+        assertEquals(listOf(9L), reactNativeApi.sendCalls.single().body?.stickerIds)
     }
 
     @Test

@@ -24,9 +24,11 @@ import com.discord.api.channel.isPrivate
 import com.discord.api.stageinstance.StageInstancePrivacyLevel
 import com.discord.app.AppActivity
 import com.discord.app.AppFragment
-import com.discord.app.AppScreenRouter
 import com.discord.app.AppToast
 import com.discord.app.appViewModels
+import com.discord.dialogs.CameraCapacityDialog
+import com.discord.dialogs.GuildVideoAtCapacityDialog
+import com.discord.dialogs.audio.AudioOutputSelectionDialog
 import com.discord.stores.StoreStream
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.time.TimeUtils
@@ -40,7 +42,6 @@ import com.discord.widgets.stage.model.StageCallModel
 import com.discord.widgets.stage.sheet.WidgetStageRaisedHandsBottomSheet
 import com.discord.widgets.status.WidgetGlobalStatusIndicatorState
 import com.discord.widgets.user.usersheet.WidgetUserSheet
-import com.discord.widgets.voice.VoiceStoreAccess
 import com.discord.widgets.voice.controls.VoiceControlsSheetView
 import com.discord.widgets.voice.controls.WidgetScreenShareNfxSheet
 import com.discord.widgets.voice.feedback.call.CallFeedbackSheetNavigator
@@ -325,7 +326,7 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
             showDisconnect = !state.isStreamFocused,
             onStopWatchingClick = viewModel::requestStopWatchingStreamFromUserInput,
             onDisconnectClick = { finishActivity() },
-            onAudioOutputClick = VoiceStoreAccess::toggleSpeakerOutput,
+            onAudioOutputClick = { AudioOutputSelectionDialog.show(parentFragmentManager) },
             onVideoClick = { requestVideoCallPermissions(viewModel::toggleCameraPressed) },
             onMuteClick = viewModel::onMuteClicked,
             onInviteClick = {
@@ -499,7 +500,7 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
                     event.triggerRateDenominator,
                 )
             WidgetCallFullscreenViewModel.Event.NavigateToPremiumSettings ->
-                AppScreenRouter.launch(requireContext(), WidgetSettingsPremium::class.java)
+                WidgetSettingsPremium.launch(requireContext())
             is WidgetCallFullscreenViewModel.Event.OnIdleStateChanged ->
                 if (event.isIdle && controlsBehavior.state == BottomSheetBehavior.STATE_EXPANDED) {
                     controlsBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
@@ -513,9 +514,9 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
                 R.string.embedded_activities_desktop_only_modal_description,
             )
             is WidgetCallFullscreenViewModel.Event.ShowCameraCapacityDialog ->
-                AppToast.show(this, R.string.unable_to_join_channel_full)
+                CameraCapacityDialog.show(parentFragmentManager, event.guildMaxVideoChannelUsers)
             WidgetCallFullscreenViewModel.Event.ShowGuildVideoAtCapacityDialog ->
-                AppToast.show(this, R.string.unable_to_join_channel_full)
+                GuildVideoAtCapacityDialog.show(parentFragmentManager)
             WidgetCallFullscreenViewModel.Event.ShowNoScreenSharePermissionDialog -> showNotice(
                 R.string.no_video_permission_dialog_title,
                 R.string.no_screenshare_permission_dialog_body,

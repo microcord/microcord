@@ -1,7 +1,7 @@
 package com.discord.widgets.accessibility
 
-import androidx.fragment.app.FragmentActivity
 import com.discord.app.AppComponent
+import com.discord.dialogs.WidgetAccessibilityDetectionDialog
 import com.discord.stores.StoreNotices
 import com.discord.stores.StoreStream
 import com.discord.utilities.accessibility.AccessibilityFeatureFlags
@@ -43,24 +43,9 @@ object AccessibilityDetectionNavigator {
                 priority = StoreNotices.PRIORITY_HIGH,
                 persist = true,
             ) { activity ->
-                val launcher = dialogLauncher
-                if (launcher == null) {
-                    false
-                } else {
-                    launcher(activity, NOTICE_NAME)
-                    true
-                }
+                WidgetAccessibilityDetectionDialog.show(activity.supportFragmentManager)
+                true
             },
         )
     }
-
-    /**
-     * Shows the consent dialog. The reference's dialog is the obfuscated `b.a.a.h` in
-     * `com.discord.dialogs` and is not reconstructed; that package is outside this agent's
-     * ownership. Until a launcher is installed the notice reports "not shown", so the queue
-     * re-offers it later instead of marking it seen and losing the prompt for good.
-     * **Reported in the handoff.**
-     */
-    @JvmStatic
-    var dialogLauncher: ((FragmentActivity, String) -> Unit)? = null
 }

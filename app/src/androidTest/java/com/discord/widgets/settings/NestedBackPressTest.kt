@@ -2,7 +2,6 @@ package com.discord.widgets.settings
 
 import android.content.Intent
 import android.view.View
-import android.view.ViewGroup
 import androidx.appcompat.widget.Toolbar
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -11,10 +10,11 @@ import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import com.discord.R
 import com.discord.app.AppActivity
+import com.discord.app.AppScreenRouter
+import com.discord.app.AppTransitionActivity
 import com.discord.panels.OverlappingPanelsLayout
 import com.discord.stores.AuthNavigationState
 import com.discord.stores.StoreStream
-import com.discord.widgets.channels.WidgetChannelSidebarActions
 import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.home.HomePanelsLayout
 import com.discord.widgets.home.WidgetHome
@@ -37,7 +37,6 @@ class NestedBackPressTest {
 
     @After
     fun cleanUp() {
-        WidgetChannelSidebarActions.onPins = null
         WidgetTabsHost.homeFragmentFactory = null
         StoreStream.getNavigation().updateAuthState(AuthNavigationState(false, false))
         instrumentation.runOnMainSync {
@@ -133,6 +132,7 @@ class NestedBackPressTest {
         val activity = launchLoggedInShell()
         val tabs = tabs(activity)
         val home = tabs.childFragmentManager.findFragmentByTag(NavigationTab.HOME.name) as WidgetHome
+        val homeView = home.requireView()
         val panels = home.getPanelLayout() as HomePanelsLayout
 
         instrumentation.runOnMainSync {
@@ -142,31 +142,41 @@ class NestedBackPressTest {
         await { panels.getSelectedPanel() == OverlappingPanelsLayout.Panel.END }
 
         instrumentation.runOnMainSync {
-            activity.onStateNotSaved()
-            WidgetChannelSidebarActions.onPins?.invoke(1L)
-            home.childFragmentManager.executePendingTransactions()
+            WidgetChannelPinnedMessages.show(activity, 1L)
         }
-        await { panels.getSelectedPanel() == OverlappingPanelsLayout.Panel.CENTER }
-        val pinned = home.childFragmentManager
-            .findFragmentById(R.id.widget_home_panel_center_overlay) as WidgetChannelPinnedMessages
-        val overlay = home.requireView().findViewById<View>(R.id.widget_home_panel_center_overlay)
+        val pinsActivity = awaitResumedActivity { it !== activity }
         instrumentation.runOnMainSync {
-            assertEquals(View.VISIBLE, overlay.visibility)
-            val parent = overlay.parent as ViewGroup
-            assertSame(overlay, parent.getChildAt(parent.childCount - 1))
-            assertSame(pinned.requireView().findViewById<Toolbar>(R.id.action_bar_toolbar), activity.toolbar)
-            assertEquals(activity.getString(R.string.pinned_messages), activity.toolbarTitleLayout?.title?.text)
-            assertTrue(pinned.requireView().hasFocus())
+            pinsActivity.supportFragmentManager.executePendingTransactions()
         }
+        val pinned = pinsActivity.supportFragmentManager.findFragmentById(R.id.app_root) as WidgetChannelPinnedMessages
+        assertSame(pinned.requireView().findViewById<Toolbar>(R.id.action_bar_toolbar), pinsActivity.toolbar)
+        assertEquals(pinsActivity.getString(R.string.pinned_messages), pinsActivity.toolbarTitleLayout?.title?.text)
+        assertEquals(1L, pinsActivity.mostRecentIntent.getLongExtra("INTENT_EXTRA_CHANNEL_ID", 0L))
+        assertFalse(pinsActivity.mostRecentIntent.hasExtra(AppScreenRouter.EXTRA_TRANSITION))
+        assertEquals(AppTransitionActivity.Transition.TYPE_SLIDE_POP_VERTICAL.animations, pinsActivity.transitionAnimations)
+        assertSame(homeView, home.requireView())
+        assertEquals(OverlappingPanelsLayout.Panel.END, panels.getSelectedPanel())
 
-        pressPhoneBack()
-        instrumentation.runOnMainSync { home.childFragmentManager.executePendingTransactions() }
-
-        assertFalse(
-            home.childFragmentManager.findFragmentById(R.id.widget_home_panel_center_overlay) is
+        instrumentation.runOnMainSync(pinsActivity::recreate)
+        val restoredPinsActivity = awaitResumedActivity { it !== activity && it !== pinsActivity }
+        instrumentation.runOnMainSync {
+            restoredPinsActivity.supportFragmentManager.executePendingTransactions()
+        }
+        assertTrue(
+            restoredPinsActivity.supportFragmentManager.findFragmentById(R.id.app_root) is
                 WidgetChannelPinnedMessages,
         )
-        assertEquals(View.GONE, overlay.visibility)
+        assertFalse(restoredPinsActivity.mostRecentIntent.hasExtra(AppScreenRouter.EXTRA_TRANSITION))
+        assertEquals(
+            AppTransitionActivity.Transition.TYPE_SLIDE_POP_VERTICAL.animations,
+            restoredPinsActivity.transitionAnimations,
+        )
+
+        pressPhoneBack()
+        assertSame(activity, awaitResumedActivity { it === activity })
+        assertSame(home, tabs(activity).childFragmentManager.findFragmentByTag(NavigationTab.HOME.name))
+        assertSame(homeView, home.requireView())
+        assertEquals(OverlappingPanelsLayout.Panel.END, panels.getSelectedPanel())
         assertFalse(activity.isFinishing)
         instrumentation.runOnMainSync(activity::finish)
     }

@@ -6,6 +6,7 @@ import android.widget.TextView
 import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.app.AppDialog
+import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.google.android.material.button.MaterialButton
 
 /**
@@ -40,8 +41,10 @@ class SimpleConfirmationDialog : AppDialog(R.layout.simple_confirmation_dialog) 
         negative.text = args.negativeButtonText
         negative.setOnClickListener { dismiss() }
 
-        view.findViewById<TextView>(R.id.simple_confirmation_dialog_title).text = args.title
-        view.findViewById<TextView>(R.id.simple_confirmation_dialog_description).text = args.description
+        view.findViewById<TextView>(R.id.simple_confirmation_dialog_title)
+            .setTextAndVisibilityBy(args.title)
+        view.findViewById<TextView>(R.id.simple_confirmation_dialog_description)
+            .setTextAndVisibilityBy(args.description)
     }
 
     companion object {

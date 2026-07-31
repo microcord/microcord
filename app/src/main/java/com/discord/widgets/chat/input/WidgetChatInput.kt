@@ -30,6 +30,7 @@ import com.discord.models.member.GuildMember
 import com.discord.stores.StoreChatInputEditing
 import com.discord.stores.StorePendingReplies
 import com.discord.stores.StoreStream
+import com.discord.utilities.attachments.UploadAttachment
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.duration.humanizeCountdownDuration
 import com.discord.utilities.messagesend.MessageResult
@@ -95,6 +96,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     }
 
     private var state: ChatInputViewModel.ViewState.Loaded? = null
+    private var hasAttachments = false
 
     /** `true` while [restoreInput] rewrites the composer, so the draft watcher ignores the edit. */
     private var restoringText = false
@@ -105,8 +107,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         override fun beforeTextChanged(value: CharSequence?, start: Int, count: Int, after: Int) = Unit
         override fun onTextChanged(value: CharSequence?, start: Int, before: Int, count: Int) = Unit
         override fun afterTextChanged(value: Editable?) {
-            view?.findViewById<View>(R.id.send_btn_container)?.visibility =
-                if (value.isNullOrEmpty()) View.GONE else View.VISIBLE
+            updateSendButtonVisibility()
             if (restoringText) return
             val loaded = state ?: return
             if (!loaded.isEditing) drafts.setTextChannelInput(loaded.channelId, value)
@@ -164,7 +165,27 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             .ui(this)
             .subscribe({ configureUI(it) }, { /* a render failure must not kill the composer */ })
         autocomplete?.onViewBoundOrOnResume()
-        flexInputViewModel.viewState?.let { renderExpressionTray(it.expressionTrayShown) }
+        flexInputViewModel.observeViewState()
+            .ui(this)
+            .subscribe({ renderExpressionTray(it.expressionTrayShown) }, { /* leave the tray as-is */ })
+        flexInputViewModel.observeEvents()
+            .ui(this)
+            .subscribe(
+                { event ->
+                    when (event) {
+                        AppFlexInputViewModel.Event.ShowKeyboard -> {
+                            input?.requestFocus()
+                            inputMethodManager().showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+                        }
+
+                        AppFlexInputViewModel.Event.HideKeyboard -> {
+                            val token = activity?.currentFocus?.windowToken ?: view?.windowToken
+                            if (token != null) inputMethodManager().hideSoftInputFromWindow(token, 0)
+                        }
+                    }
+                },
+                { /* keyboard state is best-effort */ },
+            )
     }
 
     override fun onStart() {
@@ -302,33 +323,21 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 override fun onEmojiPicked(emoji: Emoji) = this@WidgetChatInput.onEmojiPicked(emoji)
             },
             onBackspacePressed = ::onEmojiBackspace,
+            onAttachmentsChanged = {
+                hasAttachments = it
+                updateSendButtonVisibility()
+            },
         )
+        (flex as? AppFlexInputFragment)?.onAttachmentsCleared = {
+            hasAttachments = false
+            updateSendButtonVisibility()
+        }
         expressionTray = attachments?.configureFlexInputFragment(this)
+        hasAttachments = flex.selectionAggregator.size > 0
+        updateSendButtonVisibility()
 
         button.visibility = View.VISIBLE
         button.setOnClickListener { flexInputViewModel.toggleExpressionTray() }
-
-        flexInputViewModel.observeViewState()
-            .ui(this)
-            .subscribe({ renderExpressionTray(it.expressionTrayShown) }, { /* leave the tray as-is */ })
-        flexInputViewModel.observeEvents()
-            .ui(this)
-            .subscribe(
-                { event ->
-                    when (event) {
-                        AppFlexInputViewModel.Event.ShowKeyboard -> {
-                            input?.requestFocus()
-                            inputMethodManager().showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
-                        }
-
-                        AppFlexInputViewModel.Event.HideKeyboard -> {
-                            val token = activity?.currentFocus?.windowToken ?: view?.windowToken
-                            if (token != null) inputMethodManager().hideSoftInputFromWindow(token, 0)
-                        }
-                    }
-                },
-                { /* keyboard state is best-effort */ },
-            )
     }
 
     private fun renderExpressionTray(shown: Boolean) {
@@ -342,6 +351,11 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         flexView.findViewById<View>(R.id.default_window_insets_handler)?.visibility =
             if (shown) View.GONE else View.VISIBLE
         expressionTray?.takeIf { it.isAdded }?.isShown(shown)
+    }
+
+    private fun updateSendButtonVisibility() {
+        view?.findViewById<View>(R.id.send_btn_container)?.visibility =
+            if (!input?.text.isNullOrEmpty() || hasAttachments) View.VISIBLE else View.GONE
     }
 
     override fun onEmojiPicked(emoji: Emoji) {
@@ -371,22 +385,18 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val pendingReply =
             (loaded.pendingReplyState as? ChatInputViewModel.ViewState.PendingReplyState.Replying)?.pendingReply
 
-        if (attachments.isNotEmpty()) {
-            if (loaded.isEditing) {
-                Toast.makeText(requireContext(), R.string.editing_with_attachment_error, Toast.LENGTH_SHORT).show()
-                return false
-            }
-            val accepted = uploadHandler?.invoke(
-                UploadRequest(loaded.channelId, content, attachments, pendingReply),
-            ) == true
-            if (accepted) {
-                drafts.setTextChannelInput(loaded.channelId, null)
-                pendingRepliesStore?.onDeletePendingReply(loaded.channelId)
-            }
-            return accepted
+        if (attachments.isNotEmpty() && loaded.isEditing) {
+            Toast.makeText(requireContext(), R.string.editing_with_attachment_error, Toast.LENGTH_SHORT).show()
+            return false
         }
 
         val coordinator = coordinatorProvider() ?: return false
+        val uploads = runCatching {
+            attachments.map { UploadAttachment.from(requireContext().contentResolver, it) }
+        }.getOrElse {
+            Toast.makeText(requireContext(), R.string.invalid_attachments_failure, Toast.LENGTH_SHORT).show()
+            return false
+        }
         val editing = loaded.editingMessage.takeIf { loaded.isEditing }
         val submission = editing?.let { coordinator.edit(it, content) } ?: coordinator.send(
             MessageSendCoordinator.Send(
@@ -398,6 +408,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 communicationDisabled = loaded.isCommunicationDisabled,
                 systemDm = loaded.isSystemDM,
                 reply = pendingReply,
+                attachments = uploads,
             ),
         )
         if (submission is MessageSendCoordinator.Submission.Accepted) {

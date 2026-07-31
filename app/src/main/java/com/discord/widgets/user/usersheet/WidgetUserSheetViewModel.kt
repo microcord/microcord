@@ -8,6 +8,7 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.isDM
 import com.discord.api.channel.isMultiUserDM
 import com.discord.api.channel.isStageVoiceChannel
+import com.discord.api.permission.Permission
 import com.discord.api.role.GuildRole
 import com.discord.api.user.UserProfile
 import com.discord.api.voice.state.StageRequestToSpeakState
@@ -28,6 +29,7 @@ import com.discord.stores.StoreUserNotes
 import com.discord.stores.StoreUserProfile
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.permissions.ManageUserContext
+import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
@@ -40,6 +42,9 @@ import com.discord.utilities.textprocessing.node.SpoilerNode
 import com.discord.widgets.user.presence.ModelRichPresence
 import com.discord.widgets.user.profile.UserProfileAdminView
 import com.discord.widgets.user.profile.UserProfileConnectionsView
+import com.discord.widgets.stage.StageChannelAPI
+import com.discord.widgets.stage.StageRoles
+import com.discord.widgets.stage.usersheet.UserProfileStageActionsView
 import rx.Observable
 import rx.subjects.PublishSubject
 
@@ -78,13 +83,16 @@ class WidgetUserSheetViewModel(
     private val storeUserProfile: StoreUserProfile = StoreStream.getUserProfiles(),
     private val restAPI: RestAPI = RestAPI,
     private val storeApplicationStreamPreviews: StoreApplicationStreamPreviews? = null,
+    private val setStageSuppressed: (Channel, Long, Boolean) -> Observable<Void> =
+        { channel, targetUserId, suppressed ->
+            StageChannelAPI.setUserSuppressedInChannel(channel, targetUserId, suppressed)
+        },
 ) : AppViewModel<WidgetUserSheetViewModel.ViewState>(ViewState.Uninitialized) {
 
     /**
      * The store slice the sheet is built from.
      *
-     * Field-for-field the reference's `StoreState`, with two exceptions noted at the bottom: this
-     * project has no `StoreStageChannels`, so the caller's and the target's stage roles are absent.
+     * Field-for-field the reference's `StoreState`.
      */
     data class StoreState(
         val user: User,
@@ -112,12 +120,11 @@ class WidgetUserSheetViewModel(
         val userNoteFetchState: StoreUserNotes.UserNoteState,
         /** The stage I am connected to, if my selected voice channel happens to be one. */
         val stageChannel: Channel?,
+        val userStageRoles: StageRoles?,
         val userRequestToSpeakState: StageRequestToSpeakState,
+        val myStageRoles: StageRoles?,
         /** This guild may use timeouts. Reference: `GuildCommunicationDisabledGuildsFeatureFlag`. */
         val canDisableCommunication: Boolean,
-        // Absent versus the reference: `userStageRoles` and `myStageRoles`, both
-        // `com.discord.widgets.stage.StageRoles`. `StoreStageChannels` and `widgets/stage` are not
-        // reconstructed, so speaker/audience role state cannot be resolved.
     )
 
     sealed class ViewState {
@@ -134,6 +141,7 @@ class WidgetUserSheetViewModel(
             val guildSectionHeaderText: String?,
             val roleItems: List<GuildRole>,
             val adminViewState: UserProfileAdminView.ViewState?,
+            val stageViewState: UserProfileStageActionsView.ViewState,
             val channel: Channel?,
             val streamContext: StreamContext?,
             val guildName: String?,
@@ -149,10 +157,15 @@ class WidgetUserSheetViewModel(
             val guildId: Long?,
             val guildMember: GuildMember?,
             val userProfile: UserProfile,
-            // Absent versus the reference: `stageViewState`
-            // (`com.discord.widgets.stage.usersheet.UserProfileStageActionsView.ViewState`), which
-            // drives invite-to-speak / move-to-audience. `widgets/stage` is not reconstructed.
         ) : ViewState() {
+
+            val actionVisibility: ActionVisibility = Companion.actionVisibility(
+                isMe = isMe,
+                isSystemUser = user.isSystemUser,
+                isBot = user.isBot,
+                channelType = channel?.type,
+                relationshipType = userRelationshipType,
+            )
 
             /** The user has a per-guild banner or an animated avatar — Nitro-only decorations. */
             val hasPremiumCustomization: Boolean =
@@ -176,6 +189,18 @@ class WidgetUserSheetViewModel(
         }
     }
 
+    data class ActionVisibility(
+        val showActions: Boolean,
+        val showMessage: Boolean,
+        val showCall: Boolean,
+        val showVideo: Boolean,
+        val showAddFriend: Boolean,
+        val showPendingRequest: Boolean,
+        val showIncomingRequest: Boolean,
+        val showMore: Boolean,
+        val showEditProfile: Boolean,
+    )
+
     /** One-shot outcomes the sheet cannot express as state. */
     sealed class Event {
         data class ShowToast(@StringRes val stringRes: Int) : Event()
@@ -183,6 +208,7 @@ class WidgetUserSheetViewModel(
         /** A friend request the server refused; [abortCode] selects the explanatory copy. */
         data class ShowFriendRequestErrorToast(val abortCode: Int, val username: String) : Event()
 
+        data class LaunchMessage(val userId: Long) : Event()
         data class LaunchVoiceCall(val channelId: Long) : Event()
         data class LaunchVideoCall(val channelId: Long) : Event()
         data class LaunchSpectate(val stream: ModelApplicationStream) : Event()
@@ -289,6 +315,14 @@ class WidgetUserSheetViewModel(
                     voiceState = channelVoiceState,
                     canDisableCommunication = storeState.canDisableCommunication,
                     isCommunicationDisabled = guildMember?.isCommunicationDisabled() == true,
+                ),
+                stageViewState = UserProfileStageActionsView.ViewState(
+                    isMe = isMe,
+                    channel = storeState.stageChannel,
+                    userStageRole = storeState.userStageRoles,
+                    userRequestToSpeakState = storeState.userRequestToSpeakState,
+                    userInSameVoiceChannel = userInSameVoiceChannel,
+                    canMuteMembers = PermissionUtils.can(Permission.MUTE_MEMBERS, storeState.permissions),
                 ),
                 channel = storeState.channel,
                 streamContext = storeState.streamContext,
@@ -467,6 +501,8 @@ class WidgetUserSheetViewModel(
     // Calls and streams
     // ---------------------------------------------------------------------------------------
 
+    fun launchMessage() = eventSubject.onNext(Event.LaunchMessage(userId))
+
     fun launchVoiceCall() = withPrivateChannel { eventSubject.onNext(Event.LaunchVoiceCall(it)) }
 
     fun launchVideoCall() = withPrivateChannel { eventSubject.onNext(Event.LaunchVideoCall(it)) }
@@ -614,14 +650,47 @@ class WidgetUserSheetViewModel(
         storeMediaSettings?.setUserOutputVolume(userId, volume)
     }
 
-    /**
-     * Stage moderation. `StoreStageChannels` and the REST voice-state endpoints it drives are not
-     * reconstructed, so this is recorded here to keep the sheet's API complete and does nothing.
-     */
-    fun setUserSuppressedInChannel(suppressed: Boolean) = Unit
+    fun setUserSuppressedInChannel(suppressed: Boolean) {
+        runStageAction(inviting = false, suppressed = suppressed)
+    }
 
-    /** See [setUserSuppressedInChannel]. */
-    fun inviteUserToSpeak() = Unit
+    fun inviteUserToSpeak() {
+        runStageAction(inviting = true, suppressed = false)
+    }
+
+    private fun runStageAction(inviting: Boolean, suppressed: Boolean) {
+        val loaded = viewState as? ViewState.Loaded ?: return
+        val channel = loaded.stageViewState.channel ?: return
+        updateStageActionState(loaded, inviting, true)
+        @Suppress("UNCHECKED_CAST")
+        val request = setStageSuppressed(channel, loaded.user.id, suppressed) as Observable<Void?>
+        request
+            .restSubscribeOn()
+            .ui(this)
+            .appSubscribe(
+                errorClass = WidgetUserSheetViewModel::class.java,
+                errorHandler = {
+                    updateStageActionState(viewState as? ViewState.Loaded, inviting, false)
+                    eventSubject.onNext(Event.ShowToast(R.string.default_failure_to_perform_action_message))
+                },
+            ) {
+                updateStageActionState(viewState as? ViewState.Loaded, inviting, false)
+                eventSubject.onNext(Event.DismissSheet)
+            }
+    }
+
+    private fun updateStageActionState(loaded: ViewState.Loaded?, inviting: Boolean, pending: Boolean) {
+        loaded ?: return
+        updateViewState(
+            loaded.copy(
+                stageViewState = if (inviting) {
+                    loaded.stageViewState.copy(isInvitingToSpeak = pending)
+                } else {
+                    loaded.stageViewState.copy(isUpdatingSuppressed = pending)
+                },
+            ),
+        )
+    }
 
     // ---------------------------------------------------------------------------------------
     // Note
@@ -651,12 +720,40 @@ class WidgetUserSheetViewModel(
          * `X-Context-Properties` is a base64-encoded JSON blob, not raw JSON — sending the plain
          * text makes the server drop the analytics context silently.
          */
-        private val RELATIONSHIP_CONTEXT: String = Base64.encodeToString(
-            """{"location":"$LOCATION"}""".toByteArray(),
-            Base64.NO_WRAP,
-        )
+        private val RELATIONSHIP_CONTEXT: String by lazy {
+            Base64.encodeToString(
+                """{"location":"$LOCATION"}""".toByteArray(),
+                Base64.NO_WRAP,
+            )
+        }
 
         /** Guild icon in the "Roles in <guild>" header. */
         private const val GUILD_SECTION_ICON_SIZE_DP = 16
+
+        internal fun actionVisibility(
+            isMe: Boolean,
+            isSystemUser: Boolean,
+            isBot: Boolean,
+            channelType: Int?,
+            relationshipType: Int,
+        ): ActionVisibility {
+            val showActions = !isMe && !isSystemUser
+            return ActionVisibility(
+                showActions = showActions,
+                showMessage = showActions && channelType != Channel.DM,
+                showCall = showActions,
+                showVideo = showActions,
+                showAddFriend = showActions && !isBot && relationshipType == ModelUserRelationship.TYPE_NONE,
+                showPendingRequest = showActions && relationshipType in setOf(
+                    ModelUserRelationship.TYPE_INVITE_INCOMING,
+                    ModelUserRelationship.TYPE_INVITE_OUTGOING,
+                ),
+                showIncomingRequest = showActions &&
+                    relationshipType == ModelUserRelationship.TYPE_INVITE_INCOMING,
+                showMore = showActions,
+                // Profile editing remains available from Settings, not from a user popout.
+                showEditProfile = false,
+            )
+        }
     }
 }

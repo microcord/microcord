@@ -205,9 +205,11 @@ class RestEndpointContractTest {
         val request = takeRequest("PATCH", "/api/v9/guilds/1/channels")
         val positions = JsonParser.parseString(request.body.readUtf8()).asJsonArray
         assertFalse(positions[0].asJsonObject.has("parent_id"))
+        assertTrue(positions[0].asJsonObject["id"].asJsonPrimitive.isNumber)
         assertEquals(2, positions[0].asJsonObject["position"].asInt)
         assertTrue(positions[1].asJsonObject["parent_id"].isJsonNull)
         assertEquals(9L, positions[2].asJsonObject["parent_id"].asLong)
+        assertTrue(positions[2].asJsonObject["parent_id"].asJsonPrimitive.isNumber)
     }
 
     // -- Members and roles ----------------------------------------------------------------------

@@ -72,25 +72,22 @@ internal object StickerPickerViewStateBuilder {
             )
         }
 
-        // The standard packs are Nitro-only, so for everyone else they are not even offered.
-        if (canUsePremium) {
-            for (pack in state.enabledStickerPacks) {
-                if (pack.stickers.isEmpty()) continue
-                items += buildSection(
-                    stickers = pack.stickers,
-                    header = HeaderType.PackItem(pack),
-                    search = search,
-                    locale = locale,
-                    state = state,
-                    useChannelContext = false,
-                )
-            }
+        for (pack in state.enabledStickerPacks) {
+            if (pack.stickers.isEmpty()) continue
+            items += buildSection(
+                stickers = pack.stickers,
+                header = HeaderType.PackItem(pack),
+                search = search,
+                locale = locale,
+                state = state,
+                useChannelContext = false,
+            )
         }
 
-        val categories = buildCategoryItems(state, items, frequentlyUsed, canUsePremium)
+        val categories = buildCategoryItems(state, items, frequentlyUsed)
 
         // Nothing to send and nothing to unlock by joining a server: pitch Nitro instead.
-        if (!canUsePremium && state.guildStickers.isEmpty()) {
+        if (!canUsePremium && state.guildStickers.isEmpty() && state.enabledStickerPacks.isEmpty()) {
             return StickerPickerViewModel.ViewState.EmptyNonPremium(
                 emptyStateStickers = EMPTY_STATE_STICKER_IDS.mapNotNull(resolveSticker),
                 isStickersSelectedTab = state.isStickersSelectedTab,
@@ -174,9 +171,8 @@ internal object StickerPickerViewStateBuilder {
         state: StickerPickerViewModel.StoreState,
         listItems: List<MGRecyclerDataPayload>,
         frequentlyUsed: List<Sticker>,
-        canUsePremium: Boolean,
     ): List<StickerCategoryItem> {
-        if ((!canUsePremium && state.guildStickers.isEmpty()) || state.enabledStickerPacks.isEmpty()) {
+        if (state.guildStickers.isEmpty() && state.enabledStickerPacks.isEmpty()) {
             return emptyList()
         }
         val visiblePackIds = LinkedHashSet<Long>()
@@ -219,18 +215,16 @@ internal object StickerPickerViewStateBuilder {
             cursor = end
         }
 
-        if (canUsePremium) {
-            for (pack in state.enabledStickerPacks) {
-                val end = cursor + pack.stickers.size + 1
-                if (pack.id in visiblePackIds) {
-                    out += StickerCategoryItem.PackItem(
-                        pack = pack,
-                        categoryRange = cursor to end,
-                        isSelected = selectedId == pack.id,
-                    )
-                }
-                cursor = end
+        for (pack in state.enabledStickerPacks) {
+            val end = cursor + pack.stickers.size + 1
+            if (pack.id in visiblePackIds) {
+                out += StickerCategoryItem.PackItem(
+                    pack = pack,
+                    categoryRange = cursor to end,
+                    isSelected = selectedId == pack.id,
+                )
             }
+            cursor = end
         }
         return out
     }

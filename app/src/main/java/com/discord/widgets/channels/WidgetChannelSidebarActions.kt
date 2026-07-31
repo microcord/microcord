@@ -14,6 +14,7 @@ import com.discord.widgets.channels.WidgetChannelSidebarActionsViewModel.ViewSta
 import com.discord.widgets.channels.settings.WidgetTextChannelSettings
 import com.discord.widgets.channels.settings.WidgetThreadSettings
 import com.discord.widgets.channels.threads.browser.WidgetThreadBrowser
+import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.search.WidgetSearch
 import com.discord.widgets.settings.WidgetMuteSettingsSheet
 import com.discord.widgets.user.calls.PrivateCallLauncher
@@ -103,13 +104,8 @@ class WidgetChannelSidebarActions : AppFragment(R.layout.widget_channel_sidebar_
         }
     }
 
-    /**
-     * The pinned-messages list has to be hosted by the home surface (it implements
-     * `WidgetChannelPinnedMessages.Host`), so it is reached through [onPins] rather than launched
-     * here.
-     */
     private fun openPins(channelId: Long) {
-        onPins?.invoke(channelId)
+        WidgetChannelPinnedMessages.show(requireContext(), channelId)
     }
 
     private fun openNotificationSettings(channelId: Long) {
@@ -139,12 +135,9 @@ class WidgetChannelSidebarActions : AppFragment(R.layout.widget_channel_sidebar_
         /**
          * Host-supplied navigation seams, installed by `WidgetHome`.
          *
-         * Only [onPins] is load-bearing — everything else this row does is launched directly, as
-         * the reference does. [onSearch] and [onNotifications] remain so a host can override the
-         * default route.
+         * [onSearch] and [onNotifications] remain so a host can override the default route.
          */
         @JvmField var onSearch: ((Channel) -> Unit)? = null
         @JvmField var onNotifications: ((Long) -> Unit)? = null
-        @JvmField var onPins: ((Long) -> Unit)? = null
     }
 }

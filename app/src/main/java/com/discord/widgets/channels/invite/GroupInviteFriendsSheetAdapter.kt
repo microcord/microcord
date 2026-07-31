@@ -32,9 +32,9 @@ class GroupInviteFriendsSheetAdapter(
         companion object {
             const val TYPE_FRIEND = 0
 
-            fun createItems(users: Collection<User>, checkedUsers: Set<User>): ArrayList<FriendItem> =
+            fun createItems(users: Collection<User>, checkedUserIds: Set<Long>): ArrayList<FriendItem> =
                 ArrayList<FriendItem>(users.size).apply {
-                    users.forEach { add(FriendItem(it, it in checkedUsers)) }
+                    users.forEach { add(FriendItem(it, it.id in checkedUserIds)) }
                 }
         }
     }
@@ -51,8 +51,12 @@ class GroupInviteFriendsSheetAdapter(
             binding.friendsListItemName.text = data.user.username
             IconUtils.setIcon(binding.friendsListItemAvatar, data.user, R.dimen.avatar_size_standard)
             binding.userSelectedCheckbox.isChecked = data.isSelected
-            binding.userSelectedCheckbox.setOnClickListener {
-                adapter.onUserChecked(data.user, binding.userSelectedCheckbox.isChecked)
+            binding.userSelectedCheckbox.contentDescription = data.user.username
+            binding.userSelectedCheckbox.isClickable = false
+            binding.root.apply {
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { adapter.onUserChecked(data.user, !data.isSelected) }
             }
         }
     }

@@ -110,7 +110,7 @@ class WidgetThreadSettings : AppFragment(R.layout.widget_thread_settings) {
         val disabledOverlay = requireView().findViewById<View>(R.id.channel_settings_pinned_messages_disabled_overlay)
         pins.isEnabled = state.isPinsEnabled
         pins.setOnClickListener {
-            SettingsNavigation.launch(requireContext(), WidgetChannelPinnedMessages.newInstance(state.channel.id))
+            WidgetChannelPinnedMessages.show(requireContext(), state.channel.id)
         }
         disabledOverlay.isVisible = !state.isPinsEnabled
         disabledOverlay.setOnClickListener {

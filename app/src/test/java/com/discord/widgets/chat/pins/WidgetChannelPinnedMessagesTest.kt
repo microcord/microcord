@@ -1,7 +1,9 @@
 package com.discord.widgets.chat.pins
 
+import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.user.User
+import com.discord.app.AppTransitionActivity
 import com.discord.models.message.Message
 import com.discord.widgets.chat.list.entries.DividerEntry
 import com.discord.widgets.chat.list.entries.EmptyPinsEntry
@@ -13,6 +15,20 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WidgetChannelPinnedMessagesTest {
+
+    @Test fun usesReferenceActivityIntentExtra() {
+        assertEquals("INTENT_EXTRA_CHANNEL_ID", WidgetChannelPinnedMessages.INTENT_EXTRA_CHANNEL_ID)
+    }
+
+    @Test fun usesReferenceHorizontalActivityAnimations() {
+        val transition = WidgetChannelPinnedMessages.TRANSITION
+        assertEquals(AppTransitionActivity.Transition.TYPE_SLIDE_HORIZONTAL, transition)
+        assertEquals(3, transition.ordinal)
+        assertEquals(R.anim.activity_slide_horizontal_open_in, transition.animations.openEnter)
+        assertEquals(R.anim.activity_slide_horizontal_open_out, transition.animations.openExit)
+        assertEquals(R.anim.activity_slide_horizontal_close_in, transition.animations.closeEnter)
+        assertEquals(R.anim.activity_slide_horizontal_close_out, transition.animations.closeExit)
+    }
 
     @Test fun distinguishesLoadingEmptyAndLoadedRows() {
         assertTrue(WidgetChannelPinnedMessages.rows(EMPTY_TEXT, state(), null).single() is LoadingEntry)

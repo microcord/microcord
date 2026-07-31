@@ -13,7 +13,8 @@ import com.discord.api.auth.RequiredActionTypeAdapter
 import com.discord.api.botuikit.ButtonStyle
 import com.discord.api.botuikit.ButtonStyleTypeAdapter
 import com.discord.api.botuikit.ComponentType
-import com.discord.api.botuikit.ComponentTypeTypeAdapter
+import com.discord.api.botuikit.gson.ComponentRuntimeTypeAdapter
+import com.discord.api.botuikit.gson.ComponentTypeTypeAdapter
 import com.discord.api.botuikit.TextStyle
 import com.discord.api.botuikit.TextStyleTypeAdapter
 import com.discord.api.commands.ApplicationCommandPermissionType
@@ -77,13 +78,14 @@ import com.discord.api.user.NsfwAllowanceTypeAdapter
 import com.discord.api.user.Phone
 import com.discord.api.user.PhoneTypeAdapter
 import com.discord.models.experiments.dto.UserExperimentDto
+import com.discord.models.domain.Model
 import com.discord.nullserializable.NullSerializableTypeAdapterFactory
-import com.discord.api.botuikit.ComponentTypeAdapterFactory
 import com.google.gson.GsonBuilder
 
 fun GsonBuilder.registerDiscordApiTypeAdapters(): GsonBuilder =
     registerTypeAdapterFactory(NullSerializableTypeAdapterFactory())
-        .registerTypeAdapterFactory(ComponentTypeAdapterFactory())
+        .registerTypeAdapterFactory(Model.TypeAdapterFactory())
+        .registerTypeAdapterFactory(ComponentRuntimeTypeAdapter.componentRuntimeTypeAdapterFactory)
         .registerTypeAdapterFactory(UserExperimentDto.TypeAdapterFactory)
         .registerTypeAdapter(ActivityPlatform::class.java, ActivityPlatformTypeAdapter())
         .registerTypeAdapter(ActivityType::class.java, ActivityTypeTypeAdapter())

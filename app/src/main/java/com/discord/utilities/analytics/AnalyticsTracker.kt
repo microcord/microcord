@@ -1,16 +1,19 @@
 package com.discord.utilities.analytics
 
 import com.discord.api.channel.Channel
+import com.discord.api.activity.ActivityPlatform
 import com.discord.api.thread.ThreadMemberFlags
 import com.discord.api.voice.state.VoiceState
 import com.discord.models.domain.ModelGift
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.domain.ModelSku
+import com.discord.models.member.GuildMember
 import com.discord.native.engine.VideoInputDeviceDescription
 import com.discord.rtcconnection.audio.DiscordAudioManager
 import com.discord.rtcconnection.mediaengine.MediaEngine
 import com.discord.stores.StoreMediaSettings
 import com.discord.utilities.collections.filterNonNullValues
+import java.util.Locale
 
 /**
  * Every analytics event the app raises, as a named method with typed arguments.
@@ -197,6 +200,27 @@ object AnalyticsTracker {
 
     fun openPopout(popoutName: String, location: String) {
         tracker.track("open_popout", mapOf("location_section" to location, "type" to popoutName))
+    }
+
+    fun openUserSheet(
+        hasPremiumCustomization: Boolean,
+        gameName: String?,
+        gamePlatform: ActivityPlatform?,
+        guildMember: GuildMember?,
+    ) {
+        val properties = mutableMapOf<String, Any>(
+            "profile_has_nitro_customization" to hasPremiumCustomization,
+            "type" to "User Sheet",
+        )
+        gameName?.let { properties["game_name"] = it }
+        gamePlatform?.let { properties["game_platform"] = it.name.lowercase(Locale.ROOT) }
+        guildMember?.let {
+            properties["has_nickname"] = !it.nick.isNullOrEmpty()
+            properties["has_guild_member_avatar"] = it.hasAvatar()
+            properties["has_guild_member_banner"] = it.hasBanner()
+            properties["has_guild_member_bio"] = !it.bio.isNullOrEmpty()
+        }
+        tracker.track("open_popout", properties)
     }
 
     /** A settings pane was opened. [settingsType] is `"user"` or `"guild"`. */

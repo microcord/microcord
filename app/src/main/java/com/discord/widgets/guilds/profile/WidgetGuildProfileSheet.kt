@@ -28,6 +28,7 @@ import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
 import com.discord.widgets.servers.WidgetServerNotifications
 import com.discord.widgets.servers.WidgetServerSettings
 import com.discord.widgets.servers.WidgetServerSettingsEmojis
+import com.discord.widgets.settings.profile.WidgetEditUserOrGuildMemberProfile
 import com.facebook.drawee.view.SimpleDraweeView
 import rx.subscriptions.CompositeSubscription
 
@@ -212,7 +213,7 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
         }
         (root.findViewById<View>(R.id.change_identity)
             ?: root.findViewById(R.id.guild_profile_sheet_change_nickname))?.setOnClickAndDismissListener {
-            WidgetChangeGuildIdentity.launch(state.guildId, "Guild Bottom Sheet", requireContext())
+            WidgetEditUserOrGuildMemberProfile.launch(requireContext(), state.guildId)
         }
         root.findViewById<View>(R.id.guild_profile_sheet_invite)?.setOnClickAndDismissListener {
             WidgetGuildInviteShare.launch(

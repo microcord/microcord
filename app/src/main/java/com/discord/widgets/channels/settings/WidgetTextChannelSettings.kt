@@ -33,7 +33,7 @@ import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.views.CheckedSetting
-import com.discord.widgets.channels.WidgetChannelSidebarActions
+import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.channels.permissions.WidgetChannelSettingsPermissionsOverview
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.settings.SettingsStrings
@@ -136,7 +136,7 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         root.findViewById<LinearLayout>(R.id.channel_settings_pinned_messages_container).isVisible = !category
         root.findViewById<TextView>(R.id.channel_settings_pinned_messages).apply {
             isEnabled = next.isPinsEnabled
-            setOnClickListener { WidgetChannelSidebarActions.onPins?.invoke(channel.id) }
+            setOnClickListener { WidgetChannelPinnedMessages.show(context, channel.id) }
         }
         root.findViewById<View>(R.id.channel_settings_pinned_messages_disabled_overlay).apply {
             isVisible = !next.isPinsEnabled

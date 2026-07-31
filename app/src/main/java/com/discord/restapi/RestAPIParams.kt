@@ -158,7 +158,7 @@ object RestAPIParams {
      *
      * [Serializer] is registered in [RestAPIBuilder] because [PARENT_ID_NONE] must be written as an
      * explicit JSON `null` (move to root) while an absent parent must be omitted entirely. Snowflakes
-     * are strings on the current wire contract; positions remain integers.
+     * remain 64-bit JSON numbers; positions remain integers.
      */
     @JsonAdapter(ChannelPosition.Serializer::class)
     class ChannelPosition(
@@ -177,7 +177,7 @@ object RestAPIParams {
                     return
                 }
                 writer.beginObject()
-                writer.name("id").value(value.id.toString())
+                writer.name("id").value(value.id)
                 writer.name("position").value(value.position)
                 value.parentId?.let { parentId ->
                     writer.name("parent_id")
@@ -187,7 +187,7 @@ object RestAPIParams {
                         writer.nullValue()
                         writer.serializeNulls = serializeNulls
                     } else {
-                        writer.value(parentId.toString())
+                        writer.value(parentId)
                     }
                 }
                 writer.endObject()
@@ -643,11 +643,7 @@ object RestAPIParams {
 
     class Ring(val recipients: List<Long>?)
 
-    /**
-     * `POST/PATCH guilds/{guildId}/roles[/{roleId}]` body. Properties stay mutable like the reference;
-     * the adapter emits permission bitfields and role snowflakes as strings for the current API.
-     */
-    @JsonAdapter(Role.Serializer::class)
+    /** `PATCH guilds/{guildId}/roles[/{roleId}]` body. */
     class Role(
         var hoist: Boolean? = null,
         var name: String? = null,
@@ -658,48 +654,6 @@ object RestAPIParams {
         var id: Long = 0L,
         var icon: String? = null,
     ) {
-        class Serializer : TypeAdapter<Role>() {
-            override fun write(writer: JsonWriter, value: Role?) {
-                if (value == null) {
-                    writer.nullValue()
-                    return
-                }
-                writer.beginObject()
-                value.hoist?.let { writer.name("hoist").value(it) }
-                value.name?.let { writer.name("name").value(it) }
-                value.mentionable?.let { writer.name("mentionable").value(it) }
-                value.color?.let { writer.name("color").value(it) }
-                value.position?.let { writer.name("position").value(it) }
-                value.permissions?.let { writer.name("permissions").value(it.toString()) }
-                if (value.id != 0L) writer.name("id").value(value.id.toString())
-                value.icon?.let { writer.name("icon").value(it) }
-                writer.endObject()
-            }
-
-            override fun read(reader: JsonReader): Role? {
-                if (reader.peek() == JsonToken.NULL) return null.also { reader.nextNull() }
-                val role = Role()
-                reader.beginObject()
-                while (reader.hasNext()) when (reader.nextName()) {
-                    "hoist" -> role.hoist = reader.nextBoolean()
-                    "name" -> role.name = reader.nextString()
-                    "mentionable" -> role.mentionable = reader.nextBoolean()
-                    "color" -> role.color = reader.nextInt()
-                    "position" -> role.position = reader.nextInt()
-                    "permissions" -> role.permissions = reader.nextString().toLong()
-                    "id" -> role.id = reader.nextString().toLong()
-                    "icon" -> role.icon = if (reader.peek() == JsonToken.NULL) {
-                        null.also { reader.nextNull() }
-                    } else {
-                        reader.nextString()
-                    }
-                    else -> reader.skipValue()
-                }
-                reader.endObject()
-                return role
-            }
-        }
-
         companion object {
             fun createForPosition(id: Long, position: Int) = Role(position = position, id = id)
 

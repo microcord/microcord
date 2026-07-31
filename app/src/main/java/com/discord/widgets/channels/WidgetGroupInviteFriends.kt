@@ -2,6 +2,7 @@ package com.discord.widgets.channels
 
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import androidx.core.view.isVisible
@@ -23,6 +24,7 @@ import com.discord.models.user.User
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
+import com.discord.stores.StoreUserRelationships
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
@@ -47,11 +49,25 @@ class WidgetGroupInviteFriends : AppFragment(R.layout.widget_group_invite_friend
     private val addedUsers = LinkedTreeMap<Long, User>()
     private val addedUsersPublisher = BehaviorSubject.create<Collection<User>>(emptyList())
     private val filterPublisher = BehaviorSubject.create("")
+    private var restoredSelectedIds = emptySet<Long>()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        restoredSelectedIds = savedInstanceState?.getLongArray(STATE_SELECTED_IDS)?.toSet().orEmpty()
+        savedInstanceState?.getString(STATE_FILTER)?.let(filterPublisher::onNext)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putLongArray(STATE_SELECTED_IDS, addedUsers.keys.toLongArray())
+        outState.putString(STATE_FILTER, _binding?.groupInviteFriendsChips?.text?.toString().orEmpty())
+        super.onSaveInstanceState(outState)
+    }
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         _binding = WidgetGroupInviteFriendsBinding.bind(view)
         adapter = MGRecyclerAdapter.configure(WidgetGroupInviteFriendsAdapter(binding.groupInviteFriendsRecycler))
+        binding.groupInviteFriendsViewFlipper.displayedChild = VIEW_INDEX_LOADING
     }
 
     override fun onViewBoundOrOnResume() {
@@ -69,7 +85,11 @@ class WidgetGroupInviteFriends : AppFragment(R.layout.widget_group_invite_friend
             mostRecentIntent.getLongExtra(INTENT_EXTRA_CHANNEL_ID, NO_CHANNEL_ID),
             addedUsersPublisher,
             filterPublisher,
-        ).ui(this).appSubscribe(javaClass, onNext = ::configureUI)
+        ).ui(this).appSubscribe(
+            javaClass,
+            errorHandler = { binding.groupInviteFriendsViewFlipper.displayedChild = VIEW_INDEX_ERROR },
+            onNext = ::configureUI,
+        )
     }
 
     override fun onDestroyView() {
@@ -82,6 +102,15 @@ class WidgetGroupInviteFriends : AppFragment(R.layout.widget_group_invite_friend
         if (data == null || data.mode == Model.MODE_ADD && data.channel == null) {
             appActivity?.finish()
             return
+        }
+        if (restoredSelectedIds.isNotEmpty() && addedUsers.isEmpty()) {
+            val restored = StoreStream.getUsers().getUsers(restoredSelectedIds).values
+            if (restored.isNotEmpty()) {
+                restored.forEach { addedUsers[it.id] = it }
+                restoredSelectedIds = emptySet()
+                addedUsersPublisher.onNext(ArrayList(addedUsers.values))
+                return
+            }
         }
         data.selectedUsers.forEach { user ->
             binding.groupInviteFriendsChips.b(
@@ -139,37 +168,38 @@ class WidgetGroupInviteFriends : AppFragment(R.layout.widget_group_invite_friend
                 showGroupFullToast()
                 return@setOnClickListener
             }
-            val request = when {
-                data.channel != null -> addGroupRecipients(data.channel.id, data.selectedUsers.toList())
-                data.selectedUsers.size == 1 -> createOrFetchDm(data.selectedUsers.first().id)
-                else -> createGroupDm(data.selectedUsers.map(User::id))
-            }
+            binding.groupInviteFriendsSaveFab.isEnabled = false
             Observable.combineLatest(
-                request,
+                submit(data.channel, data.selectedUsers.toList()),
                 StoreStream.getVoiceChannelSelected().observeSelectedVoiceChannelId().takeSingleUntilTimeout(),
             ) { channel, selectedVoiceChannelId -> channel to selectedVoiceChannelId }
                 .ui(this)
-                .appSubscribe(javaClass, requireContext()) { (channel, selectedVoiceChannelId) ->
-                    ChannelSelector.getInstance().selectChannel(0L, channel.id)
-                    StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE)
-                    if (selectedVoiceChannelId == data.channel?.id) {
-                        if (data.channel?.isGroup() == true) {
-                            StoreStream.getCalls().ring(channel.id, data.selectedUsers.map(User::id))
-                        } else {
-                            StoreStream.getVoiceChannelSelected().clear()
-                            StoreStream.getMediaEngine().selectVideoInputDevice(null)
-                            callAndLaunch(
-                                channel.id,
-                                isVideo = false,
-                                appPermissionsRequests = this,
-                                context = requireContext(),
-                                appComponent = this,
-                                fragmentManager = parentFragmentManager,
-                            )
+                .appSubscribe(
+                    javaClass,
+                    requireContext(),
+                    onTerminated = { binding.groupInviteFriendsSaveFab.isEnabled = true },
+                    onNext = { (channel, selectedVoiceChannelId) ->
+                        ChannelSelector.getInstance().selectChannel(0L, channel.id)
+                        StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE)
+                        if (selectedVoiceChannelId == data.channel?.id) {
+                            if (data.channel?.isGroup() == true) {
+                                StoreStream.getCalls().ring(channel.id, data.selectedUsers.map(User::id))
+                            } else {
+                                StoreStream.getVoiceChannelSelected().clear()
+                                StoreStream.getMediaEngine().selectVideoInputDevice(null)
+                                callAndLaunch(
+                                    channel.id,
+                                    isVideo = false,
+                                    appPermissionsRequests = this,
+                                    context = requireContext(),
+                                    appComponent = this,
+                                    fragmentManager = parentFragmentManager,
+                                )
+                            }
                         }
-                    }
-                    appActivity?.onBackPressedDispatcher?.onBackPressed()
-                }
+                        appActivity?.onBackPressedDispatcher?.onBackPressed()
+                    },
+                )
         }
     }
 
@@ -205,38 +235,6 @@ class WidgetGroupInviteFriends : AppFragment(R.layout.widget_group_invite_friend
     private fun showGroupFullToast() {
         Toast.makeText(requireContext(), R.string.group_dm_invite_full_sub, Toast.LENGTH_SHORT).show()
     }
-
-    private fun createGroupDm(userIds: List<Long>): Observable<Channel> =
-        RestAPI.api.userCreateChannel(RestAPIParams.CreateChannel(userIds))
-            .restSubscribeOn()
-            .doOnNext(StoreStream.getChannels()::onGroupCreated)
-
-    private fun createOrFetchDm(userId: Long): Observable<Channel> =
-        StoreStream.getChannels().observePrivateChannels().takeSingleUntilTimeout().flatMap { channels ->
-            channels.values.firstOrNull { it.isDM() && it.getDMRecipient()?.id == userId }
-                ?.let { Observable.just(it) }
-                ?: RestAPI.api.userCreateChannel(RestAPIParams.CreateChannel(userId))
-                    .restSubscribeOn()
-                    .doOnNext { StoreStream.getGatewayConnection().channelCreateOrUpdate.onNext(it) }
-        }
-
-    private fun addGroupRecipients(channelId: Long, recipients: List<User>): Observable<Channel> =
-        StoreStream.getChannels().observePrivateChannel(channelId)
-            .filterNull()
-            .takeSingleUntilTimeout()
-            .flatMap { current ->
-                if (current.isGroup()) Observable.just(current)
-                else RestAPI.api.convertDMToGroup(channelId, recipients.first().id)
-            }
-            .flatMap { group ->
-                val remaining = if (group.id == channelId) recipients else recipients.drop(1)
-                Observable.from(remaining)
-                    .flatMap { RestAPI.api.addChannelRecipient(group.id, it.id) }
-                    .toList()
-                    .map { group }
-            }
-            .flatMap { group -> StoreStream.getChannels().observeChannel(group.id).filterNull() }
-            .takeSingleUntilTimeout()
 
     class UserDataContract(val modelUser: User?) : ChipsView.a {
         override fun getDisplayString(): String = modelUser?.username.orEmpty()
@@ -355,8 +353,14 @@ class WidgetGroupInviteFriends : AppFragment(R.layout.widget_group_invite_friend
                 nameFilter: String?,
             ): Observable<ModelAppUserRelationship> {
                 val excludedIds = excludedUsers.mapTo(HashSet()) { it.id }
-                return StoreStream.getUserRelationships().observeForType(ModelUserRelationship.TYPE_FRIEND)
-                    .switchMap { relationships ->
+                return StoreStream.getUserRelationships().observeUserRelationshipsState()
+                    .switchMap { state ->
+                        if (state is StoreUserRelationships.UserRelationshipsState.Unloaded) {
+                            return@switchMap Observable.never<ModelAppUserRelationship>()
+                        }
+                        val relationships = (state as StoreUserRelationships.UserRelationshipsState.Loaded)
+                            .relationships
+                            .filterValues { it == ModelUserRelationship.TYPE_FRIEND }
                         val filtered = relationships.filterKeys { it !in excludedIds }
                         Observable.combineLatest(
                             StoreStream.getPresences().observePresencesForUsers(filtered.keys),
@@ -386,9 +390,13 @@ class WidgetGroupInviteFriends : AppFragment(R.layout.widget_group_invite_friend
         private const val MAX_GROUP_MEMBERS = 10
         private const val MAX_GROUP_MEMBERS_STAFF = 25
         private const val NO_CHANNEL_ID = -1L
+        private const val STATE_SELECTED_IDS = "selected_user_ids"
+        private const val STATE_FILTER = "filter"
         internal const val VIEW_INDEX_FRIENDS_LIST = 0
         internal const val VIEW_INDEX_NO_FRIENDS = 1
         internal const val VIEW_INDEX_GROUP_FULL = 2
+        private const val VIEW_INDEX_LOADING = 3
+        private const val VIEW_INDEX_ERROR = 4
 
         internal fun getChildToDisplay(
             maxGroupSize: Int,
@@ -399,6 +407,41 @@ class WidgetGroupInviteFriends : AppFragment(R.layout.widget_group_invite_friend
             potentialAdditions.isNullOrEmpty() -> VIEW_INDEX_NO_FRIENDS
             else -> VIEW_INDEX_FRIENDS_LIST
         }
+
+        internal fun submit(channel: Channel?, recipients: List<User>): Observable<Channel> = when {
+            channel != null -> addGroupRecipients(channel.id, recipients)
+            recipients.size == 1 -> createOrFetchDm(recipients.first().id)
+            else -> RestAPI.api.userCreateChannel(RestAPIParams.CreateChannel(recipients.map(User::id)))
+                .restSubscribeOn()
+                .doOnNext(StoreStream.getChannels()::onGroupCreated)
+        }
+
+        private fun createOrFetchDm(userId: Long): Observable<Channel> =
+            StoreStream.getChannels().observePrivateChannels().takeSingleUntilTimeout().flatMap { channels ->
+                channels.values.firstOrNull { it.isDM() && it.getDMRecipient()?.id == userId }
+                    ?.let { Observable.just(it) }
+                    ?: RestAPI.api.userCreateChannel(RestAPIParams.CreateChannel(userId))
+                        .restSubscribeOn()
+                        .doOnNext { StoreStream.getGatewayConnection().channelCreateOrUpdate.onNext(it) }
+            }
+
+        private fun addGroupRecipients(channelId: Long, recipients: List<User>): Observable<Channel> =
+            StoreStream.getChannels().observePrivateChannel(channelId)
+                .filterNull()
+                .takeSingleUntilTimeout()
+                .flatMap { current ->
+                    if (current.isGroup()) Observable.just(current)
+                    else RestAPI.api.convertDMToGroup(channelId, recipients.first().id).restSubscribeOn()
+                }
+                .flatMap { group ->
+                    val remaining = if (group.id == channelId) recipients else recipients.drop(1)
+                    Observable.from(remaining)
+                        .concatMap { RestAPI.api.addChannelRecipient(group.id, it.id).restSubscribeOn() }
+                        .toList()
+                        .map { group }
+                }
+                .flatMap { group -> StoreStream.getChannels().observeChannel(group.id).filterNull() }
+                .takeSingleUntilTimeout()
 
         fun launch(context: Context, source: String) {
             AnalyticsTracker.openModal("DM Group Create", source)

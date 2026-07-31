@@ -36,11 +36,8 @@ class ReadyGuildChannelDtosTest {
         assertEquals(44L, guild.threads!!.single().id)
         assertTrue(channel.threadMetadata!!.archived)
         assertEquals(55L, channel.availableTags!!.single().emojiId)
-        // Deliberate divergence: the reference stores `customEmojiId` as a body-level property,
-        // but R8 proves ForumTag has no constructor left (Gson allocates it unsafely), so that
-        // initialiser never runs and the reference's value is permanently null — which is why
-        // forum tags with a custom emoji render without it there. We compute it on read instead.
-        assertEquals("55", channel.availableTags!!.single().customEmojiId)
+        // Gson bypasses Kotlin body initializers, matching the reference's R8-stripped DTO.
+        assertNull(channel.availableTags!!.single().customEmojiId)
         assertEquals(9L, guild.embeddedActivities!!.single().embeddedActivity.applicationId)
 
         assertNull(channel.guildHashes)

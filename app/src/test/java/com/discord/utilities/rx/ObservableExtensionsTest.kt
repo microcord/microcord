@@ -146,6 +146,84 @@ class ObservableExtensionsTest {
     }
 
     @Test
+    fun withDimmerSchedulesOnlyViewMutationsOnMain() {
+        val delayScheduler = TestScheduler()
+        val sourceScheduler = TestScheduler()
+        val observerScheduler = TestScheduler()
+        val mainScheduler = TestScheduler()
+        val events = mutableListOf<String>()
+        RxJavaHooks.setOnComputationScheduler { delayScheduler }
+        try {
+            Observable.defer {
+                events += "source"
+                Observable.just(1)
+            }
+                .subscribeOn(sourceScheduler)
+                .observeOn(observerScheduler)
+                .withDimmer(300L, { events += "dim:$it" }, mainScheduler)
+                .subscribe { events += "next:$it" }
+
+            delayScheduler.advanceTimeBy(300L, TimeUnit.MILLISECONDS)
+            assertTrue(events.isEmpty())
+            mainScheduler.triggerActions()
+            assertEquals(listOf("dim:true"), events)
+            sourceScheduler.triggerActions()
+            assertEquals(listOf("dim:true", "source"), events)
+            observerScheduler.triggerActions()
+            assertEquals(listOf("dim:true", "source", "next:1"), events)
+            mainScheduler.triggerActions()
+            assertEquals("dim:false", events.last())
+        } finally {
+            RxJavaHooks.reset()
+        }
+    }
+
+    @Test
+    fun withDimmerUndimsWhenLifecycleUnsubscribes() {
+        val delayScheduler = TestScheduler()
+        val mainScheduler = TestScheduler()
+        val dimmed = mutableListOf<Boolean>()
+        RxJavaHooks.setOnComputationScheduler { delayScheduler }
+        try {
+            val subscription = Observable.never<Int>()
+                .withDimmer(300L, dimmed::add, mainScheduler)
+                .subscribe()
+
+            delayScheduler.advanceTimeBy(300L, TimeUnit.MILLISECONDS)
+            mainScheduler.triggerActions()
+            assertEquals(listOf(true), dimmed)
+
+            subscription.unsubscribe()
+            assertEquals(listOf(true), dimmed)
+            mainScheduler.triggerActions()
+            assertEquals(listOf(true, false), dimmed)
+        } finally {
+            RxJavaHooks.reset()
+        }
+    }
+
+    @Test
+    fun withDimmerUndimsWhenAnEmptySourceTerminates() {
+        val delayScheduler = TestScheduler()
+        val mainScheduler = TestScheduler()
+        val dimmed = mutableListOf<Boolean>()
+        RxJavaHooks.setOnComputationScheduler { delayScheduler }
+        try {
+            Observable.empty<Int>()
+                .withDimmer(300L, dimmed::add, mainScheduler)
+                .subscribe()
+
+            delayScheduler.advanceTimeBy(300L, TimeUnit.MILLISECONDS)
+            assertTrue(dimmed.isEmpty())
+            mainScheduler.triggerActions()
+            assertEquals(true, dimmed.first())
+            assertEquals(false, dimmed.last())
+        } finally {
+            RxJavaHooks.reset()
+        }
+    }
+
+    @Test
     fun leadingEdgeThrottleRetainsTheLatestStoreChangeInABurst() {
         val scheduler = TestScheduler()
         RxJavaHooks.setOnComputationScheduler { scheduler }

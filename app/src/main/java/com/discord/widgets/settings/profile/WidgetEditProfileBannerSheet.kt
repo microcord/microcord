@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.core.os.bundleOf
 import androidx.core.widget.ImageViewCompat
 import androidx.fragment.app.FragmentManager
 import com.discord.R
@@ -19,10 +20,6 @@ import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 
 class WidgetEditProfileBannerSheet : AppBottomSheet() {
-    var onChangeProfileBannerImage: () -> Unit = {}
-    var onRemoveProfileBannerImage: () -> Unit = {}
-    var onColorSelected: (Int?) -> Unit = {}
-
     private val defaultBannerColorHex get() = argumentsOrDefault.getString(ARG_DEFAULT_BANNER_COLOR_HEX, "#000000")
     private val viewModel: EditProfileBannerSheetViewModel by appViewModels {
         EditProfileBannerSheetViewModel(
@@ -58,7 +55,7 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
         )
         removeImage.visibility = visible(hasBanner)
         removeImage.setOnClickListener {
-            onRemoveProfileBannerImage()
+            sendResult(ACTION_REMOVE_IMAGE)
             dismiss()
         }
         premiumUpsell.setOnClickListener { AppToast.show(this, R.string.premium_required) }
@@ -94,7 +91,7 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
             if (state.showPremiumUpsell) {
                 AppToast.show(this, R.string.premium_required)
             } else {
-                onChangeProfileBannerImage()
+                sendResult(ACTION_CHANGE_IMAGE)
                 dismiss()
             }
         }
@@ -116,7 +113,7 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
                     getString(R.string.reset),
                 ) { _, _ ->
                     viewModel.updateColorPreview(null)
-                    onColorSelected(null)
+                    sendResult(ACTION_COLOR, hasColor = false)
                     dismiss()
                 }
             }
@@ -125,7 +122,7 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
             setColorPickerDialogListener(object : ColorPickerDialogListener {
                 override fun onColorSelected(dialogId: Int, color: Int) {
                     viewModel.updateColorPreview(colorHex(color))
-                    onColorSelected(color and 0xFFFFFF)
+                    sendResult(ACTION_COLOR, color and 0xFFFFFF)
                 }
 
                 override fun onDialogDismissed(dialogId: Int) = Unit
@@ -133,6 +130,13 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
         }
         picker.show(parentFragmentManager, DIALOG_TAG_COLOR_PICKER)
         colorPickerDialog = picker
+    }
+
+    private fun sendResult(action: String, color: Int = 0, hasColor: Boolean = true) {
+        parentFragmentManager.setFragmentResult(
+            REQUEST_KEY,
+            bundleOf(RESULT_ACTION to action, RESULT_COLOR to color, RESULT_HAS_COLOR to hasColor),
+        )
     }
 
     private val isGuildContext get() = argumentsOrDefault.containsKey(EXTRA_GUILD_ID)
@@ -143,6 +147,13 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
         private const val ARG_HAS_BANNER_IMAGE = "ARG_HAS_BANNER_IMAGE"
         private const val EXTRA_GUILD_ID = "com.discord.intent.extra.EXTRA_GUILD_ID"
         private const val DIALOG_TAG_COLOR_PICKER = "DIALOG_TAG_COLOR_PICKER"
+        internal const val REQUEST_KEY = "EDIT_PROFILE_BANNER"
+        internal const val RESULT_ACTION = "action"
+        internal const val RESULT_COLOR = "color"
+        internal const val RESULT_HAS_COLOR = "has_color"
+        internal const val ACTION_CHANGE_IMAGE = "change_image"
+        internal const val ACTION_REMOVE_IMAGE = "remove_image"
+        internal const val ACTION_COLOR = "color"
 
         fun show(
             guildId: Long? = null,
@@ -150,9 +161,6 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
             initialColorPreviewHex: String?,
             hasBannerImage: Boolean,
             fragmentManager: FragmentManager,
-            onChangeProfileBannerImage: () -> Unit = {},
-            onRemoveProfileBannerImage: () -> Unit = {},
-            onColorSelected: (Int?) -> Unit = {},
         ) {
             WidgetEditProfileBannerSheet().apply {
                 arguments = Bundle().apply {
@@ -161,9 +169,6 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
                     putBoolean(ARG_HAS_BANNER_IMAGE, hasBannerImage)
                     guildId?.let { putLong(EXTRA_GUILD_ID, it) }
                 }
-                this.onChangeProfileBannerImage = onChangeProfileBannerImage
-                this.onRemoveProfileBannerImage = onRemoveProfileBannerImage
-                this.onColorSelected = onColorSelected
             }.show(fragmentManager, WidgetEditProfileBannerSheet::class.java.name)
         }
 

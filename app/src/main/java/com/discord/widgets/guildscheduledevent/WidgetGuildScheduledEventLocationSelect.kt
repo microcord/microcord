@@ -8,9 +8,7 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
 import android.widget.TextView
-import androidx.activity.result.contract.ActivityResultContracts
 import com.discord.R
-import com.discord.api.channel.Channel
 import com.discord.api.guildscheduledevent.GuildScheduledEventEntityType
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
@@ -18,9 +16,10 @@ import com.discord.app.appViewModels
 import com.discord.i18n.I18nHooks
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
+import com.discord.utilities.view.extensions.setOnImeActionDone
 import com.discord.views.CheckedSetting
+import com.discord.widgets.channels.WidgetChannelSelector
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 
@@ -46,12 +45,17 @@ class WidgetGuildScheduledEventLocationSelect : AppFragment(R.layout.widget_guil
     private lateinit var nextButton: MaterialButton
     private var currentState: WidgetGuildScheduledEventLocationSelectViewModel.ViewState.Valid? = null
 
-    private val settingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK || result.resultCode == RESULT_QUIT) {
-            activity?.setResult(result.resultCode, result.data)
+    private val settingsLauncher = WidgetGuildScheduledEventSettings.registerForResult(
+        this,
+        onFinished = {
+            activity?.setResult(Activity.RESULT_OK)
             activity?.finish()
-        }
-    }
+        },
+        onQuit = {
+            activity?.setResult(RESULT_QUIT)
+            activity?.finish()
+        },
+    )
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -75,6 +79,10 @@ class WidgetGuildScheduledEventLocationSelect : AppFragment(R.layout.widget_guil
             override fun onTextChanged(value: CharSequence?, start: Int, before: Int, count: Int) = Unit
         })
         channelInput.setOnClickListener { showChannelChooser() }
+        WidgetChannelSelector.registerForResult(this, CHANNEL_SELECT_REQUEST_KEY) { channelId, _ ->
+            viewModel.selectChannel(channelId)
+        }
+        externalLayout.setOnImeActionDone { navigateNext() }
         nextButton.setOnClickListener { navigateNext() }
     }
 
@@ -117,9 +125,10 @@ class WidgetGuildScheduledEventLocationSelect : AppFragment(R.layout.widget_guil
             },
         )
         channelInput.isEnabled = state.canChangeChannel
+        channelInput.alpha = if (state.canChangeChannel) 1f else 0.5f
         if (channelInput.text?.toString() != state.selectedChannel?.name) channelInput.setText(state.selectedChannel?.name)
         if (externalInput.text?.toString() != state.externalLocation) externalInput.setText(state.externalLocation)
-        nextButton.isEnabled = if (channelSelected) state.selectedChannel != null else state.externalLocation.isNotBlank()
+        nextButton.isEnabled = isNextEnabled(state)
     }
 
     private fun configureOption(
@@ -148,13 +157,15 @@ class WidgetGuildScheduledEventLocationSelect : AppFragment(R.layout.widget_guil
             GuildScheduledEventEntityType.VOICE -> state.availableVoiceChannelIds
             else -> emptySet()
         }
-        val channels = ids.mapNotNull(state.availableChannels::get).sortedBy(Channel::position)
-        if (channels.isEmpty()) return
-        MaterialAlertDialogBuilder(requireContext())
-            .setItems(channels.map { it.name.orEmpty() }.toTypedArray()) { _, index ->
-                viewModel.selectChannel(channels[index].id)
-            }
-            .show()
+        if (ids.isEmpty()) return
+        WidgetChannelSelector.launch(
+            this,
+            guildId,
+            CHANNEL_SELECT_REQUEST_KEY,
+            includeNoChannel = false,
+            noChannelStringId = R.string.none,
+            filterFunction = WidgetChannelSelector.SetFilterFunction(ids),
+        )
     }
 
     private fun navigateNext() {
@@ -174,7 +185,17 @@ class WidgetGuildScheduledEventLocationSelect : AppFragment(R.layout.widget_guil
         private const val EXTRA_GUILD_ID = "com.discord.intent.extra.EXTRA_GUILD_ID"
         private const val EXTRA_CHANNEL_ID = "com.discord.intent.extra.EXTRA_CHANNEL_ID"
         private const val EXTRA_EVENT_ID = "com.discord.intent.extra.EXTRA_GUILD_SCHEDULED_EVENT_ID"
+        private const val CHANNEL_SELECT_REQUEST_KEY = "GUILD_SCHEDULED_EVENT_LOCATION_SELECT_REQUEST_KEY"
         private const val RESULT_QUIT = 2
+
+        internal fun isNextEnabled(
+            state: WidgetGuildScheduledEventLocationSelectViewModel.ViewState.Valid,
+        ): Boolean = when (state.selectedLocationOption) {
+            GuildScheduledEventEntityType.STAGE_INSTANCE, GuildScheduledEventEntityType.VOICE ->
+                state.selectedChannel != null
+            GuildScheduledEventEntityType.EXTERNAL -> state.externalLocation.isNotEmpty()
+            else -> false
+        }
 
         @JvmStatic
         @JvmOverloads

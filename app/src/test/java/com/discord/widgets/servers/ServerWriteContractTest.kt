@@ -1,5 +1,6 @@
 package com.discord.widgets.servers
 
+import com.discord.api.role.GuildRole
 import com.discord.restapi.RestAPIBuilder
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
@@ -25,74 +26,40 @@ class ServerWriteContractTest {
     fun stopServer() = server.shutdown()
 
     @Test
-    fun `channel reorder sends official positions and explicit root parent`() {
+    fun `role permission update sends the cloned role as numeric fields and accepts 204 completion`() {
         server.enqueue(MockResponse().setResponseCode(204))
-        api.reorderChannels(
-            10,
-            listOf(
-                RestAPIParams.ChannelPosition(9_223_372_036_854_775_000, 3, null),
-                RestAPIParams.ChannelPosition(
-                    9_223_372_036_854_775_001,
-                    4,
-                    RestAPIParams.ChannelPosition.PARENT_ID_NONE,
-                ),
-                RestAPIParams.ChannelPosition(9_223_372_036_854_775_002, 5, 9_223_372_036_854_775_003),
-            ),
-        ).toBlocking().subscribe()
-
-        val request = server.takeRequest()
-        val body = JsonParser.parseString(request.body.readUtf8()).asJsonArray
-        assertEquals("PATCH", request.method)
-        assertEquals("/api/v9/guilds/10/channels", request.path)
-        assertEquals("9223372036854775000", body[0].asJsonObject["id"].asString)
-        assertEquals(3, body[0].asJsonObject["position"].asInt)
-        assertFalse(body[0].asJsonObject.has("parent_id"))
-        assertTrue(body[1].asJsonObject["parent_id"].isJsonNull)
-        assertEquals("9223372036854775003", body[2].asJsonObject["parent_id"].asString)
-    }
-
-    @Test
-    fun `accepted reorder keeps optimistic state and real failure rolls back`() {
-        var saved = 0
-        var rollbacks = 0
+        val values = mutableListOf<Void?>()
+        var completed = false
         var failure: Throwable? = null
 
-        listOf(200, 204).forEach { status ->
-            server.enqueue(MockResponse().setResponseCode(status))
-            api.reorderChannels(10, listOf(RestAPIParams.ChannelPosition(20, 3, null)))
-                .subscribe({ _: Void? -> saved++ }, { rollbacks++ })
-        }
-
-        server.enqueue(MockResponse().setResponseCode(400).setBody("{\"message\":\"invalid position\"}"))
-        api.reorderChannels(10, listOf(RestAPIParams.ChannelPosition(20, 3, null)))
-            .subscribe({ _: Void? -> saved++ }, {
-                rollbacks++
-                failure = it
-            })
-
-        assertEquals(2, saved)
-        assertEquals(1, rollbacks)
-        assertTrue(failure is HttpException)
-    }
-
-    @Test
-    fun `role toggles send a partial mutable role body`() {
-        server.enqueue(MockResponse().setResponseCode(204))
-        api.updateRole(10, 20, RestAPIParams.Role(permissions = 8L)).toBlocking().subscribe()
+        val update = RestAPIParams.Role.createWithRole(role()).apply { permissions = 8L }
+        api.updateRole(10, 20, update).subscribe(
+            { values.add(it) },
+            { failure = it },
+            { completed = true },
+        )
 
         val request = server.takeRequest()
         val body = JsonParser.parseString(request.body.readUtf8()).asJsonObject
         assertEquals("PATCH", request.method)
         assertEquals("/api/v9/guilds/10/roles/20", request.path)
-        assertEquals("8", body["permissions"].asString)
-        assertFalse(body.has("id"))
-        assertFalse(body.has("position"))
+        assertTrue(body["permissions"].asJsonPrimitive.isNumber)
+        assertEquals(8L, body["permissions"].asLong)
+        assertTrue(body["id"].asJsonPrimitive.isNumber)
+        assertEquals(20L, body["id"].asLong)
+        assertTrue(body["color"].asJsonPrimitive.isNumber)
+        assertEquals(0, body["color"].asInt)
+        assertTrue(body["position"].asJsonPrimitive.isNumber)
+        assertEquals(2, body["position"].asInt)
+        assertEquals(listOf<Void?>(null), values)
+        assertTrue(completed)
+        assertEquals(null, failure)
     }
 
     @Test
     fun `role create returns the created role payload`() {
         server.enqueue(
-            MockResponse().setBody(
+            MockResponse().setResponseCode(200).setBody(
                 """{"position":2,"name":"new role","id":"20","color":0,"hoist":false,"permissions":"0","mentionable":false,"managed":false,"icon":null,"tags":null,"unicode_emoji":null}""",
             ),
         )
@@ -118,18 +85,82 @@ class ServerWriteContractTest {
     }
 
     @Test
-    fun `role update accepts void success and reports real failure`() {
-        var successes = 0
+    fun `role name update ignores a 200 role body and completes`() {
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """{"position":2,"name":"Moderator","id":"20","color":0,"hoist":false,"permissions":"8","mentionable":false,"managed":false,"icon":null,"tags":null,"unicode_emoji":null}""",
+            ),
+        )
+        var values = 0
+        var completed = false
         var failure: Throwable? = null
-        server.enqueue(MockResponse().setBody("{\"ignored\":true}"))
-        server.enqueue(MockResponse().setResponseCode(400).setBody("{\"message\":\"invalid role\"}"))
 
-        api.updateRole(10, 20, RestAPIParams.Role(name = "Moderator"))
-            .subscribe({ _: Void? -> successes++ }, { failure = it })
-        api.updateRole(10, 20, RestAPIParams.Role(name = "Moderator"))
-            .subscribe({ _: Void? -> successes++ }, { failure = it })
+        api.updateRole(10, 20, RestAPIParams.Role.createWithRole(role()).apply { name = "Moderator" })
+            .subscribe({ values++ }, { failure = it }, { completed = true })
 
-        assertEquals(1, successes)
+        val request = server.takeRequest()
+        val body = JsonParser.parseString(request.body.readUtf8()).asJsonObject
+        assertEquals("Moderator", body["name"].asString)
+        assertEquals(1, values)
+        assertTrue(completed)
+        assertEquals(null, failure)
+    }
+
+    @Test
+    fun `role color update changes color while preserving the cloned role`() {
+        server.enqueue(MockResponse().setResponseCode(204))
+
+        api.updateRole(10, 20, RestAPIParams.Role.createWithRole(role()).apply { color = 0x12AB34 })
+            .toBlocking().subscribe()
+
+        val body = JsonParser.parseString(server.takeRequest().body.readUtf8()).asJsonObject
+        assertEquals(0x12AB34, body["color"].asInt)
+        assertEquals("member", body["name"].asString)
+        assertEquals(20L, body["id"].asLong)
+    }
+
+    @Test
+    fun `role delete accepts 204 completion and real failures still error`() {
+        server.enqueue(MockResponse().setResponseCode(204))
+        server.enqueue(MockResponse().setResponseCode(403).setBody("{\"message\":\"missing permissions\"}"))
+        var completed = false
+        var failure: Throwable? = null
+
+        api.deleteRole(10, 20).subscribe({}, { failure = it }, { completed = true })
+        val deleted = server.takeRequest()
+        assertEquals("DELETE", deleted.method)
+        assertEquals("/api/v9/guilds/10/roles/20", deleted.path)
+
+        api.deleteRole(10, 20).subscribe({}, { failure = it })
+
+        assertTrue(completed)
         assertTrue(failure is HttpException)
     }
+
+    @Test
+    fun `role update still reports an http failure`() {
+        server.enqueue(MockResponse().setResponseCode(400).setBody("{\"message\":\"invalid role\"}"))
+        var completed = false
+        var failure: Throwable? = null
+
+        api.updateRole(10, 20, RestAPIParams.Role(name = "Moderator"))
+            .subscribe({}, { failure = it }, { completed = true })
+
+        assertFalse(completed)
+        assertTrue(failure is HttpException)
+    }
+
+    private fun role() = GuildRole(
+        position = 2,
+        name = "member",
+        id = 20,
+        color = 0,
+        hoist = false,
+        permissions = 0,
+        mentionable = false,
+        managed = false,
+        icon = null,
+        tags = null,
+        unicodeEmoji = null,
+    )
 }

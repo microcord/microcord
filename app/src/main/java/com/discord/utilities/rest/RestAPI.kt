@@ -1,6 +1,9 @@
 package com.discord.utilities.rest
 
+import com.discord.restapi.ChannelReorderDiagnostics
+import com.discord.restapi.RestAPIBuilder
 import com.discord.restapi.RestAPIInterface
+import com.discord.restapi.ReactNativeHeadersInterceptor
 import com.discord.utilities.analytics.AnalyticSuperProperties
 import okhttp3.Interceptor
 
@@ -9,8 +12,8 @@ import okhttp3.Interceptor
  *
  * The reference exposes the same thing as `RestAPI.api`, and every screen that talks to the API
  * reads it from there rather than threading a client down through fragment arguments. The client
- * itself is still owned and configured by the store graph — this object only publishes it, so there
- * is exactly one OkHttp client, one cookie jar and one rate-limit interceptor in the process.
+ * clients are still owned and configured by the store graph; this object only publishes the normal
+ * and null-serializing variants used by 126.21.
  *
  * `StoreStream` must call [install] once it has built its `RestAPIInterface`; until it does,
  * [apiOrNull] is `null` and callers degrade instead of crashing.
@@ -20,16 +23,53 @@ object RestAPI {
     @Volatile
     private var installed: RestAPIInterface? = null
 
+    @Volatile
+    private var installedSerializeNulls: RestAPIInterface? = null
+
+    @Volatile
+    private var installedReactNative: RestAPIInterface? = null
+
     /** Publishes the store graph's REST client. Safe to call more than once. */
     @JvmStatic
-    fun install(api: RestAPIInterface) {
+    fun install(
+        api: RestAPIInterface,
+        apiSerializeNulls: RestAPIInterface = api,
+        reactNativeApi: RestAPIInterface = api,
+    ) {
         installed = api
+        installedSerializeNulls = apiSerializeNulls
+        installedReactNative = reactNativeApi
+    }
+
+    /** Builds and publishes the two authenticated clients used by production. */
+    @JvmStatic
+    fun install(builder: RestAPIBuilder, interceptors: List<Interceptor>): RestAPIInterface {
+        val api = builder.build(
+            RestAPIInterface::class.java,
+            interceptors = interceptors,
+            clientName = "main",
+        )
+        val apiSerializeNulls = builder.build(
+            RestAPIInterface::class.java,
+            serializeNulls = true,
+            interceptors = interceptors + ChannelReorderDiagnostics,
+            clientName = "serializeNulls",
+        )
+        val reactNativeApi = builder.build(
+            RestAPIInterface::class.java,
+            interceptors = interceptors + ReactNativeHeadersInterceptor,
+            clientName = "reactNative",
+        )
+        install(api, apiSerializeNulls, reactNativeApi)
+        return api
     }
 
     /** Drops the published client. Used by tests so one case cannot leak into the next. */
     @JvmStatic
     fun reset() {
         installed = null
+        installedSerializeNulls = null
+        installedReactNative = null
     }
 
     /** Adds the same client metadata header as Discord Android 126.21. */
@@ -55,4 +95,15 @@ object RestAPI {
         get() = checkNotNull(installed) {
             "RestAPI.install() has not been called; the store graph publishes the REST client."
         }
+
+    /** The 126.21 null-serializing client used by bodies with explicit JSON nulls. */
+    @JvmStatic
+    val apiSerializeNulls: RestAPIInterface
+        get() = checkNotNull(installedSerializeNulls) {
+            "RestAPI.install() has not been called; the store graph publishes the REST client."
+        }
+
+    @JvmStatic
+    val reactNativeApiOrNull: RestAPIInterface?
+        get() = installedReactNative
 }

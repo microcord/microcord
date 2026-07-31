@@ -68,17 +68,5 @@ data class ForumTag(
     val emojiId: Long?,
     val emojiName: String?,
 ) {
-    /**
-     * DELIBERATE DIVERGENCE from the reference — computed, where the reference stores.
-     *
-     * The reference declares this as a body-level property initialised to `emojiId?.toString()`.
-     * That initialiser never runs in practice: `ForumTag` has no defaulted parameters, R8 deleted
-     * its constructor, and Gson therefore allocates it via `Unsafe` and injects the fields
-     * afterwards — so the reference leaves this permanently `null`. The visible effect there is
-     * that forum tags carrying a *custom* emoji render without it.
-     *
-     * Computing it on read restores the intended behaviour. Still excluded from
-     * `equals`/`hashCode`/`toString`, so data-class semantics are unchanged.
-     */
-    val customEmojiId: String? get() = emojiId?.toString()
+    val customEmojiId: String? = emojiId?.toString()
 }

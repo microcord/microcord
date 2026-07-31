@@ -12,6 +12,7 @@ import com.discord.utilities.rest.SendUtils
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.filterIs
 import com.discord.utilities.rx.restSubscribeOn
+import com.discord.utilities.premium.grantsAccessToPremiumStickers
 import com.discord.utilities.time.Clock
 import java.util.ArrayDeque
 import java.util.concurrent.ExecutorService
@@ -51,6 +52,7 @@ class MessageQueue @JvmOverloads constructor(
     private val executorService: ExecutorService,
     private val clock: Clock,
     private val api: RestAPIInterface,
+    private val reactNativeApi: RestAPIInterface = api,
     private val networkBackoff: Backoff = Backoff(
         minBackoffMs = NETWORK_INITIAL_FAILURE_RETRY_MS,
         maxBackoffMs = MESSAGE_TIMEOUT_MS,
@@ -242,7 +244,16 @@ class MessageQueue @JvmOverloads constructor(
             }
             .filterIs<SendUtils.SendPayload.ReadyToSend>()
             .take(1)
-            .flatMap { ready -> sendReadyPayload(message.channelId, ready) }
+            .flatMap { ready ->
+                val hasStickers = !ready.message.stickerIds.isNullOrEmpty()
+                val canUsePremiumStickers =
+                    message.author?.premiumType?.grantsAccessToPremiumStickers() == true
+                sendReadyPayload(
+                    message.channelId,
+                    ready,
+                    if (hasStickers && !canUsePremiumStickers) reactNativeApi else api,
+                )
+            }
             .restSubscribeOn(retry = message.nonce != null)
             .appSubscribe(
                 errorClass = MessageQueue::class.java,
@@ -257,12 +268,13 @@ class MessageQueue @JvmOverloads constructor(
     private fun sendReadyPayload(
         channelId: Long,
         ready: SendUtils.SendPayload.ReadyToSend,
+        client: RestAPIInterface = api,
     ): Observable<com.discord.api.message.Message> {
         val parts = ready.uploads.map(FileUpload::part)
         return if (parts.isEmpty()) {
-            api.sendMessage(channelId, ready.message)
+            client.sendMessage(channelId, ready.message)
         } else {
-            api.sendMessage(channelId, PayloadJSON(ready.message), parts.toTypedArray())
+            client.sendMessage(channelId, PayloadJSON(ready.message), parts.toTypedArray())
         }
     }
 

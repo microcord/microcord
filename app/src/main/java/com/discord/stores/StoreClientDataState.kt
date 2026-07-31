@@ -181,7 +181,7 @@ class StoreClientDataState(
         /** The gateway only honours version 1 of the guild-hash contract. */
         const val SUPPORTED_GUILD_HASH_VERSION = 1
 
-        val GuildHashes.isSupported: Boolean
-            get() = version == SUPPORTED_GUILD_HASH_VERSION
+        val GuildHashes?.isSupported: Boolean
+            get() = this?.version == SUPPORTED_GUILD_HASH_VERSION
     }
 }

@@ -38,8 +38,8 @@ class FormatUtilsTest {
     }
 
     @Test
-    fun `renders a null argument rather than dropping the token`() {
-        assertEquals("null Members", FormatUtils.format("{members} Members", "members" to null))
+    fun `leaves a token whose argument is null untouched`() {
+        assertEquals("{members} Members", FormatUtils.format("{members} Members", "members" to null))
     }
 
     @Test
@@ -63,5 +63,10 @@ class FormatUtilsTest {
     @Test
     fun `removes hook markers when no arguments are supplied`() {
         assertEquals("Nelly", FormatUtils.format("!!Nelly!!", emptyMap()))
+    }
+
+    @Test
+    fun `supports reference ordered arguments when named arguments are absent`() {
+        assertEquals("3 of 5", FormatUtils.formatOrdered("{count} of {total}", arrayOf(3, 5)))
     }
 }

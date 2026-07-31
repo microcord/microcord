@@ -4,19 +4,18 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewStub
 import android.widget.TextView
-import androidx.core.content.ContextCompat
-import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.Fragment
 import com.discord.app.AppFragment
 import androidx.fragment.app.commitNow
-import androidx.fragment.app.commit
 import androidx.appcompat.widget.Toolbar
 import com.discord.R
 import com.discord.panels.OverlappingPanelsLayout
 import com.discord.panels.PanelState
 import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreNavigation
+import com.discord.stores.StoreNotices
 import com.discord.stores.StoreStream
+import com.discord.dialogs.WidgetUrgentMessageDialog
 import com.discord.widgets.channels.list.WidgetChannelsList
 import com.discord.widgets.channels.memberlist.WidgetChannelMembersList
 import com.discord.widgets.channels.WidgetChannelOnboarding
@@ -24,7 +23,6 @@ import com.discord.widgets.channels.WidgetChannelTopic
 import com.discord.widgets.channels.WidgetChannelSidebarActions
 import com.discord.widgets.guilds.list.WidgetGuildsList
 import com.discord.widgets.guilds.join.WidgetGuildWelcomeSheet
-import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.chat.list.WidgetChatList
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapterItemCallMessage
 import com.discord.widgets.quickmentions.WidgetQuickMentionsDialog
@@ -39,18 +37,21 @@ import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isSystemDM
 import com.discord.app.appViewModels
 import com.discord.app.appActivityViewModels
-import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
+import com.discord.utilities.rx.ui
 import com.discord.utilities.toolbar.positionUnreadCountView
+import com.discord.utilities.user.UserUtils.hasUnreadUrgentMessages
 import com.discord.widgets.chat.input.AppFlexInputViewModel
 import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventUpsellBottomSheet
+import com.discord.widgets.notice.WidgetNoticeNuxSamsungLink
 import com.discord.widgets.playstation.WidgetPlaystationIntegrationUpsellBottomSheet
 import com.discord.widgets.user.calls.PrivateCallLauncher
+import com.discord.widgets.accessibility.AccessibilityDetectionNavigator
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import rx.Subscription
 
-class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessages.Host, WidgetChatList.Host {
+class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private val viewModel: WidgetHomeViewModel by appViewModels { WidgetHomeViewModel() }
     private val flexInputViewModel: AppFlexInputViewModel by appActivityViewModels { AppFlexInputViewModel() }
 
@@ -74,12 +75,6 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
         startPanelState = PanelState.Closed
         endPanelState = PanelState.Closed
         initialChannelShown = savedInstanceState != null
-        view.findViewById<View>(R.id.widget_home_panel_center_overlay).apply {
-            visibility = if (
-                childFragmentManager.findFragmentById(R.id.widget_home_panel_center_overlay) != null
-            ) View.VISIBLE else View.GONE
-            if (visibility == View.VISIBLE) bringToFront()
-        }
         // Registered here rather than in onViewBound so `panels` is already resolved, and before the
         // child transactions below so this stays behind WidgetTabsHost in the registry.
         setOnBackPressed(::handleBackPressed)
@@ -112,9 +107,9 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
                 replace(R.id.widget_channel_action_bar, WidgetChannelSidebarActions(), ACTIONS_TAG)
             }
         }
-        WidgetChannelSidebarActions.onPins = ::openPins
         WidgetChannelSidebarActions.onNotifications = ::openMuteSettings
         WidgetChannelSidebarActions.onSearch = ::openSearch
+        WidgetNoticeNuxSamsungLink.enqueue(requireContext())
     }
 
     /**
@@ -182,7 +177,6 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
     }
 
     override fun onDestroyView() {
-        WidgetChannelSidebarActions.onPins = null
         WidgetChannelSidebarActions.onNotifications = null
         WidgetChannelSidebarActions.onSearch = null
         super.onDestroyView()
@@ -267,12 +261,6 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
         toolbar.setNavigationOnClickListener { handleCenterPanelBack() }
         if (toolbar.menu.size() == 0) {
             toolbar.inflateMenu(R.menu.menu_chat_toolbar)
-            val pin = ContextCompat.getDrawable(requireContext(), R.drawable.ic_pin_24dp)?.mutate()?.also {
-                DrawableCompat.setTint(it, ColorCompat.getThemedColor(requireContext(), R.attr.colorInteractiveNormal))
-            }
-            toolbar.menu.add(0, R.id.menu_private_channel_sidebar_pinned_messages, 1, R.string.pinned_messages)
-                .setIcon(pin)
-                .setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_IF_ROOM)
         }
         val callableDm = channel.isPrivate() && !channel.isSystemDM()
         val selectedVoiceChannelId = StoreStream.getVoiceChannelSelected().getSelectedVoiceChannelId()
@@ -288,9 +276,6 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
                     StoreStream.getVoiceChannelSelected().selectVoiceChannel(0L).subscribe({}, {})
                 }
                 R.id.menu_chat_side_panel -> true.also { panels.openEndPanel() }
-                R.id.menu_private_channel_sidebar_pinned_messages -> true.also {
-                    openPins(channel.id)
-                }
                 else -> false
             }
         }
@@ -299,9 +284,28 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
+        AccessibilityDetectionNavigator.enqueueNoticeWhenEnabled(this)
         viewModel.observeEvents()
             .bindToComponentLifecycle(this)
             .appSubscribe(WidgetHome::class.java, onNext = ::handleEvent)
+        StoreStream.getUsers().observeMe()
+            .filter { it.hasUnreadUrgentMessages }
+            .ui(this)
+            .appSubscribe(WidgetHome::class.java) { showUrgentMessageDialog() }
+    }
+
+    private fun showUrgentMessageDialog() {
+        StoreStream.getNotices().requestToShow(
+            StoreNotices.Notice(
+                name = WidgetUrgentMessageDialog.NOTICE_NAME,
+                priority = 0,
+                delayPeriodMs = 0L,
+                sinceLastPeriodMs = 0L,
+            ) { activity ->
+                WidgetUrgentMessageDialog.show(activity.supportFragmentManager)
+                true
+            },
+        )
     }
 
     private fun handleEvent(event: WidgetHomeViewModel.Event) = when (event) {
@@ -344,8 +348,6 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
         storeMediaEngine = StoreStream.getMediaEngine(),
     )
 
-    override fun openPinnedMessages(channelId: Long) = openPins(channelId)
-
     override fun openCallMessage(
         channelId: Long,
         status: WidgetChatListAdapterItemCallMessage.CallStatus,
@@ -354,24 +356,6 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChannelPinnedMessage
             StoreStream.getVoiceChannelSelected().selectVoiceChannel(channelId).subscribe({}, {})
         } else {
             privateCallLauncher().launchVoiceCall(channelId)
-        }
-    }
-
-    override fun pinnedMessagesStore() = StoreStream.getPinnedMessages()
-    override fun channelForPins(channelId: Long) = StoreStream.getChannels().getChannel(channelId)
-    override fun jumpToPinnedMessage(channelId: Long, messageId: Long) {
-        childFragmentManager.popBackStack()
-        StoreStream.getMessagesLoader().jumpToMessage(channelId, messageId)
-    }
-    private fun openPins(channelId: Long) {
-        if (!isAdded || view == null || childFragmentManager.isStateSaved) return
-        val overlay = requireView().findViewById<View>(R.id.widget_home_panel_center_overlay)
-        panels.closePanels()
-        overlay.visibility = View.VISIBLE
-        overlay.bringToFront()
-        childFragmentManager.commit {
-            replace(R.id.widget_home_panel_center_overlay, WidgetChannelPinnedMessages.newInstance(channelId))
-            addToBackStack("pins")
         }
     }
 

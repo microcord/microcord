@@ -42,9 +42,11 @@ class WidgetGroupInviteFriendsAdapter(
             binding.friendsListItemName.text = data.user?.username
             binding.friendsListItemStatus.setPresence(data.presence)
             binding.userSelectedCheckbox.isChecked = data.isSelected
+            binding.userSelectedCheckbox.contentDescription = data.user?.username
             binding.friendContainer.setOnClickListener {
                 data.user?.let { adapter.listener?.invoke(it, !data.isSelected) }
             }
+            binding.friendContainer.contentDescription = data.user?.username
             PresenceUtils.setPresenceText(
                 data.presence,
                 data.isApplicationStreaming,

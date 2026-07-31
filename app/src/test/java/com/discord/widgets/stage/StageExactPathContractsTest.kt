@@ -3,16 +3,21 @@ package com.discord.widgets.stage
 import com.discord.api.channel.Channel
 import com.discord.api.stageinstance.StageInstance
 import com.discord.api.stageinstance.StageInstancePrivacyLevel
+import com.discord.restapi.RestAPIInterface
+import com.discord.restapi.RestAPIParams
+import com.discord.utilities.rest.RestAPI
 import com.discord.widgets.stage.model.AnalyticsDiscoverySource
 import com.discord.widgets.stage.model.AnalyticsDiscoverySourceValues
 import com.discord.widgets.stage.model.StageChannel
 import com.discord.widgets.stage.settings.LiveStageNotificationBadgeTooltip
 import java.io.File
+import java.lang.reflect.Proxy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import rx.Observable
 
 class StageExactPathContractsTest {
     @Test
@@ -73,6 +78,40 @@ class StageExactPathContractsTest {
         )
         assertEquals("LIVE_STAGE_NOTIFICATION_BADGE", LiveStageNotificationBadgeTooltip.tooltipName)
     }
+
+    @Test
+    fun suppressingSelfUsesTheNullSerializingVoiceStateClient() {
+        val original = RestAPI.apiOrNull
+        val originalSerializeNulls = runCatching { RestAPI.apiSerializeNulls }.getOrNull()
+        val calls = mutableListOf<Pair<String, Array<out Any?>>>()
+        val ordinary = recordingApi("ordinary", calls)
+        val serializeNulls = recordingApi("serializeNulls", calls)
+        try {
+            RestAPI.install(ordinary, serializeNulls)
+
+            StageChannelAPI.setUserSuppressedInChannel(channel(), 7L, true, meId = 7L)
+            StageChannelAPI.setUserSuppressedInChannel(channel(), 8L, false, meId = 7L)
+
+            assertEquals(listOf("serializeNulls:updateMyVoiceStates", "ordinary:updateUserVoiceStates"), calls.map { it.first })
+            val selfBody = calls[0].second.last() as RestAPIParams.ChannelVoiceStateUpdate
+            assertEquals(true, selfBody.suppress)
+            assertEquals(null, selfBody.requestToSpeakTimestamp)
+        } finally {
+            if (original == null) RestAPI.reset()
+            else RestAPI.install(original, originalSerializeNulls ?: original)
+        }
+    }
+
+    private fun recordingApi(
+        name: String,
+        calls: MutableList<Pair<String, Array<out Any?>>>,
+    ) = Proxy.newProxyInstance(
+        RestAPIInterface::class.java.classLoader,
+        arrayOf(RestAPIInterface::class.java),
+    ) { _, method, args ->
+        calls += "$name:${method.name}" to args.orEmpty()
+        Observable.just(null)
+    } as RestAPIInterface
 
     private fun channel() = Channel(
         topic = null,

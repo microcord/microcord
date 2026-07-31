@@ -4,14 +4,17 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
+import android.os.Bundle
 import android.view.MotionEvent
 import android.view.View
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.cardview.widget.CardView
 import androidx.core.widget.doAfterTextChanged
 import com.discord.R
 import com.discord.app.AppFragment
+import com.discord.app.MediaPickerRequest
 import com.discord.app.AppScreenRouter
 import com.discord.app.AppToast
 import com.discord.app.appViewModels
@@ -29,15 +32,24 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import java.util.concurrent.atomic.AtomicBoolean
+import java.io.Serializable
 
 class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_user_profile) {
     private val guildId: Long? get() = arguments?.takeIf { it.containsKey(EXTRA_GUILD_ID) }?.getLong(EXTRA_GUILD_ID)
     private val viewModel: SettingsUserProfileViewModel by appViewModels { SettingsUserProfileViewModel(guildId) }
     private val discardConfirmed = AtomicBoolean()
 
+    private val chooserResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        handleMediaPickerActivityResult(MediaPickerRequest.CHOOSER.requestCode, result.resultCode, result.data)
+    }
+    private val cropResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        handleMediaPickerActivityResult(MediaPickerRequest.CROP.requestCode, result.resultCode, result.data)
+    }
+
     private var bindingText = false
-    private var imageSelectedResult: (String) -> Unit = {}
-    private var bannerSelectedResult: (String) -> Unit = {}
+    private var uploadTarget: UploadTarget? = null
+    private var avatarSelection: SelectedImage? = null
+    private var bannerSelection: SelectedImage? = null
     private var avatarColorHex = DEFAULT_BANNER_COLOR
 
     private lateinit var root: TouchInterceptingCoordinatorLayout
@@ -55,6 +67,35 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
     private lateinit var bioEditorWrap: TextInputLayout
     private lateinit var save: FloatingActionButton
     private lateinit var dimmer: DimmerView
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        uploadTarget = savedInstanceState?.getSerializable(STATE_UPLOAD_TARGET) as? UploadTarget
+        avatarSelection = savedInstanceState?.getSerializable(STATE_AVATAR_SELECTION) as? SelectedImage
+        bannerSelection = savedInstanceState?.getSerializable(STATE_BANNER_SELECTION) as? SelectedImage
+        super.onViewCreated(view, savedInstanceState)
+        val draft = savedInstanceState?.getSerializable(STATE_DRAFT) as? SettingsUserProfileViewModel.Draft
+        draft?.let(viewModel::restoreDraft)
+        avatarSelection?.let { restoreSelection(it, UploadTarget.AVATAR, draft) }
+        bannerSelection?.let { restoreSelection(it, UploadTarget.BANNER, viewModel.draft() ?: draft) }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        viewModel.draft()?.let { draft ->
+            val avatarPending = draft.avatar is com.discord.nullserializable.NullSerializable.Value
+            val bannerPending = draft.banner is com.discord.nullserializable.NullSerializable.Value
+            outState.putSerializable(
+                STATE_DRAFT,
+                draft.copy(
+                    avatar = if (avatarPending) null else draft.avatar,
+                    banner = if (bannerPending) null else draft.banner,
+                ),
+            )
+            if (avatarPending) avatarSelection?.let { outState.putSerializable(STATE_AVATAR_SELECTION, it) }
+            if (bannerPending) bannerSelection?.let { outState.putSerializable(STATE_BANNER_SELECTION, it) }
+        }
+        uploadTarget?.let { outState.putSerializable(STATE_UPLOAD_TARGET, it) }
+    }
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -96,6 +137,26 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         root.onInterceptTouchEvent = ::finishBioEditOutside
         header.setOnAvatarRepresentativeColorUpdated { color -> avatarColorHex = colorHex(color) }
         header.setOnBadgeClick(Badge.onBadgeClick(parentFragmentManager, requireContext()))
+        parentFragmentManager.setFragmentResultListener(
+            WidgetEditProfileBannerSheet.REQUEST_KEY,
+            viewLifecycleOwner,
+        ) { _, result ->
+            when (result.getString(WidgetEditProfileBannerSheet.RESULT_ACTION)) {
+                WidgetEditProfileBannerSheet.ACTION_CHANGE_IMAGE -> {
+                    uploadTarget = UploadTarget.BANNER
+                    openProfileMediaChooser()
+                }
+                WidgetEditProfileBannerSheet.ACTION_REMOVE_IMAGE -> {
+                    bannerSelection = null
+                    viewModel.updateBannerImage(null)
+                }
+                WidgetEditProfileBannerSheet.ACTION_COLOR -> viewModel.updateBannerColor(
+                    result.takeIf { it.getBoolean(WidgetEditProfileBannerSheet.RESULT_HAS_COLOR) }
+                        ?.getInt(WidgetEditProfileBannerSheet.RESULT_COLOR)
+                        ?.let(::colorHex),
+                )
+            }
+        }
     }
 
     override fun onViewBoundOrOnResume() {
@@ -170,22 +231,31 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
     private fun configureAvatar(state: SettingsUserProfileViewModel.ViewState.Loaded) {
         header.setOnAvatarEdit {
             val options = buildList {
-                add(getString(if (state.meMember == null) R.string.change_avatar else R.string.change_guild_member_avatar))
+                add(
+                    getString(
+                        when {
+                            state.meMember != null && state.hasAvatarForDisplay -> R.string.change_guild_member_avatar
+                            state.meMember != null -> R.string.upload_guild_member_avatar
+                            state.hasAvatarForDisplay -> R.string.user_settings_change_avatar
+                            else -> R.string.user_settings_upload_avatar
+                        },
+                    ),
+                )
                 if (state.hasAvatarForDisplay) {
-                    add(getString(if (state.meMember == null) R.string.user_settings_remove_avatar else R.string.guild_identity_delete_avatar))
+                    add(
+                        getString(
+                            if (state.meMember == null) R.string.user_settings_remove_avatar
+                            else R.string.change_identity_modal_reset_primary_avatar,
+                        ),
+                    )
                 }
             }
             AlertDialog.Builder(requireContext()).setItems(options.toTypedArray()) { _, index ->
                 if (index == 0) {
-                    imageSelectedResult = { data ->
-                        if (!state.canHaveAnimatedAvatars && data.startsWith("data:image/gif")) {
-                            AppToast.show(this, R.string.premium_required)
-                        } else {
-                            viewModel.updateAvatar(data)
-                        }
-                    }
-                    openMediaChooser()
+                    uploadTarget = UploadTarget.AVATAR
+                    openProfileMediaChooser()
                 } else {
+                    avatarSelection = null
                     viewModel.updateAvatar(null)
                 }
             }.show()
@@ -193,19 +263,12 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
     }
 
     private fun configureBanner(state: SettingsUserProfileViewModel.ViewState.Loaded) {
-        bannerSelectedResult = viewModel::updateBannerImage
         WidgetEditProfileBannerSheet.show(
             guildId = guildId,
             defaultBannerColorHex = avatarColorHex,
             initialColorPreviewHex = state.nonDefaultColorPreviewHex,
             hasBannerImage = state.hasBannerImageForDisplay,
             fragmentManager = parentFragmentManager,
-            onChangeProfileBannerImage = {
-                imageSelectedResult = bannerSelectedResult
-                openMediaChooser()
-            },
-            onRemoveProfileBannerImage = { viewModel.updateBannerImage(null) },
-            onColorSelected = { color -> viewModel.updateBannerColor(color?.let(::colorHex)) },
         )
     }
 
@@ -247,21 +310,26 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
     }
 
     override fun onImageChosen(uri: Uri, mimeType: String) {
+        val target = uploadTarget ?: return
         if (!mimeType.startsWith("image")) {
-            AppToast.show(this, R.string.upload_area_invalid_file_type_help)
+            uploadTarget = null
+            AppToast.show(this, R.string.user_settings_image_upload_filetype_error)
         } else if (mimeType == "image/gif") {
             val size = runCatching { requireContext().contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } }
                 .getOrNull() ?: -1L
             if (size >= MAX_BANNER_FILE_SIZE_MB * 1024L * 1024L) {
+                uploadTarget = null
                 AppToast.show(
                     this,
-                    getString(R.string.upload_area_too_large_help).replace("{maxSize}", "$MAX_BANNER_FILE_SIZE_MB MB"),
+                    getString(R.string.user_settings_image_upload_file_too_large)
+                        .replace("{maxFileSizeMB}", MAX_BANNER_FILE_SIZE_MB.toString()),
                 )
             } else {
-                MGImages.requestDataUrl(context, uri, mimeType, imageSelectedResult)
+                val stableUri = copyToLocalFile(uri) ?: return
+                requestDataUrl(stableUri, mimeType, target)
             }
         } else {
-            val banner = imageSelectedResult === bannerSelectedResult
+            val banner = target == UploadTarget.BANNER
             MediaPicker.requestImageCrop(
                 mediaPickerProvider(),
                 uri,
@@ -269,20 +337,103 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
                 aspectRatioX = if (banner) 5f else 1f,
                 aspectRatioY = if (banner) 2f else 1f,
                 maxOutputDimensionPx = if (banner) MAX_BANNER_IMAGE_SIZE else MAX_AVATAR_SIZE,
+                onError = {
+                    uploadTarget = null
+                    AppToast.show(this, R.string.default_failure_to_perform_action_message)
+                },
             )
         }
     }
 
     override fun onImageCropped(uri: Uri, mimeType: String) {
-        MGImages.requestDataUrl(context, uri, mimeType, imageSelectedResult)
+        uploadTarget?.let { requestDataUrl(uri, "image/png", it) }
+    }
+
+    private fun requestDataUrl(uri: Uri, mimeType: String, target: UploadTarget) {
+        MGImages.requestDataUrl(
+            context,
+            uri,
+            mimeType,
+            resultCallback = { data ->
+                when (target) {
+                    UploadTarget.AVATAR -> {
+                        val state = viewModel.viewState as? SettingsUserProfileViewModel.ViewState.Loaded
+                        if (data.startsWith("data:image/gif") && state?.canHaveAnimatedAvatars != true) {
+                            AppToast.show(this, R.string.premium_required)
+                        } else {
+                            avatarSelection = SelectedImage(uri.toString(), mimeType)
+                            viewModel.updateAvatar(data)
+                        }
+                    }
+                    UploadTarget.BANNER -> {
+                        bannerSelection = SelectedImage(uri.toString(), mimeType)
+                        viewModel.updateBannerImage(data)
+                    }
+                }
+                uploadTarget = null
+            },
+            onError = {
+                uploadTarget = null
+                AppToast.show(this, R.string.default_failure_to_perform_action_message)
+            },
+        )
+    }
+
+    private fun restoreSelection(
+        selection: SelectedImage,
+        target: UploadTarget,
+        draft: SettingsUserProfileViewModel.Draft?,
+    ) {
+        val base = draft ?: return
+        MGImages.requestDataUrl(
+            context,
+            Uri.parse(selection.uri),
+            selection.mimeType,
+            resultCallback = { data ->
+                viewModel.restoreDraft(
+                    when (target) {
+                        UploadTarget.AVATAR -> base.copy(avatar = com.discord.nullserializable.NullSerializable.Value(data))
+                        UploadTarget.BANNER -> base.copy(banner = com.discord.nullserializable.NullSerializable.Value(data))
+                    },
+                )
+            },
+            onError = { AppToast.show(this, R.string.default_failure_to_perform_action_message) },
+        )
+    }
+
+    private fun copyToLocalFile(uri: Uri): Uri? = runCatching {
+        val file = imageFile
+        requireContext().contentResolver.openInputStream(uri)?.use { input ->
+            file.outputStream().use(input::copyTo)
+        } ?: error("Unable to open selected image")
+        Uri.fromFile(file)
+    }.getOrElse {
+        uploadTarget = null
+        AppToast.show(this, R.string.default_failure_to_perform_action_message)
+        null
+    }
+
+    private fun openProfileMediaChooser() {
+        requestMedia {
+            MediaPicker.openMediaChooser(
+                mediaPickerProvider(),
+                getString(R.string.choose_an_application),
+                "image/*",
+            ) {
+                uploadTarget = null
+                AppToast.show(this, R.string.default_failure_to_perform_action_message)
+            }
+        }
     }
 
     private fun mediaPickerProvider() = object : MediaPicker.Provider {
         override fun requireContext() = this@WidgetEditUserOrGuildMemberProfile.requireContext()
         override fun getImageFile() = imageFile
-        @Suppress("DEPRECATION")
-        override fun startActivityForResult(intent: Intent, requestCode: Int) =
-            this@WidgetEditUserOrGuildMemberProfile.startActivityForResult(intent, requestCode)
+        override fun startActivityForResult(intent: Intent, requestCode: Int) = when (requestCode) {
+            MediaPickerRequest.CHOOSER.requestCode -> chooserResult.launch(intent)
+            MediaPickerRequest.CROP.requestCode -> cropResult.launch(intent)
+            else -> error("Unsupported profile media request code: $requestCode")
+        }
     }
 
     companion object {
@@ -291,6 +442,10 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         const val MAX_BANNER_IMAGE_SIZE = 1080
         private const val EXTRA_GUILD_ID = "com.discord.intent.extra.EXTRA_GUILD_ID"
         private const val DEFAULT_BANNER_COLOR = "#000000"
+        private const val STATE_DRAFT = "profile_draft"
+        private const val STATE_UPLOAD_TARGET = "profile_upload_target"
+        private const val STATE_AVATAR_SELECTION = "profile_avatar_selection"
+        private const val STATE_BANNER_SELECTION = "profile_banner_selection"
 
         fun launch(context: Context, guildId: Long? = null) {
             val extras = Intent().apply { guildId?.let { putExtra(EXTRA_GUILD_ID, it) } }
@@ -300,4 +455,7 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         private fun visible(value: Boolean) = if (value) View.VISIBLE else View.GONE
         private fun colorHex(color: Int) = String.format("#%06X", color and 0xFFFFFF)
     }
+
+    private enum class UploadTarget : Serializable { AVATAR, BANNER }
+    private data class SelectedImage(val uri: String, val mimeType: String) : Serializable
 }

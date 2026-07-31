@@ -8,6 +8,7 @@ import android.os.Build
 import android.view.View
 import com.discord.R
 import com.discord.app.AppDialog
+import com.discord.stores.StoreNotices
 import com.discord.stores.StoreStream
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
@@ -15,7 +16,11 @@ import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.takeSingleUntilTimeout
 import com.discord.utilities.rx.ui
+import com.discord.utilities.time.Clock
+import com.discord.utilities.time.ClockFactory
+import com.discord.utilities.user.UserUtils.getAgeMs
 import com.google.android.material.button.MaterialButton
+import rx.Observable
 
 /**
  * Offers to link the account to Samsung's Game Tools / Game Home integration.
@@ -33,12 +38,12 @@ class WidgetNoticeNuxSamsungLink : AppDialog(R.layout.widget_notice_nux_samsung_
         super.onViewBound(view)
         StoreStream.getNotices().markDialogSeen(NOTICE_NAME)
 
-        RestAPI.apiOrNull?.getOAuthTokens()
-            ?.restSubscribeOn()
-            ?.computationLatest()
-            ?.takeSingleUntilTimeout(emitError = false)
-            ?.ui(this)
-            ?.appSubscribe(WidgetNoticeNuxSamsungLink::class.java) { authorizedApps ->
+        RestAPI.api.getOAuthTokens()
+            .restSubscribeOn()
+            .computationLatest()
+            .takeSingleUntilTimeout(emitError = false)
+            .ui(this)
+            .appSubscribe(WidgetNoticeNuxSamsungLink::class.java) { authorizedApps ->
                 val alreadyLinked = authorizedApps.any { it.application.id.toString() == SAMSUNG_APPLICATION_ID }
                 if (alreadyLinked) dismiss()
             }
@@ -59,6 +64,7 @@ class WidgetNoticeNuxSamsungLink : AppDialog(R.layout.widget_notice_nux_samsung_
 
         private const val OAUTH_AUTHORIZE_URI = "discord://action/oauth2/authorize"
         private const val SAMSUNG_SCOPES = "identify activities.read activities.write"
+        private const val EXISTING_ACCOUNT_AGE_MS = 2_419_200_000L
 
         private val SAMSUNG_GAME_PACKAGES = listOf(
             "com.samsung.android.game.gametools",
@@ -84,6 +90,44 @@ class WidgetNoticeNuxSamsungLink : AppDialog(R.layout.widget_notice_nux_samsung_
             val isSupportedSamsung = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
                 Build.MANUFACTURER.equals("samsung", ignoreCase = true)
             return isSupportedSamsung && SAMSUNG_GAME_PACKAGES.any { context.isPackageInstalled(it) }
+        }
+
+        @JvmStatic
+        @JvmOverloads
+        fun enqueue(context: Context, clock: Clock = ClockFactory.get()) {
+            if (!isEligible(context)) return
+            Observable.combineLatest(
+                StoreStream.getAuthentication().observeIsAuthed(),
+                StoreStream.getUsers().observeMe(emitEmpty = true),
+            ) { isAuthed, me -> isAuthed to me }
+                .takeSingleUntilTimeout()
+                .computationLatest()
+                .appSubscribe(WidgetNoticeNuxSamsungLink::class.java) { (isAuthed, me) ->
+                    if (!isAuthed) StoreStream.getNotices().markSeen(NOTICE_NAME)
+                    if (isAccountOldEnough(me.getAgeMs(clock))) internalEnqueue()
+                }
+        }
+
+        internal fun isAccountOldEnough(ageMs: Long): Boolean = ageMs > EXISTING_ACCOUNT_AGE_MS
+
+        private fun internalEnqueue() {
+            StoreStream.getNotices().requestToShow(
+                StoreNotices.Notice(
+                    name = NOTICE_NAME,
+                    priority = StoreNotices.PRIORITY_HIGH,
+                    persist = true,
+                    validScreens = null,
+                    delayPeriodMs = 0L,
+                    sinceLastPeriodMs = Long.MAX_VALUE,
+                    show = { activity ->
+                        WidgetNoticeNuxSamsungLink().show(
+                            activity.supportFragmentManager,
+                            WidgetNoticeNuxSamsungLink::class.java.name,
+                        )
+                        true
+                    },
+                ),
+            )
         }
 
         @Suppress("DEPRECATION")

@@ -27,6 +27,9 @@ object AppScreenRouter {
     /** Marks an intent as an activity restart triggered by a settings change, not by the user. */
     const val EXTRA_RECREATE = "com.discord.intent.extra.EXTRA_RECREATE"
 
+    /** Optional activity transition override used by screen routes. */
+    const val EXTRA_TRANSITION = "transition"
+
     /**
      * Builds the intent that opens [screen] inside [AppActivity].
      *
@@ -50,8 +53,15 @@ object AppScreenRouter {
     }
 
     /** Opens [screen] inside [AppActivity]. */
-    fun launch(context: Context, screen: Class<out Fragment>, extras: Intent? = null) {
-        context.startActivity(createScreenIntent(context, screen, extras))
+    fun launch(
+        context: Context,
+        screen: Class<out Fragment>,
+        extras: Intent? = null,
+        transition: AppTransitionActivity.Transition? = null,
+    ) {
+        val intent = createScreenIntent(context, screen, extras)
+        if (transition != null) intent.putExtra(EXTRA_TRANSITION, transition)
+        context.startActivity(intent)
     }
 
     /** Opens [screen] and routes its activity result back through [launcher]. */

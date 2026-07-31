@@ -38,7 +38,13 @@ class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRe
     }
 
     @MainThread
-    override fun hasMedia(): Boolean = hasPermissions(mediaPermissions())
+    override fun hasMedia(): Boolean = hasPermissions(mediaPermissions(Build.VERSION.SDK_INT))
+
+    @MainThread
+    override fun hasGallery(): Boolean = hasPermissions(galleryPermissions(Build.VERSION.SDK_INT))
+
+    @MainThread
+    override fun hasCamera(): Boolean = hasPermissions(cameraPermissions(Build.VERSION.SDK_INT))
 
     @MainThread
     override fun requestVideoCallPermissions(onSuccess: () -> Unit) {
@@ -52,12 +58,22 @@ class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRe
 
     @MainThread
     override fun requestMedia(onSuccess: () -> Unit) {
-        request(mediaPermissions(), onSuccess) { toast(R.string.permission_media_denied) }
+        request(mediaPermissions(Build.VERSION.SDK_INT), onSuccess) { toast(R.string.permission_media_denied) }
+    }
+
+    @MainThread
+    override fun requestGallery(onSuccess: () -> Unit) {
+        request(galleryPermissions(Build.VERSION.SDK_INT), onSuccess) { toast(R.string.permission_media_denied) }
+    }
+
+    @MainThread
+    override fun requestCamera(onSuccess: () -> Unit) {
+        request(cameraPermissions(Build.VERSION.SDK_INT), onSuccess) { toast(R.string.no_camera_access) }
     }
 
     @MainThread
     override fun requestMediaDownload(onSuccess: () -> Unit) {
-        request(MEDIA_DOWNLOAD, onSuccess) { toast(R.string.permission_media_download_denied) }
+        onSuccess()
     }
 
     @MainThread
@@ -107,18 +123,8 @@ class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRe
         launcher.launch(permissions)
     }
 
-    private fun hasPermissions(permissions: Array<String>): Boolean = permissions.all { permission ->
-        // Legacy external storage writes stopped being a runtime permission with scoped storage.
-        if (permission == Manifest.permission.WRITE_EXTERNAL_STORAGE && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            return@all true
-        }
-        ContextCompat.checkSelfPermission(activity, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun mediaPermissions(): Array<String> = when {
-        Build.VERSION.SDK_INT >= 33 -> arrayOf(Manifest.permission.CAMERA)
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> MEDIA_SCOPED
-        else -> MEDIA_LEGACY
+    private fun hasPermissions(permissions: Array<String>): Boolean = permissions.all {
+        ContextCompat.checkSelfPermission(activity, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }
 
     private val toastManager = ToastManager()
@@ -127,23 +133,28 @@ class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRe
         toastManager.show(activity, messageResId)
     }
 
-    private companion object {
+    internal companion object {
         /** Guards against a double tap enqueueing two system permission dialogs. */
         const val REQUEST_DEBOUNCE_MILLIS = 350L
 
         val MICROPHONE = arrayOf(Manifest.permission.RECORD_AUDIO)
         val VIDEO_CALL = arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
-        val MEDIA_LEGACY = arrayOf(
-            Manifest.permission.CAMERA,
-            Manifest.permission.READ_EXTERNAL_STORAGE,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE,
-        )
-        val MEDIA_SCOPED = arrayOf(
-            Manifest.permission.CAMERA,
-            Manifest.permission.READ_EXTERNAL_STORAGE,
-        )
-        val MEDIA_DOWNLOAD = arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         val CAMERA = arrayOf(Manifest.permission.CAMERA)
         val CONTACTS = arrayOf(Manifest.permission.READ_CONTACTS)
+
+        fun galleryPermissions(sdkInt: Int): Array<String> = when {
+            sdkInt >= Build.VERSION_CODES.TIRAMISU -> arrayOf(
+                Manifest.permission.READ_MEDIA_IMAGES,
+                Manifest.permission.READ_MEDIA_VIDEO,
+            )
+            sdkInt >= Build.VERSION_CODES.M -> arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+            else -> emptyArray()
+        }
+
+        fun cameraPermissions(sdkInt: Int): Array<String> =
+            if (sdkInt >= Build.VERSION_CODES.M) CAMERA else emptyArray()
+
+        fun mediaPermissions(sdkInt: Int): Array<String> =
+            galleryPermissions(sdkInt) + cameraPermissions(sdkInt)
     }
 }

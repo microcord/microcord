@@ -2,6 +2,9 @@ package com.discord.utilities.messagesend
 
 import com.discord.api.message.Message as ApiMessage
 import com.discord.api.message.MessageReference
+import com.discord.api.sticker.Sticker
+import com.discord.api.sticker.StickerFormatType
+import com.discord.api.sticker.StickerType
 import com.discord.api.user.User
 import com.discord.models.commands.Application
 import com.discord.models.commands.ApplicationCommandLocalSendData
@@ -26,12 +29,14 @@ import rx.schedulers.TestScheduler
 class MessageSendCoordinatorTest {
 
     private val restApi = RecordingRestApi()
+    private val reactNativeApi = RecordingRestApi()
     private val timerScheduler = TestScheduler()
     private var now = 1_700_000_000_000L
     private val updates = mutableListOf<MessageSendCoordinator.Update>()
 
     private val coordinator = MessageSendCoordinator(
         api = restApi.api,
+        reactNativeApi = reactNativeApi.api,
         now = { now },
         contentResolver = null,
         queueExecutor = DirectExecutorService(),
@@ -229,6 +234,33 @@ class MessageSendCoordinatorTest {
         // A text-only send never preprocesses attachments, so the upload stream stays silent.
         assertTrue(events.isEmpty())
         assertNull(updates.filterIsInstance<MessageSendCoordinator.Update.Failed>().firstOrNull())
+    }
+
+    @Test
+    fun `sticker only send is accepted and uses react native metadata client`() {
+        val sticker = Sticker(
+            id = 99L,
+            packId = 7L,
+            guildId = null,
+            name = "wave",
+            description = "",
+            formatType = StickerFormatType.PNG,
+            tags = "wave",
+            type = StickerType.STANDARD,
+        )
+
+        val submission = coordinator.send(
+            MessageSendCoordinator.Send(
+                channelId = CHANNEL_ID,
+                content = "",
+                author = User(7L, "me"),
+                stickers = listOf(sticker),
+            ),
+        )
+
+        assertTrue(submission is MessageSendCoordinator.Submission.Accepted)
+        assertTrue(restApi.sendCalls.isEmpty())
+        assertEquals(listOf(99L), reactNativeApi.sendCalls.single().body?.stickerIds)
     }
 
     @Test

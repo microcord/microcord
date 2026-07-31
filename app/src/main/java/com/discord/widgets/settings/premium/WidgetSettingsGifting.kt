@@ -18,6 +18,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.billing.InAppSkuConfig
 import com.discord.utilities.billing.premiumGifts
 import com.discord.utilities.gifting.GiftingUtils
+import com.discord.utilities.premium.BlockRussianPurchasesUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
@@ -146,6 +147,10 @@ class WidgetSettingsGifting : AppFragment(R.layout.widget_settings_gifting) {
         private const val VIEW_LOADING = 0
         private const val VIEW_FAILURE = 1
         private const val VIEW_LOADED = 2
-        fun launch(context: Context) = AppScreenRouter.launch(context, WidgetSettingsGifting::class.java)
+        fun launch(context: Context) {
+            if (!BlockRussianPurchasesUtils.showDialog()) {
+                AppScreenRouter.launch(context, WidgetSettingsGifting::class.java)
+            }
+        }
     }
 }

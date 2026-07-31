@@ -12,8 +12,7 @@ import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
-import com.discord.utilities.user.UserUtils.getUserNameWithDiscriminator
-import com.discord.views.ThemedColor
+import com.discord.widgets.user.getSpannableForUserNameWithDiscrim
 import com.facebook.drawee.view.SimpleDraweeView
 
 /**
@@ -76,12 +75,17 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
             url = IconUtils.getForUser(state.user, allowAnimation = true),
             changeDetector = avatarChangeDetector,
         )
-        // A guild nickname replaces the username entirely; the discriminator is always shown, muted
-        // and at the same size, which is what the reference's UserNameFormatter produces.
-        val discriminated = state.user.getUserNameWithDiscriminator(
-            discriminatorColor = ThemedColor.resolve(requireContext(), R.attr.colorTextMuted),
+        userName.text = getSpannableForUserNameWithDiscrim(
+            user = state.user,
+            nickname = state.userNickname,
+            context = requireContext(),
+            primaryColorRes = R.attr.colorHeaderPrimary,
+            primaryFont = R.attr.font_primary_semibold,
+            primaryTextSizeSp = R.integer.uikit_textsize_large_sp,
+            secondaryColorRes = R.attr.colorTextMuted,
+            secondaryFont = R.attr.font_primary_normal,
+            secondaryTextSizeSp = R.integer.uikit_textsize_large_sp,
         )
-        userName.text = state.userNickname ?: discriminated
 
         blockItem.visibility = if (state.showBlockItem) View.VISIBLE else View.GONE
         unblockItem.visibility = if (state.showUnblockItem) View.VISIBLE else View.GONE

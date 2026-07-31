@@ -13,7 +13,10 @@ import com.discord.app.AppBottomSheet
 import com.discord.chips_view.ChipsView
 import com.discord.databinding.GroupInviteFriendsBottomSheetBinding
 import com.discord.models.user.User
+import com.discord.stores.StoreNavigation
+import com.discord.stores.StoreStream
 import com.discord.utilities.analytics.AnalyticsTracker
+import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
@@ -45,8 +48,20 @@ class GroupInviteFriendsSheet : AppBottomSheet() {
             chipDeletedListener = { it?.modelUser?.let { user -> viewModel.onChangeUserChecked(user, false) } }
             textChangedListener = viewModel::onSearchTextChanged
         }
+        viewModel.restoreState(
+            savedInstanceState?.getLongArray(STATE_SELECTED_IDS),
+            savedInstanceState?.getString(STATE_SEARCH),
+        )
+        binding.saveFab.setOnClickListener { viewModel.submit() }
+        binding.retry.setOnClickListener { viewModel.retry() }
         setBottomSheetCollapsedStateDisabled()
         resizeSheetHeight()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putLongArray(STATE_SELECTED_IDS, viewModel.selectedUserIds())
+        outState.putString(STATE_SEARCH, viewModel.currentSearchText())
+        super.onSaveInstanceState(outState)
     }
 
     override fun onResume() {
@@ -61,8 +76,14 @@ class GroupInviteFriendsSheet : AppBottomSheet() {
     }
 
     private fun handleEvent(event: GroupInviteFriendsSheetViewModel.Event) {
-        if (event === GroupInviteFriendsSheetViewModel.Event.ChannelFull) {
-            Toast.makeText(requireContext(), R.string.group_dm_invite_full_sub, Toast.LENGTH_SHORT).show()
+        when (event) {
+            GroupInviteFriendsSheetViewModel.Event.ChannelFull ->
+                Toast.makeText(requireContext(), R.string.group_dm_invite_full_sub, Toast.LENGTH_SHORT).show()
+            is GroupInviteFriendsSheetViewModel.Event.Completed -> {
+                ChannelSelector.getInstance().selectChannel(0L, event.channel.id)
+                StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE)
+                dismiss()
+            }
         }
     }
 
@@ -71,6 +92,9 @@ class GroupInviteFriendsSheet : AppBottomSheet() {
         adapter.setData(viewState.friendItems)
         if (previousCount < viewState.friendItems.size) binding.recyclerView.smoothScrollToPosition(0)
         binding.searchIcon.isVisible = viewState.showSearchIcon
+        if (viewModel.currentSearchText().isNotEmpty() && binding.chipsView.text.isEmpty()) {
+            binding.chipsView.text = viewModel.currentSearchText()
+        }
         viewState.checkedUsers.forEach { user ->
             binding.chipsView.b(
                 user.username,
@@ -80,6 +104,20 @@ class GroupInviteFriendsSheet : AppBottomSheet() {
             )
         }
         binding.chipsView.d(viewState.checkedUsers.mapTo(HashSet()) { it.id })
+        binding.contentFlipper.displayedChild = when (viewState.status) {
+            GroupInviteFriendsSheetViewModel.Status.READY -> VIEW_INDEX_FRIENDS
+            GroupInviteFriendsSheetViewModel.Status.LOADING,
+            GroupInviteFriendsSheetViewModel.Status.SUBMITTING -> VIEW_INDEX_LOADING
+            GroupInviteFriendsSheetViewModel.Status.EMPTY -> VIEW_INDEX_EMPTY
+            GroupInviteFriendsSheetViewModel.Status.FULL -> VIEW_INDEX_FULL
+            GroupInviteFriendsSheetViewModel.Status.ERROR -> VIEW_INDEX_ERROR
+        }
+        val interactive = viewState.status == GroupInviteFriendsSheetViewModel.Status.READY ||
+            viewState.status == GroupInviteFriendsSheetViewModel.Status.EMPTY ||
+            viewState.status == GroupInviteFriendsSheetViewModel.Status.ERROR
+        binding.chipsView.isEnabled = interactive
+        binding.saveFab.isVisible = viewState.checkedUsers.isNotEmpty()
+        binding.saveFab.isEnabled = viewState.canSubmit
     }
 
     private fun resizeSheetHeight() {
@@ -97,6 +135,13 @@ class GroupInviteFriendsSheet : AppBottomSheet() {
 
     companion object {
         private const val EXTRA_CHANNEL_ID = "com.discord.intent.extra.EXTRA_CHANNEL_ID"
+        private const val STATE_SELECTED_IDS = "selected_user_ids"
+        private const val STATE_SEARCH = "search"
+        private const val VIEW_INDEX_FRIENDS = 0
+        private const val VIEW_INDEX_LOADING = 1
+        private const val VIEW_INDEX_EMPTY = 2
+        private const val VIEW_INDEX_FULL = 3
+        private const val VIEW_INDEX_ERROR = 4
         const val NO_CHANNEL_ID = -1L
         const val BOTTOM_SHEET_HEIGHT_PERCENT = 0.9f
 
