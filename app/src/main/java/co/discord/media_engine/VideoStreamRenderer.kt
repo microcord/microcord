@@ -77,7 +77,8 @@ open class VideoStreamRenderer @JvmOverloads constructor(
             val newSinks = linkedSetOf(this)
             streams[streamId] = newSinks
             setSink(streamId) { frame ->
-                synchronized(newSinks) { newSinks.toList() }.forEach { it.onFrame(frame) }
+                synchronized(newSinks) { newSinks.firstOrNull() }?.onFrame(frame)
+                frame.release()
                 true
             }
         }

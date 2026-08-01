@@ -124,6 +124,7 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
 
     private lateinit var participantsAdapter: CallParticipantsAdapter
     private var viewModelEventSubscription: Subscription? = null
+    private var dismissRequested = false
 
     private lateinit var root: CoordinatorLayout
     private lateinit var headerTitle: TextView
@@ -155,6 +156,7 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
 
     override fun onResume() {
         super.onResume()
+        dismissRequested = false
         participantsAdapter = MGRecyclerAdapter.configure(
             CallParticipantsAdapter(recycler, isCallPreview = false, quantizeUserAvatars = true),
         )
@@ -407,12 +409,12 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
                 // Stop rendering before handing off, or the sheet keeps reacting to state it is
                 // about to stop owning.
                 viewModelEventSubscription?.unsubscribe()
-                dismiss()
+                dismissSheet()
                 WidgetCallFullscreen.launch(requireContext(), event.channelId, streamKey = event.streamKey)
             }
             is WidgetVoiceBottomSheetViewModel.Event.LaunchStageChannel -> {
                 viewModelEventSubscription?.unsubscribe()
-                dismiss()
+                dismissSheet()
                 WidgetCallFullscreen.launch(requireContext(), event.channelId, animate = true)
             }
             is WidgetVoiceBottomSheetViewModel.Event.AccessibilityAnnouncement ->
@@ -420,7 +422,7 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
             is WidgetVoiceBottomSheetViewModel.Event.RequestStartStream -> requestStartStream()
             is WidgetVoiceBottomSheetViewModel.Event.Dismiss -> {
                 viewModelEventSubscription?.unsubscribe()
-                dismiss()
+                dismissSheet()
             }
             is WidgetVoiceBottomSheetViewModel.Event.ExpandSheet ->
                 setBottomSheetState(BottomSheetBehavior.STATE_EXPANDED)
@@ -454,6 +456,12 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
 
     private fun enqueueOverlayNux() {
         WidgetNoticeNuxOverlay.enqueue()
+    }
+
+    private fun dismissSheet() {
+        if (dismissRequested || !isAdded || dialog?.isShowing != true) return
+        dismissRequested = true
+        dismiss()
     }
 
     /**

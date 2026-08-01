@@ -20,7 +20,6 @@ import com.discord.widgets.stage.StageChannelAPI
 import com.discord.widgets.stage.StageChannelJoinHelper
 import com.discord.widgets.stage.start.WidgetModeratorStartStage
 import com.discord.widgets.voice.call.callAndLaunch
-import com.discord.widgets.voice.fullscreen.WidgetGuildCallOnboardingSheet
 import com.discord.widgets.voice.fullscreen.WidgetCallFullscreen
 import com.discord.widgets.voice.sheet.WidgetVoiceBottomSheet
 
@@ -78,9 +77,6 @@ object VoiceUtils {
                 fragmentManager = fragmentManager,
             )
             channel.isStageVoiceChannel() -> handleStageChannel(channel, context, fragmentManager)
-            !WidgetGuildCallOnboardingSheet.hasUserSeenVoiceChannelOnboarding(context) &&
-                StoreStream.getUsers().getMe().isNewUser() ->
-                WidgetGuildCallOnboardingSheet.show(fragmentManager, channel.id)
             else -> showControls(channel, context, fragmentManager)
         }
     }

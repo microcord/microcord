@@ -60,14 +60,17 @@ internal class MediaEngineConnectionLegacy(
     /** Codecs actually in play: `opus` plus whatever video codecs this device offered. */
     private val negotiatedCodecs: MutableList<Codec> = mutableListOf()
 
-    private val connection: Connection = nativeEngine.connectToServer(
-        connectionOptions.ssrc,
-        userId,
-        connectionOptions.ip,
-        connectionOptions.port,
-        connectionOptions.streams.toTypedArray(),
-        { connectionInfo, errorMessage -> onEngineThread { handleConnection(connectionInfo, errorMessage) } },
-    ).apply {
+    private val connection: Connection = nativeEngine.run {
+        Discord.nextConnectionIsStream = type == MediaEngineConnection.Type.STREAM
+        connectToServer(
+            connectionOptions.ssrc,
+            userId,
+            connectionOptions.ip,
+            connectionOptions.port,
+            connectionOptions.streams.toTypedArray(),
+            { connectionInfo, errorMessage -> onEngineThread { handleConnection(connectionInfo, errorMessage) } },
+        )
+    }.apply {
         setOnVideoCallback { videoUserId, ssrc, streamIdentifier, streams ->
             onEngineThread { handleVideo(videoUserId, ssrc, streamIdentifier, streams) }
         }
@@ -319,12 +322,50 @@ internal class MediaEngineConnectionLegacy(
             "profile-level-id" to H264_PROFILE_LEVEL_ID,
         )
         val videoEncoder = VideoEncoder(videoCodec, video.payloadType, videoRtxPayloadType, videoParams)
-        val videoDecoder = VideoDecoder(videoCodec, video.payloadType, videoRtxPayloadType, videoParams)
+        val videoDecoders = negotiatedCodecs.filter { it.type == "video" }.mapNotNull { codec ->
+            codec.rtxPayloadType?.let { VideoDecoder(codec.name, codec.payloadType, it, videoParams.toMutableMap()) }
+        }.toTypedArray()
 
         withConnection {
-            it.setCodecs(audioEncoder, videoEncoder, arrayOf(audioDecoder), arrayOf(videoDecoder))
+            it.setCodecs(audioEncoder, videoEncoder, arrayOf(audioDecoder), videoDecoders)
         }
     }
+
+    // endregion
+
+    // region DAVE
+
+    override fun connectUsers(userIds: List<String>) = withConnection { it.connectUsers(userIds) }
+    override fun destroyUser(userId: String) = withConnection { it.destroyUser(userId) }
+    override fun prepareSecureFramesTransition(
+        transitionId: Int,
+        protocolVersion: Int,
+        callback: () -> Unit,
+    ) = withConnection { it.prepareSecureFramesTransition(transitionId, protocolVersion) { callback() } }
+    override fun executeSecureFramesTransition(transitionId: Int) =
+        withConnection { it.executeSecureFramesTransition(transitionId) }
+    override fun prepareSecureFramesEpoch(epoch: String, transitionId: Int, groupId: String) =
+        withConnection { it.prepareSecureFramesEpoch(epoch, transitionId, groupId) }
+    override fun getMLSKeyPackageB64(callback: (String) -> Unit) =
+        withConnection { it.getMLSKeyPackageB64(callback) }
+    override fun updateMLSExternalSenderB64(externalSender: String) =
+        withConnection { it.updateMLSExternalSenderB64(externalSender) }
+    override fun processMLSProposalsB64(proposals: String, callback: (String) -> Unit) =
+        withConnection { it.processMLSProposalsB64(proposals, callback) }
+    override fun prepareMLSCommitTransitionB64(
+        transitionId: Int,
+        commit: String,
+        callback: (Boolean, Int, String) -> Unit,
+    ) = withConnection { it.prepareMLSCommitTransitionB64(transitionId, commit, callback) }
+    override fun processMLSWelcomeB64(
+        transitionId: Int,
+        welcome: String,
+        callback: (Boolean, Int, String) -> Unit,
+    ) = withConnection { it.processMLSWelcomeB64(transitionId, welcome, callback) }
+    override fun setOnMLSFailureCallback(callback: (String, String) -> Unit) =
+        withConnection { it.setOnMLSFailureCallback(callback) }
+    override fun setSecureFramesStateUpdateCallback(callback: (String) -> Unit) =
+        withConnection { it.setSecureFramesStateUpdateCallback(callback) }
 
     // endregion
 

@@ -522,8 +522,8 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
      */
     private fun showScreen(screen: Class<out Fragment>, intent: Intent) {
         val tag = "screen:${screen.name}"
-        if (supportFragmentManager.findFragmentByTag(tag) != null) return
         binding.appLoading.visibility = View.GONE
+        if (supportFragmentManager.findFragmentByTag(tag) != null) return
         val fragment = supportFragmentManager.fragmentFactory
             .instantiate(classLoader, screen.name)
             .apply { arguments = intent.extras }

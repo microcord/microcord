@@ -18,6 +18,8 @@ import rx.Observable
  * Reference: `com.discord.rtcconnection.mediaengine.MediaEngine`.
  */
 interface MediaEngine {
+    val maxDaveProtocolVersion: Int get() = 0
+
 
     /** The single thread every native call must be made on. */
     val mediaEngineThreadExecutor: MediaEngineThreadExecutor

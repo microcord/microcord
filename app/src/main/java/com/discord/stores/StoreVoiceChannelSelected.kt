@@ -95,7 +95,7 @@ class StoreVoiceChannelSelected(
      */
     fun selectVoiceChannel(channelId: Long): Observable<JoinVoiceChannelResult> {
         val channel = channels.getChannel(channelId)
-        if (channel != null && channel.isStageVoiceChannel()) setAudioInputEnabled(false)
+        setAudioInputEnabled(channel?.isStageVoiceChannel() != true)
         val resultSubject = PublishSubject.create<JoinVoiceChannelResult>()
         dispatcher.schedule {
             resultSubject.onNext(selectVoiceChannelInternal(channelId, forceMoved = false))
@@ -104,7 +104,10 @@ class StoreVoiceChannelSelected(
         return resultSubject
     }
 
-    fun clear() = dispatcher.schedule { clearInternal() }
+    fun clear() {
+        setAudioInputEnabled(true)
+        dispatcher.schedule { clearInternal() }
+    }
 
     // -- Handlers -------------------------------------------------------------------------------
 

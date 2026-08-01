@@ -38,7 +38,7 @@ import com.discord.stores.StoreMediaSettings
 import com.discord.stores.StoreMentions
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StorePermissions
-import com.discord.stores.ResolutionType
+import com.discord.rtcconnection.socket.io.Payloads.ResolutionType
 import com.discord.stores.StoreStageChannels
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreStreamRtcConnection

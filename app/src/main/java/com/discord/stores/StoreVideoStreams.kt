@@ -1,6 +1,7 @@
 package com.discord.stores
 
 import com.discord.api.voice.state.VoiceState
+import com.discord.rtcconnection.VideoMetadata
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
 import rx.Observable

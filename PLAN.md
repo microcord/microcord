@@ -1509,3 +1509,47 @@ Resumable task: `app/src/main/java/com/discord/rtcconnection/RtcConnection.kt` |
 `voice/src/main/java/com/hammerandchisel/libdiscord/Discord.kt` | install the successful debug APK,
 join a video-capable voice channel, and confirm `DaveWebSocket -> OUT SELECT_PROTOCOL` carries the
 device-reported ranked codec list.
+
+## 2026-08-02 voice and screenshare runtime fixes
+
+- Removed the second native engine previously installed by `VoiceEngineServiceController`; voice
+  and Go Live now share `VoiceTransport`'s single engine. DAVE calls are forwarded through
+  `MediaEngineConnectionLegacy -> co.discord.media_engine.Connection -> NativeConnection`, matching
+  PR 752. Live verification confirmed incoming voice works after this consolidation.
+- Restored outgoing speaking signaling by subscribing to the engine-wide local VAD callback and
+  sending opcode 5 transitions with the READY audio SSRC. This matches the loaded modern Discord
+  APK's `MediaEngine.setOnVoiceCallback` flow.
+- Fixed `WidgetCallFullscreen` binding the nonexistent `private_call_container`; the include
+  overrides that root ID with `private_call`. The fresh device run no longer crashed opening the
+  fullscreen/screenshare flow.
+- Media-projection permission is now retained by the stream controller and applied from its
+  `RtcConnected` callback. The loaded modern Discord APK follows the same ordering: permission is
+  stored by its activity-result listener, then `connectionInstanceStartBroadcast` is called after
+  the stream connection exists.
+- `RtcVoiceGatewayV8Test`, `ScreenShareManagerTest`, and `:app:assembleDebug` pass. Final live
+  verification of outgoing voice and screenshare is pending because device `188b1209` disconnected
+  before the new APK could be installed.
+
+Resumable task: `app/src/main/java/com/discord/rtcconnection/VoiceTransport.kt` | loaded modern APK
+`com.discord.media.engine.MediaEngineModule` and PR 752 `VoiceChatFix.kt` | reconnect device
+`188b1209`, install `app/build/outputs/apk/debug/app-debug.apk`, verify `OUT SPEAKING` changes to 1
+while talking and logs contain `Setting screenshare true` followed by nonzero outbound video SSRC.
+
+## 2026-08-02 voice/media parity closure
+
+- Root cause of the remaining outbound failures was native context aliasing: voice and the first
+  stream both used context `stream`, so watching a stream replaced the voice/camera sender. Voice now
+  uses `default`; stream connections retain `stream`/`stream-<ssrc>`. Device verification confirmed
+  outgoing/incoming voice, camera, screenshare, and remote stream playback coexist.
+- Completed the original app's video path: RTC callbacks update `StoreVideoStreams`, renderers attach
+  through the live `StoreMediaEngine` sink on the main thread, and callback-owned frames are released.
+- Active-path codec payloads now carry native encode/decode capabilities and all decodable video
+  codecs are installed as native decoders. DAVE capability/failure/state callbacks run on the same
+  shared media connection used by voice and streams.
+- Rotation no longer exposes the boot diagnostics overlay: restored direct-screen fragments now hide
+  `appLoading` before `showScreen` returns early. Device rotation over a remote screenshare passed.
+- Removed the voice-channel onboarding sheet launch. Camera enumeration now preserves known devices
+  across transient empty callbacks while switching/focusing stream transports, preventing the camera
+  button from disappearing.
+- Focused gateway/video/store tests and `:app:assembleDebug` pass; latest debug APK was installed on
+  device `188b1209`.

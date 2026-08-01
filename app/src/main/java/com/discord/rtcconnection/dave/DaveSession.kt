@@ -1,5 +1,6 @@
 package com.discord.rtcconnection.dave
 
+import com.discord.app.AppLog
 import com.discord.rtcconnection.socket.io.Opcodes
 import com.google.gson.annotations.SerializedName
 
@@ -47,6 +48,7 @@ internal class DaveSession(
     }
 
     fun onProtocolSelected(protocolVersion: Int) {
+        AppLog.d(TAG, "protocol selected version=$protocolVersion")
         listener.onDaveProtocolVersion(protocolVersion)
         if (protocolVersion < 1) {
             pendingEpoch = null
@@ -58,6 +60,7 @@ internal class DaveSession(
     }
 
     fun onExternalSender(payload: ByteArray) {
+        AppLog.d(TAG, "external sender received bytes=${payload.size}")
         listener.onDaveExternalSender(payload.copyOf())
         externalSenderReceived = true
         preparePendingEpoch()
@@ -69,6 +72,7 @@ internal class DaveSession(
     }
 
     fun onProposals(payload: ByteArray) {
+        AppLog.d(TAG, "proposals received bytes=${payload.size} epochPrepared=$epochPrepared")
         if (!epochPrepared) {
             pendingProposals += payload.copyOf()
             return
@@ -77,22 +81,27 @@ internal class DaveSession(
     }
 
     fun onAnnounceCommitTransition(transitionId: Int, commit: ByteArray) {
+        AppLog.d(TAG, "commit transition announced id=$transitionId bytes=${commit.size}")
         val currentGeneration = generation
         listener.onDavePrepareCommitTransition(transitionId, commit.copyOf()) { processed, version ->
             if (currentGeneration != generation) return@onDavePrepareCommitTransition
+            AppLog.d(TAG, "commit transition processed id=$transitionId success=$processed version=$version")
             if (processed) listener.onDaveProtocolVersion(version) else recoverFromInvalidCommit(transitionId)
         }
     }
 
     fun onWelcome(transitionId: Int, welcome: ByteArray) {
+        AppLog.d(TAG, "welcome received id=$transitionId bytes=${welcome.size}")
         val currentGeneration = generation
         listener.onDaveProcessWelcome(transitionId, welcome.copyOf()) { joined, version ->
             if (currentGeneration != generation) return@onDaveProcessWelcome
+            AppLog.d(TAG, "welcome processed id=$transitionId success=$joined version=$version")
             if (joined) listener.onDaveProtocolVersion(version) else recoverFromInvalidCommit(transitionId)
         }
     }
 
     fun onPrepareTransition(protocolVersion: Int, transitionId: Int) {
+        AppLog.d(TAG, "prepare transition id=$transitionId version=$protocolVersion")
         val currentGeneration = generation
         listener.onDavePrepareTransition(transitionId, protocolVersion) {
             if (currentGeneration != generation) return@onDavePrepareTransition
@@ -101,7 +110,10 @@ internal class DaveSession(
         }
     }
 
-    fun onExecuteTransition(transitionId: Int) = listener.onDaveExecuteTransition(transitionId)
+    fun onExecuteTransition(transitionId: Int) {
+        AppLog.d(TAG, "execute transition id=$transitionId")
+        listener.onDaveExecuteTransition(transitionId)
+    }
 
     private fun queueEpoch(epoch: Int, transitionId: Int) {
         epochPrepared = false
@@ -117,6 +129,7 @@ internal class DaveSession(
         listener.onDavePrepareEpoch(epoch.epoch, epoch.transitionId) { keyPackage ->
             if (currentGeneration != generation) return@onDavePrepareEpoch
             sendBinary(Opcodes.DAVE_MLS_KEY_PACKAGE, keyPackage.copyOf())
+            AppLog.d(TAG, "epoch prepared epoch=${epoch.epoch} transition=${epoch.transitionId}")
             epochPrepared = true
             while (pendingProposals.isNotEmpty()) processProposals(pendingProposals.removeFirst())
         }
@@ -135,5 +148,9 @@ internal class DaveSession(
         listener.onDaveRequestKeyPackage { keyPackage ->
             if (currentGeneration == generation) sendBinary(Opcodes.DAVE_MLS_KEY_PACKAGE, keyPackage.copyOf())
         }
+    }
+
+    private companion object {
+        const val TAG = "DaveSession"
     }
 }

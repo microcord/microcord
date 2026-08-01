@@ -108,7 +108,7 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
         videoRecycler = view.findViewById(R.id.call_video_recycler)
         stageRecycler = view.findViewById(R.id.call_stage_recycler)
         participantsHidden = view.findViewById(R.id.call_participants_hidden)
-        privateCallContainer = view.findViewById(R.id.private_call_container)
+        privateCallContainer = view.findViewById(R.id.private_call)
         privateCallStatusPrimary = view.findViewById(R.id.private_call_status_primary)
         privateCallStatusSecondary = view.findViewById(R.id.private_call_status_secondary)
         privateCallStatusDuration = view.findViewById(R.id.private_call_status_duration)

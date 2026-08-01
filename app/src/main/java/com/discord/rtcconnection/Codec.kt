@@ -15,4 +15,6 @@ data class Codec(
     val type: String,
     val payloadType: Int,
     val rtxPayloadType: Int?,
+    val encode: Boolean? = null,
+    val decode: Boolean? = null,
 )

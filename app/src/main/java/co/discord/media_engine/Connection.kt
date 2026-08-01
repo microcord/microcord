@@ -292,6 +292,7 @@ class Connection(
     fun setOnVideoCallback(callback: OnVideoCallback) {
         if (disposed) return
         native.setOnVideoCallback { userId, ssrc, streamId, parametersJson ->
+            AppLog.d(TAG, "onVideo userId=$userId ssrc=$ssrc streamId=$streamId")
             val parameters = runCatching {
                 connectionGson.fromJson(parametersJson, Array<NativeVideoStreamParameters>::class.java)
                     .orEmpty()

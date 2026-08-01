@@ -108,6 +108,31 @@ interface MediaEngineConnection {
 
     // endregion
 
+    // region DAVE
+
+    fun connectUsers(userIds: List<String>) = Unit
+    fun destroyUser(userId: String) = Unit
+    fun prepareSecureFramesTransition(transitionId: Int, protocolVersion: Int, callback: () -> Unit) = Unit
+    fun executeSecureFramesTransition(transitionId: Int) = Unit
+    fun prepareSecureFramesEpoch(epoch: String, transitionId: Int, groupId: String) = Unit
+    fun getMLSKeyPackageB64(callback: (String) -> Unit) = Unit
+    fun updateMLSExternalSenderB64(externalSender: String) = Unit
+    fun processMLSProposalsB64(proposals: String, callback: (String) -> Unit) = Unit
+    fun prepareMLSCommitTransitionB64(
+        transitionId: Int,
+        commit: String,
+        callback: (Boolean, Int, String) -> Unit,
+    ) = Unit
+    fun processMLSWelcomeB64(
+        transitionId: Int,
+        welcome: String,
+        callback: (Boolean, Int, String) -> Unit,
+    ) = Unit
+    fun setOnMLSFailureCallback(callback: (String, String) -> Unit) = Unit
+    fun setSecureFramesStateUpdateCallback(callback: (String) -> Unit) = Unit
+
+    // endregion
+
     fun addListener(listener: Listener)
 
     fun removeListener(listener: Listener)

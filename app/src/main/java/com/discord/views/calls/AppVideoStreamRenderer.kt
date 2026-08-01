@@ -6,8 +6,10 @@ import android.util.AttributeSet
 import androidx.annotation.MainThread
 import co.discord.media_engine.VideoOutputSink
 import co.discord.media_engine.VideoStreamRenderer
+import com.discord.stores.StoreStream
 import org.webrtc.RendererCommon
 import rx.Subscription
+import rx.android.schedulers.AndroidSchedulers
 import rx.subjects.BehaviorSubject
 import java.util.concurrent.TimeUnit
 
@@ -56,13 +58,17 @@ class AppVideoStreamRenderer @JvmOverloads constructor(
                 .switchMap { events.resolutions.debounce(50, TimeUnit.MILLISECONDS) }
                 .map { rotatedFrameSize(it.width, it.height, it.rotation) }
                 .map { Point(it.first, it.second) }
-                .subscribe {
-                    currentFrameResolutionSubject.onNext(it)
-                    onFrameRenderedListener?.invoke(it)
-                }
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(
+                    {
+                        currentFrameResolutionSubject.onNext(it)
+                        onFrameRenderedListener?.invoke(it)
+                    },
+                    { error -> android.util.Log.e(javaClass.simpleName, "Frame resolution stream failed", error) },
+                )
             previousRenderers[newStreamId]?.takeIf { it !== this }?.detachStream()
             previousRenderers[newStreamId] = this
-            attachToStream(videoOutputSink, newStreamId.toString(), events)
+            attachToStream(videoOutputSink ?: StoreStream.getMediaEngine(), newStreamId.toString(), events)
             streamId = newStreamId
         }
         val scale = scalingType ?: this.scalingType
@@ -91,7 +97,7 @@ class AppVideoStreamRenderer @JvmOverloads constructor(
         rendererEvents = null
         previousRenderers.remove(streamId)
         currentFrameResolutionSubject.onNext(null)
-        attachToStream(videoOutputSink, null)
+        attachToStream(videoOutputSink ?: StoreStream.getMediaEngine(), null)
     }
 
     @MainThread

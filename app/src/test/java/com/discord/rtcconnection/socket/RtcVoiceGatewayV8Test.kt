@@ -88,6 +88,14 @@ class RtcVoiceGatewayV8Test {
     }
 
     @Test
+    fun speakingFrameHydratesNativeAudioUser() {
+        assertEquals(
+            """[{"id":"42","audioSsrc":1234,"ssrc":1234,"videoSsrcs":[],"rtxSsrcs":[],"volume":1.0,"mute":false}]""",
+            RtcConnection.nativeAudioUserPayload(42L, 1234, 3f, false),
+        )
+    }
+
+    @Test
     fun externalSenderPrecedesEpochAndQueuedProposals() {
         val harness = DaveHarness()
         harness.session.onProtocolSelected(1)

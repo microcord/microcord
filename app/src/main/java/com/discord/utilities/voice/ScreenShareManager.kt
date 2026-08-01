@@ -49,7 +49,6 @@ class ScreenShareManager @JvmOverloads constructor(
     private val thumbnailBitmapSubject = BehaviorSubject.create<Bitmap>()
     private val compositeSubscription = CompositeSubscription()
     private var previousState: State? = null
-    private var screenshareIntent: Intent? = null
 
     init {
         subscribeToStores()
@@ -66,7 +65,8 @@ class ScreenShareManager @JvmOverloads constructor(
     @MainThread
     private fun handleStartStream(intent: Intent) {
         storeApplicationStreaming.createStream(channelId, guildId)
-        screenshareIntent = intent
+        VoiceTransport.getOrNull()?.setScreenshare(intent, createThumbnailEmitter())
+        uploadScreenSharePreviews()
     }
 
     @MainThread
@@ -78,10 +78,6 @@ class ScreenShareManager @JvmOverloads constructor(
         if (streamDisconnected(previous, state)) stopStream()
 
         if (state.activeStream?.stream?.ownerId != state.meId) return
-        if (streamConnected(previous, state)) {
-            VoiceTransport.getOrNull()?.setScreenshare(screenshareIntent, createThumbnailEmitter())
-            uploadScreenSharePreviews()
-        }
         previousState = state
     }
 
@@ -137,7 +133,6 @@ class ScreenShareManager @JvmOverloads constructor(
     fun stopStream() {
         val activeStream = previousState?.activeStream ?: return
         storeApplicationStreaming.stopStream(activeStream.stream.encodedStreamKey)
-        screenshareIntent = null
     }
 
     private fun RtcConnection.Metadata?.matchesTarget(): Boolean =

@@ -944,6 +944,7 @@ class StoreStream private constructor(
                 storeRtcRegion = rtcRegion,
                 storeUser = users,
                 storeMediaSettings = mediaSettings,
+                storeVideoStreams = videoStreams,
                 videoUseDetector = StoreAudioManagerV2.VideoUseDetector(channels, voiceStates, users),
                 findChannel = channels::findChannelByIdInternal,
                 sendVoiceStateUpdate = { guildId, channelId, mute, deaf, video, region, includeRegion ->

@@ -30,6 +30,9 @@ class MediaEngineLegacy(
     private val echoCancellation: EchoCancellationConfig,
     private val echoCancellationCallback: MediaEngine.EchoCancellationCallback,
 ) : MediaEngine {
+    override val maxDaveProtocolVersion: Int
+        get() = nativeEngine?.maxSupportedProtocolVersion ?: 0
+
 
     private val noiseCancellationConfig = NoiseCancellationConfig()
     private val connections = mutableListOf<MediaEngineConnection>()
@@ -81,6 +84,8 @@ class MediaEngineLegacy(
                     type = "video",
                     payloadType = payloadType,
                     rtxPayloadType = payloadType + 1,
+                    encode = Discord.codecCapabilities[name]?.encode,
+                    decode = Discord.codecCapabilities[name]?.decode,
                 )
             }
 

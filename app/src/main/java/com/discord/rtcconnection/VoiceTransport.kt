@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Handler
 import android.os.HandlerThread
 import co.discord.media_engine.RtcRegion
+import co.discord.media_engine.VideoFrameCallback
 import co.discord.media_engine.VideoInputDeviceDescription
 import com.discord.api.channel.Channel
 import com.discord.api.voice.server.VoiceServer
@@ -26,9 +27,11 @@ import com.discord.stores.StoreRtcConnection
 import com.discord.stores.StoreRtcRegion
 import com.discord.stores.StoreStreamRtcConnection
 import com.discord.stores.StoreUser
+import com.discord.stores.StoreVideoStreams
 import com.discord.utilities.networking.NetworkMonitor
 import com.discord.utilities.time.Clock
 import com.discord.widgets.voice.VoiceStoreAccess
+import com.hammerandchisel.libdiscord.Discord
 import javax.net.ssl.SSLSocketFactory
 import rx.Subscription
 
@@ -55,6 +58,7 @@ class VoiceTransport(
     storeRtcRegion: StoreRtcRegion,
     private val storeUser: StoreUser,
     private val storeMediaSettings: StoreMediaSettings,
+    private val storeVideoStreams: StoreVideoStreams,
     videoUseDetector: StoreAudioManagerV2.VideoUseDetector,
     /** `StoreChannels.findChannelByIdInternal`. */
     findChannel: (channelId: Long) -> Channel?,
@@ -140,9 +144,18 @@ class VoiceTransport(
         // The engine is the only consumer of these settings, so the subscription lives here rather
         // than in the settings store: nothing else needs to know a voice config exists.
         voiceSettingsSubscription = storeMediaSettings.getVoiceConfig().subscribe(
-            { configuration -> mediaEngine.updateVoiceConfig(configuration.toMediaEngineVoiceConfig()) },
+            { configuration ->
+                mediaEngine.updateVoiceConfig(configuration.toMediaEngineVoiceConfig())
+                dispatcher.schedule {
+                    storeRtcConnection.handleSelfMuted(configuration.isSelfMuted())
+                    storeRtcConnection.handleSelfDeafened(configuration.isSelfDeafened)
+                }
+            },
             { error -> AppLog.e(TAG, "failed to observe voice configuration", error) },
         )
+        mediaEngine.setLocalVoiceStatusListener { status ->
+            voiceController.onLocalVoiceStatus(status.amplitude, status.isSpeaking)
+        }
     }
 
     /**
@@ -188,7 +201,10 @@ class VoiceTransport(
             dispatcher.schedule { storeMediaEngine.handleNativeEngineInitialized() }
         }
 
-        override fun onNewConnection(connection: MediaEngineConnection) = Unit
+        override fun onNewConnection(connection: MediaEngineConnection) {
+            mediaEngine.updateVoiceConfig(storeMediaSettings.getVoiceConfigurationBlocking().toMediaEngineVoiceConfig())
+            storeMediaEngine.handleNewConnection()
+        }
     }
 
     private inner class MediaEngineControllerImpl : StoreMediaEngine.MediaEngineController {
@@ -197,12 +213,25 @@ class VoiceTransport(
 
         override fun setVideoInputDevice(index: Int) = mediaEngine.setVideoInputDevice(index)
 
+        override fun setVideoInputDevice(deviceGuid: String) {
+            mediaEngine.getNativeEngine()?.setVideoInputDevice(deviceGuid)
+        }
+
+        override fun setVideoOutputSink(streamId: String, callback: VideoFrameCallback?) {
+            mediaEngine.getNativeEngine()?.setVideoOutputSink(
+                streamId,
+                callback?.let { sink -> Discord.VideoFrameCallback(sink::onFrame) },
+            )
+        }
+
         /**
          * There is no engine-level "video on" switch; broadcasting is a per-connection decision, so
          * this fans out to every live connection.
          */
-        override fun setVideoInputEnabled(enabled: Boolean) =
-            mediaEngine.getConnections().forEach { it.setVideoBroadcast(enabled) }
+        override fun setVideoInputEnabled(enabled: Boolean) {
+            voiceController.setVideoEnabled(enabled)
+            dispatcher.schedule { storeRtcConnection.handleSelfVideo(enabled) }
+        }
 
         override fun setAudioInputEnabled(enabled: Boolean) = mediaEngine.setAudioInputEnabled(enabled)
 
@@ -303,6 +332,26 @@ class VoiceTransport(
             connection?.setFocusedParticipant(userId)
         }
 
+        override fun setSelfMuted(muted: Boolean) {
+            connection?.setSelfMuted(muted)
+        }
+
+        override fun setSelfDeafened(deafened: Boolean) {
+            connection?.setSelfDeafened(deafened)
+        }
+
+        override fun setSelfVideo(enabled: Boolean) {
+            connection?.setSelfVideo(enabled)
+        }
+
+        fun onLocalVoiceStatus(amplitude: Float, speaking: Boolean) {
+            connection?.onLocalVoiceStatus(amplitude, speaking)
+        }
+
+        fun setVideoEnabled(enabled: Boolean) {
+            connection?.setSelfVideo(enabled)
+        }
+
         fun describe(): Map<String, Any?> = connection?.describe() ?: emptyMap()
     }
 
@@ -324,6 +373,14 @@ class VoiceTransport(
             storeRtcConnection.onSpeaking(userId, speaking)
 
         override fun onMediaSessionIdReceived() = storeRtcConnection.onMediaSessionIdReceived()
+
+        override fun onVideoStream(userId: Long, streamId: Int?, audioSsrc: Int, videoSsrc: Int, rtxSsrc: Int) {
+            dispatcher.schedule { storeVideoStreams.handleVideoStreamUpdate(userId, streamId) }
+        }
+
+        override fun onVideoMetadata(metadata: VideoMetadata) {
+            dispatcher.schedule { storeVideoStreams.handleVideoMetadataUpdate(metadata) }
+        }
     }
 
     // endregion
@@ -343,6 +400,8 @@ class VoiceTransport(
         private var connection: RtcConnection? = null
         private var channelId: Long? = null
         private var sessionId: String? = null
+        private var screenshareIntent: Intent? = null
+        private var thumbnailEmitter: ThumbnailEmitter? = null
 
         override val connectedChannelId: Long? get() = channelId
 
@@ -402,7 +461,13 @@ class VoiceTransport(
         }
 
         fun setScreenshare(permissionResultData: Intent?, thumbnailEmitter: ThumbnailEmitter?) {
-            connection?.setScreenshare(permissionResultData, thumbnailEmitter)
+            screenshareIntent = permissionResultData
+            this.thumbnailEmitter = thumbnailEmitter
+            if (permissionResultData == null) connection?.setScreenshare(null)
+        }
+
+        fun startScreenshare() {
+            screenshareIntent?.let { connection?.setScreenshare(it, thumbnailEmitter) }
         }
 
         fun describe(): Map<String, Any?> = connection?.describe() ?: emptyMap()
@@ -415,10 +480,19 @@ class VoiceTransport(
                 storeStreamRtcConnection.handleStreamRtcConnectionStateChange(connected)
                 storeStreamRtcConnection.handleMediaSessionIdReceived(stateChange.metadata?.mediaSessionId)
             }
+            if (connected) streamController.startScreenshare()
         }
 
         override fun onQualityUpdate(quality: RtcConnection.Quality) {
             dispatcher.schedule { storeStreamRtcConnection.handleQualityUpdate(quality) }
+        }
+
+        override fun onVideoStream(userId: Long, streamId: Int?, audioSsrc: Int, videoSsrc: Int, rtxSsrc: Int) {
+            dispatcher.schedule { storeVideoStreams.handleApplicationStreamUpdate(userId, streamId) }
+        }
+
+        override fun onVideoMetadata(metadata: VideoMetadata) {
+            dispatcher.schedule { storeVideoStreams.handleApplicationStreamVideoMetadataUpdate(metadata) }
         }
     }
 
@@ -562,14 +636,15 @@ internal fun StoreMediaSettings.VoiceConfiguration.toMediaEngineVoiceConfig(): M
     MediaEngine.VoiceConfig(
         outputVolume = outputVolume,
         echoCancellation = echoCancellation,
-        noiseSuppression = noiseProcessing == StoreMediaSettings.NoiseProcessing.Suppression,
-        noiseCancellation = noiseProcessing == StoreMediaSettings.NoiseProcessing.Cancellation,
+        // PR 752 disables Krisp because its Play Asset Delivery model is unavailable in a rebuilt app.
+        noiseSuppression = noiseProcessing != StoreMediaSettings.NoiseProcessing.None,
+        noiseCancellation = false,
         automaticGainControl = automaticGainControl,
         inputMode = inputMode,
         inputModeOptions = MediaEngineConnection.InputModeOptions(
             vadThreshold = sensitivity.toInt(),
             vadAutoThreshold = automaticVad,
-            vadUseKrisp = vadUseKrisp == StoreMediaSettings.VadUseKrisp.Enabled,
+            vadUseKrisp = false,
         ),
         isSelfDeafened = isSelfDeafened,
         isSelfMuted = isSelfMuted(),

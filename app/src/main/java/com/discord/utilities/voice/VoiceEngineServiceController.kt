@@ -50,7 +50,6 @@ class VoiceEngineServiceController(
 ) {
     private var serviceBinding: VoiceEngineForegroundService.Connection? = null
     private var serviceSubscription: Subscription? = null
-    private var nativeRtcController: NativeRtcController? = null
 
     internal val notificationDataObservable: Observable<NotificationData> = connectionStates
         .switchMap { stateChange ->
@@ -99,17 +98,6 @@ class VoiceEngineServiceController(
         val canRecordAudio = {
             ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) ==
                 PackageManager.PERMISSION_GRANTED
-        }
-        if (nativeRtcController == null) {
-            val mediaController = StoreStream.getMediaEngine().useModernNativeEngine(appContext)
-            nativeRtcController = NativeRtcController(
-                mediaController,
-                NetworkMonitor(appContext),
-                { StoreStream.getUsers().getMeInternal().id },
-                rtcConnectionStore,
-                canRecordAudio,
-                voiceChannelSelectedStore::clear,
-            ).also(rtcConnectionStore::useRtcConnectionController)
         }
         VoiceEngineForegroundService.onDisconnect = ::onDisconnect
         VoiceEngineForegroundService.onToggleSelfDeafen = ::onToggleSelfDeafen
@@ -163,108 +151,6 @@ class VoiceEngineServiceController(
 
     fun stopStream() {
         serviceBinding?.let { VoiceEngineForegroundService.stopStream(it) } ?: setScreenshare(null)
-    }
-
-    private class NativeRtcController(
-        private val mediaController: StoreMediaEngine.MediaEngineController,
-        private val networkMonitor: NetworkMonitor,
-        private val currentUserId: () -> Long,
-        private val store: StoreRtcConnection,
-        private val canRecordAudio: () -> Boolean,
-        private val leaveVoiceChannel: () -> Unit,
-    ) : StoreRtcConnection.RtcConnectionController {
-        private var connection: RtcConnection? = null
-        private var connectedChannelId: Long? = null
-        private var connectedSessionId: String? = null
-        private val mutedUsers = linkedMapOf<Long, Boolean>()
-        private val userVolumes = linkedMapOf<Long, Float>()
-        private var selfMuted = false
-        private var selfDeafened = false
-        private var selfVideo = false
-
-        override fun connect(
-            voiceServer: com.discord.api.voice.server.VoiceServer,
-            channelId: Long,
-            guildId: Long?,
-            sessionId: String,
-        ) {
-            if (!canRecordAudio()) {
-                AppLog.w("NativeVoice", "Microphone permission is required before starting native voice.")
-                leaveVoiceChannel()
-                return
-            }
-            val existing = connection
-            if (existing != null && connectedChannelId == channelId && connectedSessionId == sessionId) {
-                existing.sessionId = sessionId
-                existing.connect(voiceServer.endpoint, voiceServer.token)
-                return
-            }
-            disconnect("Rebuilding native RTC connection")
-            connection = RtcConnection(
-                guildId = guildId,
-                channelId = channelId,
-                sessionId = sessionId,
-                isVideoEnabled = true,
-                rtcServerId = (guildId ?: channelId).toString(),
-                userId = currentUserId(),
-                mediaEngine = null,
-                clock = Clock { System.currentTimeMillis() },
-                networkMonitor = networkMonitor,
-                enableMediaSinkWants = true,
-                loggingTagPrefix = "NativeVoice",
-                modernMediaEngine = mediaController,
-            ).also { created ->
-                created.addListener(object : RtcConnection.DefaultListener() {
-                    override fun onStateChange(stateChange: RtcConnection.StateChange) =
-                        store.onStateChange(stateChange)
-
-                    override fun onSpeaking(userId: Long, speaking: Boolean, voiceDb: Float) =
-                        store.onSpeaking(userId, speaking, voiceDb)
-
-                    override fun onMediaSessionIdReceived() = store.onMediaSessionIdReceived()
-                })
-                connectedChannelId = channelId
-                connectedSessionId = sessionId
-                mutedUsers.forEach(created::setUserMuted)
-                userVolumes.forEach(created::setUserOutputVolume)
-                created.setSelfMuted(selfMuted)
-                created.setSelfDeafened(selfDeafened)
-                created.setSelfVideo(selfVideo)
-                created.connect(voiceServer.endpoint, voiceServer.token)
-            }
-        }
-
-        override fun disconnect(reason: String) {
-            connection?.disconnect()
-            connection = null
-            connectedChannelId = null
-            connectedSessionId = null
-        }
-
-        override val metadata: RtcConnection.Metadata? get() = connection?.getMetadata()
-        override fun setUserMuted(userId: Long, muted: Boolean) {
-            mutedUsers[userId] = muted
-            connection?.setUserMuted(userId, muted)
-        }
-        override fun setUserOutputVolume(userId: Long, volume: Float) {
-            userVolumes[userId] = volume
-            connection?.setUserOutputVolume(userId, volume)
-        }
-        override fun setUserOffScreen(userId: Long, offScreen: Boolean) =
-            connection?.setUserOffScreen(userId, offScreen) ?: Unit
-        override fun setFocusedParticipant(userId: Long?) = connection?.setFocusedParticipant(userId) ?: Unit
-        override fun setSelfMuted(muted: Boolean) {
-            selfMuted = muted
-            connection?.setSelfMuted(muted)
-        }
-        override fun setSelfDeafened(deafened: Boolean) {
-            selfDeafened = deafened
-            connection?.setSelfDeafened(deafened)
-        }
-        override fun setSelfVideo(enabled: Boolean) {
-            selfVideo = enabled
-            connection?.setSelfVideo(enabled)
-        }
     }
 
     internal data class NotificationData(

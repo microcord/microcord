@@ -389,6 +389,9 @@ class Discord @JvmOverloads constructor(
 
     fun signalVideoOutputSinkReady(streamId: String) = Unit
 
+    val maxSupportedProtocolVersion: Int
+        get() = nativeEngine.maxSupportedProtocolVersion
+
     fun setLocalVoiceLevelChangedCallback(callback: LocalVoiceLevelChangedCallback?) {
         if (disposed) return
         nativeEngine.setEmitVADLevel2(callback != null)
@@ -403,7 +406,7 @@ class Discord @JvmOverloads constructor(
         const val LOGLEVEL_DEBUG = NativeEngine.LOGLEVEL_DEBUG
         const val LOGLEVEL_DEFAULT = NativeEngine.LOGLEVEL_DEFAULT
         const val DEFAULT_VIDEO_MAX_BITRATE = 2_500_000
-        private const val DEFAULT_CONTEXT = "stream"
+        private const val DEFAULT_CONTEXT = "default"
         private const val STREAM_CONTEXT = "stream"
         private const val TAG = "Discord"
 

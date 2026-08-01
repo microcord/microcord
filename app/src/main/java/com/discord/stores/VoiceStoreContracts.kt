@@ -16,30 +16,6 @@ import com.discord.rtcconnection.audio.DiscordAudioManager
  */
 
 /**
- * Per-user video track description reported by the media engine.
- *
- * Reference: `com.discord.rtcconnection.VideoMetadata`. **Move to that package in Phase 11.**
- */
-data class VideoMetadata(
-    val userID: Long,
-    val maxWidth: Int,
-    val maxHeight: Int,
-    val maxFrameRate: Int?,
-    val type: ResolutionType,
-)
-
-/**
- * How a video track's resolution is negotiated.
- *
- * Reference: `com.discord.rtcconnection.socket.io.Payloads.ResolutionType`, wire values `source` /
- * `fixed`, declared in that order. **Move to that package in Phase 11.**
- */
-enum class ResolutionType(val apiValue: String) {
-    Source("source"),
-    Fixed("fixed"),
-}
-
-/**
  * The audio-routing side effects [StoreAudioManagerV2] drives.
  *
  * The reference calls `DiscordAudioManager` singleton methods directly from the store; that class is

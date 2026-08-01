@@ -256,6 +256,8 @@ class RtcConnection(
 
     /** Our own outbound video ssrc; `0` while not sending video. */
     private var videoSsrc: Long = 0
+    private var audioSsrc: Int = 0
+    private var lastLocalSpeaking: Boolean? = null
 
     private val socketListener = SocketListener()
     private val mediaEngineConnectionListener = EngineConnectionListener()
@@ -372,21 +374,29 @@ class RtcConnection(
 
     fun setSelfMuted(muted: Boolean) {
         selfMuted = muted
-        nativeConnection?.setSelfMute(muted)
+        nativeConnection?.setSelfMute(muted) ?: mediaEngineConnection?.setSelfMute(muted)
     }
 
     fun setSelfDeafened(deafened: Boolean) {
         selfDeafened = deafened
-        nativeConnection?.setSelfDeafen(deafened)
+        nativeConnection?.setSelfDeafen(deafened) ?: mediaEngineConnection?.setSelfDeafen(deafened)
     }
 
     fun setSelfVideo(enabled: Boolean) {
         selfVideo = enabled
-        nativeConnection?.setVideoBroadcast(enabled)
+        nativeConnection?.setVideoBroadcast(enabled) ?: mediaEngineConnection?.setVideoBroadcast(enabled)
     }
 
     fun setFocusedParticipant(userId: Long?) {
         mediaSinkWantsManager?.setFocusedParticipant(userId)
+    }
+
+    fun onLocalVoiceStatus(amplitude: Float, speaking: Boolean) = runOnEngineThread {
+        if (lastLocalSpeaking != speaking) {
+            lastLocalSpeaking = speaking
+            audioSsrc.takeIf { it != 0 }?.let { socket?.sendSpeaking(it, speaking) }
+        }
+        listeners.forEach { it.onSpeaking(userId, speaking, amplitude) }
     }
 
     /**
@@ -569,6 +579,8 @@ class RtcConnection(
         breadcrumb("Destroy internal RTC connection: $reason")
         listeners.clear()
         sentVideo = false
+        audioSsrc = 0
+        lastLocalSpeaking = null
         destroyed = true
     }
 
@@ -646,7 +658,9 @@ class RtcConnection(
                 // A single "100" video layer is offered up front so the server allocates video
                 // ssrcs even when the camera is off; turning it on later then needs no renegotiation.
                 streams = listOf(Payloads.Stream(type = "video", rid = "100", quality = 100)),
-                maxDaveProtocolVersion = modernMediaEngine?.maxDaveProtocolVersion ?: 0,
+                maxDaveProtocolVersion = modernMediaEngine?.maxDaveProtocolVersion
+                    ?: mediaEngine?.maxDaveProtocolVersion
+                    ?: 0,
             )
             setState(State.Authenticating)
         }
@@ -668,6 +682,7 @@ class RtcConnection(
             streams: List<Payloads.Stream>,
             modes: List<String>,
         ) {
+            audioSsrc = ssrc
             breadcrumb("Discovered dedicated UDP server on port $port")
             setState(State.RtcConnecting)
 
@@ -711,6 +726,15 @@ class RtcConnection(
             }
             connection.addListener(mediaEngineConnectionListener)
             mediaEngineConnection = connection
+            connection.setOnMLSFailureCallback { source, reason ->
+                AppLog.w(loggingTag, "Native MLS failure from $source: $reason")
+            }
+            connection.setSecureFramesStateUpdateCallback { state ->
+                listeners.forEach { it.onSecureFramesStateUpdate(state) }
+            }
+            connection.setSelfMute(selfMuted)
+            connection.setSelfDeafen(selfDeafened)
+            connection.setVideoBroadcast(selfVideo)
         }
 
         override fun onSelectProtocolAck(mode: String, secretKey: List<Int>) {
@@ -736,6 +760,9 @@ class RtcConnection(
         override fun onSpeaking(userId: Long, ssrc: Int, speaking: Boolean) {
             // Our own speaking state comes from the engine, not from the server echo.
             if (userId == this@RtcConnection.userId) return
+            nativeConnection?.mergeUsers(
+                nativeAudioUserPayload(userId, ssrc, userVolume(userId), isUserMuted(userId)),
+            )
             mediaEngineConnection?.connectUser(
                 userId = userId,
                 audioSsrc = ssrc,
@@ -787,12 +814,16 @@ class RtcConnection(
             }
             mediaSinkWantsManager?.removeUser(userId)
             nativeConnection?.destroyUser(userId.toString())
+                ?: mediaEngineConnection?.destroyUser(userId.toString())
         }
 
         override fun onUsersConnect(userIds: List<String>) {
-            nativeConnection?.mergeUsers(
-                Gson().toJson(userIds.map { NativeUser(id = it, volume = 0f, mute = false) }),
-            )
+            val native = nativeConnection
+            if (native != null) {
+                native.mergeUsers(Gson().toJson(userIds.map { NativeUser(id = it, volume = 0f, mute = false) }))
+            } else {
+                mediaEngineConnection?.connectUsers(userIds)
+            }
         }
 
         override fun onDavePrepareTransition(
@@ -801,30 +832,40 @@ class RtcConnection(
             onPrepared: () -> Unit,
         ) {
             nativeConnection?.prepareSecureFramesTransition(transitionId, protocolVersion, onPrepared)
+                ?: mediaEngineConnection?.prepareSecureFramesTransition(transitionId, protocolVersion, onPrepared)
         }
 
         override fun onDaveExecuteTransition(transitionId: Int) {
             nativeConnection?.executeSecureFramesTransition(transitionId)
+                ?: mediaEngineConnection?.executeSecureFramesTransition(transitionId)
         }
 
         override fun onDavePrepareEpoch(epoch: Int, transitionId: Int, onKeyPackage: (ByteArray) -> Unit) {
-            val connection = nativeConnection ?: return
-            connection.prepareSecureFramesEpoch(epoch.toString(), transitionId, groupId)
-            connection.getMLSKeyPackageB64 { onKeyPackage(decodeBase64(it)) }
+            val native = nativeConnection
+            if (native != null) {
+                native.prepareSecureFramesEpoch(epoch.toString(), transitionId, groupId)
+                native.getMLSKeyPackageB64 { onKeyPackage(decodeBase64(it)) }
+            } else {
+                val connection = mediaEngineConnection ?: return
+                connection.prepareSecureFramesEpoch(epoch.toString(), transitionId, groupId)
+                connection.getMLSKeyPackageB64 { onKeyPackage(decodeBase64(it)) }
+            }
         }
 
         override fun onDaveRequestKeyPackage(onKeyPackage: (ByteArray) -> Unit) {
             nativeConnection?.getMLSKeyPackageB64 { onKeyPackage(decodeBase64(it)) }
+                ?: mediaEngineConnection?.getMLSKeyPackageB64 { onKeyPackage(decodeBase64(it)) }
         }
 
         override fun onDaveExternalSender(externalSender: ByteArray) {
             nativeConnection?.updateMLSExternalSenderB64(encodeBase64(externalSender))
+                ?: mediaEngineConnection?.updateMLSExternalSenderB64(encodeBase64(externalSender))
         }
 
         override fun onDaveProcessProposals(proposals: ByteArray, onCommitWelcome: (ByteArray) -> Unit) {
-            nativeConnection?.processMLSProposalsB64(encodeBase64(proposals)) { commitWelcomeB64 ->
-                onCommitWelcome(decodeBase64(commitWelcomeB64))
-            }
+            val callback = { commitWelcomeB64: String -> onCommitWelcome(decodeBase64(commitWelcomeB64)) }
+            nativeConnection?.processMLSProposalsB64(encodeBase64(proposals), callback)
+                ?: mediaEngineConnection?.processMLSProposalsB64(encodeBase64(proposals), callback)
         }
 
         override fun onDavePrepareCommitTransition(
@@ -832,10 +873,11 @@ class RtcConnection(
             commit: ByteArray,
             onProcessed: (Boolean, Int) -> Unit,
         ) {
-            val connection = nativeConnection ?: return
-            connection.prepareMLSCommitTransitionB64(transitionId, encodeBase64(commit)) { processed, version, _ ->
+            val callback = { processed: Boolean, version: Int, _: String ->
                 onProcessed(processed, version)
             }
+            nativeConnection?.prepareMLSCommitTransitionB64(transitionId, encodeBase64(commit), callback)
+                ?: mediaEngineConnection?.prepareMLSCommitTransitionB64(transitionId, encodeBase64(commit), callback)
         }
 
         override fun onDaveProcessWelcome(
@@ -843,10 +885,11 @@ class RtcConnection(
             welcome: ByteArray,
             onProcessed: (Boolean, Int) -> Unit,
         ) {
-            val connection = nativeConnection ?: return
-            connection.processMLSWelcomeB64(transitionId, encodeBase64(welcome)) { joined, version, _ ->
+            val callback = { joined: Boolean, version: Int, _: String ->
                 onProcessed(joined, version)
             }
+            nativeConnection?.processMLSWelcomeB64(transitionId, encodeBase64(welcome), callback)
+                ?: mediaEngineConnection?.processMLSWelcomeB64(transitionId, encodeBase64(welcome), callback)
         }
 
         override fun onMediaSinkWants(wants: Map<String, Int>) {
@@ -942,7 +985,9 @@ class RtcConnection(
                     address = transportInfo.address,
                     port = transportInfo.port,
                     codecs = supportedVideoCodecs.map {
-                        Payloads.Protocol.CodecInfo(it.name, it.priority, it.type, it.payloadType, it.rtxPayloadType)
+                        Payloads.Protocol.CodecInfo(
+                            it.name, it.priority, it.type, it.payloadType, it.rtxPayloadType, it.encode, it.decode,
+                        )
                     },
                 )
             }
@@ -1389,6 +1434,18 @@ class RtcConnection(
                 capability.decode,
             )
         }
+
+        internal fun nativeAudioUserPayload(userId: Long, audioSsrc: Int, volume: Float, mute: Boolean): String =
+            Gson().toJson(
+                listOf(
+                    NativeUser(
+                        id = userId.toString(),
+                        audioSsrc = audioSsrc,
+                        volume = volume.coerceIn(0f, 1f),
+                        mute = mute,
+                    ),
+                ),
+            )
 
         private const val TAG = "RtcConnection"
         private val instanceCount = AtomicInteger()

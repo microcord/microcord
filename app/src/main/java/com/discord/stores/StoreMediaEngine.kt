@@ -416,6 +416,13 @@ class StoreMediaEngine(
     }
 
     @Synchronized
+    internal fun handleNewConnection() {
+        mediaEngineController.getVideoInputDevices { devices ->
+            handleVideoInputDevices(devices, selectedVideoInputDevice?.guid)
+        }
+    }
+
+    @Synchronized
     fun hasNativeEngineEverInitialized(): Boolean = hasNativeEngineEverInitialized
 
     fun getIsNativeEngineInitialized(): Observable<Boolean> = isNativeEngineInitializedSubject
@@ -488,20 +495,23 @@ class StoreMediaEngine(
         deviceGUID: String?,
         onSelected: ((String?) -> Unit)? = null,
     ) {
-        val index = devices.indexOfFirst { it.guid == deviceGUID }
+        val availableDevices = devices.ifEmpty { videoInputDevices }
+        val index = availableDevices.indexOfFirst { it.guid == deviceGUID }
         val hasDevice = index >= 0
 
         mediaEngineController.setVideoInputDevice(NO_VIDEO_DEVICE)
-        mediaEngineController.setVideoInputDevice(if (hasDevice) devices[index].guid else DEFAULT_VIDEO_DEVICE_GUID)
+        mediaEngineController.setVideoInputDevice(
+            if (hasDevice) availableDevices[index].guid else DEFAULT_VIDEO_DEVICE_GUID,
+        )
         mediaEngineController.setVideoInputEnabled(hasDevice)
 
         onSelected?.invoke(if (hasDevice) deviceGUID else null)
 
-        selectedVideoInputDevice = if (hasDevice) devices[index] else null
+        selectedVideoInputDevice = if (hasDevice) availableDevices[index] else null
         selectedVideoInputDeviceSubject.onNext(selectedVideoInputDevice)
 
-        videoInputDevices = devices
-        videoInputDevicesSubject.onNext(devices)
+        videoInputDevices = availableDevices
+        videoInputDevicesSubject.onNext(availableDevices)
 
         selectedVideoInputDevice?.let { device ->
             preferredVideoInputDeviceGUID = device.guid
