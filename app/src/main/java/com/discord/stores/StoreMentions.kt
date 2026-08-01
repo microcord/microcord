@@ -102,7 +102,7 @@ class StoreMentions @JvmOverloads constructor(
         serverInitReadStates += readState?.entries.orEmpty().filter { it.isMentioned }
 
         // Read states for channels the client cannot see would otherwise pin an unclearable badge.
-        val knownChannels = storeChannels.getChannelNames()
+        val knownChannels = storeChannels.getChannelNamesInternal()
         serverInitReadStates.removeAll { it.channelId !in knownChannels }
         markChanged()
     }

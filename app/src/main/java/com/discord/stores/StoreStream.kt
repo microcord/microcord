@@ -225,7 +225,6 @@ class StoreStream private constructor(
     )
     private val channelsSelected = StoreChannelsSelected(
         channels, permissions, guildSelected, dispatcher, observationDeck,
-        onResolvedChannelChanged = ::handleResolvedChannelChanged,
     )
     private val guildsNsfw = StoreGuildsNsfw(dispatcher, channels, observationDeck)
     private val search = StoreSearch(this, dispatcher, guildsNsfw, users, observationDeck, channels, guilds)
@@ -353,20 +352,7 @@ class StoreStream private constructor(
         storeChannels = channels,
         forumChannelsEnabled = { guildId -> canAccessRedesignedForumChannels(guildId) },
     )
-    private val readStates = StoreReadStates(
-        dispatcher, clock, observationDeck,
-        ackRequest = { channelId, manual, _ ->
-            val messageId = messagesMostRecent.getMostRecentIds()[channelId]
-                ?: channels.findChannelById(channelId)?.lastMessageId
-                ?: 0L
-            if (messageId > 0 && ::restApi.isInitialized) {
-                restApi.postChannelMessagesAck(
-                    channelId, messageId,
-                    RestAPIParams.ChannelMessagesAck(manual, null),
-                ).subscribeOn(Schedulers.io()).subscribe({}, { scheduleAckWorker(channelId, messageId) })
-            }
-        },
-    )
+    private val readStates = StoreReadStates(clock)
     private val messages = StoreMessages(observationDeck)
     private val chat = StoreChat(
         dispatcher,
@@ -395,21 +381,22 @@ class StoreStream private constructor(
         channels,
         messages,
         messagesMostRecent,
+        threadsActiveJoined,
+        threadsActive,
+        guilds,
+        clock,
         meId = { users.getMeInternal().id },
-        ackRequest = readStates::acknowledge,
-        threadAckState = { channelId ->
-            val channel = channels.findChannelByIdInternal(channelId)
-                ?: channels.getChannelsByIdInternal()[channelId]
-            when {
-                channel == null -> null
-                !channel.isThread() -> StoreMessageAck.ThreadAckState.NotThread
-                else -> StoreMessageAck.ThreadAckState.Thread(
-                    canAckThread = threadsActiveJoined.getActiveJoinedThreadsInternal().containsKey(channelId) ||
-                        threadsActive.getAllForumThreadsByIdInternal().containsKey(channelId),
-                )
+        ackRequest = { channelId, messageId, manual, mentionCount ->
+            if (::restApi.isInitialized) {
+                restApi.postChannelMessagesAck(
+                    channelId,
+                    messageId,
+                    RestAPIParams.ChannelMessagesAck(manual, mentionCount),
+                ).subscribeOn(Schedulers.io())
+                    .doOnCompleted { analytics.ackMessage(channelId) }
+                    .subscribe({}, {})
             }
         },
-        hasUnavailableGuilds = { guilds.getUnavailableGuildsInternal().isNotEmpty() },
         processMarkUnread = { channelId, messagesAfter -> mentions.processMarkUnread(channelId, messagesAfter) },
     )
     private val mentions: StoreMentions = StoreMentions(
@@ -530,7 +517,7 @@ class StoreStream private constructor(
         dispatcher = dispatcher,
         requestForumUnreadsOverGateway = gatewayConnection::requestForumUnreads,
         storeThreadsActive = threadsActive,
-        storeReadStates = readStates,
+        storeMessageAck = messageAck,
         storeChannels = channels,
         storeUser = users,
         observationDeck = observationDeck,
@@ -787,7 +774,6 @@ class StoreStream private constructor(
         friendSuggestions,
         userAffinities,
         usersTyping,
-        readStates,
         messages,
         messagesMostRecent,
         pendingReplies,
@@ -1086,6 +1072,7 @@ class StoreStream private constructor(
             }
         }
         installChatStoreWiring()
+        readStates.init(context)
         // These mutate store state, so they belong on the store thread. `App.onCreate` calls
         // `initialize` from the main thread, and `dispatcher.schedule` preserves FIFO order, so the
         // relative ordering below is unchanged.
@@ -1272,12 +1259,9 @@ class StoreStream private constructor(
             expandedGuildFolders.restore()
             collapsedChannelCategories.restore()
             guildSettings.restore()
-            readStates.restore()
             messages.restore()
-            messagesMostRecent.restore()
             guildFolders = userSettings.getGuildFolders()
             updateSortedGuilds()
-            updateReadStateInputs()
             BootLog.record(BootLogEvent.CACHE_RESTORE_FINISHED)
         }
         initialized.onNext(true)
@@ -1291,6 +1275,7 @@ class StoreStream private constructor(
         accessibility.initForTesting()
         userSettings.initForTesting()
         dispatcher.schedule {
+            readStates.initForTesting()
             // On the store thread, unlike [initialize]. `installChatStoreWiring` subscribes to
             // `observeSelectedVoiceChannelId`, and `ObservationDeck.connect` invokes the new
             // observer's `onUpdate` while holding the deck monitor — which reaches
@@ -1311,12 +1296,9 @@ class StoreStream private constructor(
             expandedGuildFolders.restore()
             collapsedChannelCategories.restore()
             guildSettings.restore()
-            readStates.restore()
             messages.restore()
-            messagesMostRecent.restore()
             guildFolders = userSettings.getGuildFolders()
             updateSortedGuilds()
-            updateReadStateInputs()
         }
         // No socket is attached in tests; the listeners still let a test drive the router directly
         // through handleGatewayDispatch.
@@ -1332,6 +1314,10 @@ class StoreStream private constructor(
      * Also installs the two seams that widgets left open for stores `StoreStream` did not publish.
      */
     private fun installChatStoreWiring() {
+        channelsSelected.observeResolvedSelectedChannel().distinctUntilChanged().subscribe(
+            { selected -> dispatcher.schedule { handleChannelSelected(selected.id) } },
+            {},
+        )
         messagesLoader.init(
             chat,
             messages,
@@ -1367,7 +1353,6 @@ class StoreStream private constructor(
                     stageChannelSelfPresence.handleVoiceChannelSelected()
                     lurking.handleVoiceChannelSelected(voiceChannelId)
                     messagesLoader.handleVoiceChannelJoined(voiceChannelId)
-                    updateReadStateInputs()
                 }
             },
             {},
@@ -1543,7 +1528,6 @@ class StoreStream private constructor(
             voiceChannelSelected.handleGuildRoleCreateOrUpdate()
             stageChannels.handleGuildRoleCreateOrUpdate(event.guildId)
             clientDataState.handleRoleAddOrRemove(event.guildId, event.guildHashes)
-            updateReadStateInputs()
         }
         dispatchSubscribe(events.guildRoleUpdate, "streamGuildRoleUpdate") { event ->
             event.role?.let { role ->
@@ -1555,7 +1539,6 @@ class StoreStream private constructor(
             voiceChannelSelected.handleGuildRoleCreateOrUpdate()
             stageChannels.handleGuildRoleCreateOrUpdate(event.guildId)
             clientDataState.handleRoleAddOrRemove(event.guildId, event.guildHashes)
-            updateReadStateInputs()
         }
         dispatchSubscribe(events.guildRoleDelete, "streamGuildRoleRemove") { event ->
             guilds.handleGuildRoleRemove(event.guildId, event.roleId)
@@ -1564,7 +1547,6 @@ class StoreStream private constructor(
             voiceChannelSelected.handleGuildRoleRemove()
             stageChannels.handleGuildRoleCreateOrUpdate(event.guildId)
             clientDataState.handleRoleAddOrRemove(event.guildId, event.guildHashes)
-            updateReadStateInputs()
         }
 
         // Guild membership
@@ -1577,7 +1559,6 @@ class StoreStream private constructor(
             channelsSelected.handlePermissionsChanged(event.guildId)
             guildMemberCounts.handleGuildMemberRemove(event.guildId)
             stageChannels.handleGuildMemberRemove(event.guildId, event.user.id)
-            updateReadStateInputs()
         }
         dispatchSubscribe(events.guildMembersChunk, "streamGuildMemberChunk") { chunk ->
             val members = chunk.members.orEmpty()
@@ -1590,7 +1571,6 @@ class StoreStream private constructor(
             }
             members.forEach { member -> channelMembers.handleGuildMemberUpdate(chunk.guildId, member) }
             guildMemberRequester.handleGuildMembersChunk(chunk)
-            updateReadStateInputs()
         }
         dispatchSubscribe(events.guildMemberListUpdate, "guildMemberListUpdate", channelMembers::handleGuildMemberListUpdate)
 
@@ -1623,7 +1603,7 @@ class StoreStream private constructor(
         dispatchSubscribe(events.channelCreateOrUpdate, "streamChannelCreateOrUpdate", ::handleChannelCreateOrUpdateInternal)
         dispatchSubscribe(events.channelDeleted, "streamChannelDelete", ::handleChannelDeleteInternal)
         dispatchSubscribe(events.channelUnreadUpdate, "streamChannelUnreadUpdate") { update ->
-            readStates.handleChannelUnreadUpdate(update.channelReadStates)
+            messagesMostRecent.handleChannelUnreadUpdate(update)
         }
         dispatchSubscribe(events.channelRecipientAdd, "streamGroupDMRecipientAdd") { recipient ->
             users.handleUserUpdated(recipient.user)
@@ -1644,13 +1624,12 @@ class StoreStream private constructor(
             threadsActiveJoined.handleThreadListSync(sync)
             threadMessages.handleThreadListSync(sync)
             mentions.handleThreadListSync(sync)
+            messagesMostRecent.handleThreadListSync(sync)
             permissions.recomputeAllPermissions()
-            updateReadStateInputs()
         }
         dispatchSubscribe(events.threadMemberUpdate, "streamThreadMemberUpdate") { update ->
             threadsJoined.handleThreadMemberUpdate(update)
             threadsActiveJoined.handleThreadMemberUpdate(update)
-            updateReadStateInputs()
         }
         dispatchSubscribe(events.threadMembersUpdate, "streamThreadMembersUpdate") { update ->
             threadsJoined.handleThreadMembersUpdate(update)
@@ -1661,7 +1640,6 @@ class StoreStream private constructor(
                 update.guildId,
                 update.addedMembers.orEmpty().mapNotNull { it.presence },
             )
-            updateReadStateInputs()
         }
         dispatchSubscribe(events.threadMemberListUpdate, "streamThreadMemberListUpdate") { update ->
             threadMembers.handleThreadMemberListUpdate(update)
@@ -1726,11 +1704,10 @@ class StoreStream private constructor(
             mentions.handleMessageDeleted(deleted)
         }
         dispatchSubscribe(events.messageAck, "streamMessageAck") { readState ->
-            readStates.handleMessageAck(readState)
-            clientDataState.handleMessageAck(readState)
-            messageAck.handleMessageAck(readState)
             mentions.handleMessageAck(readState)
+            messageAck.handleMessageAck(readState)
             forumPostReadStates.handleMessageAck(readState)
+            clientDataState.handleMessageAck(readState)
         }
         dispatchSubscribe(events.messageReactionAdd, "streamReactionAdd") { reaction ->
             messages.handleReaction(reaction, true, users.getMeInternal().id)
@@ -1818,7 +1795,6 @@ class StoreStream private constructor(
             guildSettings.handleGuildSettingUpdated(listOf(settings))
             clientDataState.handleGuildSettingUpdated(settings)
             updateSortedGuilds()
-            updateReadStateInputs()
         }
 
         // Stage instances
@@ -1872,7 +1848,6 @@ class StoreStream private constructor(
         emojiCustom.handleGuildMemberAdd(member)
         mentions.handleGuildMemberAdd(member)
         voiceChannelSelected.handleGuildMemberAdd(member.user.id)
-        updateReadStateInputs()
     }
 
     @StoreThread
@@ -1882,22 +1857,21 @@ class StoreStream private constructor(
             if (::messageSendCoordinator.isInitialized) messageSendCoordinator.reconcileFromGateway(nonce)
             reconcileUpload(nonce)
         }
+        mentions.handleMessageCreateOrUpdate(message)
         users.handleMessageCreateOrUpdate(domain)
+        usersTyping.handleMessageCreate(domain.channelId, domain.author?.id)
         applicationInteractions.handleMessageCreate(message)
         messages.handleMessageCreate(domain)
         messagesMostRecent.handleMessageCreate(domain)
-        usersTyping.handleMessageCreate(domain.channelId, domain.author?.id)
-        message.thread?.let(channels::handleThreadCreateOrUpdate)
-        clientDataState.handleMessageCreate(message)
+        messageAck.handleMessageCreate(message)
         messageReplies.handleMessageCreate(message)
+        maybeNotify(domain)
+        clientDataState.handleMessageCreate(message)
         threadMessages.handleMessageCreate(message)
         forumPostMessages.handleMessageCreate(message)
         forumPostReadStates.handleMessageCreate(message)
-        messageAck.handleMessageCreate(message)
-        mentions.handleMessageCreateOrUpdate(message)
+        message.thread?.let(channels::handleThreadCreateOrUpdate)
         if (domain.author?.id == users.getMeInternal().id) slowMode.onMessageSent(domain.channelId)
-        maybeNotify(domain)
-        updateReadStateInputs()
     }
 
     /**
@@ -1910,8 +1884,12 @@ class StoreStream private constructor(
     private fun handleThreadCreateOrUpdateInternal(thread: Channel) {
         users.handleChannelCreated(thread)
         channels.handleChannelOrThreadCreateOrUpdate(thread)
-        permissions.handleChannelOrThreadCreateOrUpdate(thread)
         channelsSelected.handleChannelOrThreadCreateOrUpdate(thread)
+        permissions.handleChannelOrThreadCreateOrUpdate(thread)
+        voiceChannelSelected.handleChannelOrThreadCreateOrUpdate()
+        mentions.handleChannelOrThreadCreateOrUpdate(thread)
+        messagesMostRecent.handleThreadCreateOrUpdate(thread)
+        messageAck.handleThreadCreateOrUpdate(thread)
         clientDataState.handleChannelCreateOrUpdateOrDelete(thread)
         threadsJoined.handleThreadCreateOrUpdate(thread)
         threadsActive.handleThreadCreateOrUpdate(thread)
@@ -1920,10 +1898,6 @@ class StoreStream private constructor(
         threadMessages.handleThreadCreateOrUpdate(thread)
         forumPostMessages.handleThreadCreateOrUpdate(thread)
         forumPostReadStates.handleThreadCreateOrUpdate(thread)
-        messageAck.handleThreadCreateOrUpdate(thread)
-        mentions.handleChannelOrThreadCreateOrUpdate(thread)
-        voiceChannelSelected.handleChannelOrThreadCreateOrUpdate()
-        updateReadStateInputs()
     }
 
     /** THREAD_DELETE. See [handleThreadCreateOrUpdateInternal]. */
@@ -1943,7 +1917,6 @@ class StoreStream private constructor(
         forumPostReadStates.handleThreadDelete(thread)
         mentions.handleChannelOrThreadDelete(thread)
         voiceChannelSelected.handleChannelOrThreadDelete()
-        updateReadStateInputs()
     }
     fun handlePreLogout() = dispatcher.schedule { handlePreLogoutInternal() }
 
@@ -2432,24 +2405,17 @@ class StoreStream private constructor(
     }
 
     @StoreThread
-    private fun handleResolvedChannelChanged(channel: Channel?) {
-        applicationInteractions.handleChannelSelected()
-        val channelId = channel?.id ?: return
+    private fun handleChannelSelected(channelId: Long) {
+        channelConversions.handleChannelSelected(channelId)
+        calls.handleChannelSelect(channelId)
+        mentions.handleChannelSelected(channelId)
         messages.handleChannelSelected(channelId)
         messagesLoader.handleChannelSelected(channelId)
         messageState.handleChannelSelected()
-        notifications.handleChannelSelected(channelId)
         messageAck.handleChannelSelected()
+        notifications.handleChannelSelected(channelId)
         expressionSuggestions.handleChannelSelected()
-        mentions.handleChannelSelected(channelId)
-        calls.handleChannelSelect(channelId)
-        channelConversions.handleChannelSelected(channelId)
-        val recent = messagesMostRecent.getMostRecentIdsInternal()[channelId] ?: channel.lastMessageId
-        val acknowledged = readStates.getAck(channelId)?.messageId ?: 0L
-        readStates.updateUnreadMarker(
-            StoreReadStates.Unread.Marker(channelId, acknowledged.takeIf { recent > it }),
-            if (recent > acknowledged) 1 else 0,
-        )
+        applicationInteractions.handleChannelSelected()
     }
 
     private fun updateMemberPanelInternal(channel: Channel?, open: Boolean) = dispatcher.schedule {
@@ -2559,10 +2525,8 @@ class StoreStream private constructor(
         userNotes.handlePreLogout()
         friendSuggestions.handlePreLogout()
         userAffinities.handlePreLogout()
-        readStates.handlePreLogout()
         messages.handlePreLogout()
         applicationInteractions.handlePreLogout()
-        messagesMostRecent.handlePreLogout()
         pendingReplies.handlePreLogout()
         pinnedMessages.handlePreLogout()
         chatInputEditing.clear()
@@ -2583,7 +2547,6 @@ class StoreStream private constructor(
         guildSettings.reset()
         stageInstances.reset()
         presences.reset()
-        readStates.reset()
         messageUploads.clear()
         clientDataState.clear()
         resetSecondaryStoresInternal()
@@ -2617,6 +2580,7 @@ class StoreStream private constructor(
         messageReplies.handlePreLogout()
         messageReactions.handlePreLogout()
         messageAck.handlePreLogout()
+        messageAck.clearForAccountIsolation()
         mentions.handlePreLogout()
         spotify.handlePreLogout()
         embeddedActivities.handlePreLogout()
@@ -2678,9 +2642,7 @@ class StoreStream private constructor(
         resetStore("guildSettings", guildSettings::reset)
         resetStore("stageInstances", stageInstances::reset)
         resetStore("presences", presences::reset)
-        resetStore("readStates", readStates::reset)
         resetStore("messages", messages::handlePreLogout)
-        resetStore("messagesMostRecent", messagesMostRecent::handlePreLogout)
         resetStore("pendingReplies", pendingReplies::handlePreLogout)
         resetStore("pinnedMessages", pinnedMessages::handlePreLogout)
         resetStore("chatInputEditing", chatInputEditing::clear)
@@ -2726,14 +2688,19 @@ class StoreStream private constructor(
         guildSettings.handleConnectionOpen(payload)
         lurking.handleConnectionOpen(payload)
         channels.handleConnectionOpen(payload)
+        threadsActive.handleConnectionOpen()
+        threadsJoined.handleConnectionOpen(payload)
+        threadsActiveJoined.handleConnectionOpen()
         permissions.handleConnectionOpen()
         guildSelected.handleConnectionOpen(payload)
         channelsSelected.handleConnectionOpen(payload)
         collapsedChannelCategories.handleConnectionOpen(payload)
         stageInstances.handleConnectionOpen(payload.guilds.orEmpty())
         presences.handleConnectionOpen(payload)
-        readStates.handleConnectionOpen(payload)
+        mentions.handleConnectionOpen(payload)
+        messages.handleConnectionOpen(payload)
         messagesMostRecent.handleConnectionOpen(payload)
+        messageAck.handleConnectionOpen(payload)
         userNotes.handleConnectionOpen()
         friendSuggestions.handleConnectionOpen(payload)
         userAffinities.handleConnectionOpen()
@@ -2767,13 +2734,7 @@ class StoreStream private constructor(
         analytics.handleConnectionOpen(payload)
         experiments.handleConnectionOpen(payload)
         if (::rtcRegion.isInitialized) rtcRegion.handleConnectionOpen()
-        messageAck.handleConnectionOpen(payload)
-        mentions.handleConnectionOpen(payload)
         messageReactions.handleConnectionOpen()
-        // Threads: after `channels.handleConnectionOpen`, which these read from.
-        threadsJoined.handleConnectionOpen(payload)
-        threadsActive.handleConnectionOpen()
-        threadsActiveJoined.handleConnectionOpen()
         threadMembers.handleConnectionOpen()
         threadMessages.handleConnectionOpen(payload)
         applicationCommands.handleConnectionOpen(payload)
@@ -2784,7 +2745,6 @@ class StoreStream private constructor(
         archivedThreads.handleConnectionOpen()
         connectionOpen.handleConnectionOpen()
         updateSortedGuilds()
-        updateReadStateInputs()
         BootLog.record(BootLogEvent.CACHE_HYDRATION_FINISHED)
         navigation.updateAuthState(authentication.getAuthState(), channels.getInitializedForAuthedUser())
     }
@@ -2808,14 +2768,14 @@ class StoreStream private constructor(
         guildStickers.handleGuildCreateOrUpdate(guild)
         embeddedActivities.handleGuildCreate(guild)
         mentions.handleGuildAdd(guild)
-        messageAck.handleGuildCreate()
-        // Order matters: threadsActive reads StoreChannels' live maps, threadsActiveJoined reads both.
-        threadsJoined.handleGuildCreate(guild)
+        messagesMostRecent.handleGuildAdd(guild)
+        // Order matters: MessageAck pruning must see the hydrated active-thread indexes.
         threadsActive.handleGuildCreate()
+        threadsJoined.handleGuildCreate(guild)
         threadsActiveJoined.handleGuildCreate(guild)
+        messageAck.handleGuildCreate()
         threadMessages.handleGuildCreate(guild)
         updateSortedGuilds()
-        updateReadStateInputs()
     }
 
     @StoreThread
@@ -2849,7 +2809,6 @@ class StoreStream private constructor(
         threadsActiveJoined.handleGuildDelete(guild.id)
         threadMessages.handleGuildDelete(guild.id)
         updateSortedGuilds()
-        updateReadStateInputs()
     }
 
     @StoreThread
@@ -2860,16 +2819,16 @@ class StoreStream private constructor(
             return
         }
         users.handleChannelCreated(channel)
+        channelConversions.handleChannelCreateOrUpdate(channel)
         channels.handleChannelOrThreadCreateOrUpdate(channel)
-        permissions.handleChannelOrThreadCreateOrUpdate(channel)
         channelsSelected.handleChannelOrThreadCreateOrUpdate(channel)
+        permissions.handleChannelOrThreadCreateOrUpdate(channel)
+        voiceChannelSelected.handleChannelOrThreadCreateOrUpdate()
+        mentions.handleChannelOrThreadCreateOrUpdate(channel)
+        messagesMostRecent.handleChannelCreateOrUpdate(channel)
         clientDataState.handleChannelCreateOrUpdateOrDelete(channel)
         threadsActive.handleChannelCreateOrUpdate(channel)
         threadsActiveJoined.handleChannelCreateOrUpdate(channel)
-        channelConversions.handleChannelCreateOrUpdate(channel)
-        mentions.handleChannelOrThreadCreateOrUpdate(channel)
-        voiceChannelSelected.handleChannelOrThreadCreateOrUpdate()
-        updateReadStateInputs()
     }
 
     @StoreThread
@@ -2883,7 +2842,6 @@ class StoreStream private constructor(
         stageChannels.handleChannelDelete(channel)
         mentions.handleChannelOrThreadDelete(channel)
         voiceChannelSelected.handleChannelOrThreadDelete()
-        updateReadStateInputs()
     }
 
     @StoreThread
@@ -2897,33 +2855,6 @@ class StoreStream private constructor(
             guildFolders,
             mutedGuildIds,
             guilds.getGuildsJoinedAtInternal(),
-        )
-    }
-
-    @StoreThread
-    private fun updateReadStateInputs() {
-        val allChannels = channels.getChannelsByIdInternal() + channels.getThreadsByIdInternal()
-        readStates.updateUnreadInputs(
-            StoreReadStates.Inputs(
-                channelPermissions = permissions.getPermissionsByChannelInternal(),
-                channels = allChannels,
-                guildJoinedAt = guilds.getGuildsJoinedAtInternal(),
-                guildSettings = guildSettings.getGuildSettingsInternal(),
-                recentMessageIds = allChannels.values.filter { it.lastMessageId != 0L }.associate { it.id to it.lastMessageId } +
-                    messagesMostRecent.getMostRecentIdsInternal(),
-                channelGuildIds = allChannels.mapValues { it.value.guildId },
-            ),
-        )
-        // Without these two, StoreReadStates discards every thread and forum unread: a non-forum
-        // thread is only unread when joined, and a forum post only while it is an active post, so
-        // both maps have to be present or the thread branch never matches anything.
-        readStates.updateActiveThreads(
-            activeJoinedThreads = threadsActiveJoined.getActiveJoinedThreadsInternal(),
-            activeForumThreads = threadsActive.getAllForumThreadsByIdInternal(),
-        )
-        readStates.updateSelectedVoiceChannel(
-            voiceChannelSelected.getSelectedVoiceChannelId(),
-            voiceChannelSelected.getTimeSelectedMs(),
         )
     }
 

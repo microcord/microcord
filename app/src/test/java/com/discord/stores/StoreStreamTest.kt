@@ -133,7 +133,7 @@ class StoreStreamTest {
         assertEquals(setOf(100L, 101L), readyChannels.filterValues { it.guildId == 300L }.keys)
         assertEquals(1, StoreStream.getUserRelationships().getRelationships()[7])
         assertEquals("stage", StoreStream.getStageInstances().getStageInstanceForChannel(102)?.topic)
-        assertEquals(200L, StoreStream.getReadStates().getAck(100)?.messageId)
+        assertEquals(200L, StoreStream.getMessageAck().getForChannel(100)?.messageId)
         assertTrue(StoreStream.getChannels().getInitializedForAuthedUser())
         assertTrue(snapshots.isNotEmpty())
 
@@ -151,7 +151,8 @@ class StoreStreamTest {
         assertEquals("friend-renamed", StoreStream.getUsers().getUsers()[7]?.username)
         assertEquals(2, StoreStream.getUserRelationships().getRelationships()[8])
         assertEquals(true, StoreStream.getUserGuildSettings().getGuildSettings()[300]?.isMuted)
-        assertEquals(275L, StoreStream.getReadStates().getAck(100)?.messageId)
+        assertEquals(250L, StoreStream.getMessageAck().getForChannel(100)?.messageId)
+        assertEquals(275L, StoreStream.getMessagesMostRecent().getMostRecentIds()[100])
         assertEquals("updated-stage", StoreStream.getStageInstances().getStageInstanceForChannel(102)?.topic)
         assertNull(StoreStream.getChannels().getChannel(110))
         assertNull(StoreStream.getChannels().getChannel(111))

@@ -9,6 +9,7 @@ import com.discord.models.domain.ModelMessageDelete
 import com.discord.models.domain.ModelPayload
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.persister.Persister
+import com.discord.utilities.time.Clock
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import java.lang.reflect.Modifier
@@ -101,9 +102,13 @@ class ForumThreadStoresTest {
         val fixture = fixture()
         fixture.dispatch {
             users.handleConnectionOpen(readyPayload())
+            guilds.handleConnectionOpen(readyPayload())
             channels.handleConnectionOpen(readyPayload())
             threadsActive.handleConnectionOpen()
-            readStates.handleConnectionOpen(readyPayload())
+            threadsJoined.handleConnectionOpen(readyPayload())
+            threadsActiveJoined.handleConnectionOpen()
+            messagesMostRecent.handleConnectionOpen(readyPayload())
+            messageAck.handleConnectionOpen(readyPayload())
         }
 
         // The experiment gate is off for guild 2, so nothing is requested at all.
@@ -186,9 +191,18 @@ class ForumThreadStoresTest {
         val deck = ObservationDeck()
         val gatewayRequests = mutableListOf<Triple<Long, Long, List<Pair<Long, Long>>>>()
         val users = StoreUser(dispatcher = dispatcher, observationDeck = deck)
+        val guilds = StoreGuilds(users, dispatcher, deck)
         val channels = StoreChannels(dispatcher, deck)
         val threadsActive = StoreThreadsActive(channels, deck)
-        val readStates = StoreReadStates(dispatcher, { 1_700_000_000_000L }, deck)
+        val threadsJoined = StoreThreadsJoined(users, deck)
+        val threadsActiveJoined = StoreThreadsActiveJoined(threadsActive, threadsJoined, deck)
+        val messages = StoreMessages(deck)
+        val messagesMostRecent = StoreMessagesMostRecent(deck, storeChannels = channels)
+        val messageAck = StoreMessageAck(
+            dispatcher, deck, channels, messages, messagesMostRecent, threadsActiveJoined,
+            threadsActive, guilds, Clock { 1_700_000_000_000L }, { users.getMeInternal().id },
+            { _, _, _, _ -> },
+        )
         val forumPostMessages = StoreForumPostMessages(dispatcher, users, deck) { null }
         val forumPostReadStates = StoreForumPostReadStates(
             dispatcher = dispatcher,
@@ -197,7 +211,7 @@ class ForumThreadStoresTest {
                 true
             },
             storeThreadsActive = threadsActive,
-            storeReadStates = readStates,
+            storeMessageAck = messageAck,
             storeChannels = channels,
             storeUser = users,
             observationDeck = deck,
@@ -207,7 +221,10 @@ class ForumThreadStoresTest {
         init {
             dispatcher.registerDispatchHandlers(
                 StoreV2DispatchHandler(
-                    listOf(users, channels, threadsActive, readStates, forumPostMessages, forumPostReadStates),
+                    listOf(
+                        users, guilds, channels, threadsActive, threadsJoined, threadsActiveJoined,
+                        messages, messagesMostRecent, messageAck, forumPostMessages, forumPostReadStates,
+                    ),
                     deck,
                 ),
             )

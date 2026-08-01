@@ -33,14 +33,7 @@ import org.junit.Test
  */
 class StoreStreamWiringTest {
 
-    /**
-     * `updateReadStateInputs()` never called `StoreReadStates.updateActiveThreads`, so every thread
-     * and forum unread was silently discarded — `StoreReadStates` requires the joined/forum maps
-     * before a thread can be unread at all.
-     *
-     * Compounding it, `THREAD_CREATE` was routed into the *channel* handlers, so the thread stores
-     * that produce those maps never fired even once.
-     */
+    /** Thread and forum inputs reach the reactive read-state projection through their stores. */
     @Test
     fun threadUnreadReachesReadStates() {
         stream.handleConnectionOpen(gson.fromJson(READY_JSON, ModelPayload::class.java))
@@ -62,7 +55,11 @@ class StoreStreamWiringTest {
         stream.handleGatewayDispatch("MESSAGE_CREATE", apiMessage(RECENT_MESSAGE_ID, THREAD_ID))
         stream.handleGatewayDispatch("MESSAGE_CREATE", apiMessage(RECENT_MESSAGE_ID + 1, FORUM_POST_ID))
 
-        val unread = StoreStream.getReadStates().getUnreadChannelIdsSnapshot()
+        val unread = StoreStream.getReadStates().getUnreadChannelIds()
+            .filter { THREAD_ID in it && FORUM_POST_ID in it }
+            .take(1)
+            .toBlocking()
+            .single()
         assertTrue("joined thread must be unread, got $unread", THREAD_ID in unread)
         assertTrue("active forum post must be unread, got $unread", FORUM_POST_ID in unread)
     }

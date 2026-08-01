@@ -8,7 +8,8 @@ import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.i18n.i18nFormat
 import com.discord.i18n.i18nPlural
-import com.discord.stores.StoreReadStates
+import com.discord.models.application.Unread
+import com.discord.stores.StoreMessageAck
 import com.discord.stores.StoreStream
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
@@ -108,19 +109,17 @@ class WidgetChatStatus : AppFragment(R.layout.widget_chat_status) {
              * ack, then `true` while that holds. The stream completes on the first `false` after
              * that point; a new channel selection resubscribes it.
              *
-             * The reference reads the ack from `StoreMessageAck.observeForChannel`. That store
-             * exists in this project but is not yet reachable from `StoreStream`, so the
-             * equivalent ledger on `StoreReadStates` is used instead.
+             * The validity check and unread projection must read the same authoritative ledger.
              */
             private fun observeUnreadValid(channelId: Long): Observable<Boolean> {
                 val lastAckOlderThanMostRecent = Observable.combineLatest(
-                    StoreStream.getReadStates().observeAck(channelId)
+                    StoreStream.getMessageAck().observeForChannel(channelId)
                         .debounce(ACK_VALIDITY_DEBOUNCE_MS, TimeUnit.MILLISECONDS),
                     StoreStream.getMessagesMostRecent().observeRecentMessageIds()
                         .map { mostRecentIds -> mostRecentIds[channelId] ?: 0L }
                         .debounce(ACK_VALIDITY_DEBOUNCE_MS, TimeUnit.MILLISECONDS)
                         .take(1),
-                ) { ack: StoreReadStates.Ack?, mostRecentIdSnapshot: Long ->
+                ) { ack: StoreMessageAck.Ack?, mostRecentIdSnapshot: Long ->
                     (ack?.messageId ?: 0L) < mostRecentIdSnapshot
                 }
                     .takeUntil { isValid -> !isValid }
@@ -131,7 +130,7 @@ class WidgetChatStatus : AppFragment(R.layout.widget_chat_status) {
             fun createModel(
                 isUnreadValid: Boolean,
                 detachedChannels: Set<Long>,
-                unread: StoreReadStates.Unread,
+                unread: Unread,
             ): Model {
                 val marker = unread.marker
                 val cap = if (detachedChannels.contains(marker.channelId)) DETACHED_COUNT_CAP else ATTACHED_COUNT_CAP

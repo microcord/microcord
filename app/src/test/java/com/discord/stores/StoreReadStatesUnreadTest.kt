@@ -1,302 +1,167 @@
 package com.discord.stores
 
+import android.content.SharedPreferences
 import com.discord.api.channel.Channel
 import com.discord.api.utcdatetime.UtcDateTime
-import com.discord.models.domain.ModelPayload
-import com.discord.models.domain.ModelReadState
-import com.discord.stores.updates.ObservationDeck
-import com.discord.utilities.persister.Persister
+import com.discord.models.application.Unread
+import com.discord.utilities.time.Clock
+import java.lang.reflect.Proxy
 import java.nio.file.Files
 import org.junit.AfterClass
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.BeforeClass
 import org.junit.Test
 import rx.schedulers.TestScheduler
 
-/**
- * Regressions for the two defects that made read state silently wrong: mark-unread acking the
- * newest message instead of an older one, and thread/voice unreads being discarded because their
- * inputs were never populated.
- */
 class StoreReadStatesUnreadTest {
-    @Test
-    fun readStateAndMessageAckCachesCannotShareTypedValues() {
-        assertNotEquals(StoreMessageAck.ACKS_CACHE_KEY, StoreReadStates.ACKS_CACHE_KEY)
-    }
-
-
-    private val scheduler = TestScheduler()
-    private val dispatcher = Dispatcher(scheduler)
-    private val deck = ObservationDeck()
-
-    private fun store(
-        onAckRequest: (Long, Boolean, Boolean) -> Unit = { _, _, _ -> },
-        loadedMessageIds: Map<Long, List<Long>> = emptyMap(),
-    ): StoreReadStates {
-        val store = StoreReadStates(dispatcher, { NOW }, deck, onAckRequest)
-        store.bindMessageSource { channelId -> loadedMessageIds[channelId].orEmpty() }
-        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
-        return store
-    }
-
-    // -- mark unread ----------------------------------------------------------------------------
+    private val store = StoreReadStates(Clock { NOW })
 
     @Test
-    fun markUnreadAcksTheNewestMessageOlderThanTheTargetAndNeverAcksTheChannel() {
-        val older = snowflake(1_600_000_000_000L)
-        val target = snowflake(1_650_000_000_000L)
-        val newest = snowflake(1_660_000_000_000L)
-        val acked = mutableListOf<Long>()
-        val store = store(
-            onAckRequest = { channelId, _, _ -> acked += channelId },
-            loadedMessageIds = mapOf(10L to listOf(older, target, newest)),
+    fun `unread projection excludes private channels`() {
+        val dm = channel(1, type = Channel.DM)
+        val result = compute(
+            channels = mapOf(dm.id to dm),
+            acks = mapOf(dm.id to StoreMessageAck.Ack(10, false, false)),
+            recent = mapOf(dm.id to 20),
+            permissions = mapOf(dm.id to VIEW_CHANNEL),
         )
-        dispatcher.schedule { store.handleConnectionOpen(readPayload(false, ModelReadState(10, newest, 0, 1))) }
-        scheduler.triggerActions()
 
-        store.markUnread(10, target)
-        scheduler.triggerActions()
-
-        val ack = requireNotNull(store.getAck(10))
-        assertEquals(older, ack.messageId)
-        assertTrue(ack.isLockedAck)
-        // The whole point of mark-unread: the channel must not be reported as fully read.
-        assertEquals(emptyList<Long>(), acked)
+        assertEquals(emptySet<Long>(), result.first)
+        assertEquals(emptySet<Long>(), result.second)
     }
 
     @Test
-    fun markUnreadWithoutLoadedHistoryFallsBackBelowTheTargetMessage() {
-        val target = snowflake(1_650_000_000_000L)
-        val store = store()
-        store.markUnread(10, target)
-        scheduler.triggerActions()
+    fun `unread projection applies joined thread forum and voice gates`() {
+        val text = channel(1)
+        val thread = channel(2, type = Channel.PUBLIC_THREAD, parentId = text.id)
+        val forum = channel(3, type = Channel.GUILD_FORUM)
+        val post = channel(4, type = Channel.PUBLIC_THREAD, parentId = forum.id)
+        val voice = channel(5, type = Channel.GUILD_VOICE)
+        val channels = listOf(text, thread, forum, post, voice).associateBy(Channel::id)
+        val acks = mapOf(
+            thread.id to StoreMessageAck.Ack(10, false, false),
+            post.id to StoreMessageAck.Ack(10, false, false),
+            voice.id to StoreMessageAck.Ack(10, false, false),
+        )
+        val recent = mapOf(thread.id to 20L, post.id to 20L, voice.id to snowflake(NOW - 1))
 
-        val ack = requireNotNull(store.getAck(10))
-        assertTrue("ack must be older than the target message", ack.messageId < target)
-        assertTrue(ack.isLockedAck)
+        assertEquals(emptySet<Long>(), compute(channels, acks, recent).first)
+
+        val joined = mapOf(
+            thread.id to StoreThreadsActiveJoined.ActiveJoinedThread(thread, UtcDateTime(0), false),
+        )
+        val activeForum = mapOf(post.id to post)
+        val result = compute(channels, acks, recent, joined, activeForum, selectedVoiceChannelId = voice.id)
+
+        assertEquals(setOf(thread.id, post.id, voice.id), result.first)
+        assertEquals(setOf(GUILD_ID), result.second)
     }
 
     @Test
-    fun markUnreadKeepsTheChannelUnreadAndSelectingAChannelReleasesTheLock() {
-        val older = snowflake(1_600_000_000_000L)
-        val target = snowflake(1_650_000_000_000L)
-        val channel = channel(10, guildId = 20)
-        val store = store(loadedMessageIds = mapOf(10L to listOf(older, target)))
-        dispatcher.schedule {
-            store.handleConnectionOpen(readPayload(false, ModelReadState(10, target, 0, 1)))
-            store.updateUnreadInputs(
-                StoreReadStates.Inputs(
-                    channelPermissions = mapOf(10L to VIEW_CHANNEL),
-                    channels = mapOf(10L to channel),
-                    recentMessageIds = mapOf(10L to target),
-                ),
-            )
-        }
-        scheduler.triggerActions()
-        assertEquals(emptySet<Long>(), store.getUnreadChannelIdsSnapshot())
-
-        store.markUnread(10, target)
-        scheduler.triggerActions()
-        assertEquals(setOf(10L), store.getUnreadChannelIdsSnapshot())
-        assertTrue(requireNotNull(store.getAck(10)).isLockedAck)
-
-        dispatcher.schedule { store.handleChannelSelected() }
-        scheduler.triggerActions()
-        assertFalse(requireNotNull(store.getAck(10)).isLockedAck)
-        // Releasing the lock must not move the cursor, so the channel stays unread.
-        assertEquals(setOf(10L), store.getUnreadChannelIdsSnapshot())
+    fun `marker collapses an ack at the newest message`() {
+        assertNull(Unread.Marker(1, 20, 20).messageId)
+        assertEquals(10L, Unread.Marker(1, 10, 20).messageId)
     }
 
     @Test
-    fun automaticAckClearsUnreadStateAndSelectedChannelMarker() {
-        val older = snowflake(1_600_000_000_000L)
-        val newest = snowflake(1_650_000_000_000L)
-        val store = store()
-        dispatcher.schedule {
-            store.handleConnectionOpen(readPayload(false, ModelReadState(10, older, 0, 1)))
-            store.updateUnreadInputs(
-                StoreReadStates.Inputs(
-                    channelPermissions = mapOf(10L to VIEW_CHANNEL),
-                    channels = mapOf(10L to channel(10, guildId = 20)),
-                    recentMessageIds = mapOf(10L to newest),
-                ),
-            )
-            store.updateUnreadMarker(StoreReadStates.Unread.Marker(10, older), 1)
-        }
-        scheduler.triggerActions()
+    fun `marker keeps ack at switch unless the live ack is locked`() {
+        val atSwitch = StoreMessageAck.Ack(10, false, false)
+        val live = StoreMessageAck.Ack(20, true, false)
+        val locked = StoreMessageAck.Ack(20, false, true)
 
-        store.acknowledge(10, newest, isLockedAck = false, mentionCount = 0)
-        scheduler.triggerActions()
-
-        assertEquals(newest, store.getAck(10)?.messageId)
-        assertEquals(emptySet<Long>(), store.getUnreadChannelIdsSnapshot())
-        assertEquals(0, store.getUnreadMarkerSnapshot().count)
+        assertEquals(10L, StoreReadStates.markerFor(1, atSwitch, live, 30).messageId)
+        assertEquals(20L, StoreReadStates.markerFor(1, atSwitch, locked, 30).messageId)
     }
 
-    // -- thread and voice unreads ---------------------------------------------------------------
-
-    @Test
-    fun joinedThreadsCountAsUnreadOnlyOnceThreadInputsArePopulated() {
-        val oldMessage = snowflake(1_600_000_000_000L)
-        val newMessage = snowflake(1_650_000_000_000L)
-        val parent = channel(10, guildId = 20)
-        val thread = channel(12, guildId = 0, type = Channel.PUBLIC_THREAD, parentId = 10)
-        val store = store()
-
-        dispatcher.schedule {
-            store.handleConnectionOpen(readPayload(false, ModelReadState(12, oldMessage, 0, 1)))
-            store.updateUnreadInputs(
-                StoreReadStates.Inputs(
-                    channelPermissions = mapOf(10L to VIEW_CHANNEL, 12L to VIEW_CHANNEL),
-                    channels = mapOf(10L to parent, 12L to thread),
-                    recentMessageIds = mapOf(12L to newMessage),
-                    channelGuildIds = mapOf(12L to 20L),
-                ),
-            )
-        }
-        scheduler.triggerActions()
-        // Not joined yet: a thread nobody joined must not raise an unread badge.
-        assertEquals(emptySet<Long>(), store.getUnreadChannelIdsSnapshot())
-
-        dispatcher.schedule {
-            store.updateActiveThreads(
-                activeJoinedThreads = mapOf(
-                    12L to StoreThreadsActiveJoined.ActiveJoinedThread(thread, UtcDateTime(0), muted = false),
-                ),
-                activeForumThreads = emptyMap(),
-            )
-        }
-        scheduler.triggerActions()
-        assertEquals(setOf(12L), store.getUnreadChannelIdsSnapshot())
-        assertEquals(setOf(20L), store.getUnreadGuildIdsSnapshot())
-    }
-
-    @Test
-    fun activeForumPostsCountAsUnreadWithoutBeingJoined() {
-        val oldMessage = snowflake(1_600_000_000_000L)
-        val newMessage = snowflake(1_650_000_000_000L)
-        val forum = channel(10, guildId = 20, type = Channel.GUILD_FORUM)
-        val post = channel(12, guildId = 20, type = Channel.PUBLIC_THREAD, parentId = 10)
-        val store = store()
-
-        dispatcher.schedule {
-            store.handleConnectionOpen(readPayload(false, ModelReadState(12, oldMessage, 0, 1)))
-            store.updateUnreadInputs(
-                StoreReadStates.Inputs(
-                    channelPermissions = mapOf(10L to VIEW_CHANNEL, 12L to VIEW_CHANNEL),
-                    channels = mapOf(10L to forum, 12L to post),
-                    recentMessageIds = mapOf(12L to newMessage),
-                ),
-            )
-        }
-        scheduler.triggerActions()
-        assertEquals(emptySet<Long>(), store.getUnreadChannelIdsSnapshot())
-
-        dispatcher.schedule {
-            store.updateActiveThreads(emptyMap(), activeForumThreads = mapOf(12L to post))
-        }
-        scheduler.triggerActions()
-        assertEquals(setOf(12L), store.getUnreadChannelIdsSnapshot())
-    }
-
-    @Test
-    fun textInVoiceIsUnreadOnlyWhileThatVoiceChannelIsSelectedAndOnlyForLaterMessages() {
-        val oldMessage = snowflake(1_600_000_000_000L)
-        val newMessage = snowflake(1_650_000_000_000L)
-        val voice = channel(10, guildId = 20, type = Channel.GUILD_VOICE)
-        val store = store()
-
-        dispatcher.schedule {
-            store.handleConnectionOpen(readPayload(false, ModelReadState(10, oldMessage, 0, 1)))
-            store.updateUnreadInputs(
-                StoreReadStates.Inputs(
-                    channelPermissions = mapOf(10L to (VIEW_CHANNEL or CONNECT)),
-                    channels = mapOf(10L to voice),
-                    recentMessageIds = mapOf(10L to newMessage),
-                ),
-            )
-        }
-        scheduler.triggerActions()
-        // Not in the channel: text in voice never badges.
-        assertEquals(emptySet<Long>(), store.getUnreadChannelIdsSnapshot())
-
-        // Joined after the message was sent: still nothing, the backlog is not "new".
-        dispatcher.schedule { store.updateSelectedVoiceChannel(10, 1_660_000_000_000L) }
-        scheduler.triggerActions()
-        assertEquals(emptySet<Long>(), store.getUnreadChannelIdsSnapshot())
-
-        // Joined before the message was sent.
-        dispatcher.schedule { store.updateSelectedVoiceChannel(10, 1_640_000_000_000L) }
-        scheduler.triggerActions()
-        assertEquals(setOf(10L), store.getUnreadChannelIdsSnapshot())
-    }
-
-    // -- helpers --------------------------------------------------------------------------------
-
-    private fun readPayload(partial: Boolean, vararg states: ModelReadState) = ModelPayload().also {
-        it.readState = ModelPayload.VersionedReadStates().also { versioned ->
-            versioned.version = 3
-            versioned.isPartial = partial
-            versioned.entries = states.toList()
-        }
-    }
-
-    private fun channel(id: Long, guildId: Long, type: Int = Channel.GUILD_TEXT, parentId: Long = 0) = Channel(
-        topic = null,
-        type = type,
-        guildId = guildId,
-        name = "channel",
-        lastMessageId = 0,
-        id = id,
-        ownerId = 0,
-        recipientIds = null,
-        recipients = null,
-        position = 0,
-        permissionOverwrites = null,
-        userLimit = 0,
-        bitrate = 0,
-        icon = null,
-        originChannelId = 0,
-        applicationId = 0,
-        nicks = null,
-        nsfw = false,
-        parentId = parentId,
-        memberListId = null,
-        rateLimitPerUser = 0,
-        defaultAutoArchiveDuration = null,
-        rtcRegion = null,
-        flags = null,
-        guildHashes = null,
-        availableTags = null,
-        appliedTags = null,
-        threadMetadata = null,
-        messageCount = null,
-        memberCount = null,
-        memberIdsPreview = null,
-        member = null,
+    private fun compute(
+        channels: Map<Long, Channel>,
+        acks: Map<Long, StoreMessageAck.Ack>,
+        recent: Map<Long, Long>,
+        joined: Map<Long, StoreThreadsActiveJoined.ActiveJoinedThread> = emptyMap(),
+        activeForum: Map<Long, Channel> = emptyMap(),
+        selectedVoiceChannelId: Long = 0,
+        permissions: Map<Long, Long> = channels.mapValues { (_, channel) ->
+            if (channel.type == Channel.GUILD_VOICE) VIEW_CHANNEL or CONNECT else VIEW_CHANNEL
+        },
+    ) = store.computeUnreadIds(
+        permissions,
+        channels,
+        mapOf(GUILD_ID to DISCORD_EPOCH),
+        emptyMap(),
+        acks,
+        recent,
+        selectedVoiceChannelId,
+        activeForum,
+        joined,
     )
 
-    private fun snowflake(timestamp: Long) = (timestamp - DISCORD_EPOCH) shl 22
+    private fun channel(
+        id: Long,
+        type: Int = Channel.GUILD_TEXT,
+        parentId: Long = 0,
+    ) = Channel(
+        topic = null, type = type, guildId = if (type == Channel.DM) 0 else GUILD_ID,
+        name = "channel", lastMessageId = 0, id = id, ownerId = 0, recipientIds = null,
+        recipients = null, position = 0, permissionOverwrites = null, userLimit = 0,
+        bitrate = 0, icon = null, originChannelId = 0, applicationId = 0, nicks = null,
+        nsfw = false, parentId = parentId, memberListId = null, rateLimitPerUser = 0,
+        defaultAutoArchiveDuration = null, rtcRegion = null, flags = null, guildHashes = null,
+        availableTags = null, appliedTags = null, threadMetadata = null, messageCount = null,
+        memberCount = null, memberIdsPreview = null, member = null,
+    )
 
     companion object {
+        private const val GUILD_ID = 100L
         private const val DISCORD_EPOCH = 1_420_070_400_000L
         private const val NOW = 1_700_000_000_000L
-        private const val VIEW_CHANNEL = 1024L
-        private const val CONNECT = 1048576L
-
-        private val directory = Files.createTempDirectory("read-states-unread")
+        private const val VIEW_CHANNEL = 1_024L
+        private const val CONNECT = 1_048_576L
+        private val directory = Files.createTempDirectory("read-state-projection")
 
         @JvmStatic
         @BeforeClass
-        fun initializePersister() = Persister.init(directory.toFile())
+        fun initialize() {
+            val preferences = memoryPreferences()
+            StoreStream.initializeForTesting(directory.toFile(), preferences, preferences, TestScheduler(), Clock { NOW })
+        }
 
         @JvmStatic
         @AfterClass
         fun cleanUp() {
             directory.toFile().deleteRecursively()
+        }
+
+        private fun snowflake(timestamp: Long) = (timestamp - DISCORD_EPOCH) shl 22
+
+        private fun memoryPreferences(): SharedPreferences {
+            val values = linkedMapOf<String, Any?>()
+            lateinit var editor: Any
+            editor = Proxy.newProxyInstance(
+                SharedPreferences.Editor::class.java.classLoader,
+                arrayOf(SharedPreferences.Editor::class.java),
+            ) { _, method, args ->
+                when (method.name) {
+                    "putBoolean", "putInt", "putLong", "putFloat", "putString", "putStringSet" -> editor.also { values[args[0] as String] = args[1] }
+                    "remove" -> editor.also { values.remove(args[0]) }
+                    "clear" -> editor.also { values.clear() }
+                    "commit" -> true
+                    "apply" -> null
+                    else -> editor
+                }
+            }
+            return Proxy.newProxyInstance(
+                SharedPreferences::class.java.classLoader,
+                arrayOf(SharedPreferences::class.java),
+            ) { _, method, args ->
+                when (method.name) {
+                    "getAll" -> values.toMap()
+                    "getBoolean", "getInt", "getLong", "getFloat", "getString", "getStringSet" -> values[args[0]] ?: args[1]
+                    "contains" -> values.containsKey(args[0])
+                    "edit" -> editor
+                    else -> null
+                }
+            } as SharedPreferences
         }
     }
 }

@@ -34,7 +34,7 @@ class StoreForumPostReadStates(
      */
     private val requestForumUnreadsOverGateway: (Long, Long, List<Pair<Long, Long>>) -> Boolean,
     private val storeThreadsActive: StoreThreadsActive,
-    private val storeReadStates: StoreReadStates,
+    private val storeMessageAck: StoreMessageAck,
     private val storeChannels: StoreChannels,
     private val storeUser: StoreUser,
     private val observationDeck: ObservationDeck,
@@ -74,7 +74,7 @@ class StoreForumPostReadStates(
     fun requestForumUnreads(guildId: Long, channelId: Long) = dispatcher.schedule {
         if (!canAccessForumChannels(guildId)) return@schedule
         if (!processedForumUnreadRequests.add(channelId)) return@schedule
-        val acks = storeReadStates.getAllAcks()
+        val acks = storeMessageAck.getAll()
         val threadMessagePairs = storeThreadsActive.getAllActiveThreadsInternal()[guildId].orEmpty()
             .filterValues { it.parentId == channelId }
             .keys

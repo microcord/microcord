@@ -46,20 +46,6 @@ class StoreMessagesMostRecent @JvmOverloads constructor(
     private val mostRecentIds = HashMap<Long, Long>()
     private var snapshot: Map<Long, Long> = emptyMap()
 
-    /**
-     * Seeds from the persisted snapshot.
-     *
-     * **Divergence:** the reference only ever writes this Persister and never reads it back, so a
-     * cold start shows every channel as having no known message until `READY` lands. Reading it
-     * removes that flash of wrong unread state; because [updateMostRecentIds] is monotonic, a
-     * stale restored value is corrected by the first server-sourced id and can never win.
-     */
-    @StoreThread
-    fun restore() {
-        mostRecentIds.putAll(cache.get())
-        markChanged()
-    }
-
     @StoreThread
     fun handleConnectionOpen(payload: ModelPayload) {
         mostRecentIdsUpdateFromChannels(payload.privateChannels.orEmpty())
@@ -111,13 +97,6 @@ class StoreMessagesMostRecent @JvmOverloads constructor(
     @StoreThread
     fun handleMessageCreate(channelId: Long, messageId: Long) {
         if (updateMostRecentIds(channelId, messageId)) markChanged()
-    }
-
-    @StoreThread
-    fun handlePreLogout() {
-        mostRecentIds.clear()
-        cache.clear(persist = true)
-        markChanged()
     }
 
     fun getMostRecentIds(): Map<Long, Long> = snapshot

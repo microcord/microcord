@@ -1,16 +1,22 @@
 package com.discord.stores
 
 import com.discord.api.channel.Channel
+import com.discord.api.channel.isArchivedThread
 import com.discord.api.channel.isManaged
+import com.discord.api.channel.isTextOrVoiceChannel
 import com.discord.api.channel.isThread
 import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelReadState
 import com.discord.models.message.Message
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.SnowflakeUtils
+import com.discord.utilities.message.MessageUtils
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.rx.computationLatest
+import com.discord.utilities.rx.leadingEdgeThrottle
 import com.discord.utilities.rx.takeSingleUntilTimeout
+import com.discord.utilities.time.Clock
+import com.discord.utilities.time.TimeUtils
 import java.util.concurrent.TimeUnit
 import rx.Observable
 import rx.Subscription
@@ -39,29 +45,13 @@ class StoreMessageAck @JvmOverloads constructor(
     private val storeChannels: StoreChannels,
     private val storeMessages: StoreMessages,
     private val storeMessagesMostRecent: StoreMessagesMostRecent,
+    private val storeThreadsActiveJoined: StoreThreadsActiveJoined,
+    private val storeThreadsActive: StoreThreadsActive,
+    private val storeGuilds: StoreGuilds,
+    private val clock: Clock,
     private val meId: () -> Long,
     /** Posts the ack. `StoreStream` owns the REST client, so the call is injected. */
     private val ackRequest: (channelId: Long, messageId: Long, isLockedAck: Boolean, mentionCount: Int) -> Unit,
-    /**
-     * Whether [channelId] is a thread and, if so, whether it can be acked.
-     *
-     * The reference reads `StoreThreadsActiveJoined` and `StoreThreadsActive`, neither of which
-     * exists in this target yet. The default answers from [StoreChannels] alone, which is correct
-     * for non-threads and conservative for threads (they are reported un-ackable). Bind this to
-     * the real stores when they land — see the handoff notes.
-     */
-    private val threadAckState: (channelId: Long) -> ThreadAckState? = { channelId ->
-        storeChannels.getChannel(channelId)?.let { channel ->
-            if (channel.isThread()) ThreadAckState.Thread(canAckThread = false) else ThreadAckState.NotThread
-        }
-    },
-    /**
-     * True while any guild is still unavailable.
-     *
-     * [pruneAcks] must not run then: a channel missing only because its guild has not arrived
-     * would have its read state deleted, and the badge would come back on the next connect.
-     */
-    private val hasUnavailableGuilds: () -> Boolean = { false },
     /**
      * Folds newly-unread messages into the mention counter and returns the resulting count.
      *
@@ -98,7 +88,7 @@ class StoreMessageAck @JvmOverloads constructor(
     private var acksSnapshot: Map<Long, Ack> = acksPersister.get()
     private val acks: MutableMap<Long, Ack> = HashMap(acksSnapshot)
 
-    private var autoAckSubscription: Subscription? = null
+    private var threadSyncSubscription: Subscription? = null
 
     fun getAll(): Map<Long, Ack> = acksSnapshot
 
@@ -121,12 +111,11 @@ class StoreMessageAck @JvmOverloads constructor(
      */
     @JvmOverloads
     fun ack(channelId: Long, isLockedAck: Boolean, clearLock: Boolean = false) = dispatcher.schedule {
-        val channel = storeChannels.getChannel(channelId) ?: return@schedule
+        val channel = storeChannels.findChannelByIdInternal(channelId) ?: return@schedule
         if (channel.type != Channel.CATEGORY) {
             internalAck(channel.id, isLockedAck, clearLock)
         } else {
-            storeChannels.getChannelsForGuild(channel.guildId).values
-                .filter { it.parentId == channel.id }
+            storeChannels.findChannelsByCategoryInternal(channel.guildId, channel.id)
                 .forEach { internalAck(it.id, isLockedAck, clearLock) }
         }
     }
@@ -136,12 +125,11 @@ class StoreMessageAck @JvmOverloads constructor(
      *
      * The marker is moved to the newest message *strictly before* [messageId] so that message and
      * everything after it become unread again. When no earlier message is loaded, a synthetic
-     * snowflake one millisecond before [messageId] is used — the server only compares ordering, so
-     * an id that never existed is fine and avoids a second round trip to find the real one.
+     * the DEX fallback expression is used verbatim.
      */
     fun markUnread(channelId: Long, messageId: Long) {
         Observable.combineLatest(
-            storeMessages.observeMessagesForChannel(channelId),
+            storeMessages.observeMessagesForChannel(channelId).filter { it.isNotEmpty() },
             observeThreadAckState(channelId),
         ) { channelMessages, threadState -> channelMessages to threadState }
             .takeSingleUntilTimeout(MARK_UNREAD_TIMEOUT_MS, emitError = false)
@@ -151,7 +139,8 @@ class StoreMessageAck @JvmOverloads constructor(
                 dispatcher.schedule {
                     val newestBefore = channelMessages.filter { it.id < messageId }.maxByOrNull { it.id }
                     val messagesAfter = channelMessages.filter { it.id >= messageId }
-                    val ack = Ack(newestBefore?.id ?: previousSnowflake(messageId), false, true)
+                    val fallback = ((messageId ushr 22) - 1L - SnowflakeUtils.DISCORD_EPOCH) shl 22
+                    val ack = Ack(newestBefore?.id ?: fallback, false, true)
                     updateAcks(channelId, ack)
                     val mentionCount = processMarkUnread(channelId, messagesAfter)
                     postPendingAck(Observable.just(PendingAck(channelId, ack)), mentionCount)
@@ -172,7 +161,6 @@ class StoreMessageAck @JvmOverloads constructor(
         chat: StoreChat,
         messagesLoader: StoreMessagesLoader,
     ) {
-        autoAckSubscription?.unsubscribe()
         val candidates = selectedChannel.distinctUntilChanged().switchMap { selected ->
             val channelId = selected.id
             if (channelId <= 0L) {
@@ -201,18 +189,15 @@ class StoreMessageAck @JvmOverloads constructor(
                 }
             }
         }
-        postPendingAck(
-            getPendingAck(candidates.computationLatest().debounce(AUTO_ACK_DEBOUNCE_MS, TimeUnit.MILLISECONDS)),
-            retainSubscription = true,
-        )
+        postPendingAck(getPendingAck(candidates.computationLatest().debounce(AUTO_ACK_DEBOUNCE_MS, TimeUnit.MILLISECONDS)))
     }
 
     @StoreThread
     fun handleConnectionOpen(payload: ModelPayload) {
-        val readState = payload.readState
-        if (readState?.isPartial != true) acks.clear()
+        val readState = requireNotNull(payload.readState)
+        if (!readState.isPartial) acks.clear()
 
-        readState?.entries.orEmpty().forEach { entry ->
+        readState.entries.orEmpty().forEach { entry ->
             acks[entry.channelId] = Ack(entry, false, false)
         }
 
@@ -225,11 +210,17 @@ class StoreMessageAck @JvmOverloads constructor(
                 ?.dateTimeMillis
                 ?: 0L
             guild.channels.orEmpty()
-                .filter { it.id !in acks.keys && snowflakeTimestamp(it.lastMessageId) < joinedAtMs }
+                .filter { it.isTextOrVoiceChannel() && it.id !in acks && snowflakeTimestamp(it.lastMessageId) < joinedAtMs }
                 .forEach { acks[it.id] = Ack(it.lastMessageId, false, false) }
         }
 
         pruneAcks()
+        threadSyncSubscription?.unsubscribe()
+        threadSyncSubscription = observeActiveThreadIdsWithPrevious()
+            .computationLatest()
+            .subscribe({ (oldThreadIds, newThreadIds) ->
+                dispatcher.schedule { updateThreadAcks(oldThreadIds, newThreadIds) }
+            }, { })
         markChanged()
     }
 
@@ -255,55 +246,36 @@ class StoreMessageAck @JvmOverloads constructor(
      */
     @StoreThread
     fun handleThreadCreateOrUpdate(channel: Channel) {
-        if (!channel.isThread() || channel.ownerId != meId()) return
+        if (!channel.isThread() || channel.isArchivedThread() || channel.ownerId != meId()) return
         val parent = storeChannels.getChannel(channel.parentId) ?: return
         if (parent.type == Channel.GUILD_FORUM) updateAcks(parent.id, Ack(channel.id, false, false))
     }
 
     /**
-     * Clears the `viewed` flag on every channel when the selection changes.
-     *
-     * `viewed` means "looked at during this visit"; leaving it set would make a channel the user
-     * opened once look permanently viewed to the unread-badge logic.
+     * A selection transition releases mark-unread locks without moving the cursor or changing
+     * whether that cursor was viewed.
      */
     @StoreThread
     fun handleChannelSelected() {
         acks.keys.toList().forEach { channelId ->
-            acks[channelId]?.let { acks[channelId] = it.copy(viewed = false) }
+            acks[channelId]?.let { acks[channelId] = it.copy(isLockedAck = false) }
         }
         markChanged()
     }
 
-    /**
-     * Reconciles the ledger with the set of threads that are currently active and joined.
-     *
-     * Threads that left the set lose their marker outright — an archived thread's read state is
-     * meaningless and would otherwise pin a badge forever. Threads that joined the set get a
-     * marker seeded from [seedTimestampMs] so their backlog does not all count as unread.
-     */
-    @StoreThread
-    fun handleActiveThreadIdsChanged(
-        oldThreadIds: Set<Long>,
-        newThreadIds: Set<Long>,
-        seedTimestampMs: (Long) -> Long? = { null },
-    ) {
-        if (!hasUnavailableGuilds()) {
-            (oldThreadIds - newThreadIds).forEach { threadId ->
-                if (acks.remove(threadId) != null) markChanged()
-            }
-        }
-        (newThreadIds - oldThreadIds).forEach { threadId ->
-            if (threadId in acks || !threadAckState(threadId).isThreadAndAbleToAck()) return@forEach
-            val seed = seedTimestampMs(threadId) ?: return@forEach
-            acks[threadId] = Ack(timestampToSnowflake(seed), false, false)
-            markChanged()
-        }
-    }
-
     @StoreThread
     fun handlePreLogout() {
-        autoAckSubscription?.unsubscribe()
-        autoAckSubscription = null
+        threadSyncSubscription?.unsubscribe()
+        threadSyncSubscription = null
+    }
+
+    /** Target account isolation: global Persister reset does not clear this live map. */
+    @StoreThread
+    fun clearForAccountIsolation() {
+        acks.clear()
+        acksSnapshot = emptyMap()
+        acksPersister.clear(persist = true)
+        markChanged()
     }
 
     @StoreThread
@@ -356,11 +328,9 @@ class StoreMessageAck @JvmOverloads constructor(
      * A locked ack blocks the automatic path unless [clearLock] was requested; otherwise the
      * write is only worth making when the newest message is ahead of the stored marker.
      */
-    private fun isUpdateRequired(ack: Ack?, mostRecentMessageId: Long, clearLock: Boolean): Boolean = when {
-        ack == null -> mostRecentMessageId > 0L
-        ack.isLockedAck && !clearLock -> false
-        else -> ack.messageId < mostRecentMessageId
-    }
+    private fun isUpdateRequired(ack: Ack?, mostRecentMessageId: Long, clearLock: Boolean) =
+        MessageUtils.isNewer(ack?.messageId, mostRecentMessageId) &&
+            (clearLock || ack?.isLockedAck != true)
 
     /**
      * Writes the ledger locally, then posts. Local first, per the class comment.
@@ -371,21 +341,20 @@ class StoreMessageAck @JvmOverloads constructor(
     private fun postPendingAck(
         pendingAcks: Observable<PendingAck>,
         mentionCount: Int = 0,
-        retainSubscription: Boolean = false,
     ) {
-        val subscription = pendingAcks
+        pendingAcks
             .filter { it != PendingAck.EMPTY }
             .computationLatest()
             .subscribe({ (channelId, ack) ->
-                dispatcher.schedule { updateAcks(channelId, ack) }
-                ackRequest(channelId, ack.messageId, ack.isLockedAck, mentionCount)
+                dispatcher.schedule {
+                    updateAcks(channelId, ack)
+                    ackRequest(channelId, ack.messageId, ack.isLockedAck, mentionCount)
+                }
             }, { })
-        // Only the long-lived auto-ack pipeline is retained; one-shot acks complete on their own.
-        if (retainSubscription) autoAckSubscription = subscription
     }
 
     private fun observeThreadAckState(channelId: Long): Observable<ThreadAckState?> =
-        observationDeck.connectRx<ThreadAckState?>(this) { threadAckState(channelId) }
+        observationDeck.connectRx<ThreadAckState?>(storeThreadsActiveJoined, storeThreadsActive) { threadAckState(channelId) }
             .distinctUntilChanged()
 
     /**
@@ -399,7 +368,7 @@ class StoreMessageAck @JvmOverloads constructor(
         if (threadAckState(channelId).isThreadAndUnableToAck()) return
         val existing = acks[channelId]
         val changed = existing == null ||
-            existing.messageId != ackNewer.messageId ||
+            MessageUtils.compareMessages(existing.messageId, ackNewer.messageId) != 0 ||
             (ackNewer.isLockedAck && !existing.isLockedAck)
         if (changed) {
             acks[channelId] = ackNewer
@@ -407,17 +376,66 @@ class StoreMessageAck @JvmOverloads constructor(
         }
     }
 
-    /** Drops markers for channels that no longer exist. See [hasUnavailableGuilds]. */
+    /** Drops markers for channels that no longer exist once unavailable guild hydration is complete. */
     @StoreThread
     private fun pruneAcks() {
-        if (hasUnavailableGuilds()) return
+        if (storeGuilds.getUnavailableGuildsInternal().isNotEmpty()) return
+        val activeJoinedThreads = storeThreadsActiveJoined.getActiveJoinedThreadsInternal()
+        val activeForumThreads = storeThreadsActive.getAllForumThreadsByIdInternal()
         val iterator = acks.keys.iterator()
         while (iterator.hasNext()) {
-            if (storeChannels.getChannel(iterator.next()) == null) {
+            val channelId = iterator.next()
+            if (storeChannels.findChannelByIdInternal(channelId) == null &&
+                channelId !in activeJoinedThreads && channelId !in activeForumThreads
+            ) {
                 iterator.remove()
                 markChanged()
             }
         }
+    }
+
+    private fun observeActiveThreadIdsWithPrevious(): Observable<Pair<Set<Long>, Set<Long>>> =
+        Observable.combineLatest(
+            storeThreadsActiveJoined.observeAllActiveJoinedThreadsById(),
+            storeThreadsActive.observeAllActiveForumThreadsById(),
+        ) { joined, forum -> joined.keys + forum.keys }
+            .leadingEdgeThrottle(1, TimeUnit.SECONDS)
+            .distinctUntilChanged()
+            .scan(emptySet<Long>() to emptySet<Long>()) { previous, threadIds -> previous.second to threadIds }
+
+    @StoreThread
+    private fun updateThreadAcks(oldThreadIds: Set<Long>, newThreadIds: Set<Long>) {
+        if (storeGuilds.getUnavailableGuildsInternal().isEmpty()) {
+            (oldThreadIds - newThreadIds).forEach { threadId ->
+                if (acks.remove(threadId) != null) markChanged()
+            }
+        }
+        val joined = storeThreadsActiveJoined.getActiveJoinedThreadsInternal()
+        val forum = storeThreadsActive.getAllForumThreadsByIdInternal()
+        val guildJoinedAt = storeGuilds.getGuildsJoinedAtInternal()
+        (newThreadIds - oldThreadIds).forEach { threadId ->
+            if (threadId in acks || !threadAckState(threadId).isThreadAndAbleToAck()) return@forEach
+            val joinedThread = joined[threadId]
+            val channel = joinedThread?.channel ?: forum[threadId] ?: return@forEach
+            val guildTimestamp = guildJoinedAt[channel.guildId] ?: clock.currentTimeMillis()
+            val threadTimestamp = joinedThread?.joinTimestamp?.dateTimeMillis?.minus(5_000L) ?: 0L
+            val archiveTimestamp = TimeUtils.parseUTCDate(channel.threadMetadata?.archiveTimestamp)
+            val channelTimestamp = maxOf(threadTimestamp, archiveTimestamp).takeIf { it != 0L }
+                ?: TimeUtils.parseSnowflake(channel.id)
+            val ackTimestamp = maxOf(guildTimestamp, channelTimestamp)
+            acks[threadId] = Ack((ackTimestamp - SnowflakeUtils.DISCORD_EPOCH) shl 22, false, false)
+            markChanged()
+        }
+    }
+
+    @StoreThread
+    private fun threadAckState(channelId: Long): ThreadAckState? {
+        val channel = storeChannels.findChannelByIdInternal(channelId) ?: return null
+        if (!channel.isThread()) return ThreadAckState.NotThread
+        return ThreadAckState.Thread(
+            channelId in storeThreadsActiveJoined.getActiveJoinedThreadsInternal() ||
+                channelId in storeThreadsActive.getAllForumThreadsByIdInternal(),
+        )
     }
 
     companion object {
@@ -448,10 +466,5 @@ class StoreMessageAck @JvmOverloads constructor(
 
         // The clamp is expressed as a clamp on the *timestamp* so that `fromTimestamp` can be
         // reused unchanged: below the epoch both forms yield 0.
-        private fun timestampToSnowflake(timestampMs: Long) =
-            SnowflakeUtils.fromTimestamp(timestampMs.coerceAtLeast(SnowflakeUtils.DISCORD_EPOCH))
-
-        /** The largest snowflake that sorts strictly before [snowflake]'s millisecond. */
-        private fun previousSnowflake(snowflake: Long) = ((snowflake ushr 22) - 1L).coerceAtLeast(0L) shl 22
     }
 }

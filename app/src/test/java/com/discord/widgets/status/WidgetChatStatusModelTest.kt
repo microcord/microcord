@@ -1,6 +1,6 @@
 package com.discord.widgets.status
 
-import com.discord.stores.StoreReadStates
+import com.discord.models.application.Unread
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -32,8 +32,8 @@ class WidgetChatStatusModelTest {
         assertTrue(model.isUnreadEstimate)
     }
 
-    private fun unread(channelId: Long, count: Int) = StoreReadStates.Unread(
-        marker = StoreReadStates.Unread.Marker(channelId, messageId = 20),
+    private fun unread(channelId: Long, count: Int) = Unread(
+        marker = Unread.Marker(channelId, messageId = 20),
         count = count,
     )
 }

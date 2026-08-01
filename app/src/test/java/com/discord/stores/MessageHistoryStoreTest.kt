@@ -327,7 +327,7 @@ class MessageHistoryStoreTest {
     }
 
     @Test
-    fun mostRecentOnlyMovesForwardAndClearsOnLogout() {
+    fun mostRecentOnlyMovesForward() {
         val fixture = mostRecentFixture()
         fixture.dispatcher.schedule {
             fixture.store.handleMessageCreate(8, 20)
@@ -335,9 +335,6 @@ class MessageHistoryStoreTest {
         }
         fixture.scheduler.triggerActions()
         assertEquals(20L, fixture.store.getMostRecentIds()[8])
-        fixture.dispatcher.schedule { fixture.store.handlePreLogout() }
-        fixture.scheduler.triggerActions()
-        assertFalse(fixture.store.getMostRecentIds().containsKey(8))
     }
 
     /** `CHANNEL_UNREAD_UPDATE` is the only source for channels with no live subscription. */
