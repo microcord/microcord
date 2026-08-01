@@ -140,6 +140,29 @@ class StoreRtcConnectionTest {
         assertEquals(600L, harness.controller.recordedFocusedParticipant)
     }
 
+    @Test
+    fun replacingControllerDisconnectsOldBeforeConnectingNew() {
+        val harness = Harness()
+        harness.dispatch {
+            harness.store.handleConnectionOpen(readyPayload())
+            harness.store.handleVoiceChannelSelected(CHANNEL_ID)
+            harness.store.handleVoiceServerUpdate(voiceServer())
+        }
+        val replacement = FakeRtcController()
+        harness.controller.events.clear()
+
+        harness.store.useRtcConnectionController(replacement)
+        harness.dispatch {}
+
+        assertEquals(listOf("disconnect", "connect"), harness.controller.events + replacement.events)
+        assertEquals(Connection(CHANNEL_ID, GUILD_ID, SESSION_ID), replacement.connections.single())
+    }
+
+    @Test
+    fun speakingUpdatePreservesNativeVoiceDb() {
+        assertEquals(-37.5f, StoreRtcConnection.SpeakingUserUpdate(7L, true, -37.5f).voiceDb)
+    }
+
     private class Harness(preferredRegion: String? = null) {
         private val scheduler = TestScheduler()
         private val dispatcher = Dispatcher(scheduler).apply {
@@ -184,14 +207,16 @@ class StoreRtcConnectionTest {
 
     private class FakeRtcController : StoreRtcConnection.RtcConnectionController {
         val connections = mutableListOf<Connection>()
+        val events = mutableListOf<String>()
         var recordedFocusedParticipant: Long? = null
         override var metadata: RtcConnection.Metadata? = null
 
         override fun connect(server: VoiceServer, channelId: Long, guildId: Long?, sessionId: String) {
+            events += "connect"
             connections += Connection(channelId, guildId, sessionId)
         }
 
-        override fun disconnect(reason: String) = Unit
+        override fun disconnect(reason: String) { events += "disconnect" }
         override fun setUserMuted(userId: Long, muted: Boolean) = Unit
         override fun setUserOutputVolume(userId: Long, volume: Float) = Unit
         override fun setUserOffScreen(userId: Long, offScreen: Boolean) = Unit

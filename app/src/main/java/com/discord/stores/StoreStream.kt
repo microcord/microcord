@@ -1732,6 +1732,11 @@ class StoreStream private constructor(
 
         // Voice, calls and streams
         dispatchSubscribeBatched(events.voiceStateUpdate, "streamVoiceStateUpdate") { voiceState ->
+            voiceState.member?.let { member ->
+                users.handleGuildMemberAdd(member)
+                guilds.handleGuildMember(member, voiceState.guildId)
+                channelMembers.handleGuildMemberUpdate(voiceState.guildId, member)
+            }
             voiceStates.handleVoiceStateUpdate(voiceState)
             if (::voiceTransport.isInitialized) voiceTransport.storeRtcConnection.handleVoiceStateUpdate(voiceState)
             stageChannelSelfPresence.handleVoiceStateUpdate(voiceState)

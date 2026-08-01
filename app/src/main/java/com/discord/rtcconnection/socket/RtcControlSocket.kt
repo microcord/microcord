@@ -2,6 +2,8 @@ package com.discord.rtcconnection.socket
 
 import androidx.annotation.AnyThread
 import com.discord.app.AppLog
+import com.discord.rtcconnection.dave.DaveSession
+import com.discord.rtcconnection.dave.VoiceGatewayFrameCodec
 import com.discord.rtcconnection.mediaengine.MediaEngineThreadExecutor
 import com.discord.rtcconnection.socket.io.Opcodes
 import com.discord.rtcconnection.socket.io.Payloads
@@ -23,6 +25,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import okio.ByteString
 
 /**
  * The voice control WebSocket: session authentication, transport negotiation, heartbeats, resume
@@ -52,7 +55,7 @@ internal class RtcControlSocket(
      */
     private enum class State { DISCONNECTED, CONNECTING, IDENTIFYING, RESUMING, CONNECTED, RECONNECTING }
 
-    interface Listener {
+    interface Listener : DaveSession.Listener {
         /** The socket is being opened. */
         fun onConnecting()
 
@@ -66,7 +69,7 @@ internal class RtcControlSocket(
         fun onHeartbeatAck(pingMs: Long)
 
         /** `READY`: the dedicated media server to send RTP to. */
-        fun onReady(port: Int, ssrc: Int, ip: String, streams: List<Payloads.Stream>)
+        fun onReady(port: Int, ssrc: Int, ip: String, streams: List<Payloads.Stream>, modes: List<String>)
 
         /** `SELECT_PROTOCOL_ACK`: the RTP encryption mode and key. */
         fun onSelectProtocolAck(mode: String, secretKey: List<Int>)
@@ -85,6 +88,13 @@ internal class RtcControlSocket(
 
         /** `CLIENT_DISCONNECT`. */
         fun onUserDisconnect(userId: Long)
+
+        /** Gateway v8 announces all users already present in the DAVE session. */
+        fun onUsersConnect(userIds: List<String>) = Unit
+
+        fun onUserFlags(userId: String, flags: Int) = Unit
+
+        fun onUserPlatform(userId: String, platform: Int) = Unit
 
         /** `MEDIA_SINK_WANTS`: per-stream encode quality the receivers are asking for. */
         fun onMediaSinkWants(wants: Map<String, Int>)
@@ -127,6 +137,42 @@ internal class RtcControlSocket(
     private var helloTimeoutTask: TimerTask? = null
     private var connectionStartTime: Long? = null
     private var resumable: Boolean = false
+    private var sequence: Int = NO_SEQUENCE
+    private var supportedModes: List<String> = emptyList()
+    private var transportMode: String = TransportModes.XCHACHA20
+    private var forceTransportFallback = false
+    private var maxDaveProtocolVersion = MAX_DAVE_PROTOCOL_VERSION
+    private var daveRecoveryAttempted = false
+
+    private val daveSession = DaveSession(
+        listener = object : DaveSession.Listener {
+            override fun onDaveProtocolVersion(version: Int) = daveListener()?.onDaveProtocolVersion(version) ?: Unit
+            override fun onDaveExternalSender(externalSender: ByteArray) =
+                daveListener()?.onDaveExternalSender(externalSender) ?: Unit
+            override fun onDavePrepareEpoch(epoch: Int, transitionId: Int, onKeyPackage: (ByteArray) -> Unit) =
+                daveListener()?.onDavePrepareEpoch(epoch, transitionId, onKeyPackage) ?: Unit
+            override fun onDaveRequestKeyPackage(onKeyPackage: (ByteArray) -> Unit) =
+                daveListener()?.onDaveRequestKeyPackage(onKeyPackage) ?: Unit
+            override fun onDaveProcessProposals(proposals: ByteArray, onCommitWelcome: (ByteArray) -> Unit) =
+                daveListener()?.onDaveProcessProposals(proposals, onCommitWelcome) ?: Unit
+            override fun onDavePrepareCommitTransition(
+                transitionId: Int,
+                commit: ByteArray,
+                onProcessed: (Boolean, Int) -> Unit,
+            ) = daveListener()?.onDavePrepareCommitTransition(transitionId, commit, onProcessed) ?: Unit
+            override fun onDaveProcessWelcome(
+                transitionId: Int,
+                welcome: ByteArray,
+                onProcessed: (Boolean, Int) -> Unit,
+            ) = daveListener()?.onDaveProcessWelcome(transitionId, welcome, onProcessed) ?: Unit
+            override fun onDavePrepareTransition(transitionId: Int, protocolVersion: Int, onPrepared: () -> Unit) =
+                daveListener()?.onDavePrepareTransition(transitionId, protocolVersion, onPrepared) ?: Unit
+            override fun onDaveExecuteTransition(transitionId: Int) =
+                daveListener()?.onDaveExecuteTransition(transitionId) ?: Unit
+        },
+        sendJson = ::send,
+        sendBinary = { opcode, payload -> sendBinary(opcode, payload) },
+    )
 
     fun addListener(listener: Listener) {
         listeners += listener
@@ -156,12 +202,35 @@ internal class RtcControlSocket(
     }
 
     /** Sends `IDENTIFY` and moves into the authenticating state. */
-    fun identify(serverId: String, userId: Long, sessionId: String, video: Boolean, streams: List<Payloads.Stream>) {
+    fun identify(
+        serverId: String,
+        userId: Long,
+        sessionId: String,
+        video: Boolean,
+        streams: List<Payloads.Stream>,
+        maxDaveProtocolVersion: Int = MAX_DAVE_PROTOCOL_VERSION,
+    ) {
         executor.assertOnEngineThread()
         this.serverId = serverId
         this.sessionId = sessionId
+        this.maxDaveProtocolVersion = if (daveRecoveryAttempted) {
+            maxOf(maxDaveProtocolVersion, MAX_DAVE_PROTOCOL_VERSION)
+        } else {
+            maxDaveProtocolVersion
+        }
         state = State.IDENTIFYING
-        send(Opcodes.IDENTIFY, Payloads.Identify(serverId, userId, sessionId, token, video, streams))
+        send(
+            Opcodes.IDENTIFY,
+            Payloads.Identify(
+                serverId,
+                userId.toString(),
+                sessionId,
+                token,
+                video,
+                streams,
+                this.maxDaveProtocolVersion,
+            ),
+        )
     }
 
     /** Sends `SELECT_PROTOCOL` once the media engine has bound its transport. */
@@ -171,7 +240,7 @@ internal class RtcControlSocket(
             Opcodes.SELECT_PROTOCOL,
             Payloads.Protocol(
                 protocol = TRANSPORT_PROTOCOL,
-                data = Payloads.Protocol.ProtocolInfo(address, port, ENCRYPTION_MODE),
+                data = Payloads.Protocol.ProtocolInfo(address, port, transportMode),
                 codecs = codecs,
             ),
         )
@@ -275,6 +344,26 @@ internal class RtcControlSocket(
      */
     private fun handleClosed(wasFatal: Boolean, code: Int?, reason: String?) {
         state = State.DISCONNECTED
+        if (VoiceCloseRecovery.from(code) != VoiceCloseRecovery.NONE && backoff.hasReachedFailureThreshold()) {
+            disconnect(wasFatal, code, reason)
+            return
+        }
+        when (VoiceCloseRecovery.from(code)) {
+            VoiceCloseRecovery.RETRY_WITH_XCHACHA20 -> if (transportMode != TransportModes.XCHACHA20) {
+                forceTransportFallback = true
+                transportMode = TransportModes.XCHACHA20
+                retryFreshSession(requireNotNull(code))
+                return
+            }
+            VoiceCloseRecovery.RETRY_WITH_DAVE -> if (!daveRecoveryAttempted) {
+                daveRecoveryAttempted = true
+                maxDaveProtocolVersion = MAX_DAVE_PROTOCOL_VERSION
+                daveSession.reset()
+                retryFreshSession(requireNotNull(code))
+                return
+            }
+            VoiceCloseRecovery.NONE -> Unit
+        }
         if (code != null && code in FATAL_CLOSE_CODES) {
             disconnect(true, code, reason)
             return
@@ -286,18 +375,31 @@ internal class RtcControlSocket(
         }
         cleanUp(null)
         val delaySeconds = backoff.fail { reconnect(wasFatal, code, reason) } / 1000.0
-        warn("`[WS CLOSED] ($wasFatal, $code, $reason) retrying in %.2f seconds.".format(delaySeconds))
+        warn("[WS CLOSED] fatal=$wasFatal code=$code; retrying in %.2f seconds.".format(delaySeconds))
+    }
+
+    private fun retryFreshSession(code: Int) {
+        cleanUp(null)
+        serverId = null
+        sessionId = null
+        resumable = false
+        sequence = NO_SEQUENCE
+        val delaySeconds = backoff.fail {
+            state = State.CONNECTING
+            openSocket()
+        } / 1000.0
+        warn("[WS CLOSED] code=$code; retrying fresh in %.2f seconds.".format(delaySeconds))
     }
 
     private fun reconnect(wasFatal: Boolean, code: Int?, reason: String?) {
-        info("[RECONNECT] wasFatal=$wasFatal code=$code reason=$reason")
+        info("[RECONNECT] fatal=$wasFatal code=$code")
         cleanUp { it.close(WS_RECONNECT, "close reason") }
         state = State.RECONNECTING
         openSocket()
     }
 
     private fun disconnect(wasFatal: Boolean, code: Int?, reason: String?) {
-        warn("[DISCONNECT] ($wasFatal, $code, $reason)")
+        warn("[DISCONNECT] fatal=$wasFatal code=$code")
         cleanUp(null)
         clearSession()
         state = State.DISCONNECTED
@@ -317,6 +419,8 @@ internal class RtcControlSocket(
         serverId = null
         sessionId = null
         resumable = false
+        sequence = NO_SEQUENCE
+        daveSession.reset()
     }
 
     // endregion
@@ -326,8 +430,7 @@ internal class RtcControlSocket(
     /**
      * Sends a heartbeat, or gives up on the socket when the previous one was never acked.
      *
-     * The heartbeat payload is the current wall-clock time as a string; the server echoes it, which
-     * is how round-trip time is measured without keeping a sequence table.
+     * Gateway v8 echoes [Payloads.Heartbeat.t] and buffers events after `seq_ack` for resume.
      */
     private fun onHeartbeatInterval() {
         if (!heartbeatAcked) {
@@ -338,7 +441,7 @@ internal class RtcControlSocket(
             return
         }
         heartbeatAcked = false
-        send(Opcodes.HEARTBEAT, clock.currentTimeMillis().toString())
+        send(Opcodes.HEARTBEAT, Payloads.Heartbeat(clock.currentTimeMillis(), sequence))
         val interval = heartbeatIntervalMs
         if (interval == null) {
             warn("onHeartbeatInterval called when heartbeatInterval was null")
@@ -388,10 +491,10 @@ internal class RtcControlSocket(
             clock.currentTimeMillis() - lastAck <= RESUMABLE_HEARTBEAT_AGE_MS
 
         if (session != null && server != null && resumable && isHeartbeatRecentEnough) {
-            info("[RESUME] resuming session. serverId=$server")
+            info("[RESUME] resuming session")
             notifyListeners { it.onSocketResume() }
             state = State.RESUMING
-            send(Opcodes.RESUME, Payloads.Resume(token, session, server))
+            send(Opcodes.RESUME, Payloads.Resume(token, session, server, sequence))
         } else {
             disconnect(
                 false,
@@ -402,12 +505,32 @@ internal class RtcControlSocket(
     }
 
     override fun onMessage(webSocket: WebSocket, text: String) {
-        val message = gson.fromJson(text, Payloads.Incoming::class.java)
-        // Payload bodies are only logged at debug; `Description` and `Resume` redact their secrets.
+        val message = try {
+            VoiceGatewayFrameCodec.decodeText(gson, text)
+        } catch (_: RuntimeException) {
+            warn("discarding malformed text voice frame")
+            return
+        }
+        AppLog.d(DAVE_LOG_TAG, "IN ${Opcodes.getNameOf(message.opcode)} ${traceText(message.opcode, text)}")
         AppLog.d(loggingTag, "received (${Opcodes.getNameOf(message.opcode)})")
         onEngineThread {
             if (webSocket !== socket) return@onEngineThread
+            message.seq?.let { sequence = it }
             handleMessage(message)
+        }
+    }
+
+    override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+        onEngineThread {
+            if (webSocket !== socket) return@onEngineThread
+            try {
+                val frame = VoiceGatewayFrameCodec.decodeBinary(bytes, serverVersion)
+                AppLog.d(DAVE_LOG_TAG, "IN ${Opcodes.getNameOf(frame.opcode)} <binary:${frame.payload.size} bytes>")
+                frame.sequence?.let { sequence = it }
+                handleBinaryMessage(frame)
+            } catch (_: RuntimeException) {
+                warn("discarding malformed binary voice frame")
+            }
         }
     }
 
@@ -415,14 +538,18 @@ internal class RtcControlSocket(
         when (message.opcode) {
             Opcodes.READY -> {
                 val ready = gson.fromJson(message.data, Payloads.Ready::class.java)
+                daveSession.reset()
+                supportedModes = ready.modes.orEmpty()
+                transportMode = chooseTransportMode()
                 backoff.succeed()
                 val elapsed = clock.currentTimeMillis() - (connectionStartTime ?: 0L)
                 info("[READY] took $elapsed ms")
-                notifyListeners { it.onReady(ready.port, ready.ssrc, ready.ip, ready.streams) }
+                notifyListeners { it.onReady(ready.port, ready.ssrc, ready.ip, ready.streams, supportedModes) }
             }
 
             // The server may ask us to heartbeat out of band; answer immediately.
-            Opcodes.HEARTBEAT -> send(Opcodes.HEARTBEAT, clock.currentTimeMillis().toString())
+            Opcodes.HEARTBEAT ->
+                send(Opcodes.HEARTBEAT, Payloads.Heartbeat(clock.currentTimeMillis(), sequence))
 
             Opcodes.SELECT_PROTOCOL_ACK -> {
                 val description = gson.fromJson(message.data, Payloads.Description::class.java)
@@ -431,6 +558,7 @@ internal class RtcControlSocket(
                     listener.onCodecs(description.audioCodec, description.videoCodec)
                     description.mediaSessionId?.let(listener::onMediaSessionIdReceived)
                 }
+                daveSession.onProtocolSelected(description.secureFramesVersion)
                 // Only a session that reached this point has something worth resuming.
                 resumable = true
             }
@@ -445,7 +573,7 @@ internal class RtcControlSocket(
             }
 
             Opcodes.HEARTBEAT_ACK -> {
-                val sentAt = gson.fromJson(message.data, Long::class.java)
+                val sentAt = gson.fromJson(message.data, Payloads.Heartbeat::class.java).t
                 val now = clock.currentTimeMillis()
                 val ping = now - sentAt
                 AppLog.d(loggingTag, "got heartbeat ack after $ping ms")
@@ -457,7 +585,7 @@ internal class RtcControlSocket(
             Opcodes.HELLO -> {
                 val hello = gson.fromJson(message.data, Payloads.Hello::class.java)
                 helloTimeoutTask?.cancel()
-                info("[HELLO] raw: $hello")
+                info("[HELLO] version=${hello.serverVersion}")
                 heartbeatIntervalMs = hello.heartbeatIntervalMs
                 serverVersion = hello.serverVersion
                 heartbeatTask?.cancel()
@@ -467,6 +595,11 @@ internal class RtcControlSocket(
             }
 
             Opcodes.RESUMED -> backoff.succeed()
+
+            Opcodes.CLIENTS_CONNECT -> {
+                val connected = gson.fromJson(message.data, Payloads.ClientsConnect::class.java)
+                notifyListeners { it.onUsersConnect(connected.userIds) }
+            }
 
             Opcodes.VIDEO -> {
                 val video = gson.fromJson(message.data, Payloads.Video::class.java)
@@ -479,6 +612,31 @@ internal class RtcControlSocket(
             Opcodes.CLIENT_DISCONNECT -> {
                 val disconnect = gson.fromJson(message.data, Payloads.ClientDisconnect::class.java)
                 notifyListeners { it.onUserDisconnect(disconnect.userId) }
+            }
+
+            Opcodes.CLIENT_FLAGS -> {
+                val flags = gson.fromJson(message.data, Payloads.ClientFlags::class.java)
+                notifyListeners { it.onUserFlags(flags.userId, flags.flags) }
+            }
+
+            Opcodes.CLIENT_PLATFORM -> {
+                val platform = gson.fromJson(message.data, Payloads.ClientPlatform::class.java)
+                notifyListeners { it.onUserPlatform(platform.userId, platform.platform) }
+            }
+
+            Opcodes.DAVE_PREPARE_TRANSITION -> {
+                val transition = gson.fromJson(message.data, Payloads.DavePrepareTransition::class.java)
+                daveSession.onPrepareTransition(transition.protocolVersion, transition.transitionId)
+            }
+
+            Opcodes.DAVE_EXECUTE_TRANSITION -> {
+                val transition = gson.fromJson(message.data, Payloads.DaveExecuteTransition::class.java)
+                daveSession.onExecuteTransition(transition.transitionId)
+            }
+
+            Opcodes.DAVE_PREPARE_EPOCH -> {
+                val epoch = gson.fromJson(message.data, Payloads.DavePrepareEpoch::class.java)
+                daveSession.onPrepareEpoch(epoch.protocolVersion, epoch.epoch, epoch.transitionId)
             }
 
             Opcodes.SESSION_UPDATE -> {
@@ -495,6 +653,24 @@ internal class RtcControlSocket(
         }
     }
 
+    private fun handleBinaryMessage(frame: VoiceGatewayFrameCodec.BinaryFrame) {
+        when (frame.opcode) {
+            Opcodes.DAVE_MLS_EXTERNAL_SENDER -> daveSession.onExternalSender(frame.payload)
+            Opcodes.DAVE_MLS_PROPOSALS -> daveSession.onProposals(frame.payload)
+            Opcodes.DAVE_MLS_ANNOUNCE_COMMIT_TRANSITION -> {
+                val reader = com.discord.rtcconnection.dave.ByteReader(frame.payload)
+                daveSession.onAnnounceCommitTransition(reader.readUint16(), reader.collect())
+            }
+            Opcodes.DAVE_MLS_WELCOME -> {
+                val reader = com.discord.rtcconnection.dave.ByteReader(frame.payload)
+                daveSession.onWelcome(reader.readUint16(), reader.collect())
+            }
+            else -> info("unknown binary opcode: ${frame.opcode}")
+        }
+    }
+
+    private fun chooseTransportMode(): String = TransportModes.select(supportedModes, forceTransportFallback)
+
     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = onEngineThread {
         if (webSocket === socket) handleClosed(true, code, reason)
     }
@@ -506,7 +682,7 @@ internal class RtcControlSocket(
 
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) = onEngineThread {
         if (webSocket === socket) {
-            handleClosed(true, null, "An error with the websocket occurred: ${t.message}")
+            handleClosed(true, null, "Voice WebSocket failure")
         }
     }
 
@@ -520,12 +696,31 @@ internal class RtcControlSocket(
         }
         try {
             val json = gson.toJson(Payloads.Outgoing(opcode, data))
+            AppLog.d(DAVE_LOG_TAG, "OUT ${Opcodes.getNameOf(opcode)} ${traceText(opcode, json)}")
             AppLog.d(loggingTag, "sending (${Opcodes.getNameOf(opcode)})")
             webSocket.send(json)
         } catch (e: Exception) {
             warn("exception sending opcode: $opcode")
         }
     }
+
+    private fun sendBinary(opcode: Int, data: ByteArray): Boolean {
+        val webSocket = socket
+        if (webSocket == null) {
+            AppLog.e(loggingTag, "opcode() websocket null. opcode: ${Opcodes.getNameOf(opcode)}")
+            return false
+        }
+        return try {
+            AppLog.d(DAVE_LOG_TAG, "OUT ${Opcodes.getNameOf(opcode)} <binary:${data.size} bytes>")
+            AppLog.d(loggingTag, "sending binary (${Opcodes.getNameOf(opcode)})")
+            webSocket.send(VoiceGatewayFrameCodec.encodeBinary(opcode, data))
+        } catch (_: Exception) {
+            warn("exception sending binary opcode: $opcode")
+            false
+        }
+    }
+
+    private fun daveListener(): Listener? = listeners.firstOrNull()
 
     private inline fun notifyListeners(block: (Listener) -> Unit) {
         executor.assertOnEngineThread()
@@ -559,16 +754,26 @@ internal class RtcControlSocket(
         return factory.trustManagers.filterIsInstance<X509TrustManager>().first()
     }
 
-    private companion object {
+    companion object {
+        private const val DAVE_LOG_TAG = "DaveWebSocket"
+
+        internal fun traceText(opcode: Int, text: String): String =
+            if (opcode in setOf(Opcodes.IDENTIFY, Opcodes.RESUME, Opcodes.SELECT_PROTOCOL_ACK)) {
+                "<redacted:${text.length} chars>"
+            } else {
+                text
+            }
+
         private val instanceCount = AtomicInteger()
 
         private val MEDIA_SINK_WANTS_TYPE = object : TypeToken<Map<String, Int>>() {}.type
 
         private const val SECURE_SCHEME = "wss"
-        private const val WIRE_VERSION = 5
+        private const val WIRE_VERSION = 8
         private const val MEDIA_SINK_WANTS_MIN_SERVER_VERSION = 5
         private const val TRANSPORT_PROTOCOL = "udp"
-        private const val ENCRYPTION_MODE = "xsalsa20_poly1305"
+        private const val MAX_DAVE_PROTOCOL_VERSION = 1
+        private const val NO_SEQUENCE = -1
 
         private const val HELLO_TIMEOUT_MS = 20_000L
         private const val RESUMABLE_HEARTBEAT_AGE_MS = 60_000L

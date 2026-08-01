@@ -7,7 +7,6 @@ import org.webrtc.CameraEnumerator
 import org.webrtc.CameraVideoCapturer
 import org.webrtc.CapturerObserver
 import org.webrtc.EglBase
-import org.webrtc.EglHelper
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.VideoCapturer
 import org.webrtc.VideoFrame
@@ -46,7 +45,7 @@ class SharedEglBaseContext {
         @JvmStatic
         @Synchronized
         fun getEglContext(): EglBase.Context {
-            val base = eglBase ?: EglHelper.create().also { eglBase = it }
+            val base = eglBase ?: EglBase.create(null, EglBase.CONFIG_PLAIN).also { eglBase = it }
             return base.eglBaseContext
         }
     }

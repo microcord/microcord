@@ -4,7 +4,9 @@ import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.w3c.dom.Element
 
 class VoiceEngineForegroundServiceTest {
     @Test
@@ -32,6 +34,7 @@ class VoiceEngineForegroundServiceTest {
         assertNotNull(VoiceEngineForegroundService.Connection::class.java.getDeclaredField("connection"))
         assertNotNull(VoiceEngineForegroundService.Connection::class.java.getDeclaredField("service"))
         assertNotNull(VoiceEngineForegroundService.Connection::class.java.getDeclaredField("isUnbinding"))
+        assertNotNull(VoiceEngineForegroundService.Connection::class.java.getDeclaredField("isBound"))
 
         val document = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
             .newDocumentBuilder()
@@ -45,9 +48,22 @@ class VoiceEngineForegroundServiceTest {
             }
         assertEquals("false", service.attributes.getNamedItemNS(ANDROID_NS, "exported").nodeValue)
         assertEquals(
-            "mediaProjection",
+            "camera|mediaProjection|microphone|specialUse",
             service.attributes.getNamedItemNS(ANDROID_NS, "foregroundServiceType").nodeValue,
         )
+        assertEquals(
+            "Maintains an ongoing receive-only voice or stage connection",
+            (service as Element).getElementsByTagName("property").item(0).attributes
+                .getNamedItemNS(ANDROID_NS, "value").nodeValue,
+        )
+
+        val permissions = document.getElementsByTagName("uses-permission")
+        val permissionNames = (0 until permissions.length)
+            .mapNotNull { permissions.item(it).attributes.getNamedItemNS(ANDROID_NS, "name")?.nodeValue }
+            .toSet()
+        assertTrue("android.permission.FOREGROUND_SERVICE_CAMERA" in permissionNames)
+        assertTrue("android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" in permissionNames)
+        assertTrue("android.permission.FOREGROUND_SERVICE_MICROPHONE" in permissionNames)
     }
 
     private companion object {

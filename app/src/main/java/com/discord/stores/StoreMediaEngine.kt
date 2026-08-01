@@ -1,10 +1,20 @@
 package com.discord.stores
 
+import android.content.Context
 import co.discord.media_engine.VideoInputDeviceDescription
 import co.discord.media_engine.VideoInputDeviceFacing
+import co.discord.media_engine.VideoFrameCallback
+import co.discord.media_engine.VideoOutputSink
 import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelRtcLatencyRegion
+import com.discord.native.engine.NativeConnection
+import com.discord.native.engine.NativeEngine
+import com.discord.app.AppLog
+import com.discord.rtcconnection.mediaengine.MediaEngineThreadExecutor
 import com.discord.utilities.persister.Persister
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import org.webrtc.VideoCapturer
 import rx.Observable
 import rx.subjects.BehaviorSubject
 import rx.subjects.SerializedSubject
@@ -22,21 +32,27 @@ import rx.subjects.SerializedSubject
  * Every mutator is `@Synchronized`: device enumeration completes on an engine callback thread while
  * the UI is free to call `selectVideoInputDevice` from the main thread.
  *
- * **Phase 11 boundary.** [mediaEngineController] stands in for the JNI bridge. Device *state* and
- * every observation surface are real; the calls that reach `libdiscord.so` are routed through the
- * seam and are no-ops until the engine is reconstructed.
+ * Native calls stay behind [MediaEngineController] so ordering can be tested without loading JNI.
  */
 class StoreMediaEngine(
-    private val mediaEngineController: MediaEngineController = MediaEngineController.NoOp,
-) : Store() {
+    mediaEngineController: MediaEngineController = MediaEngineController.NoOp,
+) : Store(), VideoOutputSink {
 
-    /** The JNI-facing surface this store drives. Reconstructed in Phase 11. */
+    @Volatile
+    private var mediaEngineController = mediaEngineController
+
+    /** The JNI-facing surface this store drives. */
     interface MediaEngineController {
+        val executor: MediaEngineThreadExecutor? get() = null
+        val maxDaveProtocolVersion: Int get() = 0
+
         /** Asks the engine to enumerate cameras; the callback may arrive on an engine thread. */
         fun getVideoInputDevices(callback: (List<VideoInputDeviceDescription>) -> Unit)
 
         /** Selects the camera at [index], or `-1` to release the current one. */
         fun setVideoInputDevice(index: Int)
+
+        fun setVideoInputDevice(deviceGuid: String) = Unit
 
         /** Enables or disables local video capture on the voice connection. */
         fun setVideoInputEnabled(enabled: Boolean)
@@ -45,11 +61,102 @@ class StoreMediaEngine(
 
         fun setPttActive(active: Boolean)
 
+        fun getCodecCapabilities(callback: (List<CodecCapability>) -> Unit) = callback(emptyList())
+
         /** Measures round-trip latency to each region and returns them best-first. */
         fun rankRtcRegions(
             regions: List<ModelRtcLatencyRegion>,
             callback: (List<String>) -> Unit,
         )
+
+        fun createVoiceConnection(
+            userId: Long,
+            options: ConnectionOptions,
+            callback: (ConnectionInfo, String) -> Unit,
+        ): Connection? = null
+
+        fun setVideoOutputSink(streamId: String, callback: VideoFrameCallback?) = Unit
+
+        fun dispose() = Unit
+
+        data class ConnectionOptions(
+            val context: String,
+            val address: String,
+            val port: Int,
+            val ssrc: Int,
+            val experiments: List<String>,
+            val modes: List<String>,
+            val streamParameters: List<StreamParameters>,
+            val qosEnabled: Boolean,
+        )
+
+        data class StreamParameters(
+            val type: String,
+            val rid: String,
+            val ssrc: Int,
+            val maxBitrate: Int,
+            val soundshare: Boolean? = null,
+            val quality: Int? = null,
+            val maxResolution: MaxResolution? = null,
+            val maxPixelCount: Int? = null,
+            val rtxSsrc: Int? = null,
+            val maxFrameRate: Int? = null,
+            val active: Boolean? = null,
+        ) {
+            data class MaxResolution(val type: String, val width: Int, val height: Int)
+        }
+
+        data class ConnectionInfo(
+            val isConnected: Boolean,
+            val protocol: String,
+            val localAddress: String,
+            val localPort: Int,
+        )
+
+        data class CodecCapability(
+            val codec: String,
+            val decode: Boolean,
+            val encode: Boolean,
+        )
+
+        interface Connection {
+            fun dispose()
+            fun getEncryptionModes(callback: (List<String>) -> Unit)
+            fun mergeUsers(usersJson: String)
+            fun destroyUser(userId: String)
+            fun setVideoBroadcast(enabled: Boolean)
+            fun setLocalVolume(userId: String, volume: Float)
+            fun setLocalMute(userId: String, muted: Boolean)
+            fun setSelfMute(muted: Boolean)
+            fun setSelfDeafen(deafened: Boolean)
+            fun setPTTActive(active: Boolean, priority: Boolean, muteOverride: Boolean)
+            fun setOnSpeaking(callback: (String, Int, Float) -> Unit)
+            fun setOnPing(callback: (Int, String, Int, Int) -> Unit)
+            fun setOnPingTimeout(callback: (String, Int, Int, Int) -> Unit)
+            fun fastUdpReconnect()
+            fun setOnVideo(callback: (String, Long, String, String) -> Unit)
+            fun setOnFirstFrame(callback: (String, Long, String) -> Unit)
+            fun startBroadcast(capturer: VideoCapturer, soundshareNativeInstance: Long)
+            fun stopBroadcast()
+            fun prepareSecureFramesTransition(transitionId: Int, protocolVersion: Int, callback: () -> Unit)
+            fun executeSecureFramesTransition(transitionId: Int)
+            fun prepareSecureFramesEpoch(epoch: String, transitionId: Int, groupId: String)
+            fun getMLSKeyPackageB64(callback: (String) -> Unit)
+            fun updateMLSExternalSenderB64(externalSenderB64: String)
+            fun processMLSProposalsB64(proposals: String, callback: (String) -> Unit)
+            fun prepareMLSCommitTransitionB64(
+                transitionId: Int,
+                commit: String,
+                callback: (Boolean, Int, String) -> Unit,
+            )
+            fun processMLSWelcomeB64(
+                transitionId: Int,
+                welcome: String,
+                callback: (Boolean, Int, String) -> Unit,
+            )
+            fun setOnMLSFailure(callback: (String, String) -> Unit)
+            fun setSecureFramesStateUpdate(callback: (String) -> Unit)
+        }
 
         object NoOp : MediaEngineController {
             override fun getVideoInputDevices(callback: (List<VideoInputDeviceDescription>) -> Unit) =
@@ -62,6 +169,179 @@ class StoreMediaEngine(
                 regions: List<ModelRtcLatencyRegion>,
                 callback: (List<String>) -> Unit,
             ) = callback(regions.map(ModelRtcLatencyRegion::region))
+        }
+    }
+
+    private class NativeMediaEngineController(context: Context) : MediaEngineController {
+        private val gson = Gson()
+        private val engine = NativeEngine(context.applicationContext, NativeEngine.LOGLEVEL_DEFAULT)
+        override val executor = MediaEngineThreadExecutor.create()
+        override val maxDaveProtocolVersion: Int get() = engine.maxSupportedProtocolVersion
+        private var disposed = false
+        private val connections = linkedSetOf<NativeConnectionAdapter>()
+
+        override fun getVideoInputDevices(callback: (List<VideoInputDeviceDescription>) -> Unit) {
+            if (disposed) return callback(emptyList())
+            engine.getVideoInputDevices { devices ->
+                callback(devices.filterNotNull().map { device ->
+                    VideoInputDeviceDescription(
+                        device.name,
+                        device.guid,
+                        when (device.facing) {
+                            com.discord.native.engine.VideoInputDeviceFacing.Front -> VideoInputDeviceFacing.Front
+                            com.discord.native.engine.VideoInputDeviceFacing.Back -> VideoInputDeviceFacing.Back
+                            else -> VideoInputDeviceFacing.Unknown
+                        },
+                    )
+                })
+            }
+        }
+
+        override fun setVideoInputDevice(index: Int) {
+            if (!disposed) engine.setVideoInputDeviceIndex(index)
+        }
+
+        override fun setVideoInputDevice(deviceGuid: String) {
+            if (!disposed) engine.setVideoInputDevice(deviceGuid)
+        }
+
+        override fun setVideoInputEnabled(enabled: Boolean) =
+            connections.toList().forEach { it.setVideoBroadcast(enabled) }
+
+        override fun setAudioInputEnabled(enabled: Boolean) {
+            if (!disposed) engine.setAudioInputEnabled(enabled)
+        }
+
+        override fun setPttActive(active: Boolean) =
+            connections.toList().forEach { it.setPTTActive(active, false, false) }
+
+        override fun getCodecCapabilities(callback: (List<MediaEngineController.CodecCapability>) -> Unit) {
+            if (disposed) return callback(emptyList())
+            engine.getCodecCapabilities { json ->
+                val capabilities = runCatching {
+                    gson.fromJson<List<MediaEngineController.CodecCapability>>(json, CODEC_CAPABILITIES_TYPE)
+                }.onFailure { AppLog.e("StoreMediaEngine", "Unable to parse native codec capabilities", it) }
+                    .getOrDefault(emptyList())
+                callback(capabilities)
+            }
+        }
+
+        override fun rankRtcRegions(
+            regions: List<ModelRtcLatencyRegion>,
+            callback: (List<String>) -> Unit,
+        ) {
+            if (disposed) return callback(emptyList())
+            engine.rankRtcRegions(gson.toJson(regions)) { callback(it.toList()) }
+        }
+
+        override fun createVoiceConnection(
+            userId: Long,
+            options: MediaEngineController.ConnectionOptions,
+            callback: (MediaEngineController.ConnectionInfo, String) -> Unit,
+        ): MediaEngineController.Connection? {
+            if (disposed) return null
+            val adapter = NativeConnectionAdapter(
+                engine.createVoiceConnection(userId.toString(), gson.toJson(options)) { info, error ->
+                    callback(
+                        MediaEngineController.ConnectionInfo(
+                            info.isConnected,
+                            info.protocol,
+                            info.localAddress,
+                            info.localPort,
+                        ),
+                        error,
+                    )
+                },
+            ) { connections -= it }
+            connections += adapter
+            return adapter
+        }
+
+        override fun setVideoOutputSink(streamId: String, callback: VideoFrameCallback?) {
+            if (!disposed) {
+                engine.setVideoOutputSink(
+                    streamId,
+                    callback?.let { sink -> NativeEngine.VideoFrameCallback { frame, _ -> sink.onFrame(frame) } },
+                )
+            }
+        }
+
+        override fun dispose() {
+            if (disposed) return
+            disposed = true
+            connections.toList().forEach(MediaEngineController.Connection::dispose)
+            connections.clear()
+            engine.dispose()
+        }
+    }
+
+    private class NativeConnectionAdapter(
+        private val native: NativeConnection,
+        private val onDisposed: (NativeConnectionAdapter) -> Unit,
+    ) : MediaEngineController.Connection {
+        private var disposed = false
+
+        override fun dispose() {
+            if (disposed) return
+            disposed = true
+            onDisposed(this)
+            native.dispose()
+        }
+
+        override fun getEncryptionModes(callback: (List<String>) -> Unit) =
+            unlessDisposed { native.getEncryptionModes { callback(it.filterNotNull()) } }
+        override fun mergeUsers(usersJson: String) = unlessDisposed { native.mergeUsers(usersJson) }
+        override fun destroyUser(userId: String) = unlessDisposed { native.destroyUser(userId) }
+        override fun setVideoBroadcast(enabled: Boolean) = unlessDisposed { native.setVideoBroadcast(enabled) }
+        override fun setLocalVolume(userId: String, volume: Float) = unlessDisposed { native.setLocalVolume(userId, volume) }
+        override fun setLocalMute(userId: String, muted: Boolean) = unlessDisposed { native.setLocalMute(userId, muted) }
+        override fun setSelfMute(muted: Boolean) = unlessDisposed { native.setSelfMute(muted) }
+        override fun setSelfDeafen(deafened: Boolean) = unlessDisposed { native.setSelfDeafen(deafened) }
+        override fun setPTTActive(active: Boolean, priority: Boolean, muteOverride: Boolean) =
+            unlessDisposed { native.setPTTActive(active, priority, muteOverride) }
+        override fun setOnSpeaking(callback: (String, Int, Float) -> Unit) =
+            unlessDisposed { native.setOnSpeakingCallback(callback) }
+        override fun setOnPing(callback: (Int, String, Int, Int) -> Unit) =
+            unlessDisposed { native.setOnPingCallback(callback) }
+        override fun setOnPingTimeout(callback: (String, Int, Int, Int) -> Unit) =
+            unlessDisposed { native.setOnPingTimeoutCallback(callback) }
+        override fun fastUdpReconnect() = unlessDisposed(native::fastUdpReconnect)
+        override fun setOnVideo(callback: (String, Long, String, String) -> Unit) =
+            unlessDisposed { native.setOnVideoCallback(callback) }
+        override fun setOnFirstFrame(callback: (String, Long, String) -> Unit) =
+            unlessDisposed { native.setOnFirstFrameCallback(callback) }
+        override fun startBroadcast(capturer: VideoCapturer, soundshareNativeInstance: Long) =
+            unlessDisposed { native.startBroadcast(capturer, soundshareNativeInstance) }
+        override fun stopBroadcast() = unlessDisposed(native::stopBroadcast)
+        override fun prepareSecureFramesTransition(transitionId: Int, protocolVersion: Int, callback: () -> Unit) =
+            unlessDisposed { native.prepareSecureFramesTransition(transitionId, protocolVersion) { callback() } }
+        override fun executeSecureFramesTransition(transitionId: Int) =
+            unlessDisposed { native.executeSecureFramesTransition(transitionId) }
+        override fun prepareSecureFramesEpoch(epoch: String, transitionId: Int, groupId: String) =
+            unlessDisposed { native.prepareSecureFramesEpoch(epoch, transitionId, groupId) }
+        override fun getMLSKeyPackageB64(callback: (String) -> Unit) =
+            unlessDisposed { native.getMLSKeyPackageB64(callback) }
+        override fun updateMLSExternalSenderB64(externalSenderB64: String) =
+            unlessDisposed { native.updateMLSExternalSenderB64(externalSenderB64) }
+        override fun processMLSProposalsB64(proposals: String, callback: (String) -> Unit) =
+            unlessDisposed { native.processMLSProposalsB64(proposals, callback) }
+        override fun prepareMLSCommitTransitionB64(
+            transitionId: Int,
+            commit: String,
+            callback: (Boolean, Int, String) -> Unit,
+        ) = unlessDisposed { native.prepareMLSCommitTransitionB64(transitionId, commit, callback) }
+        override fun processMLSWelcomeB64(
+            transitionId: Int,
+            welcome: String,
+            callback: (Boolean, Int, String) -> Unit,
+        ) = unlessDisposed { native.processMLSWelcomeB64(transitionId, welcome, callback) }
+        override fun setOnMLSFailure(callback: (String, String) -> Unit) =
+            unlessDisposed { native.setOnMLSFailureCallback(callback) }
+        override fun setSecureFramesStateUpdate(callback: (String) -> Unit) =
+            unlessDisposed { native.setSecureFramesStateUpdateCallback(callback) }
+
+        private inline fun unlessDisposed(action: () -> Unit) {
+            if (!disposed) action()
         }
     }
 
@@ -95,6 +375,17 @@ class StoreMediaEngine(
     }
 
     @Synchronized
+    internal fun useModernNativeEngine(context: Context): MediaEngineController {
+        if (mediaEngineController !is NativeMediaEngineController) {
+            mediaEngineController = NativeMediaEngineController(context)
+        }
+        return mediaEngineController
+    }
+
+    @Synchronized
+    internal fun controller(): MediaEngineController = mediaEngineController
+
+    @Synchronized
     fun handleConnectionOpen(payload: ModelPayload) {
         userId = payload.me?.id ?: NO_USER
     }
@@ -102,15 +393,14 @@ class StoreMediaEngine(
     /**
      * Releases the camera when we leave voice.
      *
-     * Re-enumerating with the preferred guid while the channel id is `0` is what actually hands the
-     * camera back to the system: the engine holds it open otherwise, and no other app can use it.
+     * Selecting no device while the channel id is `0` hands the camera back to the system.
      */
     @Synchronized
     fun handleVoiceChannelSelected(channelId: Long) {
         val previous = previousVoiceChannelId
         if (previous != null && previous != NO_VOICE_CHANNEL && channelId == NO_VOICE_CHANNEL) {
             mediaEngineController.getVideoInputDevices { devices ->
-                handleVideoInputDevices(devices, preferredVideoInputDeviceGUID)
+                handleVideoInputDevices(devices, null)
             }
         }
         previousVoiceChannelId = channelId
@@ -179,6 +469,12 @@ class StoreMediaEngine(
         pttActiveSubject.onNext(active)
     }
 
+    override fun setVideoOutputSink(streamId: String, callback: VideoFrameCallback?) =
+        mediaEngineController.setVideoOutputSink(streamId, callback)
+
+    @Synchronized
+    fun dispose() = mediaEngineController.dispose()
+
     /**
      * Applies a device enumeration.
      *
@@ -196,7 +492,7 @@ class StoreMediaEngine(
         val hasDevice = index >= 0
 
         mediaEngineController.setVideoInputDevice(NO_VIDEO_DEVICE)
-        mediaEngineController.setVideoInputDevice(index)
+        mediaEngineController.setVideoInputDevice(if (hasDevice) devices[index].guid else DEFAULT_VIDEO_DEVICE_GUID)
         mediaEngineController.setVideoInputEnabled(hasDevice)
 
         onSelected?.invoke(if (hasDevice) deviceGUID else null)
@@ -221,6 +517,8 @@ class StoreMediaEngine(
         }
 
     private companion object {
+        val CODEC_CAPABILITIES_TYPE =
+            object : TypeToken<List<MediaEngineController.CodecCapability>>() {}.type
         private const val NATIVE_ENGINE_EVER_INITIALIZED_CACHE_KEY =
             "CACHE_KEY_NATIVE_ENGINE_EVER_INITIALIZED"
         private const val PREFERRED_VIDEO_INPUT_DEVICE_GUID_CACHE_KEY =

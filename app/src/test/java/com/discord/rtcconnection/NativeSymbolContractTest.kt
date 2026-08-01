@@ -1,6 +1,11 @@
 package com.discord.rtcconnection
 
+import co.discord.media_engine.NativeCapturerObserver
+import co.discord.media_engine.SoundshareAudioSource
+import com.discord.native.engine.NativeConnection
+import com.discord.native.engine.NativeEngine
 import java.io.File
+import java.lang.reflect.Modifier
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -22,44 +27,16 @@ import org.junit.Test
  */
 class NativeSymbolContractTest {
 
-    /**
-     * The one deliberate exception.
-     *
-     * `Discord.setKeepAliveChannel(boolean)` is declared `native` in the reference APK too, and no
-     * `libdiscord.so` in the release exports it — verified across all four ABIs. It is kept for
-     * structural parity with the reference class and must never be called.
-     */
-    private val declaredButNotExported = setOf(
-        "Java_com_hammerandchisel_libdiscord_Discord_setKeepAliveChannel",
-    )
-
-    private val expectedSymbols: List<String> = listOf(
-        // com.hammerandchisel.libdiscord.Discord
-        "nativeConstructor", "setLocalVoiceLevelChangedCallbackNative", "connectToServer", "crash",
-        "dispose", "enableBuiltInAEC", "getAudioInputDevices", "getAudioOutputDevices",
-        "getAudioSubsystem", "getRankedRtcRegions", "getSupportedVideoCodecs", "getVideoInputDevices",
-        "setAudioInputEnabled", "setAutomaticGainControl", "setEchoCancellation", "setMicVolume",
-        "setNoAudioInputCallback", "setNoAudioInputThreshold", "setNoiseCancellation",
-        "setNoiseSuppression", "setPlayoutDevice", "setRecordingDevice", "setSpeakerVolume",
-        "setVideoInputDevice", "setVideoOutputSink", "signalVideoOutputSinkReady",
-    ).map { "Java_com_hammerandchisel_libdiscord_Discord_$it" } + listOf(
-        // co.discord.media_engine.Connection
-        "dispose", "simulatePacketLoss", "setQoS", "setEncryptionSettings", "getEncryptionModes",
-        "connectUser", "disconnectUser", "setUserPlayoutVolume", "muteUser", "disableVideo",
-        "deafenLocalUser", "muteLocalUser", "setMinimumPlayoutDelay", "enableForwardErrorCorrection",
-        "enableDiscontinuousTransmission", "setExpectedPacketLossRate", "setCodecs",
-        "setOnVideoCallback", "setVideoBroadcast", "startScreenshareBroadcast",
-        "stopScreenshareBroadcast", "setAudioInputMode", "setVADLeadingFramesToBuffer",
-        "setVADTrailingFramesToSend", "setVADTriggerThreshold", "setVADAutoThreshold",
-        "setVADUseKrisp", "setPTTActive", "setEncodingQuality", "getStatsNative",
-    ).map { "Java_co_discord_media_1engine_Connection_$it" } + listOf(
-        // co.discord.media_engine.SoundshareAudioSource
-        "nativeSetSampleFormat", "nativeCacheDirectBufferAddress", "nativeDataIsRecorded",
-        "nativeCreateInstance", "nativeDestroyInstance",
-    ).map { "Java_co_discord_media_1engine_SoundshareAudioSource_$it" } + listOf(
-        // co.discord.media_engine.NativeCapturerObserver
-        "Java_co_discord_media_1engine_NativeCapturerObserver_nativeOnFrame",
-    )
+    private val expectedSymbols = listOf(
+        NativeEngine::class.java,
+        NativeConnection::class.java,
+        SoundshareAudioSource::class.java,
+        NativeCapturerObserver::class.java,
+    ).flatMap { owner ->
+        owner.declaredMethods
+            .filter { Modifier.isNative(it.modifiers) }
+            .map { method -> "Java_${jniMangle(owner.name)}_${jniMangle(method.name)}" }
+    }.sorted()
 
     @Test
     fun `every declared descriptor is exported by libdiscord for every abi`() {
@@ -72,22 +49,6 @@ class NativeSymbolContractTest {
             val bytes = library.readBytes()
             val missing = expectedSymbols.filterNot { bytes.containsSymbol(it) }
             assertEquals("$abi is missing JNI descriptors", emptyList<String>(), missing)
-        }
-    }
-
-    @Test
-    fun `setKeepAliveChannel is absent from every abi and must not be called`() {
-        val jniLibs = findJniLibs()
-        assumeTrue("jniLibs not found", jniLibs != null)
-
-        ABIS.forEach { abi ->
-            val bytes = File(jniLibs, "$abi/libdiscord.so").readBytes()
-            declaredButNotExported.forEach { symbol ->
-                assertTrue(
-                    "$symbol unexpectedly appeared in $abi; the declaration can now be used",
-                    !bytes.containsSymbol(symbol),
-                )
-            }
         }
     }
 
@@ -127,6 +88,21 @@ class NativeSymbolContractTest {
             return true
         }
         return false
+    }
+
+    private fun jniMangle(value: String): String = buildString {
+        value.forEach { character ->
+            append(
+                when (character) {
+                    '.' -> "_"
+                    '_' -> "_1"
+                    ';' -> "_2"
+                    '[' -> "_3"
+                    '$' -> "_00024"
+                    else -> character
+                },
+            )
+        }
     }
 
     /** Unit tests run from the module directory, but tolerate being run from the repository root. */

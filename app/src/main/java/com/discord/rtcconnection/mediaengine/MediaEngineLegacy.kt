@@ -1,7 +1,6 @@
 package com.discord.rtcconnection.mediaengine
 
 import android.content.Context
-import android.os.Build
 import androidx.annotation.AnyThread
 import co.discord.media_engine.RtcRegion
 import co.discord.media_engine.VideoInputDeviceDescription
@@ -10,8 +9,7 @@ import com.discord.rtcconnection.Codec
 import com.hammerandchisel.libdiscord.Discord
 import java.util.Locale
 import org.webrtc.Logging
-import org.webrtc.voiceengine.WebRtcAudioManager
-import org.webrtc.voiceengine.WebRtcAudioUtils
+import org.webrtc.audio.JavaAudioDeviceModule
 import rx.Emitter
 import rx.Observable
 
@@ -31,8 +29,6 @@ class MediaEngineLegacy(
     private val openSLESConfig: MediaEngine.OpenSLESConfig,
     private val echoCancellation: EchoCancellationConfig,
     private val echoCancellationCallback: MediaEngine.EchoCancellationCallback,
-    private val defaultOpenSLAllowList: Set<String> = DEFAULT_OPENSL_ALLOW_LIST,
-    private val defaultOpenSLExcludeList: Set<String> = DEFAULT_OPENSL_EXCLUDE_LIST,
 ) : MediaEngine {
 
     private val noiseCancellationConfig = NoiseCancellationConfig()
@@ -303,7 +299,7 @@ class MediaEngineLegacy(
         if (nativeEngine != null) return
 
         AppLog.i(TAG, "initializing voice engine. OpenSL ES: $openSLESConfig, OpenSL usage mode: $openSLUsageMode")
-        applyOpenSLESPolicy()
+        // Modern WebRTC selects its audio backend internally and no longer exposes an OpenSL override.
         Logging.externalReporter = Logging.ExternalReporter { tag, message, throwable ->
             AppLog.e(tag, message, throwable)
         }
@@ -317,7 +313,8 @@ class MediaEngineLegacy(
                         pendingEchoCancellationInfo = MediaEngine.EchoCancellationInfo(
                             builtinAecRequested = requested,
                             builtinAecSupportedNative = nativeSupported,
-                            builtinAecSupportedJava = WebRtcAudioUtils.isAcousticEchoCancelerSupported(),
+                            builtinAecSupportedJava = JavaAudioDeviceModule
+                                .isBuiltInAcousticEchoCancelerSupported(),
                             builtinAecEnabled = enabled,
                         )
                     }
@@ -336,32 +333,6 @@ class MediaEngineLegacy(
         if (nativeEngine != null) notifyListener { it.onNativeEngineInitialized() }
     }
 
-    /**
-     * Decides whether WebRTC may use the OpenSL ES audio path on this device.
-     *
-     * The default is a per-model decision because OpenSL ES gives lower latency where it works and
-     * produces unusable audio where it does not; the two packaged lists are the models the
-     * reference had measured.
-     */
-    private fun applyOpenSLESPolicy() {
-        when (openSLESConfig) {
-            MediaEngine.OpenSLESConfig.FORCE_ENABLED -> WebRtcAudioManager.setBlacklistDeviceForOpenSLESUsage(false)
-            MediaEngine.OpenSLESConfig.FORCE_DISABLED -> WebRtcAudioManager.setBlacklistDeviceForOpenSLESUsage(true)
-            MediaEngine.OpenSLESConfig.DEFAULT -> {
-                val enableOpenSL = when (openSLUsageMode) {
-                    MediaEngine.OpenSLUsageMode.ALLOW_LIST -> Build.MODEL in defaultOpenSLAllowList
-                    MediaEngine.OpenSLUsageMode.EXCLUDE_LIST -> Build.MODEL !in defaultOpenSLExcludeList
-                }
-                AppLog.i(
-                    TAG,
-                    "OpenSL ES default. mode: $openSLUsageMode, enableOpenSL: $enableOpenSL, " +
-                        "model: '${Build.MODEL}'",
-                )
-                WebRtcAudioManager.setBlacklistDeviceForOpenSLESUsage(!enableOpenSL)
-            }
-        }
-    }
-
     private inline fun notifyListener(block: (MediaEngine.Listener) -> Unit) {
         try {
             block(listener)
@@ -377,12 +348,5 @@ class MediaEngineLegacy(
         private const val MAX_VOLUME_PERCENT = 100f
         private const val SPEAKING_FLAG = 1
 
-        /** Models measured as good with OpenSL ES; used when the mode is [MediaEngine.OpenSLUsageMode.ALLOW_LIST]. */
-        val DEFAULT_OPENSL_ALLOW_LIST: Set<String> =
-            setOf("Pixel", "Pixel XL", "Pixel 3a XL", "Pixel 4", "Pixel 4 XL", "Pixel 5")
-
-        /** Models measured as broken with OpenSL ES; used when the mode is [MediaEngine.OpenSLUsageMode.EXCLUDE_LIST]. */
-        val DEFAULT_OPENSL_EXCLUDE_LIST: Set<String> =
-            setOf("Pixel 3a", "Redmi Note 8 Pro", "Redmi Note 8 pro")
     }
 }

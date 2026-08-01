@@ -35,9 +35,10 @@ object Payloads {
         @SerializedName("audio_codec") val audioCodec: String,
         @SerializedName("video_codec") val videoCodec: String,
         val mode: String,
+        @SerializedName("secure_frames_version") val secureFramesVersion: Int = 0,
     ) {
         override fun toString(): String =
-            "Description(secretKey=<redacted>, mediaSessionId=$mediaSessionId, " +
+            "Description(secretKey=<redacted>, mediaSessionId=<redacted>, " +
                 "audioCodec=$audioCodec, videoCodec=$videoCodec, mode=$mode)"
     }
 
@@ -54,14 +55,15 @@ object Payloads {
      */
     internal data class Identify(
         @SerializedName("server_id") val serverId: String,
-        @SerializedName("user_id") val userId: Long,
+        @SerializedName("user_id") val userId: String,
         @SerializedName("session_id") val sessionId: String,
         val token: String,
         val video: Boolean,
         val streams: List<Stream>,
+        @SerializedName("max_dave_protocol_version") val maxDaveProtocolVersion: Int,
     ) {
         override fun toString(): String =
-            "Identify(serverId=$serverId, userId=$userId, sessionId=<redacted>, token=<redacted>, " +
+            "Identify(serverId=<redacted>, userId=<redacted>, sessionId=<redacted>, token=<redacted>, " +
                 "video=$video, streams=$streams)"
     }
 
@@ -69,6 +71,7 @@ object Payloads {
     internal data class Incoming(
         @SerializedName("op") val opcode: Int,
         @SerializedName("d") val data: JsonElement,
+        val seq: Int? = null,
     )
 
     /** Envelope of every client frame. */
@@ -89,6 +92,8 @@ object Payloads {
             val type: String,
             @SerializedName("payload_type") val payloadType: Int,
             @SerializedName("rtx_payload_type") val rtxPayloadType: Int?,
+            val encode: Boolean? = null,
+            val decode: Boolean? = null,
         )
 
         data class ProtocolInfo(
@@ -104,6 +109,7 @@ object Payloads {
         val port: Int,
         val ip: String,
         val streams: List<Stream>,
+        val modes: List<String>?,
     )
 
     /** How a video stream's resolution is negotiated. */
@@ -117,14 +123,50 @@ object Payloads {
         val token: String,
         @SerializedName("session_id") val sessionId: String,
         @SerializedName("server_id") val serverId: String,
+        @SerializedName("seq_ack") val seqAck: Int,
     ) {
         override fun toString(): String =
-            "Resume(token=<redacted>, sessionId=<redacted>, serverId=$serverId)"
+            "Resume(token=<redacted>, sessionId=<redacted>, serverId=<redacted>)"
     }
 
     /** Opcode 14 — the media session was re-keyed (for example when a stream starts). */
     internal data class SessionUpdate(
         @SerializedName("media_session_id") val mediaSessionId: String?,
+    )
+
+    /** Opcode 3 in gateway v8, and the echoed object in opcode 6. */
+    internal data class Heartbeat(
+        val t: Long,
+        @SerializedName("seq_ack") val seqAck: Int,
+    )
+
+    internal data class ClientsConnect(
+        @SerializedName("user_ids") val userIds: List<String>,
+    )
+
+    internal data class ClientFlags(
+        @SerializedName("user_id") val userId: String,
+        val flags: Int,
+    )
+
+    internal data class ClientPlatform(
+        @SerializedName("user_id") val userId: String,
+        val platform: Int,
+    )
+
+    internal data class DavePrepareTransition(
+        @SerializedName("protocol_version") val protocolVersion: Int,
+        @SerializedName("transition_id") val transitionId: Int,
+    )
+
+    internal data class DaveExecuteTransition(
+        @SerializedName("transition_id") val transitionId: Int,
+    )
+
+    internal data class DavePrepareEpoch(
+        @SerializedName("protocol_version") val protocolVersion: Int,
+        val epoch: Int,
+        @SerializedName("transition_id") val transitionId: Int?,
     )
 
     /**

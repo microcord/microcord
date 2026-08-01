@@ -1492,3 +1492,20 @@ including the OAuth `code` — only scheme+host is logged here.
 - `StoreNotices` now delivers through the resumed `AppActivity` and visible fragment tree; its
   remaining shell gap is adding the absent `WidgetCallFullscreen` to `DEFAULT_VALID_SCREENS`.
 - All 7 gateway TODOs at `StoreStream.kt:1116-1123` still open.
+
+## 2026-08-02 modern voice codec negotiation
+
+- `NativeEngine.getCodecCapabilities()` is now consumed using the PR 752 contract
+  (`codec`, `decode`, `encode`) rather than guessed wire fields. The direct native RTC path always
+  advertises Opus at payload type 120, filters video codecs to decodable entries, preserves native
+  rank order, and assigns payload/RTX pairs from 101/102 upward before `SELECT_PROTOCOL`.
+- `RtcVoiceGatewayV8Test.nativeCodecCapabilitiesBecomeSelectProtocolCodecs` verifies parsing,
+  decode filtering, encode/decode propagation, priorities, and payload assignment. The focused test
+  and `:app:assembleDebug` passed on 2026-08-02.
+- Debug and release builds send every DAVE websocket package; temporary protocol fault injection
+  has been removed.
+
+Resumable task: `app/src/main/java/com/discord/rtcconnection/RtcConnection.kt` | PR 752
+`voice/src/main/java/com/hammerandchisel/libdiscord/Discord.kt` | install the successful debug APK,
+join a video-capable voice channel, and confirm `DaveWebSocket -> OUT SELECT_PROTOCOL` carries the
+device-reported ranked codec list.

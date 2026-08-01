@@ -1,6 +1,8 @@
 package com.discord.rtcconnection
 
 import android.content.Intent
+import android.media.projection.MediaProjection
+import android.util.Base64
 import androidx.annotation.AnyThread
 import co.discord.media_engine.MediaType
 import co.discord.media_engine.StreamParameters
@@ -8,6 +10,7 @@ import co.discord.media_engine.VoiceQuality
 import com.discord.app.AppLog
 import com.discord.rtcconnection.mediaengine.MediaEngine
 import com.discord.rtcconnection.mediaengine.MediaEngineConnection
+import com.discord.rtcconnection.mediaengine.ScreenCapturer
 import com.discord.rtcconnection.mediaengine.ThumbnailEmitter
 import com.discord.rtcconnection.socket.RtcControlSocket
 import com.discord.rtcconnection.socket.io.Payloads
@@ -16,6 +19,8 @@ import com.discord.rtcconnection.stats.VideoQualityTracker
 import com.discord.utilities.networking.Backoff
 import com.discord.utilities.networking.NetworkMonitor
 import com.discord.utilities.time.Clock
+import com.discord.stores.StoreMediaEngine
+import com.google.gson.Gson
 import java.net.URI
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
@@ -62,7 +67,7 @@ class RtcConnection(
     private val isVideoEnabled: Boolean,
     private val rtcServerId: String,
     private val userId: Long,
-    private val mediaEngine: MediaEngine,
+    private val mediaEngine: MediaEngine?,
     private val clock: Clock,
     private val rtcConnectionType: Type = Type.Default,
     networkMonitor: NetworkMonitor,
@@ -75,6 +80,7 @@ class RtcConnection(
     private val enableMediaSinkWants: Boolean = false,
     loggingTagPrefix: String,
     val streamKey: String? = null,
+    private val modernMediaEngine: StoreMediaEngine.MediaEngineController? = null,
 ) {
 
     /** What this connection is for. A Go Live broadcast is a second connection to the same channel. */
@@ -168,6 +174,7 @@ class RtcConnection(
         fun onMediaSessionIdReceived()
         fun onQualityUpdate(quality: Quality)
         fun onSpeaking(userId: Long, speaking: Boolean)
+        fun onSpeaking(userId: Long, speaking: Boolean, voiceDb: Float) = onSpeaking(userId, speaking)
         fun onStateChange(stateChange: StateChange)
 
         /** A peer was announced to the engine; the UI can start rendering a tile for them. */
@@ -175,6 +182,9 @@ class RtcConnection(
 
         fun onVideoMetadata(metadata: VideoMetadata)
         fun onVideoStream(userId: Long, streamId: Int?, audioSsrc: Int, videoSsrc: Int, rtxSsrc: Int)
+        fun onNativeVideo(userId: Long, videoSsrc: Long, streamId: String, streamParametersJson: String) = Unit
+        fun onFirstFrameReceived(videoSsrc: Long) = Unit
+        fun onSecureFramesStateUpdate(stateUpdateJson: String) = Unit
     }
 
     abstract class DefaultListener : Listener {
@@ -208,6 +218,8 @@ class RtcConnection(
 
     private var socket: RtcControlSocket? = null
     private var mediaEngineConnection: MediaEngineConnection? = null
+    private var nativeConnection: StoreMediaEngine.MediaEngineController.Connection? = null
+    private var screenCapturer: ScreenCapturer? = null
     private var statsCollector: RtcStatsCollector? = null
     private var transportInfo: MediaEngineConnection.TransportInfo? = null
 
@@ -217,6 +229,9 @@ class RtcConnection(
     private var destroyed = false
     private var sentVideo = false
     private var hasConnected = false
+    private var selfMuted = false
+    private var selfDeafened = false
+    private var selfVideo = false
 
     /** Last five round-trip samples, for the disconnect report's `ping_average`. */
     private val pings = mutableListOf<Long>()
@@ -247,7 +262,7 @@ class RtcConnection(
     private val mediaSinkWantsManager = if (enableMediaSinkWants) {
         MediaSinkWantsManager(
             selfUserId = userId,
-            executor = mediaEngine.mediaEngineThreadExecutor,
+            executor = engineExecutor,
             listener = MediaSinkWantsManager.Listener { participantId, audioSsrc, videoSsrc, metadata ->
                 announceUserVideo(participantId, audioSsrc.toInt(), videoSsrc, metadata)
             },
@@ -304,12 +319,19 @@ class RtcConnection(
         runOnEngineThread {
             connectStartTime = clock.currentTimeMillis()
             connectCount++
-            mediaEnginePrepareSubscription = mediaEngine.prepare()
-                .timeout(MEDIA_ENGINE_PREPARE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                .subscribe(
-                    { runOnEngineThread { openSocket(endpoint, token, sslSocketFactory) } },
-                    { error -> handleFatalClose(false, "Failed to prepare media engine.", error) },
-                )
+            val legacyEngine = mediaEngine
+            if (modernMediaEngine != null) {
+                openSocket(endpoint, token, sslSocketFactory)
+            } else if (legacyEngine != null) {
+                mediaEnginePrepareSubscription = legacyEngine.prepare()
+                    .timeout(MEDIA_ENGINE_PREPARE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .subscribe(
+                        { runOnEngineThread { openSocket(endpoint, token, sslSocketFactory) } },
+                        { error -> handleFatalClose(false, "Failed to prepare media engine.", error) },
+                    )
+            } else {
+                handleFatalClose(false, "No media engine is installed.")
+            }
         }
 
     @AnyThread
@@ -318,6 +340,7 @@ class RtcConnection(
     /** Sets a peer's playout volume as a percentage; `100` is unity. */
     fun setUserOutputVolume(userId: Long, volume: Float) {
         userVolumes[userId] = volume
+        nativeConnection?.setLocalVolume(userId.toString(), volume)
         mediaEngineConnection?.setUserPlayoutVolume(userId, volume)
     }
 
@@ -332,17 +355,34 @@ class RtcConnection(
      */
     fun setUserMuted(userId: Long, muted: Boolean) {
         mutedUsers[userId] = muted
+        nativeConnection?.setLocalMute(userId.toString(), muted)
         mediaEngineConnection?.setUserMuted(userId, muted)
     }
 
     /** Marks a peer's video tile as scrolled out of view. */
     fun setUserOffScreen(userId: Long, offScreen: Boolean) {
         val connection = mediaEngineConnection
+        if (nativeConnection != null) return
         if (connection == null) {
             AppLog.e(TAG, "MediaEngine not connected for setLocalVideoOffscreen.")
             return
         }
         connection.setUserOffScreen(userId, offScreen)
+    }
+
+    fun setSelfMuted(muted: Boolean) {
+        selfMuted = muted
+        nativeConnection?.setSelfMute(muted)
+    }
+
+    fun setSelfDeafened(deafened: Boolean) {
+        selfDeafened = deafened
+        nativeConnection?.setSelfDeafen(deafened)
+    }
+
+    fun setSelfVideo(enabled: Boolean) {
+        selfVideo = enabled
+        nativeConnection?.setVideoBroadcast(enabled)
     }
 
     fun setFocusedParticipant(userId: Long?) {
@@ -358,6 +398,26 @@ class RtcConnection(
     fun setScreenshare(intent: Intent?, thumbnailEmitter: ThumbnailEmitter? = null) {
         if (rtcConnectionType !is Type.Stream) return
         breadcrumb("Setting screenshare ${intent != null}")
+        val directConnection = nativeConnection
+        if (directConnection != null) {
+            screenCapturer?.let {
+                directConnection.stopBroadcast()
+                it.dispose()
+            }
+            screenCapturer = null
+            if (intent != null) {
+                val capturer = ScreenCapturer(
+                    intent,
+                    object : MediaProjection.Callback() {
+                        override fun onStop() = setScreenshare(null)
+                    },
+                    thumbnailEmitter,
+                )
+                screenCapturer = capturer
+                directConnection.startBroadcast(capturer, capturer.soundshareAudioSource.nativeInstance)
+            }
+            return
+        }
         val connection = mediaEngineConnection
         if (connection == null) {
             AppLog.e(TAG, "MediaEngine not connected for setScreenshare.")
@@ -435,7 +495,7 @@ class RtcConnection(
             endpoint = mediaEndpoint,
             token = requireNotNull(token),
             sslSocketFactory = sslSocketFactory,
-            executor = mediaEngine.mediaEngineThreadExecutor,
+            executor = engineExecutor,
             clock = clock,
             loggingTagPrefix = loggingTag,
         ).apply {
@@ -462,6 +522,7 @@ class RtcConnection(
         statsCollector = null
         mediaEngineConnection?.destroy()
         mediaEngineConnection = null
+        destroyNativeConnection()
         sentVideo = false
         reconnectBackoff.cancel()
         setState(State.Disconnected(willReconnect))
@@ -502,6 +563,7 @@ class RtcConnection(
         statsCollector = null
         mediaEngineConnection?.destroy()
         mediaEngineConnection = null
+        destroyNativeConnection()
 
         setState(State.Disconnected(false))
         breadcrumb("Destroy internal RTC connection: $reason")
@@ -584,6 +646,7 @@ class RtcConnection(
                 // A single "100" video layer is offered up front so the server allocates video
                 // ssrcs even when the camera is off; turning it on later then needs no renegotiation.
                 streams = listOf(Payloads.Stream(type = "video", rid = "100", quality = 100)),
+                maxDaveProtocolVersion = modernMediaEngine?.maxDaveProtocolVersion ?: 0,
             )
             setState(State.Authenticating)
         }
@@ -598,7 +661,13 @@ class RtcConnection(
             listeners.forEach { it.onQualityUpdate(quality) }
         }
 
-        override fun onReady(port: Int, ssrc: Int, ip: String, streams: List<Payloads.Stream>) {
+        override fun onReady(
+            port: Int,
+            ssrc: Int,
+            ip: String,
+            streams: List<Payloads.Stream>,
+            modes: List<String>,
+        ) {
             breadcrumb("Discovered dedicated UDP server on port $port")
             setState(State.RtcConnecting)
 
@@ -620,7 +689,12 @@ class RtcConnection(
                     )
                 }
 
-            val connection = mediaEngine.connect(
+            val directEngine = modernMediaEngine
+            if (directEngine != null) {
+                connectNative(directEngine, ssrc, ip, port, streamParameters, modes)
+                return
+            }
+            val connection = requireNotNull(mediaEngine).connect(
                 userId = userId,
                 options = MediaEngine.ConnectionOptions(ssrc, ip, port, streamParameters),
                 type = when (rtcConnectionType) {
@@ -641,6 +715,12 @@ class RtcConnection(
 
         override fun onSelectProtocolAck(mode: String, secretKey: List<Int>) {
             mediaEngineConnection?.setEncryptionSettings(mode, secretKey.toIntArray())
+            if (nativeConnection != null) {
+                setState(State.RtcConnected)
+                connectCompletedTime = clock.currentTimeMillis()
+                hasConnected = true
+                listeners.forEach { it.onMediaEngineConnectionConnected(this@RtcConnection) }
+            }
         }
 
         override fun onCodecs(audioCodec: String, videoCodec: String) {
@@ -706,6 +786,67 @@ class RtcConnection(
                     ?.let { report -> reportVideoStreamEnded(userId, report, RECEIVER) }
             }
             mediaSinkWantsManager?.removeUser(userId)
+            nativeConnection?.destroyUser(userId.toString())
+        }
+
+        override fun onUsersConnect(userIds: List<String>) {
+            nativeConnection?.mergeUsers(
+                Gson().toJson(userIds.map { NativeUser(id = it, volume = 0f, mute = false) }),
+            )
+        }
+
+        override fun onDavePrepareTransition(
+            transitionId: Int,
+            protocolVersion: Int,
+            onPrepared: () -> Unit,
+        ) {
+            nativeConnection?.prepareSecureFramesTransition(transitionId, protocolVersion, onPrepared)
+        }
+
+        override fun onDaveExecuteTransition(transitionId: Int) {
+            nativeConnection?.executeSecureFramesTransition(transitionId)
+        }
+
+        override fun onDavePrepareEpoch(epoch: Int, transitionId: Int, onKeyPackage: (ByteArray) -> Unit) {
+            val connection = nativeConnection ?: return
+            connection.prepareSecureFramesEpoch(epoch.toString(), transitionId, groupId)
+            connection.getMLSKeyPackageB64 { onKeyPackage(decodeBase64(it)) }
+        }
+
+        override fun onDaveRequestKeyPackage(onKeyPackage: (ByteArray) -> Unit) {
+            nativeConnection?.getMLSKeyPackageB64 { onKeyPackage(decodeBase64(it)) }
+        }
+
+        override fun onDaveExternalSender(externalSender: ByteArray) {
+            nativeConnection?.updateMLSExternalSenderB64(encodeBase64(externalSender))
+        }
+
+        override fun onDaveProcessProposals(proposals: ByteArray, onCommitWelcome: (ByteArray) -> Unit) {
+            nativeConnection?.processMLSProposalsB64(encodeBase64(proposals)) { commitWelcomeB64 ->
+                onCommitWelcome(decodeBase64(commitWelcomeB64))
+            }
+        }
+
+        override fun onDavePrepareCommitTransition(
+            transitionId: Int,
+            commit: ByteArray,
+            onProcessed: (Boolean, Int) -> Unit,
+        ) {
+            val connection = nativeConnection ?: return
+            connection.prepareMLSCommitTransitionB64(transitionId, encodeBase64(commit)) { processed, version, _ ->
+                onProcessed(processed, version)
+            }
+        }
+
+        override fun onDaveProcessWelcome(
+            transitionId: Int,
+            welcome: ByteArray,
+            onProcessed: (Boolean, Int) -> Unit,
+        ) {
+            val connection = nativeConnection ?: return
+            connection.processMLSWelcomeB64(transitionId, encodeBase64(welcome)) { joined, version, _ ->
+                onProcessed(joined, version)
+            }
         }
 
         override fun onMediaSinkWants(wants: Map<String, Int>) {
@@ -908,6 +1049,20 @@ class RtcConnection(
 
     /** Announces a peer to the engine and to the UI, with the resolution envelope when known. */
     private fun announceUserVideo(userId: Long, audioSsrc: Int, videoSsrc: Long, metadata: VideoMetadata?) {
+        nativeConnection?.mergeUsers(
+            Gson().toJson(
+                listOf(
+                    NativeUser(
+                        id = userId.toString(),
+                        audioSsrc = audioSsrc,
+                        videoSsrcs = videoSsrc.takeIf { it != 0L }?.let { listOf(it.toInt()) }.orEmpty(),
+                        rtxSsrcs = videoSsrc.takeIf { it != 0L }?.let { listOf(it.toInt() + 1) }.orEmpty(),
+                        volume = userVolume(userId).coerceIn(0f, 1f),
+                        mute = isUserMuted(userId),
+                    ),
+                ),
+            ),
+        )
         mediaEngineConnection?.connectUser(
             userId = userId,
             audioSsrc = audioSsrc,
@@ -1039,9 +1194,143 @@ class RtcConnection(
 
     private fun userVolume(userId: Long): Float = userVolumes[userId] ?: DEFAULT_USER_VOLUME
 
+    private fun connectNative(
+        engine: StoreMediaEngine.MediaEngineController,
+        ssrc: Int,
+        ip: String,
+        port: Int,
+        streams: List<StreamParameters>,
+        serverModes: List<String>,
+    ) {
+        destroyNativeConnection()
+        val nativeStreams = listOf(
+            StoreMediaEngine.MediaEngineController.StreamParameters(
+                type = "audio",
+                rid = "",
+                ssrc = ssrc,
+                maxBitrate = 64_000,
+                soundshare = false,
+            ),
+        ) + streams.map { stream ->
+            StoreMediaEngine.MediaEngineController.StreamParameters(
+                type = if (stream.type == MediaType.Audio) "audio" else "video",
+                rid = stream.rid,
+                ssrc = stream.ssrc,
+                maxBitrate = stream.maxBitrate.takeIf { it > 0 } ?: DEFAULT_VIDEO_MAX_BITRATE,
+                quality = stream.quality,
+                rtxSsrc = stream.rtxSsrc,
+                maxFrameRate = VIDEO_CAPTURE_FRAME_RATE,
+                active = true,
+                maxResolution = StoreMediaEngine.MediaEngineController.StreamParameters.MaxResolution(
+                    "fixed",
+                    VIDEO_CAPTURE_WIDTH,
+                    VIDEO_CAPTURE_HEIGHT,
+                ),
+            )
+        }
+        var pendingResult: Pair<StoreMediaEngine.MediaEngineController.ConnectionInfo, String>? = null
+        val connection = engine.createVoiceConnection(
+            userId,
+            StoreMediaEngine.MediaEngineController.ConnectionOptions(
+                context = if (rtcConnectionType is Type.Stream) "stream:$rtcServerId:$channelId" else "default",
+                address = ip,
+                port = port,
+                ssrc = ssrc,
+                experiments = emptyList(),
+                modes = serverModes,
+                streamParameters = nativeStreams,
+                qosEnabled = false,
+            ),
+        ) { info, error ->
+            if (nativeConnection == null) pendingResult = info to error
+            else handleNativeConnected(info, error)
+        }
+        if (connection == null) {
+            handleFatalClose(true, "Native connection creation returned null.")
+            return
+        }
+        nativeConnection = connection
+        connection.setSelfMute(selfMuted)
+        connection.setSelfDeafen(selfDeafened)
+        connection.setVideoBroadcast(selfVideo)
+        mutedUsers.forEach { (id, muted) -> connection.setLocalMute(id.toString(), muted) }
+        userVolumes.forEach { (id, volume) -> connection.setLocalVolume(id.toString(), volume) }
+        pendingResult?.let { (info, error) -> handleNativeConnected(info, error) }
+        connection.setOnSpeaking { id, flags, voiceDb ->
+            val speakingUserId = id.toLongOrNull() ?: return@setOnSpeaking
+            val speaking = flags and SPEAKING_FLAG_MICROPHONE != 0
+            listeners.forEach { it.onSpeaking(speakingUserId, speaking, voiceDb) }
+            if (speakingUserId == userId) socket?.sendSpeaking(ssrc, speaking)
+        }
+        connection.setOnPing { ping, _, _, _ ->
+            listeners.forEach { it.onQualityUpdate(Quality.fromPing(ping.toDouble())) }
+        }
+        connection.setOnPingTimeout { _, _, _, _ -> connection.fastUdpReconnect() }
+        connection.setOnFirstFrame { _, videoSsrc, _ ->
+            listeners.forEach { it.onFirstFrameReceived(videoSsrc) }
+        }
+        connection.setOnVideo { id, videoSsrc, streamId, parameters ->
+            val peerId = id.toLongOrNull() ?: return@setOnVideo
+            listeners.forEach { it.onNativeVideo(peerId, videoSsrc, streamId, parameters) }
+        }
+        connection.setOnMLSFailure { _, _ -> Unit }
+        connection.setSecureFramesStateUpdate { state ->
+            listeners.forEach { it.onSecureFramesStateUpdate(state) }
+        }
+    }
+
+    private fun handleNativeConnected(
+        info: StoreMediaEngine.MediaEngineController.ConnectionInfo,
+        error: String,
+    ) = runOnEngineThread {
+        if (error.isNotEmpty() || !info.isConnected) {
+            handleFatalClose(true, "Native connection failed.")
+        } else {
+            modernMediaEngine?.getCodecCapabilities { capabilities ->
+                runOnEngineThread {
+                    socket?.selectProtocol(
+                        info.localAddress,
+                        info.localPort,
+                        protocolCodecs(capabilities),
+                    )
+                }
+            } ?: socket?.selectProtocol(info.localAddress, info.localPort, protocolCodecs(emptyList()))
+        }
+    }
+
+    private fun destroyNativeConnection() {
+        screenCapturer?.dispose()
+        screenCapturer = null
+        nativeConnection?.dispose()
+        nativeConnection = null
+    }
+
+    private fun decodeBase64(value: String): ByteArray = Base64.decode(value, Base64.DEFAULT)
+    private fun encodeBase64(value: ByteArray): String = Base64.encodeToString(value, Base64.NO_WRAP)
+
+    private val groupId: String
+        get() = if (rtcConnectionType is Type.Stream) {
+            ((rtcServerId.toLongOrNull() ?: channelId) - 1L).toString()
+        } else {
+            channelId.toString()
+        }
+
+    private val engineExecutor
+        get() = modernMediaEngine?.executor ?: requireNotNull(mediaEngine).mediaEngineThreadExecutor
+
+    private data class NativeUser(
+        val id: String,
+        val audioSsrc: Int = 0,
+        val ssrc: Int = audioSsrc,
+        val videoSsrcs: List<Int> = emptyList(),
+        val rtxSsrcs: List<Int> = emptyList(),
+        val volume: Float,
+        val mute: Boolean,
+    )
+
     @AnyThread
     private fun runOnEngineThread(action: () -> Unit) {
-        mediaEngine.mediaEngineThreadExecutor.run(action)
+        engineExecutor.run(action)
     }
 
     private fun breadcrumb(message: String) = AppLog.recordBreadcrumb(message, loggingTag)
@@ -1083,7 +1372,24 @@ class RtcConnection(
         maxBitrate = maxBitrate,
     )
 
-    private companion object {
+    companion object {
+        internal fun protocolCodecs(
+            capabilities: List<StoreMediaEngine.MediaEngineController.CodecCapability>,
+        ): List<Payloads.Protocol.CodecInfo> = listOf(
+            Payloads.Protocol.CodecInfo("opus", 1, "audio", 120, null),
+        ) + capabilities.filter { it.decode }.mapIndexed { index, capability ->
+            val payloadType = 101 + index * 2
+            Payloads.Protocol.CodecInfo(
+                capability.codec,
+                index + 1,
+                "video",
+                payloadType,
+                payloadType + 1,
+                capability.encode,
+                capability.decode,
+            )
+        }
+
         private const val TAG = "RtcConnection"
         private val instanceCount = AtomicInteger()
 
@@ -1101,6 +1407,8 @@ class RtcConnection(
         private const val MAX_PING_SAMPLES = 5
         private const val BAD_PING_MS = 500L
         private const val DEFAULT_USER_VOLUME = 1f
+        private const val DEFAULT_VIDEO_MAX_BITRATE = 4_000_000
+        private const val SPEAKING_FLAG_MICROPHONE = 1
 
         private const val RECEIVER = "receiver"
         private const val SENDER = "sender"

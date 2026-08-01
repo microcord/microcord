@@ -1,9 +1,9 @@
 package co.discord.media_engine.internal
 
 import android.content.Context
-import android.util.Log
 import co.discord.media_engine.CameraEnumeratorProvider
 import com.discord.R
+import com.discord.app.AppLog
 import java.io.File
 import java.util.Locale
 
@@ -42,7 +42,7 @@ class AssetManagement(val ctx: Context) {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed copying krisp model files: ${e.message}: $e")
+            AppLog.e(TAG, "Failed copying krisp model files", e)
             cleanup()
         }
     }
@@ -51,7 +51,7 @@ class AssetManagement(val ctx: Context) {
         try {
             File(ctx.filesDir, "thz").deleteRecursively()
         } catch (e: Exception) {
-            Log.e(TAG, "Failed removing krisp model files: ${e.message}: $e")
+            AppLog.e(TAG, "Failed removing krisp model files", e)
         }
     }
 

@@ -1,9 +1,25 @@
 # Retrofit and Gson inspect generic signatures and runtime annotations.
 -keepattributes Signature,InnerClasses,EnclosingMethod,*Annotation*
 
-# libdiscord.so and the recovered WebRTC bridge use exact JNI class, member, and field names.
+# libdiscord.so and WebRTC use exact JNI class, callback, model, member, and field names.
 -keep class com.hammerandchisel.libdiscord.** { *; }
 -keep class co.discord.media_engine.** { *; }
+-keep class com.discord.native.engine.NativeEngine { *; }
+-keep class com.discord.native.engine.NativeEngine$* { *; }
+-keep class com.discord.native.engine.NativeConnection { *; }
+-keep class com.discord.native.engine.NativeConnection$* { *; }
+-keep class com.discord.native.engine.AudioInputDeviceDescription { *; }
+-keep class com.discord.native.engine.AudioInputInitializationInfo { *; }
+-keep class com.discord.native.engine.AudioOutputDeviceDescription { *; }
+-keep class com.discord.native.engine.ConnectionInfo { *; }
+-keep class com.discord.native.engine.VideoInputDeviceDescription { *; }
+-keep class com.discord.native.engine.VideoInputDeviceFacing { *; }
+-keep class com.discord.DiscordDecoderStreamManager { *; }
+-keep class com.discord.DiscordDecoderStreamManagerDelegate { *; }
+-keep class com.discord.MainApplication { *; }
+-keep class com.discord.crash_reporting.WebrtcCrashReporting { *; }
+-keep class com.discord.play_delivery.PlayAssetDeliveryNativeWrapper { *; }
+-keep class com.discord.socialsdk.DiscordSocialSdkInit { *; }
 -keep class org.webrtc.** { *; }
 -keepclasseswithmembernames,includedescriptorclasses class * {
     native <methods>;

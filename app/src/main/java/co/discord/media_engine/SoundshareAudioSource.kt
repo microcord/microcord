@@ -2,7 +2,7 @@ package co.discord.media_engine
 
 import android.media.AudioFormat
 import android.media.AudioRecord
-import android.util.Log
+import com.discord.app.AppLog
 import java.nio.ByteBuffer
 import org.webrtc.ThreadUtils
 import org.webrtc.TimestampAligner
@@ -34,7 +34,7 @@ class SoundshareAudioSource {
 
     fun startRecording(audioRecord: AudioRecord): Boolean {
         if (this.audioRecord != null) {
-            Log.e(TAG, "Init recording error: StartRecording called twice without StopRecording.")
+            AppLog.e(TAG, "Init recording error: StartRecording called twice without StopRecording.")
             return false
         }
 
@@ -52,11 +52,11 @@ class SoundshareAudioSource {
             AudioFormat.ENCODING_PCM_16BIT,
         )
         if (minBufferSize == AudioRecord.ERROR || minBufferSize == AudioRecord.ERROR_BAD_VALUE) {
-            Log.e(TAG, "Init recording error: AudioRecord.getMinBufferSize failed: $minBufferSize")
+            AppLog.e(TAG, "Init recording error: AudioRecord.getMinBufferSize failed: $minBufferSize")
             return false
         }
         if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
-            Log.e(TAG, "Init recording error: Failed to create a new AudioRecord instance")
+            AppLog.e(TAG, "Init recording error: Failed to create a new AudioRecord instance")
             release()
             return false
         }
@@ -66,14 +66,14 @@ class SoundshareAudioSource {
             val timestamp = TimestampAligner.getRtcTimeNanos()
             audioRecord.startRecording()
             if (audioRecord.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
-                Log.e(TAG, "Start recording error: incorrect state ${audioRecord.recordingState}")
+                AppLog.e(TAG, "Start recording error: incorrect state ${audioRecord.recordingState}")
                 false
             } else {
                 audioThread = AudioRecordThread("SoundshareThread", audioRecord, buffer, timestamp).also { it.start() }
                 true
             }
         } catch (e: IllegalStateException) {
-            Log.e(TAG, "Start recording error: ${e.message}")
+            AppLog.e(TAG, "Start recording error", e)
             false
         }
     }
@@ -82,7 +82,7 @@ class SoundshareAudioSource {
         val thread = audioThread ?: return false
         thread.stopThread()
         if (!ThreadUtils.joinUninterruptibly(thread, AUDIO_RECORD_THREAD_JOIN_TIMEOUT_MS)) {
-            Log.e(TAG, "Join of SoundshareThread timed out")
+            AppLog.e(TAG, "Join of SoundshareThread timed out")
         }
         audioThread = null
         return true
@@ -120,17 +120,17 @@ class SoundshareAudioSource {
                     if (keepAlive) dataIsRecorded(bytes, timestamp)
                 } else {
                     val message = "AudioRecord.read failed: $bytes"
-                    Log.e(TAG, message)
+                    AppLog.e(TAG, message)
                     if (bytes == AudioRecord.ERROR_INVALID_OPERATION) {
                         keepAlive = false
-                        Log.e(TAG, "Run-time recording error: $message")
+                        AppLog.e(TAG, "Run-time recording error: $message")
                     }
                 }
             }
             try {
                 audioRecord.stop()
             } catch (e: IllegalStateException) {
-                Log.e(TAG, "AudioRecord.stop failed: ${e.message}")
+                AppLog.e(TAG, "AudioRecord.stop failed", e)
             }
         }
 
@@ -149,7 +149,7 @@ class SoundshareAudioSource {
 
         @JvmStatic
         fun setMicrophoneMute(mute: Boolean) {
-            Log.w(TAG, "setMicrophoneMute($mute)")
+            AppLog.w(TAG, "setMicrophoneMute($mute)")
             microphoneMute = mute
         }
     }

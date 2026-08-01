@@ -77,7 +77,12 @@ internal class ScreenCapturer(
 
     @Synchronized
     override fun startCapture(width: Int, height: Int, framerate: Int) {
-        super.startCapture(width, height, framerate)
+        try {
+            super.startCapture(width, height, framerate)
+        } catch (t: Throwable) {
+            AppLog.e(TAG, "error starting screen capture", t)
+            return
+        }
         requestedLongestSide = maxOf(width, height)
         setFrameRate(framerate)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -98,16 +103,6 @@ internal class ScreenCapturer(
     override fun changeCaptureFormat(width: Int, height: Int, framerate: Int) {
         applyCaptureSize(lastMeasuredSize, maxOf(width, height))
         setFrameRate(framerate)
-    }
-
-    override fun createVirtualDisplay() {
-        // The projection can be revoked between the permission grant and the display creation; that
-        // must degrade to "no stream", not to a crash inside a capture callback.
-        try {
-            super.createVirtualDisplay()
-        } catch (t: Throwable) {
-            AppLog.e(TAG, "error in createVirtualDisplay", t)
-        }
     }
 
     override fun onFrame(frame: VideoFrame) {
@@ -142,7 +137,11 @@ internal class ScreenCapturer(
             (measuredSize.height() * scale).toInt(),
         )
         captureSize.set(captureSize.x.roundToMacroblock(), captureSize.y.roundToMacroblock())
-        super.changeCaptureFormat(captureSize.x, captureSize.y, frameRate)
+        try {
+            super.changeCaptureFormat(captureSize.x, captureSize.y, frameRate)
+        } catch (t: Throwable) {
+            AppLog.e(TAG, "error resizing screen capture", t)
+        }
     }
 
     private fun Int.roundToMacroblock(): Int {
@@ -194,7 +193,7 @@ internal class ScreenCapturer(
      */
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun createPlaybackCaptureRecord(): AudioRecord? {
-        val projection = mediaProjection ?: return null
+        val projection = getMediaProjection() ?: return null
         val config = AudioPlaybackCaptureConfiguration.Builder(projection)
             .addMatchingUsage(android.media.AudioAttributes.USAGE_MEDIA)
             .addMatchingUsage(android.media.AudioAttributes.USAGE_GAME)

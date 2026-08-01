@@ -178,6 +178,7 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
         viewModel.observeViewState()
             .bindToComponentLifecycle(this)
             .subscribe(::configureUI)
+        viewModelEventSubscription?.unsubscribe()
         viewModelEventSubscription = viewModel.observeEvents()
             .bindToComponentLifecycle(this)
             .subscribe(::handleEvent)
@@ -417,7 +418,10 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
             is WidgetVoiceBottomSheetViewModel.Event.AccessibilityAnnouncement ->
                 view?.announceForAccessibility(getString(event.announcementResId))
             is WidgetVoiceBottomSheetViewModel.Event.RequestStartStream -> requestStartStream()
-            is WidgetVoiceBottomSheetViewModel.Event.Dismiss -> dismiss()
+            is WidgetVoiceBottomSheetViewModel.Event.Dismiss -> {
+                viewModelEventSubscription?.unsubscribe()
+                dismiss()
+            }
             is WidgetVoiceBottomSheetViewModel.Event.ExpandSheet ->
                 setBottomSheetState(BottomSheetBehavior.STATE_EXPANDED)
         }

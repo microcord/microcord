@@ -3,14 +3,19 @@ package com.discord.utilities.voice
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.IntentService
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.net.wifi.WifiManager
 import android.os.Binder
+import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
@@ -37,6 +42,7 @@ class VoiceEngineForegroundService : IntentService("VoiceEngineForegroundService
     private var wakeLockPartial: PowerManager.WakeLock? = null
     private var wakeLockProximity: PowerManager.WakeLock? = null
     private var wakeLockWifi: WifiManager.WifiLock? = null
+    private var foregroundNotification: Notification? = null
 
     override fun onBind(intent: Intent): IBinder = binder
 
@@ -88,9 +94,19 @@ class VoiceEngineForegroundService : IntentService("VoiceEngineForegroundService
             ACTION.START_FOREGROUND -> handleStartForeground(intent)
             ACTION.START_STREAM -> {
                 val permissionIntent = intent.getParcelableExtra(Intent.EXTRA_INTENT) as? Intent
-                if (permissionIntent != null) screenShareManager?.startStream(permissionIntent)
+                if (permissionIntent != null) {
+                    foregroundNotification?.let {
+                        promoteForeground(it, foregroundServiceTypes(includeMediaProjection = true))
+                    }
+                    screenShareManager?.startStream(permissionIntent)
+                }
             }
-            ACTION.STOP_STREAM -> screenShareManager?.stopStream()
+            ACTION.STOP_STREAM -> {
+                screenShareManager?.stopStream()
+                foregroundNotification?.let {
+                    promoteForeground(it, foregroundServiceTypes(includeMediaProjection = false))
+                }
+            }
             ACTION.STAGE_INVITE_ACCEPT -> ackStageInvite(intent, true)
             ACTION.STAGE_INVITE_DECLINE -> ackStageInvite(intent, false)
         }
@@ -105,6 +121,7 @@ class VoiceEngineForegroundService : IntentService("VoiceEngineForegroundService
     @SuppressLint("ThreadConstraint")
     private fun handleStartForeground(intent: Intent) {
         setProximityLock(intent.getBooleanExtra(EXTRA.PROXIMITY_LOCK_ENABLED, false))
+        ensureNotificationChannel()
 
         val channelId = intent.getLongExtra(EXTRA.CHANNEL_ID, 0L)
         val guildId = intent.extras?.get(EXTRA.GUILD_ID) as? Long
@@ -114,9 +131,7 @@ class VoiceEngineForegroundService : IntentService("VoiceEngineForegroundService
             screenShareManager = ScreenShareManager(this, channelId, guildId)
         }
 
-        startForeground(
-            NOTIFICATION_ID,
-            VoiceEngineNotificationBuilder.buildNotification(
+        val notification = VoiceEngineNotificationBuilder.buildNotification(
                 context = this,
                 actionMain = ACTION.MAIN_ACTION,
                 actionDisconnect = ACTION.DISCONNECT,
@@ -134,8 +149,53 @@ class VoiceEngineForegroundService : IntentService("VoiceEngineForegroundService
                 isStreaming = intent.getBooleanExtra(EXTRA.ITEM_STREAMING, false),
                 isMuted = intent.getBooleanExtra(EXTRA.ITEM_MUTED, false),
                 isDeafened = intent.getBooleanExtra(EXTRA.ITEM_DEAFENED, false),
+        )
+        foregroundNotification = notification
+        promoteForeground(notification, foregroundServiceTypes(includeMediaProjection = false))
+    }
+
+    private fun ensureNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        getSystemService(NotificationManager::class.java).createNotificationChannel(
+            NotificationChannel(
+                NOTIFICATION_CHANNEL,
+                NOTIFICATION_CHANNEL,
+                NotificationManager.IMPORTANCE_LOW,
             ),
         )
+    }
+
+    private fun foregroundServiceTypes(includeMediaProjection: Boolean): Int {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return 0
+        val canRecord = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!canRecord && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            return ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+        }
+        var types = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+        }
+        if (includeMediaProjection) types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+        return types
+    }
+
+    private fun promoteForeground(notification: Notification, types: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                startForeground(NOTIFICATION_ID, notification, types)
+            } catch (exception: SecurityException) {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE ||
+                    types == ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                ) {
+                    throw exception
+                }
+                AppLog.w(LOG_TAG, "Foreground media access is not currently eligible; using receive-only mode.")
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            }
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     private fun ackStageInvite(intent: Intent, accept: Boolean) {
@@ -186,10 +246,12 @@ class VoiceEngineForegroundService : IntentService("VoiceEngineForegroundService
         val connection: ServiceConnection = object : ServiceConnection {
             override fun onServiceConnected(className: ComponentName, binder: IBinder) {
                 service = (binder as LocalBinder).service
+                isBound = true
                 isUnbinding = false
             }
 
             override fun onServiceDisconnected(className: ComponentName) {
+                isBound = false
                 isUnbinding = false
                 service = null
             }
@@ -198,6 +260,10 @@ class VoiceEngineForegroundService : IntentService("VoiceEngineForegroundService
         @get:Synchronized
         @set:Synchronized
         var isUnbinding: Boolean = false
+
+        @get:Synchronized
+        @set:Synchronized
+        var isBound: Boolean = false
 
         var service: VoiceEngineForegroundService? = null
             private set
@@ -294,11 +360,13 @@ class VoiceEngineForegroundService : IntentService("VoiceEngineForegroundService
                     .putExtra(EXTRA.CHANNEL_ID, channelId)
                     .putExtra(EXTRA.GUILD_ID, guildId)
                 ContextCompat.startForegroundService(connection.context, intent)
-                connection.context.bindService(
-                    Intent(connection.context, VoiceEngineForegroundService::class.java),
-                    connection.connection,
-                    Context.BIND_AUTO_CREATE,
-                )
+                if (!connection.isBound) {
+                    connection.isBound = connection.context.bindService(
+                        Intent(connection.context, VoiceEngineForegroundService::class.java),
+                        connection.connection,
+                        Context.BIND_AUTO_CREATE,
+                    )
+                }
             } catch (exception: Exception) {
                 AppLog.v(LOG_TAG, "Unable to bind service connection.", exception)
             }
@@ -314,7 +382,7 @@ class VoiceEngineForegroundService : IntentService("VoiceEngineForegroundService
 
         fun stopForegroundAndUnbind(connection: Connection) {
             try {
-                if (connection.service == null || connection.isUnbinding) return
+                if (!connection.isBound || connection.isUnbinding) return
                 AppLog.v(LOG_TAG, "Unbind service connection.")
                 connection.isUnbinding = true
                 connection.context.startService(
@@ -322,6 +390,7 @@ class VoiceEngineForegroundService : IntentService("VoiceEngineForegroundService
                         .setAction(ACTION.STOP_SERVICE),
                 )
                 connection.context.unbindService(connection.connection)
+                connection.isBound = false
             } catch (exception: Exception) {
                 AppLog.v(LOG_TAG, "Unable to unbind service connection.", exception)
             }

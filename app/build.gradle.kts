@@ -30,6 +30,7 @@ android {
         }
     }
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -53,6 +54,7 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.apng)
     implementation(libs.billing)
     implementation(libs.androidx.appcompat)
@@ -100,7 +102,7 @@ dependencies {
     implementation(libs.realtime.blur.view)
     implementation(libs.simpleast)
     implementation(libs.ucrop)
-    implementation(files("../third_party/webrtc-discord-126.21/webrtc-discord-126.21.jar"))
+    implementation(files("../third_party/webrtc-discord-333.5/webrtc-discord-333.5.aar"))
     implementation(libs.zxing.scanner) {
         exclude(group = "com.android.support")
     }

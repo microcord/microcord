@@ -4,6 +4,11 @@ data class AudioInputDeviceDescription(val name: String, val guid: String)
 
 data class AudioOutputDeviceDescription(val name: String, val guid: String)
 
+data class AudioInputInitializationInfo(
+    val description: AudioInputDeviceDescription,
+    val timeToInitializedNanos: Long,
+)
+
 enum class VideoInputDeviceFacing {
     Unknown,
     Front,
@@ -16,9 +21,11 @@ data class VideoInputDeviceDescription(
     val facing: VideoInputDeviceFacing,
 )
 
-data class ConnectionInfo(
+data class ConnectionInfo @JvmOverloads constructor(
     val isConnected: Boolean,
     val protocol: String,
     val localAddress: String,
     val localPort: Int,
+    val createConnectionTime: Int? = null,
+    val connectTime: Int? = null,
 )

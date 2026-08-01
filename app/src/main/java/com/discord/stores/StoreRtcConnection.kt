@@ -27,9 +27,8 @@ import rx.subjects.SerializedSubject
  * sends `VOICE_STATE_UPDATE` (session) and `VOICE_SERVER_UPDATE` (endpoint) in either order, which
  * is why [checkForVoiceServerUpdate] re-runs on both paths instead of assuming an order.
  *
- * **Phase 11 boundary.** Creating and tearing down the actual `RtcConnection` is delegated to
- * [rtcConnectionController]; the reference does it inline. Everything above the transport — state
- * tracking, gateway messaging, the speaking feed, the metadata subject — is real here.
+ * Creating and tearing down the actual `RtcConnection` is delegated to [rtcConnectionController]
+ * so store ordering remains deterministic without loading JNI in unit tests.
  */
 class StoreRtcConnection(
     private val dispatcher: Dispatcher,
@@ -46,17 +45,18 @@ class StoreRtcConnection(
         preferredRegion: String?,
         shouldIncludePreferredRegion: Boolean,
     ) -> Unit,
-    private val rtcConnectionController: RtcConnectionController = RtcConnectionController.NoOp,
+    rtcConnectionController: RtcConnectionController = RtcConnectionController.NoOp,
     private val getLocalUserId: () -> Long = { StoreStream.getUsers().getMeInternal().id },
     private val getVoiceStates: (guildId: Long) -> Map<Long, VoiceState>? = { guildId ->
         StoreStream.getVoiceStates().get()[guildId]
     },
 ) {
 
+    @Volatile
+    private var rtcConnectionController = rtcConnectionController
+
     /**
-     * The transport this store drives. Reconstructed in Phase 11 on top of
-     * `com.discord.rtcconnection.RtcConnection`; until then the store is a complete state machine
-     * with a no-op transport.
+     * The transport this store drives.
      */
     interface RtcConnectionController {
         /** Builds a connection for the current channel/server pair, replacing any existing one. */
@@ -72,6 +72,9 @@ class StoreRtcConnection(
         fun setUserOutputVolume(userId: Long, volume: Float)
         fun setUserOffScreen(userId: Long, offScreen: Boolean)
         fun setFocusedParticipant(userId: Long?)
+        fun setSelfMuted(muted: Boolean) = Unit
+        fun setSelfDeafened(deafened: Boolean) = Unit
+        fun setSelfVideo(enabled: Boolean) = Unit
 
         object NoOp : RtcConnectionController {
             override fun connect(voiceServer: VoiceServer, channelId: Long, guildId: Long?, sessionId: String) = Unit
@@ -85,7 +88,7 @@ class StoreRtcConnection(
     }
 
     /** One user's speaking transition, as reported by the media engine. */
-    data class SpeakingUserUpdate(val userId: Long, val isSpeaking: Boolean)
+    data class SpeakingUserUpdate(val userId: Long, val isSpeaking: Boolean, val voiceDb: Float = 0f)
 
     interface Listener {
         fun onConnected()
@@ -150,6 +153,14 @@ class StoreRtcConnection(
 
     fun removeListener(listener: Listener) { listeners -= listener }
 
+    internal fun useRtcConnectionController(controller: RtcConnectionController) {
+        dispatcher.schedule {
+            rtcConnectionController.disconnect("Replacing RTC controller")
+            rtcConnectionController = controller
+            checkForVoiceServerUpdate()
+        }
+    }
+
     // region Gateway and store input
 
     @StoreThread
@@ -213,18 +224,21 @@ class StoreRtcConnection(
     @StoreThread
     fun handleSelfMuted(selfMuted: Boolean) {
         currentVoiceState = currentVoiceState.copy(selfMute = selfMuted)
+        rtcConnectionController.setSelfMuted(selfMuted)
         onVoiceStateUpdated()
     }
 
     @StoreThread
     fun handleSelfDeafened(selfDeafened: Boolean) {
         currentVoiceState = currentVoiceState.copy(selfDeaf = selfDeafened)
+        rtcConnectionController.setSelfDeafened(selfDeafened)
         onVoiceStateUpdated()
     }
 
     @StoreThread
     fun handleSelfVideo(selfVideo: Boolean) {
         currentVoiceState = currentVoiceState.copy(selfVideo = selfVideo)
+        rtcConnectionController.setSelfVideo(selfVideo)
         onVoiceStateUpdated()
     }
 
@@ -248,8 +262,8 @@ class StoreRtcConnection(
 
     // region Transport callbacks
 
-    fun onSpeaking(userId: Long, isSpeaking: Boolean) {
-        speakingUsersSubject.onNext(SpeakingUserUpdate(userId, isSpeaking))
+    fun onSpeaking(userId: Long, isSpeaking: Boolean, voiceDb: Float = 0f) {
+        speakingUsersSubject.onNext(SpeakingUserUpdate(userId, isSpeaking, voiceDb))
         dispatcher.schedule { voicePropsTracker?.handleOnSpeaking(userId, isSpeaking) }
     }
 

@@ -79,6 +79,27 @@ class StoreStreamTest {
     }
 
     @Test
+    fun voiceStateUpdateHydratesJoiningMemberBeforePublishingParticipant() {
+        val gson = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .registerDiscordApiTypeAdapters().create()
+        val parser = IncomingParser(gson)
+        fun dispatch(json: String) = parser.parse(json).also { event ->
+            stream.handleGatewayDispatch(event.type, requireNotNull(event.data))
+        }
+
+        dispatch(
+            """{"op":0,"t":"GUILD_CREATE","d":{"id":1,"name":"Voice Guild","owner_id":42,"unavailable":false,"features":[],"roles":[],"members":[],"channels":[{"id":10,"guild_id":1,"type":2,"name":"Voice"}],"voice_states":[]}}""",
+        )
+        dispatch(
+            """{"op":0,"t":"VOICE_STATE_UPDATE","d":{"guild_id":1,"channel_id":10,"user_id":7,"session_id":"other","suppress":false,"self_mute":false,"self_deaf":false,"self_video":false,"self_stream":false,"mute":false,"deaf":false,"member":{"guild_id":1,"user":{"id":7,"username":"joined","discriminator":"0007"},"roles":[]}}}""",
+        )
+
+        assertEquals("joined", StoreStream.getUsers().getUsers()[7]?.username)
+        assertEquals(7L, StoreStream.getGuilds().getMembers()[1]?.get(7)?.userId)
+        assertEquals(10L, StoreStream.getVoiceStates().getForChannel(1, 10)[7]?.channelId)
+    }
+
+    @Test
     fun snapshotsStayStableAcrossDispatches() {
         val store = StoreStream.getStageInstances()
         stream.dispatcher.schedule { store.handleConnectionOpen(emptyList()) }
