@@ -9,17 +9,15 @@ import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.app.AppViewFlipper
-import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
-import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
-import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.views.guildboost.GuildBoostMarketingView
 import com.discord.views.guildboost.GuildBoostSubscriptionUpsellView
 import com.discord.widgets.guilds.WidgetGuildSelector
+import com.discord.widgets.servers.guildboost.WidgetGuildBoostConfirmation
+import com.discord.widgets.servers.guildboost.WidgetGuildBoostTransfer
 import com.discord.widgets.settings.premium.WidgetSettingsPremium
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class WidgetSettingsGuildBoost : AppFragment(R.layout.widget_settings_boost) {
     private lateinit var viewModel: SettingsGuildBoostViewModel
@@ -91,35 +89,18 @@ class WidgetSettingsGuildBoost : AppFragment(R.layout.widget_settings_boost) {
     private fun handlePendingAction(action: SettingsGuildBoostViewModel.PendingAction?) {
         when (action) {
             is SettingsGuildBoostViewModel.PendingAction.Subscribe -> action.targetGuildId?.let { guildId ->
-                confirm(R.string.premium_guild_subscription_subscribe) {
-                    RestAPI.api.subscribeToGuild(guildId, RestAPIParams.GuildBoosting(listOf(action.slotId)))
-                        .restSubscribeOn().ui(this).appSubscribe(javaClass, onNext = { viewModel.retryClicked() })
-                }
+                WidgetGuildBoostConfirmation.create(requireContext(), guildId, action.slotId)
             }
             is SettingsGuildBoostViewModel.PendingAction.Transfer -> action.targetGuildId?.let { guildId ->
-                confirm(R.string.premium_guild_subscription_transfer_button) {
-                    val applied = action.slot.premiumGuildSubscription ?: return@confirm
-                    RestAPI.api.unsubscribeToGuild(action.previousGuildId, applied.id)
-                        .flatMap { RestAPI.api.subscribeToGuild(guildId, RestAPIParams.GuildBoosting(listOf(action.slot.id))) }
-                        .restSubscribeOn().ui(this).appSubscribe(javaClass, onNext = { viewModel.retryClicked() })
-                }
+                WidgetGuildBoostTransfer.create(requireContext(), action.previousGuildId, guildId, action.slot)
             }
-            is SettingsGuildBoostViewModel.PendingAction.Cancel -> confirm(R.string.premium_guild_subscription_cancel_title) {
-                RestAPI.api.cancelSubscriptionSlot(action.slotId).restSubscribeOn().ui(this)
-                    .appSubscribe(javaClass, onNext = { StoreStream.getGuildBoost().updateGuildBoostSlot(it) })
-            }
-            is SettingsGuildBoostViewModel.PendingAction.Uncancel -> confirm(R.string.premium_guild_subscription_inventory_uncancel_title) {
-                RestAPI.api.uncancelSubscriptionSlot(action.slotId).restSubscribeOn().ui(this)
-                    .appSubscribe(javaClass, onNext = { StoreStream.getGuildBoost().updateGuildBoostSlot(it) })
-            }
+            is SettingsGuildBoostViewModel.PendingAction.Cancel ->
+                GuildBoostCancelDialog.show(parentFragmentManager, action.slotId)
+            is SettingsGuildBoostViewModel.PendingAction.Uncancel ->
+                GuildBoostUncancelDialog.show(parentFragmentManager, action.slotId)
             null -> return
         }
         viewModel.consumePendingAction()
-    }
-
-    private fun confirm(title: Int, action: () -> Unit) {
-        MaterialAlertDialogBuilder(requireContext()).setTitle(title).setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.confirm) { _, _ -> action() }.show()
     }
 
     companion object {

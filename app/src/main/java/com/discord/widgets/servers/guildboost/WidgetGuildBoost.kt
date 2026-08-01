@@ -31,8 +31,8 @@ import com.discord.views.guildboost.GuildBoostSubscriptionUpsellView
 import com.discord.widgets.settings.guildboost.WidgetSettingsGuildBoost
 import com.discord.widgets.settings.premium.WidgetChoosePlan
 import com.discord.widgets.settings.premium.WidgetSettingsPremium
+import com.discord.widgets.notice.WidgetNoticeDialog
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -200,24 +200,25 @@ class WidgetGuildBoost : AppFragment(R.layout.widget_server_boost_status) {
                     Traits.Location.Section.ANDROID_CANNOT_MANAGE_SUBSCRIPTION,
                     boostLocation(Traits.Location.Section.HEADER),
                 )
-                MaterialAlertDialogBuilder(requireContext())
-                    .setTitle(R.string.premium_guild_subscription_out_of_slots_title)
-                    .setMessage(R.string.premium_guild_subscription_out_of_slots_purchase_on_desktop)
-                    .setPositiveButton(R.string.premium_guild_subscription_header_subscribe_tooltip_close, null)
-                    .show()
+                WidgetNoticeDialog.show(
+                    parentFragmentManager,
+                    getString(R.string.premium_guild_subscription_out_of_slots_title),
+                    getString(R.string.premium_guild_subscription_out_of_slots_purchase_on_desktop),
+                    getString(R.string.premium_guild_subscription_header_subscribe_tooltip_close),
+                )
             }
             GuildBoostViewModel.Event.UnacknowledgedPurchase -> {
                 toastManager.show(requireContext(), R.string.billing_error_purchase)
                 GooglePlayBillingManager.queryPurchases()
             }
-            is GuildBoostViewModel.Event.ShowBlockedPlanSwitchAlertDialog ->
-                MaterialAlertDialogBuilder(requireContext())
-                    .setTitle(event.headerStringRes)
-                    .setMessage(event.bodyStringRes)
-                    .setNegativeButton(R.string.cancel, null)
-                    .setPositiveButton(R.string.billing_manage_subscription) { _, _ ->
-                        WidgetSettingsPremium.launch(requireContext())
-                    }.show()
+            is GuildBoostViewModel.Event.ShowBlockedPlanSwitchAlertDialog -> WidgetNoticeDialog.show(
+                parentFragmentManager,
+                getString(event.headerStringRes),
+                getString(event.bodyStringRes),
+                getString(R.string.billing_manage_subscription),
+                getString(R.string.cancel),
+                mapOf(R.id.notice_ok to { WidgetSettingsPremium.launch(requireContext()) }),
+            )
         }
     }
 

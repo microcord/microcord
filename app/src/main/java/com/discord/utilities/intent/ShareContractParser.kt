@@ -26,7 +26,8 @@ internal object ShareContractParser {
 
     fun isSdkUri(value: String?): Boolean = runCatching {
         val uri = URI(value ?: return false)
-        uri.scheme in setOf("discord", "manticord") && uri.host == "sdk" && uri.path.startsWith('/')
+        (uri.scheme.equals("discord", true) || uri.scheme.equals("manticord", true)) && uri.host.equals("sdk", true) &&
+            !uri.isOpaque && uri.userInfo == null && uri.port == -1 && uri.path.startsWith('/')
     }.getOrDefault(false)
 
     private fun isSafeAttachment(value: String): Boolean = runCatching {

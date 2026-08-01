@@ -117,7 +117,7 @@ object AppMediaPicker {
         MediaPickerRequest.CAMERA -> consumePendingCaptureUri(context)
         MediaPickerRequest.GALLERY, MediaPickerRequest.DOCUMENTS ->
             data?.data ?: throw IOException("Picker returned no data result.")
-        MediaPickerRequest.CROP -> data?.getParcelableExtra(CROP_OUTPUT_EXTRA) ?: Uri.EMPTY
+        MediaPickerRequest.CROP -> data?.getParcelableExtra(CROP_OUTPUT_EXTRA) ?: data?.data ?: Uri.EMPTY
         // A chooser can resolve to either the gallery branch (data present) or the camera branch.
         MediaPickerRequest.CHOOSER -> data?.data ?: consumePendingCaptureUri(context)
     }

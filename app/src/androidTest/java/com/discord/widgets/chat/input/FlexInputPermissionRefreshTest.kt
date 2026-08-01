@@ -17,7 +17,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.discord.R
 import com.discord.app.AppActivity
 import com.discord.app.AppFragment
-import com.discord.app.AppScreenRouter
+import com.discord.stores.AuthNavigationState
+import com.discord.stores.StoreStream
 import com.lytefast.flexinput.adapters.FileListAdapter
 import com.lytefast.flexinput.adapters.PhotoCursorAdapter
 import org.junit.After
@@ -95,8 +96,9 @@ class FlexInputPermissionRefreshTest {
 
     private fun launch(page: Fragment): PermissionRefreshHost {
         AppActivity.routeFragmentFactory = { PermissionRefreshHost(page) }
+        StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, false))
         activity = instrumentation.startActivitySync(
-            AppScreenRouter.createScreenIntent(instrumentation.targetContext, WidgetChatInput::class.java)
+            Intent(instrumentation.targetContext, AppActivity.Main::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         ) as AppActivity
         instrumentation.waitForIdleSync()
@@ -123,32 +125,49 @@ class FlexInputPermissionRefreshTest {
 
     private fun clickGate(recyclerView: RecyclerView) {
         instrumentation.runOnMainSync {
-            val holder = requireNotNull(recyclerView.adapter).onCreateViewHolder(recyclerView, 0)
+            @Suppress("UNCHECKED_CAST")
+            val adapter = requireNotNull(recyclerView.adapter) as RecyclerView.Adapter<RecyclerView.ViewHolder>
+            val holder = adapter.createViewHolder(recyclerView, 0)
+            adapter.bindViewHolder(holder, 0)
             assertTrue(holder.itemView.findViewById<View>(R.id.action_btn).performClick())
         }
     }
 }
 
-private class PermissionRefreshHost(val page: Fragment) : AppFragment() {
+class PermissionRefreshHost() : AppFragment() {
+    lateinit var page: Fragment
     lateinit var flexInput: AppFlexInputFragment
     lateinit var input: TextView
 
+    constructor(page: Fragment) : this() {
+        this.page = page
+    }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
-        FrameLayout(requireContext()).apply { id = View.generateViewId() }
+        inflater.inflate(R.layout.widget_chat_input, container, false)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        flexInput = AppFlexInputFragment()
-        childFragmentManager.beginTransaction().add(view.id, flexInput).commitNow()
-        val pageHost = PermissionPageHost(page)
-        flexInput.childFragmentManager.beginTransaction()
-            .add(com.lytefast.flexinput.R.id.emoji_container, pageHost)
-            .commitNow()
-        input = flexInput.requireView().findViewById(com.lytefast.flexinput.R.id.text_input)
+        view.post {
+            flexInput = childFragmentManager.findFragmentById(R.id.chat_input_widget) as AppFlexInputFragment
+            flexInput.requireView().findViewById<View>(com.lytefast.flexinput.R.id.emoji_container).visibility =
+                View.VISIBLE
+            val pageHost = PermissionPageHost(page)
+            flexInput.childFragmentManager.beginTransaction()
+                .add(com.lytefast.flexinput.R.id.emoji_container, pageHost)
+                .commitNow()
+            input = flexInput.requireView().findViewById(com.lytefast.flexinput.R.id.text_input)
+        }
     }
 }
 
-private class PermissionPageHost(private val page: Fragment) : Fragment() {
+class PermissionPageHost() : Fragment() {
+    lateinit var page: Fragment
+
+    constructor(page: Fragment) : this() {
+        this.page = page
+    }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
         FrameLayout(requireContext()).apply { id = View.generateViewId() }
 
@@ -157,7 +176,7 @@ private class PermissionPageHost(private val page: Fragment) : Fragment() {
     }
 }
 
-private class TestMediaFragment : WidgetChatInputAttachments.DiscordMediaFragment() {
+class TestMediaFragment : WidgetChatInputAttachments.DiscordMediaFragment() {
     var granted = false
     private var result: (() -> Unit)? = null
 
@@ -168,7 +187,7 @@ private class TestMediaFragment : WidgetChatInputAttachments.DiscordMediaFragmen
     fun recycler(): RecyclerView = requireView().findViewById(com.lytefast.flexinput.R.id.list)
 }
 
-private class TestFilesFragment : WidgetChatInputAttachments.DiscordFilesFragment() {
+class TestFilesFragment : WidgetChatInputAttachments.DiscordFilesFragment() {
     var granted = false
     private var result: (() -> Unit)? = null
 
@@ -179,7 +198,7 @@ private class TestFilesFragment : WidgetChatInputAttachments.DiscordFilesFragmen
     fun recycler(): RecyclerView = requireView().findViewById(com.lytefast.flexinput.R.id.list)
 }
 
-private class TestCameraFragment : WidgetChatInputAttachments.DiscordCameraFragment() {
+class TestCameraFragment : WidgetChatInputAttachments.DiscordCameraFragment() {
     var granted = false
     private var result: (() -> Unit)? = null
 

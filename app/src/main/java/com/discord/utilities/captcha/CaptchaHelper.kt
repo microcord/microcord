@@ -1,12 +1,12 @@
 package com.discord.utilities.captcha
 
 import android.app.Activity
-import android.content.Intent
-import android.net.Uri
-import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.FragmentActivity
 import com.discord.R
+import com.discord.app.AppActivity
+import com.discord.utilities.uri.UriHandler
 import com.discord.widgets.captcha.HCaptchaWebDialog
+import com.discord.widgets.notice.WidgetNoticeDialog
 import java.util.Locale
 import java.util.UUID
 import rx.Emitter
@@ -43,7 +43,7 @@ object CaptchaHelper {
     private const val FAILED_MISSING_DEPS = "missing_dependencies"
     private const val FAILED_NETWORK = "network"
 
-    private const val CAPTCHA_HELP_URL = "https://support.discord.com/hc/en-us/articles/360045138471"
+    private const val CAPTCHA_HELP_URL = "https://discord.com/app"
 
     /** Most recently solved captcha token, parked for the retry that follows. Never logged. */
     @Volatile
@@ -144,30 +144,18 @@ object CaptchaHelper {
         }
     }
 
-    /**
-     * Reference `CaptchaHelper.showCaptchaHelpDialog`: offers to retry the challenge in a browser
-     * when the in-app WebView cannot complete it.
-     *
-     * The reference builds this with `WidgetNoticeDialog`, which is not reconstructed yet, so a
-     * plain [AlertDialog] with the same recovered strings and button order is used.
-     */
+    /** Offers to retry the challenge in a browser when the in-app WebView cannot complete it. */
     @JvmOverloads
-    fun showCaptchaHelpDialog(activity: Activity?, onOpenBrowser: (() -> Unit)? = null) {
+    fun showCaptchaHelpDialog(activity: AppActivity?, onOpenBrowser: (() -> Unit)? = null) {
         if (activity == null || activity.isFinishing) return
-        AlertDialog.Builder(activity)
+        WidgetNoticeDialog.Builder(activity)
             .setTitle(R.string.captcha_problems)
             .setMessage(R.string.captcha_problems_info)
-            .setPositiveButton(R.string.captcha_open_browser) { dialog, _ ->
-                dialog.dismiss()
-                if (onOpenBrowser != null) onOpenBrowser() else openCaptchaHelpInBrowser(activity)
+            .setPositiveButton(R.string.captcha_open_browser) {
+                UriHandler.handle(activity, CAPTCHA_HELP_URL, forceExternal = true)
+                onOpenBrowser?.invoke()
             }
-            .setNegativeButton(R.string.cancel) { dialog, _ -> dialog.dismiss() }
-            .show()
-    }
-
-    private fun openCaptchaHelpInBrowser(activity: Activity) {
-        runCatching {
-            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(CAPTCHA_HELP_URL)))
-        }
+            .setNegativeButton(R.string.cancel)
+            .show(activity.supportFragmentManager)
     }
 }

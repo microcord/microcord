@@ -1,13 +1,15 @@
 package com.discord.widgets.servers
 
 import android.content.Context
-import android.view.LayoutInflater
+import android.content.ContextWrapper
+import android.os.Bundle
 import android.view.View
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
+import androidx.fragment.app.FragmentActivity
 import com.discord.R
+import com.discord.app.AppDialog
 import com.discord.models.domain.ModelGuildIntegration
 import com.discord.restapi.RestAPIParams
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
@@ -138,30 +140,7 @@ class WidgetServerSettingsIntegrationsListItem(
         isTwitch: Boolean,
         context: Context,
     ) {
-        val view = LayoutInflater.from(context)
-            .inflate(R.layout.widget_server_settings_confirm_disable_integration, null, false)
-        val dialog = AlertDialog.Builder(context).setView(view).create()
-        view.findViewById<TextView>(R.id.server_settings_confirm_disable_integration_body).setText(
-            if (isTwitch) {
-                R.string.disable_integration_twitch_body
-            } else {
-                R.string.disable_integration_youtube_body
-            },
-        )
-        view.findViewById<MaterialButton>(R.id.server_settings_confirm_disable_integration_cancel)
-            .setOnClickListener { dialog.dismiss() }
-        view.findViewById<MaterialButton>(R.id.server_settings_confirm_disable_integration_confirm)
-            .setOnClickListener {
-                val api = RestAPI.apiOrNull ?: return@setOnClickListener
-                api.deleteGuildIntegration(guildId, integrationId)
-                    .restSubscribeOn()
-                    .ui()
-                    .appSubscribe(
-                        WidgetServerSettingsIntegrationsListItem::class.java,
-                        context,
-                    ) { dialog.dismiss() }
-            }
-        dialog.show()
+        DisableIntegrationDialog.show(context, guildId, integrationId, isTwitch)
     }
 
     private fun showSyncingUI(isSyncing: Boolean) {
@@ -171,4 +150,51 @@ class WidgetServerSettingsIntegrationsListItem(
         // Called on its own after an optimistic enable, so the header must be re-disabled here too.
         if (isSyncing) headerContainer.setOnClickListener(null)
     }
+}
+
+internal class DisableIntegrationDialog : AppDialog(R.layout.widget_server_settings_confirm_disable_integration) {
+    override fun onViewBound(view: View) {
+        super.onViewBound(view)
+        val args = argumentsOrDefault
+        view.findViewById<TextView>(R.id.server_settings_confirm_disable_integration_body).setText(
+            if (args.getBoolean(ARG_IS_TWITCH)) {
+                R.string.disable_integration_twitch_body
+            } else {
+                R.string.disable_integration_youtube_body
+            },
+        )
+        view.findViewById<MaterialButton>(R.id.server_settings_confirm_disable_integration_cancel)
+            .setOnClickListener { dismiss() }
+        view.findViewById<MaterialButton>(R.id.server_settings_confirm_disable_integration_confirm)
+            .setOnClickListener {
+                val api = RestAPI.apiOrNull ?: return@setOnClickListener
+                api.deleteGuildIntegration(args.getLong(ARG_GUILD_ID), args.getLong(ARG_INTEGRATION_ID))
+                    .restSubscribeOn()
+                    .ui(this)
+                    .appSubscribe(DisableIntegrationDialog::class.java, context) { dismiss() }
+            }
+    }
+
+    companion object {
+        private const val ARG_GUILD_ID = "guild_id"
+        private const val ARG_INTEGRATION_ID = "integration_id"
+        private const val ARG_IS_TWITCH = "is_twitch"
+
+        fun show(context: Context, guildId: Long, integrationId: Long, isTwitch: Boolean) {
+            val manager = context.fragmentActivity()?.supportFragmentManager ?: return
+            DisableIntegrationDialog().apply {
+                arguments = Bundle().apply {
+                    putLong(ARG_GUILD_ID, guildId)
+                    putLong(ARG_INTEGRATION_ID, integrationId)
+                    putBoolean(ARG_IS_TWITCH, isTwitch)
+                }
+            }.show(manager, DisableIntegrationDialog::class.java.name)
+        }
+    }
+}
+
+private tailrec fun Context.fragmentActivity(): FragmentActivity? = when (this) {
+    is FragmentActivity -> this
+    is ContextWrapper -> baseContext.fragmentActivity()
+    else -> null
 }

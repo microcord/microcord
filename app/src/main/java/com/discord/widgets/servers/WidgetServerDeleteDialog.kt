@@ -2,12 +2,11 @@ package com.discord.widgets.servers
 
 import android.os.Bundle
 import android.view.View
-import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.app.AppDialog
 import com.discord.app.appViewModels
+import com.discord.databinding.WidgetServerDeleteDialogBinding
 import com.discord.models.guild.Guild
 import com.discord.models.user.MeUser
 import com.discord.restapi.RestAPIParams
@@ -18,8 +17,6 @@ import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.view.extensions.getTextOrEmpty
 import com.discord.widgets.settings.SettingsStrings
-import com.google.android.material.button.MaterialButton
-import com.google.android.material.textfield.TextInputLayout
 import com.discord.app.AppViewModel
 import com.discord.stores.StoreStream
 import rx.Observable
@@ -33,25 +30,23 @@ import rx.subjects.PublishSubject
  */
 class WidgetServerDeleteDialog : AppDialog(R.layout.widget_server_delete_dialog) {
 
+    private var _binding: WidgetServerDeleteDialogBinding? = null
+    private val binding get() = checkNotNull(_binding)
+
     private val viewModel: ServerDeleteViewModel by appViewModels {
         ServerDeleteViewModel(argumentsOrDefault.getLong(INTENT_GUILD_ID))
     }
 
-    private lateinit var header: TextView
-    private lateinit var body: TextView
-    private lateinit var mfaWrap: LinearLayout
-    private lateinit var mfaCode: TextInputLayout
-    private lateinit var confirm: MaterialButton
-
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        header = view.findViewById(R.id.server_settings_delete_server_header)
-        body = view.findViewById(R.id.server_settings_delete_server_text)
-        mfaWrap = view.findViewById(R.id.server_settings_delete_server_mfa_wrap)
-        mfaCode = view.findViewById(R.id.server_settings_delete_server_mfa_code)
-        confirm = view.findViewById(R.id.server_settings_delete_server_confirm)
-        view.findViewById<View>(R.id.server_settings_delete_server_cancel)
+        _binding = WidgetServerDeleteDialogBinding.bind(view)
+        binding.serverSettingsDeleteServerCancel
             .setOnClickListener { dismiss() }
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun onViewBoundOrOnResume() {
@@ -61,19 +56,23 @@ class WidgetServerDeleteDialog : AppDialog(R.layout.widget_server_delete_dialog)
     }
 
     private fun configureUI(viewState: ServerDeleteViewModel.ViewState) {
+        if (_binding == null) return
         when (viewState) {
             is ServerDeleteViewModel.ViewState.Uninitialized -> Unit
             // The guild disappeared under us — most likely someone else deleted it.
             is ServerDeleteViewModel.ViewState.GuildGone -> dismiss()
             is ServerDeleteViewModel.ViewState.Loaded -> {
                 val context = requireContext()
-                header.text =
+                binding.serverSettingsDeleteServerHeader.text =
                     SettingsStrings.render(context, R.string.delete_server_title, "name" to viewState.guildName)
-                body.text =
+                binding.serverSettingsDeleteServerText.text =
                     SettingsStrings.render(context, R.string.delete_server_body, "name" to viewState.guildName)
-                mfaWrap.visibility = if (viewState.isMfaEnabled) View.VISIBLE else View.GONE
-                confirm.isEnabled = viewState.isOwner
-                confirm.setOnClickListener { viewModel.deleteGuild(mfaCode.getTextOrEmpty()) }
+                binding.serverSettingsDeleteServerMfaWrap.visibility =
+                    if (viewState.isMfaEnabled) View.VISIBLE else View.GONE
+                binding.serverSettingsDeleteServerConfirm.isEnabled = viewState.isOwner
+                binding.serverSettingsDeleteServerConfirm.setOnClickListener {
+                    viewModel.deleteGuild(binding.serverSettingsDeleteServerMfaCode.getTextOrEmpty())
+                }
             }
         }
     }

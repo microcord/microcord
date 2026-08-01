@@ -6,10 +6,8 @@ import android.content.Intent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.RadioButton
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.widget.SwitchCompat
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
@@ -20,6 +18,7 @@ import com.discord.api.permission.Permission
 import com.discord.api.role.GuildRole
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
+import com.discord.databinding.WidgetCreateChannelBinding
 import com.discord.models.guild.Guild
 import com.discord.models.user.MeUser
 import com.discord.restapi.RestAPIParams
@@ -38,7 +37,6 @@ import com.discord.views.CheckedSetting
 import com.discord.views.RadioManager
 import com.discord.widgets.channels.permissions.WidgetCreateChannelAddMember
 import com.discord.widgets.forums.ForumUtils
-import com.google.android.material.textfield.TextInputLayout
 import rx.Observable
 import rx.functions.Func6
 
@@ -51,80 +49,72 @@ class WidgetCreateChannel : AppFragment(R.layout.widget_create_channel) {
     private val disablePrivateSwitch get() = extraBoolean(INTENT_DISABLE_PRIVATE_SWITCH)
     private val disableAnnouncementType get() = extraBoolean(INTENT_DISABLE_ANNOUNCEMENT_CHANNEL_TYPE)
 
-    private lateinit var name: TextInputLayout
-    private lateinit var privateContainer: View
-    private lateinit var privateSwitch: SwitchCompat
-    private lateinit var rolesHeader: View
-    private lateinit var rolesDivider: View
-    private lateinit var rolesRecycler: RecyclerView
-    private lateinit var typeContainer: View
-    private lateinit var textRadio: RadioButton
-    private lateinit var voiceRadio: RadioButton
-    private lateinit var announcementRadio: RadioButton
-    private lateinit var stageRadio: RadioButton
-    private lateinit var forumRadio: RadioButton
+    private var _binding: WidgetCreateChannelBinding? = null
+    private val binding get() = requireNotNull(_binding)
     private lateinit var rolesAdapter: RolesAdapter
     private var model: Model? = null
 
     private val channelType: Int
         get() = when {
             initialType == Channel.CATEGORY -> Channel.CATEGORY
-            voiceRadio.isChecked -> Channel.GUILD_VOICE
-            announcementRadio.isChecked -> Channel.GUILD_ANNOUNCEMENT
-            stageRadio.isChecked -> Channel.GUILD_STAGE_VOICE
-            forumRadio.isChecked -> Channel.GUILD_FORUM
+            binding.createChannelVoiceRadio.isChecked -> Channel.GUILD_VOICE
+            binding.createChannelAnnouncementsRadio.isChecked -> Channel.GUILD_ANNOUNCEMENT
+            binding.createChannelStageRadio.isChecked -> Channel.GUILD_STAGE_VOICE
+            binding.createChannelForumRadio.isChecked -> Channel.GUILD_FORUM
             else -> Channel.GUILD_TEXT
         }
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        name = view.findViewById(R.id.create_channel_name_layout)
-        privateContainer = view.findViewById(R.id.create_channel_private_container)
-        privateSwitch = view.findViewById(R.id.create_channel_private_switch)
-        rolesHeader = view.findViewById(R.id.create_channel_role_header)
-        rolesDivider = view.findViewById(R.id.create_channel_role_divider)
-        rolesRecycler = view.findViewById(R.id.create_channel_role_access_recycler)
-        typeContainer = view.findViewById(R.id.create_channel_type_container)
-        textRadio = view.findViewById(R.id.create_channel_text_radio)
-        voiceRadio = view.findViewById(R.id.create_channel_voice_radio)
-        announcementRadio = view.findViewById(R.id.create_channel_announcements_radio)
-        stageRadio = view.findViewById(R.id.create_channel_stage_radio)
-        forumRadio = view.findViewById(R.id.create_channel_forum_radio)
+        val binding = WidgetCreateChannelBinding.bind(view).also { _binding = it }
 
         rolesAdapter = RolesAdapter()
-        rolesRecycler.adapter = rolesAdapter
-        rolesRecycler.setHasFixedSize(false)
-        rolesRecycler.isNestedScrollingEnabled = false
-        privateSwitch.isChecked = shouldDefaultPrivate || disablePrivateSwitch
+        binding.createChannelRoleAccessRecycler.adapter = rolesAdapter
+        binding.createChannelRoleAccessRecycler.setHasFixedSize(false)
+        binding.createChannelRoleAccessRecycler.isNestedScrollingEnabled = false
+        binding.createChannelPrivateSwitch.isChecked = shouldDefaultPrivate || disablePrivateSwitch
 
-        val radioManager = RadioManager(listOf(textRadio, voiceRadio, announcementRadio, stageRadio, forumRadio))
-        val choices = mapOf(
-            R.id.create_channel_text_container to textRadio,
-            R.id.create_channel_voice_container to voiceRadio,
-            R.id.create_channel_announcements_container to announcementRadio,
-            R.id.create_channel_stage_container to stageRadio,
-            R.id.create_channel_forum_container to forumRadio,
+        val radioManager = RadioManager(
+            listOf(
+                binding.createChannelTextRadio,
+                binding.createChannelVoiceRadio,
+                binding.createChannelAnnouncementsRadio,
+                binding.createChannelStageRadio,
+                binding.createChannelForumRadio,
+            ),
         )
-        choices.forEach { (containerId, radio) ->
-            view.findViewById<View>(containerId).setOnClickListener {
+        val choices = mapOf(
+            binding.createChannelTextContainer to binding.createChannelTextRadio,
+            binding.createChannelVoiceContainer to binding.createChannelVoiceRadio,
+            binding.createChannelAnnouncementsContainer to binding.createChannelAnnouncementsRadio,
+            binding.createChannelStageContainer to binding.createChannelStageRadio,
+            binding.createChannelForumContainer to binding.createChannelForumRadio,
+        )
+        choices.forEach { (container, radio) ->
+            container.setOnClickListener {
                 radioManager.setChecked(radio)
                 configurePrivateRoles()
             }
         }
         radioManager.setChecked(
             when (initialType) {
-                Channel.GUILD_VOICE -> voiceRadio
-                Channel.GUILD_ANNOUNCEMENT -> announcementRadio
-                Channel.GUILD_STAGE_VOICE -> stageRadio
-                Channel.GUILD_FORUM -> forumRadio
-                else -> textRadio
+                Channel.GUILD_VOICE -> binding.createChannelVoiceRadio
+                Channel.GUILD_ANNOUNCEMENT -> binding.createChannelAnnouncementsRadio
+                Channel.GUILD_STAGE_VOICE -> binding.createChannelStageRadio
+                Channel.GUILD_FORUM -> binding.createChannelForumRadio
+                else -> binding.createChannelTextRadio
             },
         )
-        privateContainer.setOnClickListener {
-            privateSwitch.isChecked = !privateSwitch.isChecked
+        binding.createChannelPrivateContainer.setOnClickListener {
+            binding.createChannelPrivateSwitch.isChecked = !binding.createChannelPrivateSwitch.isChecked
             configurePrivateRoles()
         }
         configurePrivateRoles()
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun onViewBoundOrOnResume() {
@@ -134,6 +124,7 @@ class WidgetCreateChannel : AppFragment(R.layout.widget_create_channel) {
     }
 
     private fun configureUI(state: Model?) {
+        val binding = _binding ?: return
         if (state?.canCreate != true) {
             activity?.finish()
             return
@@ -144,13 +135,14 @@ class WidgetCreateChannel : AppFragment(R.layout.widget_create_channel) {
         setActionBarOptionsMenu(R.menu.menu_channel_create, onSelected = {
             if (it.itemId == R.id.menu_sort_channel) createChannel()
         })
-        requireView().findViewById<View>(R.id.create_channel_announcements_container).isVisible =
+        binding.createChannelAnnouncementsContainer.isVisible =
             state.canCreateCommunityChannels && !disableAnnouncementType
-        requireView().findViewById<View>(R.id.create_channel_stage_container).isVisible =
+        binding.createChannelStageContainer.isVisible =
             state.canCreateCommunityChannels && state.canManageRoles
-        requireView().findViewById<View>(R.id.create_channel_forum_container).isVisible = state.canCreateForumChannels
-        typeContainer.isVisible = initialType != Channel.CATEGORY
-        name.hint = getString(if (initialType == Channel.CATEGORY) R.string.category_name else R.string.form_label_channel_name)
+        binding.createChannelForumContainer.isVisible = state.canCreateForumChannels
+        binding.createChannelTypeContainer.isVisible = initialType != Channel.CATEGORY
+        binding.createChannelNameLayout.hint =
+            getString(if (initialType == Channel.CATEGORY) R.string.category_name else R.string.form_label_channel_name)
         rolesAdapter.submit(state.roles)
     }
 
@@ -161,12 +153,12 @@ class WidgetCreateChannel : AppFragment(R.layout.widget_create_channel) {
             RestAPIParams.CreateGuildChannel(
                 type = channelType,
                 id = null,
-                name = name.getTextOrEmpty(),
+                name = binding.createChannelNameLayout.getTextOrEmpty(),
                 parentId = categoryId,
                 permissionOverwrites = permissionOverwrites(
                     guildId,
                     channelType,
-                    privateSwitch.isChecked,
+                    binding.createChannelPrivateSwitch.isChecked,
                     disablePrivateSwitch && shouldDefaultPrivate,
                     rolesAdapter.selectedRoleIds,
                 ),
@@ -197,11 +189,12 @@ class WidgetCreateChannel : AppFragment(R.layout.widget_create_channel) {
     }
 
     private fun configurePrivateRoles() {
+        val binding = _binding ?: return
         val available = channelType != Channel.GUILD_STAGE_VOICE && !disablePrivateSwitch
-        privateContainer.isVisible = available
-        rolesDivider.isVisible = available
-        rolesHeader.isVisible = available && privateSwitch.isChecked
-        rolesRecycler.isVisible = available && privateSwitch.isChecked
+        binding.createChannelPrivateContainer.isVisible = available
+        binding.createChannelRoleDivider.isVisible = available
+        binding.createChannelRoleHeader.isVisible = available && binding.createChannelPrivateSwitch.isChecked
+        binding.createChannelRoleAccessRecycler.isVisible = available && binding.createChannelPrivateSwitch.isChecked
     }
 
     private fun extraLong(key: String, default: Long) =

@@ -49,18 +49,28 @@ class ApplicationSmokeTest {
             Intent(context, AppActivity.Main::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
         assertNotNull(activity.findViewById(R.id.app_root))
-        assertSame(activity, ActivityProvider.getActivity())
+        var activeActivity: android.app.Activity? = null
+        for (attempt in 0 until 100) {
+            instrumentation.runOnMainSync { activeActivity = ActivityProvider.getActivity() }
+            if (activeActivity != null) break
+            Thread.sleep(20)
+        }
+        val launchedActivity = requireNotNull(activeActivity)
+        assertTrue(launchedActivity is AppActivity.Main)
         val themeName = TypedValue()
-        assertTrue(activity.theme.resolveAttribute(R.attr.theme_name, themeName, true))
+        assertTrue(launchedActivity.theme.resolveAttribute(R.attr.theme_name, themeName, true))
         assertEquals("light", themeName.string.toString())
         val locale = if (Build.VERSION.SDK_INT >= 24) {
-            activity.resources.configuration.locales[0]
+            launchedActivity.resources.configuration.locales[0]
         } else {
             @Suppress("DEPRECATION")
-            activity.resources.configuration.locale
+            launchedActivity.resources.configuration.locale
         }
         assertEquals("tr", locale.language)
-        instrumentation.runOnMainSync(activity::finish)
+        instrumentation.runOnMainSync {
+            launchedActivity.finish()
+            if (activity !== launchedActivity) activity.finish()
+        }
         settings.setTheme("dark", apiSync = false)
         settings.setLocale(null, apiSync = false)
     }

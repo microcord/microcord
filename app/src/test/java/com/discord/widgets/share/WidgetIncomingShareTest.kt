@@ -1,26 +1,25 @@
 package com.discord.widgets.share
 
+import com.discord.api.premium.PremiumTier
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WidgetIncomingShareTest {
-    private val candidates = listOf(
-        WidgetIncomingShare.Candidate(1, "general", "Guild"),
-        WidgetIncomingShare.Candidate(2, "Alice"),
-    )
-
     @Test
-    fun filtersTitleOrGuildCaseInsensitively() {
-        assertEquals(listOf(1L), WidgetIncomingShare.filterCandidates(candidates, "guild").map { it.channelId })
-        assertEquals(listOf(2L), WidgetIncomingShare.filterCandidates(candidates, "ALI").map { it.channelId })
-        assertEquals(candidates, WidgetIncomingShare.filterCandidates(candidates, " "))
+    fun sendRequiresARecipientAndContent() {
+        assertFalse(WidgetIncomingShare.canSend(false, "hello", 0))
+        assertFalse(WidgetIncomingShare.canSend(true, "  ", 0))
+        assertTrue(WidgetIncomingShare.canSend(true, "hello", 0))
+        assertTrue(WidgetIncomingShare.canSend(true, "", 1))
     }
 
     @Test
-    fun directShareIdPreselectsOnlyAnAvailableCandidate() {
-        assertEquals(2L, WidgetIncomingShare.preselectedCandidate(candidates, 2)?.channelId)
-        assertNull(WidgetIncomingShare.preselectedCandidate(candidates, 99))
-        assertNull(WidgetIncomingShare.preselectedCandidate(candidates, null))
+    fun uploadLimitUsesTheLargerAccountOrGuildAllowance() {
+        assertEquals(8, WidgetIncomingShare.uploadLimitMB(PremiumTier.NONE, 0, false))
+        assertEquals(50, WidgetIncomingShare.uploadLimitMB(PremiumTier.NONE, 2, false))
+        assertEquals(100, WidgetIncomingShare.uploadLimitMB(PremiumTier.TIER_2, 0, false))
+        assertEquals(200, WidgetIncomingShare.uploadLimitMB(PremiumTier.NONE, 3, true))
     }
 }

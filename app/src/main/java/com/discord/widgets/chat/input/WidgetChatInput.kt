@@ -21,9 +21,12 @@ import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayNameOrDefault
+import com.discord.api.channel.isGuildForumChannel
 import com.discord.api.guild.GuildVerificationLevel
+import com.discord.api.permission.Permission
 import com.discord.app.AppFragment
 import com.discord.app.appActivityViewModels
+import com.discord.databinding.FlexInputWidgetBinding
 import com.discord.i18n.FormatUtils
 import com.discord.models.domain.emoji.Emoji
 import com.discord.models.member.GuildMember
@@ -35,6 +38,7 @@ import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.duration.humanizeCountdownDuration
 import com.discord.utilities.messagesend.MessageResult
 import com.discord.utilities.messagesend.MessageSendCoordinator
+import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rx.ui
 import com.discord.utilities.user.UserUtils.synthesizeApiUser
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
@@ -55,6 +59,10 @@ import com.lytefast.flexinput.widget.FlexEditText
 import java.io.File
 import rx.Subscription
 import rx.subjects.PublishSubject
+
+internal fun FlexInputWidgetBinding.renderSendPermission(ableToSendMessages: Boolean) {
+    cannotSendText.visibility = if (ableToSendMessages) View.GONE else View.VISIBLE
+}
 
 /**
  * The message composer.
@@ -86,6 +94,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     private var expressionTray: WidgetExpressionTray? = null
     private var autocomplete: InputAutocomplete? = null
     private var attachments: WidgetChatInputAttachments? = null
+    private var flexInputBinding: FlexInputWidgetBinding? = null
 
     /**
      * Owns whether the expression tray is open. Activity-scoped so the tray and its child pickers
@@ -231,6 +240,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         input?.removeTextChangedListener(watcher)
         autocomplete?.onDestroyView()
         autocomplete = null
+        flexInputBinding = null
         input = null
         expressionTray = null
         attachments = null
@@ -241,6 +251,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         if (!isAdded || view == null) return
         val flex = childFragmentManager.findFragmentById(R.id.chat_input_widget) as? FlexInputFragment ?: return
         val flexView = flex.view ?: return
+        flexInputBinding = FlexInputWidgetBinding.bind(flexView)
         flex.setKeyboardManager(object : KeyboardManager {
             override fun requestDisplay(editText: EditText) {
                 editText.requestFocus()
@@ -450,6 +461,14 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
 
         requireView().findViewById<View>(R.id.chat_input_wrap).visibility =
             if (next.isInputShowing) View.VISIBLE else View.GONE
+        val channelPermissions = StoreStream.getPermissions().getPermissionsByChannel()[next.channelId]
+        val ableToSendMessages = when {
+            next.selectedThreadDraft != null ->
+                PermissionUtils.can(Permission.SEND_MESSAGES_IN_THREADS, channelPermissions)
+            next.channel.isGuildForumChannel() -> false
+            else -> PermissionUtils.hasAccessWrite(next.channel, channelPermissions)
+        }
+        flexInputBinding?.renderSendPermission(ableToSendMessages)
         configureChatGuard(next)
         configureContextBar(next)
 

@@ -7,8 +7,6 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.View
-import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -16,6 +14,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.appViewModels
+import com.discord.databinding.WidgetServerNotificationsBinding
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.utilities.rx.ui
 import com.discord.views.CheckedSetting
@@ -42,6 +41,9 @@ import rx.functions.Action1
  */
 class WidgetServerNotifications : AppFragment(R.layout.widget_server_notifications) {
 
+    private var _binding: WidgetServerNotificationsBinding? = null
+    private val binding get() = checkNotNull(_binding)
+
     private val guildId: Long
         get() = arguments?.getLong(EXTRA_GUILD_ID, INVALID_GUILD_ID)
             ?.takeIf { it != INVALID_GUILD_ID }
@@ -51,44 +53,18 @@ class WidgetServerNotifications : AppFragment(R.layout.widget_server_notificatio
         WidgetServerNotificationsViewModel(guildId)
     }
 
-    private lateinit var muteSettings: NotificationMuteSettingsView
-    private lateinit var frequencyDivider: View
-    private lateinit var frequencyWrap: LinearLayout
-    private lateinit var frequencyRadios: List<CheckedSetting>
-    private lateinit var radioManager: RadioManager
-    private lateinit var highlights: NotificationHighlightsSettingsView
-    private lateinit var highlightsDivider: View
-    private lateinit var everyoneSwitch: CheckedSetting
-    private lateinit var rolesSwitch: CheckedSetting
-    private lateinit var rolesDivider: View
-    private lateinit var pushSwitch: CheckedSetting
-    private lateinit var overrideTitle: TextView
-    private lateinit var overrideDivider: View
-    private lateinit var addOverride: View
-    private lateinit var overrideList: RecyclerView
-    private lateinit var overrideAdapter: NotificationsOverridesAdapter
+    private var frequencyRadios: List<CheckedSetting> = emptyList()
+    private var radioManager: RadioManager? = null
+    private var overrideAdapter: NotificationsOverridesAdapter? = null
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        muteSettings = view.findViewById(R.id.server_notifications_mute_settings_view)
-        frequencyDivider = view.findViewById(R.id.server_notifications_frequency_divider)
-        frequencyWrap = view.findViewById(R.id.server_notifications_frequency_wrap)
+        _binding = WidgetServerNotificationsBinding.bind(view)
         frequencyRadios = listOf(
-            view.findViewById(R.id.server_notifications_frequency_0_radio),
-            view.findViewById(R.id.server_notifications_frequency_1_radio),
-            view.findViewById(R.id.server_notifications_frequency_2_radio),
+            binding.serverNotificationsFrequency0Radio,
+            binding.serverNotificationsFrequency1Radio,
+            binding.serverNotificationsFrequency2Radio,
         )
-        highlights = view.findViewById(R.id.server_notifications_highlights)
-        highlightsDivider = view.findViewById(R.id.server_notifications_highlights_divider)
-        everyoneSwitch = view.findViewById(R.id.server_notifications_everyone_switch)
-        rolesSwitch = view.findViewById(R.id.server_notifications_roles_switch)
-        rolesDivider = view.findViewById(R.id.server_notifications_roles_divider)
-        pushSwitch = view.findViewById(R.id.server_notifications_push_switch)
-        overrideTitle = view.findViewById(R.id.server_notifications_override_title)
-        overrideDivider = view.findViewById(R.id.server_notifications_override_divider)
-        addOverride = view.findViewById(R.id.add_override)
-        overrideList = view.findViewById(R.id.guild_notifications_override_list)
-
         radioManager = RadioManager(frequencyRadios)
 
         overrideAdapter = NotificationsOverridesAdapter { itemView, item ->
@@ -98,14 +74,23 @@ class WidgetServerNotifications : AppFragment(R.layout.widget_server_notificatio
             )
         }
         // The list lives inside the screen's NestedScrollView, so it must never scroll itself.
-        overrideList.isNestedScrollingEnabled = false
-        overrideList.layoutManager = LinearLayoutManager(view.context)
-        overrideList.adapter = overrideAdapter
-        createSwipeableItemTouchHelper().attachToRecyclerView(overrideList)
+        binding.guildNotificationsOverrideList.isNestedScrollingEnabled = false
+        binding.guildNotificationsOverrideList.layoutManager = LinearLayoutManager(view.context)
+        binding.guildNotificationsOverrideList.adapter = overrideAdapter
+        createSwipeableItemTouchHelper().attachToRecyclerView(binding.guildNotificationsOverrideList)
 
-        addOverride.setOnClickListener {
+        binding.addOverride.root.setOnClickListener {
             WidgetServerNotificationsOverrideSelector.launch(it.context, guildId)
         }
+    }
+
+    override fun onDestroyView() {
+        binding.guildNotificationsOverrideList.adapter = null
+        overrideAdapter = null
+        radioManager = null
+        frequencyRadios = emptyList()
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun onViewBoundOrOnResume() {
@@ -114,6 +99,7 @@ class WidgetServerNotifications : AppFragment(R.layout.widget_server_notificatio
     }
 
     private fun configureUI(viewState: WidgetServerNotificationsViewModel.ViewState) {
+        if (_binding == null) return
         when (viewState) {
             is WidgetServerNotificationsViewModel.ViewState.Uninitialized -> Unit
             is WidgetServerNotificationsViewModel.ViewState.Invalid -> appActivity?.onBackPressed()
@@ -129,8 +115,8 @@ class WidgetServerNotifications : AppFragment(R.layout.widget_server_notificatio
         configureMuteSettings(model)
 
         val visibleWhileUnmuted = if (model.isMuted) View.GONE else View.VISIBLE
-        frequencyDivider.visibility = visibleWhileUnmuted
-        frequencyWrap.visibility = visibleWhileUnmuted
+        binding.serverNotificationsFrequencyDivider.visibility = visibleWhileUnmuted
+        binding.serverNotificationsFrequencyWrap.visibility = visibleWhileUnmuted
 
         if (model.isHub) {
             configureForHub()
@@ -145,7 +131,7 @@ class WidgetServerNotifications : AppFragment(R.layout.widget_server_notificatio
 
     private fun configureMuteSettings(model: WidgetServerNotificationsViewModel.ViewState.Loaded) {
         val context = requireContext()
-        muteSettings.updateView(
+        binding.serverNotificationsMuteSettingsView.updateView(
             NotificationMuteSettingsView.ViewState(
                 isMuted = model.isMuted,
                 muteEndTime = model.guildSettings.muteEndTime,
@@ -170,21 +156,27 @@ class WidgetServerNotifications : AppFragment(R.layout.widget_server_notificatio
 
     private fun configureHighlights(model: WidgetServerNotificationsViewModel.ViewState.Loaded) {
         val visibility = if (model.highlightsEnabled) View.VISIBLE else View.GONE
-        highlights.visibility = visibility
-        highlightsDivider.visibility = visibility
+        binding.serverNotificationsHighlights.visibility = visibility
+        binding.serverNotificationsHighlightsDivider.visibility = visibility
         if (!model.highlightsEnabled) return
-        highlights.updateView(
+        binding.serverNotificationsHighlights.updateView(
             NotificationHighlightsSettingsView.ViewState(
                 isMuted = model.isMuted,
                 notifyHighlights = model.guildSettings.notifyHighlights,
                 serverTooLarge = model.isAboveHighlightsSize,
             ),
         ) { notifyHighlights ->
-            viewModel.setNotifyHighlights(highlights.context.applicationContext, notifyHighlights)
+            viewModel.setNotifyHighlights(
+                binding.serverNotificationsHighlights.context.applicationContext,
+                notifyHighlights,
+            )
         }
     }
 
     private fun configureToggles(model: WidgetServerNotificationsViewModel.ViewState.Loaded) {
+        val everyoneSwitch = binding.serverNotificationsEveryoneSwitch
+        val rolesSwitch = binding.serverNotificationsRolesSwitch
+        val pushSwitch = binding.serverNotificationsPushSwitch
         everyoneSwitch.setText(
             SettingsStrings.render(everyoneSwitch.context, R.string.form_label_suppress_everyone),
         )
@@ -230,7 +222,7 @@ class WidgetServerNotifications : AppFragment(R.layout.widget_server_notificatio
         frequency: Int,
         model: WidgetServerNotificationsViewModel.ViewState.Loaded,
     ) {
-        if (model.notificationsSetting == frequency) radioManager.setChecked(radio)
+        if (model.notificationsSetting == frequency) radioManager?.setChecked(radio)
         // A large server does not push non-@mention messages at all, so "All messages" says so
         // rather than quietly not working. The row stays selectable.
         radio.setSubtext(
@@ -247,23 +239,23 @@ class WidgetServerNotifications : AppFragment(R.layout.widget_server_notificatio
     }
 
     private fun configureOverrides(model: WidgetServerNotificationsViewModel.ViewState.Loaded) {
-        overrideAdapter.data = model.overrides
+        overrideAdapter?.data = model.overrides
     }
 
     /** Hubs have no roles, no `@everyone`, no per-channel overrides and no highlights. */
     private fun configureForHub() {
-        frequencyDivider.visibility = View.GONE
-        frequencyWrap.visibility = View.GONE
-        everyoneSwitch.visibility = View.GONE
-        rolesDivider.visibility = View.GONE
-        rolesSwitch.visibility = View.GONE
-        pushSwitch.visibility = View.GONE
-        overrideTitle.visibility = View.GONE
-        addOverride.visibility = View.GONE
-        overrideDivider.visibility = View.GONE
-        overrideList.visibility = View.GONE
-        highlights.visibility = View.GONE
-        highlightsDivider.visibility = View.GONE
+        binding.serverNotificationsFrequencyDivider.visibility = View.GONE
+        binding.serverNotificationsFrequencyWrap.visibility = View.GONE
+        binding.serverNotificationsEveryoneSwitch.visibility = View.GONE
+        binding.serverNotificationsRolesDivider.visibility = View.GONE
+        binding.serverNotificationsRolesSwitch.visibility = View.GONE
+        binding.serverNotificationsPushSwitch.visibility = View.GONE
+        binding.serverNotificationsOverrideTitle.visibility = View.GONE
+        binding.addOverride.root.visibility = View.GONE
+        binding.serverNotificationsOverrideDivider.visibility = View.GONE
+        binding.guildNotificationsOverrideList.visibility = View.GONE
+        binding.serverNotificationsHighlights.visibility = View.GONE
+        binding.serverNotificationsHighlightsDivider.visibility = View.GONE
     }
 
     private fun createSwipeableItemTouchHelper(): ItemTouchHelper {
@@ -275,7 +267,7 @@ class WidgetServerNotifications : AppFragment(R.layout.widget_server_notificatio
         return ItemTouchHelper(
             object : SwipeableItemTouchHelper(deleteConfig, deleteConfig) {
                 override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
-                    val item = overrideAdapter.data.getOrNull(viewHolder.adapterPosition) ?: return
+                    val item = overrideAdapter?.data?.getOrNull(viewHolder.adapterPosition) ?: return
                     viewModel.deleteOverride(requireContext().applicationContext, item)
                 }
             },

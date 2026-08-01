@@ -11,8 +11,8 @@ import okhttp3.Interceptor
  * Process-wide access point for the authenticated REST client.
  *
  * The reference exposes the same thing as `RestAPI.api`, and every screen that talks to the API
- * reads it from there rather than threading a client down through fragment arguments. The client
- * clients are still owned and configured by the store graph; this object only publishes the normal
+ * reads it from there rather than threading a client down through fragment arguments. The clients
+ * are still owned and configured by the store graph; this object only publishes the normal
  * and null-serializing variants used by 126.21.
  *
  * `StoreStream` must call [install] once it has built its `RestAPIInterface`; until it does,
@@ -41,7 +41,7 @@ object RestAPI {
         installedReactNative = reactNativeApi
     }
 
-    /** Builds and publishes the two authenticated clients used by production. */
+    /** Builds and publishes the authenticated client variants used by production. */
     @JvmStatic
     fun install(builder: RestAPIBuilder, interceptors: List<Interceptor>): RestAPIInterface {
         val api = builder.build(

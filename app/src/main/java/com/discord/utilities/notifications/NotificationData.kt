@@ -7,6 +7,7 @@ import com.discord.api.sticker.Sticker
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
+import java.security.MessageDigest
 
 enum class NotificationKind { MESSAGE, DIRECT_MESSAGE, SOCIAL, GENERAL }
 
@@ -332,11 +333,20 @@ class NotificationCache(private val maxMessages: Int = 20) {
     }
 }
 
-internal sealed class NotificationCommand(val authGeneration: Int) {
-    class MarkRead(val channelId: Long, val messageId: Long, generation: Int) : NotificationCommand(generation)
-    class Reply(val channelId: Long, val text: String, generation: Int) : NotificationCommand(generation)
-    class Delete(val channelId: Long, generation: Int) : NotificationCommand(generation)
-    class Cancel(val notificationId: Int, generation: Int) : NotificationCommand(generation)
+internal sealed class NotificationCommand(val authSession: String?) {
+    class MarkRead(val channelId: Long, val messageId: Long, session: String) : NotificationCommand(session)
+    class Reply(val channelId: Long, val text: String, session: String) : NotificationCommand(session)
+    class Delete(val channelId: Long) : NotificationCommand(null)
+    class Cancel(val notificationId: Int) : NotificationCommand(null)
+}
+
+internal object NotificationActionSession {
+    fun fromToken(token: String?): String? = token?.let {
+        MessageDigest.getInstance("SHA-256").digest(it.toByteArray(Charsets.UTF_8))
+            .joinToString("") { byte -> (byte.toInt() and 0xff).toString(16).padStart(2, '0') }
+    }
+
+    fun matches(session: String?, token: String?): Boolean = session != null && session == fromToken(token)
 }
 
 internal object NotificationActionValidator {
@@ -345,19 +355,20 @@ internal object NotificationActionValidator {
         channelId: Long,
         messageId: Long,
         notificationId: Int,
-        authGeneration: Int,
+        authSession: String?,
         reply: CharSequence? = null,
     ): NotificationCommand? {
-        if (authGeneration < 0) return null
         return when (action) {
             NotificationActionReceiver.ACTION_MARK_READ ->
-                if (channelId > 0 && messageId > 0) NotificationCommand.MarkRead(channelId, messageId, authGeneration) else null
+                authSession?.takeIf { it.isNotBlank() && channelId > 0 && messageId > 0 }
+                    ?.let { NotificationCommand.MarkRead(channelId, messageId, it) }
             NotificationActionReceiver.ACTION_REPLY -> reply?.toString()?.takeIf { it.isNotBlank() && it.length <= 2_000 }
-                ?.let { if (channelId > 0) NotificationCommand.Reply(channelId, it, authGeneration) else null }
+                ?.let { text -> authSession?.takeIf { it.isNotBlank() && channelId > 0 }
+                    ?.let { NotificationCommand.Reply(channelId, text, it) } }
             NotificationActionReceiver.ACTION_DELETE ->
-                if (channelId > 0) NotificationCommand.Delete(channelId, authGeneration) else null
+                if (channelId > 0) NotificationCommand.Delete(channelId) else null
             NotificationActionReceiver.ACTION_CANCEL ->
-                if (notificationId > 0) NotificationCommand.Cancel(notificationId, authGeneration) else null
+                if (notificationId > 0) NotificationCommand.Cancel(notificationId) else null
             else -> null
         }
     }

@@ -63,12 +63,11 @@ class WidgetSettingsTest {
     }
 
     @Test fun `privacy loading and cached terminal values drive loading exactly`() {
-        assertEquals(
-            SettingsPrivacyViewModel.ViewState.Loading,
-            SettingsPrivacyViewModel.toViewState(
-                privacyState(StoreUserSettings.ConsentState.Loading(null)),
-            ),
-        )
+        val loading = SettingsPrivacyViewModel.toViewState(
+            privacyState(StoreUserSettings.ConsentState.Loading(null)),
+        ) as SettingsPrivacyViewModel.ViewState.Loaded
+        assertNull(loading.consents)
+        assertNull(loading.consentError)
         val consents = Consents(Consent(true), Consent(false))
         val loaded = SettingsPrivacyViewModel.toViewState(
             privacyState(StoreUserSettings.ConsentState.Failed(consents, IllegalStateException("offline"))),

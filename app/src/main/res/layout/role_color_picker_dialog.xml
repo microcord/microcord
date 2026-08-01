@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:minWidth="280dp"
+    android:paddingTop="16dp"
+    style="@style/UiKit.ViewGroup.Page.LinearLayout">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingLeft="16dp"
+        android:paddingRight="16dp"
+        android:paddingBottom="12dp"
+        android:text="@string/role_color"
+        style="@style/UiKit.TextView.H1.Bold" />
+
+    <View style="@style/UiKit.Divider" />
+
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="16dp"
+            style="@style/UiKit.ViewGroup.LinearLayout">
+
+            <GridLayout
+                android:id="@+id/role_color_presets"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:columnCount="5"
+                android:alignmentMode="alignMargins" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/role_color_custom_wrap"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:hint="#RRGGBB"
+                style="@style/UiKit.TextInputLayout">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/role_color_custom"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textCapCharacters"
+                    android:maxLength="7"
+                    android:singleLine="true"
+                    style="@style/UiKit.TextInputLayout.EditText.SingleLine" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <View style="@style/UiKit.Settings.Divider" />
+
+    <LinearLayout style="@style/UiKit.Dialog.ButtonContainer">
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/role_color_reset"
+            android:text="@string/reset"
+            style="@style/UiKit.Material.Button.Transparent.Fit" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/role_color_cancel"
+            android:text="@string/cancel"
+            style="@style/UiKit.Material.Button.Transparent.Fit" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/role_color_select"
+            android:text="@string/select"
+            style="@style/UiKit.Material.Button.Fit" />
+    </LinearLayout>
+</LinearLayout>

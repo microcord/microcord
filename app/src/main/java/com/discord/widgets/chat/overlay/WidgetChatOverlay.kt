@@ -2,14 +2,12 @@ package com.discord.widgets.chat.overlay
 
 import android.os.Bundle
 import android.view.View
-import android.widget.ImageView
-import android.widget.TextView
 import androidx.lifecycle.Lifecycle
 import com.discord.R
 import com.discord.app.AppFragment
+import com.discord.databinding.WidgetChatOverlayBinding
 import com.discord.stores.StoreStream
 import com.discord.utilities.time.TimeUtils
-import com.discord.views.typing.TypingDots
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
 import java.util.concurrent.TimeUnit
@@ -48,11 +46,14 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
         }
     }
 
+    private var _binding: WidgetChatOverlayBinding? = null
+    private val binding get() = requireNotNull(_binding)
     private var subscriptions = CompositeSubscription()
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        view.findViewById<View>(R.id.chat_overlay_old_messages_fab).setOnClickListener {
+        _binding = WidgetChatOverlayBinding.bind(view)
+        binding.chatOverlayOldMessagesFab.setOnClickListener {
             StoreStream.getMessagesLoader().requestNewestMessages()
         }
     }
@@ -71,8 +72,13 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
 
     override fun onStop() {
         subscriptions.unsubscribe()
-        requireView().findViewById<TypingDots>(R.id.chat_overlay_typing_dots).stop()
+        binding.chatOverlayTypingDots.stop()
         super.onStop()
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     private fun postIfStarted(action: () -> Unit) {
@@ -84,26 +90,26 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
     }
 
     private fun showOldMessages(model: OldMessageModel) {
-        requireView().findViewById<View>(R.id.chat_overlay_old_messages_fab).visibility =
+        binding.chatOverlayOldMessagesFab.visibility =
             if (model.isViewingOldMessages) View.VISIBLE else View.GONE
     }
 
     private fun showTyping(model: ChatTypingModel) {
         val typing = model as? ChatTypingModel.Typing
         if (typing == null || typing.typingUsers.isEmpty() && typing.channelRateLimit <= 0) {
-            requireView().findViewById<TypingDots>(R.id.chat_overlay_typing_dots).stop()
-            requireView().findViewById<View>(R.id.chat_overlay_typing).visibility = View.GONE
+            binding.chatOverlayTypingDots.stop()
+            binding.chatOverlayTyping.visibility = View.GONE
             return
         }
 
         val users = typing.typingUsers
         val hasTyping = users.isNotEmpty()
-        requireView().findViewById<View>(R.id.chat_overlay_typing).visibility = View.VISIBLE
-        requireView().findViewById<TypingDots>(R.id.chat_overlay_typing_dots).apply {
+        binding.chatOverlayTyping.visibility = View.VISIBLE
+        binding.chatOverlayTypingDots.apply {
             visibility = if (hasTyping) View.VISIBLE else View.GONE
             if (hasTyping) start() else stop()
         }
-        requireView().findViewById<TextView>(R.id.chat_typing_users_typing).apply {
+        binding.chatTypingUsersTyping.apply {
             text = typingText(users)
             visibility = if (hasTyping) View.VISIBLE else View.GONE
         }
@@ -112,11 +118,11 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
             typing.channelRateLimit > 0 && !hasTyping -> getString(R.string.channel_slowmode_desc_short)
             else -> ""
         }
-        requireView().findViewById<TextView>(R.id.chat_typing_users_slowmode).apply {
+        binding.chatTypingUsersSlowmode.apply {
             text = slowmodeText
             visibility = if (slowmodeText.isNotEmpty()) View.VISIBLE else View.GONE
         }
-        requireView().findViewById<ImageView>(R.id.chat_typing_users_slowmode_icon).visibility =
+        binding.chatTypingUsersSlowmodeIcon.visibility =
             if (typing.channelRateLimit > 0) View.VISIBLE else View.GONE
     }
 

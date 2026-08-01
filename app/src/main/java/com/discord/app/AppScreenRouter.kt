@@ -10,9 +10,9 @@ import androidx.fragment.app.FragmentManager
 /**
  * Screen level navigation.
  *
- * The app is single-activity: a "screen" is a fragment class carried on the launch intent, and
- * [AppActivity] instantiates it into its content container. Everything that starts a screen goes
- * through here so navigation breadcrumbs stay consistent and the intent extras keep one shape.
+ * A "screen" is a fragment class carried on a dedicated [AppActivity] launch intent. Everything
+ * that starts a screen goes through here so navigation breadcrumbs stay consistent and the intent
+ * extras keep one shape.
  *
  * Reconstructed from the reference's obfuscated `AppScreen.kt` helper.
  */
@@ -24,7 +24,7 @@ object AppScreenRouter {
     /** Requests that the home surface opens its side panel once the screen is shown. */
     const val EXTRA_OPEN_PANEL = "com.discord.intent.extra.EXTRA_OPEN_PANEL"
 
-    /** Marks an intent as an activity restart triggered by a settings change, not by the user. */
+    /** Legacy marker accepted by [AppActivity] when restoring an older restart intent. */
     const val EXTRA_RECREATE = "com.discord.intent.extra.EXTRA_RECREATE"
 
     /** Optional activity transition override used by screen routes. */
@@ -76,8 +76,11 @@ object AppScreenRouter {
 
     /** Reads the screen requested by [intent], if any. */
     @Suppress("DEPRECATION", "UNCHECKED_CAST")
-    fun screenOf(intent: Intent?): Class<out Fragment>? =
-        intent?.getSerializableExtra(EXTRA_SCREEN) as? Class<out Fragment>
+    fun screenOf(intent: Intent?): Class<out Fragment>? {
+        val screen = runCatching { intent?.getSerializableExtra(EXTRA_SCREEN) as? Class<*> }.getOrNull()
+            ?: return null
+        return screen.takeIf(Fragment::class.java::isAssignableFrom) as? Class<out Fragment>
+    }
 
     /** Replaces the fragment hosted in [containerId] with a new instance of [screen]. */
     fun replaceFragment(
@@ -98,12 +101,10 @@ object AppScreenRouter {
     }
 
     /**
-     * Restarts [activity] so a locale, theme or font-scale change is applied to a freshly themed
-     * context. The restart intent is tagged so the new instance does not restart itself again.
+     * Recreates [activity] so a locale, theme or font-scale change is applied while Android retains
+     * its saved state, caller result contract and position in the activity stack.
      */
     fun recreate(activity: AppActivity) {
-        val restartIntent = Intent(activity.mostRecentIntent).putExtra(EXTRA_RECREATE, true)
-        activity.finish()
-        activity.startActivity(restartIntent)
+        activity.recreate()
     }
 }

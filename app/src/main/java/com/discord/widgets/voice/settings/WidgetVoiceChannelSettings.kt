@@ -2,13 +2,13 @@ package com.discord.widgets.voice.settings
 
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
 import androidx.core.view.isVisible
 import com.discord.R
 import com.discord.api.channel.Channel
@@ -19,8 +19,10 @@ import com.discord.api.channel.isStageVoiceChannel
 import com.discord.api.guild.GuildFeature
 import com.discord.api.permission.Permission
 import com.discord.app.AppFragment
+import com.discord.app.AppDialog
 import com.discord.app.AppScreenRouter
 import com.discord.app.AppToast
+import com.discord.dialogs.SelectorDialog
 import com.discord.models.domain.ModelVoiceRegion
 import com.discord.models.guild.Guild
 import com.discord.restapi.RestAPIParams
@@ -33,8 +35,8 @@ import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.views.CheckedSetting
 import com.discord.widgets.channels.permissions.WidgetChannelSettingsPermissionsOverview
-import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.settings.SettingsStrings
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputLayout
 import rx.Observable
@@ -147,15 +149,15 @@ class WidgetVoiceChannelSettings : AppFragment(R.layout.widget_voice_channel_set
 
     private fun showRegionDialog(regions: List<ModelVoiceRegion>) {
         val labels = listOf(getString(R.string.automatic_region)) + regions.map { it.name.orEmpty() }
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.form_label_region_override)
-            .setItems(labels.toTypedArray()) { dialog, position ->
-                selectedRegion = regions.getOrNull(position - 1)?.id
-                region.text = labels[position]
-                dialog.dismiss()
-                updateSaveVisibility()
-            }
-            .show()
+        SelectorDialog.show(
+            childFragmentManager,
+            getString(R.string.form_label_region_override),
+            labels.toTypedArray(),
+        ) { position ->
+            selectedRegion = regions.getOrNull(position - 1)?.id
+            region.text = labels[position]
+            updateSaveVisibility()
+        }
     }
 
     private fun saveChanges() {
@@ -178,24 +180,14 @@ class WidgetVoiceChannelSettings : AppFragment(R.layout.widget_voice_channel_set
     }
 
     private fun confirmDelete(channel: Channel) {
-        WidgetNoticeDialog.show(
-            fragmentManager = parentFragmentManager,
-            headerText = getString(R.string.delete_channel),
-            bodyText = SettingsStrings.render(
+        VoiceChannelDeleteDialog.show(
+            childFragmentManager,
+            channel.id,
+            SettingsStrings.render(
                 requireContext(), R.string.delete_channel_body,
                 "channelName" to channel.getDisplayNameOrDefault(requireContext()),
             ),
-            okText = getString(R.string.delete),
-            cancelText = getString(R.string.cancel),
-            listenerMap = mapOf(R.id.notice_ok to { _: View ->
-                RestAPI.api.deleteChannel(channel.id).restSubscribeOn().ui(this)
-                    .appSubscribe(WidgetVoiceChannelSettings::class.java, context = context) { deleted ->
-                        deleted.getDeletedMessage()?.let { AppToast.show(context, it) }
-                        appActivity?.finish()
-                    }
-            }),
-            dialogTheme = R.attr.notice_theme_positive_red,
-        )
+        ) { appActivity?.finish() }
     }
 
     private fun listener(update: (Int) -> Unit) = object : SeekBar.OnSeekBarChangeListener {
@@ -275,5 +267,43 @@ class WidgetVoiceChannelSettings : AppFragment(R.layout.widget_voice_channel_set
             guild.premiumTier == 1 -> 128
             else -> 96
         }
+    }
+}
+
+internal class VoiceChannelDeleteDialog : AppDialog(R.layout.widget_channel_settings_delete) {
+    var onDeleted: (() -> Unit)? = null
+
+    override fun onViewBound(view: View) {
+        super.onViewBound(view)
+        view.findViewById<TextView>(R.id.channel_settings_delete_body).text =
+            argumentsOrDefault.getCharSequence(ARG_BODY)
+        view.findViewById<MaterialButton>(R.id.channel_settings_delete_cancel).setOnClickListener { dismiss() }
+        view.findViewById<MaterialButton>(R.id.channel_settings_delete_confirm).setOnClickListener {
+            RestAPI.api.deleteChannel(argumentsOrDefault.getLong(ARG_CHANNEL_ID))
+                .restSubscribeOn().ui(this)
+                .appSubscribe(VoiceChannelDeleteDialog::class.java, context = context) { deleted ->
+                    deleted.getDeletedMessage()?.let { AppToast.show(context, it) }
+                    dismiss()
+                    onDeleted?.invoke()
+                }
+        }
+    }
+
+    companion object {
+        private const val ARG_CHANNEL_ID = "channel_id"
+        private const val ARG_BODY = "body"
+
+        fun show(
+            fragmentManager: androidx.fragment.app.FragmentManager,
+            channelId: Long,
+            body: CharSequence,
+            onDeleted: () -> Unit,
+        ) = VoiceChannelDeleteDialog().apply {
+            arguments = Bundle().apply {
+                putLong(ARG_CHANNEL_ID, channelId)
+                putCharSequence(ARG_BODY, body)
+            }
+            this.onDeleted = onDeleted
+        }.show(fragmentManager, VoiceChannelDeleteDialog::class.java.name)
     }
 }

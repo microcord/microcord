@@ -15,6 +15,7 @@ import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.ViewModelProvider
 import com.discord.R
 import com.discord.app.AppDialog
+import com.discord.dialogs.SelectorDialog
 import com.discord.models.domain.ModelPaymentSource
 import com.discord.models.domain.PatchPaymentSourceRaw
 import com.discord.models.domain.billing.ModelBillingAddress
@@ -30,7 +31,6 @@ import com.discord.utilities.view.validators.BasicTextInputValidator
 import com.discord.utilities.view.validators.Input
 import com.discord.utilities.view.validators.ValidationManager
 import com.discord.views.LoadingButton
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputLayout
 import com.google.gson.Gson
 
@@ -210,13 +210,14 @@ class WidgetPaymentSourceEditDialog : AppDialog(R.layout.widget_payment_source_e
     }
 
     private fun selectState(states: Array<StateEntry>) {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.payment_source_edit_select_state)
-            .setItems(states.map(StateEntry::label).toTypedArray()) { _, position ->
+        SelectorDialog.show(
+            parentFragmentManager,
+            getText(R.string.payment_source_edit_select_state),
+            states.map { it.label as CharSequence }.toTypedArray(),
+        ) { position ->
                 state.setText(states[position].label)
-                postalCode.requestFocus()
-            }
-            .show()
+        }
+        postalCode.requestFocus()
     }
 
     private fun loadStates(path: String): Array<StateEntry> =

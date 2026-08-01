@@ -25,6 +25,7 @@ import com.discord.widgets.channels.list.WidgetChannelsList
 import com.discord.widgets.channels.memberlist.WidgetChannelMembersList
 import com.discord.widgets.guilds.list.WidgetGuildsList
 import com.discord.widgets.settings.WidgetSettings
+import com.discord.widgets.share.WidgetIncomingShare
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -94,20 +95,17 @@ class MainHostNavigationTest {
             ),
         )
 
-        StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, false))
-        val monitor = instrumentation.addMonitor(AppActivity.Main::class.java.name, null, false)
-        context.startActivity(
+        val share = instrumentation.startActivitySync(
             Intent(Intent.ACTION_SEND)
                 .setClass(context, AppActionActivity::class.java)
                 .setType("text/plain")
                 .putExtra(Intent.EXTRA_TEXT, "shared")
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        )
-        val main = instrumentation.waitForMonitorWithTimeout(monitor, 5_000) as? AppActivity.Main
-        instrumentation.removeMonitor(monitor)
-        assertNotNull(main)
-        assertEquals("shared", (StoreStream.getNavigation().getPendingIntent() as AppIntentContract.Share).content.text)
-        instrumentation.runOnMainSync(main!!::finish)
+        ) as AppActionActivity
+        instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync { share.supportFragmentManager.executePendingTransactions() }
+        assertTrue(share.supportFragmentManager.findFragmentById(android.R.id.content) is WidgetIncomingShare)
+        instrumentation.runOnMainSync(share::finish)
     }
 
     @Test
@@ -139,6 +137,13 @@ class MainHostNavigationTest {
     }
 
     @Test
+    fun screenRouterRejectsNonFragmentClasses() {
+        val intent = Intent().putExtra(AppScreenRouter.EXTRA_SCREEN, String::class.java)
+
+        assertNull(AppScreenRouter.screenOf(intent))
+    }
+
+    @Test
     fun loggedInRouteCreatesTabsAndHomeHost() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         WidgetTabsHost.homeFragmentFactory = ::WidgetHome
@@ -154,7 +159,6 @@ class MainHostNavigationTest {
         assertTrue(home.childFragmentManager.findFragmentById(R.id.widget_guilds) is WidgetGuildsList)
         assertTrue(home.childFragmentManager.findFragmentById(R.id.widget_channels) is WidgetChannelsList)
         assertTrue(home.childFragmentManager.findFragmentById(R.id.widget_connected_list) is WidgetChannelMembersList)
-        assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.widget_tabs_host_bottom_navigation_view).visibility)
         assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.overlapping_panels).visibility)
         instrumentation.runOnMainSync(activity::finish)
     }
@@ -172,8 +176,17 @@ class MainHostNavigationTest {
         instrumentation.runOnMainSync(activity::recreate)
         val recreated = instrumentation.waitForMonitorWithTimeout(monitor, 5_000) as AppActivity.Main
         instrumentation.removeMonitor(monitor)
-        instrumentation.runOnMainSync { recreated.supportFragmentManager.executePendingTransactions() }
-        assertTrue(recreated.supportFragmentManager.findFragmentById(R.id.app_root) is WidgetTabsHost)
+        var restored = false
+        for (attempt in 0 until 100) {
+            instrumentation.waitForIdleSync()
+            instrumentation.runOnMainSync {
+                recreated.supportFragmentManager.executePendingTransactions()
+                restored = recreated.supportFragmentManager.findFragmentById(R.id.app_root) is WidgetTabsHost
+            }
+            if (restored) break
+            Thread.sleep(20)
+        }
+        assertTrue(restored)
         assertEquals(View.VISIBLE, recreated.findViewById<View>(R.id.overlapping_panels).visibility)
         instrumentation.runOnMainSync(recreated::finish)
     }

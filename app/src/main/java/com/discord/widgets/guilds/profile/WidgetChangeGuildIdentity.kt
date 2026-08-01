@@ -7,21 +7,25 @@ import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
-import androidx.appcompat.app.AlertDialog
+import android.widget.TextView
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentManager
 import com.discord.R
+import com.discord.app.AppBottomSheet
+import com.discord.app.AppDialog
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.app.AppToast
 import com.discord.app.appViewModels
+import com.discord.databinding.WidgetChangeGuildIdentityBinding
 import com.discord.media_picker.MediaPicker
-import com.discord.utilities.dimmer.DimmerView
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
-import com.facebook.drawee.view.SimpleDraweeView
-import com.google.android.material.floatingactionbutton.FloatingActionButton
-import com.google.android.material.textfield.TextInputLayout
+import com.discord.utilities.view.recycler.MaxHeightRecyclerView
+import com.discord.utilities.views.SimpleRecyclerAdapter
+import com.google.android.material.button.MaterialButton
 import java.util.concurrent.atomic.AtomicBoolean
 
 class WidgetChangeGuildIdentity : AppFragment(R.layout.widget_change_guild_identity) {
@@ -35,39 +39,35 @@ class WidgetChangeGuildIdentity : AppFragment(R.layout.widget_change_guild_ident
         WidgetChangeGuildIdentityViewModel(guildId, source)
     }
 
-    private lateinit var nickname: TextInputLayout
-    private lateinit var avatar: SimpleDraweeView
-    private lateinit var avatarContainer: View
-    private lateinit var upsell: View
-    private lateinit var save: FloatingActionButton
-    private lateinit var dimmer: DimmerView
+    private var _binding: WidgetChangeGuildIdentityBinding? = null
+    private val binding get() = requireNotNull(_binding)
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        val binding = WidgetChangeGuildIdentityBinding.bind(view).also { _binding = it }
         setActionBarTitle(R.string.change_identity)
         setActionBarDisplayHomeAsUpEnabled(false)
-        nickname = view.findViewById(R.id.set_nickname_text)
-        avatar = view.findViewById(R.id.guild_avatar)
-        avatarContainer = view.findViewById(R.id.guild_avatar_container)
-        upsell = view.findViewById(R.id.upsell_section)
-        save = view.findViewById(R.id.save_fab)
-        dimmer = view.findViewById(R.id.dimmer_view)
 
-        nickname.editText?.addTextChangedListener(object : TextWatcher {
+        binding.setNicknameText.editText?.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 if (!bindingText) viewModel.updateNickname(s?.toString().orEmpty())
             }
             override fun afterTextChanged(s: Editable?) = Unit
         })
-        nickname.setEndIconOnClickListener { viewModel.updateNickname("") }
-        save.setOnClickListener { viewModel.saveMemberChanges(view.context) }
-        view.findViewById<View>(R.id.get_premium_button).setOnClickListener {
+        binding.setNicknameText.setEndIconOnClickListener { viewModel.updateNickname("") }
+        binding.saveFab.setOnClickListener { viewModel.saveMemberChanges(view.context) }
+        binding.getPremiumButton.setOnClickListener {
             AppToast.show(this, R.string.premium_required)
         }
         requireContext().getSharedPreferences("com.discord_preferences", Context.MODE_PRIVATE)
             .edit().putBoolean(USER_GUILD_PROFILE_VIEWED_CACHE_KEY, true).apply()
-        showKeyboard(nickname)
+        showKeyboard(binding.setNicknameText)
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun onViewBoundOrOnResume() {
@@ -79,57 +79,53 @@ class WidgetChangeGuildIdentity : AppFragment(R.layout.widget_change_guild_ident
     }
 
     private fun configureUI(state: WidgetChangeGuildIdentityViewModel.ViewState) {
+        val binding = _binding ?: return
         val loaded = state as? WidgetChangeGuildIdentityViewModel.ViewState.Loaded ?: return
-        nickname.isEnabled = loaded.canChangeNickname
-        nickname.hint = getString(
+        binding.setNicknameText.isEnabled = loaded.canChangeNickname
+        binding.setNicknameText.hint = getString(
             if (loaded.canChangeNickname) R.string.nickname else R.string.change_identity_modal_change_nickname_disabled,
         )
-        nickname.placeholderText = loaded.meUser.username
-        nickname.isEndIconVisible = !loaded.currentNickname.isNullOrEmpty()
+        binding.setNicknameText.placeholderText = loaded.meUser.username
+        binding.setNicknameText.isEndIconVisible = !loaded.currentNickname.isNullOrEmpty()
         val text = loaded.currentNickname.orEmpty()
-        if (nickname.editText?.text?.toString() != text) {
+        if (binding.setNicknameText.editText?.text?.toString() != text) {
             bindingText = true
-            nickname.editText?.setText(text)
-            nickname.editText?.setSelection(text.length)
+            binding.setNicknameText.editText?.setText(text)
+            binding.setNicknameText.editText?.setSelection(text.length)
             bindingText = false
         }
-        IconUtils.setIcon(avatar, loaded.displayedAvatarURL)
-        avatarContainer.setOnClickListener {
+        IconUtils.setIcon(binding.guildAvatar, loaded.displayedAvatarURL)
+        binding.guildAvatarContainer.setOnClickListener {
             if (loaded.shouldUpsell) {
                 AppToast.show(this, R.string.premium_required)
             } else {
                 val options = buildList {
-                    add(getString(R.string.change_avatar))
+                    add(getString(R.string.change_guild_member_avatar))
                     if (loaded.displayingGuildAvatar) add(getString(R.string.change_identity_modal_reset_primary_avatar))
                 }
-                AlertDialog.Builder(requireContext()).setItems(options.toTypedArray()) { _, index ->
+                GuildIdentityAvatarSheet.show(childFragmentManager, options) { index ->
                     if (index == 0) {
                         imageSelectedResult = viewModel::updateAvatar
                         openMediaChooser()
                     } else {
                         viewModel.updateAvatar(null)
                     }
-                }.show()
+                }
             }
         }
-        upsell.visibility = if (loaded.shouldUpsell) View.VISIBLE else View.GONE
-        save.visibility = if (loaded.showSaveFab) View.VISIBLE else View.GONE
-        dimmer.setDimmed(loaded.dimmed)
+        binding.upsellSection.visibility = if (loaded.shouldUpsell) View.VISIBLE else View.GONE
+        binding.saveFab.visibility = if (loaded.showSaveFab) View.VISIBLE else View.GONE
+        binding.dimmerView.setDimmed(loaded.dimmed)
         setOnBackPressed(handler = { handleBackPressed(loaded) })
     }
 
     private fun handleBackPressed(state: WidgetChangeGuildIdentityViewModel.ViewState.Loaded): Boolean {
-        hideKeyboard(nickname)
+        hideKeyboard(binding.setNicknameText)
         if (!state.isDirty || discardConfirmed.get()) return false
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.unsaved_changes)
-            .setMessage(R.string.discard_changes_description)
-            .setNegativeButton(R.string.discard_changes_cancel, null)
-            .setPositiveButton(R.string.discard_changes_confirm) { _, _ ->
+        GuildIdentityDiscardDialog.show(childFragmentManager) {
                 discardConfirmed.set(true)
                 requireActivity().onBackPressed()
-            }
-            .show()
+        }
         return true
     }
 
@@ -185,5 +181,78 @@ class WidgetChangeGuildIdentity : AppFragment(R.layout.widget_change_guild_ident
             WidgetChangeGuildIdentity::class.java,
             Intent().putExtra(EXTRA_GUILD_ID, guildId).putExtra(EXTRA_SOURCE, source),
         )
+    }
+}
+
+internal class GuildIdentityAvatarSheet : AppBottomSheet() {
+    var options: List<String> = emptyList()
+    var onSelected: ((Int) -> Unit)? = null
+
+    override fun getContentViewResId() = R.layout.bottom_sheet_simple_selector
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        setBottomSheetCollapsedStateDisabled()
+        view.findViewById<View>(R.id.widget_simple_bottom_sheet_selector_header).visibility = View.GONE
+        view.findViewById<MaxHeightRecyclerView>(R.id.widget_simple_bottom_sheet_selector_recycler).adapter =
+            SimpleRecyclerAdapter(options) { inflater, parent ->
+                OptionHolder(inflater.inflate(R.layout.bottom_sheet_simple_selector_item, parent, false))
+            }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        dismiss()
+    }
+
+    private inner class OptionHolder(view: View) : SimpleRecyclerAdapter.ViewHolder<String>(view) {
+        override fun bind(data: String) {
+            itemView.findViewById<View>(R.id.select_component_sheet_item_icon).visibility = View.GONE
+            itemView.findViewById<View>(R.id.select_component_sheet_item_description).visibility = View.GONE
+            itemView.findViewById<TextView>(R.id.select_component_sheet_item_title).apply {
+                text = data
+                setTextColor(
+                    if (bindingAdapterPosition == 1) ContextCompat.getColor(context, R.color.status_red_500)
+                    else currentTextColor,
+                )
+            }
+            itemView.setOnClickListener {
+                onSelected?.invoke(bindingAdapterPosition)
+                dismiss()
+            }
+        }
+    }
+
+    companion object {
+        fun show(fragmentManager: FragmentManager, options: List<String>, onSelected: (Int) -> Unit) =
+            GuildIdentityAvatarSheet().apply {
+                this.options = options
+                this.onSelected = onSelected
+            }.show(fragmentManager, GuildIdentityAvatarSheet::class.java.name)
+    }
+}
+
+internal class GuildIdentityDiscardDialog : AppDialog(R.layout.view_dialog_confirmation) {
+    var onConfirm: (() -> Unit)? = null
+
+    override fun onViewBound(view: View) {
+        super.onViewBound(view)
+        view.findViewById<TextView>(R.id.view_dialog_confirmation_header).setText(R.string.discard_changes)
+        view.findViewById<TextView>(R.id.view_dialog_confirmation_text)
+            .setText(R.string.discard_changes_description)
+        view.findViewById<MaterialButton>(R.id.view_dialog_confirmation_cancel).setOnClickListener { dismiss() }
+        view.findViewById<MaterialButton>(R.id.view_dialog_confirmation_confirm).apply {
+            setText(R.string.okay)
+            setOnClickListener {
+                dismiss()
+                onConfirm?.invoke()
+            }
+        }
+    }
+
+    companion object {
+        fun show(fragmentManager: FragmentManager, onConfirm: () -> Unit) =
+            GuildIdentityDiscardDialog().apply { this.onConfirm = onConfirm }
+                .show(fragmentManager, GuildIdentityDiscardDialog::class.java.name)
     }
 }

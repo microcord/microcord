@@ -46,15 +46,14 @@ object IntentUtils {
         getStringExtra("android.intent.extra.shortcut.ID")?.toLongOrNull()
 
     fun isDiscordAppUri(uri: Uri): Boolean =
-        uri.scheme.equals("discord", ignoreCase = true) &&
-            uri.host?.lowercase(Locale.ROOT) in setOf("app", "action")
+        uri.scheme?.lowercase(Locale.ROOT) in setOf("discord", "manticord") &&
+            uri.host?.lowercase(Locale.ROOT) in setOf("app", "action") &&
+            uri.userInfo == null && uri.port == -1
 
     fun isHttpDomainUrl(uri: Uri): Boolean {
-        if (uri.scheme?.lowercase(Locale.ROOT) !in setOf("http", "https")) return false
+        if (!uri.scheme.equals("https", ignoreCase = true) || uri.userInfo != null || uri.port !in setOf(-1, 443)) return false
         val host = uri.host?.lowercase(Locale.ROOT) ?: return false
-        return host == "discord.com" || host.endsWith(".discord.com") ||
-            host == "discordapp.com" || host.endsWith(".discordapp.com") ||
-            host in setOf("discord.gg", "discord.gift", "discord.new")
+        return DeepLinkParser.isDiscordHost(host)
     }
 
     fun Intent.toExternalizedSend(): Intent {

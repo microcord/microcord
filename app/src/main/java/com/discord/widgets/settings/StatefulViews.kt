@@ -1,17 +1,13 @@
 package com.discord.widgets.settings
 
-import android.app.Activity
 import android.text.SpannableStringBuilder
-import android.view.LayoutInflater
 import android.view.View
 import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
-import com.discord.R
+import androidx.fragment.app.setFragmentResultListener
 import com.discord.app.AppFragment
 import com.discord.utilities.view.extensions.addBindedTextWatcher
 import com.discord.utilities.view.text.addBindedTextWatcher
 import com.discord.views.CheckedSetting
-import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputLayout
 import java.util.concurrent.atomic.AtomicBoolean
@@ -143,10 +139,8 @@ class StatefulViews(private val ids: List<Int>) {
 
     /** Asks for confirmation before Back discards pending edits. */
     fun setupUnsavedChangesConfirmation(fragment: AppFragment) {
-        val handler = fragment.activity?.let {
-            DiscardChangesBackHandler(it) { hasAnythingChanged() }
-        }
-        fragment.setOnBackPressed({ handler?.onBackPressed() ?: false })
+        val handler = DiscardChangesBackHandler(fragment) { hasAnythingChanged() }
+        fragment.setOnBackPressed(handler::onBackPressed)
     }
 
     private fun currentValue(id: Int): Any? =
@@ -178,30 +172,22 @@ class StatefulViews(private val ids: List<Int>) {
      * re-issues Back and must not intercept it a second time.
      */
     private class DiscardChangesBackHandler(
-        private val activity: Activity,
+        private val fragment: AppFragment,
         private val hasAnythingChanged: () -> Boolean,
     ) {
         private val discardConfirmed = AtomicBoolean(false)
+        private val requestKey = "${DiscardChangesDialog::class.java.name}:${fragment.id}"
+
+        init {
+            fragment.setFragmentResultListener(requestKey) { _, _ ->
+                discardConfirmed.set(true)
+                fragment.activity?.onBackPressed()
+            }
+        }
 
         fun onBackPressed(): Boolean {
             if (!hasAnythingChanged() || discardConfirmed.get()) return false
-            val view = LayoutInflater.from(activity).inflate(R.layout.view_dialog_confirmation, null)
-            val dialog = AlertDialog.Builder(activity).setView(view).create()
-            view.findViewById<TextView>(R.id.view_dialog_confirmation_header)
-                .setText(R.string.discard_changes)
-            view.findViewById<TextView>(R.id.view_dialog_confirmation_text)
-                .setText(R.string.discard_changes_description)
-            view.findViewById<MaterialButton>(R.id.view_dialog_confirmation_cancel)
-                .setOnClickListener { dialog.dismiss() }
-            view.findViewById<MaterialButton>(R.id.view_dialog_confirmation_confirm).apply {
-                setText(R.string.okay)
-                setOnClickListener {
-                    discardConfirmed.set(true)
-                    dialog.dismiss()
-                    activity.onBackPressed()
-                }
-            }
-            dialog.show()
+            DiscardChangesDialog.show(fragment.parentFragmentManager, requestKey)
             return true
         }
     }

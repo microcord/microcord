@@ -16,8 +16,6 @@ import com.discord.app.appViewModels
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.google.android.material.button.MaterialButton
-import com.jaredrummler.android.colorpicker.ColorPickerDialog
-import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 
 class WidgetEditProfileBannerSheet : AppBottomSheet() {
     private val defaultBannerColorHex get() = argumentsOrDefault.getString(ARG_DEFAULT_BANNER_COLOR_HEX, "#000000")
@@ -27,7 +25,7 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
             argumentsOrDefault.getString(ARG_INITIAL_COLOR_PREVIEW_HEX),
         )
     }
-    private var colorPickerDialog: ColorPickerDialog? = null
+    private var colorPickerDialog: ProfileColorPickerDialog? = null
 
     private lateinit var colorContainer: View
     private lateinit var colorTitle: TextView
@@ -59,6 +57,19 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
             dismiss()
         }
         premiumUpsell.setOnClickListener { AppToast.show(this, R.string.premium_required) }
+        parentFragmentManager.setFragmentResultListener(
+            ProfileColorPickerDialog.REQUEST_KEY,
+            viewLifecycleOwner,
+        ) { _, result ->
+            if (result.getBoolean(ProfileColorPickerDialog.RESULT_HAS_COLOR)) {
+                val color = result.getInt(ProfileColorPickerDialog.RESULT_COLOR)
+                viewModel.updateColorPreview(colorHex(color))
+                sendResult(ACTION_COLOR, color)
+            } else {
+                viewModel.updateColorPreview(null)
+                sendResult(ACTION_COLOR, hasColor = false)
+            }
+        }
         if (isGuildContext) {
             colorTitle.setText(R.string.change_identity_profile_color)
             changeImageTitle.setText(R.string.change_identity_profile_banner)
@@ -73,10 +84,10 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
     }
 
     override fun onPause() {
-        colorPickerDialog?.dismiss()
-        colorPickerDialog = null
         super.onPause()
         dismiss()
+        colorPickerDialog?.dismiss()
+        colorPickerDialog = null
     }
 
     private fun configureUi(state: EditProfileBannerSheetViewModel.ViewState) {
@@ -98,38 +109,8 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
     }
 
     private fun launchColorPicker(initialColor: Int) {
-        val configured = ColorPickerDialog.newBuilder()
-            .setDialogTitle(R.string.user_settings_profile_color_select_color)
-            .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
-            .setColor(initialColor)
-            .setShowAlphaSlider(false)
-            .setAllowPresets(false)
-            .create()
-        val picker = object : ColorPickerDialog() {
-            override fun onStart() {
-                super.onStart()
-                (dialog as? androidx.appcompat.app.AlertDialog)?.setButton(
-                    android.content.DialogInterface.BUTTON_NEUTRAL,
-                    getString(R.string.reset),
-                ) { _, _ ->
-                    viewModel.updateColorPreview(null)
-                    sendResult(ACTION_COLOR, hasColor = false)
-                    dismiss()
-                }
-            }
-        }.apply {
-            arguments = configured.arguments
-            setColorPickerDialogListener(object : ColorPickerDialogListener {
-                override fun onColorSelected(dialogId: Int, color: Int) {
-                    viewModel.updateColorPreview(colorHex(color))
-                    sendResult(ACTION_COLOR, color and 0xFFFFFF)
-                }
-
-                override fun onDialogDismissed(dialogId: Int) = Unit
-            })
-        }
-        picker.show(parentFragmentManager, DIALOG_TAG_COLOR_PICKER)
-        colorPickerDialog = picker
+        hideKeyboard()
+        colorPickerDialog = ProfileColorPickerDialog.show(parentFragmentManager, initialColor)
     }
 
     private fun sendResult(action: String, color: Int = 0, hasColor: Boolean = true) {
@@ -146,7 +127,6 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
         private const val ARG_INITIAL_COLOR_PREVIEW_HEX = "ARG_INITIAL_COLOR_PREVIEW_HEX"
         private const val ARG_HAS_BANNER_IMAGE = "ARG_HAS_BANNER_IMAGE"
         private const val EXTRA_GUILD_ID = "com.discord.intent.extra.EXTRA_GUILD_ID"
-        private const val DIALOG_TAG_COLOR_PICKER = "DIALOG_TAG_COLOR_PICKER"
         internal const val REQUEST_KEY = "EDIT_PROFILE_BANNER"
         internal const val RESULT_ACTION = "action"
         internal const val RESULT_COLOR = "color"

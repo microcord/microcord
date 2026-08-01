@@ -2,12 +2,10 @@ package com.discord.widgets.channels.settings
 
 import android.content.Context
 import android.content.Intent
-import android.view.LayoutInflater
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
 import androidx.core.view.isVisible
 import androidx.fragment.app.viewModels
 import com.discord.R
@@ -23,7 +21,6 @@ import com.discord.utilities.view.extensions.getTextOrEmpty
 import com.discord.utilities.view.extensions.setText
 import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.settings.SettingsNavigation
-import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputLayout
 
@@ -47,6 +44,9 @@ class WidgetThreadSettings : AppFragment(R.layout.widget_thread_settings) {
         slowMode = view.findViewById(R.id.thread_settings_slow_mode_cooldown_slider)
         slowModeLabel = view.findViewById(R.id.thread_settings_slow_mode_cooldown_label)
         save = view.findViewById(R.id.thread_settings_save)
+        parentFragmentManager.setFragmentResultListener(ThreadDeleteDialog.REQUEST_KEY, this) { _, result ->
+            viewModel.onThreadDeleted(result.getLong(ThreadDeleteDialog.RESULT_CHANNEL_ID))
+        }
 
         name.addBindedTextWatcher(this) {
             if (!bindingState) viewModel.onChannelNameInputChanged(it.toString())
@@ -120,22 +120,11 @@ class WidgetThreadSettings : AppFragment(R.layout.widget_thread_settings) {
     }
 
     private fun confirmDelete(channel: Channel) {
-        val content = LayoutInflater.from(requireContext())
-            .inflate(R.layout.widget_channel_settings_delete, null) as LinearLayout
-        val dialog = AlertDialog.Builder(requireContext()).setView(content).create()
-        content.findViewById<TextView>(R.id.channel_settings_delete_title).setText(R.string.delete_thread)
-        content.findViewById<TextView>(R.id.channel_settings_delete_body).text =
-            getString(R.string.delete_channel_body)
-                .replace("!!{channelName}!!", channel.getDisplayNameOrDefault(requireContext()))
-                .replace("**", "")
-        content.findViewById<MaterialButton>(R.id.channel_settings_delete_cancel)
-            .setOnClickListener { dialog.dismiss() }
-        content.findViewById<MaterialButton>(R.id.channel_settings_delete_confirm)
-            .setOnClickListener {
-                dialog.dismiss()
-                viewModel.onThreadDeleted(channel.id)
-            }
-        dialog.show()
+        ThreadDeleteDialog.show(
+            parentFragmentManager,
+            channel.id,
+            channel.getDisplayNameOrDefault(requireContext()),
+        )
     }
 
     private fun handleEvent(event: WidgetThreadSettingsViewModel.Event) {

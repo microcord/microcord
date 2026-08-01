@@ -1,11 +1,16 @@
 package com.discord.widgets.directories
 
 import android.content.Context
+import android.os.Bundle
 import android.util.Base64
+import android.view.View
+import android.widget.TextView
 import androidx.activity.result.ActivityResultLauncher
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import android.content.Intent
 import com.discord.R
+import com.discord.app.AppBottomSheet
 import com.discord.api.directory.DirectoryEntryGuild
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
@@ -20,7 +25,9 @@ import com.discord.widgets.hubs.WidgetHubAddServer
 import com.discord.widgets.hubs.WidgetHubDescription
 import com.discord.widgets.hubs.toArgsIntent
 import com.discord.widgets.mobile_reports.WidgetMobileReports
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.discord.utilities.view.recycler.MaxHeightRecyclerView
+import com.discord.utilities.views.SimpleRecyclerAdapter
+import com.facebook.drawee.view.SimpleDraweeView
 import org.json.JSONObject
 
 /** Analytics source recorded on a join started from a directory row. */
@@ -84,16 +91,14 @@ object DirectoryNavigation {
 /**
  * The long-press menu on a directory row.
  *
- * The reference shows Discord's shared "simple actions" bottom sheet; that view does not exist here,
- * so this uses the same `MaterialAlertDialogBuilder` chooser the bot select-menu fallback uses. The
- * option set, the ordering, and the destructive confirmation are the reference's.
+ * The option set, ordering, icons, and destructive confirmation match the reference action sheet.
  */
 object DirectoryServerOptions {
 
-    private enum class Option(@StringRes val titleRes: Int) {
-        Edit(R.string.hub_entry_update),
-        Remove(R.string.hub_entry_remove),
-        Report(R.string.report),
+    internal enum class Option(@StringRes val titleRes: Int, @DrawableRes val iconRes: Int) {
+        Edit(R.string.hub_entry_update, R.drawable.ic_edit_24dp),
+        Remove(R.string.hub_entry_remove, R.drawable.ic_delete_24dp),
+        Report(R.string.report, R.drawable.ic_flag_24dp),
     }
 
     private val SERVER_OWNER_OPTIONS = listOf(Option.Edit, Option.Remove)
@@ -111,10 +116,8 @@ object DirectoryServerOptions {
             .filter { it.isAvailable() }
         if (options.isEmpty()) return
 
-        MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.server_settings)
-            .setItems(options.map { context.getString(it.titleRes) }.toTypedArray()) { _, index ->
-                when (options[index]) {
+        DirectoryServerOptionsSheet.show(fragment, options) { option ->
+                when (option) {
                     Option.Edit -> DirectoryNavigation.editHubEntry?.invoke(context, directoryEntry, hubName)
                     Option.Remove -> confirmRemove(fragment, directoryEntry, removeGuildListener)
                     Option.Report -> DirectoryNavigation.reportHubEntry?.invoke(
@@ -124,8 +127,7 @@ object DirectoryServerOptions {
                         directoryEntry.directoryChannelId,
                     )
                 }
-            }
-            .show()
+        }
     }
 
     private fun Option.isAvailable(): Boolean = when (this) {
@@ -152,6 +154,55 @@ object DirectoryServerOptions {
                 negativeButtonText = context.getString(R.string.cancel),
             ),
         ) { removeGuildListener() }
+    }
+}
+
+internal class DirectoryServerOptionsSheet : AppBottomSheet() {
+    var options: List<DirectoryServerOptions.Option> = emptyList()
+    var onSelected: ((DirectoryServerOptions.Option) -> Unit)? = null
+
+    override fun getContentViewResId() = R.layout.bottom_sheet_simple_selector
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        setBottomSheetCollapsedStateDisabled()
+        view.findViewById<TextView>(R.id.widget_simple_bottom_sheet_selector_placeholder)
+            .setText(R.string.server_settings)
+        view.findViewById<MaxHeightRecyclerView>(R.id.widget_simple_bottom_sheet_selector_recycler).apply {
+            adapter = SimpleRecyclerAdapter(options) { inflater, parent ->
+                val row = inflater.inflate(R.layout.bottom_sheet_simple_selector_item, parent, false)
+                OptionHolder(row)
+            }
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        dismiss()
+    }
+
+    private inner class OptionHolder(view: View) : SimpleRecyclerAdapter.ViewHolder<DirectoryServerOptions.Option>(view) {
+        override fun bind(data: DirectoryServerOptions.Option) {
+            itemView.findViewById<TextView>(R.id.select_component_sheet_item_title).setText(data.titleRes)
+            itemView.findViewById<TextView>(R.id.select_component_sheet_item_description).visibility = View.GONE
+            itemView.findViewById<SimpleDraweeView>(R.id.select_component_sheet_item_icon)
+                .setActualImageResource(data.iconRes)
+            itemView.setOnClickListener {
+                onSelected?.invoke(data)
+                dismiss()
+            }
+        }
+    }
+
+    companion object {
+        fun show(
+            fragment: AppFragment,
+            options: List<DirectoryServerOptions.Option>,
+            onSelected: (DirectoryServerOptions.Option) -> Unit,
+        ) = DirectoryServerOptionsSheet().apply {
+            this.options = options
+            this.onSelected = onSelected
+        }.show(fragment.childFragmentManager, DirectoryServerOptionsSheet::class.java.name)
     }
 }
 

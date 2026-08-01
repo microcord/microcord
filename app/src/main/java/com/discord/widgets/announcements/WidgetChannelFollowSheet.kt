@@ -10,15 +10,15 @@ import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppViewFlipper
 import com.discord.app.appViewModels
-import com.discord.stores.StoreStream
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.ui
+import com.discord.widgets.channels.WidgetChannelSelector
+import com.discord.widgets.guilds.WidgetGuildSelector
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import rx.subscriptions.CompositeSubscription
 
 /**
@@ -48,6 +48,17 @@ class WidgetChannelFollowSheet : AppBottomSheet() {
     private lateinit var followButton: MaterialButton
 
     override fun getContentViewResId(): Int = R.layout.widget_channel_follow_sheet
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        WidgetChannelSelector.registerForResult(this, REQUEST_KEY_CHANNEL, allowNullChannel = true) { id, _ ->
+            viewModel.selectChannel(id)
+        }
+        WidgetGuildSelector.registerForResult(this, allowNullGuild = true) { id, _ ->
+            viewModel.selectGuild(id)
+            viewModel.selectChannel(0L)
+        }
+    }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -94,7 +105,9 @@ class WidgetChannelFollowSheet : AppBottomSheet() {
     }
 
     private fun configureGuildSelector(viewState: WidgetChannelFollowSheetViewModel.ViewState.Loaded) {
-        selectGuild.setOnClickListener { showGuildPicker(viewState.availableGuilds) }
+        selectGuild.setOnClickListener {
+            WidgetGuildSelector.launch(this, filterFunction = WidgetGuildSelector.GuildFilterFunction(viewState.availableGuilds))
+        }
         val selected = viewState.selectedGuild
         selectedGuildName.text = selected?.name ?: getString(R.string.select)
         selectedGuildName.setTextColor(
@@ -109,7 +122,14 @@ class WidgetChannelFollowSheet : AppBottomSheet() {
         val selectedGuild = viewState.selectedGuild
         if (selectedGuild != null) {
             selectChannel.setOnClickListener {
-                showChannelPicker(selectedGuild.id, viewState.availableChannels)
+                WidgetChannelSelector.launch(
+                    this,
+                    selectedGuild.id,
+                    REQUEST_KEY_CHANNEL,
+                    includeNoChannel = false,
+                    noChannelStringId = R.string.none,
+                    filterFunction = ChannelFollowChannelFilterFunction(selectedGuild.id, viewState.availableChannels),
+                )
             }
         }
 
@@ -131,48 +151,12 @@ class WidgetChannelFollowSheet : AppBottomSheet() {
         )
     }
 
-    /**
-     * The reference opens `WidgetGuildSelector` / `WidgetChannelSelector` — full searchable
-     * pickers that take a `FilterFunction` and answer through the fragment-result API. Neither
-     * screen exists in this project, so both pickers are single-choice dialogs over the very same
-     * id sets the view model already computed. **Swap them back when those screens land**; the
-     * filter predicates are exactly `availableGuilds` and `availableChannels ∩ guildId`.
-     */
-    private fun showGuildPicker(availableGuilds: Set<Long>) {
-        val guilds = StoreStream.getGuilds().getGuilds()
-        val options = availableGuilds.mapNotNull { guilds[it] }.sortedBy { it.name }
-        if (options.isEmpty()) return
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.form_label_send_to)
-            .setItems(options.map { it.name }.toTypedArray()) { _, index ->
-                viewModel.selectGuild(options[index].id)
-                // Clearing the channel is what the reference's result callback does; a channel from
-                // the previous guild must not survive the switch.
-                viewModel.selectChannel(0L)
-            }
-            .show()
-    }
-
-    private fun showChannelPicker(selectedGuildId: Long, availableChannels: Set<Long>) {
-        val channels = StoreStream.getChannels().getAllChannels()
-        val options = availableChannels
-            .mapNotNull(channels::get)
-            .filter { it.guildId == selectedGuildId }
-            .sortedBy { it.getDisplayNameOrDefault(requireContext()) }
-        if (options.isEmpty()) return
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.form_label_select_channel)
-            .setItems(options.map { it.getDisplayNameOrDefault(requireContext()) }.toTypedArray()) { _, index ->
-                viewModel.selectChannel(options[index].id)
-            }
-            .show()
-    }
-
     companion object {
         private const val EXTRA_CHANNEL_ID = "com.discord.intent.extra.EXTRA_CHANNEL_ID"
         private const val EXTRA_GUILD_ID = "com.discord.intent.extra.EXTRA_GUILD_ID"
         private const val VIEW_INDEX_FOLLOW = 0
         private const val VIEW_INDEX_NO_AVAILABLE_GUILDS = 1
+        private const val REQUEST_KEY_CHANNEL = "REQUEST_KEY_CHANNEL_FOLLOW_CHANNEL"
 
         fun show(fragmentManager: FragmentManager, channelId: Long, guildId: Long) {
             WidgetChannelFollowSheet().apply {
@@ -189,7 +173,7 @@ class WidgetChannelFollowSheet : AppBottomSheet() {
 data class ChannelFollowChannelFilterFunction(
     private val selectedGuildId: Long,
     private val channelIds: Set<Long>,
-) {
-    fun includeChannel(channel: Channel): Boolean =
+) : WidgetChannelSelector.FilterFunction {
+    override fun includeChannel(channel: Channel): Boolean =
         channel.id in channelIds && channel.guildId == selectedGuildId
 }

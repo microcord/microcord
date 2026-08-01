@@ -24,7 +24,6 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.views.premium.GiftSelectView
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputLayout
 
 class WidgetSettingsGifting : AppFragment(R.layout.widget_settings_gifting) {
@@ -67,16 +66,8 @@ class WidgetSettingsGifting : AppFragment(R.layout.widget_settings_gifting) {
             }
         }
         viewModel.setOnGiftCodeResolved { code ->
-            MaterialAlertDialogBuilder(requireContext())
-                .setMessage(R.string.gift_code_auth_accept)
-                .setNegativeButton(R.string.cancel, null)
-                .setPositiveButton(R.string.redeem) { _, _ ->
-                    RestAPI.api.acceptGift(code).restSubscribeOn().ui(this).appSubscribe(javaClass) {
-                        input.editText?.text?.clear()
-                        StoreStream.getEntitlements().fetchMyGiftEntitlements()
-                    }
-                }
-                .show()
+            WidgetGiftAcceptDialog.show(parentFragmentManager, code)
+            input.editText?.text?.clear()
         }
     }
 

@@ -5,21 +5,18 @@ import android.graphics.drawable.Animatable
 import android.os.Bundle
 import android.provider.MediaStore
 import android.view.View
-import android.widget.FrameLayout
-import android.widget.TextView
 import android.webkit.MimeTypeMap
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.os.bundleOf
 import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.app.AppBottomSheet
+import com.discord.databinding.WidgetAttachmentBottomSheetBinding
 import com.discord.utilities.embed.EmbedResourceUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.time.TimeUtils
 import com.facebook.drawee.controller.BaseControllerListener
-import com.facebook.drawee.view.SimpleDraweeView
 import com.facebook.imagepipeline.image.ImageInfo
-import com.google.android.material.checkbox.MaterialCheckBox
 import com.lytefast.flexinput.model.Attachment
 
 /**
@@ -37,6 +34,8 @@ import com.lytefast.flexinput.model.Attachment
  */
 class AttachmentBottomSheet : AppBottomSheet() {
 
+    private var _binding: WidgetAttachmentBottomSheetBinding? = null
+    private val binding get() = requireNotNull(_binding)
     private var attachment: Attachment<*>? = null
     private var attachmentImageInfo: ImageInfo? = null
     private var attachmentViewSize: Int? = null
@@ -45,10 +44,6 @@ class AttachmentBottomSheet : AppBottomSheet() {
     private var onFileRemoved: (() -> Unit)? = null
     private var onMarkSpoiler: ((Boolean) -> Unit)? = null
     private var onDismissed: (() -> Unit)? = null
-
-    private lateinit var preview: SimpleDraweeView
-    private lateinit var spoilerCover: FrameLayout
-    private lateinit var spoilerCheckbox: MaterialCheckBox
 
     override fun getContentViewResId(): Int = R.layout.widget_attachment_bottom_sheet
 
@@ -60,16 +55,11 @@ class AttachmentBottomSheet : AppBottomSheet() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        preview = view.findViewById(R.id.attachment_preview)
-        spoilerCover = view.findViewById(R.id.attachment_spoiler_cover)
-        spoilerCheckbox = view.findViewById(R.id.attachment_mark_spoiler_checkbox)
-        val filename = view.findViewById<TextView>(R.id.attachment_filename)
-        val markSpoiler = view.findViewById<View>(R.id.attachment_mark_spoiler)
-        val removeItem = view.findViewById<View>(R.id.attachment_remove_item)
+        _binding = WidgetAttachmentBottomSheetBinding.bind(view)
 
-        filename.text = attachment?.displayName
+        binding.attachmentFilename.text = attachment?.displayName
 
-        view.findViewById<TextView>(R.id.attachment_duration).apply {
+        binding.attachmentDuration.apply {
             val durationMs = videoDurationMs()
             visibility = if (durationMs == null) View.GONE else View.VISIBLE
             if (durationMs != null) {
@@ -81,7 +71,7 @@ class AttachmentBottomSheet : AppBottomSheet() {
             }
         }
 
-        preview.addOnLayoutChangeListener { v, left, _, right, _, _, _, _, _ ->
+        binding.attachmentPreview.addOnLayoutChangeListener { v, left, _, right, _, _, _, _, _ ->
             attachmentViewSize = right - left
             updateSpoilerViewSize()
             v.contentDescription = attachment?.displayName
@@ -90,16 +80,23 @@ class AttachmentBottomSheet : AppBottomSheet() {
         markSpoiler(isSpoiler)
         loadAttachment()
 
-        removeItem.setOnClickListener {
+        binding.attachmentRemoveItem.setOnClickListener {
             onFileRemoved?.invoke()
             dismiss()
         }
-        markSpoiler.setOnClickListener {
+        binding.attachmentMarkSpoiler.setOnClickListener {
             val next = !isSpoiler
             markSpoiler(next)
             onMarkSpoiler?.invoke(next)
         }
-        setPeekHeightBottomView(removeItem)
+        setPeekHeightBottomView(binding.attachmentRemoveItem)
+    }
+
+    override fun onDestroyView() {
+        attachmentImageInfo = null
+        attachmentViewSize = null
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun onPause() {
@@ -116,25 +113,26 @@ class AttachmentBottomSheet : AppBottomSheet() {
 
     private fun markSpoiler(spoiler: Boolean) {
         isSpoiler = spoiler
-        spoilerCheckbox.isChecked = spoiler
-        spoilerCover.visibility = if (spoiler) View.VISIBLE else View.GONE
+        binding.attachmentMarkSpoilerCheckbox.isChecked = spoiler
+        binding.attachmentSpoilerCover.visibility = if (spoiler) View.VISIBLE else View.GONE
     }
 
     private fun loadAttachment() {
         val uri = attachment?.uri ?: return
         MGImages.setImage(
-            view = preview,
+            view = binding.attachmentPreview,
             urls = listOf(uri.toString()),
             controllerListener = object : BaseControllerListener<ImageInfo>() {
                 override fun onFinalImageSet(id: String?, imageInfo: ImageInfo?, animatable: Animatable?) {
+                    val binding = _binding ?: return
                     attachmentImageInfo = imageInfo
                     val width = imageInfo?.width ?: 0
                     val height = imageInfo?.height ?: 0
-                    val params = preview.layoutParams as ConstraintLayout.LayoutParams
+                    val params = binding.attachmentPreview.layoutParams as ConstraintLayout.LayoutParams
                     // Portrait and square images are shown square; only landscape gets its own ratio,
                     // which is what stops a tall image from taking over the whole sheet.
                     params.dimensionRatio = if (width > height) "$width:$height" else "1"
-                    preview.layoutParams = params
+                    binding.attachmentPreview.layoutParams = params
                     updateSpoilerViewSize()
                 }
             },
@@ -164,6 +162,7 @@ class AttachmentBottomSheet : AppBottomSheet() {
     }
 
     private fun updateSpoilerViewSize() {
+        val binding = _binding ?: return
         val imageInfo = attachmentImageInfo ?: return
         val viewSize = attachmentViewSize ?: return
         val (width, height) = EmbedResourceUtils.calculateScaledSize(
@@ -173,10 +172,11 @@ class AttachmentBottomSheet : AppBottomSheet() {
             viewSize,
             resources,
         )
-        spoilerCover.layoutParams = (spoilerCover.layoutParams as ConstraintLayout.LayoutParams).apply {
-            this.width = width
-            this.height = height
-        }
+        binding.attachmentSpoilerCover.layoutParams =
+            (binding.attachmentSpoilerCover.layoutParams as ConstraintLayout.LayoutParams).apply {
+                this.width = width
+                this.height = height
+            }
     }
 
     companion object {

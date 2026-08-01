@@ -2,14 +2,13 @@ package com.discord.widgets.user.account
 
 import android.content.Context
 import android.view.View
-import android.widget.TextView
 import com.discord.R
 import com.discord.app.AppScreenRouter
+import com.discord.databinding.WidgetUserAccountVerifyBinding
 import com.discord.i18n.setI18nText
 import com.discord.models.requiredaction.RequiredAction
 import com.discord.stores.StoreStream
 import com.discord.utilities.analytics.AnalyticsTracker
-import com.discord.utilities.view.text.LinkifiedTextView
 import com.discord.widgets.user.account.WidgetUserAccountVerifyBase.Mode
 import com.discord.widgets.user.email.WidgetUserEmailVerify
 import com.discord.widgets.user.phone.WidgetUserPhoneManage
@@ -27,23 +26,25 @@ import java.util.Locale
  * menu item the base class installs.
  */
 class WidgetUserAccountVerify : WidgetUserAccountVerifyBase(R.layout.widget_user_account_verify) {
+    private var _binding: WidgetUserAccountVerifyBinding? = null
+    private val binding get() = requireNotNull(_binding)
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        _binding = WidgetUserAccountVerifyBinding.bind(view)
         setOnBackPressed({ true })
 
-        view.findViewById<TextView>(R.id.verify_account_text_body)
-            .setI18nText(R.string.verification_body)
+        binding.verifyAccountTextBody.setI18nText(R.string.verification_body)
 
-        view.findViewById<LinkifiedTextView>(R.id.verify_account_support)
+        binding.verifyAccountSupport
             .setI18nText(R.string.verification_footer_support, "supportURL" to supportRequestUrl())
 
-        view.findViewById<View>(R.id.verify_account_by_email).apply {
+        binding.verifyAccountByEmail.apply {
             visibility = if (isEmailAllowed) View.VISIBLE else View.GONE
             setOnClickListener { WidgetUserEmailVerify.launch(it.context, mode) }
         }
 
-        view.findViewById<View>(R.id.verify_account_by_phone).apply {
+        binding.verifyAccountByPhone.apply {
             visibility = if (isPhoneAllowed) View.VISIBLE else View.GONE
             setOnClickListener {
                 WidgetUserPhoneManage.launch(
@@ -53,6 +54,11 @@ class WidgetUserAccountVerify : WidgetUserAccountVerifyBase(R.layout.widget_user
                 )
             }
         }
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     /** Reference `b.a.d.f.c()`: the support centre's "new request" form in the user's locale. */

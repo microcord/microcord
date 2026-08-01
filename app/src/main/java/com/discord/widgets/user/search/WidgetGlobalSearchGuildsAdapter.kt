@@ -57,6 +57,7 @@ class WidgetGlobalSearchGuildsAdapter(
         private val mentions: TextView = itemView.findViewById(R.id.guilds_item_mentions)
         private val selected: ImageView = itemView.findViewById(R.id.guilds_item_selected)
         private val unread: ImageView = itemView.findViewById(R.id.guilds_item_unread)
+        private val voice: ImageView = itemView.findViewById(R.id.guilds_item_voice)
 
         override fun onConfigure(position: Int, data: WidgetGlobalSearchGuildsModel.Item) {
             super.onConfigure(position, data)
@@ -71,6 +72,7 @@ class WidgetGlobalSearchGuildsAdapter(
             mentions.visibility = if (data.mentionCount > 0) View.VISIBLE else View.GONE
             selected.visibility = if (data.isSelected) View.VISIBLE else View.GONE
             unread.visibility = if (data.isUnread && data.mentionCount == 0) View.VISIBLE else View.GONE
+            voice.visibility = if (data.connectedToVoice) View.VISIBLE else View.GONE
             itemView.contentDescription = guild.name
         }
     }

@@ -8,6 +8,7 @@ import java.util.Locale
 
 object DeepLinkParser {
     private val shortDiscordHosts = setOf("discord.gg", "discord.gift", "discord.new")
+    private val discordHosts = setOf("discord.com", "discordapp.com")
     private val settings = setOf(
         "account", "nitro", "voice", "createServer", "quickSwitcher", "friends", "mentions",
         "settings", "contactSync", "addFriends", "editProfile", "voiceChannel", "xboxLinkBeta",
@@ -33,6 +34,9 @@ object DeepLinkParser {
         if (appScheme && (host !in setOf("app", "action") || uri.userInfo != null || uri.port != -1)) {
             return LinkParseResult.Unsupported(LinkParseResult.Reason.UNSUPPORTED_HOST)
         }
+        if (scheme == "https" && (uri.userInfo != null || uri.port !in setOf(-1, 443))) {
+            return LinkParseResult.Unsupported(LinkParseResult.Reason.UNSUPPORTED_HOST)
+        }
         val path = uri.path?.trimEnd('/').orEmpty().ifEmpty { "/" }
         val parts = path.split('/').filter(String::isNotEmpty)
         val query = query(uri.rawQuery)
@@ -41,7 +45,7 @@ object DeepLinkParser {
             host == "discord.gg" && parts.size == 1 -> invite(parts[0], query)
             host == "discord.gift" && parts.size == 1 -> parts[0].takeIf(code::matches)?.let(DeepLinkRoute::Gift)
             host == "discord.new" && parts.size == 1 -> parts[0].takeIf(code::matches)?.let(DeepLinkRoute::GuildTemplate)
-            path == "/app" -> DeepLinkRoute.Home
+            (appScheme && host == "app" && path == "/") || path == "/app" -> DeepLinkRoute.Home
             path == "/discovery" -> DeepLinkRoute.Discovery
             parts.firstOrNull() == "invite" && parts.size == 2 -> invite(parts[1], query)
             parts.firstOrNull() == "gifts" && parts.size == 2 -> parts[1].takeIf(code::matches)?.let(DeepLinkRoute::Gift)
@@ -57,9 +61,14 @@ object DeepLinkParser {
                 DeepLinkRoute.Authorization(parts[0] == "connect", query)
             host == "action" && parts.size == 2 && parts[1] == "authorize" && parts[0] in setOf("oauth2", "connect") ->
                 DeepLinkRoute.Authorization(parts[0] == "connect", query)
-            parts.firstOrNull() == "connect" && parts.size <= 2 -> DeepLinkRoute.Voice(parts.getOrNull(1)?.let(::positive))
+            parts.firstOrNull() == "connect" && parts.size <= 2 ->
+                parts.getOrNull(1)?.let(::positive)?.let(DeepLinkRoute::Voice)
+                    ?: if (parts.size == 1) DeepLinkRoute.Voice(null) else null
             parts.firstOrNull() == "lurk" && parts.size in 2..3 ->
-                positive(parts[1])?.let { DeepLinkRoute.Lurk(it, parts.getOrNull(2)?.let(::positive)) }
+                positive(parts[1])?.let { guildId ->
+                    parts.getOrNull(2)?.let(::positive)?.let { DeepLinkRoute.Lurk(guildId, it) }
+                        ?: if (parts.size == 2) DeepLinkRoute.Lurk(guildId, null) else null
+                }
             parts.firstOrNull() == "ra" && parts.size == 2 && code.matches(parts[1]) -> DeepLinkRoute.RemoteAuth(parts[1])
             parts.firstOrNull() == "guild" && parts.getOrNull(2) == "premiumguild" && parts.size == 3 -> when (parts[1]) {
                 "@me" -> DeepLinkRoute.PremiumGuild(null)
@@ -110,9 +119,8 @@ object DeepLinkParser {
 
     private fun guild(value: String): Long? = if (value == "@me") null else positive(value)
     private fun positive(value: String): Long? = value.toLongOrNull()?.takeIf { it > 0 }
-    private fun isDiscordHost(host: String?): Boolean = host in shortDiscordHosts ||
-        host == "discord.com" || host?.endsWith(".discord.com") == true ||
-        host == "discordapp.com" || host?.endsWith(".discordapp.com") == true
+    internal fun isDiscordHost(host: String?): Boolean = host in shortDiscordHosts || host in discordHosts ||
+        discordHosts.any { host?.removeSuffix(".$it") in setOf("www", "ptb", "canary") }
 
     private fun query(raw: String?): Map<String, String>? = runCatching {
         raw.orEmpty().split('&').filter(String::isNotEmpty).associate { field ->
@@ -132,8 +140,9 @@ object ExternalUriPolicy {
             return false
         }
         val host = uri.host ?: return false
-        val asciiHost = runCatching { IDN.toASCII(host).lowercase(Locale.ROOT) }.getOrNull() ?: return false
+        val asciiHost = runCatching { IDN.toASCII(host).lowercase(Locale.ROOT).trimEnd('.') }.getOrNull() ?: return false
         return asciiHost.contains('.') && asciiHost != "localhost" && !asciiHost.endsWith(".local") &&
+            ':' !in asciiHost &&
             !Regex("(?:\\d{1,3}\\.){3}\\d{1,3}").matches(asciiHost) &&
             asciiHost.none(Char::isWhitespace) && '\\' !in uri.rawSchemeSpecificPart
     }

@@ -9,7 +9,9 @@ import com.discord.api.activity.ActivityType
 import com.discord.api.connectedaccounts.ConnectedAccount
 import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.spotify.ModelSpotifyTrack
+import com.discord.utilities.integrations.SpotifyHelper
 import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.spotify.SpotifyApiClient
 import com.discord.utilities.time.Clock
 import java.util.concurrent.TimeUnit
 import rx.Observable
@@ -22,7 +24,7 @@ import rx.subjects.BehaviorSubject
  * The device only tells us *that* a track id started playing (through Spotify's broadcast
  * intents); the track's name, artists, duration and album art come from a separate Web-API
  * lookup. This store joins the two: [setPlayingStatus] carries the transport state, the injected
- * [spotifyTrack] stream carries the metadata, and the presence is only published once both agree.
+ * [SpotifyApiClient] carries the metadata, and the presence is only published once both agree.
  *
  * The state also self-expires. Spotify does not broadcast when a track ends, so a timer fires
  * 5 seconds past the expected end and clears the presence rather than leaving a stale "listening"
@@ -34,18 +36,7 @@ class StoreSpotify(
     private val presences: StoreUserPresence,
     private val userConnections: StoreUserConnections,
     private val currentUserId: () -> Long,
-    /**
-     * Metadata for the currently playing track, or null when it could not be resolved.
-     * `utilities/spotify/SpotifyApiClient` is not reconstructed yet; until it is, this stays at
-     * its inert default and no Spotify presence is ever published.
-     */
-    private val spotifyTrack: Observable<ModelSpotifyTrack?> = Observable.never(),
-    /** `SpotifyApiClient.fetchSpotifyTrack` — starts the metadata lookup for a track id. */
-    private val fetchTrack: (trackId: String) -> Unit = {},
-    /** `SpotifyApiClient.setSpotifyAccountId` — scopes the Web-API lookup to the linked account. */
-    private val setSpotifyAccountId: (accountId: String?) -> Unit = {},
-    /** `SpotifyHelper.registerSpotifyBroadcastReceivers`. */
-    private val registerBroadcastReceivers: (Context) -> Unit = {},
+    private val spotifyApiClient: SpotifyApiClient = SpotifyApiClient(clock),
     /** `AnalyticsTracker.activityUpdatedSpotify`. */
     private val trackActivityUpdated: (trackId: String?, hasArtwork: Boolean) -> Unit = { _, _ -> },
 ) {
@@ -61,8 +52,11 @@ class StoreSpotify(
     private var expireStateSub: Subscription? = null
 
     fun init(context: Context) {
-        registerBroadcastReceivers(context)
-        Observable.combineLatest(publishStateTrigger, spotifyTrack.distinctUntilChanged()) { _, track -> track }
+        SpotifyHelper.registerSpotifyBroadcastReceivers(context, ::setCurrentTrackId, ::setPlayingStatus)
+        Observable.combineLatest(
+            publishStateTrigger,
+            spotifyApiClient.getSpotifyTrack().distinctUntilChanged(),
+        ) { _, track -> track }
             .debounce(TRACK_DEBOUNCE_SECONDS, TimeUnit.SECONDS)
             .appSubscribe(StoreSpotify::class.java) { track ->
                 dispatcher.schedule {
@@ -92,15 +86,20 @@ class StoreSpotify(
     @StoreThread
     fun handlePreLogout() {
         spotifyState = null
+        expireStateSub?.unsubscribe()
+        expireStateSub = null
+        spotifyApiClient.setSpotifyAccountId(null)
     }
 
     @StoreThread
     fun handleUserConnections(accounts: List<ConnectedAccount>) {
-        setSpotifyAccountId(accounts.firstOrNull { it.type.equals(SPOTIFY_PLATFORM_ID, ignoreCase = true) }?.id)
+        spotifyApiClient.setSpotifyAccountId(
+            accounts.firstOrNull { it.type.equals(SPOTIFY_PLATFORM_ID, ignoreCase = true) }?.id,
+        )
     }
 
     /** Called from the Spotify broadcast receiver when a new track id starts. */
-    fun setCurrentTrackId(trackId: String) = fetchTrack(trackId)
+    fun setCurrentTrackId(trackId: String) = spotifyApiClient.fetchSpotifyTrack(trackId)
 
     /** Called from the Spotify broadcast receiver on play/pause/seek. */
     fun setPlayingStatus(playing: Boolean, position: Int) = dispatcher.schedule {

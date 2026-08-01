@@ -1,10 +1,13 @@
 package com.discord.utilities.integrations
 
 import android.content.ActivityNotFoundException
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.discord.api.activity.Activity
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
@@ -31,6 +34,8 @@ object SpotifyHelper {
     private const val ATTRIBUTION_URL = "https://app.adjust.com/ndjczk?campaign="
 
     private const val TAG = "SPOTIFY"
+    private const val METADATA_CHANGED = "com.spotify.music.metadatachanged"
+    private const val PLAYBACK_STATE_CHANGED = "com.spotify.music.playbackstatechanged"
 
     fun isSpotifyInstalled(context: Context): Boolean =
         try {
@@ -39,6 +44,41 @@ object SpotifyHelper {
         } catch (notInstalled: android.content.pm.PackageManager.NameNotFoundException) {
             false
         }
+
+    /** Receives local playback state only; authorization remains owned by the linked connection. */
+    fun registerSpotifyBroadcastReceivers(
+        context: Context,
+        onTrackChanged: (String) -> Unit,
+        onPlaybackChanged: (playing: Boolean, positionMs: Int) -> Unit,
+    ) {
+        val appContext = context.applicationContext
+        ContextCompat.registerReceiver(
+            appContext,
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    intent?.getStringExtra("id")
+                        ?.let(::spotifyTrackId)
+                        ?.let(onTrackChanged)
+                }
+            },
+            IntentFilter(METADATA_CHANGED),
+            ContextCompat.RECEIVER_EXPORTED,
+        )
+        ContextCompat.registerReceiver(
+            appContext,
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    intent ?: return
+                    onPlaybackChanged(
+                        intent.getBooleanExtra("playing", false),
+                        intent.getIntExtra("playbackPosition", 0).coerceAtLeast(0),
+                    )
+                }
+            },
+            IntentFilter(PLAYBACK_STATE_CHANGED),
+            ContextCompat.RECEIVER_EXPORTED,
+        )
+    }
 
     /**
      * Opens the track the presence is currently on. No-op when the activity carries no `sync_id`,
@@ -122,9 +162,9 @@ object SpotifyHelper {
         }
     }
 
-    // The reference also exposes `registerSpotifyBroadcastReceivers(context)`, which registers
-    // `SpotifyMetadataReceiver` and `SpotifyPlayingStateReceiver` for
-    // `com.spotify.music.metadatachanged` / `…playbackstatechanged`. Neither receiver exists in
-    // this project yet (`utilities/receiver/spotify/` is unreconstructed), so the local-playback
-    // half of the Spotify integration is not wired here.
+    internal fun spotifyTrackId(value: String): String? = value
+        .takeIf { it.startsWith("spotify:track:") }
+        ?.substringAfterLast(':')
+        ?.takeIf { it.length == 22 && it.all(Char::isLetterOrDigit) }
+
 }

@@ -3,20 +3,22 @@ package com.discord.widgets.guilds.invite
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isStageVoiceChannel
 import com.discord.api.channel.isVoiceChannel
+import com.discord.api.guild.GuildFeature
+import com.discord.api.guildjoinrequest.GuildJoinRequest
 import com.discord.app.AppFragment
-import com.discord.app.AppLog
 import com.discord.models.domain.ModelInvite
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
 import com.discord.utilities.captcha.CaptchaHelper
 import com.discord.utilities.error.RestApiError
-import com.discord.utilities.guilds.MemberVerificationUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.filterNull
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.takeSingleUntilTimeout
 import com.discord.utilities.rx.ui
+import com.discord.widgets.servers.member_verification.WidgetMemberVerification
+import rx.Observable
 
 /**
  * Accepting an invite: `POST /invites/{code}`, then landing the user where the invite points.
@@ -29,14 +31,10 @@ import com.discord.utilities.rx.ui
  * the part that *is* readable — the REST call, the callback triad, and the two navigation
  * helpers, which do decompile cleanly — restated over RxJava 1 callbacks.
  *
- * Two suspension points in the reference are visible only through their continuation lambdas, which
- * resume with `false` on dismissal and `true` on completion:
- *
- * * `hasCompletedMembershipGate` — the rules gate. `MemberVerificationUtils.maybeShowVerificationGate`
- *   does not exist in this project (`WidgetGuildJoinRequest` was never reconstructed), so a guild
- *   with a gate is joined and navigated to without showing it. **Marked, not guessed.**
- * * `hasMicrophonePermissions` — asked before entering a vocal channel. Reproduced through
- *   [AppFragment.requestMicrophone].
+ * The reference checks the membership gate before ordinary navigation and abandons that navigation
+ * when the gate owns the flow. This target must wait for the invite POST's gateway result first, so
+ * it races channel hydration against `GUILD_JOIN_REQUEST_CREATE`; whichever arrives first owns the
+ * route. Microphone permission remains the final gate before entering a vocal channel.
  *
  * The *ordering* of those two relative to the navigation calls is inference from the field order in
  * the state machine, not a read fact.
@@ -81,25 +79,16 @@ object InviteJoinHelper {
                 errorHandler = { error -> onInvitePostError(error) },
             ) { joinedInvite ->
                 onInvitePostSuccess(joinedInvite)
-                completeJoin(fragment, joinedInvite, onInviteFlowFinished)
+                completeJoin(fragment, joinedInvite, location, onInviteFlowFinished)
             }
     }
 
     private fun completeJoin(
         fragment: AppFragment,
         invite: ModelInvite,
+        location: String,
         onInviteFlowFinished: (ModelInvite) -> Unit,
     ) {
-        // The reference suspends here on `hasCompletedMembershipGate` and abandons the flow when
-        // the gate is dismissed. `MemberVerificationUtils.maybeShowVerificationGate` and
-        // `WidgetGuildJoinRequest` are unreconstructed, so a gated guild currently proceeds
-        // straight through. When the gate screen lands, this becomes:
-        //     if (MemberVerificationUtils.hasVerificationGate(guild)) { showGate(...); return }
-        val guild = invite.guild?.id?.let { StoreStream.getGuilds().getGuild(it) }
-        if (MemberVerificationUtils.hasVerificationGate(guild)) {
-            AppLog.i("Invite guild ${guild?.id} has a membership gate; no gate screen exists yet.")
-        }
-
         val channel = invite.channel
         if (channel == null) {
             navigateToGuild(invite)
@@ -107,18 +96,50 @@ object InviteJoinHelper {
             return
         }
 
-        StoreStream.getChannels().observeChannel(channel.id)
-            .filterNull()
+        val guild = invite.guild
+        val joinRequests = if (
+            guild != null &&
+            GuildFeature.MEMBER_VERIFICATION_GATE_ENABLED in guild.features &&
+            GuildFeature.COMMUNITY in guild.features
+        ) {
+            StoreStream.getGuildJoinRequests().observeGuildJoinRequest(guild.id)
+        } else {
+            Observable.never<GuildJoinRequest?>()
+        }
+        raceJoinOutcome(
+            StoreStream.getChannels().observeChannel(channel.id),
+            joinRequests,
+            StoreStream.getUsers().getMe().id,
+        )
             .takeSingleUntilTimeout()
             .ui(fragment)
             .appSubscribe(
                 errorClass = InviteJoinHelper::class.java,
                 errorHandler = { onInviteFlowFinished(invite) },
-            ) { resolvedChannel ->
+            ) { (resolvedChannel, joinRequest) ->
+                if (joinRequest != null && guild != null) {
+                    WidgetMemberVerification.create(fragment.requireContext(), guild.id, location, invite)
+                    return@appSubscribe
+                }
+                if (resolvedChannel == null) {
+                    onInviteFlowFinished(invite)
+                    return@appSubscribe
+                }
                 invite.channel = resolvedChannel
                 navigateToJoinedChannel(fragment, invite, onInviteFlowFinished)
             }
     }
+
+    internal fun raceJoinOutcome(
+        channels: Observable<Channel?>,
+        joinRequests: Observable<GuildJoinRequest?>,
+        currentUserId: Long,
+    ): Observable<Pair<Channel?, GuildJoinRequest?>> = Observable.amb(
+        channels.filterNull().map { Pair<Channel?, GuildJoinRequest?>(it, null) },
+        joinRequests.filterNull()
+            .filter { it.userId == currentUserId }
+            .map { Pair<Channel?, GuildJoinRequest?>(null, it) },
+    ).take(1)
 
     private fun navigateToJoinedChannel(
         fragment: AppFragment,

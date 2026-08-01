@@ -7,10 +7,12 @@ import android.os.Bundle
 import android.view.View
 import android.widget.ImageView
 import android.widget.ProgressBar
+import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.bugreport.Feature
 import com.discord.app.AppFragment
+import com.discord.app.AppBottomSheet
 import com.discord.app.AppScreenRouter
 import com.discord.app.AppViewFlipper
 import com.discord.app.appViewModels
@@ -18,6 +20,8 @@ import com.discord.i18n.I18nSpans
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.ui
+import com.discord.utilities.view.recycler.MaxHeightRecyclerView
+import com.discord.utilities.views.SimpleRecyclerAdapter
 import com.discord.utilities.view.extensions.addBindedTextWatcher
 import com.discord.utilities.view.extensions.setText
 import com.discord.utilities.view.extensions.setTextIfDifferent
@@ -28,7 +32,6 @@ import com.discord.views.SearchInputView
 import com.discord.views.sticker.StickerView
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputLayout
 import com.google.android.material.textview.MaterialTextView
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -156,17 +159,8 @@ class WidgetBugReport : AppFragment(R.layout.widget_bug_report) {
         viewModel.selectFeatureArea(feature)
     }
 
-    /**
-     * The reference uses `views/SelectorBottomSheet`, which shows each priority's emoji, title and
-     * a formatted description. That view does not exist in this project, so this is a single-choice
-     * dialog over the same list with the same callback. **Swap it back when the sheet lands.**
-     */
     private fun showPriorityPicker() {
-        val labels = priorityLevels.map { getString(it.title) }.toTypedArray()
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.bug_report_priority)
-            .setItems(labels) { _, index -> viewModel.updatePriority(index) }
-            .show()
+        BugReportPrioritySheet.show(childFragmentManager) { viewModel.updatePriority(it) }
     }
 
     private fun submit() {
@@ -318,5 +312,50 @@ class WidgetBugReport : AppFragment(R.layout.widget_bug_report) {
                 .putExtra(INTENT_EXTRA_SCREENSHOT_FILENAME, screenshotFileName)
             AppScreenRouter.launch(context, WidgetBugReport::class.java, intent)
         }
+    }
+}
+
+internal class BugReportPrioritySheet : AppBottomSheet() {
+    var onSelected: ((Int) -> Unit)? = null
+
+    override fun getContentViewResId() = R.layout.bottom_sheet_simple_selector
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        setBottomSheetCollapsedStateDisabled()
+        view.findViewById<TextView>(R.id.widget_simple_bottom_sheet_selector_placeholder)
+            .setText(R.string.bug_report_priority)
+        view.findViewById<MaxHeightRecyclerView>(R.id.widget_simple_bottom_sheet_selector_recycler).adapter =
+            SimpleRecyclerAdapter(WidgetBugReport.priorityLevels) { inflater, parent ->
+                PriorityHolder(inflater.inflate(R.layout.bottom_sheet_simple_selector_item, parent, false))
+            }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        dismiss()
+    }
+
+    private inner class PriorityHolder(view: View) : SimpleRecyclerAdapter.ViewHolder<Priority>(view) {
+        override fun bind(data: Priority) {
+            val index = WidgetBugReport.priorityLevels.indexOf(data)
+            itemView.findViewById<TextView>(R.id.select_component_sheet_item_title).setText(data.title)
+            itemView.findViewById<TextView>(R.id.select_component_sheet_item_description).text =
+                WidgetBugReport.priorityDescription(itemView.context, index)
+            MGImages.setImage(
+                itemView.findViewById(R.id.select_component_sheet_item_icon),
+                IconUtils.getForEmoji(data.emojiId, animated = true, sizePx = 64),
+            )
+            itemView.setOnClickListener {
+                onSelected?.invoke(index)
+                dismiss()
+            }
+        }
+    }
+
+    companion object {
+        fun show(fragmentManager: androidx.fragment.app.FragmentManager, onSelected: (Int) -> Unit) =
+            BugReportPrioritySheet().apply { this.onSelected = onSelected }
+                .show(fragmentManager, BugReportPrioritySheet::class.java.name)
     }
 }

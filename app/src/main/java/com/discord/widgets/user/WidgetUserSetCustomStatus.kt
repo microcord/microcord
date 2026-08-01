@@ -4,18 +4,17 @@ import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
-import android.widget.RadioGroup
 import android.widget.Toast
 import com.discord.app.AppFragment
 import com.discord.app.appViewModels
 import com.discord.R
-import com.discord.models.domain.emoji.ModelEmojiUnicode
+import com.discord.databinding.WidgetUserSetCustomStatusBinding
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.widgets.chat.input.emoji.EmojiPickerContextType
+import com.discord.widgets.chat.input.emoji.EmojiPickerListener
+import com.discord.widgets.chat.input.emoji.EmojiPickerNavigator
 import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.textfield.TextInputLayout
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -30,13 +29,13 @@ class WidgetUserSetCustomStatus : AppFragment(R.layout.widget_user_set_custom_st
     private val viewModel: WidgetUserSetCustomStatusViewModel by appViewModels {
         WidgetUserSetCustomStatusViewModel()
     }
-    private lateinit var input: TextInputEditText
-    private lateinit var expiration: RadioGroup
+    private var _binding: WidgetUserSetCustomStatusBinding? = null
+    private val binding get() = requireNotNull(_binding)
+    private val input get() = requireNotNull(binding.setCustomStatusText.editText as? TextInputEditText)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        input = requireNotNull(view.findViewById<TextInputLayout>(R.id.set_custom_status_text).editText as? TextInputEditText)
-        expiration = view.findViewById(R.id.set_custom_status_expiration)
+        _binding = WidgetUserSetCustomStatusBinding.bind(view)
         input.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
@@ -44,25 +43,30 @@ class WidgetUserSetCustomStatus : AppFragment(R.layout.widget_user_set_custom_st
             }
             override fun afterTextChanged(s: Editable?) = Unit
         })
-        expiration.setOnCheckedChangeListener { _, checked ->
+        binding.setCustomStatusExpiration.setOnCheckedChangeListener { _, checked ->
             expirationFor(checked)?.let(viewModel::setExpiration)
         }
-        view.findViewById<View>(R.id.set_custom_status_emoji_button).setOnClickListener {
-            if (onChooseEmoji != null) onChooseEmoji?.invoke() else {
-                val emojis = arrayOf("😀", "🎮", "🎵", "💬", "🌙")
-                MaterialAlertDialogBuilder(requireContext()).setItems(emojis) { _, index ->
-                    viewModel.setStatusEmoji(
-                        ModelEmojiUnicode(names = listOf(emojis[index]), surrogates = emojis[index]),
-                    )
-                }.show()
-            }
+        binding.setCustomStatusEmojiButton.setOnClickListener {
+            onChooseEmoji?.invoke() ?: EmojiPickerNavigator.launchBottomSheet(
+                parentFragmentManager,
+                object : EmojiPickerListener {
+                    override fun onEmojiPicked(emoji: com.discord.models.domain.emoji.Emoji) =
+                        viewModel.setStatusEmoji(emoji)
+                },
+                EmojiPickerContextType.Global,
+            )
         }
-        view.findViewById<TextInputLayout>(R.id.set_custom_status_text).setEndIconOnClickListener {
+        binding.setCustomStatusText.setEndIconOnClickListener {
             viewModel.clearStatusTextAndEmoji()
         }
-        view.findViewById<View>(R.id.set_custom_status_save).setOnClickListener {
+        binding.setCustomStatusSave.setOnClickListener {
             viewModel.saveStatus()
         }
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun onViewBoundOrOnResume() {
@@ -92,16 +96,15 @@ class WidgetUserSetCustomStatus : AppFragment(R.layout.widget_user_set_custom_st
             input.setText(form.text.take(MAX_LENGTH))
             input.setSelection(input.text?.length ?: 0)
         }
-        expiration.check(idFor(form.expiration))
-        requireView().findViewById<SimpleDraweeView>(R.id.set_custom_status_emoji).apply {
+        binding.setCustomStatusExpiration.check(idFor(form.expiration))
+        binding.setCustomStatusEmoji.apply {
             if (form.emoji == null) {
                 setActualImageResource(R.drawable.ic_smiley_desaturated)
             } else {
                 setImageURI(form.emoji.getImageUri(true, 64, requireContext()))
             }
         }
-        requireView().findViewById<TextInputLayout>(R.id.set_custom_status_text).isEndIconVisible =
-            state.showStatusClear
+        binding.setCustomStatusText.isEndIconVisible = state.showStatusClear
     }
 
     private fun idFor(value: WidgetUserSetCustomStatusViewModel.FormState.Expiration) = when (value) {

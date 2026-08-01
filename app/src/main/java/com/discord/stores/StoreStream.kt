@@ -577,8 +577,18 @@ class StoreStream private constructor(
         dispatcher,
         observationDeck,
         api = { if (::restApi.isInitialized) restApi else null },
-        onConnectionsLoaded = { accounts -> userConnections.handleUserConnections(accounts) },
+        onConnectionsLoaded = { accounts ->
+            userConnections.handleUserConnections(accounts)
+            spotify.handleUserConnections(accounts)
+        },
         connectionUpdates = gatewayConnection.userConnectionUpdate,
+    )
+    private val spotify = StoreSpotify(
+        dispatcher = dispatcher,
+        clock = clock,
+        presences = presences,
+        userConnections = userConnections,
+        currentUserId = { users.getMeInternal().id },
     )
     private val contactSync = StoreContactSync(
         dispatcher,
@@ -1084,6 +1094,7 @@ class StoreStream private constructor(
             guildsNsfw.init(context)
             maskedLinks.init(context)
             userConnections.init(context)
+            spotify.init(context)
             contactSync.init(context)
             mediaSettings.init()
             analytics.init(context)
@@ -1845,6 +1856,7 @@ class StoreStream private constructor(
         guildMemberRequester.handleConnectionReady(ready)
         applicationCommands.handleConnectionReady(ready)
         applicationInteractions.handleConnectionReady(ready)
+        spotify.handleConnectionReady(ready)
     }
 
     @StoreThread
@@ -2606,6 +2618,7 @@ class StoreStream private constructor(
         messageReactions.handlePreLogout()
         messageAck.handlePreLogout()
         mentions.handlePreLogout()
+        spotify.handlePreLogout()
         embeddedActivities.handlePreLogout()
         applications.handlePreLogout()
         applicationAssets.handlePreLogout()
@@ -2640,48 +2653,52 @@ class StoreStream private constructor(
     }
 
     fun resetForLogout() = dispatcher.schedule {
-        userSettingsSystem.handlePreLogout()
-        Persister.reset()
+        fun resetStore(name: String, action: () -> Unit) {
+            runCatching(action).onFailure { Log.e("StoreStream", "Logout reset failed for $name", it) }
+        }
+        resetStore("userSettingsSystem.preLogout", userSettingsSystem::handlePreLogout)
+        resetStore("accessibility", accessibility::reset)
+        resetStore("userSettings", userSettings::reset)
+        resetStore("userSettingsSystem", userSettingsSystem::reset)
+        resetStore("users", users::reset)
+        resetStore("userRelationships", userRelationships::handlePreLogout)
+        resetStore("userProfiles", userProfiles::handlePreLogout)
+        resetStore("userNotes", userNotes::handlePreLogout)
+        resetStore("friendSuggestions", friendSuggestions::handlePreLogout)
+        resetStore("userAffinities", userAffinities::handlePreLogout)
+        resetStore("guilds", guilds::reset)
+        resetStore("channels", channels::reset)
+        resetStore("permissions", permissions::reset)
+        resetStore("guildSelected", guildSelected::reset)
+        resetStore("channelsSelected", channelsSelected::reset)
+        resetStore("channelMembers", channelMembers::reset)
+        resetStore("guildSubscriptions", guildSubscriptions::reset)
+        resetStore("expandedGuildFolders", expandedGuildFolders::reset)
+        resetStore("collapsedChannelCategories", collapsedChannelCategories::reset)
+        resetStore("guildSettings", guildSettings::reset)
+        resetStore("stageInstances", stageInstances::reset)
+        resetStore("presences", presences::reset)
+        resetStore("readStates", readStates::reset)
+        resetStore("messages", messages::handlePreLogout)
+        resetStore("messagesMostRecent", messagesMostRecent::handlePreLogout)
+        resetStore("pendingReplies", pendingReplies::handlePreLogout)
+        resetStore("pinnedMessages", pinnedMessages::handlePreLogout)
+        resetStore("chatInputEditing", chatInputEditing::clear)
+        resetStore("usersTyping", usersTyping::clear)
+        resetStore("tabsNavigation", tabsNavigation::handlePreLogout)
+        resetStore("clientDataState", clientDataState::clear)
+        resetStore("notifications", notifications::handlePreLogout)
+        resetStore("analytics", analytics::handlePreLogout)
+        resetStore("secondaryStores", ::resetSecondaryStoresInternal)
+        resetStore("voiceChannelSelected", voiceChannelSelected::clear)
+        resetStore("connectionOpen") { connectionOpen.handleConnected(false) }
+        resetStore("navigation", navigation::reset)
+        guildFolders = emptyList()
+        val persisterReset = runCatching { Persister.reset() }
         val preferencesCleared = preferences.edit().clear().commit()
         val durablePreferencesCleared = sessionDurablePreferences.edit().clear().commit()
-        accessibility.reset()
-        userSettings.reset()
-        userSettingsSystem.reset()
-        users.reset()
-        userRelationships.handlePreLogout()
-        userProfiles.handlePreLogout()
-        userNotes.handlePreLogout()
-        friendSuggestions.handlePreLogout()
-        userAffinities.handlePreLogout()
-        guilds.reset()
-        channels.reset()
-        permissions.reset()
-        guildSelected.reset()
-        channelsSelected.reset()
-        channelMembers.reset()
-        guildSubscriptions.reset()
-        expandedGuildFolders.reset()
-        collapsedChannelCategories.reset()
-        guildSettings.reset()
-        stageInstances.reset()
-        presences.reset()
-        readStates.reset()
-        messages.handlePreLogout()
-        messagesMostRecent.handlePreLogout()
-        pendingReplies.handlePreLogout()
-        pinnedMessages.handlePreLogout()
-        chatInputEditing.clear()
-        usersTyping.clear()
-        tabsNavigation.handlePreLogout()
-        clientDataState.clear()
-        notifications.handlePreLogout()
-        analytics.handlePreLogout()
-        resetSecondaryStoresInternal()
-        voiceChannelSelected.clear()
-        connectionOpen.handleConnected(false)
-        navigation.reset()
-        guildFolders = emptyList()
         check(preferencesCleared && durablePreferencesCleared) { "Unable to clear logout preferences" }
+        persisterReset.getOrThrow()
     }
 
     @StoreThread
@@ -2725,6 +2742,7 @@ class StoreStream private constructor(
         gameParty.handleConnectionOpen(payload)
         userRequiredActions.handleConnectionOpen(payload)
         userConnections.handleConnectionOpen(payload)
+        spotify.handleConnectionOpen(payload)
         phone.handleConnectionOpen(payload)
         userSurvey.handleConnectionOpen()
         guildMemberRequester.handleConnectionOpen()
@@ -3121,6 +3139,7 @@ class StoreStream private constructor(
         @JvmStatic fun getGuildMemberCounts() = requireInstance().guildMemberCounts
         @JvmStatic fun getUserRequiredActions() = requireInstance().userRequiredActions
         @JvmStatic fun getUserConnections() = requireInstance().userConnections
+        @JvmStatic fun getSpotify() = requireInstance().spotify
         @JvmStatic fun getContactSync() = requireInstance().contactSync
 
         // Guild administration

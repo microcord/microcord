@@ -54,7 +54,7 @@ class ChannelReorderContractTest {
 
         val request = server.takeRequest()
         val body = JsonParser.parseString(request.body.readUtf8()).asJsonArray
-        assertEquals(listOf("main", "serializeNulls"), clients.keys.toList())
+        assertEquals(listOf("main", "serializeNulls", "reactNative"), clients.keys.toList())
         assertNotSame(clients.getValue("main"), clients.getValue("serializeNulls"))
         assertEquals("PATCH", request.method)
         assertEquals("/api/v9/guilds/$GUILD_ID/channels", request.path)

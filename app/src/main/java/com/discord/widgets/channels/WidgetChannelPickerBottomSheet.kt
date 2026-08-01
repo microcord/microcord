@@ -7,16 +7,14 @@ import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.setFragmentResult
 import androidx.fragment.app.setFragmentResultListener
-import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.getDisplayName
 import com.discord.app.AppBottomSheet
-import com.discord.app.AppViewFlipper
 import com.discord.app.appViewModels
+import com.discord.databinding.WidgetChannelPickerSheetBinding
 import com.discord.utilities.channel.guildChannelIcon
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
-import com.discord.views.SearchInputView
 import rx.subscriptions.CompositeSubscription
 
 class WidgetChannelPickerBottomSheet : AppBottomSheet() {
@@ -28,9 +26,8 @@ class WidgetChannelPickerBottomSheet : AppBottomSheet() {
     private val viewModel: WidgetChannelPickerBottomSheetViewModel by appViewModels {
         WidgetChannelPickerBottomSheetViewModel(guildId, selectedChannelId, hideAnnouncementChannels)
     }
+    private var _binding: WidgetChannelPickerSheetBinding? = null
     private lateinit var adapter: WidgetchannelPickerAdapter
-    private lateinit var appFlipper: AppViewFlipper
-    private lateinit var searchInput: SearchInputView
     private var onCancel: (() -> Unit)? = null
 
     private val itemClickListener = object : WidgetchannelPickerAdapter.OnItemClickListener {
@@ -61,11 +58,15 @@ class WidgetChannelPickerBottomSheet : AppBottomSheet() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        appFlipper = requireNotNull(view.findViewById(R.id.channel_picker_app_flipper))
-        searchInput = requireNotNull(view.findViewById(R.id.channel_picker_search_input))
+        val binding = WidgetChannelPickerSheetBinding.bind(view).also { _binding = it }
         adapter = WidgetchannelPickerAdapter(itemClickListener, this)
-        requireNotNull<RecyclerView>(view.findViewById(R.id.channel_picker_recycler)).adapter = adapter
-        searchInput.bindTextWatcher(this, viewModel::updateSearchQuery)
+        binding.channelPickerRecycler.adapter = adapter
+        binding.channelPickerSearchInput.bindTextWatcher(this, viewModel::updateSearchQuery)
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun bindSubscriptions(compositeSubscription: CompositeSubscription) {
@@ -86,14 +87,15 @@ class WidgetChannelPickerBottomSheet : AppBottomSheet() {
     }
 
     private fun configureUI(viewState: WidgetChannelPickerBottomSheetViewModel.ViewState) {
+        val binding = _binding ?: return
         when (viewState) {
             WidgetChannelPickerBottomSheetViewModel.ViewState.Loading -> {
-                appFlipper.displayedChild = FLIPPER_LOADING
-                searchInput.visibility = View.GONE
+                binding.channelPickerAppFlipper.displayedChild = FLIPPER_LOADING
+                binding.channelPickerSearchInput.visibility = View.GONE
             }
             is WidgetChannelPickerBottomSheetViewModel.ViewState.Loaded -> {
-                searchInput.visibility = View.VISIBLE
-                appFlipper.displayedChild = FLIPPER_RESULT
+                binding.channelPickerSearchInput.visibility = View.VISIBLE
+                binding.channelPickerAppFlipper.displayedChild = FLIPPER_RESULT
                 adapter.setItems(viewState.adapterItems)
             }
         }

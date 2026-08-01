@@ -1,6 +1,5 @@
 package com.discord.widgets.auth
 
-import android.app.DatePickerDialog
 import android.content.ClipboardManager
 import android.os.Bundle
 import android.view.ContextMenu
@@ -14,7 +13,9 @@ import androidx.annotation.LayoutRes
 import androidx.fragment.app.viewModels
 import com.discord.R
 import com.discord.app.AppFragment
+import com.discord.dialogs.DatePickerDialog
 import com.discord.utilities.captcha.CaptchaHelper
+import com.discord.utilities.time.ClockFactory
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputLayout
 import java.util.Calendar
@@ -137,20 +138,19 @@ abstract class AuthFragment(
         else super.onContextItemSelected(item)
 
     protected fun chooseBirthday(current: Long?, callback: (Long) -> Unit) {
-        val initial = Calendar.getInstance().apply {
-            timeInMillis = current ?: run {
-                add(Calendar.YEAR, -18)
-                timeInMillis
-            }
-        }
-        DatePickerDialog(
-            requireContext(),
-            { _, year, month, day ->
-                callback(Calendar.getInstance().apply { set(year, month, day, 12, 0, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis)
-            },
-            initial.get(Calendar.YEAR), initial.get(Calendar.MONTH), initial.get(Calendar.DAY_OF_MONTH),
-        ).apply { datePicker.maxDate = System.currentTimeMillis() }.show()
+        DatePickerDialog.show(
+            parentFragmentManager,
+            getString(R.string.age_gate_date_of_birth),
+            current ?: subtractYearsFromToday(10),
+            subtractYearsFromToday(3),
+            callback,
+        )
     }
+
+    private fun subtractYearsFromToday(years: Int): Long = Calendar.getInstance().apply {
+        timeInMillis = ClockFactory.get().currentTimeMillis()
+        set(Calendar.YEAR, get(Calendar.YEAR) - years)
+    }.timeInMillis
 
     companion object {
         private const val STATE = "auth_ui_state"

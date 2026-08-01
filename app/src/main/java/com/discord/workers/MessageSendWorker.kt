@@ -3,13 +3,17 @@ package com.discord.workers
 import android.content.Context
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import com.discord.utilities.fcm.NotificationClient
+import com.discord.utilities.notifications.NotificationActionSession
 
 class MessageSendWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     override fun doWork() = execute(
         authenticated = MessageWorkerActions.isAuthenticated?.invoke() == true,
         connected = MessageWorkerActions.isConnected?.invoke(applicationContext) == true,
-        currentAuthGeneration = MessageWorkerActions.isCurrentAuthGeneration
-            ?.invoke(inputData.getInt(KEY_AUTH_GENERATION, -1)) == true,
+        currentAuthSession = NotificationActionSession.matches(
+            inputData.getString(KEY_AUTH_SESSION),
+            NotificationClient.getSettings().token,
+        ),
         channelId = inputData.getLong(KEY_CHANNEL_ID, -1L),
         channelName = inputData.getString(KEY_CHANNEL_NAME).orEmpty(),
         content = inputData.getString(KEY_MESSAGE_CONTENT),
@@ -25,13 +29,13 @@ class MessageSendWorker(context: Context, params: WorkerParameters) : Worker(con
         const val KEY_MESSAGE_ID = "com.discord.intent.extra.EXTRA_MESSAGE_ID"
         const val KEY_MESSAGE_CONTENT = "MESSAGE_CONTENT"
         const val KEY_STICKER_ID = "com.discord.intent.extra.EXTRA_STICKER_ID"
-        const val KEY_AUTH_GENERATION = "notification_auth_generation"
+        const val KEY_AUTH_SESSION = "notification_auth_session"
         const val MAX_ATTEMPTS = 3
 
         internal fun execute(
             authenticated: Boolean,
             connected: Boolean,
-            currentAuthGeneration: Boolean,
+            currentAuthSession: Boolean,
             channelId: Long,
             channelName: String,
             content: String?,
@@ -40,7 +44,10 @@ class MessageSendWorker(context: Context, params: WorkerParameters) : Worker(con
             runAttemptCount: Int,
             action: ((Long, String, String, String?, Long) -> Boolean)?,
         ): WorkerOutcome {
-            if (!authenticated || !currentAuthGeneration) return WorkerOutcome.FAILURE
+            if (!authenticated || !currentAuthSession) return WorkerOutcome.FAILURE
+            if (channelId <= 0 || content?.isBlank() == true || (content?.length ?: 0) > 2_000) {
+                return WorkerOutcome.FAILURE
+            }
             if (!connected) {
                 return if (runAttemptCount < MAX_ATTEMPTS) WorkerOutcome.RETRY else WorkerOutcome.FAILURE
             }

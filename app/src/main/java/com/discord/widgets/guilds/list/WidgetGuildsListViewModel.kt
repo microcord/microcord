@@ -13,6 +13,7 @@ import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreGuildsSorted
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
+import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
@@ -106,7 +107,7 @@ class WidgetGuildsListViewModel(
                     eventSubject.onNext(Event.ShowHubUnavailable)
                 else -> StoreStream.selectGuild(item.guild.id)
             }
-            is GuildListItem.PrivateChannelItem -> StoreStream.selectChannel(0L, item.channel.id)
+            is GuildListItem.PrivateChannelItem -> ChannelSelector.getInstance().selectChannel(0L, item.channel.id)
             is GuildListItem.UnavailableItem ->
                 eventSubject.onNext(Event.ShowUnavailableGuilds(item.unavailableGuildCount))
             is GuildListItem.FriendsItem -> if (item.isSelected) {

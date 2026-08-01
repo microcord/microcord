@@ -44,19 +44,24 @@ internal class ReadyPayloadHydrator(
 
         val hydratedMembers = guilds.mapIndexed { index, guild ->
             val source = payload.guildMembers?.getOrNull(index).orEmpty().ifEmpty { guild.members.orEmpty() }
-            source.mapNotNull { hydrateMember(it, guild.id, users) }
+            source.map { hydrateMember(it, users) }
         }
-        hydratedMembers.flatten().forEach { users[it.user.id] = it.user }
+        hydratedMembers.flatten().forEach { member ->
+            runCatching { member.user }.getOrNull()?.let { users[it.id] = it }
+        }
 
         val hydratedGuildPresences = guilds.mapIndexed { index, guild ->
             val source = payload.guildPresences?.getOrNull(index).orEmpty().ifEmpty { guild.presences.orEmpty() }
-            source.mapNotNull { hydratePresence(it, guild.id, users) }
+            source.map { hydratePresence(it, users) }
         }
-        val hydratedPresences = payload.presences.orEmpty().mapNotNull { hydratePresence(it, it.guildId, users) }
+        val hydratedPresences = payload.presences.orEmpty().map { hydratePresence(it, users) }
 
         val hydratedGuilds = ArrayList<Guild>(guilds.size)
         guilds.forEachIndexed { index, guild ->
-            val members = hydratedMembers[index].associateByTo(LinkedHashMap()) { it.user.id }
+            val members = hydratedMembers[index].associateByTo(LinkedHashMap()) { member ->
+                runCatching { member.user.id }.getOrNull() ?: member.userId
+                    ?: error("Guild member has neither user nor user id")
+            }
             when (val result = hydrateGuild(guild, hydratedGuildPresences[index], members)) {
                 HydrateGuildResult.Error -> return HydrateResult.Error
                 is HydrateGuildResult.Success -> hydratedGuilds += result.guild
@@ -161,17 +166,13 @@ internal class ReadyPayloadHydrator(
         channel.copy(recipients = channel.recipientIds.mapNotNull(users::get))
     }
 
-    private fun hydrateMember(member: GuildMember, guildId: Long, users: Map<Long, User>): GuildMember? {
-        val inline = runCatching { member.user }.getOrNull()
-        val user = member.userId?.let(users::get) ?: inline ?: return null
-        return member.copy(guildId = member.guildId.takeUnless { it == 0L } ?: guildId, user = user)
+    private fun hydrateMember(member: GuildMember, users: Map<Long, User>): GuildMember {
+        val user = member.userId?.let(users::get) ?: return member
+        return member.copy(user = user)
     }
 
-    private fun hydratePresence(presence: Presence, guildId: Long?, users: Map<Long, User>): Presence? {
-        val user = presence.user ?: presence.userId?.let(users::get)
-        val userId = presence.userId ?: user?.id ?: return null
-        return presence.copy(user = user, userId = userId, guildId = presence.guildId ?: guildId)
-    }
+    private fun hydratePresence(presence: Presence, users: Map<Long, User>): Presence =
+        presence.copy(user = presence.userId?.let(users::get))
 
     private fun StoredGuild.toApiGuild() = Guild(
         roles = roles,

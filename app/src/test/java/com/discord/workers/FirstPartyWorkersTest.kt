@@ -22,6 +22,9 @@ class FirstPartyWorkersTest {
         assertEquals(WorkerOutcome.RETRY, message(connected = false, attempt = 2))
         assertEquals(WorkerOutcome.FAILURE, message(connected = false, attempt = 3))
         assertEquals(WorkerOutcome.FAILURE, message(currentGeneration = false))
+        assertEquals(WorkerOutcome.FAILURE, message(channelId = -1))
+        assertEquals(WorkerOutcome.FAILURE, message(content = " "))
+        assertEquals(WorkerOutcome.FAILURE, message(content = "x".repeat(2_001)))
         assertEquals(WorkerOutcome.SUCCESS, message())
         assertEquals("MESSAGE_CONTENT", MessageSendWorker.KEY_MESSAGE_CONTENT)
         assertEquals("com.discord.intent.extra.EXTRA_STICKER_ID", MessageSendWorker.KEY_STICKER_ID)
@@ -50,11 +53,12 @@ class FirstPartyWorkersTest {
         authenticated: Boolean = true,
         connected: Boolean = true,
         currentGeneration: Boolean = true,
+        channelId: Long = 1,
         content: String? = "hello",
         attempt: Int = 0,
         action: (Long, String, String, String?, Long) -> Boolean = { _, _, _, _, _ -> true },
     ) = MessageSendWorker.execute(
-        authenticated, connected, currentGeneration, 1, "channel", content, null, -1, attempt, action,
+        authenticated, connected, currentGeneration, channelId, "channel", content, null, -1, attempt, action,
     )
 
     private fun timed(

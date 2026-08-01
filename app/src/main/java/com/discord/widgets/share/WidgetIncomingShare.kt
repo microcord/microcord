@@ -1,140 +1,416 @@
 package com.discord.widgets.share
 
-import android.content.Context
-import android.content.Intent
-import android.database.Cursor
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
-import android.provider.OpenableColumns
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
+import android.view.animation.AnimationUtils
 import android.widget.Toast
-import androidx.appcompat.widget.Toolbar
 import androidx.core.os.bundleOf
-import androidx.fragment.app.Fragment
-import com.discord.app.AppFragment
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.core.view.ViewCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.permission.Permission
+import com.discord.api.premium.PremiumTier
+import com.discord.app.AppFragment
+import com.discord.app.appViewModels
+import com.discord.databinding.ViewImageBinding
+import com.discord.databinding.WidgetIncomingShareBinding
+import com.discord.dialogs.ImageUploadFailedDialog
+import com.discord.models.guild.Guild
+import com.discord.models.user.MeUser
+import com.discord.stores.StoreSlowMode
 import com.discord.stores.StoreStream
 import com.discord.utilities.ShareUtils
+import com.discord.utilities.analytics.AnalyticsTracker
+import com.discord.utilities.attachments.UploadAttachment
+import com.discord.utilities.messagesend.MessageResult
 import com.discord.utilities.messagesend.MessageSendCoordinator
+import com.discord.utilities.mg_recycler.MGRecyclerAdapter
+import com.discord.utilities.rx.ui
+import com.discord.utilities.user.UserUtils.isStaff
+import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
 import com.discord.widgets.chat.input.WidgetChatInput
-import com.google.android.material.appbar.AppBarLayout
-import com.google.android.material.textfield.TextInputLayout
-import com.lytefast.flexinput.model.Attachment
+import com.discord.widgets.user.search.WidgetGlobalSearchAdapter
+import com.discord.widgets.user.search.WidgetGlobalSearchModel
+import com.discord.widgets.user.search.WidgetGlobalSearchViewModel
+import com.facebook.drawee.view.SimpleDraweeView
+import rx.Subscription
 
 class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
-    data class Candidate(val channelId: Long, val title: String, val subtitle: String? = null)
+    private var binding: WidgetIncomingShareBinding? = null
+    private val searchViewModel: WidgetGlobalSearchViewModel by appViewModels { WidgetGlobalSearchViewModel() }
+    private lateinit var resultsAdapter: WidgetGlobalSearchAdapter
+    private val previewAdapter = AttachmentAdapter(::removeAttachment)
 
-    data class Callbacks(
-        val loadCandidates: () -> List<Candidate>,
-        val send: (channelId: Long, message: String, uris: List<Uri>) -> Boolean,
-        val onSent: () -> Unit = {},
-    )
+    private var content = ShareUtils.SharedContent(null, null, emptyList(), null)
+    private var selected: WidgetGlobalSearchModel.ItemDataPayload? = null
+    private var latestSearchModel: WidgetGlobalSearchModel? = null
+    private var isOnCooldown = false
+    private var isSending = false
+    private var cooldownSubscription: Subscription? = null
 
-    private lateinit var callbacks: Callbacks
-    private lateinit var content: ShareUtils.SharedContent
-    private val candidateAdapter = CandidateAdapter(::select)
-    private val attachmentAdapter = AttachmentAdapter()
-    private var candidates = emptyList<Candidate>()
-    private var selected: Candidate? = null
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
+    override fun onViewBound(view: View) {
+        super.onViewBound(view)
+        val binding = WidgetIncomingShareBinding.bind(view).also { this.binding = it }
         content = ShareUtils.SharedContent(
             arguments?.getString(ARG_TEXT),
             arguments?.getString(ARG_SUBJECT),
             arguments?.getStringArrayList(ARG_URIS).orEmpty().map(Uri::parse),
             arguments?.getLong(ARG_DIRECT_SHARE_ID, 0L)?.takeIf { it > 0 },
         )
-        callbacks = callbacksFactory?.invoke(requireContext()) ?: defaultCallbacks(requireContext())
-        candidates = callbacks.loadCandidates()
 
-        toolbar(view).apply {
+        binding.actionBarToolbar.apply {
             setNavigationOnClickListener { requireActivity().finish() }
-            inflateMenu(R.menu.menu_external_share)
-            setOnMenuItemClickListener {
-                if (it.itemId != R.id.menu_send) false else send().let { true }
+            setNavigationContentDescription(R.string.close)
+        }
+        binding.externalShareComment.editText?.apply {
+            setText(content.message)
+            addTextChangedListener(SimpleTextWatcher { updateSendMenu() })
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND && selected != null) {
+                    send()
+                    true
+                } else {
+                    false
+                }
             }
         }
-        view.findViewById<TextInputLayout>(R.id.external_share_comment).editText?.setText(content.message)
-        view.findViewById<RecyclerView>(R.id.external_share_list).apply {
-            adapter = attachmentAdapter
-            layoutManager = LinearLayoutManager(requireContext(), RecyclerView.HORIZONTAL, false)
+        binding.externalShareList.apply {
+            adapter = previewAdapter
+            ViewCompat.setNestedScrollingEnabled(this, false)
+            setHasFixedSize(true)
+            val spacing = (8 * resources.displayMetrics.density).toInt()
+            addItemDecoration(object : RecyclerView.ItemDecoration() {
+                override fun getItemOffsets(outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State) {
+                    outRect.right = spacing
+                    if (parent.getChildAdapterPosition(view) == 0) outRect.left = spacing
+                }
+            })
         }
-        attachmentAdapter.uris = content.uris
-        view.findViewById<View>(R.id.external_share_list_wrap).visibility =
-            if (content.uris.isEmpty()) View.GONE else View.VISIBLE
-        view.findViewById<RecyclerView>(R.id.external_share_search_results).apply {
-            adapter = candidateAdapter
-            layoutManager = LinearLayoutManager(requireContext())
+        binding.externalShareSearchResults.apply {
+            resultsAdapter = MGRecyclerAdapter.configure(WidgetGlobalSearchAdapter(this))
+            adapter = resultsAdapter
+            ViewCompat.setNestedScrollingEnabled(this, false)
+            setHasFixedSize(false)
         }
-        candidateAdapter.items = candidates
-        view.findViewById<TextInputLayout>(R.id.external_share_search).editText?.addTextChangedListener(
-            SimpleTextWatcher { candidateAdapter.items = filterCandidates(candidates, it) },
+        resultsAdapter.onSelectedListener = { _, isLongPress, item ->
+            if (!isLongPress && item !is WidgetGlobalSearchModel.ItemHeader) select(item)
+        }
+        binding.externalShareSearch.editText?.addTextChangedListener(
+            SimpleTextWatcher(searchViewModel::setFilter),
         )
-        view.findViewById<View>(R.id.widget_channel_search_item_remove).setOnClickListener { select(null) }
-        select(preselectedCandidate(candidates, content.directShareId))
+        binding.externalShareSearch.editText?.setOnFocusChangeListener { _, focused ->
+            if (focused) binding.scrollView.smoothScrollTo(0, binding.externalShareComment.bottom)
+        }
+        binding.widgetChannelSearchItemRemove.setOnClickListener {
+            select(null)
+            binding.externalShareSearch.postDelayed({
+                binding.externalShareSearch.editText?.requestFocus()
+                binding.externalShareSearch.editText?.let(::showKeyboard)
+            }, 200L)
+        }
+        binding.searchFlipper.apply {
+            inAnimation = AnimationUtils.loadAnimation(context, R.anim.abc_grow_fade_in_from_bottom)
+            outAnimation = AnimationUtils.loadAnimation(context, R.anim.abc_shrink_fade_out_from_bottom)
+        }
+        binding.incomingShareResultsFlipper.displayedChild = 1
+        content.uris.forEachIndexed { index, uri ->
+            AnalyticsTracker.addAttachment(
+                AnalyticsTracker.ATTACHMENT_SOURCE_SHARE,
+                requireContext().contentResolver.getType(uri).orEmpty(),
+                index,
+            )
+        }
+        renderContent()
+        select(null)
+    }
+
+    override fun onViewBoundOrOnResume() {
+        super.onViewBoundOrOnResume()
+        searchViewModel.observeViewState().ui(this).subscribe(::renderSearch)
+        observeCooldown()
+    }
+
+    override fun onDestroyView() {
+        cooldownSubscription?.unsubscribe()
+        cooldownSubscription = null
+        binding = null
+        super.onDestroyView()
+    }
+
+    private fun renderContent() {
+        val binding = binding ?: return
+        previewAdapter.items = content.uris
+        binding.externalShareListWrap.visibility = if (content.uris.isEmpty()) View.GONE else View.VISIBLE
+        binding.externalShareComment.hint = if (content.uris.isEmpty()) {
+            getString(R.string.upload_area_leave_a_comment)
+        } else {
+            getString(R.string.add_a_comment_optional)
+        }
+        updateSendMenu()
+    }
+
+    private fun renderSearch(model: WidgetGlobalSearchModel) {
+        val binding = binding ?: return
+        latestSearchModel = model
+        val rows = shareResults(model.data, selected?.key)
+        resultsAdapter.setData(rows)
+        binding.incomingShareResultsFlipper.displayedChild = if (rows.any { it !is WidgetGlobalSearchModel.ItemHeader }) 0 else 1
+        binding.externalShareSearchResults.scrollToPosition(0)
+
+        val directShareId = content.directShareId
+        if (selected == null && directShareId != null) {
+            rows.firstOrNull { it.channel?.id == directShareId }?.let(::select)
+        }
+    }
+
+    private fun select(item: WidgetGlobalSearchModel.ItemDataPayload?) {
+        selected = item
+        val binding = binding ?: return
+        binding.searchFlipper.displayedChild = if (item == null) 0 else 1
+        binding.externalShareSearch.isFocusable = item == null
+        binding.externalShareComment.editText?.imeOptions = if (item == null) {
+            android.view.inputmethod.EditorInfo.IME_ACTION_NEXT
+        } else {
+            android.view.inputmethod.EditorInfo.IME_ACTION_SEND
+        }
+        when (item) {
+            is WidgetGlobalSearchModel.ItemChannel -> binding.widgetChannelSearchItem.onConfigure(item)
+            is WidgetGlobalSearchModel.ItemGuild -> binding.widgetChannelSearchItem.onConfigure(item)
+            is WidgetGlobalSearchModel.ItemUser -> binding.widgetChannelSearchItem.onConfigure(item)
+        }
+        latestSearchModel?.let(::renderSearch)
+        binding.scrollView.post { binding.scrollView.scrollTo(0, 0) }
+        observeCooldown()
+        updateSendMenu()
+    }
+
+    private fun observeCooldown() {
+        cooldownSubscription?.unsubscribe()
+        val channelId = selected?.channel?.id
+        cooldownSubscription = StoreStream.getSlowMode().observeCooldownSecs(channelId, StoreSlowMode.Type.MessageSend)
+            .ui(this)
+            .subscribe { seconds -> isOnCooldown = seconds > 0 }
+    }
+
+    private fun updateSendMenu() {
+        val binding = binding ?: return
+        val comment = binding.externalShareComment.editText?.text?.toString().orEmpty()
+        val enabled = canSend(selected != null, comment, content.uris.size) && !isSending
+        binding.actionBarToolbar.menu.clear()
+        binding.actionBarToolbar.inflateMenu(if (enabled) R.menu.menu_external_share else R.menu.menu_empty)
+        binding.actionBarToolbar.setOnMenuItemClickListener { item ->
+            if (item.itemId == R.id.menu_send) {
+                send()
+                true
+            } else {
+                false
+            }
+        }
     }
 
     private fun send() {
-        val candidate = selected ?: return
-        val message = requireView().findViewById<TextInputLayout>(R.id.external_share_comment)
-            .editText?.text?.toString().orEmpty()
-        if (message.isBlank() && content.uris.isEmpty()) return
-        if (callbacks.send(candidate.channelId, message, content.uris)) {
-            callbacks.onSent()
-            requireActivity().finish()
-        } else {
-            Toast.makeText(requireContext(), R.string.error, Toast.LENGTH_SHORT).show()
+        val receiver = selected ?: return
+        if (isOnCooldown) {
+            Toast.makeText(requireContext(), R.string.channel_slowmode_desc_short, Toast.LENGTH_SHORT).show()
+            return
         }
-    }
-
-    private fun select(candidate: Candidate?) {
-        selected = candidate
-        requireView().findViewById<com.discord.app.AppViewFlipper>(R.id.search_flipper).displayedChild =
-            if (candidate == null) 0 else 1
-        candidate?.let {
-            requireView().findViewById<TextView>(R.id.item_name_tv).text = it.title
-            requireView().findViewById<TextView>(R.id.item_group_tv).apply {
-                text = it.subtitle
-                visibility = if (it.subtitle.isNullOrBlank()) View.GONE else View.VISIBLE
+        setSending(true)
+        resolveChannel(receiver) { result ->
+            binding?.root?.post {
+                if (!isAdded) return@post
+                result.onSuccess(::sendToChannel).onFailure(::showError)
             }
         }
     }
 
-    private fun toolbar(root: View): Toolbar = ((root as ViewGroup).getChildAt(0) as AppBarLayout).getChildAt(0) as Toolbar
+    private fun resolveChannel(
+        receiver: WidgetGlobalSearchModel.ItemDataPayload,
+        completed: (Result<Channel>) -> Unit,
+    ) {
+        when (receiver) {
+            is WidgetGlobalSearchModel.ItemChannel -> completed(Result.success(receiver.channel))
+            is WidgetGlobalSearchModel.ItemUser -> receiver.channel?.let { completed(Result.success(it)) }
+                ?: StoreStream.createPrivateChannel(listOf(receiver.user.id), completed)
+            is WidgetGlobalSearchModel.ItemGuild -> shareChannel(receiver.guild)?.let {
+                StoreStream.selectChannel(it.guildId, it.id)
+                completed(Result.success(it))
+            } ?: completed(Result.failure(IllegalStateException("No sendable channel")))
+            else -> completed(Result.failure(IllegalArgumentException("Unsupported recipient")))
+        }
+    }
 
-    private class CandidateAdapter(private val onClick: (Candidate) -> Unit) : RecyclerView.Adapter<TextHolder>() {
-        var items = emptyList<Candidate>()
-            set(value) { field = value; notifyDataSetChanged() }
+    private fun sendToChannel(channel: Channel) {
+        val context = requireContext()
+        val attachments = runCatching {
+            content.uris.mapIndexed { index, uri ->
+                UploadAttachment.from(context.contentResolver, index.toLong(), uri, uri.lastPathSegment ?: "attachment")
+            }
+        }.getOrElse {
+            showError(it)
+            return
+        }
+        val me = StoreStream.getUsers().getMe()
+        val guild = StoreStream.getGuilds().getGuild(channel.guildId)
+        val limitMb = uploadLimitMB(me.premiumTier, guild?.premiumTier ?: 0, me.isStaff)
+        if (attachments.sumOf(UploadAttachment::size) > limitMb * BYTES_PER_MEGABYTE) {
+            setSending(false)
+            ImageUploadFailedDialog.show(
+                parentFragmentManager,
+                isPremium(me.premiumTier),
+                limitMb,
+                onResendCompressed = null,
+                isVideo = attachments.any { it.mimeType.startsWith("video/") },
+            )
+            return
+        }
+
+        val coordinator = WidgetChatInput.coordinatorProvider() ?: run {
+            showError(IllegalStateException("Message sender unavailable"))
+            return
+        }
+        val submission = coordinator.send(
+            MessageSendCoordinator.Send(
+                channelId = channel.id,
+                guildId = channel.guildId.takeUnless { it == 0L },
+                content = binding?.externalShareComment?.editText?.text?.toString().orEmpty(),
+                canSend = true,
+                systemDm = channel.type == Channel.DM && channel.recipients.orEmpty().any { it.system == true },
+                attachments = attachments.takeIf { it.isNotEmpty() },
+            ),
+        )
+        when (submission) {
+            is MessageSendCoordinator.Submission.Accepted -> {
+                coordinator.observeUpdates().ui(this).subscribe { update ->
+                    if (update.requestId != submission.requestId) return@subscribe
+                    when (update) {
+                        is MessageSendCoordinator.Update.Reconciled -> {
+                            setSending(false)
+                            requireActivity().finish()
+                        }
+                        is MessageSendCoordinator.Update.Failed -> {
+                            if (update.result is MessageResult.CaptchaRequired) {
+                                showCaptcha(coordinator, submission.requestId, update.result)
+                            } else {
+                                showSendFailure(update.result)
+                            }
+                        }
+                        is MessageSendCoordinator.Update.Cancelled -> setSending(false)
+                        is MessageSendCoordinator.Update.Optimistic -> Unit
+                    }
+                }
+            }
+            is MessageSendCoordinator.Submission.Rejected -> showSendFailure(submission.result)
+        }
+    }
+
+    private fun setSending(sending: Boolean) {
+        isSending = sending
+        binding?.dimmerView?.setDimmed(sending)
+        updateSendMenu()
+    }
+
+    private fun showCaptcha(
+        coordinator: MessageSendCoordinator,
+        requestId: String,
+        result: MessageResult.CaptchaRequired,
+    ) {
+        setSending(false)
+        WidgetCaptchaBottomSheet.registerForResult(this, requestId) { _, payload ->
+            setSending(true)
+            if (!coordinator.retry(requestId, payload)) showError(IllegalStateException("Message retry unavailable"))
+        }
+        WidgetCaptchaBottomSheet.show(
+            parentFragmentManager,
+            requestId,
+            WidgetCaptchaBottomSheet.errorBodyOf(result.error),
+            onCaptchaAttemptFailed = { setSending(false) },
+        )
+    }
+
+    private fun showSendFailure(result: MessageResult) {
+        setSending(false)
+        val message = when (result) {
+            is MessageResult.Slowmode -> R.string.channel_slowmode_desc_short
+            MessageResult.NoValidContent -> R.string.message_too_long_header
+            else -> R.string.error
+        }
+        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showError(@Suppress("UNUSED_PARAMETER") error: Throwable) {
+        setSending(false)
+        Toast.makeText(requireContext(), R.string.error, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun removeAttachment(uri: Uri) {
+        content = content.copy(uris = content.uris.filterNot { it == uri })
+        renderContent()
+    }
+
+    private fun shareChannel(guild: Guild): Channel? {
+        val permissions = StoreStream.getPermissions().getPermissionsByChannel()
+        return StoreStream.getChannels().getChannelsForGuild(guild.id).values
+            .filter(::isSendableChannel)
+            .filter { canSendInChannel(it, permissions[it.id]) }
+            .sortedBy { it.position }
+            .firstOrNull()
+    }
+
+    private fun shareResults(
+        rows: List<WidgetGlobalSearchModel.ItemDataPayload>,
+        selectedKey: String?,
+    ): List<WidgetGlobalSearchModel.ItemDataPayload> {
+        val permissions = StoreStream.getPermissions().getPermissionsByChannel()
+        val meId = StoreStream.getUsers().getMe().id
+        val filtered = rows.filter { item ->
+            item.key != selectedKey && when (item) {
+                is WidgetGlobalSearchModel.ItemHeader -> true
+                is WidgetGlobalSearchModel.ItemChannel -> isSendableChannel(item.channel) &&
+                    item.channel.recipients.orEmpty().none { it.system == true } &&
+                    canSendInChannel(item.channel, permissions[item.channel.id])
+                is WidgetGlobalSearchModel.ItemUser -> !item.user.isSystemUser && item.user.id != meId
+                is WidgetGlobalSearchModel.ItemGuild -> shareChannel(item.guild) != null
+                else -> false
+            }
+        }
+        return filtered.filterIndexed { index, item ->
+            val next = filtered.drop(index + 1).firstOrNull()
+            item !is WidgetGlobalSearchModel.ItemHeader || next != null && next !is WidgetGlobalSearchModel.ItemHeader
+        }
+    }
+
+    private class AttachmentAdapter(
+        private val onRemove: (Uri) -> Unit,
+    ) : RecyclerView.Adapter<AttachmentAdapter.Holder>() {
+        var items = emptyList<Uri>()
+            set(value) {
+                field = value
+                notifyDataSetChanged()
+            }
+
         override fun getItemCount() = items.size
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = TextHolder(textView(parent))
-        override fun onBindViewHolder(holder: TextHolder, position: Int) = holder.bind(
-            items[position].let { if (it.subtitle.isNullOrBlank()) it.title else "${it.title}\n${it.subtitle}" },
-            View.OnClickListener { onClick(items[position]) },
-        )
-    }
 
-    private class AttachmentAdapter : RecyclerView.Adapter<TextHolder>() {
-        var uris = emptyList<Uri>()
-            set(value) { field = value; notifyDataSetChanged() }
-        override fun getItemCount() = uris.size
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = TextHolder(textView(parent))
-        override fun onBindViewHolder(holder: TextHolder, position: Int) = holder.bind(
-            uris[position].lastPathSegment ?: uris[position].toString(), null,
-        )
-    }
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
+            val binding = ViewImageBinding.inflate(LayoutInflater.from(parent.context), parent, false)
+            return Holder(binding, onRemove)
+        }
 
-    private class TextHolder(private val text: TextView) : RecyclerView.ViewHolder(text) {
-        fun bind(value: String, click: View.OnClickListener?) {
-            text.text = value
-            text.contentDescription = value
-            text.setOnClickListener(click)
+        override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(items[position])
+
+        class Holder(
+            private val binding: ViewImageBinding,
+            private val onRemove: (Uri) -> Unit,
+        ) : RecyclerView.ViewHolder(binding.root) {
+            fun bind(uri: Uri) {
+                (binding.root as SimpleDraweeView).setImageURI(uri)
+                binding.root.contentDescription = binding.root.context.getString(R.string.attachment_utilities_remove)
+                binding.root.setOnClickListener { onRemove(uri) }
+            }
         }
     }
 
@@ -145,8 +421,6 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
     }
 
     companion object {
-        @JvmField var callbacksFactory: ((Context) -> Callbacks)? = null
-
         fun newInstance(content: ShareUtils.SharedContent) = WidgetIncomingShare().apply {
             arguments = bundleOf(
                 ARG_TEXT to content.text,
@@ -156,91 +430,50 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
             )
         }
 
-        internal fun filterCandidates(candidates: List<Candidate>, query: String): List<Candidate> {
-            val value = query.trim()
-            return if (value.isEmpty()) candidates else candidates.filter {
-                it.title.contains(value, ignoreCase = true) || it.subtitle?.contains(value, ignoreCase = true) == true
-            }
-        }
+        internal fun canSend(selected: Boolean, comment: String, attachmentCount: Int): Boolean =
+            selected && (comment.isNotBlank() || attachmentCount > 0)
 
-        internal fun preselectedCandidate(candidates: List<Candidate>, directShareId: Long?) =
-            directShareId?.let { id -> candidates.firstOrNull { it.channelId == id } }
-
-        internal fun defaultCandidates(): List<Candidate> = runCatching {
-            val channels = StoreStream.getChannels().run {
-                getChannelsForGuild(0L).values + StoreStream.getGuilds().getGuilds().keys.flatMap { getChannelsForGuild(it).values }
-            }
-            val permissions = StoreStream.getPermissions().getPermissionsByChannel()
-            val guilds = StoreStream.getGuilds().getGuilds()
-            channels.filter { channel ->
-                channel.type in SENDABLE_TYPES &&
-                    channel.recipients.orEmpty().none { it.system == true } &&
-                    (channel.guildId == 0L || permissions[channel.id]?.and(Permission.SEND_MESSAGES) != 0L)
-            }.distinctBy(Channel::id).map { channel ->
-                Candidate(
-                    channel.id,
-                    channel.name ?: channel.recipients.orEmpty().joinToString(", ") { it.username },
-                    guilds[channel.guildId]?.name,
-                )
-            }.filter { it.title.isNotBlank() }.sortedWith(compareBy<Candidate> { it.subtitle.orEmpty() }.thenBy { it.title })
-        }.getOrDefault(emptyList())
-
-        private fun defaultCallbacks(context: Context) = Callbacks(
-            loadCandidates = ::defaultCandidates,
-            send = { channelId, message, uris ->
-                val channel = StoreStream.getChannels().getChannel(channelId)
-                if (channel == null) false else if (uris.isNotEmpty()) {
-                    persistPermissions(context, uris)
-                    WidgetChatInput.uploadHandler?.invoke(
-                        WidgetChatInput.UploadRequest(
-                            channelId,
-                            message,
-                            uris.map { Attachment(it.hashCode().toLong(), it, displayName(context, it), it) },
-                            null,
-                        ),
-                    ) == true
-                } else {
-                    WidgetChatInput.coordinatorProvider()?.send(
-                        MessageSendCoordinator.Send(
-                            channelId = channelId,
-                            guildId = channel.guildId.takeUnless { it == 0L },
-                            content = message,
-                            canSend = true,
-                            systemDm = channel.type == Channel.DM && channel.recipients.orEmpty().any { it.system == true },
-                        ),
-                    ) is MessageSendCoordinator.Submission.Accepted
-                }
+        internal fun uploadLimitMB(premiumTier: PremiumTier, guildPremiumTier: Int, isStaff: Boolean): Int = maxOf(
+            when {
+                isStaff -> 200
+                premiumTier == PremiumTier.TIER_1 -> 50
+                premiumTier == PremiumTier.TIER_2 -> 100
+                premiumTier == PremiumTier.TIER_0 -> 20
+                else -> 8
+            },
+            when (guildPremiumTier) {
+                0, 1 -> 8
+                2 -> 50
+                else -> 100
             },
         )
 
-        private fun persistPermissions(context: Context, uris: List<Uri>) = uris.forEach {
-            runCatching { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-        }
+        private fun isPremium(tier: PremiumTier) = tier in setOf(
+            PremiumTier.TIER_0,
+            PremiumTier.TIER_1,
+            PremiumTier.TIER_2,
+        )
 
-        private fun displayName(context: Context, uri: Uri): String {
-            var cursor: Cursor? = null
-            return try {
-                cursor = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-                if (cursor?.moveToFirst() == true) cursor.getString(0) else null
-            } catch (_: RuntimeException) {
-                null
-            } finally {
-                cursor?.close()
-            } ?: uri.lastPathSegment ?: "attachment"
-        }
+        private fun isSendableChannel(channel: Channel) = channel.type in SENDABLE_TYPES
 
-        private fun textView(parent: ViewGroup) = TextView(parent.context).apply {
-            val padding = (16 * resources.displayMetrics.density).toInt()
-            setPadding(padding, padding, padding, padding)
-            isFocusable = true
-            isClickable = true
-            layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        private fun canSendInChannel(channel: Channel, permissions: Long?): Boolean {
+            if (channel.guildId == 0L) return true
+            val required = if (channel.type in THREAD_TYPES) Permission.SEND_MESSAGES_IN_THREADS else Permission.SEND_MESSAGES
+            return permissions?.and(required) != 0L
         }
 
         private val SENDABLE_TYPES = setOf(
-            Channel.GUILD_TEXT, Channel.DM, Channel.GROUP_DM, Channel.GUILD_ANNOUNCEMENT,
-            Channel.ANNOUNCEMENT_THREAD, Channel.PUBLIC_THREAD, Channel.PRIVATE_THREAD,
+            Channel.GUILD_TEXT,
+            Channel.DM,
+            Channel.GROUP_DM,
+            Channel.GUILD_ANNOUNCEMENT,
+            Channel.ANNOUNCEMENT_THREAD,
+            Channel.PUBLIC_THREAD,
+            Channel.PRIVATE_THREAD,
         )
+        private val THREAD_TYPES = setOf(Channel.ANNOUNCEMENT_THREAD, Channel.PUBLIC_THREAD, Channel.PRIVATE_THREAD)
+
+        private const val BYTES_PER_MEGABYTE = 1024L * 1024L
         private const val ARG_TEXT = "text"
         private const val ARG_SUBJECT = "subject"
         private const val ARG_URIS = "uris"

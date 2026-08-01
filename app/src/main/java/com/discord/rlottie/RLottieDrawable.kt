@@ -53,6 +53,7 @@ class RLottieDrawable : BitmapDrawable, Animatable {
     @Volatile private var cachePending = false
     @Volatile private var running = false
     @Volatile private var nativePtr = 0L
+    @Volatile private var pendingNativeDestroy = 0L
 
     private var allowDecodeSingleFrame = false
     private var singleFrameDecoded = false
@@ -317,7 +318,7 @@ class RLottieDrawable : BitmapDrawable, Animatable {
      */
     private fun checkRunningTasks() {
         if (nativePtr == 0L) {
-            recycleBitmaps()
+            finishDestroyIfIdle()
             return
         }
         if (!hasParentView()) running = false
@@ -467,14 +468,23 @@ class RLottieDrawable : BitmapDrawable, Animatable {
      */
     fun destroy() {
         val ptr = nativePtr
+        if (ptr == 0L) return
         nativePtr = 0L
+        pendingNativeDestroy = ptr
         running = false
-        cachePending = false
         synchronized(parentViews) { parentViews.clear() }
+        finishDestroyIfIdle()
+    }
+
+    private fun finishDestroyIfIdle() {
+        if (framePending || cachePending) return
+        val ptr = synchronized(this) {
+            if (framePending || cachePending) return
+            pendingNativeDestroy.also { pendingNativeDestroy = 0L }
+        }
         if (ptr != 0L) {
             runCatching { destroy(ptr) }.onFailure { Log.e(TAG, "Error destroying animation", it) }
         }
-        if (framePending) return // the in-flight decode recycles through checkRunningTasks
         recycleBitmaps()
     }
 

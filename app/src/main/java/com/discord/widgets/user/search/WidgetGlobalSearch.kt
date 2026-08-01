@@ -11,13 +11,14 @@ import com.discord.app.AppFragment
 import com.discord.app.AppViewFlipper
 import com.discord.app.appActivityViewModels
 import com.discord.app.appViewModels
+import com.discord.dialogs.SelectorDialog
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rx.ui
 import com.discord.widgets.user.usersheet.WidgetUserSheet
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 
 /**
  * The quick switcher: type anything, jump anywhere.
@@ -72,9 +73,12 @@ class WidgetGlobalSearch : AppFragment(R.layout.widget_global_search) {
             item.guild != null
         }
 
-        view.findViewById<View>(R.id.global_search_bar).setOnLongClickListener {
-            showFilterPickerDialog()
-            true
+        view.findViewById<TextInputLayout>(R.id.global_search_bar).apply {
+            setEndIconOnClickListener { showFilterPickerDialog() }
+            setStartIconOnClickListener {
+                hideKeyboard(this)
+                dismissViewModel.dismiss()
+            }
         }
 
         searchBarText.addTextChangedListener(object : TextWatcher {
@@ -110,9 +114,9 @@ class WidgetGlobalSearch : AppFragment(R.layout.widget_global_search) {
         showKeyboard(searchBarText)
     }
 
-    /** The host dialog calls this on dismiss so the query does not survive into the next open. */
+    /** The host dialog calls this on dismiss to release the keyboard. */
     fun onDismiss() {
-        searchBarText.setText("")
+        hideKeyboard(searchBarText)
     }
 
     private fun configureUI(model: WidgetGlobalSearchModel) {
@@ -169,19 +173,16 @@ class WidgetGlobalSearch : AppFragment(R.layout.widget_global_search) {
 
     /** The four prefixes, offered as a menu for anyone who does not know the shorthand. */
     private fun showFilterPickerDialog() {
-        val options = FILTER_OPTIONS
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.filter_options)
-            .setItems(options.map { getString(it.first) }.toTypedArray()) { _, index ->
-                setSearchPrefix(options[index].second)
-            }
-            .show()
+        SelectorDialog.show(
+            parentFragmentManager,
+            getString(R.string.filter_options),
+            FILTER_OPTIONS.map { getString(it.first) }.toTypedArray(),
+        ) { index -> setSearchPrefix(FILTER_OPTIONS[index].second) }
     }
 
-    private fun setSearchPrefix(prefix: Char, text: String = "") {
-        searchBarText.setText("$prefix$text")
-        searchBarText.setSelection(searchBarText.length())
-        showKeyboard(searchBarText)
+    private fun setSearchPrefix(prefix: Char, query: String = searchBarText.text.toString()) {
+        searchBarText.setText(applySearchPrefix(query, prefix))
+        searchBarText.post { searchBarText.setSelection(searchBarText.length()) }
     }
 
     companion object {
@@ -191,12 +192,19 @@ class WidgetGlobalSearch : AppFragment(R.layout.widget_global_search) {
         private const val INDEX_TUTORIAL = 1
         private const val INDEX_NO_RESULTS = 2
 
-        private val FILTER_OPTIONS = listOf(
+        internal val FILTER_OPTIONS = listOf(
             R.string.users to WidgetGlobalSearchViewModel.MENTION_PREFIX,
             R.string.text_channels to WidgetGlobalSearchViewModel.CHANNEL_PREFIX,
             R.string.voice_channels to WidgetGlobalSearchViewModel.VOICE_PREFIX,
             R.string.servers to WidgetGlobalSearchViewModel.GUILD_PREFIX,
         )
+
+        internal fun applySearchPrefix(query: String, prefix: Char): String =
+            if (query.firstOrNull() in FILTER_OPTIONS.map { it.second }) {
+                prefix + query.drop(1)
+            } else {
+                prefix + query
+            }
 
         fun create(searchText: String?): WidgetGlobalSearch = WidgetGlobalSearch().apply {
             arguments = Bundle().apply { putString(EXTRA_SEARCH_TEXT, searchText) }

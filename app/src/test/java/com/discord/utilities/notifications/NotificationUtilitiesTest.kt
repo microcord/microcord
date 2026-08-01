@@ -1,6 +1,7 @@
 package com.discord.utilities.notifications
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -44,21 +45,39 @@ class NotificationUtilitiesTest {
 
     @Test fun actionValidationRejectsForgedOrStaleShapes() {
         assertTrue(NotificationActionValidator.validate(
-            NotificationActionReceiver.ACTION_MARK_READ, CHANNEL, 9, -1, 3,
+            NotificationActionReceiver.ACTION_MARK_READ, CHANNEL, 9, -1, "session",
         ) is NotificationCommand.MarkRead)
         assertTrue(NotificationActionValidator.validate(
-            NotificationActionReceiver.ACTION_REPLY, CHANNEL, -1, -1, 3, "hello",
+            NotificationActionReceiver.ACTION_REPLY, CHANNEL, -1, -1, "session", "hello",
         ) is NotificationCommand.Reply)
         assertNull(NotificationActionValidator.validate(
-            NotificationActionReceiver.ACTION_MARK_READ, -1, 9, -1, 3,
+            NotificationActionReceiver.ACTION_MARK_READ, -1, 9, -1, "session",
         ))
         assertNull(NotificationActionValidator.validate(
-            NotificationActionReceiver.ACTION_REPLY, CHANNEL, -1, -1, -1, "hello",
+            NotificationActionReceiver.ACTION_REPLY, CHANNEL, -1, -1, null, "hello",
         ))
         assertNull(NotificationActionValidator.validate(
-            NotificationActionReceiver.ACTION_REPLY, CHANNEL, -1, -1, 3, " ",
+            NotificationActionReceiver.ACTION_REPLY, CHANNEL, -1, -1, "session", " ",
         ))
-        assertNull(NotificationActionValidator.validate("forged", CHANNEL, 9, 1, 3))
+        assertNull(NotificationActionValidator.validate(
+            NotificationActionReceiver.ACTION_REPLY, CHANNEL, -1, -1, "session", "x".repeat(2_001),
+        ))
+        assertTrue(NotificationActionValidator.validate(
+            NotificationActionReceiver.ACTION_DELETE, CHANNEL, -1, -1, null,
+        ) is NotificationCommand.Delete)
+        assertTrue(NotificationActionValidator.validate(
+            NotificationActionReceiver.ACTION_CANCEL, -1, -1, 9, null,
+        ) is NotificationCommand.Cancel)
+        assertNull(NotificationActionValidator.validate("forged", CHANNEL, 9, 1, "session"))
+    }
+
+    @Test fun actionSessionSurvivesProcessStateButNotAccountChanges() {
+        val session = requireNotNull(NotificationActionSession.fromToken("account-a-token"))
+        assertEquals(64, session.length)
+        assertTrue(NotificationActionSession.matches(session, "account-a-token"))
+        assertFalse(NotificationActionSession.matches(session, "account-b-token"))
+        assertFalse(NotificationActionSession.matches(session, null))
+        assertFalse(session.contains("account-a-token"))
     }
 
     private fun message(id: Long, body: String = "body") = NotificationData(

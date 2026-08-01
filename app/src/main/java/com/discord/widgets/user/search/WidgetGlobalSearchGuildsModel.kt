@@ -84,7 +84,7 @@ data class WidgetGlobalSearchGuildsModel(
                 .map { guild ->
                     Item.createGuild(
                         guild = guild,
-                        mentionCount = mentionCounts[guild.id] ?: 0,
+                        mentionCount = mentionCount(channelIdsByGuild[guild.id], mentionCounts),
                         isSelected = guild.id == selectedGuildId,
                         isUnread = guild.id in unreadGuildIds,
                         connectedToVoice = false,
@@ -98,5 +98,10 @@ data class WidgetGlobalSearchGuildsModel(
             }
             return WidgetGlobalSearchGuildsModel(items, channelIdsByGuild.isNotEmpty())
         }
+
+        internal fun mentionCount(
+            channelIds: Collection<Long>?,
+            mentionCounts: Map<Long, Int>,
+        ): Int = channelIds?.sumOf { mentionCounts[it] ?: 0 } ?: 0
     }
 }

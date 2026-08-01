@@ -9,10 +9,12 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import com.discord.R
+import com.discord.api.channel.Channel
+import com.discord.api.user.User
 import com.discord.app.AppActivity
 import com.discord.app.AppScreenRouter
-import com.discord.app.AppTransitionActivity
 import com.discord.panels.OverlappingPanelsLayout
+import com.discord.models.domain.ModelPayload
 import com.discord.stores.AuthNavigationState
 import com.discord.stores.StoreStream
 import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
@@ -22,6 +24,7 @@ import com.discord.widgets.tabs.NavigationTab
 import com.discord.widgets.tabs.WidgetTabsHost
 import com.discord.widgets.settings.account.WidgetSettingsAccount
 import com.discord.widgets.settings.account.WidgetSettingsBlockedUsers
+import com.google.gson.Gson
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -129,6 +132,7 @@ class NestedBackPressTest {
 
     @Test
     fun backFromPinnedMessagesReturnsToChat() {
+        seedChannel(1L)
         val activity = launchLoggedInShell()
         val tabs = tabs(activity)
         val home = tabs.childFragmentManager.findFragmentByTag(NavigationTab.HOME.name) as WidgetHome
@@ -136,10 +140,10 @@ class NestedBackPressTest {
         val panels = home.getPanelLayout() as HomePanelsLayout
 
         instrumentation.runOnMainSync {
-            panels.setEndPanelLockState(OverlappingPanelsLayout.LockState.UNLOCKED)
-            panels.openEndPanel()
+            panels.setStartPanelLockState(OverlappingPanelsLayout.LockState.UNLOCKED)
+            panels.openStartPanel()
         }
-        await { panels.getSelectedPanel() == OverlappingPanelsLayout.Panel.END }
+        await { panels.getSelectedPanel() == OverlappingPanelsLayout.Panel.START }
 
         instrumentation.runOnMainSync {
             WidgetChannelPinnedMessages.show(activity, 1L)
@@ -152,12 +156,12 @@ class NestedBackPressTest {
         assertSame(pinned.requireView().findViewById<Toolbar>(R.id.action_bar_toolbar), pinsActivity.toolbar)
         assertEquals(pinsActivity.getString(R.string.pinned_messages), pinsActivity.toolbarTitleLayout?.title?.text)
         assertEquals(1L, pinsActivity.mostRecentIntent.getLongExtra("INTENT_EXTRA_CHANNEL_ID", 0L))
-        assertFalse(pinsActivity.mostRecentIntent.hasExtra(AppScreenRouter.EXTRA_TRANSITION))
-        assertEquals(AppTransitionActivity.Transition.TYPE_SLIDE_POP_VERTICAL.animations, pinsActivity.transitionAnimations)
+        assertTrue(pinsActivity.mostRecentIntent.hasExtra(AppScreenRouter.EXTRA_TRANSITION))
+        assertEquals(WidgetChannelPinnedMessages.TRANSITION.animations, pinsActivity.transitionAnimations)
         assertSame(homeView, home.requireView())
-        assertEquals(OverlappingPanelsLayout.Panel.END, panels.getSelectedPanel())
+        assertEquals(OverlappingPanelsLayout.Panel.START, panels.getSelectedPanel())
 
-        instrumentation.runOnMainSync(pinsActivity::recreate)
+        instrumentation.runOnMainSync { AppScreenRouter.recreate(pinsActivity) }
         val restoredPinsActivity = awaitResumedActivity { it !== activity && it !== pinsActivity }
         instrumentation.runOnMainSync {
             restoredPinsActivity.supportFragmentManager.executePendingTransactions()
@@ -166,9 +170,9 @@ class NestedBackPressTest {
             restoredPinsActivity.supportFragmentManager.findFragmentById(R.id.app_root) is
                 WidgetChannelPinnedMessages,
         )
-        assertFalse(restoredPinsActivity.mostRecentIntent.hasExtra(AppScreenRouter.EXTRA_TRANSITION))
+        assertTrue(restoredPinsActivity.mostRecentIntent.hasExtra(AppScreenRouter.EXTRA_TRANSITION))
         assertEquals(
-            AppTransitionActivity.Transition.TYPE_SLIDE_POP_VERTICAL.animations,
+            WidgetChannelPinnedMessages.TRANSITION.animations,
             restoredPinsActivity.transitionAnimations,
         )
 
@@ -176,7 +180,7 @@ class NestedBackPressTest {
         assertSame(activity, awaitResumedActivity { it === activity })
         assertSame(home, tabs(activity).childFragmentManager.findFragmentByTag(NavigationTab.HOME.name))
         assertSame(homeView, home.requireView())
-        assertEquals(OverlappingPanelsLayout.Panel.END, panels.getSelectedPanel())
+        assertEquals(OverlappingPanelsLayout.Panel.START, panels.getSelectedPanel())
         assertFalse(activity.isFinishing)
         instrumentation.runOnMainSync(activity::finish)
     }
@@ -187,10 +191,14 @@ class NestedBackPressTest {
         val home = tabs(activity).childFragmentManager
             .findFragmentByTag(NavigationTab.HOME.name) as WidgetHome
         val homeView = home.requireView()
+        val panels = home.getPanelLayout() as HomePanelsLayout
 
         instrumentation.runOnMainSync {
             activity.onStateNotSaved()
-            home.getPanelLayout().openStartPanel()
+            panels.openStartPanel()
+        }
+        await { panels.getSelectedPanel() == OverlappingPanelsLayout.Panel.START }
+        instrumentation.runOnMainSync {
             SettingsNavigation.launch(activity, WidgetSettingsAppearance::class.java)
         }
         awaitResumedActivity { it !== activity }
@@ -238,6 +246,7 @@ class NestedBackPressTest {
     }
 
     private fun launchLoggedInShell(): AppActivity.Main {
+        seedUser()
         WidgetTabsHost.homeFragmentFactory = ::WidgetHome
         StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, true, true))
         return (instrumentation.startActivitySync(
@@ -252,6 +261,30 @@ class NestedBackPressTest {
                 tabs(it).childFragmentManager.executePendingTransactions()
             }
         }
+    }
+
+    private fun seedUser() {
+        val user = User(1L, "navigation-test", verified = true)
+        val payload = ModelPayload().also {
+            ModelPayload::class.java.getDeclaredField("me").apply { isAccessible = true }.set(it, user)
+        }
+        val stream = StoreStream::class.java.getDeclaredField("instance").run {
+            isAccessible = true
+            get(null) as StoreStream
+        }
+        stream.dispatcher.schedule { StoreStream.getUsers().handleConnectionOpen(payload) }
+        await { StoreStream.getUsers().getMe().id == user.id }
+    }
+
+    private fun seedChannel(channelId: Long) {
+        StoreStream.getChannels().onGroupCreated(
+            Gson().fromJson(
+                """{"type":3,"guild_id":0,"name":"Pinned test","id":$channelId}""",
+                Channel::class.java,
+            ),
+        )
+        StoreStream.selectChannel(0L, channelId)
+        await { StoreStream.getChannels().getChannel(channelId) != null }
     }
 
     private fun tabs(activity: AppActivity) =

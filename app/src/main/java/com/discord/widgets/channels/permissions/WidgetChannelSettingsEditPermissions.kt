@@ -22,6 +22,7 @@ import com.discord.utilities.rx.ui
 import com.discord.views.TernaryCheckBox
 import com.discord.views.user.SettingsMemberView
 import com.discord.widgets.settings.SettingsNavigation
+import com.discord.widgets.settings.DiscardChangesDialog
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 
 class WidgetChannelSettingsEditPermissions : AppFragment(R.layout.widget_channel_settings_edit_permissions) {
@@ -38,14 +39,13 @@ class WidgetChannelSettingsEditPermissions : AppFragment(R.layout.widget_channel
         setActionBarDisplayHomeAsUpEnabled()
         PermissionEditor.permissionByViewId.forEach { (id, permission) -> boxes[permission] = view.findViewById(id) }
         save = view.findViewById(R.id.channel_permissions_save)
+        parentFragmentManager.setFragmentResultListener(DISCARD_REQUEST_KEY, this) { _, _ ->
+            baseline = currentStatuses()
+            requireActivity().onBackPressed()
+        }
         setOnBackPressed({
             if (currentStatuses() == baseline) false else {
-                androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                    .setTitle(R.string.discard_changes)
-                    .setMessage(R.string.discard_changes_description)
-                    .setNegativeButton(R.string.cancel, null)
-                    .setPositiveButton(R.string.okay) { _, _ -> baseline = currentStatuses(); requireActivity().onBackPressed() }
-                    .show()
+                DiscardChangesDialog.show(parentFragmentManager, DISCARD_REQUEST_KEY)
                 true
             }
         })
@@ -160,6 +160,7 @@ class WidgetChannelSettingsEditPermissions : AppFragment(R.layout.widget_channel
         private const val EXTRA_CHANNEL_ID = "INTENT_EXTRA_CHANNEL_ID"
         private const val EXTRA_TARGET_ID = "INTENT_EXTRA_TARGET_ID"
         private const val EXTRA_TYPE = "INTENT_EXTRA_TYPE"
+        private const val DISCARD_REQUEST_KEY = "CHANNEL_PERMISSION_DISCARD_RESULT"
         private val STAGE_DISABLED = setOf(com.discord.api.permission.Permission.MUTE_MEMBERS, com.discord.api.permission.Permission.DEAFEN_MEMBERS, com.discord.api.permission.Permission.MOVE_MEMBERS)
 
         private fun create(context: Context, guildId: Long, channelId: Long, targetId: Long, type: Int) = SettingsNavigation.launch(

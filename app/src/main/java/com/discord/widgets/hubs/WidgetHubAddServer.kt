@@ -12,7 +12,6 @@ import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.app.appActivityViewModels
 import com.discord.i18n.I18nSpans
-import com.discord.stores.StoreStream
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
@@ -20,6 +19,7 @@ import com.discord.views.ScreenTitleView
 import com.discord.views.segmentedcontrol.CardSegment
 import com.discord.views.segmentedcontrol.SegmentedControlContainer
 import com.discord.widgets.guilds.create.WidgetGuildCreate
+import com.discord.widgets.directories.DirectoryServerOptions
 import com.discord.widgets.nux.CreateGuildTrigger
 import com.discord.widgets.nux.GuildCreateArgs
 import com.discord.widgets.nux.GuildTemplateAnalytics
@@ -27,7 +27,6 @@ import com.discord.widgets.nux.GuildTemplateArgs
 import com.discord.widgets.nux.GuildTemplateTypes
 import com.discord.widgets.nux.WidgetHubGuildTemplates
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 /**
  * "Add a server to <hub>" — picks one of the user's own servers to list in the hub directory.
@@ -121,7 +120,9 @@ class WidgetHubAddServer : AppFragment(R.layout.widget_hub_add_server) {
         viewModel.withViewState { state ->
             val existing = state.addedDirectories.firstOrNull { it.guild.id == guildId }
             if (existing != null) {
-                showServerOptions(guildId, channelId, existing.description, existing.primaryCategoryId, state.hubName)
+                DirectoryServerOptions.show(this, existing, state.hubName, isServerOwner = true) {
+                    viewModel.removeGuild(guildId, existing.directoryChannelId)
+                }
             } else {
                 AppScreenRouter.replaceFragment(
                     fragmentManager = parentFragmentManager,
@@ -138,62 +139,6 @@ class WidgetHubAddServer : AppFragment(R.layout.widget_hub_add_server) {
                 )
             }
         }
-    }
-
-    /**
-     * Edit / remove for a server that is already listed.
-     *
-     * The reference shows `DirectoryUtils.showServerOptions`, a bottom sheet that has not been
-     * reconstructed (it is owned by the `widgets/directories` wave). The same two actions and the same
-     * confirmation string are offered here through a dialog; replace this with the sheet when it
-     * lands.
-     */
-    private fun showServerOptions(
-        guildId: Long,
-        channelId: Long,
-        description: String,
-        primaryCategoryId: Int,
-        hubName: String,
-    ) {
-        val context = context ?: return
-        val options = arrayOf(
-            getString(R.string.hub_entry_update),
-            getString(R.string.hub_entry_remove),
-        )
-        MaterialAlertDialogBuilder(context)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> AppScreenRouter.replaceFragment(
-                        fragmentManager = parentFragmentManager,
-                        context = context,
-                        screen = WidgetHubDescription::class.java,
-                        addToBackStack = true,
-                        arguments = HubDescriptionArgs(
-                            guildId = guildId,
-                            channelId = channelId,
-                            isEditing = true,
-                            hubName = hubName,
-                            description = description,
-                            primaryCategoryId = primaryCategoryId,
-                        ).toArgsBundle(),
-                    )
-                    1 -> confirmRemoval(guildId, channelId)
-                }
-            }
-            .show()
-    }
-
-    private fun confirmRemoval(guildId: Long, channelId: Long) {
-        val context = context ?: return
-        val guildName = StoreStream.getGuilds().getGuild(guildId)?.name.orEmpty()
-        MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.hub_entry_remove)
-            .setMessage(
-                I18nSpans.render(getString(R.string.hub_entry_remove_body), "guildName" to guildName),
-            )
-            .setPositiveButton(R.string.remove) { _, _ -> viewModel.removeGuild(guildId, channelId) }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
     }
 
     private fun onCreateServerClicked() {

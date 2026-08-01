@@ -6,25 +6,24 @@ import android.content.Context
 import android.content.DialogInterface
 import android.os.Bundle
 import android.view.View
-import android.widget.TextView
 import androidx.fragment.app.FragmentManager
-import com.airbnb.lottie.LottieAnimationView
 import com.discord.R
 import com.discord.app.AppDialog
+import com.discord.databinding.GuildBoostActivatedDialogBinding
 import com.discord.i18n.i18nRender
 import com.discord.i18n.i18nPlural
 
 class GuildBoostActivatedDialog : AppDialog(R.layout.guild_boost_activated_dialog) {
+    private var binding: GuildBoostActivatedDialogBinding? = null
     private var dismissListener: (() -> Unit)? = null
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        view.findViewById<TextView>(R.id.guild_boost_activated_body_1).text =
-            argumentsOrDefault.getCharSequence(EXTRA_BODY_1)
-        view.findViewById<TextView>(R.id.guild_boost_activated_body_2).text =
-            argumentsOrDefault.getCharSequence(EXTRA_BODY_2)
-        view.findViewById<View>(R.id.guild_boost_activated_ok).setOnClickListener { dismiss() }
-        view.findViewById<LottieAnimationView>(R.id.guild_boost_activated_lottie).apply {
+        val binding = GuildBoostActivatedDialogBinding.bind(view).also { this.binding = it }
+        binding.guildBoostActivatedBody1.text = argumentsOrDefault.getCharSequence(EXTRA_BODY_1)
+        binding.guildBoostActivatedBody2.text = argumentsOrDefault.getCharSequence(EXTRA_BODY_2)
+        binding.guildBoostActivatedOk.setOnClickListener { dismiss() }
+        binding.guildBoostActivatedLottie.apply {
             setMaxFrame(825)
             frame = 180
             repeatCount = ValueAnimator.INFINITE
@@ -36,6 +35,11 @@ class GuildBoostActivatedDialog : AppDialog(R.layout.guild_boost_activated_dialo
             })
             playAnimation()
         }
+    }
+
+    override fun onDestroyView() {
+        binding = null
+        super.onDestroyView()
     }
 
     override fun onDismiss(dialog: DialogInterface) {
@@ -50,7 +54,7 @@ class GuildBoostActivatedDialog : AppDialog(R.layout.guild_boost_activated_dialo
         fun show(
             fragmentManager: FragmentManager,
             context: Context,
-            guildName: String,
+            guildName: String?,
             subscriptionCount: Int,
             transferred: Boolean,
             dismissListener: () -> Unit,
@@ -67,17 +71,28 @@ class GuildBoostActivatedDialog : AppDialog(R.layout.guild_boost_activated_dialo
                 )
                 putCharSequence(
                     EXTRA_BODY_2,
-                    context.i18nRender(
-                        if (transferred) R.string.guild_subscription_purchase_modal_transferred_description_mobile2
-                        else R.string.guild_subscription_purchase_modal_activated_description_mobile2,
-                        "guildName" to guildName,
-                        "guildSubscriptionQuantity" to context.i18nPlural(
-                            if (transferred) R.plurals.guild_subscription_purchase_modal_transferred_description_mobile2_guildSubscriptionQuantity
-                            else R.plurals.guild_subscription_purchase_modal_activated_description_guildSubscriptionQuantity,
-                            subscriptionCount,
-                            "#" to subscriptionCount,
-                        ),
-                    ),
+                    if (guildName == null) {
+                        context.i18nRender(
+                            R.string.guild_subscription_purchase_modal_activated_description_no_application,
+                            "guildSubscriptionQuantity" to context.i18nPlural(
+                                R.plurals.guild_subscription_purchase_modal_activated_description_no_application_guildSubscriptionQuantity,
+                                subscriptionCount,
+                                "#" to subscriptionCount,
+                            ),
+                        )
+                    } else {
+                        context.i18nRender(
+                            if (transferred) R.string.guild_subscription_purchase_modal_transferred_description_mobile2
+                            else R.string.guild_subscription_purchase_modal_activated_description_mobile2,
+                            "guildName" to guildName,
+                            "guildSubscriptionQuantity" to context.i18nPlural(
+                                if (transferred) R.plurals.guild_subscription_purchase_modal_transferred_description_mobile2_guildSubscriptionQuantity
+                                else R.plurals.guild_subscription_purchase_modal_activated_description_guildSubscriptionQuantity,
+                                subscriptionCount,
+                                "#" to subscriptionCount,
+                            ),
+                        )
+                    },
                 )
             }
             dialog.show(fragmentManager, GuildBoostActivatedDialog::class.java.name)

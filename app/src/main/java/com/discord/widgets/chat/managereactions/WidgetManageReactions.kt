@@ -3,22 +3,25 @@ package com.discord.widgets.chat.managereactions
 import android.content.Context
 import android.content.Intent
 import android.view.View
-import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.message.reaction.MessageReaction
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
+import com.discord.databinding.WidgetManageReactionsBinding
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
 
 class WidgetManageReactions : AppFragment(R.layout.widget_manage_reactions) {
-    private lateinit var emojisAdapter: ManageReactionsEmojisAdapter
+    private var _binding: WidgetManageReactionsBinding? = null
+    private val binding get() = requireNotNull(_binding)
+    private var emojisAdapter: ManageReactionsEmojisAdapter? = null
     private lateinit var modelProvider: ManageReactionsModelProvider
-    private lateinit var resultsAdapter: ManageReactionsResultsAdapter
+    private var resultsAdapter: ManageReactionsResultsAdapter? = null
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        _binding = WidgetManageReactionsBinding.bind(view)
         setActionBarDisplayHomeAsUpEnabled()
         setActionBarTitle(R.string.reactions)
         if (!::modelProvider.isInitialized) {
@@ -30,14 +33,23 @@ class WidgetManageReactions : AppFragment(R.layout.widget_manage_reactions) {
         }
         emojisAdapter = MGRecyclerAdapter.configure(
             ManageReactionsEmojisAdapter(
-                view.findViewById<RecyclerView>(R.id.manage_reactions_emojis_recycler),
+                binding.manageReactionsEmojisRecycler,
             ),
         ).also { it.onEmojiSelectedListener = modelProvider::onEmojiTargeted }
         resultsAdapter = MGRecyclerAdapter.configure(
             ManageReactionsResultsAdapter(
-                view.findViewById<RecyclerView>(R.id.manage_reactions_results_recycler),
+                binding.manageReactionsResultsRecycler,
             ),
         )
+    }
+
+    override fun onDestroyView() {
+        binding.manageReactionsEmojisRecycler.adapter = null
+        binding.manageReactionsResultsRecycler.adapter = null
+        emojisAdapter = null
+        resultsAdapter = null
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun onViewBoundOrOnResume() {
@@ -52,8 +64,8 @@ class WidgetManageReactions : AppFragment(R.layout.widget_manage_reactions) {
             appActivity?.finish()
             return
         }
-        emojisAdapter.setData(data.reactionItems)
-        resultsAdapter.setData(data.userItems)
+        emojisAdapter?.setData(data.reactionItems)
+        resultsAdapter?.setData(data.userItems)
     }
 
     companion object {

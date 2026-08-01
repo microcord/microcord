@@ -64,7 +64,7 @@ class GuildBoostMarketingView @JvmOverloads constructor(
             PremiumTier.PREMIUM_GUILD_SUBSCRIPTION_ONLY -> {
                 marketingContainer.visibility = View.VISIBLE
                 tierOneContainer.visibility = View.VISIBLE
-                title.setText(R.string.guild_settings_premium_upsell_heading_secondary_premium_user)
+                title.setText(R.string.guild_settings_premium_upsell_heading_secondary)
                 subtitle.visibility = View.GONE
             }
             PremiumTier.TIER_1 -> {

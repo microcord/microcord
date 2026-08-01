@@ -46,13 +46,14 @@ class WidgetUserMentions : AppFragment(R.layout.widget_user_mentions) {
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        val isEmbedded = arguments?.getBoolean(ARG_EMBEDDED) == true
         view.findViewById<Toolbar>(R.id.action_bar_toolbar).apply {
             setTitle(R.string.recent_mentions)
-            visibility = if (arguments?.getBoolean(ARG_EMBEDDED) == true) View.GONE else View.VISIBLE
+            visibility = if (isEmbedded) View.GONE else View.VISIBLE
         }
         val recycler = view.findViewById<RecyclerView>(R.id.user_mentions_list)
         val mentionsAdapter = MGRecyclerAdapter.configure<ChatListEntry, WidgetChatListAdapter>(
-            WidgetChatListAdapter(recycler, this, parentFragmentManager, MentionsEventHandler()),
+            WidgetChatListAdapter(recycler, this, parentFragmentManager, MentionsEventHandler(isEmbedded)),
         ).apply { mentionMeMessageLevelHighlighting = false }
         recycler.addItemDecoration(ThreadSpineItemDecoration(requireContext(), mentionsAdapter))
         recycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
@@ -136,18 +137,19 @@ class WidgetUserMentions : AppFragment(R.layout.widget_user_mentions) {
         adapter?.data = model
     }
 
-    private fun openMessage(message: Message) {
-        val channel = StoreStream.getChannels().getChannel(message.channelId) ?: return
-        StoreStream.selectChannel(channel.guildId, channel.id)
-        StoreStream.getMessagesLoader().jumpToMessage(channel.id, message.id)
-        StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE, true)
-        dismissViewModel.dismiss()
-    }
+    private fun openMessage(message: Message, isEmbedded: Boolean) = navigateToMention(
+        channelId = message.channelId,
+        messageId = message.id,
+        isEmbedded = isEmbedded,
+        jumpToMessage = StoreStream.getMessagesLoader()::jumpToMessage,
+        selectHomeTab = StoreStream.getTabsNavigation()::selectHomeTab,
+        dismiss = dismissViewModel::dismiss,
+    )
 
     /** Tapping a result leaves this screen for the message in its own channel. */
-    private inner class MentionsEventHandler : WidgetChatListAdapter.EventHandler {
+    private inner class MentionsEventHandler(private val isEmbedded: Boolean) : WidgetChatListAdapter.EventHandler {
         override fun onMessageClicked(message: Message, isThreadStarterMessage: Boolean) =
-            openMessage(message)
+            openMessage(message, isEmbedded)
     }
 
     /**
@@ -185,4 +187,17 @@ class WidgetUserMentions : AppFragment(R.layout.widget_user_mentions) {
         /** The reference's sentinel for "these rows do not belong to one channel". */
         const val NO_CHANNEL = -1L
     }
+}
+
+internal fun navigateToMention(
+    channelId: Long,
+    messageId: Long,
+    isEmbedded: Boolean,
+    jumpToMessage: (Long, Long) -> Unit,
+    selectHomeTab: (StoreNavigation.PanelAction, Boolean) -> Unit,
+    dismiss: () -> Unit,
+) {
+    jumpToMessage(channelId, messageId)
+    selectHomeTab(StoreNavigation.PanelAction.CLOSE, isEmbedded)
+    dismiss()
 }

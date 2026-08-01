@@ -127,6 +127,7 @@
     <application
         android:name="com.discord.app.App"
         android:allowBackup="false"
+        android:appCategory="social"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:enableOnBackInvokedCallback="false"
         android:fullBackupContent="@xml/backup_rules"
@@ -200,12 +201,8 @@
                 <data android:pathPrefix="/events/" />
                 <data android:pathPrefix="/connect/authorize" />
             </intent-filter>
-            <!--
-                autoVerify matches the reference. App Links verification only succeeds for a domain
-                whose assetlinks.json lists this app's signing certificate, so until Phase 13
-                registers one these links still fall back to the disambiguation dialog.
-            -->
-            <intent-filter android:autoVerify="true">
+            <!-- Discord-owned domains cannot verify this app's package and signing certificate. -->
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
@@ -251,7 +248,8 @@
             android:name="com.discord.app.AppActionActivity"
             android:exported="true"
             android:launchMode="standard"
-            android:theme="@style/AppTheme.Loading">
+            android:theme="@style/AppTheme.Loading"
+            android:windowSoftInputMode="adjustResize|stateHidden">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <action android:name="android.intent.action.SEND_MULTIPLE" />

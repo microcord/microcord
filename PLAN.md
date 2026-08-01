@@ -813,9 +813,10 @@ profile, privacy/safety, appearance, accessibility, voice, notifications,
 authorized apps, connections, MFA, billing, and diagnostics with real store/REST
 flows. Unit coverage includes settings routes, account/MFA contracts, profile,
 privacy, connections, billing, and optimistic writes; focused privacy cold-launch
-instrumentation passed on device. Remaining seams include provider-backed Spotify,
-some nullable-clear/store utility paths, session-management evidence, unreachable
-premium/gift dialog owners, and broad device validation.
+instrumentation passed on device. Account disable/delete now has exact endpoint,
+payload, MFA/password error, and generated-binding coverage. Remaining seams include
+some nullable-clear/store utility paths, session-management evidence, provider-owned
+credential flows, and broad device validation.
 
 Exit criteria: settings restore correctly, synchronize where required, and
 apply without unnecessary process restarts.
@@ -864,7 +865,8 @@ location and stage moderation, group invites, hubs/directories, reports, audit
 logs, community/member verification, roles, permissions, and server settings.
 Physical widget source coverage is 1,150/1,155; four unmatched filenames emit the
 exact reference JVM classes from consolidated Kotlin. Structural coverage remains
-an upper bound: Spotify lacks a provider, webhooks/integration and manifest-route
+an upper bound: existing linked Spotify accounts now have local playback/token/track
+metadata presence support, while new links still need project OAuth; webhooks/integration and manifest-route
 behavior is not fully re-audited, several store/utility seams remain, and the
 feature/device regression matrix is incomplete.
 
@@ -884,7 +886,8 @@ Status: **IN PROGRESS**
 
 Implemented: Billing 5.2.1 runtime management, purchase/SKU stores, plan
 selection, subscriptions, entitlements, gifting, boosts, and checkout handoff are
-present and fail closed without Manticord-owned products. Analytics, super
+present and fail closed without Manticord-owned products. Purchase completion now
+routes to the reference premium/boost activation dialogs before finishing. Analytics, super
 properties, resource monitoring, and legitimate GAID retrieval are implemented
 without recovered credentials. Project-owned Firebase/FCM, dynamic links/App
 Links, OAuth clients, products, and crash-reporting transport remain open.
@@ -895,14 +898,14 @@ degrade safely when an official signing/package relationship is unavailable.
 
 ### Phase 14: Parity Audit and Release Hardening
 
-Status: **NOT STARTED**
+Status: **IN PROGRESS**
 
-- [ ] Audit every first-party manifest component.
+- [x] Audit every first-party manifest component.
 - [ ] Audit every recovered app layout and deep-link route.
-- [ ] Audit exported components and permissions.
+- [x] Audit exported components and permissions.
 - [ ] Test API 21 through current target SDK behavior.
 - [ ] Test phone, tablet, portrait, landscape, RTL, and large fonts.
-- [ ] Run unit, instrumentation, lint, and release builds.
+- [x] Run unit, instrumentation, lint, and release builds.
 - [ ] Enable release shrinking after keep rules are verified.
 - [ ] Verify no secrets or reference API keys are committed.
 - [ ] Produce a signed internal release using Manticord-owned credentials.
@@ -939,15 +942,15 @@ large issue hierarchy without work attached.
 
 The 2026-07-26 figures are retained in `docs/parity-audit/` as the campaign
 baseline, but are superseded here by later measured checkpoints. The latest full
-recorded verification is 1,635 unit tests plus `assembleDebug`, `lintDebug`, and
-`compileDebugAndroidTestKotlin`; it did not include a connected-device or live
-backend run. Where no fresh full-surface recount exists, the ledger says so rather
-than carrying the obsolete baseline percentage. A row is not `DONE` until its
-behavioral/runtime blockers are cleared.
+recorded verification is 1,678 unit tests plus debug/release assembly, `lintDebug`,
+release lint-vital, `compileDebugAndroidTestKotlin`, and 59/59 connected tests on
+Android 16; it did not include a live backend run. Where no fresh full-surface
+recount exists, the ledger says so rather than carrying the obsolete baseline
+percentage. A row is not `DONE` until its behavioral/runtime blockers are cleared.
 
 | Area | Status | Measured coverage | Notes |
 | --- | --- | --- | --- |
-| Build/XML shell | DONE | — | Phase 0 baseline holds |
+| Build/XML shell | DONE | Debug and release APKs assemble; lint and release lint-vital pass | Phase 0 baseline holds |
 | Native media load | DONE | — | ARM64 runtime waived by user decision |
 | Resources/themes | IN PROGRESS | 1,228 layout variants retained; all first-party attr enums/flags restored | Runtime/qualifier/accessibility matrix not complete |
 | Custom views | IN PROGRESS | **76/76** first-party classes present; 13 audited defects fixed | No fresh behavioral recount of formerly inert views |
@@ -956,7 +959,7 @@ behavioral/runtime blockers are cleared.
 | Gateway | IN PROGRESS | **83/83** reference dispatch events typed; 21/21 opcodes represented | Destination-store behavior has not been fully re-audited |
 | Models/DTOs | IN PROGRESS | 39 adapters plus 3 factories at the measured data-wave checkpoint | Later DTO/model additions are not freshly recounted |
 | Utilities | IN PROGRESS | No fresh full-surface recount | Major text, image, permission, send, recycler, URI, billing, notification, and voice utilities now exist; residual seams are tracked in followups |
-| App framework | IN PROGRESS | Base fragment/sheet/dialog, router, back registry, permissions, and direct-screen activity stack present | Device regression remains incomplete |
+| App framework | IN PROGRESS | Base fragment/sheet/dialog, router, back registry, permissions, direct-screen activity stack, reviewed component exports, shortcuts and package queries present | Device regression remains incomplete |
 | Authentication | IN PROGRESS | Credential, MFA, captcha, remote-auth, OAuth, verification, and required-action flows present | Samsung OAuth excluded; remaining provider/runtime gaps prevent `DONE` |
 | Navigation/deep links | IN PROGRESS | Reference routes represented, including query/search, remote auth, guild templates, discovery, mutuals, pins, and call activities | Full route/device matrix not complete |
 | Guilds/channels | IN PROGRESS | Included in the **1,150/1,155** physical widget-path checkpoint | Runtime reorder, permissions, panels, and persistence still need broad device validation |
@@ -965,9 +968,9 @@ behavioral/runtime blockers are cleared.
 | Notifications/background work | IN PROGRESS | Store, renderer/actions, provider-neutral payloads, and 3 first-party workers present | Project-owned FCM and full device/action validation remain open |
 | Settings/account | IN PROGRESS | Settings/account source surfaces and focused unit/instrumentation checks present | Provider, residual dialog/seam, and device gaps remain |
 | Voice/calls/video | IN PROGRESS | Fullscreen active/preview, call activity, services, overlay, video and screen-share surfaces present | No ARM64/live end-to-end fullscreen call validation |
-| Extended features | IN PROGRESS | Widgets **1,150/1,155 physical paths**; 4 unmatched names emitted by consolidated files | Structural upper bound; Spotify/provider and behavioral gaps remain |
+| Extended features | IN PROGRESS | Widgets **1,150/1,155 physical paths**; 4 unmatched names emitted by consolidated files | Existing linked Spotify accounts supported; new links and behavioral gaps remain |
 | Billing/integrations | IN PROGRESS | Billing 5.2.1, purchase/SKU stores, premium/gift/boost flows, analytics and GAID present | Manticord-owned products/providers absent; purchase path fails closed |
-| Generated view bindings | IN PROGRESS | `WidgetUserSheet`, `WidgetSettings`, `WidgetSettingsDeveloper`, `ExperimentOverridesAdapter`, and `WidgetKickUser` migrated | Repository-wide static lookup inventory and migration remain |
+| Generated view bindings | IN PROGRESS | Core settings/user plus 15 additional channel, guild, chat, user, settings, and server screens migrated in the Phase 14 wave | Repository-wide static lookup inventory and migration remain |
 
 ## Parity Audit (2026-07-26)
 
@@ -1203,6 +1206,7 @@ or observable behavior. Small implementation details do not belong here.
 | 2026-07-26 | `WidgetTabsHost` and `WidgetHome` both register at `BackPressHandlerRegistry.DEFAULT_PRIORITY`, relying on registration order for their relative precedence | This is what the reference does: every reference `setOnBackPressed` call site uses the default priority, and the tabs-host-before-home order falls out of `HashMap` bucket order for the two `javaClass.name` keys (computed and confirmed). Inventing distinct priority constants would diverge from the reference for no behavioral gain | A parent fragment's view is bound before its child's, so registration order reproduces the reference order deterministically. Pinned by `BackPressHandlerRegistryTest` |
 | 2026-07-26 | Keep `ObservationDeck.notify`'s try/catch, contrary to the decompiled Java | `dexdump classes2.dex` shows `notify` has a 7-entry catch table: the loop is guarded, the handler compares `logLevel.compareTo(ERROR)`, calls `logNotifyError` when `>= 0` and rethrows otherwise, with `logBreadcrumb("notify END")` duplicated on all three exits. JADX dropped the whole region | Observer failures still propagate at the default `LogLevel.NONE`; only a deck configured to `ERROR`/`VERBOSE` absorbs and reports them, matching the reference |
 | 2026-07-31 | Upgrade Google Play Billing from recovered `4.0.0` to `5.2.1` | `5.2.1` is the earliest public release explicitly compatible with Android 14; its API 33+ billing receiver registration uses `RECEIVER_NOT_EXPORTED` and it retains the reconstructed wrapper's `SkuDetails` and `Purchase` APIs | Avoids the Android 14+ startup `SecurityException` without receiver workarounds or a `ProductDetails` migration |
+| 2026-08-01 | Do not use platform Android/AppCompat/Material dialogs in first-party application flows | The user explicitly requires Discord-styled first-party dialog and bottom-sheet UI throughout the app | First-party choices, confirmations, inputs, date/time pickers, and sheets use `AppDialog`, `AppBottomSheet`, selector dialogs, notice dialogs, or feature-owned fragment dialogs; this deliberately replaces the few 126.21 flows that used platform date/time dialogs |
 
 ## Progress Journal
 
@@ -1311,6 +1315,10 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-08-01 | OpenCode | Preserved the exact 126.21 `StoreMentions` algorithm and fixed its stale input instead: REST-loaded message chunks now monotonically advance `StoreMessagesMostRecent`, so bottom auto-ack compares against the actual newest loaded DM message rather than stale channel metadata | Focused newest-message and ack-gate tests plus `assembleDebug` pass | Device-check the remaining red 2 clears after the loaded DM reaches bottom |
 | 2026-08-01 | OpenCode | Added a narrow recovery for persisted server mention counts whose ack cursor already equals the newest message: the unchanged reference ID comparator still governs normal acks, but an authoritative non-zero server mention count re-posts the same cursor with `mention_count=0` so the badge does not return after restart | Focused ack-repair tests plus `assembleDebug` pass | Device-check the red 2 clears at bottom and remains cleared after restart |
 | 2026-08-01 | OpenCode | Found the actual persistent DM badge root with store diagnostics: `StoreMentions` was already empty while `WidgetChannelListModel` rendered red counts from the wrong `StoreReadStates` source. Switched both private and guild channel-list mention inputs to `StoreMentions` exactly as 126.21 does, and removed the temporary diagnostics plus target-only ack/mention repair patches | Focused channel-list, guild-list, and exact ack-gate tests plus `assembleDebug` pass | Device-check the red 2 disappears immediately and remains absent after restart |
+| 2026-08-01 | OpenCode | Ran four parallel feature-gap slices: membership-screened invites now race channel hydration against the current user's `GUILD_JOIN_REQUEST_CREATE` and open the real verification form; existing linked Spotify accounts now drive local-playback rich presence through token/track metadata with central store wiring; account disable/delete was binding-migrated and endpoint/payload verified; premium/boost purchase completion now reaches the reference activation dialogs | Focused invite, Spotify, account, and premium activation tests, `assembleDebug`, Android-test Kotlin compilation, and `git diff --check` pass; no destructive account or purchase calls used | Device install/retest is pending because ADB disconnected; new Spotify links still require Manticord-owned OAuth credentials |
+| 2026-08-01 | OpenCode | Started Phase 14 with a 12-agent hardening wave: audited manifest exports/permissions/queries/shortcuts; made notification actions process-safe and account-bound; added shared serialize-nulls REST; migrated 15 high-value channel/guild/chat/user/settings/server screens to bindings; fixed RLottie disposal, boost copy and READY unresolved member/presence retention; hardened route parsing/recreation; added release R8 rules; restored account validators; improved RTL/large-font/touch layouts; isolated every logout store reset so one failure cannot retain another account's state | All 1,678 unit tests, debug/release assembly, Android-test Kotlin compilation, `lintDebug`, release lint-vital, and `git diff --check` pass | Connected instrumentation, device/API/RTL/tablet regression, shrinking, signed release, and project-owned FCM/OAuth/App Links remain before Phase 14 can close |
+| 2026-08-01 | OpenCode | Closed the connected-test hardening boundary: made FlexInput permission hosts recreation-safe and mount through production XML; corrected isolated navigation/profile fixtures; made crop results accept the standard intent-data fallback when UCrop's parcelable extra is absent; removed transient bottom-nav assertions and stabilized activity recreation checks | All 59 connected tests pass on physical Android 16 device A065; all 1,678 JVM tests and `git diff --check` pass. The phone had to remain awake; its original two-minute timeout was restored afterward | API 21-35, tablet/landscape/RTL/large-font, shrinking, signing, live backend, and project-owned provider credentials remain open |
+| 2026-08-01 | OpenCode | Restored incoming-share UI/state behavior, exact no-send composer guard, authoritative search mention badges, mention-message navigation ordering, reference 40dp composer/reply geometry, reference-bound guild-search voice-marker visibility, and guild-list DM routing through `ChannelSelector`; replaced all first-party platform AlertDialog/Material/date/time/raw bottom-sheet construction with Discord-styled fragment dialogs and selectors | Production and Android-test Kotlin compile; all JVM tests, `assembleDebug`, `lintDebug`, `git diff --check`, and 60/60 connected Android 16 tests pass; production scan has zero forbidden platform-dialog constructions; rebuilt APK installed on A065 after each device-reported fix | Visually compare share, no-send, search badges, dialogs, DM mention jumps, guild-list DM selection, and composer dimensions against 126.21 |
 
 ## Agent Handoff Template
 

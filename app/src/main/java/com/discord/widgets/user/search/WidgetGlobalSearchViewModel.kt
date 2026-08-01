@@ -79,6 +79,7 @@ class WidgetGlobalSearchViewModel : AppViewModel<WidgetGlobalSearchModel>() {
     private data class ChannelContext(
         val channels: Map<Long, Channel>,
         val guilds: Map<Long, Guild>,
+        val channelIdsByGuild: Map<Long, List<Long>>,
         val mentionCounts: Map<Long, Int>,
         val unreadChannelIds: Set<Long>,
     )
@@ -94,14 +95,15 @@ class WidgetGlobalSearchViewModel : AppViewModel<WidgetGlobalSearchModel>() {
             StoreStream.getChannels().observeAllChannels(),
             StoreStream.getPermissions().observePermissionsForAllChannels(),
             StoreStream.getGuilds().observeGuilds(),
-            StoreStream.getReadStates().getMentionCountsByChannel(),
+            StoreStream.getChannels().observeIds(),
+            StoreStream.getMentions().observeMentionCounts(),
             StoreStream.getReadStates().getUnreadChannelIds(),
-        ) { channels, permissions, guilds, mentionCounts, unreadChannelIds ->
+        ) { channels, permissions, guilds, channelIdsByGuild, mentionCounts, unreadChannelIds ->
             // Gate before anything else: an inaccessible channel must not even influence ranking.
             val visible = channels.filterValues {
                 WidgetGlobalSearchModel.DEFAULT_PERMISSIONS_PREDICATE.invoke(it, permissions)
             }
-            ChannelContext(visible, guilds, mentionCounts, unreadChannelIds)
+            ChannelContext(visible, guilds, channelIdsByGuild, mentionCounts, unreadChannelIds)
         }
         .leadingEdgeThrottle(CONTEXT_THROTTLE_SECONDS, TimeUnit.SECONDS)
 
@@ -118,7 +120,7 @@ class WidgetGlobalSearchViewModel : AppViewModel<WidgetGlobalSearchModel>() {
             StoreStream.getGuildSelected().observeRecentSelectedGuildIds(),
             StoreStream.getGuildSelected().observeSelectedGuildId(),
             StoreStream.getReadStates().getUnreadGuildIds(),
-            StoreStream.getReadStates().getMentionCountsByChannel(),
+            StoreStream.getMentions().observeMentionCounts(),
             StoreStream.getChannels().observePrivateChannels(),
             StoreStream.getGuilds().observeGuilds(),
             StoreStream.getChannels().observeIds(),
@@ -186,7 +188,13 @@ class WidgetGlobalSearchViewModel : AppViewModel<WidgetGlobalSearchModel>() {
         ) {
             channelContext.guilds.values.forEach { guild ->
                 val matched = guild.name.match(filter) ?: return@forEach
-                results += WidgetGlobalSearchModel.ItemGuild(matched, guild)
+                val channelIds = channelContext.channelIdsByGuild[guild.id]
+                results += WidgetGlobalSearchModel.ItemGuild(
+                    matchedResult = matched,
+                    guild = guild,
+                    mentions = WidgetGlobalSearchGuildsModel.mentionCount(channelIds, channelContext.mentionCounts),
+                    unread = channelIds?.any(channelContext.unreadChannelIds::contains) == true,
+                )
             }
         }
 
@@ -200,6 +208,7 @@ class WidgetGlobalSearchViewModel : AppViewModel<WidgetGlobalSearchModel>() {
 
             usersContext.users.values.forEach { user ->
                 val matched = user.username.match(filter) ?: return@forEach
+                val dmChannel = dmChannelsByRecipient[user.id]
                 results += WidgetGlobalSearchModel.ItemUser(
                     matchedResult = matched,
                     user = user,
@@ -207,7 +216,9 @@ class WidgetGlobalSearchViewModel : AppViewModel<WidgetGlobalSearchModel>() {
                     isFriend = usersContext.relationships[user.id] ==
                         ModelUserRelationship.TYPE_FRIEND,
                     presence = usersContext.presences[user.id],
-                    channel = dmChannelsByRecipient[user.id],
+                    channel = dmChannel,
+                    mentions = dmChannel?.let { channelContext.mentionCounts[it.id] } ?: 0,
+                    unread = dmChannel?.id in channelContext.unreadChannelIds,
                 )
             }
         }

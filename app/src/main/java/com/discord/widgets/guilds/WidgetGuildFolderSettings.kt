@@ -12,11 +12,10 @@ import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.app.AppToast
 import com.discord.app.appViewModels
+import com.discord.databinding.WidgetGuildFolderSettingsBinding
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
-import com.google.android.material.floatingactionbutton.FloatingActionButton
-import com.google.android.material.textfield.TextInputLayout
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 
@@ -28,23 +27,21 @@ class WidgetGuildFolderSettings : AppFragment(R.layout.widget_guild_folder_setti
                 ?: mostRecentIntent.getLongExtra(EXTRA_GUILD_FOLDER_ID, -1L),
         )
     }
-    private lateinit var nameInput: TextInputLayout
-    private lateinit var colorRow: View
-    private lateinit var colorDisplay: View
-    private lateinit var colorName: android.widget.TextView
-    private lateinit var save: FloatingActionButton
+    private var _binding: WidgetGuildFolderSettingsBinding? = null
+    private val binding get() = requireNotNull(_binding)
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        val binding = WidgetGuildFolderSettingsBinding.bind(view).also { _binding = it }
         setActionBarTitle(R.string.server_folder_settings)
-        nameInput = view.findViewById(R.id.edit_guild_folder_name)
-        colorRow = view.findViewById(R.id.guild_folder_settings_color)
-        colorDisplay = view.findViewById(R.id.guild_folder_settings_color_display)
-        colorName = view.findViewById(R.id.guild_folder_color_name)
-        save = view.findViewById(R.id.guild_folder_settings_save)
-        nameInput.editText?.doAfterTextChanged { viewModel.setName(it.toString()) }
-        colorRow.setOnClickListener { launchColorPicker() }
-        save.setOnClickListener { viewModel.saveFolder() }
+        binding.editGuildFolderName.editText?.doAfterTextChanged { viewModel.setName(it.toString()) }
+        binding.guildFolderSettingsColor.setOnClickListener { launchColorPicker() }
+        binding.guildFolderSettingsSave.setOnClickListener { viewModel.saveFolder() }
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun onViewBoundOrOnResume() {
@@ -56,24 +53,28 @@ class WidgetGuildFolderSettings : AppFragment(R.layout.widget_guild_folder_setti
     }
 
     private fun configureUI(state: WidgetGuildFolderSettingsViewModel.ViewState) {
+        val binding = _binding ?: return
         val loaded = state as? WidgetGuildFolderSettingsViewModel.ViewState.Loaded ?: return
         val text = loaded.formState.name.orEmpty()
-        if (nameInput.editText?.text?.toString() != text) {
-            nameInput.editText?.setText(text)
-            nameInput.editText?.setSelection(text.length)
+        if (binding.editGuildFolderName.editText?.text?.toString() != text) {
+            binding.editGuildFolderName.editText?.setText(text)
+            binding.editGuildFolderName.editText?.setSelection(text.length)
         }
         val color = loaded.formState.color?.let { it or -0x1000000 }
-            ?: ColorCompat.getThemedColor(colorDisplay, R.attr.colorBackgroundAccent)
+            ?: ColorCompat.getThemedColor(binding.guildFolderSettingsColorDisplay, R.attr.colorBackgroundAccent)
         val drawable = ContextCompat.getDrawable(requireContext(), R.drawable.drawable_circle_brand)?.mutate()
-        drawable?.let { colorDisplay.background = DrawableCompat.wrap(it).also { wrapped -> DrawableCompat.setTint(wrapped, color) } }
-        colorName.text = String.format("#%06X", color and 0xFFFFFF)
-        save.visibility = if (loaded.showSave) View.VISIBLE else View.GONE
+        drawable?.let {
+            binding.guildFolderSettingsColorDisplay.background =
+                DrawableCompat.wrap(it).also { wrapped -> DrawableCompat.setTint(wrapped, color) }
+        }
+        binding.guildFolderColorName.text = String.format("#%06X", color and 0xFFFFFF)
+        binding.guildFolderSettingsSave.visibility = if (loaded.showSave) View.VISIBLE else View.GONE
     }
 
     private fun launchColorPicker() {
         val state = viewModel.viewState as? WidgetGuildFolderSettingsViewModel.ViewState.Loaded ?: return
         val current = state.formState.color?.let { it or -0x1000000 }
-            ?: ColorCompat.getThemedColor(colorDisplay, R.attr.colorBackgroundAccent)
+            ?: ColorCompat.getThemedColor(binding.guildFolderSettingsColorDisplay, R.attr.colorBackgroundAccent)
         ColorPickerDialog.newBuilder()
             .setDialogTitle(R.string.guild_folder_color)
             .setColor(current)

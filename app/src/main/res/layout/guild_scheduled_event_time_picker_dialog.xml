@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/UiKit.ViewGroup.Page.LinearLayout"
+    android:layout_height="wrap_content">
+
+    <TextView
+        android:id="@+id/guild_scheduled_event_time_picker_title"
+        style="@style/UiKit.TextView.H1.Bold"
+        android:layout_width="match_parent"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="8dp"
+        android:gravity="center" />
+
+    <TimePicker
+        android:id="@+id/guild_scheduled_event_time_picker_input"
+        android:theme="@style/DialogDatePicker"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:timePickerMode="spinner" />
+
+    <LinearLayout style="@style/UiKit.Dialog.ButtonContainer">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/guild_scheduled_event_time_picker_cancel"
+            style="@style/UiKit.Material.Button.Transparent.Fit"
+            android:text="@string/cancel" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/guild_scheduled_event_time_picker_done"
+            style="@style/UiKit.Material.Button.Fit"
+            android:text="@string/done" />
+    </LinearLayout>
+</LinearLayout>

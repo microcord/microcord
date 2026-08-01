@@ -1,11 +1,9 @@
 package com.discord.widgets.settings
 
 import android.content.Context
-import android.view.LayoutInflater
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
 import com.discord.R
 import com.discord.api.connectedaccounts.ConnectedAccount
 import com.discord.app.AppFragment
@@ -70,7 +68,6 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
 
     private val viewModel: SettingsPrivacyViewModel by appViewModels { SettingsPrivacyViewModel() }
 
-    private var existingServersDialog: AlertDialog? = null
     private var shownConsentError: Throwable? = null
 
     private lateinit var dimmer: DimmerView
@@ -132,6 +129,34 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
         basicService = view.findViewById(R.id.settings_privacy_basic_service)
         requestData = view.findViewById(R.id.settings_privacy_request_data)
         requestDataLink = view.findViewById(R.id.request_data_link)
+
+        parentFragmentManager.setFragmentResultListener(
+            SettingsPrivacyDefaultsDialog.REQUEST_KEY,
+            this,
+        ) { _, result ->
+            updateDefaultGuildsRestricted(
+                result.getBoolean(SettingsPrivacyDefaultsDialog.RESULT_RESTRICTED),
+                result.getBoolean(SettingsPrivacyDefaultsDialog.RESULT_APPLY_EXISTING),
+            )
+        }
+        parentFragmentManager.setFragmentResultListener(
+            SettingsPrivacyConsentDialog.REQUEST_KEY,
+            this,
+        ) { _, result ->
+            val consentType = result.getString(SettingsPrivacyConsentDialog.RESULT_CONSENT_TYPE)
+                ?: return@setFragmentResultListener
+            val toggle = when (consentType) {
+                RestAPIParams.Consents.Type.USAGE_STATS -> usageStatistics
+                RestAPIParams.Consents.Type.PERSONALIZATION -> personalization
+                else -> return@setFragmentResultListener
+            }
+            if (result.getBoolean(SettingsPrivacyConsentDialog.RESULT_CONFIRMED)) {
+                toggleConsent(false, consentType, toggle)
+            } else {
+                toggle.setChecked(true, false)
+                toggle.isEnabled = true
+            }
+        }
 
         configureStaticSubtexts(view.context)
 
@@ -208,11 +233,6 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
             .subscribe { screenReaderDetection.setChecked(it, false) }
     }
 
-    override fun onPause() {
-        super.onPause()
-        existingServersDialog?.dismiss()
-    }
-
     private fun configureUI(viewState: SettingsPrivacyViewModel.ViewState) {
         when (viewState) {
             // READY supplies the local settings; the consent endpoint completes the model.
@@ -267,17 +287,7 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
      * assumed.
      */
     private fun showDefaultGuildsRestrictedExistingServers(defaultGuildsRestricted: Boolean) {
-        val view = layoutInflater.inflate(R.layout.widget_settings_privacy_defaults, null, false)
-        view.findViewById<MaterialButton>(R.id.settings_privacy_defaults_existing_no)
-            .setOnClickListener {
-                updateDefaultGuildsRestricted(defaultGuildsRestricted, applyToExistingGuilds = false)
-            }
-        view.findViewById<MaterialButton>(R.id.settings_privacy_defaults_existing_yes)
-            .setOnClickListener {
-                updateDefaultGuildsRestricted(defaultGuildsRestricted, applyToExistingGuilds = true)
-            }
-        existingServersDialog?.dismiss()
-        existingServersDialog = AlertDialog.Builder(view.context).setView(view).create().also { it.show() }
+        SettingsPrivacyDefaultsDialog.show(parentFragmentManager, defaultGuildsRestricted)
     }
 
     private fun updateDefaultGuildsRestricted(
@@ -298,7 +308,6 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
                 StoreStream.getUserSettings()
                     .setDefaultGuildsRestricted(appActivity, defaultGuildsRestricted, guildIds)
             }
-        existingServersDialog?.dismiss()
     }
 
     // endregion
@@ -451,12 +460,10 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
                     // Revoking is the direction Discord asks about, so a mis-tap cannot silently
                     // opt the user out of the thing they were told about.
                     confirmConsent(
-                        context = context,
                         titleRes = R.string.usage_statistics_disable_modal_title,
                         bodyRes = R.string.usage_statistics_disable_modal_body,
                         cancelRes = R.string.usage_statistics_disable_modal_cancel,
                         confirmRes = R.string.usage_statistics_disable_modal_confirm,
-                        toggle = usageStatistics,
                         consentType = RestAPIParams.Consents.Type.USAGE_STATS,
                     )
                 }
@@ -472,12 +479,10 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
                     toggleConsent(consented, RestAPIParams.Consents.Type.PERSONALIZATION, personalization)
                 } else {
                     confirmConsent(
-                        context = context,
                         titleRes = R.string.personalization_disable_modal_title,
                         bodyRes = R.string.personalization_disable_modal_body,
                         cancelRes = R.string.personalization_disable_modal_cancel,
                         confirmRes = R.string.personalization_disable_modal_confirm,
-                        toggle = personalization,
                         consentType = RestAPIParams.Consents.Type.PERSONALIZATION,
                     )
                 }
@@ -491,38 +496,20 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
      * Cancelling restores the switch, because it was already moved by the time the listener ran.
      */
     private fun confirmConsent(
-        context: Context,
         titleRes: Int,
         bodyRes: Int,
         cancelRes: Int,
         confirmRes: Int,
-        toggle: CheckedSetting,
         consentType: String,
     ) {
-        val view = LayoutInflater.from(context)
-            .inflate(R.layout.view_dialog_confirmation, null, false)
-        val dialog = AlertDialog.Builder(context)
-            .setView(view)
-            .setCancelable(false)
-            .create()
-        view.findViewById<TextView>(R.id.view_dialog_confirmation_header).setText(titleRes)
-        view.findViewById<TextView>(R.id.view_dialog_confirmation_text).setText(bodyRes)
-        view.findViewById<MaterialButton>(R.id.view_dialog_confirmation_cancel).apply {
-            setText(cancelRes)
-            setOnClickListener {
-                dialog.dismiss()
-                toggle.setChecked(true, false)
-                toggle.isEnabled = true
-            }
-        }
-        view.findViewById<MaterialButton>(R.id.view_dialog_confirmation_confirm).apply {
-            setText(confirmRes)
-            setOnClickListener {
-                dialog.dismiss()
-                toggleConsent(false, consentType, toggle)
-            }
-        }
-        dialog.show()
+        SettingsPrivacyConsentDialog.show(
+            parentFragmentManager,
+            titleRes,
+            bodyRes,
+            cancelRes,
+            confirmRes,
+            consentType,
+        )
     }
 
     private fun toggleConsent(consented: Boolean, consentType: String, toggle: CheckedSetting) {

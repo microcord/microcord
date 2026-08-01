@@ -38,6 +38,7 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
         val snapshot = cache.add(data)
         val channelId = data.kind.channelId
         val private = data.kind != NotificationKind.GENERAL
+        val authSession = NotificationActionSession.fromToken(settings.token)
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_notifications_white_24dp)
             .setContentTitle(data.title)
@@ -68,16 +69,23 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
         )
         if (data.kind == NotificationKind.MESSAGE || data.kind == NotificationKind.DIRECT_MESSAGE) {
             builder.setStyle(messageStyle(snapshot.messages))
-            data.messageId?.let {
+            if (data.messageId != null && authSession != null) {
                 builder.addAction(
                     R.drawable.ic_check_white_24dp,
                     context.getString(R.string.mark_as_read),
-                    actionIntent(context, data, NotificationActionReceiver.ACTION_MARK_READ),
+                    actionIntent(
+                        context,
+                        data,
+                        NotificationActionReceiver.ACTION_MARK_READ,
+                        authSession,
+                    ),
                 )
             }
             // A reply action the user cannot act on is worse than none: the reference suppresses it
             // for every channel where SEND_MESSAGES is denied.
-            if (data.allowReply && settings.canReplyTo(data.channelId)) builder.addAction(replyAction(context, data))
+            if (data.allowReply && settings.canReplyTo(data.channelId)) {
+                authSession?.let { builder.addAction(replyAction(context, data, it)) }
+            }
         } else {
             builder.setStyle(NotificationCompat.BigTextStyle().bigText(data.body))
         }
@@ -180,16 +188,21 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
         return PendingIntent.getActivity(context, requestCode(data, 0), intent, immutableFlags())
     }
 
-    private fun actionIntent(context: Context, data: NotificationData, action: String): PendingIntent {
+    private fun actionIntent(
+        context: Context,
+        data: NotificationData,
+        action: String,
+        authSession: String? = null,
+    ): PendingIntent {
         val intent = Intent(action, actionUri(action, data.channelId), context, NotificationActionReceiver::class.java)
             .putExtra(NotificationActionReceiver.EXTRA_CHANNEL_ID, data.channelId)
             .putExtra(NotificationActionReceiver.EXTRA_MESSAGE_ID, data.messageId ?: -1L)
             .putExtra(NotificationActionReceiver.EXTRA_NOTIFICATION_ID, NotificationCache.notificationId(data.channelId))
-            .putExtra(NotificationActionReceiver.EXTRA_AUTH_GENERATION, data.authGeneration)
+        authSession?.let { intent.putExtra(NotificationActionReceiver.EXTRA_AUTH_SESSION, it) }
         return PendingIntent.getBroadcast(context, requestCode(data, action.hashCode()), intent, immutableFlags())
     }
 
-    private fun replyAction(context: Context, data: NotificationData): NotificationCompat.Action {
+    private fun replyAction(context: Context, data: NotificationData, authSession: String): NotificationCompat.Action {
         val input = RemoteInput.Builder(NotificationActionReceiver.REMOTE_INPUT_REPLY)
             .setLabel(context.getString(R.string.notification_reply))
             .build()
@@ -201,7 +214,7 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
         ).putExtra(NotificationActionReceiver.EXTRA_CHANNEL_ID, data.channelId)
             .putExtra(NotificationActionReceiver.EXTRA_CHANNEL_NAME, data.title)
             .putExtra(NotificationActionReceiver.EXTRA_NOTIFICATION_ID, NotificationCache.notificationId(data.channelId))
-            .putExtra(NotificationActionReceiver.EXTRA_AUTH_GENERATION, data.authGeneration)
+            .putExtra(NotificationActionReceiver.EXTRA_AUTH_SESSION, authSession)
         val pending = PendingIntent.getBroadcast(context, requestCode(data, 2), intent, mutableReplyFlags())
         return NotificationCompat.Action.Builder(R.drawable.ic_notifications_white_24dp, context.getString(R.string.notification_reply), pending)
             .addRemoteInput(input)
@@ -224,10 +237,9 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
      * `RemoteInput` works by having the system write the typed text into the intent it fires, which
      * is impossible with FLAG_IMMUTABLE. The blast radius is bounded because the intent names its
      * component explicitly (so only [NotificationActionReceiver], which is not exported, can
-     * receive it), it carries no data URI another app could redirect, and every field it does carry
-     * — channel id, notification id, auth generation — is re-validated by
-     * [NotificationActionValidator] and re-checked against the live auth generation before any work
-     * is enqueued.
+     * receive it), its data URI contains no credentials, and every field it carries — channel id,
+     * notification id, auth-session fingerprint — is re-validated by [NotificationActionValidator]
+     * and checked against the current account before any work is enqueued.
      */
     private fun mutableReplyFlags() = PendingIntent.FLAG_UPDATE_CURRENT or
         if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0

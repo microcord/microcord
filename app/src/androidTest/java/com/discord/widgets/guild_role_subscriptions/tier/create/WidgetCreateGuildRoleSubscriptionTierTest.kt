@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.view.LayoutInflater
+import android.view.ContextThemeWrapper
 import com.discord.R
 import com.discord.app.AppScreenRouter
 import com.discord.views.steps.StepsView
@@ -35,7 +36,7 @@ class WidgetCreateGuildRoleSubscriptionTierTest {
             34L,
             launched?.getLongExtra(WidgetCreateGuildRoleSubscriptionTier.INTENT_EXTRA_GROUP_LISTING_ID, 0L),
         )
-        val view = LayoutInflater.from(targetContext)
+        val view = LayoutInflater.from(ContextThemeWrapper(targetContext, R.style.AppTheme_Dark))
             .inflate(R.layout.widget_create_guild_role_subscription_tier, null)
         assertNotNull(view.findViewById<StepsView>(R.id.create_guild_subscription_role_tier_steps_view))
     }

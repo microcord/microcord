@@ -9,7 +9,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.cardview.widget.CardView
 import androidx.core.widget.doAfterTextChanged
 import com.discord.R
@@ -157,6 +156,25 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
                 )
             }
         }
+        childFragmentManager.setFragmentResultListener(
+            ProfileAvatarSelectorSheet.REQUEST_KEY,
+            viewLifecycleOwner,
+        ) { _, result ->
+            if (result.getInt(ProfileAvatarSelectorSheet.RESULT_INDEX) == 0) {
+                uploadTarget = UploadTarget.AVATAR
+                openProfileMediaChooser()
+            } else {
+                avatarSelection = null
+                viewModel.updateAvatar(null)
+            }
+        }
+        childFragmentManager.setFragmentResultListener(
+            ProfileDiscardChangesDialog.REQUEST_KEY,
+            viewLifecycleOwner,
+        ) { _, _ ->
+            discardConfirmed.set(true)
+            requireActivity().onBackPressed()
+        }
     }
 
     override fun onViewBoundOrOnResume() {
@@ -250,15 +268,11 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
                     )
                 }
             }
-            AlertDialog.Builder(requireContext()).setItems(options.toTypedArray()) { _, index ->
-                if (index == 0) {
-                    uploadTarget = UploadTarget.AVATAR
-                    openProfileMediaChooser()
-                } else {
-                    avatarSelection = null
-                    viewModel.updateAvatar(null)
-                }
-            }.show()
+            ProfileAvatarSelectorSheet.show(
+                childFragmentManager,
+                options.toTypedArray(),
+                destructiveIndex = if (state.hasAvatarForDisplay) 1 else -1,
+            )
         }
     }
 
@@ -297,15 +311,7 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
             return true
         }
         if (!state.isDirty || discardConfirmed.get()) return false
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.discard_changes)
-            .setMessage(R.string.discard_changes_description)
-            .setNegativeButton(R.string.discard_changes_cancel, null)
-            .setPositiveButton(R.string.discard_changes_confirm) { _, _ ->
-                discardConfirmed.set(true)
-                requireActivity().onBackPressed()
-            }
-            .show()
+        ProfileDiscardChangesDialog.show(childFragmentManager)
         return true
     }
 

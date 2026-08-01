@@ -4,12 +4,11 @@ import android.content.Context
 import android.content.Intent
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageView
-import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppFragment
-import com.discord.app.AppViewFlipper
+import com.discord.databinding.WidgetServerSettingsBanListItemBinding
+import com.discord.databinding.WidgetServerSettingsBansBinding
 import com.discord.models.domain.ModelBan
 import com.discord.models.guild.Guild
 import com.discord.models.user.CoreUser
@@ -32,7 +31,6 @@ import com.discord.utilities.view.text.addBindedTextWatcher
 import com.discord.widgets.settings.SettingsNavigation
 import com.discord.widgets.settings.SettingsStrings
 import com.discord.widgets.notice.WidgetNoticeDialog
-import com.google.android.material.textfield.TextInputLayout
 import rx.Observable
 import rx.subjects.BehaviorSubject
 
@@ -40,47 +38,56 @@ import rx.subjects.BehaviorSubject
  * The server's ban list, searchable by username, with unban behind a confirmation.
  *
  * Reference: `com.discord.widgets.servers.WidgetServerSettingsBans`. Four states share one
- * [AppViewFlipper]: loading, the list, "nobody is banned", and "nothing matched the search" — the
+ * `AppViewFlipper`: loading, the list, "nobody is banned", and "nothing matched the search" — the
  * last two are different situations and say different things.
  */
 class WidgetServerSettingsBans : AppFragment(R.layout.widget_server_settings_bans) {
+
+    private var _binding: WidgetServerSettingsBansBinding? = null
+    private val binding get() = checkNotNull(_binding)
 
     private val guildId: Long
         get() = arguments?.getLong(INTENT_EXTRA_GUILD_ID, INVALID_GUILD_ID)
             ?.takeIf { it != INVALID_GUILD_ID }
             ?: mostRecentIntent.getLongExtra(INTENT_EXTRA_GUILD_ID, INVALID_GUILD_ID)
 
-    private lateinit var viewFlipper: AppViewFlipper
-    private lateinit var search: TextInputLayout
     private var adapter: Adapter? = null
     private val filterPublisher = BehaviorSubject.create("")
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        _binding = WidgetServerSettingsBansBinding.bind(view)
         setActionBarDisplayHomeAsUpEnabled()
         setActionBarTitle(R.string.bans)
 
-        viewFlipper = view.findViewById(R.id.server_settings_bans_view_flipper)
-        search = view.findViewById(R.id.server_settings_bans_search)
-        val recycler = view.findViewById<RecyclerView>(R.id.server_settings_bans_recycler)
+        val recycler = binding.serverSettingsBansRecycler
         adapter = MGRecyclerAdapter.configure<Model.BanItem, Adapter>(Adapter(recycler))
+    }
+
+    override fun onDestroyView() {
+        binding.serverSettingsBansRecycler.adapter = null
+        adapter = null
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun onResume() {
         super.onResume()
-        filterPublisher.onNext(search.getTextOrEmpty())
-        search.editText?.addBindedTextWatcher(this) { filterPublisher.onNext(it.toString()) }
+        filterPublisher.onNext(binding.serverSettingsBansSearch.getTextOrEmpty())
+        binding.serverSettingsBansSearch.editText
+            ?.addBindedTextWatcher(this) { filterPublisher.onNext(it.toString()) }
         Model.get(guildId, filterPublisher).ui(this).appSubscribe(javaClass) { configureUI(it) }
     }
 
     private fun configureUI(model: Model?) {
+        if (_binding == null) return
         val bans = model?.filteredBannedUsers
         if (bans == null) {
             appActivity?.onBackPressed()
             return
         }
         setActionBarSubtitle(model.guildName)
-        viewFlipper.displayedChild = when {
+        binding.serverSettingsBansViewFlipper.displayedChild = when {
             model.isLoading -> VIEW_INDEX_LOADING
             model.totalBannedUsers == 0 -> VIEW_INDEX_NO_BANS
             bans.isEmpty() -> VIEW_INDEX_NO_RESULTS
@@ -122,16 +129,20 @@ class WidgetServerSettingsBans : AppFragment(R.layout.widget_server_settings_ban
             adapter: Adapter,
         ) : MGRecyclerViewHolder<Adapter, Model.BanItem>(R.layout.widget_server_settings_ban_list_item, adapter) {
 
-            private val container: View = itemView.findViewById(R.id.ban_container)
-            private val avatar: ImageView = itemView.findViewById(R.id.ban_list_item_avatar)
-            private val name: TextView = itemView.findViewById(R.id.ban_list_item_name)
+            private val binding = WidgetServerSettingsBanListItemBinding.bind(itemView)
 
             override fun onConfigure(position: Int, data: Model.BanItem) {
                 super.onConfigure(position, data)
                 val ban = data.ban
-                name.text = ban?.user?.username
-                IconUtils.setIcon(avatar, ban?.user?.let(::CoreUser), R.dimen.avatar_size_standard)
-                container.setOnClickListener { ban?.let { adapter.onBanSelected?.invoke(it) } }
+                binding.banListItemName.text = ban?.user?.username
+                IconUtils.setIcon(
+                    binding.banListItemAvatar,
+                    ban?.user?.let(::CoreUser),
+                    R.dimen.avatar_size_standard,
+                )
+                binding.banContainer.setOnClickListener {
+                    ban?.let { adapter.onBanSelected?.invoke(it) }
+                }
             }
         }
     }

@@ -4,15 +4,19 @@ import android.content.Context
 import androidx.work.ListenableWorker
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import com.discord.utilities.fcm.NotificationClient
+import com.discord.workers.MessageWorkerActions
 
 class NotificationMarkReadWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     override fun doWork(): ListenableWorker.Result {
         val channelId = inputData.getLong(NotificationActionReceiver.EXTRA_CHANNEL_ID, -1)
         val messageId = inputData.getLong(NotificationActionReceiver.EXTRA_MESSAGE_ID, -1)
-        val generation = inputData.getInt(NotificationActionReceiver.EXTRA_AUTH_GENERATION, -1)
-        val actions = NotificationActionReceiver.callbacks ?: return Result.failure()
-        if (channelId <= 0 || messageId <= 0 || !actions.isCurrentAuthGeneration(generation)) return Result.failure()
-        return runCatching { if (actions.markRead(channelId, messageId)) Result.success() else retryOrFail() }
+        val authSession = inputData.getString(NotificationActionReceiver.EXTRA_AUTH_SESSION)
+        val action = MessageWorkerActions.acknowledgeMessage ?: return Result.failure()
+        if (channelId <= 0 || messageId <= 0 ||
+            !NotificationActionSession.matches(authSession, NotificationClient.getSettings().token)
+        ) return Result.failure()
+        return runCatching { if (action(channelId, messageId)) Result.success() else retryOrFail() }
             .getOrElse { retryOrFail() }
     }
 

@@ -5,8 +5,6 @@ import android.os.Bundle
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.view.View
-import android.widget.FrameLayout
-import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
@@ -14,6 +12,7 @@ import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.app.AppBottomSheet
 import com.discord.app.appViewModels
+import com.discord.databinding.WidgetMuteSettingsSheetBinding
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.utilities.rx.ui
 import com.discord.utilities.time.TimeUtils
@@ -37,6 +36,9 @@ import rx.subscriptions.CompositeSubscription
  */
 class WidgetMuteSettingsSheet : AppBottomSheet() {
 
+    private var _binding: WidgetMuteSettingsSheetBinding? = null
+    private val binding get() = checkNotNull(_binding)
+
     private val viewModel: MuteSettingsSheetViewModel by appViewModels {
         MuteSettingsSheetViewModel(
             guildId = argumentsOrDefault.getLong(ARG_GUILD_ID, 0L),
@@ -44,41 +46,24 @@ class WidgetMuteSettingsSheet : AppBottomSheet() {
         )
     }
 
-    private lateinit var title: TextView
-    private lateinit var subtitle: TextView
-    private lateinit var unmuteButton: LinearLayout
-    private lateinit var unmuteButtonLabel: TextView
-    private lateinit var unmuteButtonDetailsLabel: TextView
-    private lateinit var muteOptions: LinearLayout
-    private lateinit var notificationSettingsButtonContainer: FrameLayout
-    private lateinit var notificationSettingsButton: LinearLayout
-    private lateinit var notificationSettingsLabel: TextView
-    private lateinit var notificationSettingsOverridesLabel: TextView
-    private lateinit var channelMutedDetails: TextView
-
     override fun getContentViewResId(): Int = R.layout.widget_mute_settings_sheet
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        title = view.findViewById(R.id.title)
-        subtitle = view.findViewById(R.id.subtitle)
-        unmuteButton = view.findViewById(R.id.unmute_button)
-        unmuteButtonLabel = view.findViewById(R.id.unmute_button_label)
-        unmuteButtonDetailsLabel = view.findViewById(R.id.unmute_button_details_label)
-        muteOptions = view.findViewById(R.id.mute_settings_sheet_mute_options)
-        notificationSettingsButtonContainer = view.findViewById(R.id.notification_settings_button_container)
-        notificationSettingsButton = view.findViewById(R.id.notification_settings_button)
-        notificationSettingsLabel = view.findViewById(R.id.notification_settings_label)
-        notificationSettingsOverridesLabel = view.findViewById(R.id.notification_settings_overrides_label)
-        channelMutedDetails = view.findViewById(R.id.channel_muted_details)
+        _binding = WidgetMuteSettingsSheetBinding.bind(view)
 
-        bindDuration(R.id.option_fifteen_minutes, FIFTEEN_MINUTES_MS)
-        bindDuration(R.id.option_one_hour, ONE_HOUR_MS)
-        bindDuration(R.id.option_eight_hours, EIGHT_HOURS_MS)
-        bindDuration(R.id.option_twenty_four_hours, TWENTY_FOUR_HOURS_MS)
-        bindDuration(R.id.option_always, MuteSettingsSheetViewModel.MUTE_DURATION_ALWAYS)
+        bindDuration(binding.optionFifteenMinutes, FIFTEEN_MINUTES_MS)
+        bindDuration(binding.optionOneHour, ONE_HOUR_MS)
+        bindDuration(binding.optionEightHours, EIGHT_HOURS_MS)
+        bindDuration(binding.optionTwentyFourHours, TWENTY_FOUR_HOURS_MS)
+        bindDuration(binding.optionAlways, MuteSettingsSheetViewModel.MUTE_DURATION_ALWAYS)
 
-        unmuteButton.setOnClickListener { viewModel.unmute(it.context.applicationContext) }
+        binding.unmuteButton.setOnClickListener { viewModel.unmute(it.context.applicationContext) }
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun bindSubscriptions(compositeSubscription: CompositeSubscription) {
@@ -86,8 +71,8 @@ class WidgetMuteSettingsSheet : AppBottomSheet() {
         viewModel.observeEvents().ui(this).subscribe { handleEvent(it) }
     }
 
-    private fun bindDuration(rowId: Int, durationMs: Long) {
-        requireView().findViewById<TextView>(rowId).setOnClickListener {
+    private fun bindDuration(row: TextView, durationMs: Long) {
+        row.setOnClickListener {
             viewModel.selectMuteDurationMs(durationMs, it.context.applicationContext)
         }
     }
@@ -104,6 +89,7 @@ class WidgetMuteSettingsSheet : AppBottomSheet() {
     }
 
     private fun updateViews(viewState: MuteSettingsSheetViewModel.ViewState) {
+        if (_binding == null) return
         when (viewState) {
             is MuteSettingsSheetViewModel.ViewState.Uninitialized -> Unit
             is MuteSettingsSheetViewModel.ViewState.Failure -> {
@@ -116,8 +102,8 @@ class WidgetMuteSettingsSheet : AppBottomSheet() {
             }
 
             is MuteSettingsSheetViewModel.ViewState.Loaded -> {
-                title.text = titleResFor(viewState.settingsType)?.let { getString(it) }.orEmpty()
-                subtitle.text = viewState.subtitle
+                binding.title.text = titleResFor(viewState.settingsType)?.let { getString(it) }.orEmpty()
+                binding.subtitle.text = viewState.subtitle
                 configureUnmuteButton(viewState)
                 configureNotificationSettings(viewState)
             }
@@ -126,8 +112,8 @@ class WidgetMuteSettingsSheet : AppBottomSheet() {
 
     private fun configureUnmuteButton(viewState: MuteSettingsSheetViewModel.ViewState.Loaded) {
         if (!viewState.isChannelMuted) {
-            unmuteButton.visibility = View.GONE
-            muteOptions.visibility = View.VISIBLE
+            binding.unmuteButton.visibility = View.GONE
+            binding.muteSettingsSheetMuteOptions.visibility = View.VISIBLE
             return
         }
 
@@ -137,7 +123,7 @@ class WidgetMuteSettingsSheet : AppBottomSheet() {
                 ForegroundColorSpan(ThemedColor.resolve(requireContext(), R.attr.colorHeaderPrimary)),
             ),
         )
-        unmuteButtonLabel.text = SettingsStrings.render(
+        binding.unmuteButtonLabel.text = SettingsStrings.render(
             requireContext(),
             R.string.unmute_channel,
             "name" to viewState.subtitle,
@@ -147,7 +133,7 @@ class WidgetMuteSettingsSheet : AppBottomSheet() {
         val isConversation =
             viewState.settingsType == SettingsType.DM || viewState.settingsType == SettingsType.GROUP_DM
         val endTime = viewState.muteEndTime
-        unmuteButtonDetailsLabel.text = when {
+        binding.unmuteButtonDetailsLabel.text = when {
             endTime == null && isConversation -> getString(R.string.form_label_mobile_dm_muted)
             endTime == null -> getString(R.string.form_label_mobile_channel_muted)
             else -> SettingsStrings.render(
@@ -162,12 +148,12 @@ class WidgetMuteSettingsSheet : AppBottomSheet() {
             )
         }
 
-        unmuteButton.visibility = View.VISIBLE
-        muteOptions.visibility = View.GONE
+        binding.unmuteButton.visibility = View.VISIBLE
+        binding.muteSettingsSheetMuteOptions.visibility = View.GONE
     }
 
     private fun configureNotificationSettings(viewState: MuteSettingsSheetViewModel.ViewState.Loaded) {
-        notificationSettingsOverridesLabel.text = when (viewState.notificationSetting) {
+        binding.notificationSettingsOverridesLabel.text = when (viewState.notificationSetting) {
             ModelNotificationSettings.FREQUENCY_ALL -> getString(R.string.form_label_all_messages_short)
             ModelNotificationSettings.FREQUENCY_MENTIONS -> getString(R.string.form_label_only_mentions_short)
             ModelNotificationSettings.FREQUENCY_NOTHING -> getString(R.string.form_label_nothing)
@@ -176,15 +162,15 @@ class WidgetMuteSettingsSheet : AppBottomSheet() {
 
         // A guild, a DM, a group DM and a category have no per-channel override screen to reach.
         if (viewState.settingsType in TYPES_WITHOUT_OVERRIDES) {
-            notificationSettingsButtonContainer.visibility = View.GONE
-            channelMutedDetails.visibility = View.GONE
+            binding.notificationSettingsButtonContainer.visibility = View.GONE
+            binding.channelMutedDetails.visibility = View.GONE
             return
         }
 
         if (viewState.isChannelMuted || viewState.isGuildMuted) {
-            notificationSettingsLabel.alpha = INACTIVE_OPACITY
-            notificationSettingsButton.setOnClickListener(null)
-            channelMutedDetails.text = if (viewState.isChannelMuted) {
+            binding.notificationSettingsLabel.alpha = INACTIVE_OPACITY
+            binding.notificationSettingsButton.setOnClickListener(null)
+            binding.channelMutedDetails.text = if (viewState.isChannelMuted) {
                 getString(R.string.form_description_mobile_notification_muted)
             } else {
                 SettingsStrings.render(
@@ -199,13 +185,13 @@ class WidgetMuteSettingsSheet : AppBottomSheet() {
                     ),
                 )
             }
-            channelMutedDetails.visibility = View.VISIBLE
+            binding.channelMutedDetails.visibility = View.VISIBLE
         } else {
-            notificationSettingsLabel.alpha = ACTIVE_OPACITY
-            notificationSettingsButton.setOnClickListener { viewModel.onChannelSettingsSelected() }
-            channelMutedDetails.visibility = View.GONE
+            binding.notificationSettingsLabel.alpha = ACTIVE_OPACITY
+            binding.notificationSettingsButton.setOnClickListener { viewModel.onChannelSettingsSelected() }
+            binding.channelMutedDetails.visibility = View.GONE
         }
-        notificationSettingsButtonContainer.visibility = View.VISIBLE
+        binding.notificationSettingsButtonContainer.visibility = View.VISIBLE
     }
 
     private fun renderMuteEndTime(muteEndTime: String): String = TimeUtils.renderUtcDateTime(

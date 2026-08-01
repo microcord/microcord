@@ -6,6 +6,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.ViewModelProvider
 import com.discord.R
+import com.discord.api.channel.Channel
 import com.discord.app.AppActivity
 import com.discord.panels.OverlappingPanelsLayout
 import com.discord.stores.AuthNavigationState
@@ -14,6 +15,7 @@ import com.discord.widgets.chat.input.AppFlexInputViewModel
 import com.discord.widgets.tabs.NavigationTab
 import com.discord.widgets.tabs.WidgetTabsHost
 import com.discord.utilities.toolbar.getNavigationIconView
+import com.google.gson.Gson
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -61,8 +63,22 @@ class HomeBackPressTest {
     @Test
     fun toolbarNavigationButtonOpensTheChannelList() {
         val activity = launchLoggedInShell()
+        StoreStream.getChannels().onGroupCreated(
+            Gson().fromJson(
+                """{"type":3,"guild_id":0,"name":"Toolbar test","id":$CHANNEL_ID}""",
+                Channel::class.java,
+            ),
+        )
+        await { StoreStream.getChannels().getChannel(CHANNEL_ID) != null }
+        StoreStream.getChannels().javaClass.getDeclaredField("initializedForAuthedUser").run {
+            isAccessible = true
+            setBoolean(StoreStream.getChannels(), true)
+        }
+        StoreStream.selectChannel(0L, CHANNEL_ID)
+        await { StoreStream.getChannelsSelected().getId() == CHANNEL_ID }
         val home = homeFragment(activity)
         val panels = home.requireView().findViewById<HomePanelsLayout>(R.id.overlapping_panels)
+        await { home.requireView().findViewById<android.view.View>(R.id.action_bar_toolbar_layout) != null }
         instrumentation.runOnMainSync {
             panels.setStartPanelLockState(OverlappingPanelsLayout.LockState.UNLOCKED)
             panels.closePanels()
@@ -197,5 +213,9 @@ class HomeBackPressTest {
             Thread.sleep(20)
         }
         assertTrue("Timed out waiting for the expected shell state", condition())
+    }
+
+    private companion object {
+        const val CHANNEL_ID = 987654322L
     }
 }

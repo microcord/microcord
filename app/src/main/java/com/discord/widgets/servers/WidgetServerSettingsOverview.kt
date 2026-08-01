@@ -14,12 +14,12 @@ import com.discord.app.AppBottomSheet
 import com.discord.app.AppFragment
 import com.discord.app.AppToast
 import com.discord.app.appViewModels
+import com.discord.databinding.WidgetServerSettingsOverviewBinding
 import com.discord.dialogs.ImageUploadDialog
 import com.discord.i18n.i18nPlural
 import com.discord.media_picker.MediaPicker
 import com.discord.models.guild.Guild
 import com.discord.models.user.MeUser
-import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreGuildProfiles
 import com.discord.stores.StoreStream
@@ -86,6 +86,8 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
 
     private var hasOpenedAvatarPicker = false
     private var imageSelectedResult: ((String) -> Unit)? = null
+    private var _binding: WidgetServerSettingsOverviewBinding? = null
+    private val binding get() = requireNotNull(_binding)
 
     private lateinit var scroll: ScrollView
     private lateinit var icon: SimpleDraweeView
@@ -109,29 +111,29 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        _binding = WidgetServerSettingsOverviewBinding.bind(view)
         setActionBarDisplayHomeAsUpEnabled()
         setActionBarTitle(R.string.overview)
         retainInstance = true
 
-        scroll = view.findViewById(R.id.server_settings_overview_scroll)
-        icon = view.findViewById(R.id.server_settings_overview_icon)
-        iconText = view.findViewById(R.id.server_settings_overview_icon_text)
-        iconLabel = view.findViewById(R.id.icon_label)
-        iconRemove = view.findViewById(R.id.server_settings_overview_icon_remove)
-        nameInput = view.findViewById(R.id.overview_name)
-        afkChannel = view.findViewById(R.id.afk_channel)
-        afkChannelWrap = view.findViewById(R.id.afk_channel_wrap)
-        afkTimeout = view.findViewById(R.id.afk_timeout)
-        afkTimeoutWrap = view.findViewById(R.id.afk_timeout_wrap)
-        systemChannel = view.findViewById(R.id.system_channel)
-        systemChannelWrap = view.findViewById(R.id.systemChannel)
-        systemChannelJoin = view.findViewById(R.id.system_channel_join)
-        systemChannelJoinReplies = view.findViewById(R.id.system_channel_join_replies)
-        systemChannelBoost = view.findViewById(R.id.system_channel_boost)
-        notificationAll = view.findViewById(R.id.server_settings_overview_notification_all)
-        notificationOnlyMentions =
-            view.findViewById(R.id.server_settings_overview_notification_only_mentions)
-        save = view.findViewById(R.id.save)
+        scroll = binding.serverSettingsOverviewScroll
+        icon = binding.header.serverSettingsOverviewIcon
+        iconText = binding.header.serverSettingsOverviewIconText
+        iconLabel = binding.header.iconLabel
+        iconRemove = binding.header.serverSettingsOverviewIconRemove
+        nameInput = binding.header.overviewName
+        afkChannel = binding.afk.afkChannel
+        afkChannelWrap = binding.afk.afkChannelWrap
+        afkTimeout = binding.afk.afkTimeout
+        afkTimeoutWrap = binding.afk.afkTimeoutWrap
+        systemChannel = binding.systemChannel.systemChannel
+        systemChannelWrap = binding.systemChannel.systemChannelWrap
+        systemChannelJoin = binding.systemChannel.systemChannelJoin
+        systemChannelJoinReplies = binding.systemChannel.systemChannelJoinReplies
+        systemChannelBoost = binding.systemChannel.systemChannelBoost
+        notificationAll = binding.notifications.serverSettingsOverviewNotificationAll
+        notificationOnlyMentions = binding.notifications.serverSettingsOverviewNotificationOnlyMentions
+        save = binding.save
 
         iconLabel.text = SettingsStrings.render(
             view.context,
@@ -238,6 +240,11 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
         iconText.text = guild.shortName
         iconRemove.visibility = if (current.isNullOrBlank()) View.GONE else View.VISIBLE
         iconRemove.setOnClickListener { configureIcon(guild, null) }
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     private fun configureIcon(guild: Guild, updated: String?) {
@@ -438,7 +445,7 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
      */
     private fun saveChanges(viewState: ServerSettingsOverviewViewModel.ViewState.Loaded) {
         val guild = viewState.guild
-        val api = serializeNullsApi ?: RestAPI.apiOrNull ?: return
+        val api = RestAPI.apiSerializeNulls
 
         var systemChannelFlags = 0
         if (!state.get(systemChannelJoin.id, systemChannelJoin.isChecked())) {
@@ -584,21 +591,6 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
 
         /** The AFK timeouts Discord offers, in the row order the sheet's layout declares. */
         private val AFK_TIMEOUT_SECONDS = listOf(60, 300, 900, 1800, 3600)
-
-        /**
-         * Clearing the AFK or system channel means sending an explicit `null`, which only happens on
-         * a Gson built with `serializeNulls`. The reference keeps a second REST client for it
-         * (`RestAPI.apiSerializeNulls`); this project publishes one client whose Gson drops nulls, so
-         * the PATCH would silently leave the old channel in place.
-         *
-         * `RestAPIBuilder.build(serializeNulls = true)` already supports it — the store graph only
-         * has to publish the second client into this seam. The same stopgap exists at
-         * `widgets/guildcommunicationdisabled/start/WidgetEnableGuildCommunication.serializeNullsApi`;
-         * both should collapse into one `RestAPI.apiSerializeNulls`. Recorded in
-         * `docs/parity-audit/followups.md`.
-         */
-        @JvmStatic
-        var serializeNullsApi: RestAPIInterface? = null
 
         /** The label for an AFK timeout, or `""` for a value Discord does not offer. */
         internal fun afkTimeoutLabel(context: Context, seconds: Int): CharSequence = when (seconds) {

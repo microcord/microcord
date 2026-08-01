@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/colorBackgroundPrimary">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:fontFamily="?attr/font_display_bold"
+            android:text="@string/user_settings_banner_color_title"
+            android:textColor="?attr/colorHeaderPrimary"
+            android:textSize="16sp" />
+
+        <com.jaredrummler.android.colorpicker.ColorPickerView
+            android:id="@+id/profile_color_picker"
+            style="@style/cpv_ColorPickerViewStyle"
+            android:contentDescription="@string/user_settings_banner_color_title" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingTop="16dp">
+
+            <com.jaredrummler.android.colorpicker.ColorPanelView
+                android:id="@+id/profile_color_preview"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:importantForAccessibility="no"
+                app:cpv_colorShape="circle" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:background="@drawable/drawable_cpv_edit_text_background"
+                android:orientation="horizontal"
+                android:padding="8dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:text="#"
+                    android:textColor="?attr/colorTextMuted"
+                    android:textSize="16sp" />
+
+                <androidx.appcompat.widget.AppCompatEditText
+                    android:id="@+id/profile_color_hex"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@null"
+                    android:contentDescription="@string/user_settings_banner_color_title"
+                    android:digits="0123456789ABCDEFabcdef"
+                    android:fontFamily="monospace"
+                    android:imeOptions="actionGo"
+                    android:inputType="textNoSuggestions"
+                    android:maxLength="8"
+                    android:maxLines="1"
+                    android:textColor="?attr/colorTextMuted"
+                    android:textSize="16sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="end|center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/profile_color_use_default"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="?attr/bg_pressed_highlight"
+                android:fontFamily="?attr/font_primary_semibold"
+                android:padding="8dp"
+                android:text="@string/color_picker_use_default"
+                android:textColor="?attr/color_brand" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/profile_color_select"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="?attr/font_primary_semibold"
+                android:text="@string/select"
+                android:textAllCaps="false"
+                android:textColor="@color/white" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

@@ -1,8 +1,6 @@
 package com.discord.widgets.guildscheduledevent
 
 import android.app.Activity
-import android.app.DatePickerDialog
-import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -10,6 +8,7 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.text.format.DateUtils
 import android.view.View
+import android.widget.DatePicker
 import android.widget.TextView
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,9 +19,11 @@ import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.app.AppToast
 import com.discord.app.appViewModels
+import com.discord.dialogs.DatePickerDialog
 import com.discord.i18n.I18nHooks
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
+import com.discord.utilities.time.ClockFactory
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -98,17 +99,45 @@ class WidgetGuildScheduledEventSettings : AppFragment(R.layout.widget_guild_sche
         }
         topic.watch(viewModel::setTopic)
         description.watch(viewModel::setDescription)
-        startDate.setOnClickListener { currentState?.eventModel?.startDate?.let { showDatePicker(it, viewModel::setStartDate) } }
-        startTime.setOnClickListener { currentState?.eventModel?.startTime?.let { showTimePicker(it, viewModel::setStartTime) } }
+        parentFragmentManager.setFragmentResultListener(REQUEST_START_TIME, viewLifecycleOwner) { _, result ->
+            showDateErrorToast(
+                viewModel.setStartTime(
+                    result.getInt(GuildScheduledEventTimePickerDialog.RESULT_HOUR),
+                    result.getInt(GuildScheduledEventTimePickerDialog.RESULT_MINUTE),
+                ),
+            )
+        }
+        parentFragmentManager.setFragmentResultListener(REQUEST_END_TIME, viewLifecycleOwner) { _, result ->
+            showDateErrorToast(
+                viewModel.setEndTime(
+                    result.getInt(GuildScheduledEventTimePickerDialog.RESULT_HOUR),
+                    result.getInt(GuildScheduledEventTimePickerDialog.RESULT_MINUTE),
+                ),
+            )
+        }
+        startDate.setOnClickListener {
+            currentState?.eventModel?.startDate?.let {
+                showDatePicker(REQUEST_START_DATE, it, ClockFactory.get().currentTimeMillis())
+            }
+        }
+        startTime.setOnClickListener {
+            currentState?.eventModel?.startTime?.let { showTimePicker(REQUEST_START_TIME, it) }
+        }
         endDate.setOnClickListener {
             val model = currentState?.eventModel ?: return@setOnClickListener
-            showDatePicker(model.endDate ?: model.startDate, viewModel::setEndDate)
+            val defaultDate = GuildScheduledEventPickerDateTime
+                .generateDefaultEndDateTime(model.startDate, model.startTime).first
+            showDatePicker(
+                REQUEST_END_DATE,
+                model.endDate ?: defaultDate,
+                maxOf(model.startDate.toMillis(), ClockFactory.get().currentTimeMillis()),
+            )
         }
         endTime.setOnClickListener {
             val model = currentState?.eventModel ?: return@setOnClickListener
             val defaultTime = model.endTime ?: GuildScheduledEventPickerDateTime
                 .generateDefaultEndDateTime(model.startDate, model.startTime).second
-            showTimePicker(defaultTime, viewModel::setEndTime)
+            showTimePicker(REQUEST_END_TIME, defaultTime)
         }
         next.setOnClickListener { openPreview() }
     }
@@ -118,6 +147,10 @@ class WidgetGuildScheduledEventSettings : AppFragment(R.layout.widget_guild_sche
         viewModel.observeViewState()
             .bindToComponentLifecycle(this)
             .appSubscribe(WidgetGuildScheduledEventSettings::class.java) { configureUi(it) }
+        (parentFragmentManager.findFragmentByTag(DatePickerDialog::class.java.name) as? DatePickerDialog)?.let {
+            bindDatePicker(it)
+            view?.post { bindDatePicker(it) }
+        }
     }
 
     private fun configureUi(state: GuildScheduledEventSettingsViewModel.ViewState) {
@@ -174,17 +207,74 @@ class WidgetGuildScheduledEventSettings : AppFragment(R.layout.widget_guild_sche
     }
 
     private fun showDatePicker(
+        requestKey: String,
         date: GuildScheduledEventPickerDate,
-        setter: (Int, Int, Int) -> GuildScheduledEventSettingsViewModel.DateError?,
+        minDateMillis: Long,
     ) {
-        DatePickerDialog(requireContext(), { _, year, month, day -> setter(year, month, day) }, date.year, date.month, date.dayOfMonth).show()
+        val maxDateMillis = Calendar.getInstance().apply {
+            set(2100, Calendar.DECEMBER, 31)
+        }.timeInMillis
+        val dialog = DatePickerDialog.show(
+            parentFragmentManager,
+            getString(R.string.date),
+            date.toMillis(),
+            maxDateMillis,
+        ) { }
+        dialog.requireArguments().apply {
+            putString(ARG_DATE_REQUEST_KEY, requestKey)
+            putLong(ARG_DATE_MIN_MILLIS, minDateMillis)
+        }
+        parentFragmentManager.executePendingTransactions()
+        bindDatePicker(dialog)
+    }
+
+    private fun bindDatePicker(dialog: DatePickerDialog) {
+        val requestKey = dialog.arguments?.getString(ARG_DATE_REQUEST_KEY) ?: return
+        dialog.onDateSelected = { selectedDateMillis ->
+            val arguments = dialog.requireArguments()
+            if (arguments.containsKey(ARG_PENDING_DATE_MILLIS) &&
+                arguments.getLong(ARG_PENDING_DATE_MILLIS) == selectedDateMillis
+            ) {
+                arguments.remove(ARG_PENDING_DATE_MILLIS)
+                handleSelectedDate(requestKey, selectedDateMillis)
+            } else {
+                arguments.putLong(ARG_PENDING_DATE_MILLIS, selectedDateMillis)
+            }
+        }
+        dialog.view?.findViewById<DatePicker>(R.id.dialog_date_picker_input)?.minDate =
+            dialog.requireArguments().getLong(ARG_DATE_MIN_MILLIS)
+    }
+
+    private fun handleSelectedDate(requestKey: String, selectedDateMillis: Long) {
+        val selected = Calendar.getInstance().apply { timeInMillis = selectedDateMillis }
+        val year = selected.get(Calendar.YEAR)
+        val month = selected.get(Calendar.MONTH)
+        val day = selected.get(Calendar.DAY_OF_MONTH)
+        showDateErrorToast(
+            when (requestKey) {
+                REQUEST_START_DATE -> viewModel.setStartDate(year, month, day)
+                REQUEST_END_DATE -> viewModel.setEndDate(year, month, day)
+                else -> null
+            },
+        )
     }
 
     private fun showTimePicker(
+        requestKey: String,
         time: GuildScheduledEventPickerTime,
-        setter: (Int, Int) -> GuildScheduledEventSettingsViewModel.DateError?,
     ) {
-        TimePickerDialog(requireContext(), { _, hour, minute -> setter(hour, minute) }, time.hourOfDay, time.minute, false).show()
+        GuildScheduledEventTimePickerDialog.show(parentFragmentManager, requestKey, time)
+    }
+
+    private fun showDateErrorToast(error: GuildScheduledEventSettingsViewModel.DateError?) {
+        val message = when (error) {
+            GuildScheduledEventSettingsViewModel.DateError.START_DATE_IN_PAST -> R.string.guild_event_past_start_date
+            GuildScheduledEventSettingsViewModel.DateError.END_DATE_IN_PAST -> R.string.guild_event_past_end_date_1
+            GuildScheduledEventSettingsViewModel.DateError.END_DATE_BEFORE_START_DATE ->
+                R.string.guild_event_end_date_before_start_date
+            else -> return
+        }
+        AppToast.show(context, message)
     }
 
     private fun TextInputEditText.watch(update: (String) -> Unit) {
@@ -202,6 +292,13 @@ class WidgetGuildScheduledEventSettings : AppFragment(R.layout.widget_guild_sche
         private const val EXTRA_ENTITY_TYPE = "EXTRA_ENTITY_TYPE"
         private const val EXTRA_EXTERNAL_LOCATION = "EXTRA_EXTERNAL_LOCATION"
         private const val RESULT_QUIT = 2
+        private const val ARG_DATE_REQUEST_KEY = "guild_scheduled_event_date_request_key"
+        private const val ARG_DATE_MIN_MILLIS = "guild_scheduled_event_date_min_millis"
+        private const val ARG_PENDING_DATE_MILLIS = "guild_scheduled_event_pending_date_millis"
+        private const val REQUEST_START_DATE = "guild_scheduled_event_start_date"
+        private const val REQUEST_END_DATE = "guild_scheduled_event_end_date"
+        private const val REQUEST_START_TIME = "guild_scheduled_event_start_time"
+        private const val REQUEST_END_TIME = "guild_scheduled_event_end_time"
 
         @JvmStatic
         fun launch(

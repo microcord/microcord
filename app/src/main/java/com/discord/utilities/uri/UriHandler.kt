@@ -1,19 +1,15 @@
 package com.discord.utilities.uri
 
 import android.content.ActivityNotFoundException
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
-import android.view.LayoutInflater
-import android.view.View
-import androidx.appcompat.app.AlertDialog
 import androidx.browser.customtabs.CustomTabColorSchemeParams
 import androidx.browser.customtabs.CustomTabsIntent
+import androidx.fragment.app.FragmentActivity
 import com.discord.R
-import com.discord.databinding.LayoutUnhandledUriBinding
 import com.discord.stores.StoreStream
 import com.discord.utilities.color.ColorCompat
 
@@ -293,18 +289,14 @@ object UriHandler {
 
     /** Last resort: tell the user nothing on the device can open the link, and let them copy it. */
     private fun showUnhandledUrlDialog(context: Context, url: String) {
-        val binding = LayoutUnhandledUriBinding.inflate(LayoutInflater.from(context))
-        val dialog = AlertDialog.Builder(context).setView(binding.root).create()
-        binding.unhandledUriDisplay.text = url
-        binding.unhandledUriDisplay.setOnClickListener { view -> copyToClipboard(view, url) }
-        binding.unhandledUriOkay.setOnClickListener { dialog.dismiss() }
-        dialog.show()
-    }
-
-    private fun copyToClipboard(view: View, url: String) {
-        val clipboard = view.context
-            .getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        clipboard?.setPrimaryClip(ClipData.newPlainText(url, url))
+        val activity = generateSequence(context as Context?) { (it as? ContextWrapper)?.baseContext }
+            .filterIsInstance<FragmentActivity>()
+            .firstOrNull()
+        if (activity == null || activity.isFinishing) {
+            Log.w(TAG, "Unable to show the unhandled URI dialog without a FragmentActivity.")
+            return
+        }
+        UnhandledUriDialog.show(activity.supportFragmentManager, url)
     }
 
     private fun isChromeCustomTabsEnabled(): Boolean = runCatching {

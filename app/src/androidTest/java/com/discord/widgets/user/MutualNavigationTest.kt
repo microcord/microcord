@@ -8,6 +8,7 @@ import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import com.discord.R
 import com.discord.app.AppActivity
+import com.discord.models.user.CoreUser
 import com.discord.models.user.User
 import com.discord.stores.AuthNavigationState
 import com.discord.stores.StoreStream
@@ -15,7 +16,6 @@ import com.discord.widgets.friends.WidgetFriendsList
 import com.discord.widgets.home.WidgetHome
 import com.discord.widgets.tabs.NavigationTab
 import com.discord.widgets.tabs.WidgetTabsHost
-import com.google.gson.Gson
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -181,10 +181,7 @@ class MutualNavigationTest {
         assertTrue("Timed out waiting for navigation", condition())
     }
 
-    private fun user(): User = Gson().fromJson(
-        """{"id":$USER_ID,"username":"$USERNAME","discriminator":1}""",
-        User::class.java,
-    )
+    private fun user(): User = CoreUser(id = USER_ID, username = USERNAME, discriminator = 1)
 
     private companion object {
         const val USER_ID = 42L

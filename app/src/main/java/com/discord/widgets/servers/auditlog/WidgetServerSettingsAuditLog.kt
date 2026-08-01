@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.view.ContextThemeWrapper
 import android.view.View
-import android.widget.TextView
 import androidx.appcompat.widget.PopupMenu
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
@@ -15,7 +14,7 @@ import com.discord.api.channel.isTextyChannelType
 import com.discord.api.permission.Permission
 import com.discord.app.AppFragment
 import com.discord.app.AppToast
-import com.discord.app.AppViewFlipper
+import com.discord.databinding.WidgetServerSettingsAuditLogBinding
 import com.discord.models.domain.ModelAuditLogEntry
 import com.discord.models.domain.ModelAuditLogEntry.TargetType
 import com.discord.models.guild.Guild
@@ -52,18 +51,15 @@ import rx.Observable
  */
 class WidgetServerSettingsAuditLog : AppFragment(R.layout.widget_server_settings_audit_log) {
 
+    private var _binding: WidgetServerSettingsAuditLogBinding? = null
+    private val binding get() = checkNotNull(_binding)
+
     private var guildId: Long = INVALID_GUILD_ID
     private var adapter: WidgetServerSettingsAuditLogAdapter? = null
 
-    private lateinit var viewFlipper: AppViewFlipper
-    private lateinit var resultsFlipper: AppViewFlipper
-    private lateinit var userFilter: TextView
-    private lateinit var actionFilter: TextView
-    private lateinit var noLogsTitle: TextView
-    private lateinit var noLogsBody: TextView
-
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        _binding = WidgetServerSettingsAuditLogBinding.bind(view)
         setActionBarDisplayHomeAsUpEnabled()
 
         guildId = mostRecentIntent.getLongExtra(INTENT_EXTRA_GUILD_ID, INVALID_GUILD_ID)
@@ -79,21 +75,14 @@ class WidgetServerSettingsAuditLog : AppFragment(R.layout.widget_server_settings
         setActionBarSubtitle(mostRecentIntent.getStringExtra(INTENT_EXTRA_GUILD_NAME))
         configureFilterMenu()
 
-        viewFlipper = view.findViewById(R.id.server_settings_audit_logs_view_flipper)
-        resultsFlipper = view.findViewById(R.id.server_settings_audit_logs_view_results_flipper)
-        userFilter = view.findViewById(R.id.server_settings_audit_logs_user_filter)
-        actionFilter = view.findViewById(R.id.server_settings_audit_logs_action_filter)
-        noLogsTitle = view.findViewById(R.id.no_logs_title)
-        noLogsBody = view.findViewById(R.id.no_logs_body)
-
-        userFilter.setOnClickListener {
+        binding.serverSettingsAuditLogsUserFilter.setOnClickListener {
             WidgetServerSettingsAuditLogFilter.show(it.context, guildId, FILTER_TYPE_USER)
         }
-        actionFilter.setOnClickListener {
+        binding.serverSettingsAuditLogsActionFilter.setOnClickListener {
             WidgetServerSettingsAuditLogFilter.show(it.context, guildId, FILTER_TYPE_ACTION)
         }
 
-        val recycler = view.findViewById<RecyclerView>(R.id.server_settings_audit_logs_recycler)
+        val recycler = binding.serverSettingsAuditLogsRecycler
         recycler.addOnScrollListener(
             object : RecyclerView.OnScrollListener() {
                 override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
@@ -115,6 +104,13 @@ class WidgetServerSettingsAuditLog : AppFragment(R.layout.widget_server_settings
                     WidgetUserSheet.show(parentFragmentManager, userId, guildId = memberGuildId)
                 }
             }
+    }
+
+    override fun onDestroyView() {
+        binding.serverSettingsAuditLogsRecycler.adapter = null
+        adapter = null
+        _binding = null
+        super.onDestroyView()
     }
 
     /**
@@ -168,27 +164,31 @@ class WidgetServerSettingsAuditLog : AppFragment(R.layout.widget_server_settings
     }
 
     private fun configureUI(model: Model) {
+        if (_binding == null) return
         when (model) {
-            is Model.Loading -> viewFlipper.displayedChild = VIEW_INDEX_LOGS_LOADING
+            is Model.Loading ->
+                binding.serverSettingsAuditLogsViewFlipper.displayedChild = VIEW_INDEX_LOGS_LOADING
             is Model.Error -> {
                 adapter?.configure(emptyList())
-                viewFlipper.displayedChild = VIEW_INDEX_LOGS_CONTENT
-                resultsFlipper.displayedChild = RESULTS_VIEW_INDEX_NO_LOGS
-                noLogsTitle.setText(R.string.guild_settings_label_audit_log_error_title)
-                noLogsBody.setText(R.string.guild_settings_label_audit_log_error_body)
+                binding.serverSettingsAuditLogsViewFlipper.displayedChild = VIEW_INDEX_LOGS_CONTENT
+                binding.serverSettingsAuditLogsViewResultsFlipper.displayedChild = RESULTS_VIEW_INDEX_NO_LOGS
+                binding.noLogsTitle.setText(R.string.guild_settings_label_audit_log_error_title)
+                binding.noLogsBody.setText(R.string.guild_settings_label_audit_log_error_body)
             }
             // Losing View Audit Log while the screen is open is the same as never having reached it.
             is Model.Unauthorized -> appActivity?.onBackPressed()
             is Model.Loaded -> {
                 adapter?.configure(model.auditLogEntryItems)
-                viewFlipper.displayedChild = VIEW_INDEX_LOGS_CONTENT
-                userFilter.text = model.usernameFilterText
-                actionFilter.text = model.actionFilterText
-                noLogsTitle.setText(R.string.guild_settings_label_audit_log_empty_title)
-                noLogsBody.setText(R.string.guild_settings_label_audit_log_empty_body)
+                binding.serverSettingsAuditLogsViewFlipper.displayedChild = VIEW_INDEX_LOGS_CONTENT
+                binding.serverSettingsAuditLogsUserFilter.text = model.usernameFilterText
+                binding.serverSettingsAuditLogsActionFilter.text = model.actionFilterText
+                binding.noLogsTitle.setText(R.string.guild_settings_label_audit_log_empty_title)
+                binding.noLogsBody.setText(R.string.guild_settings_label_audit_log_empty_body)
                 // An empty result is not an empty log — it usually means the filters exclude
                 // everything, so the empty view sits *inside* the loaded state.
-                resultsFlipper.displayedChild = if (model.auditLogEntryItems.isEmpty()) {
+                binding.serverSettingsAuditLogsViewResultsFlipper.displayedChild = if (
+                    model.auditLogEntryItems.isEmpty()
+                ) {
                     RESULTS_VIEW_INDEX_NO_LOGS
                 } else {
                     RESULTS_VIEW_INDEX_LOGS

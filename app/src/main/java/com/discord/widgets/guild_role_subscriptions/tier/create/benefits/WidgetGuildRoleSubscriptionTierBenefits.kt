@@ -16,7 +16,9 @@ import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.views.StickyHeaderItemDecoration
 import com.discord.widgets.guild_role_subscriptions.getFormattedLabel
 import com.discord.widgets.guild_role_subscriptions.tier.create.GuildRoleSubscriptionTierViewModel
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.discord.widgets.hubs.RadioSelectorItem
+import com.discord.widgets.hubs.RadioSelectorItems
+import com.discord.widgets.hubs.WidgetRadioSelectorBottomSheet
 import com.google.android.material.radiobutton.MaterialRadioButton
 
 class WidgetGuildRoleSubscriptionTierBenefits :
@@ -116,11 +118,7 @@ class WidgetGuildRoleSubscriptionTierBenefits :
 
     private fun configureUI(state: GuildRoleSubscriptionTierBenefitsViewModel.ViewState) {
         latestViewState = state
-        // Adding requires the unreconstructed channel and emoji pickers. Existing benefit rows and
-        // free-trial controls remain fully functional.
-        benefitsAdapter.setItems(state.items.filterNot {
-            it is GuildRoleSubscriptionBenefitAdapterItem.AddBenefitItem
-        })
+        benefitsAdapter.setItems(state.items)
         channelSettings.visibility = if (state.canChangeChannelSettings) View.VISIBLE else View.GONE
         state.canAccessAllChannels?.let { canAccessAll ->
             channelSettings.setOnCheckedChangeListener(null)
@@ -156,7 +154,14 @@ class WidgetGuildRoleSubscriptionTierBenefits :
 
     override fun onAddBenefitItemClick(
         benefitAdapterItem: GuildRoleSubscriptionBenefitAdapterItem.AddBenefitItem,
-    ) = Unit
+    ) = WidgetGuildRoleSubscriptionTierBenefit.launch(
+        requireContext(),
+        benefitLauncher,
+        guildId,
+        benefitAdapterItem.type,
+        benefitAdapterItem.tierName,
+        null,
+    )
 
     override fun onFreeTrialToggle(isEnabled: Boolean) {
         tierViewModel.updateFreeTrialInterval(
@@ -166,27 +171,37 @@ class WidgetGuildRoleSubscriptionTierBenefits :
 
     override fun onActiveTrialUserLimitClick() {
         val options = latestViewState?.activeTrialUserLimitOptions.orEmpty()
-        val labels = options.map {
-            it?.toString()
-                ?: getString(R.string.guild_role_subscription_setup_tier_active_trial_user_limit_none_option)
-        }.toTypedArray()
-        MaterialAlertDialogBuilder(requireContext())
-            .setItems(labels) { dialog, index ->
-                tierViewModel.updateFreeTrialLimit(options[index])
-                dialog.dismiss()
-            }
-            .show()
+        val selected = latestViewState?.items?.filterIsInstance<GuildRoleSubscriptionBenefitAdapterItem.FreeTrialItem>()
+            ?.firstOrNull()?.activeTrialUserLimit
+        WidgetRadioSelectorBottomSheet.show(
+            parentFragmentManager,
+            RadioSelectorItems(
+                getString(R.string.guild_role_subscription_setup_tier_active_trial_user_limit_title),
+                options.mapIndexed { index, value ->
+                    RadioSelectorItem(
+                        index,
+                        value?.toString()
+                            ?: getString(R.string.guild_role_subscription_setup_tier_active_trial_user_limit_none_option),
+                        value == selected,
+                    )
+                },
+            ),
+        ) { index -> tierViewModel.updateFreeTrialLimit(options[index]) }
     }
 
     override fun onTrialIntervalClick() {
         val options = latestViewState?.trialIntervalOptions.orEmpty()
-        val labels = options.map { it.getFormattedLabel(requireContext()) }.toTypedArray()
-        MaterialAlertDialogBuilder(requireContext())
-            .setItems(labels) { dialog, index ->
-                tierViewModel.updateFreeTrialInterval(options[index])
-                dialog.dismiss()
-            }
-            .show()
+        val selected = latestViewState?.items?.filterIsInstance<GuildRoleSubscriptionBenefitAdapterItem.FreeTrialItem>()
+            ?.firstOrNull()?.trialInterval
+        WidgetRadioSelectorBottomSheet.show(
+            parentFragmentManager,
+            RadioSelectorItems(
+                getString(R.string.guild_role_subscription_setup_free_trial_time_limit_title),
+                options.mapIndexed { index, value ->
+                    RadioSelectorItem(index, value.getFormattedLabel(requireContext()).toString(), value == selected)
+                },
+            ),
+        ) { index -> tierViewModel.updateFreeTrialInterval(options[index]) }
     }
 
     private fun dpToPx(dp: Int): Int = (dp * resources.displayMetrics.density).toInt()

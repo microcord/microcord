@@ -1,21 +1,21 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# Retrofit and Gson inspect generic signatures and runtime annotations.
+-keepattributes Signature,InnerClasses,EnclosingMethod,*Annotation*
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# libdiscord.so and the recovered WebRTC bridge use exact JNI class, member, and field names.
+-keep class com.hammerandchisel.libdiscord.** { *; }
+-keep class co.discord.media_engine.** { *; }
+-keep class org.webrtc.** { *; }
+-keepclasseswithmembernames,includedescriptorclasses class * {
+    native <methods>;
+}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
-
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Gson's snake_case policy derives wire names from these Kotlin/JVM field names.
+-keepclassmembers,allowoptimization class com.discord.api.** { <fields>; }
+-keepclassmembers,allowoptimization class com.discord.models.** { <fields>; }
+-keepclassmembers,allowoptimization class com.discord.analytics.generated.** { <fields>; }
+-keepclassmembers,allowoptimization class com.discord.gateway.io.** { <fields>; }
+-keepclassmembers,allowoptimization class com.discord.gateway.GatewaySocket$** { <fields>; }
+-keepclassmembers,allowoptimization class com.discord.restapi.RestAPIParams$** { <fields>; }
+-keepclassmembers,allowoptimization class com.discord.rtcconnection.socket.io.** { <fields>; }
+-keepclassmembers,allowoptimization class com.discord.utilities.captcha.CaptchaErrorBody { <fields>; }
+-keepclassmembers,allowoptimization class com.discord.widgets.settings.billing.WidgetPaymentSourceEditDialog$StateEntry { <fields>; }

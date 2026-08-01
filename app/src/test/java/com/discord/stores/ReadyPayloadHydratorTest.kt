@@ -30,6 +30,18 @@ class ReadyPayloadHydratorTest {
     }
 
     @Test
+    fun unresolvedMembersAndPresencesArePreserved() {
+        val (guilds, channels) = stores()
+        val payload = gson.fromJson(UNRESOLVED_READY, ModelPayload::class.java)
+
+        val hydrated = ReadyPayloadHydrator(guilds, channels).hydrate(payload).guilds!!.single()
+
+        assertEquals(404L, hydrated.members!!.single().userId)
+        assertEquals(405L, hydrated.presences!!.single().userId)
+        assertNull(hydrated.presences!!.single().user)
+    }
+
+    @Test
     fun omittedGuildWithoutCacheReturnsError() {
         val (guilds, channels) = stores()
         val payload = gson.fromJson(OMITTED_READY, ModelPayload::class.java)
@@ -124,6 +136,16 @@ class ReadyPayloadHydratorTest {
                   {"id":10,"guild_id":1,"type":0,"name":"one","last_message_id":99},
                   {"id":11,"guild_id":1,"type":0,"name":"two","last_message_id":100}
                 ]
+              }]
+            }
+        """.trimIndent()
+        private val UNRESOLVED_READY = """
+            {
+              "users":[],
+              "guilds":[{
+                "id":1,"name":"Guild","owner_id":9,"features":[],
+                "members":[{"guild_id":1,"user_id":404,"roles":[],"pending":false}],
+                "presences":[{"user_id":405,"status":"online"}]
               }]
             }
         """.trimIndent()
