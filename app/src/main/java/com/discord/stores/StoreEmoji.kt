@@ -216,7 +216,7 @@ class StoreEmoji(
         // Sized up front because the picker rebuilds this on every keystroke of its search box.
         val emojiNameCounts: MutableMap<String, Int> =
             ShallowPartitionMap.create<String, Int>(usableCustomEmojiCount + namesMap.size)
-        val usableCustomEmojis = HashMap<Long, List<Emoji>>(sortedGuildIds.size + unsortedGuildIds.size)
+        val usableCustomEmojis = LinkedHashMap<Long, List<Emoji>>(sortedGuildIds.size + unsortedGuildIds.size)
         val emojiIdsMap: MutableMap<String, Emoji> =
             ShallowPartitionMap.create<String, Emoji>(usableCustomEmojiCount + unicodeEmojiCount)
 

@@ -209,7 +209,7 @@ open class ModelEmojiCustom : Emoji {
 
         /** Set once at startup from the CDN host; see `IconUtils.CDN_HOST`. */
         @JvmStatic
-        var emojiUriFormat: String = ""
+        var emojiUriFormat: String = "${IconUtils.CDN_HOST}/emojis/%s.%s?size=%s&quality=lossless"
             private set
 
         @JvmStatic

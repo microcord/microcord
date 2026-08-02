@@ -1553,3 +1553,6 @@ while talking and logs contain `Setting screenshare true` followed by nonzero ou
   button from disappearing.
 - Focused gateway/video/store tests and `:app:assembleDebug` pass; latest debug APK was installed on
   device `188b1209`.
+- `ModelNotificationSettingsTypeAdapter` now treats explicit JSON nulls like absent fields across
+  guild and channel-override settings. `ModelNotificationSettingsTest.explicitNullsUseWireDefaults`
+  covers the READY payload regression; focused test and debug APK build pass.

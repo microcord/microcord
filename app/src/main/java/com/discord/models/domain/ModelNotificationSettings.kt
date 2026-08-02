@@ -195,33 +195,37 @@ private class ModelNotificationSettingsTypeAdapter(private val gson: Gson) : Typ
         val json = JsonParser.parseReader(reader).asJsonObject
         val muteConfig = json["mute_config"]?.takeUnless { it.isJsonNull }
             ?.let { gson.fromJson(it, ModelMuteConfig::class.java) }
-        val overrides = json["channel_overrides"]?.asJsonArray?.map { element ->
+        val overrides = json["channel_overrides"]?.takeUnless { it.isJsonNull }?.asJsonArray?.map { element ->
             val value = element.asJsonObject
             val overrideMuteConfig = value["mute_config"]?.takeUnless { it.isJsonNull }
                 ?.let { gson.fromJson(it, ModelMuteConfig::class.java) }
-            val muted = value["muted"]?.asBoolean ?: false
+            val muted = value["muted"]?.takeUnless { it.isJsonNull }?.asBoolean ?: false
             ModelNotificationSettings.ChannelOverride(
                 muted,
                 overrideMuteConfig,
                 muted && overrideMuteConfig?.endTimeMs?.let { it <= System.currentTimeMillis() } != true,
-                value["message_notifications"]?.asInt ?: ModelNotificationSettings.FREQUENCY_UNSET,
-                value["flags"]?.asInt ?: ModelNotificationSettings.NEW_FORUM_POSTS_UNSET,
-                value["channel_id"]?.asLong ?: 0,
+                value["message_notifications"]?.takeUnless { it.isJsonNull }?.asInt
+                    ?: ModelNotificationSettings.FREQUENCY_UNSET,
+                value["flags"]?.takeUnless { it.isJsonNull }?.asInt
+                    ?: ModelNotificationSettings.NEW_FORUM_POSTS_UNSET,
+                value["channel_id"]?.takeUnless { it.isJsonNull }?.asLong ?: 0,
             )
         }.orEmpty()
-        val muted = json["muted"]?.asBoolean ?: false
+        val muted = json["muted"]?.takeUnless { it.isJsonNull }?.asBoolean ?: false
         return ModelNotificationSettings(
-            json["suppress_everyone"]?.asBoolean ?: false,
-            json["suppress_roles"]?.asBoolean ?: false,
+            json["suppress_everyone"]?.takeUnless { it.isJsonNull }?.asBoolean ?: false,
+            json["suppress_roles"]?.takeUnless { it.isJsonNull }?.asBoolean ?: false,
             muted,
             muteConfig,
             muted && muteConfig?.endTimeMs?.let { it <= System.currentTimeMillis() } != true,
-            json["mobile_push"]?.asBoolean ?: true,
-            json["message_notifications"]?.asInt ?: ModelNotificationSettings.FREQUENCY_UNSET,
-            json["guild_id"]?.asLong ?: 0,
+            json["mobile_push"]?.takeUnless { it.isJsonNull }?.asBoolean ?: true,
+            json["message_notifications"]?.takeUnless { it.isJsonNull }?.asInt
+                ?: ModelNotificationSettings.FREQUENCY_UNSET,
+            json["guild_id"]?.takeUnless { it.isJsonNull }?.asLong ?: 0,
             overrides,
-            json["version"]?.asInt ?: 0,
-            json["notify_highlights"]?.asInt ?: ModelNotificationSettings.HIGHLIGHTS_NULL,
+            json["version"]?.takeUnless { it.isJsonNull }?.asInt ?: 0,
+            json["notify_highlights"]?.takeUnless { it.isJsonNull }?.asInt
+                ?: ModelNotificationSettings.HIGHLIGHTS_NULL,
         )
     }
 

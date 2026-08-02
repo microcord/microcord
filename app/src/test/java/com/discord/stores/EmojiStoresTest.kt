@@ -149,6 +149,27 @@ class EmojiStoresTest {
         assertEquals("blob-1", set.emojiIndex.getValue("2").firstName)
     }
 
+    @Test fun customEmojiServersPreserveContextThenSortedGuildOrder() {
+        val store = newEmojiStore()
+        val thirdGuildId = GUILD_ID + 1
+        val set = store.buildUsableEmojiSet(
+            allCustomEmojis = mapOf(
+                GUILD_ID to mapOf(1L to emoji(1, "second", guildId = GUILD_ID)),
+                thirdGuildId to mapOf(2L to emoji(2, "third", guildId = thirdGuildId)),
+                CONTEXT_GUILD_ID to mapOf(3L to emoji(3, "first", guildId = CONTEXT_GUILD_ID)),
+            ),
+            emojiContext = StoreEmoji.EmojiContext.Chat(CONTEXT_GUILD_ID, CHANNEL_ID),
+            sortedGuildIds = listOf(GUILD_ID, CONTEXT_GUILD_ID, thirdGuildId),
+            isMePremium = true,
+            includeUnusableEmojis = false,
+            includeUnavailableEmojis = false,
+            hasExternalEmojiPermission = true,
+            favoriteEmojiIds = emptySet(),
+        )
+
+        assertEquals(listOf(CONTEXT_GUILD_ID, GUILD_ID, thirdGuildId), set.customEmojis.keys.toList())
+    }
+
     @Test fun withoutExternalEmojiPermissionOtherGuildsAreSkippedEntirely() {
         val store = newEmojiStore()
         val set = store.buildUsableEmojiSet(

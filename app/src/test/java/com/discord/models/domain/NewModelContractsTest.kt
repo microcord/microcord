@@ -22,6 +22,13 @@ import org.junit.Test
 
 /** Field-parity and wire-shape coverage for the models restored in this pass. */
 class NewModelContractsTest {
+    @Test
+    fun customEmojiUsesDiscordCdnWithoutStartupMutation() {
+        assertEquals(
+            "https://cdn.discordapp.com/emojis/42.webp?size=64&quality=lossless",
+            ModelEmojiCustom.getImageUri(42L, false, 64),
+        )
+    }
 
     private val gson = GsonBuilder()
         .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
