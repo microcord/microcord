@@ -195,6 +195,11 @@ class StoreMessagesLoader @JvmOverloads constructor(
      */
     @Synchronized
     @StoreThread
+    fun handleChannelSelected(channel: Channel?) =
+        handleChannelSelected(channel?.id?.takeUnless { channel.type == Channel.GUILD_FORUM } ?: 0L)
+
+    @Synchronized
+    @StoreThread
     fun handleChannelSelected(channelId: Long) {
         channelLoadedStateUpdate(selectedChannelId) { it.copy(isTouchedSinceLastJump = false) }
         selectedChannelId = channelId

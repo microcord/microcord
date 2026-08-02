@@ -10,12 +10,59 @@ import com.discord.models.domain.emoji.toCodePoints
 import com.discord.models.user.CoreUser
 import com.discord.models.user.MeUser
 import com.discord.nullserializable.NullSerializable
+import com.google.gson.FieldNamingPolicy
+import com.google.gson.GsonBuilder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UserProfileContractsTest {
+    @Test
+    fun parsesModernProfileThemeMetadata() {
+        val profile = GsonBuilder()
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .create()
+            .fromJson(
+                """{
+                    "user":{
+                        "id":"2","username":"target",
+                        "avatar_decoration_data":{"asset":"a_global","sku_id":"31","expires_at":null}
+                    },
+                    "guild_member":{
+                        "guild_id":"10","user":{"id":"2","username":"target"},"roles":[],
+                        "avatar_decoration_data":{"asset":"a_guild","sku_id":"32","expires_at":1740124800}
+                    },
+                    "user_profile":{"pronouns":"they/them","theme_colors":[1193046,6636321]},
+                    "guild_member_profile":{
+                        "guild_id":"10","pronouns":"","banner":"guild-banner",
+                        "theme_colors":[1122867,4478310],
+                        "emoji":{"id":"1090395834966880336","name":"meowlien","roles":[],"require_colons":true,"managed":false,"animated":false,"available":true},
+                        "profile_effect":{"sku_id":"33","expires_at":1740124800}
+                    }
+                }""".trimIndent(),
+                UserProfile::class.java,
+            )
+
+        assertEquals(listOf(1193046, 6636321), profile.userProfile?.themeColors)
+        assertEquals(10L, profile.guildMemberProfile?.guildId)
+        assertEquals("guild-banner", profile.guildMemberProfile?.banner)
+        assertEquals(1090395834966880336L, profile.guildMemberProfile?.emoji?.id)
+        assertEquals(33L, profile.guildMemberProfile?.profileEffect?.skuId)
+        assertEquals(1740124800L, profile.guildMemberProfile?.profileEffect?.expiresAt)
+        assertEquals("a_global", profile.user.avatarDecorationData?.asset)
+        assertEquals("a_guild", profile.guildMember?.avatarDecorationData?.asset)
+        assertEquals(
+            "https://cdn.discordapp.com/avatar-decoration-presets/a_guild.png?size=256&passthrough=true",
+            profile.guildMember?.avatarDecorationData?.cdnUrl(),
+        )
+        assertEquals(
+            "https://cdn.discordapp.com/avatar-decoration-presets/a_guild.png?size=256&passthrough=true",
+            loaded(null, false).copy(userProfile = profile).avatarDecorationUrl,
+        )
+    }
+
     @Test
     fun preservesConnectionAndPresenceContracts() {
         val account = ConnectedAccount(id = "42", name = "user", visibility = ConnectedAccount.VISIBLE, type = "github")
@@ -110,10 +157,229 @@ class UserProfileContractsTest {
         assertFalse(guildBanner.shouldShowGIFTag)
     }
 
-    private fun loaded(banner: String?, reducedMotion: Boolean) = UserProfileHeaderViewModel.ViewState.Loaded(
+    @Test
+    fun guildProfileBannerKeepsGuildScopeWithoutBreakingGlobalFallback() {
+        val member = GuildMember(
+            color = 0,
+            hoistRoleId = 0,
+            roles = emptyList(),
+            nick = null,
+            premiumSince = null,
+            pending = false,
+            joinedAt = null,
+            guildId = 10,
+            userId = 2,
+        )
+        val guildBanner = loaded("global-banner", false).copy(
+            guildMember = member,
+            userProfile = UserProfile(
+                userProfile = UserProfile.ProfileMetadata(banner = "global-banner"),
+                guildMemberProfile = UserProfile.ProfileMetadata(banner = "guild-banner"),
+            ),
+        )
+
+        assertEquals("guild-banner", guildBanner.effectiveBanner)
+        assertEquals(10L, guildBanner.effectiveBannerGuildId)
+
+        val globalFallback = guildBanner.copy(
+            userProfile = UserProfile(
+                userProfile = UserProfile.ProfileMetadata(banner = "global-banner"),
+                guildMemberProfile = UserProfile.ProfileMetadata(guildId = 10),
+            ),
+        )
+        assertEquals("global-banner", globalFallback.effectiveBanner)
+        assertNull(globalFallback.effectiveBannerGuildId)
+    }
+
+    @Test
+    fun profileThemeUsesGuildColorsAndBuildsOpaqueColors() {
+        val profile = UserProfile(
+            user = com.discord.api.user.User(2, "target"),
+            userProfile = UserProfile.ProfileMetadata(themeColors = listOf(0x112233, 0x445566)),
+            guildMemberProfile = UserProfile.ProfileMetadata(
+                guildId = 10,
+                banner = "guild-banner",
+                themeColors = listOf(0x123456, 0x654321),
+            ),
+        )
+        val user = CoreUser(id = 2, username = "target")
+        val state = UserProfileHeaderViewModel.mapStoreState(
+            UserProfileHeaderViewModel.StoreState(
+                meUser(), user, emptyMap(), emptyList(), null, null, profile,
+                allowAnimatedEmojis = true, reducedMotionEnabled = false, channel = null,
+            ),
+            null,
+        )
+
+        assertEquals(listOf(0x123456, 0x654321), state.themeColors)
+        assertEquals(listOf(0xFF123456.toInt(), 0xFF654321.toInt()), state.themeGradientColors)
+        assertEquals("guild-banner", state.banner)
+        assertEquals(10L, state.bannerGuildId)
+        assertNull(state.guildMember)
+        assertNull(loaded(null, false, listOf(0x123456)).themeGradientColors)
+        assertEquals(0xFF000000.toInt(), UserProfileHeaderViewModel.profileColorToArgb(0))
+        assertEquals(0xFFFFFFFF.toInt(), UserProfileHeaderViewModel.profileColorToArgb(0xFFFFFF))
+        assertNull(UserProfileHeaderViewModel.profileColorToArgb(-1))
+        assertNull(UserProfileHeaderViewModel.profileColorToArgb(0x1000000))
+    }
+
+    @Test
+    fun profileThemeDerivesDesktopModeSurfacesTextAndContrastButtons() {
+        val dark = ProfileThemeColors.from(0xFF123456.toInt(), 0xFF654321.toInt(), true)
+        assertTrue(dark.isDark)
+        assertEquals(0xFF1C1718.toInt(), dark.bodySurface)
+        assertEquals(dark.headerSurface, dark.bodySurface)
+        assertEquals(0x29000000, dark.sectionOverlay)
+        assertEquals(0x4D000000, dark.noteOverlay)
+        assertEquals(0x14FFFFFF, dark.borderOverlay)
+        assertEquals(0xF5FFFFFF.toInt(), dark.textDefault)
+        assertTrue(ProfileThemeColors.contrastRatio(dark.textDefault, dark.bodySurface) >= 4.5)
+        assertEquals(0xFF123456.toInt(), dark.button)
+
+        val light = ProfileThemeColors.from(0xFF123456.toInt(), 0xFF654321.toInt(), false)
+        assertEquals(dark, light)
+
+        val bright = ProfileThemeColors.from(0xFFF0F0F0.toInt(), 0xFFE0D0C0.toInt(), false)
+        assertFalse(bright.isDark)
+        assertEquals(0xFFE9E0D8.toInt(), bright.bodySurface)
+        assertEquals(0x3DFFFFFF, bright.sectionOverlay)
+        assertEquals(0xF5000000.toInt(), bright.textDefault)
+        assertTrue(ProfileThemeColors.contrastRatio(bright.textDefault, bright.bodySurface) >= 4.5)
+        assertEquals(0xFF363636.toInt(), bright.button)
+
+        assertEquals(
+            0xFF003BBE.toInt(),
+            ProfileThemeColors.from(0xFF5865F2.toInt(), 0xFF000000.toInt(), true).button,
+        )
+        assertEquals(
+            0xFF424242.toInt(),
+            ProfileThemeColors.from(0xFFFFFFFF.toInt(), 0xFF000000.toInt(), true).button,
+        )
+        assertEquals(
+            0xFF555555.toInt(),
+            ProfileThemeColors.from(0xFF000000.toInt(), 0xFF000000.toInt(), true).button,
+        )
+    }
+
+    @Test
+    fun guildProfileEffectWinsWithoutAGuildMember() {
+        val global = UserProfile.ProfileEffect(1)
+        val guild = UserProfile.ProfileEffect(2)
+        val state = loaded(null, false).copy(
+            userProfile = UserProfile(
+                userProfile = UserProfile.ProfileMetadata(profileEffect = global),
+                guildMemberProfile = UserProfile.ProfileMetadata(guildId = 10, profileEffect = guild),
+            ),
+        )
+
+        assertNull(state.guildMember)
+        assertEquals(guild, state.profileEffect)
+        assertEquals(1, UserProfile.ProfileEffectItem.TYPE)
+    }
+
+    @Test
+    fun parsesProfileEffectProductLayers() {
+        val gson = GsonBuilder()
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .create()
+        val effect = gson.fromJson(
+            """{"sku_id":"4","expires_at":null}""",
+            UserProfile.ProfileEffect::class.java,
+        )
+        val product = gson.fromJson(
+            """{
+                "sku_id":"4",
+                "name":"fixture",
+                "summary":"fixture summary",
+                "store_listing_id":"4",
+                "styles":{
+                    "background_colors":[4620287,1396431],
+                    "button_colors":[5793266,5793266],
+                    "confetti_colors":[43772,15774258,16414587,3000177,9739511]
+                },
+                "preview_assets":null,
+                "items":[{
+                    "sku_id":"4","type":1,
+                    "title":"fixture","description":"fixture summary",
+                    "accessibilityLabel":"Animated profile effect",
+                    "animationType":2,
+                    "thumbnailPreviewSrc":"https://cdn.example/assets/content/thumbnail",
+                    "reducedMotionSrc":"https://cdn.example/assets/content/reduced",
+                    "effects":[{
+                        "src":"https://cdn.example/assets/content/layer-one","loop":false,
+                        "height":880,"width":450,"duration":4980,"start":0,"loopDelay":0,
+                        "position":{"x":0,"y":0},"zIndex":100,"randomizedSources":[]
+                    },{
+                        "src":"https://cdn.example/assets/content/layer-two","loop":true,
+                        "height":880,"width":450,"duration":5000,"start":6500,"loopDelay":1500,
+                        "position":{"x":0,"y":0},"zIndex":101,"randomizedSources":[]
+                    }]
+                }],
+                "type":1,"premium_type":0,"category_sku_id":"5",
+                "google_sku_ids":{"5":"fixture-five","7":"fixture-seven"},
+                "is_first_party":true
+            }""".trimIndent(),
+            UserProfile.ProfileEffectProduct::class.java,
+        )
+
+        assertEquals(4L, effect.skuId)
+        assertNull(effect.expiresAt)
+        val item = product.items.single()
+        assertEquals(4L, item.skuId)
+        assertEquals(2, item.animationType)
+        assertEquals("https://cdn.example/assets/content/reduced", item.reducedMotionSrc)
+        assertEquals(2, item.effects.size)
+        assertFalse(item.effects.first().loop)
+        assertEquals(4980L, item.effects.first().duration)
+        assertEquals(0L, item.effects.first().start)
+        assertEquals(100, item.effects.first().zIndex)
+        assertTrue(item.effects.last().loop)
+        assertEquals(5000L, item.effects.last().duration)
+        assertEquals(6500L, item.effects.last().start)
+        assertEquals(1500L, item.effects.last().loopDelay)
+        assertEquals(101, item.effects.last().zIndex)
+        assertTrue(item.effects.all { it.randomizedSources.orEmpty().isEmpty() })
+        assertTrue(item.effects.all { it.src.substringAfterLast('/').contains('.') == false })
+        val layerWithoutRandomizedSources = gson.fromJson(
+            """{"src":"https://cdn.example/layer","loop":false}""",
+            UserProfile.ProfileEffectLayer::class.java,
+        )
+        assertTrue(layerWithoutRandomizedSources.randomizedSources.orEmpty().isEmpty())
+    }
+
+    @Test
+    fun profileDecorationUsesTheAvatarDecorationCdnAndReducedMotionFallback() {
+        val profile = UserProfile(
+            user = com.discord.api.user.User(
+                2,
+                "target",
+                avatarDecorationData = com.discord.api.user.AvatarDecorationData("a_frame", 3),
+            ),
+        )
+        val animated = loaded(null, false).copy(userProfile = profile)
+        val reduced = animated.copy(reducedMotionEnabled = true)
+
+        assertEquals(
+            "https://cdn.discordapp.com/avatar-decoration-presets/a_frame.png?size=256&passthrough=true",
+            animated.avatarDecorationUrl,
+        )
+        assertEquals(
+            "https://cdn.discordapp.com/avatar-decoration-presets/a_frame.png?size=256&passthrough=false",
+            reduced.avatarDecorationUrl,
+        )
+        assertEquals(96, UserProfileHeaderView.DECORATION_SIZE_DP)
+    }
+
+    private fun loaded(
+        banner: String?,
+        reducedMotion: Boolean,
+        themeColors: List<Int>? = null,
+    ) = UserProfileHeaderViewModel.ViewState.Loaded(
         user = CoreUser(id = 2, username = "target"),
         banner = banner,
+        bannerGuildId = null,
         bannerColorHex = null,
+        themeColors = themeColors,
         guildMember = null,
         guildMembersForAka = emptyList(),
         presence = null,

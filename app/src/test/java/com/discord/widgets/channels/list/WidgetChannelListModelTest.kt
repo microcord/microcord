@@ -2,22 +2,36 @@ package com.discord.widgets.channels.list
 
 import com.discord.api.channel.Channel
 import com.discord.api.permission.Permission
+import com.discord.api.user.Collectibles
+import com.discord.api.user.Nameplate
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.api.voice.state.VoiceState
 import com.discord.models.domain.ModelNotificationSettings
+import com.discord.models.domain.ModelPayload
 import com.discord.models.member.GuildMember
 import com.discord.models.user.CoreUser
+import com.discord.stores.Dispatcher
+import com.discord.stores.StoreChannels
 import com.discord.stores.StoreThreadsActiveJoined.ActiveJoinedThread
+import com.discord.stores.StoreUser
+import com.discord.stores.StoreV2DispatchHandler
+import com.discord.stores.updates.ObservationDeck
+import com.discord.utilities.persister.Persister
 import com.discord.widgets.channels.list.items.ChannelListItem
 import com.discord.widgets.channels.list.items.ChannelListItemCategory
+import com.discord.widgets.channels.list.items.ChannelListItemPrivate
 import com.discord.widgets.channels.list.items.ChannelListItemTextChannel
 import com.discord.widgets.channels.list.items.ChannelListItemThread
 import com.discord.widgets.channels.list.items.ChannelListItemVoiceChannel
 import com.discord.widgets.channels.list.items.ChannelListItemVoiceUser
+import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.BeforeClass
 import org.junit.Test
+import rx.Observable
+import rx.schedulers.TestScheduler
 
 /**
  * Covers the row-building rules that are easy to break and impossible to see without a device:
@@ -195,6 +209,50 @@ class WidgetChannelListModelTest {
     }
 
     @Test
+    fun `ready users hydrate the shipping direct message row nameplate`() {
+        val scheduler = TestScheduler()
+        val deck = ObservationDeck()
+        val dispatcher = Dispatcher(scheduler)
+        val users = StoreUser(dispatcher = dispatcher, observationDeck = deck)
+        val channels = StoreChannels(dispatcher, deck)
+        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(users, channels), deck))
+        val nameplate = Nameplate("legacy", 9, "plate", "sky")
+        val payload = ModelPayload().apply {
+            me = com.discord.api.user.User(1, "me")
+            privateChannels = listOf(channel(5, Channel.DM, recipientIds = listOf(7)))
+            this.users = listOf(
+                com.discord.api.user.User(7, "recipient", collectibles = Collectibles(nameplate)),
+            )
+        }
+        dispatcher.schedule {
+            users.handleConnectionOpen(payload)
+            channels.handleConnectionOpen(payload)
+        }
+        scheduler.triggerActions()
+
+        val model = WidgetChannelListModel.privateListBuilder(
+            channels.getChannelsForGuild(0).values.toList(),
+            selectedChannelId = 0,
+            presences = emptyMap(),
+            mentionCounts = emptyMap(),
+            streamingUserIds = emptySet(),
+            notificationSettings = ModelNotificationSettings(),
+            users = users.getUsers(),
+        )
+
+        val row = model.items.filterIsInstance<ChannelListItemPrivate>().single()
+        assertEquals(nameplate, row.nameplate)
+        assertEquals(
+            "https://cdn.discordapp.com/media/v1/collectibles-shop/9/static",
+            row.nameplate?.staticImageUrl(),
+        )
+
+        dispatcher.schedule { users.handleUserUpdated(com.discord.api.user.User(7, "renamed")) }
+        scheduler.triggerActions()
+        assertEquals(nameplate, users.getUsers()[7]?.collectibles?.nameplate)
+    }
+
+    @Test
     fun `a thread is dropped when its parent channel is hidden`() {
         val parent = channel(2, Channel.GUILD_TEXT)
         val thread = channel(3, Channel.PUBLIC_THREAD, parentId = 2)
@@ -306,10 +364,12 @@ class WidgetChannelListModelTest {
         parentId: Long = 0,
         name: String = "channel-$id",
         lastMessageId: Long = 0,
+        recipients: List<com.discord.api.user.User>? = null,
+        recipientIds: List<Long>? = null,
     ) = Channel(
         topic = null, type = type, guildId = GUILD_ID, name = name,
         lastMessageId = lastMessageId,
-        id = id, ownerId = 0, recipientIds = null, recipients = null, position = position,
+        id = id, ownerId = 0, recipientIds = recipientIds, recipients = recipients, position = position,
         permissionOverwrites = null, userLimit = 0, bitrate = 0, icon = null,
         originChannelId = 0, applicationId = 0, nicks = null, nsfw = false,
         parentId = parentId, memberListId = null, rateLimitPerUser = 0,
@@ -320,5 +380,11 @@ class WidgetChannelListModelTest {
 
     private companion object {
         private const val GUILD_ID = 1L
+
+        @JvmStatic
+        @BeforeClass
+        fun initializePersister() {
+            Persister.init(Files.createTempDirectory("channel-list-model").toFile(), Observable.never())
+        }
     }
 }

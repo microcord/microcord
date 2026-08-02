@@ -11,6 +11,8 @@ import com.discord.models.domain.ModelUserAffinities
 import com.discord.models.domain.ModelUserAffinity
 import com.discord.models.domain.ModelUserNote
 import com.discord.stores.updates.ObservationDeck
+import com.google.gson.FieldNamingPolicy
+import com.google.gson.GsonBuilder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -49,6 +51,107 @@ class UserProfileNotesSuggestionsAffinitiesTest {
         harness.dispatcher.schedule { store.handlePreLogout() }
         harness.run()
         assertEquals(StoreUserProfile.EMPTY_PROFILE, store.getUserProfile(1))
+    }
+
+    @Test
+    fun profileEffectMetadataIsFetchedOnceCachedAndRebound() {
+        val harness = Harness()
+        lateinit var profileLoaded: (UserProfile) -> Unit
+        val effectRequests = mutableListOf<
+            Triple<Long, (UserProfile.ProfileEffectProduct) -> Unit, () -> Unit>,
+        >()
+        val store = StoreUserProfile(
+            harness.dispatcher,
+            harness.deck,
+            fetchProfile = { _, _, _, success, _ -> profileLoaded = success },
+            fetchProfileEffect = { skuId, success, failure ->
+                effectRequests += Triple(skuId, success, failure)
+            },
+        )
+        harness.register(store)
+        val observed = mutableListOf<UserProfile>()
+        store.observeUserProfile(1).subscribe(observed::add)
+
+        store.fetchProfile(1)
+        harness.run()
+        profileLoaded(
+            UserProfile(
+                user = User(1, "one"),
+                userProfile = UserProfile.ProfileMetadata(profileEffect = UserProfile.ProfileEffect(7)),
+                guildMemberProfile = UserProfile.ProfileMetadata(profileEffect = UserProfile.ProfileEffect(7)),
+            ),
+        )
+        harness.run()
+
+        assertEquals(1, effectRequests.size)
+        assertEquals(7L, effectRequests.single().first)
+        val unresolved = store.getUserProfile(1)
+        assertEquals(null, unresolved.userProfile?.profileEffect?.product)
+
+        val product = GsonBuilder()
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .create()
+            .fromJson(
+                """{
+                    "sku_id":"7","name":"fixture","type":121,
+                    "items":[{
+                        "sku_id":"7","type":1,"animationType":2,
+                        "staticFrameSrc":"https://cdn.example/static.png",
+                        "reducedMotionSrc":"https://cdn.example/reduced.png",
+                        "effects":[{
+                            "src":"https://cdn.example/layer.png","loop":true,
+                            "duration":5000,"start":13000,"loopDelay":5000,"zIndex":2,
+                            "randomizedSources":[{"src":"https://cdn.example/random.png"}]
+                        }]
+                    }]
+                }""".trimIndent(),
+                UserProfile.ProfileEffectProduct::class.java,
+            )
+        effectRequests.single().second(product)
+        harness.run()
+
+        assertEquals(product, store.getUserProfile(1).userProfile?.profileEffect?.product)
+        assertEquals(product, store.getUserProfile(1).guildMemberProfile?.profileEffect?.product)
+        assertEquals(
+            "https://cdn.example/layer.png",
+            observed.last().userProfile?.profileEffect?.product?.items?.single()?.effects?.single()?.src,
+        )
+        assertEquals(null, unresolved.userProfile?.profileEffect?.product)
+
+        store.fetchProfile(2)
+        harness.run()
+        profileLoaded(
+            UserProfile(
+                user = User(2, "two"),
+                userProfile = UserProfile.ProfileMetadata(profileEffect = UserProfile.ProfileEffect(7)),
+            ),
+        )
+        harness.run()
+        assertEquals(1, effectRequests.size)
+        assertEquals(product, store.getUserProfile(2).userProfile?.profileEffect?.product)
+
+        store.fetchProfile(3)
+        harness.run()
+        profileLoaded(
+            UserProfile(
+                user = User(3, "three"),
+                userProfile = UserProfile.ProfileMetadata(profileEffect = UserProfile.ProfileEffect(8)),
+            ),
+        )
+        harness.run()
+        effectRequests.last().third()
+        harness.run()
+        store.fetchProfile(3)
+        harness.run()
+        profileLoaded(
+            UserProfile(
+                user = User(3, "three"),
+                userProfile = UserProfile.ProfileMetadata(profileEffect = UserProfile.ProfileEffect(8)),
+            ),
+        )
+        harness.run()
+        assertEquals(3, effectRequests.size)
+        assertEquals(null, store.getUserProfile(3).userProfile?.profileEffect?.product)
     }
 
     @Test

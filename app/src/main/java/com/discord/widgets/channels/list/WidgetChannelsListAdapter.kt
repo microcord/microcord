@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.util.TypedValue
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AccelerateDecelerateInterpolator
@@ -26,6 +27,7 @@ import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
+import com.discord.api.channel.getDMRecipient
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isDM
@@ -56,6 +58,7 @@ import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.utilities.view.text.LinkifiedTextView
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
+import com.discord.views.NameplateView
 import com.discord.views.StatusView
 import com.discord.views.ThemedColor
 import com.discord.views.VoiceUserLimitView
@@ -878,6 +881,9 @@ class WidgetChannelsListAdapter(
             itemView.findViewById(R.id.channels_list_item_private_mentions)
         private val name: TextView = itemView.findViewById(R.id.channels_list_item_private_name)
         private val tag: TextView = itemView.findViewById(R.id.channels_list_item_private_tag)
+        private val nameplate: NameplateView =
+            itemView.findViewById(R.id.channels_list_item_private_nameplate)
+        private val content: View = itemView.findViewById(R.id.channels_list_item_private_content)
 
         override fun onConfigure(position: Int, data: ChannelListItem) {
             super.onConfigure(position, data)
@@ -893,7 +899,19 @@ class WidgetChannelsListAdapter(
 
             root.setOnLongClickListenerConsumeClick { adapter.onSelectChannelOptions(channel) }
             root.setOnClickListener { adapter.onSelectChannel(channel) }
+            root.setOnHoverListener { _, event ->
+                nameplate.setNameplateHovered(
+                    event.action == MotionEvent.ACTION_HOVER_ENTER || event.action == MotionEvent.ACTION_HOVER_MOVE,
+                )
+                false
+            }
             root.contentDescription = contentDescription(item, channelName)
+            nameplate.bind(
+                item.nameplate ?: channel.getDMRecipient()?.collectibles?.nameplate,
+                NameplateView.Placement.CHANNEL,
+                item.selected,
+                content,
+            )
 
             name.text = channelName
             name.setTextColor(textColor(item))

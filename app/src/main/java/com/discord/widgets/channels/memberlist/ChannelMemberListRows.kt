@@ -3,6 +3,7 @@ package com.discord.widgets.channels.memberlist
 import com.discord.api.channel.Channel
 import com.discord.api.presence.ClientStatus
 import com.discord.api.role.GuildRole
+import com.discord.api.user.Nameplate
 import com.discord.models.domain.ModelGuildMemberListUpdate.Group
 import com.discord.models.member.GuildMember
 import com.discord.models.presence.Presence
@@ -38,6 +39,7 @@ sealed class ChannelMemberListRow(open val key: String) {
         val isOwner: Boolean,
         val isApplicationStreaming: Boolean = false,
         val canDisplayStatusEmoji: Boolean = true,
+        val nameplate: Nameplate? = guildMember?.collectibles?.nameplate ?: user.collectibles?.nameplate,
     ) : ChannelMemberListRow("member:${user.id}")
 
     data class PlaceholderHeader(override val key: String) : ChannelMemberListRow(key)

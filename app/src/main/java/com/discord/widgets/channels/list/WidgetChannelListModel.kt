@@ -325,8 +325,9 @@ data class WidgetChannelListModel(
                 ChannelListSources.streamingUserIds(),
                 StoreStream.getUserGuildSettings().observeGuildSettings(PRIVATE_CHANNELS_GUILD_ID),
                 StoreStream.getMessagesMostRecent().observeRecentMessageIds(),
+                StoreStream.getUsers().observeAllUsers(),
             ) { channels, selectedChannelId, presences, mentionCounts, streamingUserIds, settings,
-                mostRecentIds ->
+                mostRecentIds, users ->
                 privateListBuilder(
                     channels = channels.values.sortedWith(
                         Channel.getSortByMostRecent(mostRecentIds),
@@ -336,6 +337,7 @@ data class WidgetChannelListModel(
                     mentionCounts = mentionCounts,
                     streamingUserIds = streamingUserIds,
                     notificationSettings = settings,
+                    users = users,
                 )
             }.leadingEdgeThrottle(250L, TimeUnit.MILLISECONDS)
 
@@ -487,6 +489,7 @@ data class WidgetChannelListModel(
             mentionCounts: Map<Long, Int>,
             streamingUserIds: Set<Long>,
             notificationSettings: ModelNotificationSettings,
+            users: Map<Long, com.discord.models.user.User> = emptyMap(),
         ): WidgetChannelListModel {
             val rows = channels.map { channel ->
                 val recipientId = channel.getDMRecipient()?.id
@@ -497,6 +500,11 @@ data class WidgetChannelListModel(
                     mentionCount = mentionCounts[channel.id] ?: 0,
                     isApplicationStreaming = recipientId != null && recipientId in streamingUserIds,
                     muted = notificationSettings.getChannelOverride(channel.id)?.isMuted == true,
+                    nameplate = if (recipientId != null && recipientId in users) {
+                        users[recipientId]?.collectibles?.nameplate
+                    } else {
+                        channel.getDMRecipient()?.collectibles?.nameplate
+                    },
                 )
             }
             return WidgetChannelListModel(

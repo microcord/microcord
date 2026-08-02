@@ -29,6 +29,8 @@ data class User(
     val bio: NullSerializable<String>? = null,
     val bannerColor: NullSerializable<String>? = null,
     val globalName: String? = null,
+    val collectibles: Collectibles? = null,
+    val avatarDecorationData: AvatarDecorationData? = null,
 ) : Serializable {
     override fun toString() =
         "User(id=$id, username=$username, avatar=$avatar, banner=$banner, discriminator=$discriminator, " +
@@ -36,5 +38,5 @@ data class User(
             "email=<redacted>, verified=$verified, locale=$locale, nsfwAllowed=$nsfwAllowed, " +
             "mfaEnabled=$mfaEnabled, phone=<redacted>, analyticsToken=<redacted>, premiumType=$premiumType, " +
             "approximateGuildCount=$approximateGuildCount, member=$member, bio=$bio, bannerColor=$bannerColor, " +
-            "globalName=$globalName)"
+            "globalName=$globalName, collectibles=$collectibles, avatarDecorationData=$avatarDecorationData)"
 }

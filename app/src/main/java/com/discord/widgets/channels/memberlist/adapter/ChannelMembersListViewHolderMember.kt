@@ -1,6 +1,7 @@
 package com.discord.widgets.channels.memberlist.adapter
 
 import android.graphics.Color
+import android.view.MotionEvent
 import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
@@ -10,6 +11,7 @@ import com.discord.api.activity.ActivityType
 import com.discord.databinding.WidgetChannelMembersListItemUserBinding
 import com.discord.utilities.color.ColorCompat
 import com.discord.views.StatusView
+import com.discord.views.NameplateView
 import com.discord.views.UsernameView
 import com.facebook.drawee.view.SimpleDraweeView
 
@@ -20,6 +22,20 @@ class ChannelMembersListViewHolderMember(private val binding: WidgetChannelMembe
         binding.root.setOnLongClickListener(onLongClicked?.let { callback ->
             View.OnLongClickListener { callback(); true }
         })
+        binding.root.findViewById<NameplateView>(R.id.channel_members_list_item_nameplate).apply {
+            bind(
+                data.nameplate,
+                NameplateView.Placement.MEMBER_LIST,
+                selected = false,
+                binding.root.findViewById(R.id.channel_members_list_item_content_end),
+            )
+            binding.root.setOnHoverListener { _, event ->
+                setNameplateHovered(
+                    event.action == MotionEvent.ACTION_HOVER_ENTER || event.action == MotionEvent.ACTION_HOVER_MOVE,
+                )
+                false
+            }
+        }
         binding.root.findViewById<SimpleDraweeView>(R.id.channel_members_list_item_avatar).setImageURI(data.avatarUrl)
         binding.root.findViewById<UsernameView>(R.id.channel_members_list_item_name).apply {
             configureUsername(data.name)

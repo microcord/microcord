@@ -55,21 +55,48 @@ class UserProfileHeaderViewModel @JvmOverloads constructor(
             val reducedMotionEnabled: Boolean,
             val allowAnimationInReducedMotion: Boolean,
             val isMe: Boolean,
+            val bannerGuildId: Long? = null,
+            val themeColors: List<Int>? = null,
         ) : ViewState() {
             val hasGuildMemberAvatar = guildMember?.hasAvatar() == true
             val hasNickname = !guildMember?.nick.isNullOrBlank()
             val showMediumAvatar = hasGuildMemberAvatar && !hasNickname
             val showSmallAvatar = hasGuildMemberAvatar && hasNickname
             val shouldAnimateBanner = !reducedMotionEnabled || allowAnimationInReducedMotion
-            val effectiveBanner = guildMember?.bannerHash ?: banner
+            private val guildProfileBanner = userProfile.guildMemberProfile?.banner
+            val effectiveBanner = guildMember?.bannerHash
+                ?: guildProfileBanner
+                ?: userProfile.userProfile?.banner
+                ?: banner
+            val effectiveBannerGuildId = when {
+                guildMember?.hasBanner() == true -> guildMember.guildId
+                guildProfileBanner != null -> bannerGuildId
+                    ?: userProfile.guildMemberProfile?.guildId
+                    ?: guildMember?.guildId
+                else -> null
+            }
             val shouldAutoPlayBanner = shouldAnimateBanner && effectiveBanner?.let {
                 IconUtils.isDataUrlForGif(it) || IconUtils.isImageHashAnimated(it)
             } == true
-            val shouldShowGIFTag = reducedMotionEnabled && !allowAnimationInReducedMotion && banner?.startsWith("a_") == true
-            val isProfileLoaded = userProfile != UserProfile()
+            val shouldShowGIFTag = reducedMotionEnabled && !allowAnimationInReducedMotion &&
+                effectiveBanner?.let(IconUtils::isImageHashAnimated) == true
+            val themeGradientColors = (themeColors
+                ?: userProfile.guildMemberProfile?.themeColors
+                ?: userProfile.userProfile?.themeColors)
+                ?.takeIf { it.size == 2 }
+                ?.mapNotNull(::profileColorToArgb)
+                ?.takeIf { it.size == 2 }
+            val avatarDecorationData = userProfile.guildMember?.avatarDecorationData
+                ?: userProfile.user.avatarDecorationData
+            val avatarDecorationUrl = avatarDecorationData?.cdnUrl(passthrough = shouldAnimateBanner)
+            val profileEffect = userProfile.guildMemberProfile?.profileEffect
+                ?: userProfile.userProfile?.profileEffect
             val avatarColorId by lazy { user.avatar ?: user.discriminator.toString() }
             val guildMemberColorId by lazy { guildMember?.avatarHash ?: avatarColorId }
             val showAkas = guildMembersForAka.isNotEmpty() && !isMe
+
+            internal fun profileThemeColors(isDarkTheme: Boolean): ProfileThemeColors? =
+                themeGradientColors?.let { ProfileThemeColors.from(it[0], it[1], isDarkTheme) }
         }
     }
 
@@ -94,6 +121,9 @@ class UserProfileHeaderViewModel @JvmOverloads constructor(
     companion object {
         const val ME = -1L
 
+        internal fun profileColorToArgb(color: Int): Int? =
+            color.takeIf { it in 0..0xFFFFFF }?.or(0xFF000000.toInt())
+
         internal fun mapStoreState(storeState: StoreState, currentState: ViewState?): ViewState.Loaded {
             val userId = storeState.user.id
             val guildMember = storeState.userIdToGuildMemberMap[userId]
@@ -102,10 +132,16 @@ class UserProfileHeaderViewModel @JvmOverloads constructor(
             } else {
                 emptyList()
             }
+            val profileMetadata = storeState.userProfile.guildMemberProfile
+                ?: storeState.userProfile.userProfile
             return ViewState.Loaded(
                 user = storeState.user,
-                banner = storeState.userProfile.user.banner?.value,
-                bannerColorHex = storeState.userProfile.user.bannerColor?.value,
+                banner = profileMetadata?.banner ?: storeState.userProfile.user.banner?.value,
+                bannerGuildId = profileMetadata?.guildId,
+                bannerColorHex = storeState.userProfile.userProfile?.accentColor
+                    ?.let { "#%06X".format(it) }
+                    ?: storeState.userProfile.user.bannerColor?.value,
+                themeColors = profileMetadata?.themeColors,
                 guildMember = guildMember,
                 guildMembersForAka = guildMembersForAka,
                 presence = storeState.richPresence?.presence,
@@ -122,5 +158,180 @@ class UserProfileHeaderViewModel @JvmOverloads constructor(
                 isMe = userId == storeState.me.id,
             )
         }
+    }
+}
+
+internal data class ProfileThemeColors(
+    val primary: Int,
+    val headerSurface: Int,
+    val bodySurface: Int,
+    val sectionOverlay: Int,
+    val noteOverlay: Int,
+    val borderOverlay: Int,
+    val button: Int,
+    val textDefault: Int,
+    val textMuted: Int,
+    val textSubtle: Int,
+    val isDark: Boolean,
+) {
+    companion object {
+        private const val DARK_SECTION = 0x29000000
+        private const val LIGHT_SECTION = 0x3DFFFFFF
+        private const val DARK_NOTE = 0x4D000000
+        private const val LIGHT_NOTE = 0x4DFFFFFF
+        private const val DARK_BORDER = 0x14FFFFFF
+        private const val LIGHT_BORDER = 0x14000000
+
+        fun from(primary: Int, secondary: Int, isDarkTheme: Boolean): ProfileThemeColors {
+            // Desktop chooses the custom profile's mode from the primary color, independently of
+            // the app theme. Dark profiles get a dark derived surface and light text.
+            val profileIsDark = perceivedDarkness(primary) > 0.5
+            val surface = modalSurface(primary, secondary, profileIsDark)
+            return ProfileThemeColors(
+                primary = primary,
+                headerSurface = surface,
+                bodySurface = surface,
+                sectionOverlay = if (profileIsDark) DARK_SECTION else LIGHT_SECTION,
+                noteOverlay = if (profileIsDark) DARK_NOTE else LIGHT_NOTE,
+                borderOverlay = if (profileIsDark) DARK_BORDER else LIGHT_BORDER,
+                button = contrastButton(primary),
+                textDefault = if (profileIsDark) 0xF5FFFFFF.toInt() else 0xF5000000.toInt(),
+                textMuted = if (profileIsDark) 0xC2FFFFFF.toInt() else 0xC2000000.toInt(),
+                textSubtle = if (profileIsDark) 0xE0FFFFFF.toInt() else 0xE0000000.toInt(),
+                isDark = profileIsDark,
+            )
+        }
+
+        /** Discord adjusts LAB lightness in chroma.js steps until white contrast is between 7 and 10. */
+        private fun contrastButton(primary: Int): Int {
+            val lab = colorToLab(primary)
+            repeat(100) {
+                val color = labToColor(lab)
+                val contrast = contrast(color, 0xFFFFFFFF.toInt())
+                if (contrast in 7.0..10.0) return color
+                lab[0] = (lab[0] + if (contrast > 10.0) 18.0 else -18.0).coerceIn(0.0, 100.0)
+            }
+            return labToColor(lab)
+        }
+
+        private fun contrast(first: Int, second: Int): Double {
+            val firstLuminance = luminance(first)
+            val secondLuminance = luminance(second)
+            return (maxOf(firstLuminance, secondLuminance) + 0.05) /
+                (minOf(firstLuminance, secondLuminance) + 0.05)
+        }
+
+        private fun luminance(color: Int): Double {
+            fun channel(shift: Int): Double {
+                val value = ((color ushr shift) and 0xFF) / 255.0
+                return if (value <= 0.03928) value / 12.92
+                else Math.pow((value + 0.055) / 1.055, 2.4)
+            }
+            return channel(16) * 0.2126 + channel(8) * 0.7152 + channel(0) * 0.0722
+        }
+
+        private fun perceivedDarkness(color: Int): Double = 1.0 - (
+            0.299 * ((color ushr 16) and 0xFF) +
+                0.587 * ((color ushr 8) and 0xFF) +
+                0.114 * (color and 0xFF)
+            ) / 255.0
+
+        private fun colorToLab(color: Int): DoubleArray {
+            fun channel(shift: Int): Double {
+                val value = ((color ushr shift) and 0xFF) / 255.0
+                return if (value <= 0.04045) value / 12.92
+                else Math.pow((value + 0.055) / 1.055, 2.4)
+            }
+            val red = channel(16)
+            val green = channel(8)
+            val blue = channel(0)
+            val x = (red * 0.4124 + green * 0.3576 + blue * 0.1805) / 0.95047
+            val y = red * 0.2126 + green * 0.7152 + blue * 0.0722
+            val z = (red * 0.0193 + green * 0.1192 + blue * 0.9505) / 1.08883
+            fun pivot(value: Double) = if (value > 0.008856) Math.cbrt(value) else 7.787 * value + 16.0 / 116.0
+            val fx = pivot(x)
+            val fy = pivot(y)
+            val fz = pivot(z)
+            return doubleArrayOf(116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz))
+        }
+
+        private fun labToColor(lab: DoubleArray): Int {
+            val rgb = labToRgb(lab)
+            fun channel(value: Double) = Math.round(value * 255.0).toInt()
+            return (0xFF shl 24) or (channel(rgb[0]) shl 16) or (channel(rgb[1]) shl 8) or channel(rgb[2])
+        }
+
+        private fun labToRgb(lab: DoubleArray): DoubleArray {
+            val fy = (lab[0] + 16.0) / 116.0
+            val fx = lab[1] / 500.0 + fy
+            val fz = fy - lab[2] / 200.0
+            fun pivot(value: Double): Double {
+                val cube = value * value * value
+                return if (cube > 0.008856) cube else (value - 16.0 / 116.0) / 7.787
+            }
+            val x = 0.95047 * pivot(fx)
+            val y = pivot(fy)
+            val z = 1.08883 * pivot(fz)
+            fun channel(value: Double): Double {
+                val gamma = if (value <= 0.0031308) 12.92 * value
+                else 1.055 * Math.pow(value, 1.0 / 2.4) - 0.055
+                return gamma.coerceIn(0.0, 1.0)
+            }
+            val red = channel(x * 3.2406 - y * 1.5372 - z * 0.4986)
+            val green = channel(x * -0.9689 + y * 1.8758 + z * 0.0415)
+            val blue = channel(x * 0.0557 - y * 0.2040 + z * 1.0570)
+            return doubleArrayOf(red, green, blue)
+        }
+
+        private fun modalSurface(primary: Int, secondary: Int, dark: Boolean): Int {
+            val first = colorToLab(primary)
+            val second = colorToLab(secondary)
+            val mixed = labToRgb(DoubleArray(3) { (first[it] + second[it]) / 2.0 })
+            val hsl = rgbToHsl(mixed[0], mixed[1], mixed[2])
+            val roundedLightness = Math.round(hsl[2] * 100.0) / 100.0
+            hsl[2] = if (dark) roundedLightness.coerceIn(0.0, 0.1)
+            else roundedLightness.coerceIn(0.8, 1.0)
+            return hslToColor(hsl)
+        }
+
+        private fun colorToHsl(color: Int): DoubleArray {
+            val red = ((color ushr 16) and 0xFF) / 255.0
+            val green = ((color ushr 8) and 0xFF) / 255.0
+            val blue = (color and 0xFF) / 255.0
+            return rgbToHsl(red, green, blue)
+        }
+
+        private fun rgbToHsl(red: Double, green: Double, blue: Double): DoubleArray {
+            val max = maxOf(red, green, blue)
+            val min = minOf(red, green, blue)
+            val delta = max - min
+            val lightness = (max + min) / 2.0
+            if (delta == 0.0) return doubleArrayOf(0.0, 0.0, lightness)
+            val saturation = delta / (1.0 - kotlin.math.abs(2.0 * lightness - 1.0))
+            val hue = when (max) {
+                red -> 60.0 * (((green - blue) / delta) % 6.0)
+                green -> 60.0 * ((blue - red) / delta + 2.0)
+                else -> 60.0 * ((red - green) / delta + 4.0)
+            }
+            return doubleArrayOf(if (hue < 0) hue + 360.0 else hue, saturation, lightness)
+        }
+
+        private fun hslToColor(hsl: DoubleArray): Int {
+            val chroma = (1.0 - kotlin.math.abs(2.0 * hsl[2] - 1.0)) * hsl[1]
+            val x = chroma * (1.0 - kotlin.math.abs((hsl[0] / 60.0) % 2.0 - 1.0))
+            val (red, green, blue) = when (hsl[0]) {
+                in 0.0..<60.0 -> Triple(chroma, x, 0.0)
+                in 60.0..<120.0 -> Triple(x, chroma, 0.0)
+                in 120.0..<180.0 -> Triple(0.0, chroma, x)
+                in 180.0..<240.0 -> Triple(0.0, x, chroma)
+                in 240.0..<300.0 -> Triple(x, 0.0, chroma)
+                else -> Triple(chroma, 0.0, x)
+            }
+            val match = hsl[2] - chroma / 2.0
+            fun channel(value: Double) = Math.round((value + match) * 255.0).toInt().coerceIn(0, 255)
+            return (0xFF shl 24) or (channel(red) shl 16) or (channel(green) shl 8) or channel(blue)
+        }
+
+        internal fun contrastRatio(first: Int, second: Int) = contrast(first, second)
     }
 }

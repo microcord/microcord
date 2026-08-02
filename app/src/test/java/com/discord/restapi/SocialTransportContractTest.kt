@@ -36,6 +36,13 @@ class SocialTransportContractTest {
         api.userProfileGet(7, true, 9).toBlocking().single()
         assertRequest("GET", "/api/v9/users/7/profile?with_mutual_guilds=true&guild_id=9")
 
+        enqueue(
+            """{"items":[{"sku_id":"4","type":1,"animationType":1,"effects":[{"src":"https://cdn.example/layer","loop":true,"loopDelay":5000,"zIndex":2}]}]}""",
+        )
+        val effectProduct = api.getCollectiblesProduct(4, "en-US").toBlocking().single()
+        assertEquals(5000L, effectProduct.items.single().effects.single().loopDelay)
+        assertRequest("GET", "/api/v9/collectibles-products/4?locale=en-US")
+
         enqueue("[]")
         api.getRelationships(7).toBlocking().single()
         assertRequest("GET", "/api/v9/users/7/relationships")

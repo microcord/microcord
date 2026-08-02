@@ -1,5 +1,6 @@
 package com.discord.stores
 
+import com.discord.api.channel.Channel
 import com.discord.api.interaction.Interaction
 import com.discord.api.interaction.InteractionStateUpdate
 import com.discord.models.commands.Application
@@ -175,6 +176,19 @@ class MessageHistoryStoreTest {
 
         loader.handleBackgrounded(false)
         assertEquals(1, attempts)
+    }
+
+    @Test
+    fun forumParentSelectionDoesNotLoadMessageHistoryButItsPostDoes() {
+        val requests = mutableListOf<LoadRequest>()
+        val loader = loader(requests) { Result.success(emptyList()) }
+        loader.handleAuthToken("token")
+        loader.handleConnected(true)
+
+        loader.handleChannelSelected(channel(10, Channel.GUILD_FORUM))
+        loader.handleChannelSelected(channel(11, Channel.PUBLIC_THREAD))
+
+        assertEquals(listOf(11L), requests.map(LoadRequest::channelId))
     }
 
     @Test
@@ -401,6 +415,16 @@ class MessageHistoryStoreTest {
     }
 
     private fun message(id: Long, content: String = "message-$id") = Message(id = id, content = content)
+
+    private fun channel(id: Long, type: Int) = Channel(
+        topic = null, type = type, guildId = 1, name = "channel", lastMessageId = 0, id = id,
+        ownerId = 0, recipientIds = null, recipients = null, position = 0, permissionOverwrites = null,
+        userLimit = 0, bitrate = 0, icon = null, originChannelId = 0, applicationId = 0, nicks = null,
+        nsfw = false, parentId = 10, memberListId = null, rateLimitPerUser = 0,
+        defaultAutoArchiveDuration = null, rtcRegion = null, flags = null, guildHashes = null,
+        availableTags = null, appliedTags = null, threadMetadata = null, messageCount = null,
+        memberCount = null, memberIdsPreview = null, member = null,
+    )
 
     private fun commandSendData(nonce: Long) = ApplicationCommandLocalSendData(
         nonce = nonce,

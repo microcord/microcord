@@ -53,6 +53,7 @@ class StoreUser(
         payload.privateChannels.orEmpty().flatMap { it.recipients.orEmpty() }.forEach(::putUser)
         payload.relationships.orEmpty().mapNotNull(ModelUserRelationship::user).forEach(::putUser)
         payload.guilds.orEmpty().flatMap { it.members.orEmpty() }.map(GuildMember::user).forEach(::putUser)
+        payload.users.orEmpty().forEach(::updateUser)
         markChanged(MeUpdate, UsersUpdate)
     }
 
@@ -194,6 +195,7 @@ class StoreUser(
         bio = merge(old.bio, new.bio),
         bannerColor = merge(old.bannerColor, new.bannerColor),
         globalName = new.globalName,
+        collectibles = new.collectibles ?: old.collectibles,
     )
 
     private fun mergeMe(old: MeUser, new: ApiUser) = old.copy(
@@ -215,6 +217,7 @@ class StoreUser(
         bio = merge(old.bio, new.bio),
         bannerColor = merge(old.bannerColor, new.bannerColor),
         globalName = new.globalName,
+        collectibles = new.collectibles ?: old.collectibles,
     )
 
     private fun <T> merge(old: T?, new: NullSerializable<T>?): T? = when (new) {

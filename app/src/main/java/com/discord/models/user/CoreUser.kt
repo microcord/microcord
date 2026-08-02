@@ -1,6 +1,7 @@
 package com.discord.models.user
 
 import com.discord.api.premium.PremiumTier
+import com.discord.api.user.Collectibles
 import com.discord.nullserializable.NullSerializable
 
 data class CoreUser(
@@ -17,6 +18,7 @@ data class CoreUser(
     override val bio: String? = null,
     override val bannerColor: String? = null,
     override val globalName: String? = null,
+    override val collectibles: Collectibles? = null,
 ) : User {
     constructor(user: com.discord.api.user.User) : this(
         user.id,
@@ -32,6 +34,7 @@ data class CoreUser(
         user.bio?.value,
         user.bannerColor?.value,
         user.globalName,
+        user.collectibles,
     )
 
     companion object {
@@ -49,6 +52,7 @@ data class CoreUser(
             bio = mergeNullSerializable(oldUser.bio, newUser.bio),
             bannerColor = mergeNullSerializable(oldUser.bannerColor, newUser.bannerColor),
             globalName = newUser.globalName,
+            collectibles = newUser.collectibles ?: oldUser.collectibles,
         )
 
         private fun <T> mergeNullSerializable(old: T?, new: NullSerializable<T>?): T? = when (new) {

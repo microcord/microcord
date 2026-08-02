@@ -10,6 +10,7 @@ import com.discord.databinding.WidgetChannelMembersListItemHeaderBinding
 import com.discord.databinding.WidgetChannelMembersListItemLoadingBinding
 import com.discord.databinding.WidgetChannelMembersListItemPlaceholderHeaderBinding
 import com.discord.databinding.WidgetChannelMembersListItemUserBinding
+import com.discord.api.user.Nameplate
 import com.discord.models.presence.Presence
 import com.discord.utilities.views.StickyHeaderItemDecoration
 import com.discord.widgets.channels.memberlist.WidgetChannelMembersListViewModel
@@ -152,6 +153,7 @@ class ChannelMembersListAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>(
             val isApplicationStreaming: Boolean,
             val canDisplayStatusEmoji: Boolean,
             val userFlags: Int,
+            val nameplate: Nameplate? = null,
         ) : Item(ViewType.MEMBER, userId)
         data class PlaceholderHeader(val listId: String) : Item(ViewType.PLACEHOLDER_HEADER, "placeholder:$listId")
         data class PlaceholderMember(private val placeholderSize: Float) : Item(ViewType.LOADING, "")

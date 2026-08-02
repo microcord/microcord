@@ -29,6 +29,9 @@ data class Badge(
     val tooltip: CharSequence? = null,
     val showPremiumUpSell: Boolean = false,
     val objectType: String? = null,
+    val iconUrl: String? = null,
+    val badgeId: String? = null,
+    val link: String? = null,
 ) {
 
     companion object {
@@ -44,6 +47,7 @@ data class Badge(
         private const val OBJECT_TYPE_PREMIUM_EARLY_SUPPORTER = "PREMIUM_EARLY_SUPPORTER"
         private const val OBJECT_TYPE_PREMIUM = "PREMIUM"
         private const val OBJECT_TYPE_PREMIUM_GUILD = "PREMIUM_GUILD"
+        private const val PROFILE_BADGE_CDN = "https://cdn.discordapp.com/badge-icons"
 
         /**
          * Every badge [user] has earned, in the order Discord displays them: staff and programme
@@ -59,7 +63,7 @@ data class Badge(
             isMeUserPremium: Boolean,
             isMeUserVerified: Boolean,
             context: Context,
-        ): List<Badge> = with(UserUtils) {
+        ): List<Badge> = getModernBadges(profile) ?: with(UserUtils) {
             val badges = ArrayList<Badge>(8)
             val canUpSell = !isMeUserPremium && isMeUserVerified
 
@@ -160,6 +164,22 @@ data class Badge(
                 )
             }
             badges
+        }
+
+        /** Puts guild badges first and preserves server order within both arrays. */
+        internal fun getModernBadges(profile: UserProfile): List<Badge>? {
+            if (profile.badges == null && profile.guildBadges == null) return null
+            return (profile.guildBadges.orEmpty() + profile.badges.orEmpty()).mapNotNull { badge ->
+                badge.icon.takeIf(String::isNotBlank)?.let { icon ->
+                    Badge(
+                        text = badge.description,
+                        tooltip = badge.description,
+                        iconUrl = "$PROFILE_BADGE_CDN/$icon.png",
+                        badgeId = badge.id,
+                        link = badge.link,
+                    )
+                }
+            }
         }
 
         private fun hypesquadHouseBadge(

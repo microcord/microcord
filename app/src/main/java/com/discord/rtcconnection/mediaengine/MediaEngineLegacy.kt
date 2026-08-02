@@ -38,7 +38,8 @@ class MediaEngineLegacy(
     private val connections = mutableListOf<MediaEngineConnection>()
 
     private var nativeEngine: Discord? = null
-    private var audioInputEnabled: Boolean = true
+    private var audioInputEnabled: Boolean = false
+    private var localVoiceStatusListener: ((MediaEngine.LocalVoiceStatus) -> Unit)? = null
     private var openSLUsageMode: MediaEngine.OpenSLUsageMode = MediaEngine.OpenSLUsageMode.ALLOW_LIST
 
     /** `null` until the device's video codecs have been enumerated; that is what "prepared" means. */
@@ -187,15 +188,8 @@ class MediaEngineLegacy(
     }
 
     override fun setLocalVoiceStatusListener(voiceStatusListener: ((MediaEngine.LocalVoiceStatus) -> Unit)?) {
-        if (voiceStatusListener == null) {
-            nativeEngine?.setLocalVoiceLevelChangedCallback(null)
-            return
-        }
-        ensureNativeEngine()
-        nativeEngine?.setLocalVoiceLevelChangedCallback { level, speaking ->
-            // `speaking` is a bit field; bit 0 is "the gate is open".
-            voiceStatusListener(MediaEngine.LocalVoiceStatus(level, speaking and SPEAKING_FLAG != 0))
-        }
+        localVoiceStatusListener = voiceStatusListener
+        nativeEngine?.applyLocalVoiceStatusListener()
     }
 
     override fun setOpenSLUsageMode(openSLUsageMode: MediaEngine.OpenSLUsageMode) {
@@ -326,6 +320,7 @@ class MediaEngineLegacy(
                 }
             }
             engine.setAudioInputEnabled(audioInputEnabled)
+            engine.applyLocalVoiceStatusListener()
             nativeEngine = engine
         } catch (e: ExceptionInInitializerError) {
             AppLog.e(TAG, "Unable to initialize voice engine.", e)
@@ -337,6 +332,13 @@ class MediaEngineLegacy(
 
         if (nativeEngine != null) notifyListener { it.onNativeEngineInitialized() }
     }
+
+    private fun Discord.applyLocalVoiceStatusListener() =
+        setLocalVoiceLevelChangedCallback(localVoiceStatusListener?.let { listener ->
+            Discord.LocalVoiceLevelChangedCallback { level, speaking ->
+                listener(MediaEngine.LocalVoiceStatus(level, speaking and SPEAKING_FLAG != 0))
+            }
+        })
 
     private inline fun notifyListener(block: (MediaEngine.Listener) -> Unit) {
         try {

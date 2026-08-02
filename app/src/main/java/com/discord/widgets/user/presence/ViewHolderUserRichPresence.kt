@@ -1,13 +1,17 @@
 package com.discord.widgets.user.presence
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.SeekBar
 import android.widget.TextView
 import androidx.annotation.MainThread
+import androidx.core.view.ViewCompat
+import androidx.core.widget.TextViewCompat
 import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.api.activity.Activity
@@ -30,7 +34,9 @@ import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.views.StreamPreviewView
+import com.discord.widgets.user.profile.ProfileThemeColors
 import com.facebook.drawee.view.SimpleDraweeView
+import com.google.android.material.card.MaterialCardView
 import java.util.concurrent.TimeUnit
 import rx.Observable
 import rx.Subscription
@@ -73,10 +79,82 @@ open class ViewHolderUserRichPresence(
     /** Ticks the elapsed/remaining label once a second while the card is visible. */
     private var perSecondTimerSubscription: Subscription? = null
 
+    private val profileCards = root.allViews().filterIsInstance<MaterialCardView>().toList()
+    private val defaultCardColors = profileCards.associateWith(MaterialCardView::getCardBackgroundColor)
+    private val defaultCardStrokes = profileCards.associateWith(MaterialCardView::getStrokeColor)
+    private val profileButtons = listOfNotNull(richPresencePrimaryButton, richPresenceSecondaryButton)
+    private val defaultButtonTints = profileButtons.associateWith(Button::getBackgroundTintList)
+    private val defaultButtonTextColors = profileButtons.associateWith(Button::getTextColors)
+    private val defaultButtonIconTints =
+        profileButtons.associateWith(TextViewCompat::getCompoundDrawableTintList)
+    private val profileTextViews = listOfNotNull(
+        richPresenceHeader,
+        richPresenceTitle,
+        richPresenceDetails,
+        richPresenceTime,
+        richPresenceState,
+        root.findViewById(R.id.rich_presence_music_elapsed),
+        root.findViewById(R.id.rich_presence_music_duration),
+        root.findViewById(R.id.rich_presence_image_large_text),
+    )
+    private val defaultTextColors = profileTextViews.associateWith(TextView::getTextColors)
+    private val seekBar = root.findViewById<SeekBar>(R.id.rich_presence_seekbar)
+    private val defaultSeekProgressTint = seekBar?.progressTintList
+    private val defaultSeekTrackTint = seekBar?.progressBackgroundTintList
+
     fun setOnActivityCustomButtonClicked(
         newOnActivityCustomButtonClicked: (Context, Long, String, Long, Int) -> Unit,
     ) {
         onActivityCustomButtonClicked = newOnActivityCustomButtonClicked
+    }
+
+    /** Applies the user-profile palette after the variant layout has been inflated. */
+    internal fun applyProfileTheme(colors: ProfileThemeColors?) {
+        profileCards.forEach { card ->
+            if (colors == null) card.setCardBackgroundColor(defaultCardColors.getValue(card))
+            else card.setCardBackgroundColor(colors.sectionOverlay)
+            card.strokeColor = colors?.borderOverlay ?: defaultCardStrokes.getValue(card)
+        }
+
+        fun TextView.color(value: Int?) {
+            setTextColor(value?.let(ColorStateList::valueOf) ?: defaultTextColors.getValue(this))
+        }
+        richPresenceHeader.color(colors?.textMuted)
+        richPresenceTitle.color(colors?.textDefault)
+        richPresenceDetails?.color(colors?.textSubtle)
+        richPresenceState?.color(colors?.textSubtle)
+        richPresenceTime.color(colors?.textSubtle)
+        root.findViewById<TextView>(R.id.rich_presence_music_elapsed)?.color(colors?.textMuted)
+        root.findViewById<TextView>(R.id.rich_presence_music_duration)?.color(colors?.textMuted)
+        root.findViewById<TextView>(R.id.rich_presence_image_large_text)?.color(colors?.textDefault)
+
+        profileButtons.forEach { button ->
+            button.backgroundTintList = colors?.button?.let(ColorStateList::valueOf)
+                ?: defaultButtonTints.getValue(button)
+            button.setTextColor(
+                colors?.let { ColorStateList.valueOf(android.graphics.Color.WHITE) }
+                    ?: defaultButtonTextColors.getValue(button),
+            )
+            TextViewCompat.setCompoundDrawableTintList(
+                button,
+                colors?.let { ColorStateList.valueOf(android.graphics.Color.WHITE) }
+                    ?: defaultButtonIconTints.getValue(button),
+            )
+        }
+
+        seekBar?.progressTintList = colors?.textDefault?.let(ColorStateList::valueOf)
+            ?: defaultSeekProgressTint
+        seekBar?.progressBackgroundTintList = colors?.textMuted?.let(ColorStateList::valueOf)
+            ?: defaultSeekTrackTint
+        listOf(
+            root.findViewById<View>(R.id.stream_preview),
+            root.findViewById<View>(R.id.rich_presence_image_large_text),
+        ).filterNotNull().forEach { view ->
+            ViewCompat.setBackgroundTintList(
+                view,
+                colors?.sectionOverlay?.let(ColorStateList::valueOf),
+            )
+        }
     }
 
     /**
@@ -459,5 +537,12 @@ open class ViewHolderUserRichPresence(
             requireNotNull(findViewById<T>(id)) {
                 "Missing required view with ID: ${resources.getResourceName(id)}"
             }
+    }
+}
+
+private fun View.allViews(): Sequence<View> = sequence {
+    yield(this@allViews)
+    if (this@allViews is ViewGroup) {
+        repeat(childCount) { yieldAll(getChildAt(it).allViews()) }
     }
 }

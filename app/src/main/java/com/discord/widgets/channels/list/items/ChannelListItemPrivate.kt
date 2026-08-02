@@ -1,6 +1,7 @@
 package com.discord.widgets.channels.list.items
 
 import com.discord.api.channel.Channel
+import com.discord.api.user.Nameplate
 import com.discord.models.presence.Presence
 import com.discord.widgets.channels.list.WidgetChannelListUnreads
 
@@ -11,6 +12,7 @@ data class ChannelListItemPrivate(
     override val mentionCount: Int,
     val isApplicationStreaming: Boolean,
     val muted: Boolean,
+    val nameplate: Nameplate? = null,
 ) : ChannelListItem, WidgetChannelListUnreads.UnreadItem {
     override val type: Int = ChannelListItem.TYPE_CHANNEL_PRIVATE
     override val key: String = "$type${channel.id}"

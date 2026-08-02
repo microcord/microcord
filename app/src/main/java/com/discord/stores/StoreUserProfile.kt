@@ -18,10 +18,19 @@ class StoreUserProfile(
         onFailure: () -> Unit,
     ) -> Unit,
     private val propagateMember: ((GuildMember, Long?) -> Unit)? = null,
+    private val fetchProfileEffect: (
+        skuId: Long,
+        onSuccess: (UserProfile.ProfileEffectProduct) -> Unit,
+        onFailure: () -> Unit,
+    ) -> Unit = { _, _, failure -> failure() },
 ) : StoreV2() {
     private val profiles = HashMap<Long, UserProfile>()
     private val profilesLoading = HashSet<Long>()
     private val profileErrors = HashSet<Long>()
+    // ponytail: session cache; add the shop's ten-minute refresh only if effect metadata proves mutable.
+    private val profileEffectProducts = HashMap<Long, UserProfile.ProfileEffectProduct>()
+    private val profileEffectsLoading = HashSet<Long>()
+    private var profileEffectGeneration = 0
     private var profilesSnapshot: Map<Long, UserProfile> = emptyMap()
     private var profilesLoadingSnapshot: Set<Long> = emptySet()
     private var profileErrorsSnapshot: Set<Long> = emptySet()
@@ -74,7 +83,9 @@ class StoreUserProfile(
         StoreThreadScheduler.assertCurrentThread()
         profilesLoading.remove(userProfile.user.id)
         profileErrors.remove(userProfile.user.id)
-        profiles[userProfile.user.id] = userProfile
+        val resolved = resolveProfileEffects(userProfile)
+        profiles[userProfile.user.id] = resolved
+        loadProfileEffects(resolved)
         markChanged()
     }
 
@@ -84,6 +95,9 @@ class StoreUserProfile(
         profiles.clear()
         profilesLoading.clear()
         profileErrors.clear()
+        profileEffectProducts.clear()
+        profileEffectsLoading.clear()
+        profileEffectGeneration++
         markChanged()
     }
 
@@ -107,6 +121,74 @@ class StoreUserProfile(
         val profile = profiles[user.id] ?: return
         profiles[user.id] = profile.copy(user = user, guildMember = null)
         markChanged()
+    }
+
+    @StoreThread
+    private fun loadProfileEffects(profile: UserProfile) {
+        listOfNotNull(
+            profile.userProfile?.profileEffect,
+            profile.guildMemberProfile?.profileEffect,
+        ).forEach { effect ->
+            effect.product?.let {
+                profileEffectProducts[effect.skuId] = it
+                return@forEach
+            }
+            if (effect.skuId in profileEffectProducts || !profileEffectsLoading.add(effect.skuId)) {
+                return@forEach
+            }
+            val generation = profileEffectGeneration
+            fetchProfileEffect(
+                effect.skuId,
+                { product ->
+                    dispatcher.schedule {
+                        if (generation == profileEffectGeneration) {
+                            handleProfileEffectProduct(effect.skuId, product)
+                        }
+                    }
+                },
+                {
+                    dispatcher.schedule {
+                        if (generation == profileEffectGeneration) {
+                            profileEffectsLoading.remove(effect.skuId)
+                        }
+                    }
+                },
+            )
+        }
+    }
+
+    @StoreThread
+    private fun handleProfileEffectProduct(
+        skuId: Long,
+        product: UserProfile.ProfileEffectProduct,
+    ) {
+        StoreThreadScheduler.assertCurrentThread()
+        profileEffectsLoading.remove(skuId)
+        profileEffectProducts[skuId] = product
+        var changed = false
+        profiles.entries.forEach { entry ->
+            val resolved = resolveProfileEffects(entry.value)
+            if (resolved != entry.value) {
+                entry.setValue(resolved)
+                changed = true
+            }
+        }
+        if (changed) markChanged()
+    }
+
+    @StoreThread
+    private fun resolveProfileEffects(profile: UserProfile): UserProfile {
+        fun UserProfile.ProfileMetadata?.resolve(): UserProfile.ProfileMetadata? {
+            val metadata = this ?: return null
+            val effect = metadata.profileEffect ?: return metadata
+            val product = effect.product ?: profileEffectProducts[effect.skuId] ?: return metadata
+            return metadata.copy(profileEffect = effect.copy(product = product))
+        }
+
+        val user = profile.userProfile.resolve()
+        val guild = profile.guildMemberProfile.resolve()
+        return if (user == profile.userProfile && guild == profile.guildMemberProfile) profile else
+            profile.copy(userProfile = user, guildMemberProfile = guild)
     }
 
     companion object {

@@ -1575,3 +1575,71 @@ while talking and logs contain `Setting screenshare true` followed by nonzero ou
 Resumable task: `app/src/main/java/com/discord/widgets/**` | live Discord user payloads and
 `UserUtils.getDisplayName` | replace remaining low-traffic direct username labels only when their
 screen is reconstructed or device evidence shows they are display-name surfaces.
+
+## 2026-08-02 modern profile cosmetics, forum loading, and diagnostics
+
+- Backported current profile metadata using Discord Userdoccers and the connected desktop client's
+  SecurityResearchCompanion webpack evidence: global/guild theme colors, avatar decorations,
+  profile badges, profile effects, and collectible nameplates. Guild profile fields override global
+  fields independently; guild banners retain their own CDN scope.
+- Profile themes now derive separate header/body/card/note/button/text surfaces from the desktop
+  formulas instead of stretching one gradient over the sheet. Rich-presence and Material note-input
+  surfaces use the same palette and reset cleanly for unthemed profiles without changing geometry.
+- Profile effects resolve `profile_effect.sku_id` through `GET /collectibles-products/{sku}` in a
+  dispatcher-confined, deduplicated `StoreUserProfile` cache. Product/layer camelCase wire fields are
+  explicitly mapped; timed APNG layers, loops, randomized sources, reduced-motion fallbacks, and
+  idempotent rebinds are supported.
+- Modern `badges`/`guild_badges` load from profile payloads with CDN icons and preserve legacy flag
+  badges as fallback. Unknown badge IDs remain renderable and safe.
+- Nameplates render only behind member-list and DM-list rows. READY users now hydrate collectibles;
+  DM artwork uses the desktop static CDN path, right-centered focus crop, and a non-measuring overlay.
+  The original private-row hierarchy, dimensions, padding, margins, and touch geometry are preserved.
+- Follow-up runtime fixes preserve that geometry while allowing the overlay to draw through parent
+  padding. Artwork now scales from row height with its full source aspect and physical-right alignment
+  instead of `FOCUS_CROP`, which showed only the palette and cropped away the subject.
+- The DM artwork already ended at the physical row right edge; channel masking still obscured part of
+  the subject, so DM rows now draw the full unmasked artwork. Member-list masking is unchanged.
+- Selected/hovered DM rows also requested the animated collectible variant while the working member
+  path used static artwork. DM placement now always requests the verified static PNG; member-list
+  animation behavior remains unchanged.
+- The final DM-only artwork blocker was measurement: the 0dp overlay was expanded after parent layout,
+  but its internal Drawee child remained 0x0. The parent palette therefore rendered without the PNG.
+  `NameplateView.onLayout` now gives the image the overlay's final bounds without affecting row size.
+- Forum parent channels no longer enter ordinary message-history loading; forum posts/threads remain
+  valid message channels. This stops the live backend retry loop for forum parent IDs.
+- Debug builds now log only HTTP method, Retrofit route template, status, and duration. Release builds
+  install no logger; URLs, concrete path/query values, headers, cookies, bodies, and credentials are
+  never read by the interceptor.
+- Fixed an ARM64 startup crash in `libdiscord.so`: registering the VAD callback eagerly created the
+  native engine and started OpenSL capture before an input device existed. Listener registration is
+  now lazy and audio input remains disabled until real native initialization. A065 cold-start smoke
+  remained alive after the fix.
+- Focused store/profile/forum/logger/nameplate tests and earlier connected nameplate/native lifecycle
+  checks passed. The final integrated `assembleDebug` passes with a temporary 4 GiB Kotlin daemon
+  heap after Windows cache packing and default-heap failures. The newest effect-rebind and exact
+  private-row geometry assertions still need one batch run; repeated per-edit test runs were stopped
+  at user request.
+- Live profile payloads were confirmed to carry `profile_effect.sku_id` as a string. Product layers
+  may omit `randomizedSources`; Gson then supplies null rather than the Kotlin default, so effect
+  binding previously threw inside `runCatching` and silently hid the view. Nullable parsing plus
+  `orEmpty()` fixes that path, and identical sheet rebinds no longer cancel active APNG playback.
+  The focused profile/store/transport tests and final `assembleDebug` pass after these fixes.
+- Live product inspection confirmed extensionless APNG layers. Android's platform decoder emitted
+  `Image decoder ... unimplemented`, so playback now uses the already-installed LINE APNG decoder
+  on an IO dispatcher. Layers decode independently at their start times; one slow/failed layer no
+  longer hides the whole effect, and identical sheet updates do not restart playback. The latest APK
+  containing this and the full-aspect nameplate transform was installed on WSA Android 13.
+- Effects now play once per popout: completed APNG drawables are removed/recycled, identical state
+  emissions do not restart them, and reopening creates fresh drawables with preserved bounds instead
+  of reusing a completed/cropped drawable. DM rows now fall back from a sparse cached user to the
+  embedded recipient collectible and use the member-list mask/placement semantics. The combined APK
+  builds and was installed on WSA Android 13; focused assertions remain queued per the user's request
+  to avoid per-edit test runs.
+
+Resumable task: `app/src/main/java/com/discord/widgets/user/profile/ProfileEffectView.kt` | desktop
+collectibles modules `590180`, `203632`, `575593`, `758836` | reconnect A065 `188b1209`, install the
+latest debug APK, open a profile with an effect, and verify timed APNG layers survive sheet updates.
+
+Resumable task: `app/src/main/java/com/discord/views/NameplateView.kt` |
+`widget_channels_list_item_channel_private.xml` and desktop modules `174755`, `715069`, `746002` |
+run the queued connected geometry assertion and visually confirm the restored-height DM row artwork.

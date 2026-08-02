@@ -314,6 +314,11 @@ class StoreStream private constructor(
                 )
         },
         propagateMember = { member, guildId -> guildId?.let { guilds.handleGuildMember(member, it) } },
+        fetchProfileEffect = { skuId, success, failure ->
+            if (!::restApi.isInitialized) failure() else
+                restApi.getCollectiblesProduct(skuId, userSettingsSystem.getLocale())
+                    .subscribeOn(Schedulers.io()).subscribe(success, { failure() })
+        },
     )
     private val guildProfiles = StoreGuildProfiles(dispatcher, observationDeck)
     private val guildWelcomeScreens = StoreGuildWelcomeScreens(dispatcher, observationDeck)
@@ -1316,7 +1321,7 @@ class StoreStream private constructor(
      */
     private fun installChatStoreWiring() {
         channelsSelected.observeResolvedSelectedChannel().distinctUntilChanged().subscribe(
-            { selected -> dispatcher.schedule { handleChannelSelected(selected.id) } },
+            { selected -> dispatcher.schedule { handleChannelSelected(selected) } },
             {},
         )
         messagesLoader.init(
@@ -2411,12 +2416,13 @@ class StoreStream private constructor(
     }
 
     @StoreThread
-    private fun handleChannelSelected(channelId: Long) {
+    private fun handleChannelSelected(selected: StoreChannelsSelected.ResolvedSelectedChannel) {
+        val channelId = selected.id
         channelConversions.handleChannelSelected(channelId)
         calls.handleChannelSelect(channelId)
         mentions.handleChannelSelected(channelId)
         messages.handleChannelSelected(channelId)
-        messagesLoader.handleChannelSelected(channelId)
+        messagesLoader.handleChannelSelected(selected.maybeChannel)
         messageState.handleChannelSelected()
         messageAck.handleChannelSelected()
         notifications.handleChannelSelected(channelId)

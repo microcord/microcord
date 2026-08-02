@@ -129,6 +129,10 @@ invalid decompiler constructs into the target.
 - Preserve the reference navigation chrome and exit behavior on every screen.
   Nested destinations must expose the same toolbar Up button and Back-stack
   behavior as the original; omit them only when the reference does.
+- Do not change an existing view's measured width, height, padding, margins, or
+  touch-target geometry for a new decoration or feature unless the change is
+  absolutely necessary and supported by reference or runtime evidence. Prefer
+  non-measuring overlays; document any unavoidable size change in `PLAN.md`.
 - A placeholder may exist only during active development and must be recorded
   in `PLAN.md`; no phase can be marked done while one remains.
 

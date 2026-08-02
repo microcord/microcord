@@ -1499,6 +1499,12 @@ interface RestAPIInterface {
     @GET("stickers/{stickerId}/guild")
     fun getStickerGuild(@Path("stickerId") stickerId: Long): Observable<Guild>
 
+    @GET("collectibles-products/{skuId}")
+    fun getCollectiblesProduct(
+        @Path("skuId") skuId: Long,
+        @Query("locale") locale: String,
+    ): Observable<UserProfile.ProfileEffectProduct>
+
     @POST("store/skus/{skuId}/purchase")
     fun claimSku(
         @Path("skuId") skuId: Long,

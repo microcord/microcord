@@ -1,6 +1,7 @@
 package com.discord.models.user
 
 import com.discord.api.premium.PremiumTier
+import com.discord.api.user.Collectibles
 import com.discord.api.user.NsfwAllowance
 import com.discord.api.user.Phone
 
@@ -24,6 +25,7 @@ data class MeUser(
     override val bio: String?,
     override val bannerColor: String?,
     override val globalName: String? = null,
+    override val collectibles: Collectibles? = null,
 ) : User {
     constructor(user: com.discord.api.user.User) : this(
         id = user.id,
@@ -45,6 +47,7 @@ data class MeUser(
         bio = user.bio?.value,
         bannerColor = user.bannerColor?.value,
         globalName = user.globalName,
+        collectibles = user.collectibles,
     )
 
     val hasBirthday = nsfwAllowance != NsfwAllowance.UNKNOWN
@@ -53,5 +56,6 @@ data class MeUser(
             "isSystemUser=$isSystemUser, discriminator=$discriminator, premiumTier=$premiumTier, " +
             "email=<redacted>, isVerified=$isVerified, mfaEnabled=$mfaEnabled, token=<redacted>, " +
             "flags=$flags, publicFlags=$publicFlags, phoneNumber=<redacted>, nsfwAllowance=$nsfwAllowance, " +
-            "bio=$bio, bannerColor=$bannerColor, globalName=$globalName, hasBirthday=$hasBirthday)"
+            "bio=$bio, bannerColor=$bannerColor, globalName=$globalName, collectibles=$collectibles, " +
+            "hasBirthday=$hasBirthday)"
 }

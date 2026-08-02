@@ -1,11 +1,14 @@
 package com.discord.widgets.user.profile
 
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Color
 import android.util.AttributeSet
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.cardview.widget.CardView
@@ -25,13 +28,16 @@ import com.discord.views.UsernameView
 import com.discord.views.user.UserAvatarPresenceView
 import com.discord.widgets.channels.UserAkaView
 import com.discord.widgets.user.Badge
+import com.facebook.drawee.controller.BaseControllerListener
 import com.facebook.drawee.view.SimpleDraweeView
+import com.facebook.imagepipeline.image.ImageInfo
 
 class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayout(context, attrs) {
     private val banner: SimpleDraweeView
     private val bannerEdit: CardView
     private val gifTag: ImageView
     private val avatar: UserAvatarPresenceView
+    private val avatarDecoration: SimpleDraweeView
     private val avatarEdit: CardView
     private val aka: UserAkaView
     private val badges: RecyclerView
@@ -52,6 +58,15 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         bannerEdit = requireNotNull(findViewById(R.id.banner_edit))
         gifTag = requireNotNull(findViewById(R.id.gif_tag))
         avatar = requireNotNull(findViewById(R.id.large_avatar))
+        avatarDecoration = SimpleDraweeView(context).apply {
+            visibility = View.INVISIBLE
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        requireNotNull<FrameLayout>(avatar.findViewById(R.id.avatar_container)).addView(
+            avatarDecoration,
+            FrameLayout.LayoutParams(dp(DECORATION_SIZE_DP), dp(DECORATION_SIZE_DP), Gravity.CENTER),
+        )
         avatarEdit = requireNotNull(findViewById(R.id.avatar_edit))
         aka = requireNotNull(findViewById(R.id.user_aka))
         badges = requireNotNull(findViewById(R.id.user_profile_header_badges_recycler))
@@ -78,6 +93,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
     fun setOnAvatarRepresentativeColorUpdated(callback: (Int) -> Unit) { onAvatarRepresentativeColorUpdated = callback }
 
     fun updateViewState(state: UserProfileHeaderViewModel.ViewState.Loaded) {
+        configureTheme(state)
         avatar.setOnAvatarBitmapLoadedListener { bitmap, _ ->
             val pixel = bitmap.getPixel(bitmap.width / 2, bitmap.height / 2)
             onAvatarRepresentativeColorUpdated(pixel)
@@ -86,6 +102,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         avatarEdit.setOnClickListener { if (state.editable) onAvatarEdit() }
         configureBanner(state)
         avatar.configure(UserAvatarPresenceView.ViewState(state.user, state.presence, state.showPresence, state.guildMember))
+        configureAvatarDecoration(state)
         configureNames(state.user, state.guildMember, state)
         aka.visibility = if (state.showAkas) View.VISIBLE else View.GONE
         aka.configure(state.guildMembersForAka)
@@ -102,25 +119,76 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
     }
 
     fun updateBannerColor(state: UserProfileHeaderViewModel.ViewState.Loaded) {
-        runCatching { state.bannerColorHex?.let(Color::parseColor) }.getOrNull()?.let(banner::setBackgroundColor)
+        val color = state.profileThemeColors(isDarkTheme())?.primary
+            ?: runCatching { state.bannerColorHex?.let(Color::parseColor) }.getOrNull()
+            ?: backgroundColor
+        banner.setBackgroundColor(color)
     }
 
+    private fun configureTheme(state: UserProfileHeaderViewModel.ViewState.Loaded) {
+        val colors = state.profileThemeColors(isDarkTheme())
+        val surface = colors?.headerSurface ?: backgroundColor
+        setBackgroundColor(surface)
+        avatar.setAvatarBackgroundColor(surface)
+        colors?.let {
+            primaryName.setUsernameColor(it.textDefault)
+            secondaryName.setTextColor(it.textMuted)
+            customStatus.setTextColor(it.textDefault)
+        } ?: run {
+            primaryName.setUsernameColor(ColorCompat.getThemedColor(context, R.attr.colorHeaderPrimary))
+            secondaryName.setTextColor(ColorCompat.getThemedColor(context, R.attr.primary_400))
+            customStatus.setTextColor(ColorCompat.getThemedColor(context, R.attr.colorHeaderSecondary))
+        }
+    }
+
+    private fun configureAvatarDecoration(state: UserProfileHeaderViewModel.ViewState.Loaded) {
+        val url = state.avatarDecorationUrl
+        if (url == null) {
+            avatarDecoration.visibility = View.INVISIBLE
+            MGImages.setImage(avatarDecoration, emptyList())
+            return
+        }
+        avatarDecoration.visibility = View.INVISIBLE
+        MGImages.setImage(
+            avatarDecoration,
+            listOf(url),
+            width = DECORATION_ASSET_SIZE_PX,
+            height = DECORATION_ASSET_SIZE_PX,
+            useSmallCache = true,
+            controllerListener = object : BaseControllerListener<ImageInfo>() {
+                override fun onFinalImageSet(id: String?, imageInfo: ImageInfo?, animatable: android.graphics.drawable.Animatable?) {
+                    avatarDecoration.visibility = if (imageInfo == null) View.INVISIBLE else View.VISIBLE
+                }
+
+                override fun onFailure(id: String?, throwable: Throwable?) {
+                    avatarDecoration.visibility = View.INVISIBLE
+                }
+            },
+            autoPlayAnimations = state.shouldAnimateBanner,
+        )
+    }
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    private fun isDarkTheme() =
+        resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+
     private fun configureBanner(state: UserProfileHeaderViewModel.ViewState.Loaded) {
-        val hash = state.guildMember?.bannerHash ?: state.banner
+        val hash = state.effectiveBanner
         val size = maxOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels)
         val url = when {
             hash == null -> null
             hash.startsWith("data:") -> hash
-            state.guildMember?.hasBanner() == true -> IconUtils.getForGuildMemberBanner(
+            state.guildMember?.hasBanner() == true || state.effectiveBannerGuildId != null -> IconUtils.getForGuildMemberBanner(
                 hash,
-                state.guildMember.guildId,
+                state.effectiveBannerGuildId ?: checkNotNull(state.guildMember).guildId,
                 state.user.id,
                 size,
                 state.shouldAnimateBanner,
             )
             else -> IconUtils.getForUserBanner(state.user.id, hash, size, state.shouldAnimateBanner)
         }
-        banner.aspectRatio = if (url == null) 5f else 2.5f
+        banner.aspectRatio = BANNER_ASPECT_RATIO
         MGImages.setImage(
             banner,
             url,
@@ -162,16 +230,27 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
             set(value) { field = value; notifyDataSetChanged() }
         override fun getItemCount() = items.size
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = BadgeHolder(
-            LayoutInflater.from(parent.context).inflate(R.layout.user_profile_header_badge, parent, false) as ImageView,
+            LayoutInflater.from(parent.context).inflate(R.layout.user_profile_header_badge, parent, false) as SimpleDraweeView,
         )
         override fun onBindViewHolder(holder: BadgeHolder, position: Int) {
             val badge = items[position]
-            holder.image.setImageResource(badge.icon)
+            if (badge.iconUrl != null) {
+                MGImages.setImage(holder.image, badge.iconUrl, useSmallCache = true)
+            } else {
+                MGImages.cancelImageRequests(holder.image)
+                holder.image.setActualImageResource(badge.icon)
+            }
             holder.image.contentDescription = badge.text
             holder.image.setOnClickListener { onBadgeClick(badge) }
         }
     }
 
-    private class BadgeHolder(val image: ImageView) : RecyclerView.ViewHolder(image)
+    private class BadgeHolder(val image: SimpleDraweeView) : RecyclerView.ViewHolder(image)
+
+    companion object {
+        internal const val DECORATION_SIZE_DP = 96
+        private const val DECORATION_ASSET_SIZE_PX = 256
+        private const val BANNER_ASPECT_RATIO = 300f / 105f
+    }
 
 }
