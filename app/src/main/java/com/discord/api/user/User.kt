@@ -28,11 +28,13 @@ data class User(
     val member: GuildMember? = null,
     val bio: NullSerializable<String>? = null,
     val bannerColor: NullSerializable<String>? = null,
+    val globalName: String? = null,
 ) : Serializable {
     override fun toString() =
         "User(id=$id, username=$username, avatar=$avatar, banner=$banner, discriminator=$discriminator, " +
             "publicFlags=$publicFlags, flags=$flags, bot=$bot, system=$system, token=<redacted>, " +
             "email=<redacted>, verified=$verified, locale=$locale, nsfwAllowed=$nsfwAllowed, " +
             "mfaEnabled=$mfaEnabled, phone=<redacted>, analyticsToken=<redacted>, premiumType=$premiumType, " +
-            "approximateGuildCount=$approximateGuildCount, member=$member, bio=$bio, bannerColor=$bannerColor)"
+            "approximateGuildCount=$approximateGuildCount, member=$member, bio=$bio, bannerColor=$bannerColor, " +
+            "globalName=$globalName)"
 }

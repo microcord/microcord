@@ -19,6 +19,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.rx.ui
 import com.discord.utilities.uri.UriHandler
+import com.discord.utilities.user.UserUtils.displayName
 import com.discord.widgets.settings.account.WidgetSettingsAccount
 import com.discord.widgets.settings.developer.WidgetSettingsDeveloper
 import com.discord.widgets.notice.WidgetNoticeDialog
@@ -272,10 +273,6 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         @JvmField var onSetStatus: (() -> Unit)? = null
         @JvmField var onLogout: (() -> Unit)? = null
 
-        internal fun displayName(user: MeUser) = if (user.discriminator == 0) {
-            user.username
-        } else {
-            "${user.username}#${user.discriminator.toString().padStart(4, '0')}"
-        }
+        internal fun displayName(user: MeUser) = user.displayName
     }
 }

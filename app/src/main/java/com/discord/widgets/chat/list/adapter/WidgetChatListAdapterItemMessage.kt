@@ -42,6 +42,7 @@ import com.discord.utilities.textprocessing.spans.SpoilerSpan
 import com.discord.utilities.time.TimeUtils
 import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.user.UserUtils
+import com.discord.utilities.user.UserUtils.displayName
 import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.FailedUploadList
@@ -661,7 +662,7 @@ class WidgetChatListAdapterItemMessage(
         messageEntry: MessageEntry,
     ) {
         configureReplyAvatar(replyAuthor, replyGuildMember ?: messageEntry.author)
-        val name = messageEntry.nickOrUsernames[replyAuthor.id] ?: replyAuthor.username
+        val name = messageEntry.nickOrUsernames[replyAuthor.id] ?: replyAuthor.displayName
         // Reproduces the reference exactly: the mention list consulted is the one on [messageEntry],
         // which for a loaded reply is the *replied* message rather than the reply itself.
         val didMention = messageEntry.message.mentions.orEmpty().any { it.id == replyAuthor.id }

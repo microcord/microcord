@@ -120,15 +120,24 @@ object UserUtils {
 
     // region names
 
-    /** The four-digit discriminator with its leading `#`, zero padded. */
-    val User.discriminatorWithPadding: String get() = padDiscriminator(discriminator)
+    /** The account display name, falling back to the unique username. */
+    val User.displayName: String
+        get() = globalName?.takeUnless(String::isBlank) ?: username
+
+    /** Guild nicknames take precedence over the account display name. */
+    fun User.getDisplayName(nickname: String? = null): String =
+        nickname?.takeUnless(String::isBlank) ?: displayName
+
+    /** Bot discriminators are retained for old bot identities only. */
+    val User.discriminatorWithPadding: String
+        get() = if (isBot && discriminator != 0) padDiscriminator(discriminator) else ""
 
     /** Formats [discriminator] as `#0001`. */
     fun padDiscriminator(discriminator: Int): String =
         String.format(Locale.US, "#%04d", discriminator)
 
     /**
-     * `username#0001`, optionally styling the discriminator.
+     * The unique username, with a legacy discriminator only for bots.
      *
      * Returns a plain [String] when neither styling argument is supplied, so callers that
      * only need text do not pay for a [SpannableString].
@@ -151,21 +160,20 @@ object UserUtils {
         }
     }
 
-    /** Case-insensitive name ordering, falling back to user id so it is a total order. */
+    /** Case-insensitive display-name ordering, falling back to user id so it is a total order. */
     @JvmOverloads
     fun compareUserNames(
         user1: User?,
         user2: User?,
         user1Nickname: String? = null,
         user2Nickname: String? = null,
-    ): Int = compareUserNames(
-        user1?.username,
-        user2?.username,
-        user1Nickname,
-        user2Nickname,
-        user1?.id ?: 0L,
-        user2?.id ?: 0L,
-    )
+    ): Int {
+        if (user1 == null) return if (user2 == null) 0 else -1
+        if (user2 == null) return 1
+        val byName = user1.getDisplayName(user1Nickname)
+            .compareTo(user2.getDisplayName(user2Nickname), ignoreCase = true)
+        return if (byName != 0) byName else user1.id.compareTo(user2.id)
+    }
 
     /** Nicknames win over usernames when present; blank nicknames are ignored. */
     fun compareUserNames(

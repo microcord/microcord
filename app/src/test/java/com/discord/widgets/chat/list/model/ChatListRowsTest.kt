@@ -30,7 +30,7 @@ class ChatListRowsTest {
     @Test fun messageEntryIncludesItsAuthorDisplayName() {
         val body = rows(listOf(message(1, 1_000))).filterIsInstance<MessageEntry>().single()
 
-        assertEquals("author", body.nickOrUsernames[1L])
+        assertEquals("Author Display", body.nickOrUsernames[1L])
     }
 
     @Test fun directMessageStartRowUsesRecipientAvatar() {
@@ -142,7 +142,7 @@ class ChatListRowsTest {
     private fun message(id: Long, timestamp: Long) = Message(
         id = id,
         channelId = 1,
-        author = User(1, "author"),
+        author = User(1, "author", globalName = "Author Display"),
         content = "message-$id",
         timestamp = UtcDateTime(timestamp),
         type = 0,

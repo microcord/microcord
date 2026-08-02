@@ -10,6 +10,7 @@ import androidx.core.content.res.ResourcesCompat
 import com.discord.models.user.User
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.spans.TypefaceSpanCompat
+import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.utilities.user.UserUtils.getUserNameWithDiscriminator
 
 fun getSpannableForUserNameWithDiscrim(
@@ -23,11 +24,12 @@ fun getSpannableForUserNameWithDiscrim(
     secondaryFont: Int,
     secondaryTextSizeSp: Int,
 ): SpannableStringBuilder {
-    val value = nickname ?: user.getUserNameWithDiscriminator()
+    val displayName = user.getDisplayName(nickname)
+    val value = if (displayName == user.username) user.getUserNameWithDiscriminator() else displayName
     val result = SpannableStringBuilder(value)
-    val primaryEnd = nickname?.length ?: user.username.length
+    val primaryEnd = if (displayName == user.username) user.username.length else result.length
     result.setStyle(context, 0, primaryEnd, primaryColorRes, primaryFont, primaryTextSizeSp)
-    if (nickname == null) {
+    if (primaryEnd < result.length) {
         result.setStyle(
             context,
             primaryEnd,

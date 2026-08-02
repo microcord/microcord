@@ -14,6 +14,7 @@ import com.discord.stores.StoreVideoStreams.UserStreams
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.leadingEdgeThrottle
 import com.discord.utilities.streams.StreamContext
+import com.discord.utilities.user.UserUtils.getDisplayName
 import java.util.concurrent.TimeUnit
 import rx.Observable
 import rx.subjects.BehaviorSubject
@@ -107,7 +108,7 @@ class StoreVoiceParticipants(
             voiceState.stageRequestToSpeakState ==
                 StageRequestToSpeakState.REQUESTED_TO_SPEAK_AND_AWAITING_USER_ACK
 
-        val displayName: String get() = nickname ?: user.username
+        val displayName: String get() = user.getDisplayName(nickname)
         val isConnected: Boolean get() = voiceState != null
     }
 

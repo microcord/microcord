@@ -20,6 +20,7 @@ import com.discord.utilities.images.MGImages
 import com.discord.utilities.textprocessing.AstRenderer
 import com.discord.utilities.textprocessing.node.EmojiNode
 import com.discord.utilities.user.UserUtils
+import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.utilities.user.UserUtils.getUserNameWithDiscriminator
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.StatusView
@@ -69,9 +70,11 @@ class AutocompleteItemViewHolder(
     }
 
     private fun bindUser(item: UserAutocompletable) {
-        name.text = item.nickname ?: item.user.username
-        nameRight.visibility = View.VISIBLE
-        nameRight.text = item.user.getUserNameWithDiscriminator()
+        val displayName = item.user.getDisplayName(item.nickname)
+        val accountName = item.user.getUserNameWithDiscriminator()
+        name.text = displayName
+        nameRight.visibility = if (accountName.toString() == displayName) View.GONE else View.VISIBLE
+        nameRight.text = accountName
         avatar.visibility = View.VISIBLE
         IconUtils.setIcon(
             imageView = avatar,

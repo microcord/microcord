@@ -16,6 +16,7 @@ data class CoreUser(
     override val publicFlags: Int = 0,
     override val bio: String? = null,
     override val bannerColor: String? = null,
+    override val globalName: String? = null,
 ) : User {
     constructor(user: com.discord.api.user.User) : this(
         user.id,
@@ -30,6 +31,7 @@ data class CoreUser(
         user.publicFlags ?: 0,
         user.bio?.value,
         user.bannerColor?.value,
+        user.globalName,
     )
 
     companion object {
@@ -46,6 +48,7 @@ data class CoreUser(
             publicFlags = newUser.publicFlags ?: oldUser.publicFlags,
             bio = mergeNullSerializable(oldUser.bio, newUser.bio),
             bannerColor = mergeNullSerializable(oldUser.bannerColor, newUser.bannerColor),
+            globalName = newUser.globalName,
         )
 
         private fun <T> mergeNullSerializable(old: T?, new: NullSerializable<T>?): T? = when (new) {

@@ -349,12 +349,12 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             message.author?.let { user ->
                 val nick = guildMembers[user.id]?.nick?.takeUnless(String::isBlank)
                     ?: user.member?.nick?.takeUnless(String::isBlank)
-                names[user.id] = nick ?: user.username
+                names[user.id] = nick ?: user.globalName?.takeUnless(String::isBlank) ?: user.username
             }
             message.mentions.orEmpty().forEach { user ->
                 val nick = guildMembers[user.id]?.nick?.takeUnless(String::isBlank)
                     ?: user.member?.nick?.takeUnless(String::isBlank)
-                names[user.id] = nick ?: user.username
+                names[user.id] = nick ?: user.globalName?.takeUnless(String::isBlank) ?: user.username
             }
             channel.nicks.orEmpty().forEach { names[it.id] = it.nick }
             return names

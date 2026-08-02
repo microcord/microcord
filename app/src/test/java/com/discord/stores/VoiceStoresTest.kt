@@ -301,7 +301,7 @@ class VoiceStoresTest {
     fun displayNameAndConnectedAreDerived() {
         val disconnected = voiceUser(voiceState = null)
         assertFalse(disconnected.isConnected)
-        assertEquals("me", disconnected.displayName)
+        assertEquals("Me Display", disconnected.displayName)
         assertTrue(voiceUser(voiceState = voiceState(1, 5, 50)).isConnected)
     }
 
@@ -420,7 +420,7 @@ class VoiceStoresTest {
         config: StoreMediaSettings.VoiceConfiguration? = null,
         speaking: Boolean = false,
     ) = StoreVoiceParticipants.VoiceUser(
-        user = CoreUser(ME_ID, "me"),
+        user = CoreUser(ME_ID, "me", globalName = "Me Display"),
         voiceState = voiceState,
         isRinging = false,
         streams = null,

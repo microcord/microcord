@@ -10,11 +10,13 @@ import org.junit.Test
 class CoreUserTest {
     @Test
     fun mergesOmittedAndExplicitNullFields() {
-        val old = CoreUser(1, "old", avatar = "avatar", banner = "banner")
-        val omitted = CoreUser.merge(old, User(1, "new"))
+        val old = CoreUser(1, "old", avatar = "avatar", banner = "banner", globalName = "Old")
+        val omitted = CoreUser.merge(old, User(1, "new", globalName = "Display"))
         assertEquals("avatar", omitted.avatar)
+        assertEquals("Display", omitted.globalName)
         val cleared = CoreUser.merge(old, User(1, "new", avatar = NullSerializable.Null()))
         assertNull(cleared.avatar)
+        assertNull(cleared.globalName)
         assertTrue(User(1, "name", token = "secret").toString().contains("token=<redacted>"))
     }
 }

@@ -18,6 +18,8 @@ import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.presence.PresenceUtils
+import com.discord.utilities.user.UserUtils.getDisplayName
+import com.discord.utilities.user.UserUtils.getUserNameWithDiscriminator
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.UsernameView
 import com.discord.views.user.UserAvatarPresenceView
@@ -132,11 +134,12 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
     }
 
     private fun configureNames(user: User, member: GuildMember?, state: UserProfileHeaderViewModel.ViewState.Loaded) {
-        val primary = member?.nick?.takeUnless(String::isBlank) ?: user.username
-        val discrim = user.discriminator.toString().padStart(4, '0')
-        primaryName.configureUsername(if (discrim == "0000") primary else "$primary#$discrim")
+        val accountName = user.getUserNameWithDiscriminator()
+        val displayName = user.getDisplayName(member?.nick)
+        val primary = if (displayName == user.username) accountName else displayName
+        primaryName.configureUsername(primary)
         primaryName.configureTag(user.isBot, if (user.isSystemUser) R.string.system_dm_tag_system else R.string.bot_tag_bot, false)
-        val secondary = member?.nick?.let { "${user.username}#$discrim" }
+        val secondary = accountName.takeUnless { it.toString() == primary.toString() }
         secondaryName.text = secondary
         secondaryName.visibility = if (secondary != null && !state.showAkas) View.VISIBLE else View.GONE
     }

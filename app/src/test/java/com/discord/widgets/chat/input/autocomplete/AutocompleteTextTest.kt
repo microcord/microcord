@@ -1,6 +1,7 @@
 package com.discord.widgets.chat.input.autocomplete
 
 import com.discord.api.channel.Channel
+import com.discord.models.user.CoreUser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -95,6 +96,17 @@ class AutocompleteTextTest {
         assertEquals(2, flattened.size)
         assertEquals("<#1>", flattened[0].getInputReplacement())
         assertEquals("@everyone", flattened[1].getInputReplacement())
+    }
+
+    @Test
+    fun userMentionsMatchUsernameGlobalNameAndNickname() {
+        val user = UserAutocompletable(
+            user = CoreUser(7, "handle", globalName = "Display"),
+            nickname = "Guild Nick",
+        )
+
+        assertEquals(listOf("@handle", "@Display"), user.getInputTextMatchers())
+        assertEquals(listOf("@Guild Nick", "@Display"), user.getAutocompleteTextMatchers())
     }
 
     @Test

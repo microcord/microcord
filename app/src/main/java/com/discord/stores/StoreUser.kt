@@ -193,6 +193,7 @@ class StoreUser(
         publicFlags = new.publicFlags ?: old.publicFlags,
         bio = merge(old.bio, new.bio),
         bannerColor = merge(old.bannerColor, new.bannerColor),
+        globalName = new.globalName,
     )
 
     private fun mergeMe(old: MeUser, new: ApiUser) = old.copy(
@@ -213,6 +214,7 @@ class StoreUser(
         nsfwAllowance = new.nsfwAllowed ?: old.nsfwAllowance,
         bio = merge(old.bio, new.bio),
         bannerColor = merge(old.bannerColor, new.bannerColor),
+        globalName = new.globalName,
     )
 
     private fun <T> merge(old: T?, new: NullSerializable<T>?): T? = when (new) {

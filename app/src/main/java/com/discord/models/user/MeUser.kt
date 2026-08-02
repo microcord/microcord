@@ -23,6 +23,7 @@ data class MeUser(
     val nsfwAllowance: NsfwAllowance,
     override val bio: String?,
     override val bannerColor: String?,
+    override val globalName: String? = null,
 ) : User {
     constructor(user: com.discord.api.user.User) : this(
         id = user.id,
@@ -43,6 +44,7 @@ data class MeUser(
         nsfwAllowance = user.nsfwAllowed ?: NsfwAllowance.UNKNOWN,
         bio = user.bio?.value,
         bannerColor = user.bannerColor?.value,
+        globalName = user.globalName,
     )
 
     val hasBirthday = nsfwAllowance != NsfwAllowance.UNKNOWN
@@ -51,5 +53,5 @@ data class MeUser(
             "isSystemUser=$isSystemUser, discriminator=$discriminator, premiumTier=$premiumTier, " +
             "email=<redacted>, isVerified=$isVerified, mfaEnabled=$mfaEnabled, token=<redacted>, " +
             "flags=$flags, publicFlags=$publicFlags, phoneNumber=<redacted>, nsfwAllowance=$nsfwAllowance, " +
-            "bio=$bio, bannerColor=$bannerColor, hasBirthday=$hasBirthday)"
+            "bio=$bio, bannerColor=$bannerColor, globalName=$globalName, hasBirthday=$hasBirthday)"
 }

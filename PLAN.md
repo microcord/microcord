@@ -1556,3 +1556,22 @@ while talking and logs contain `Setting screenshare true` followed by nonzero ou
 - `ModelNotificationSettingsTypeAdapter` now treats explicit JSON nulls like absent fields across
   guild and channel-override settings. `ModelNotificationSettingsTest.explicitNullsUseWireDefaults`
   covers the READY payload regression; focused test and debug APK build pass.
+
+## 2026-08-02 modern usernames and display names
+
+- Added the live API's nullable `global_name` to the API, `CoreUser`, and `MeUser` models and the
+  `StoreUser` update path. This is an intentional backend-compatibility extension beyond the 126.21
+  reference model; the recovered reference predates migrated usernames.
+- Central name rendering now resolves guild nickname, then global display name, then username.
+  Legacy discriminators render only for bot accounts with a nonzero discriminator.
+- Chat authors and replies, member lists, voice participants, profile/settings headers, and mention
+  autocomplete now consume the shared precedence. The READY Gson fixture verifies the
+  `global_name` wire mapping.
+- Guild user popouts no longer pass the current guild member as a group-DM AKA. That false AKA state
+  hid the secondary unique username whenever a nickname or global display name was primary.
+- Focused model, chat, member-list, voice-display, settings, and autocomplete tests pass;
+  `:app:assembleDebug` passes.
+
+Resumable task: `app/src/main/java/com/discord/widgets/**` | live Discord user payloads and
+`UserUtils.getDisplayName` | replace remaining low-traffic direct username labels only when their
+screen is reconstructed or device evidence shows they are display-name surfaces.

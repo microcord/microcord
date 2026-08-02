@@ -58,7 +58,7 @@ class ChannelMemberListRowsTest {
         })
     }
 
-    @Test fun privateRecipientsSortByUsernameAndUseGroupNicks() {
+    @Test fun privateRecipientsSortByDisplayNameAndUseGroupNicks() {
         val channel = channel(
             recipientIds = listOf(1, 2),
             nicks = listOf(com.discord.api.channel.ChannelRecipientNick(2, "Bee")),
@@ -66,18 +66,18 @@ class ChannelMemberListRowsTest {
         )
         val rows = ChannelMemberListRows.privateChannel(
             channel,
-            mapOf(1L to CoreUser(1, "zoe", discriminator = 2), 2L to CoreUser(2, "Amy", discriminator = 9)),
+            mapOf(1L to CoreUser(1, "zoe", globalName = "Zoe Display"), 2L to CoreUser(2, "Amy")),
             emptyMap(),
         )
         assertEquals(ChannelMemberListRow.Header.Kind.MEMBERS, (rows[0] as ChannelMemberListRow.Header).kind)
-        assertEquals(listOf("Bee", "zoe"), rows.filterIsInstance<ChannelMemberListRow.Member>().map { it.displayName })
+        assertEquals(listOf("Bee", "Zoe Display"), rows.filterIsInstance<ChannelMemberListRow.Member>().map { it.displayName })
         assertTrue(rows.filterIsInstance<ChannelMemberListRow.Member>().first().isOwner)
     }
 
     @Test fun directDmUsesEmbeddedRecipientWhenUserStoreHasNotLoadedIt() {
         val channel = channel(
             type = Channel.DM,
-            recipients = listOf(com.discord.api.user.User(7, "Embedded")),
+            recipients = listOf(com.discord.api.user.User(7, "embedded", globalName = "Embedded")),
         )
         val members = ChannelMemberListRows.privateChannel(channel, emptyMap(), emptyMap())
             .filterIsInstance<ChannelMemberListRow.Member>()

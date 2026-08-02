@@ -73,6 +73,7 @@ work in one change unless the dependency is unavoidable.
 | **Vineflower Kotlin decompile of the DEX** | `C:\Users\manti\Desktop\projeler\discorddecompile\out\**` (4,853 `.kt` files, paths mirror the reference) | Constructors, `equals`/`hashCode`/`toString`, declaration order, nullability — **recovers what JADX drops** |
 | **dex2jar JAR** | `C:\Users\manti\Desktop\projeler\discorddecompile\discord126.21-dex2jar.jar` | `javap -p` for exact signatures/arity/field types; `javap -v` for runtime-visible annotations |
 | Original DEX | `discord-jadx/app/src/main/classes*.dex` | `dexdump` when even the above disagree |
+| Discord Userdoccers | `https://docs.discord.food/llms.txt` | Undocumented modern Discord API fields, payloads, routes, and behavior; verify against runtime/reference evidence |
 
 All are READ-ONLY. **Check the Kotlin decompile before declaring anything
 unverifiable** — many findings in `docs/parity-audit/` were marked "JADX broken"

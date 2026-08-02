@@ -209,7 +209,7 @@ class WidgetUserSheet : AppBottomSheet() {
                     ?: state.user.banner,
                 state.userProfile.user.bannerColor?.value ?: state.user.bannerColor,
                 state.guildMember,
-                listOfNotNull(state.guildMember),
+                emptyList(),
                 state.presence,
                 state.streamContext,
                 state.userProfile,

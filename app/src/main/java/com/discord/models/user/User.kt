@@ -14,6 +14,7 @@ interface User : Serializable {
     val banner: String?
     val discriminator: Int
     val username: String
+    val globalName: String? get() = null
     val isBot: Boolean
     val premiumTier: PremiumTier
 }

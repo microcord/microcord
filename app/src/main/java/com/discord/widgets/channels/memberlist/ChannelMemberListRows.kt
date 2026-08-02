@@ -10,6 +10,7 @@ import com.discord.models.user.CoreUser
 import com.discord.models.user.User
 import com.discord.utilities.lazy.memberlist.ChannelMemberList
 import com.discord.utilities.lazy.memberlist.MemberListRow
+import com.discord.utilities.user.UserUtils.getDisplayName
 import java.util.Locale
 
 sealed class ChannelMemberListRow(open val key: String) {
@@ -179,7 +180,7 @@ object ChannelMemberListRows {
         val ids = (channel.recipientIds.orEmpty() + channel.recipients.orEmpty().map { it.id } + listOfNotNull(currentUser?.id)).toSet()
         val nicks = channel.nicks.orEmpty().associate { it.id to it.nick }
         val recipients = resolvedUsers.values.filter { it.id in ids }.sortedWith(
-            compareBy<User> { it.username.lowercase(Locale.ROOT) + "%04d".format(Locale.ROOT, it.discriminator) }
+            compareBy<User> { it.getDisplayName().lowercase(Locale.ROOT) }
                 .thenBy { it.id },
         )
         return buildList {
@@ -190,7 +191,7 @@ object ChannelMemberListRows {
                     user,
                     null,
                     presences[user.id],
-                    nicks[user.id] ?: user.username,
+                    user.getDisplayName(nicks[user.id]),
                     user.id == channel.ownerId,
                     user.id in streamingUserIds,
                 ))
@@ -219,7 +220,7 @@ object ChannelMemberListRows {
             }
         }
         val order = compareBy<Long> { userId ->
-            (members[userId]?.nick?.takeUnless(String::isBlank) ?: users.getValue(userId).username).lowercase(Locale.ROOT)
+            users.getValue(userId).getDisplayName(members[userId]?.nick).lowercase(Locale.ROOT)
         }.thenBy { it }
         return buildList {
             orderedRoles.forEach { role ->
@@ -254,7 +255,7 @@ object ChannelMemberListRows {
             user,
             guildMember,
             presences[userId],
-            guildMember?.nick?.takeUnless(String::isBlank) ?: user.username,
+            user.getDisplayName(guildMember?.nick),
             userId == ownerId,
             userId in streamingUserIds,
         )

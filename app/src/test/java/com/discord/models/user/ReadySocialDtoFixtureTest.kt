@@ -45,8 +45,10 @@ class ReadySocialDtoFixtureTest {
         assertEquals(NullSerializable.Value("avatar-hash"), fixture.user.avatar)
         assertTrue(fixture.user.banner is NullSerializable.Null)
         assertEquals(PremiumTier.TIER_2, fixture.user.premiumType)
+        assertEquals("Ready Display", fixture.user.globalName)
         assertEquals("+10000000000", (fixture.user.phone as com.discord.api.user.Phone.PhoneNumber).number)
         assertEquals(42, MeUser(fixture.user).discriminator)
+        assertEquals("Ready Display", MeUser(fixture.user).globalName)
         assertFalse(MeUser(fixture.user).toString().contains("fixture-token"))
 
         val relationship = fixture.relationships.single()

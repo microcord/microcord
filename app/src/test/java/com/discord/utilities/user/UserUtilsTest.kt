@@ -51,17 +51,30 @@ class UserUtilsTest {
         assertFalse(user(premiumTier = PremiumTier.TIER_1).canUsePremiumStickers)
     }
 
-    @Test fun `discriminator is zero padded`() = with(UserUtils) {
+    @Test fun `only bots retain legacy discriminators`() = with(UserUtils) {
         assertEquals("#0001", padDiscriminator(1))
         assertEquals("#1234", padDiscriminator(1234))
-        assertEquals("#0042", user(discriminator = 42).discriminatorWithPadding)
-        assertEquals("ada#0042", user(username = "ada", discriminator = 42).getUserNameWithDiscriminator())
+        assertEquals("", user(discriminator = 42).discriminatorWithPadding)
+        assertEquals("#0042", user(discriminator = 42, isBot = true).discriminatorWithPadding)
+        assertEquals(
+            "ada#0042",
+            user(username = "ada", discriminator = 42, isBot = true).getUserNameWithDiscriminator(),
+        )
+    }
+
+    @Test fun `display name prefers nickname then global name then username`() = with(UserUtils) {
+        val user = user(username = "handle", globalName = "Display")
+        assertEquals("Display", user.displayName)
+        assertEquals("Guild Nick", user.getDisplayName("Guild Nick"))
+        assertEquals("Display", user.getDisplayName("   "))
+        assertEquals("handle", user(username = "handle", globalName = " ").displayName)
     }
 
     @Test fun `name comparison prefers nicknames and falls back to id`() = with(UserUtils) {
         val ada = user(id = 1, username = "ada")
         val grace = user(id = 2, username = "grace")
         assertTrue(compareUserNames(ada, grace) < 0)
+        assertTrue(compareUserNames(user(id = 1, username = "zoe", globalName = "Ada"), grace) < 0)
         // A nickname replaces the username for ordering.
         assertTrue(compareUserNames(ada, grace, "zoe", null) > 0)
         // A blank nickname is ignored.
@@ -117,10 +130,13 @@ class UserUtilsTest {
         flags: Int = 0,
         publicFlags: Int = 0,
         isSystemUser: Boolean = false,
+        isBot: Boolean = false,
+        globalName: String? = null,
         premiumTier: PremiumTier = PremiumTier.NONE,
     ) = CoreUser(
         id = id, username = username, isSystemUser = isSystemUser, discriminator = discriminator,
-        premiumTier = premiumTier, flags = flags, publicFlags = publicFlags,
+        premiumTier = premiumTier, flags = flags, publicFlags = publicFlags, isBot = isBot,
+        globalName = globalName,
     )
 
     private companion object {

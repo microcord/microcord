@@ -2,6 +2,7 @@
   "user": {
     "id": 100,
     "username": "ready-user",
+    "global_name": "Ready Display",
     "avatar": "avatar-hash",
     "banner": null,
     "discriminator": "0042",

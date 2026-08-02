@@ -6,6 +6,7 @@ import com.discord.api.guildmember.GuildMember as ApiGuildMember
 import com.discord.api.role.GuildRole
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.user.User
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 data class GuildMember(
     @ColorInt val color: Int,
@@ -82,14 +83,14 @@ data class GuildMember(
             member1: GuildMember?,
             member2: GuildMember?,
         ): Int {
-            val name1 = member1?.nick?.takeUnless(String::isBlank) ?: user1.username
-            val name2 = member2?.nick?.takeUnless(String::isBlank) ?: user2.username
+            val name1 = user1.getDisplayName(member1?.nick)
+            val name2 = user2.getDisplayName(member2?.nick)
             return name1.compareTo(name2, ignoreCase = true).takeUnless { it == 0 }
                 ?: user1.id.compareTo(user2.id)
         }
 
         @JvmStatic
-        fun getNickOrUsername(member: GuildMember?, user: User) = member?.nick ?: user.username
+        fun getNickOrUsername(member: GuildMember?, user: User) = user.getDisplayName(member?.nick)
 
         private val roleComparator = compareBy<GuildRole>({ it.position }, { it.id })
     }
