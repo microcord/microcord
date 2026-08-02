@@ -13,6 +13,7 @@ data class RegisteredExperiment(
 /** The developer-visible experiment registry shipped by Discord Android 126.21. */
 object ExperimentRegistry {
     val registeredExperiments: LinkedHashMap<String, RegisteredExperiment> = listOf(
+        user("TapTap", "manticord_local_taptap", "Control: Standard message gestures", "Treatment 1: Double tap to reply or edit"),
         user("Compact Invite Widget", "2020-01_mobile_invite_suggestion_compact", "Control", "Treatment 1: Use compact view"),
         user("Guild Invite Sheet", "2020-12_android_guild_channel_invite_sheet", "Control: Use the full-screen guild invite UI", "Treatment 1: Use the bottom sheet guild invite UI"),
         user("Disable mentions in landscape", "2020-12_android_disable_landscape_mentions", "Control", "Treatment 1: Hide mentions in landscape"),

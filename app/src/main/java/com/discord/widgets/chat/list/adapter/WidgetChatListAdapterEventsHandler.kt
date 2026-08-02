@@ -4,6 +4,9 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.widget.Toast
 import com.discord.R
 import com.discord.i18n.FormatUtils
@@ -77,6 +80,8 @@ class WidgetChatListAdapterEventsHandler(
 ) : WidgetChatListAdapter.EventHandler {
 
     private val fragmentManager get() = host.parentFragmentManager
+    private val tapHandler = Handler(Looper.getMainLooper())
+    private var pendingTap: PendingTap? = null
 
     override fun onBotUiComponentClicked(
         applicationId: Long,
@@ -166,7 +171,36 @@ class WidgetChatListAdapterEventsHandler(
         StoreStream.getChat().toggleBlockedMessageGroup(message.id)
 
     override fun onMessageClicked(message: Message, isThreadStarterMessage: Boolean) {
-        if (isThreadStarterMessage) StoreStream.getMessagesLoader().jumpToMessage(message.channelId, message.id)
+        val enabled = TapTapBehavior.isEnabled(
+            StoreStream.getExperiments().getUserExperiment(TapTapBehavior.EXPERIMENT_KEY)?.bucket,
+        )
+        if (!enabled || !TapTapBehavior.canHandle(message)) {
+            handleSingleTap(message, isThreadStarterMessage)
+            return
+        }
+
+        val now = SystemClock.uptimeMillis()
+        val previous = pendingTap
+        if (previous?.messageId == message.id && now - previous.startedAt <= TapTapBehavior.TIMEOUT_MS) {
+            tapHandler.removeCallbacks(previous.callback)
+            pendingTap = null
+            handleDoubleTap(message)
+            return
+        }
+
+        if (previous != null) {
+            tapHandler.removeCallbacks(previous.callback)
+            previous.callback.run()
+        }
+        lateinit var callback: Runnable
+        callback = Runnable {
+            if (pendingTap?.callback === callback) {
+                pendingTap = null
+                handleSingleTap(message, isThreadStarterMessage)
+            }
+        }
+        pendingTap = PendingTap(message.id, now, callback)
+        tapHandler.postDelayed(callback, TapTapBehavior.TIMEOUT_MS)
     }
 
     override fun onMessageLongClicked(
@@ -338,6 +372,31 @@ class WidgetChatListAdapterEventsHandler(
         WidgetGuildProfileSheet.show(fragmentManager, false, guildId, reference.channelId)
     }
 
+    private fun handleSingleTap(message: Message, isThreadStarterMessage: Boolean) {
+        if (isThreadStarterMessage) StoreStream.getMessagesLoader().jumpToMessage(message.channelId, message.id)
+    }
+
+    private fun handleDoubleTap(message: Message) {
+        val channel = StoreStream.getChannels().getChannel(message.channelId) ?: return
+        when (TapTapBehavior.action(message, StoreStream.getUsers().getMe().id)) {
+            TapTapBehavior.Action.EDIT -> {
+                val actionsHost = host as? WidgetChatListActions.Host ?: return
+                WidgetChatListActions.prepareMessageForEdit(
+                    message,
+                    channel,
+                    StoreStream.getGuilds().getGuild(channel.guildId),
+                ).ui(host).appSubscribe(WidgetChatListAdapterEventsHandler::class.java) { editable ->
+                    actionsHost.requestMessageEdit(editable, messageActionCoordinator)
+                }
+            }
+            TapTapBehavior.Action.REPLY -> messageActionCoordinator.reply(
+                channel,
+                message,
+                StoreStream.getUsers().getMe().id,
+            )
+        }
+    }
+
     private fun showMessageActions(message: Message) {
         val channel = StoreStream.getChannels().getChannel(message.channelId) ?: return
         WidgetChatListActions.show(
@@ -381,4 +440,25 @@ class WidgetChatListAdapterEventsHandler(
             }
         }
     }
+
+    private data class PendingTap(
+        val messageId: Long,
+        val startedAt: Long,
+        val callback: Runnable,
+    )
+}
+
+internal object TapTapBehavior {
+    const val EXPERIMENT_KEY = "manticord_local_taptap"
+    const val TIMEOUT_MS = 200L
+
+    enum class Action { REPLY, EDIT }
+
+    fun isEnabled(bucket: Int?) = bucket == 1
+
+    fun canHandle(message: Message) = !message.isEphemeralMessage() && !message.isLocal() &&
+        !message.isFailed() && !message.isLoading()
+
+    fun action(message: Message, currentUserId: Long) =
+        if (message.author?.id == currentUserId) Action.EDIT else Action.REPLY
 }

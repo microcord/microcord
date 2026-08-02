@@ -1674,3 +1674,18 @@ run the queued connected geometry assertion and visually confirm the restored-he
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/gifpicker/**` |
 `zt64/aliucord-plugins/plugin/Frecents` | device-check GIF long-press toast/star rendering and emoji
 category-scroll synchronization; add settings-proto sync only when that transport is reconstructed.
+
+## 2026-08-03 TapTap local experiment
+
+- Backported Vendicated/AliucordPlugins TapTap 1.1.6 as local user experiment
+  `manticord_local_taptap`, default bucket 0/off; bucket 1 enables it without spoofing a server
+  assignment.
+- Two message-row clicks within 200 ms reply to another user's message or open editing for the
+  current user's message. Existing reply/edit coordinators and message unparser paths are reused.
+- Ephemeral, local, failed, and loading messages are ignored. Child link/media/spoiler/reaction
+  handlers, collapsed blocked rows, and long-press behavior remain independent; no geometry changed.
+- Focused experiment/gesture tests and `assembleDebug` pass.
+
+Resumable task: `app/src/main/java/com/discord/widgets/chat/list/adapter/WidgetChatListAdapterEventsHandler.kt` |
+`Vendicated/AliucordPlugins/TapTap` | device-check the 200 ms threshold against long-press, links,
+media, spoilers, and thread-starter rows.

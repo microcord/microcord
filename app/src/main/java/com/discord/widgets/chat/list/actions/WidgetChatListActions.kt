@@ -225,18 +225,9 @@ class WidgetChatListActions : AppBottomSheet() {
     }
 
     private fun editMessage(model: Model) {
-        val message = model.message
-        StoreStream.getEmojis().getEmojiSet(model.channel?.guildId ?: 0L, message.channelId).take(1)
-            .computationLatest().ui(this)
-            .appSubscribe(WidgetChatListActions::class.java) { emojiSet ->
-                val content = unparse(
-                    message.content.orEmpty(),
-                    model.guild,
-                    StoreStream.getChannels().getChannelsForGuild(model.channel?.guildId ?: 0L),
-                    StoreStream.getUsers().getUsers(),
-                    emojiSet,
-                )
-                host().requestMessageEdit(message.copy(content = content), host().messageActionCoordinator())
+        prepareMessageForEdit(model.message, model.channel, model.guild)
+            .ui(this).appSubscribe(WidgetChatListActions::class.java) { message ->
+                host().requestMessageEdit(message, host().messageActionCoordinator())
                 dismiss()
             }
     }
@@ -423,6 +414,20 @@ class WidgetChatListActions : AppBottomSheet() {
                 putInt(ARG_TYPE, type)
             }
         }.show(fragmentManager, WidgetChatListActions::class.java.name)
+
+        internal fun prepareMessageForEdit(message: Message, channel: Channel?, guild: Guild?): Observable<Message> =
+            StoreStream.getEmojis().getEmojiSet(channel?.guildId ?: 0L, message.channelId).take(1)
+                .computationLatest().map { emojiSet ->
+                    message.copy(
+                        content = unparse(
+                            message.content.orEmpty(),
+                            guild,
+                            StoreStream.getChannels().getChannelsForGuild(channel?.guildId ?: 0L),
+                            StoreStream.getUsers().getUsers(),
+                            emojiSet,
+                        ),
+                    )
+                }
 
         private fun unparse(
             raw: String,
