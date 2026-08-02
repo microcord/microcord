@@ -3,6 +3,7 @@ package com.discord.widgets.chat.input.gifpicker
 import com.discord.app.AppViewModel
 import com.discord.models.gifpicker.dto.ModelGif
 import com.discord.stores.StoreAnalytics
+import com.discord.stores.StoreMediaFavorites
 import com.discord.utilities.analytics.SearchType
 import com.discord.utilities.analytics.Traits
 import com.discord.utilities.rx.restSubscribeOn
@@ -20,16 +21,17 @@ import rx.Observable
 class GifCategoryViewModel(
     gifCategoryItem: GifCategoryItem,
     private val messageSender: GifMessageSender = GifMessageSender(),
+    private val storeGifPicker: GifPickerStore = GifPickerStores.gifPicker,
     /**
      * `StoreAnalytics` exists but `StoreStream` publishes no accessor for it yet, so search
      * telemetry is off by default rather than routed through an invented seam. Pass the store when
      * one is available and every reference event fires unchanged.
      */
     private val storeAnalytics: StoreAnalytics? = null,
-    storeStateObservable: Observable<StoreState> = observeStoreState(gifCategoryItem),
+    storeStateObservable: Observable<StoreState> = observeStoreState(gifCategoryItem, storeGifPicker),
 ) : AppViewModel<GifCategoryViewModel.ViewState>() {
 
-    data class StoreState(val gifs: List<ModelGif>)
+    data class StoreState(val gifs: List<ModelGif>, val favoriteKeys: Set<String>)
 
     data class ViewState(val gifItems: List<GifItem>) {
         /** Counted lazily; only the analytics path reads it. */
@@ -45,7 +47,14 @@ class GifCategoryViewModel(
     }
 
     private fun handleStoreState(storeState: StoreState) {
-        val viewState = ViewState(storeState.gifs.map { GifItem(it) })
+        val viewState = ViewState(
+            storeState.gifs.map { gif ->
+                GifItem(
+                    gif,
+                    isFavorite = StoreMediaFavorites.canonicalGifKey(gif.tenorGifUrl) in storeState.favoriteKeys,
+                )
+            },
+        )
         storeAnalytics?.trackSearchResultViewed(SearchType.GIF, viewState.gifCount)
         updateViewState(viewState)
     }
@@ -58,8 +67,11 @@ class GifCategoryViewModel(
                 sourceTrait = Traits.Source(_object = Traits.Source.Obj.GIF_PICKER),
             )
         }
-        messageSender.send(gifItem.gif.tenorGifUrl)
+        if (messageSender.send(gifItem.gif.tenorGifUrl)) storeGifPicker.onGifUsed(gifItem.gif)
     }
+
+    fun toggleFavorite(gifItem: GifItem) =
+        storeGifPicker.setFavoriteGif(gifItem.gif, !gifItem.isFavorite)
 
     companion object {
         fun observeStoreState(
@@ -71,11 +83,20 @@ class GifCategoryViewModel(
                     storeGifPicker.observeGifsForSearchQuery(gifCategoryItem.gifCategory.categoryName)
 
                 is GifCategoryItem.Trending -> storeGifPicker.observeTrendingCategoryGifs()
+                is GifCategoryItem.Favorite -> storeGifPicker.observeFavoriteGifs()
+                is GifCategoryItem.Frequent -> storeGifPicker.observeFrequentlyUsedGifs()
             }
             // Hold the loading grid until real results land, rather than flashing an empty one.
             return gifs
                 .filter { it !== GifPickerStore.SEARCH_RESULTS_LOADING }
-                .map { StoreState(it) }
+                .switchMap { results ->
+                    storeGifPicker.observeFavoriteGifs().map { favorites ->
+                        StoreState(
+                            results,
+                            favorites.mapTo(HashSet()) { StoreMediaFavorites.canonicalGifKey(it.tenorGifUrl) },
+                        )
+                    }
+                }
         }
     }
 }

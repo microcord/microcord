@@ -5,6 +5,8 @@ import com.discord.models.gifpicker.dto.ModelGif
 import com.discord.models.gifpicker.dto.TrendingGifCategoriesResponseDto
 import com.discord.restapi.RestAPIInterface
 import com.discord.stores.updates.ObservationDeck
+import com.discord.utilities.media.ExpressionFrecencyTracker
+import com.discord.utilities.persister.Persister
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.widgets.chat.input.gifpicker.GifPickerStore
@@ -17,7 +19,15 @@ class StoreGifPicker(
     private val storeUserSettingsSystem: StoreUserSettingsSystem,
     private val restAPI: () -> RestAPIInterface? = { RestAPI.apiOrNull },
     private val observationDeck: ObservationDeck,
+    private val mediaFavorites: StoreMediaFavorites,
+    private val frecencyCache: Persister<ExpressionFrecencyTracker> =
+        Persister(GIF_FRECENCY_CACHE_KEY, ExpressionFrecencyTracker()),
+    private val gifHistoryCache: Persister<Map<String, ModelGif>> =
+        Persister(GIF_HISTORY_CACHE_KEY, emptyMap()),
 ) : StoreV2(), GifPickerStore {
+    private var frecency = frecencyCache.get()
+    private val gifHistory = gifHistoryCache.get().toMutableMap()
+    private var frequentlyUsedGifsSnapshot: List<ModelGif> = buildFrequentlyUsedGifs()
     private val gifCategories = ArrayList<ModelGifCategory>()
     private var gifCategoriesSnapshot: List<ModelGifCategory> = emptyList()
     private val gifSearchHistory = CacheHistory<String, List<ModelGif>>()
@@ -84,6 +94,22 @@ class StoreGifPicker(
             .filter { it != null }
             .map { it!! }
     }
+
+    override fun observeFavoriteGifs(): Observable<List<ModelGif>> =
+        mediaFavorites.observeFavoriteGifs().map { favorites -> favorites.map { it.toModelGif() } }
+
+    override fun observeFrequentlyUsedGifs(): Observable<List<ModelGif>> =
+        observationDeck.connectRx(this) { frequentlyUsedGifsSnapshot }.distinctUntilChanged()
+
+    override fun onGifUsed(gif: ModelGif) = dispatcher.schedule {
+        val key = StoreMediaFavorites.canonicalGifKey(gif.tenorGifUrl)
+        frecency.track(key)
+        gifHistory[key] = gif.copy(tenorGifUrl = key)
+        markChanged()
+    }
+
+    override fun setFavoriteGif(gif: ModelGif, favorite: Boolean) =
+        mediaFavorites.setFavoriteGif(gif, favorite)
 
     override fun fetchGifCategories() = dispatcher.schedule {
         if (!isFetchingGifCategories) fetchGifCategoriesInternal()
@@ -196,7 +222,24 @@ class StoreGifPicker(
         suggestedSearchTermsSnapshot = HashMap(gifSuggestedSearchTermsHistory)
         gifTrendingSearchTermsSnapshot = ArrayList(gifTrendingSearchTerms)
         trendingCategoryGifsSnapshot = ArrayList(trendingCategoryGifs)
+        frequentlyUsedGifsSnapshot = buildFrequentlyUsedGifs()
+        frecencyCache.set(frecency, persist = true)
+        gifHistoryCache.set(HashMap(gifHistory), persist = true)
     }
+
+    @StoreThread
+    fun handlePreLogout() {
+        frecencyCache.clear(persist = true)
+        gifHistoryCache.clear(persist = true)
+        frecency = ExpressionFrecencyTracker()
+        gifHistory.clear()
+        frequentlyUsedGifsSnapshot = emptyList()
+        markChanged()
+    }
+
+    private fun buildFrequentlyUsedGifs(): List<ModelGif> = frecency.getSortedKeys()
+        .mapNotNull(gifHistory::get)
+        .take(MAX_FREQUENT_GIFS)
 
     private class CacheHistory<K, V> : LinkedHashMap<K, V>() {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<K, V>?): Boolean = size > MAX_CACHE_ENTRIES
@@ -212,5 +255,9 @@ class StoreGifPicker(
         private const val SEARCH_PAGE_SIZE = 50
         private const val SEARCH_TERM_LIMIT = 5
         private const val MAX_CACHE_ENTRIES = 20
+        private const val MAX_FREQUENT_GIFS = 32
+
+        const val GIF_FRECENCY_CACHE_KEY = "GIF_FRECENTS_V1"
+        const val GIF_HISTORY_CACHE_KEY = "GIF_HISTORY_ITEMS_V1"
     }
 }

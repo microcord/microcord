@@ -3,7 +3,10 @@ package com.discord.widgets.chat.input.gifpicker
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import com.discord.R
@@ -29,17 +32,45 @@ sealed class GifViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
     class Gif(itemView: View) : GifViewHolder(itemView) {
 
         private val image: SimpleDraweeView = itemView.findViewById(R.id.gif_item_image)
+        private val favorite: ImageView = itemView.findViewById(R.id.gif_item_favorite)
 
         init {
             itemView.setOnTouchListener(ViewScalingOnTouchListener(PRESS_SCALE))
         }
 
-        fun configure(gifItem: GifItem, columnWidthPx: Int, onSelectGif: ((GifItem) -> Unit)? = null) {
+        fun configure(
+            gifItem: GifItem,
+            columnWidthPx: Int,
+            onSelectGif: ((GifItem) -> Unit)? = null,
+            onToggleFavorite: ((GifItem) -> Unit)? = null,
+        ) {
             val gif = gifItem.gif
             val aspect = if (gif.width == 0) 1f else gif.height.toFloat() / gif.width
             itemView.layoutParams.height = (columnWidthPx * aspect).toInt()
             MGImages.setImage(image, listOf(gif.gifImageUrl))
+            favorite.visibility = View.VISIBLE
+            favorite.alpha = if (gifItem.isFavorite) 1f else 0.7f
+            favorite.setColorFilter(
+                ContextCompat.getColor(
+                    favorite.context,
+                    if (gifItem.isFavorite) R.color.status_yellow else R.color.white,
+                ),
+            )
+            favorite.contentDescription = favorite.context.getString(
+                if (gifItem.isFavorite) R.string.gif_tooltip_remove_from_favorites
+                else R.string.gif_tooltip_favorited_picker_button,
+            )
+            favorite.setOnClickListener {
+                onToggleFavorite?.invoke(gifItem)
+                Toast.makeText(
+                    itemView.context,
+                    if (gifItem.isFavorite) R.string.gif_tooltip_remove_from_favorites
+                    else R.string.gif_tooltip_favorited_picker_button,
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
             itemView.setOnClickListener { onSelectGif?.invoke(gifItem) }
+            itemView.setOnLongClickListener(null)
         }
 
         private companion object {

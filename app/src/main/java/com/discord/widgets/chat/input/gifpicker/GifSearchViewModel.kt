@@ -4,6 +4,7 @@ import com.discord.R
 import com.discord.app.AppViewModel
 import com.discord.models.gifpicker.dto.ModelGif
 import com.discord.stores.StoreAnalytics
+import com.discord.stores.StoreMediaFavorites
 import com.discord.utilities.analytics.SearchType
 import com.discord.utilities.analytics.Traits
 import com.discord.utilities.rx.leadingEdgeThrottle
@@ -31,9 +32,11 @@ import rx.subjects.BehaviorSubject
 class GifSearchViewModel(
     private val searchSubject: BehaviorSubject<String> = BehaviorSubject.create(""),
     private val messageSender: GifMessageSender = GifMessageSender(),
+    private val storeGifPicker: GifPickerStore = GifPickerStores.gifPicker,
     /** See [GifCategoryViewModel]: no `StoreStream` accessor for `StoreAnalytics` exists yet. */
     private val storeAnalytics: StoreAnalytics? = null,
-    storeStateObservable: Observable<StoreState> = observeStoreState(searchSubject, storeAnalytics),
+    storeStateObservable: Observable<StoreState> =
+        observeStoreState(searchSubject, storeAnalytics, storeGifPicker),
 ) : AppViewModel<GifSearchViewModel.ViewState>() {
 
     sealed class StoreState(val trendingSearchTerms: List<String>) {
@@ -46,6 +49,7 @@ class GifSearchViewModel(
             val suggested: List<String>,
             val trending: List<String>,
             val searchQuery: String?,
+            val favoriteKeys: Set<String> = emptySet(),
         ) : StoreState(trending)
     }
 
@@ -81,8 +85,11 @@ class GifSearchViewModel(
                 sourceTrait = Traits.Source(_object = Traits.Source.Obj.GIF_PICKER),
             )
         }
-        messageSender.send(gifItem.gif.tenorGifUrl)
+        if (messageSender.send(gifItem.gif.tenorGifUrl)) storeGifPicker.onGifUsed(gifItem.gif)
     }
+
+    fun toggleFavorite(gifItem: GifItem) =
+        storeGifPicker.setFavoriteGif(gifItem.gif, !gifItem.isFavorite)
 
     /**
      * The loading flip happens here rather than downstream because it must be immediate: the store
@@ -114,7 +121,15 @@ class GifSearchViewModel(
 
             when (storeState) {
                 is StoreState.SearchResults -> {
-                    items.addAll(storeState.gifs.map { GifItem(it, storeState.searchQuery) })
+                    items.addAll(
+                        storeState.gifs.map { gif ->
+                            GifItem(
+                                gif,
+                                storeState.searchQuery,
+                                StoreMediaFavorites.canonicalGifKey(gif.tenorGifUrl) in storeState.favoriteKeys,
+                            )
+                        },
+                    )
 
                     val hasResults = items.isNotEmpty()
                     val hasSuggestions = storeState.suggested.isNotEmpty()
@@ -178,7 +193,18 @@ class GifSearchViewModel(
                             .filter { it !== GifPickerStore.SEARCH_RESULTS_LOADING },
                         storeGifPicker.observeSuggestedSearchTerms(query)
                             .filter { it !== GifPickerStore.SEARCH_TERMS_LOADING },
-                    ) { gifs, terms -> StoreState.SearchResults(gifs, terms, trendingTerms, query) }
+                        storeGifPicker.observeFavoriteGifs(),
+                    ) { gifs, terms, favorites ->
+                        StoreState.SearchResults(
+                            gifs,
+                            terms,
+                            trendingTerms,
+                            query,
+                            favorites.mapTo(HashSet()) {
+                                StoreMediaFavorites.canonicalGifKey(it.tenorGifUrl)
+                            },
+                        )
+                    }
                 }
             }
     }

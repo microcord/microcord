@@ -9,8 +9,10 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.cardview.widget.CardView
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
 import com.discord.R
 import com.discord.api.message.embed.EmbedAuthor
@@ -23,6 +25,7 @@ import com.discord.api.message.embed.MessageEmbed
 import com.discord.api.role.GuildRole
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.member.GuildMember
+import com.discord.models.gifpicker.dto.ModelGif
 import com.discord.simpleast.core.node.Node
 import com.discord.simpleast.core.parser.Parser
 import com.discord.stores.StoreStream
@@ -100,6 +103,8 @@ class WidgetChatListAdapterItemEmbed(
     private val footerText: TextView = itemView.findViewById(R.id.chat_list_item_embed_footer_text)
     private val spoilerCover: View = itemView.findViewById(R.id.chat_list_item_embed_spoiler)
     private val inlineMedia: InlineMediaView = itemView.findViewById(R.id.embed_inline_media)
+    private val inlineFavorite: ImageView = itemView.findViewById(R.id.chat_list_item_embed_inline_favorite)
+    private val imageFavorite: ImageView = itemView.findViewById(R.id.chat_list_item_embed_image_favorite)
 
     private val userSettings = StoreStream.getUserSettings()
     private val embedTinyIconSize = itemView.resources.getDimensionPixelSize(R.dimen.embed_tiny_icon_size)
@@ -188,6 +193,8 @@ class WidgetChatListAdapterItemEmbed(
                     androidx.core.content.ContextCompat.getColor(itemView.context, R.color.transparent),
                 )
                 containerCard.strokeWidth = 0
+                configureGifFavorite(embed, inlineFavorite)
+                imageFavorite.visibility = View.GONE
             } else {
                 content.visibility = View.VISIBLE
                 divider.visibility = View.VISIBLE
@@ -206,6 +213,8 @@ class WidgetChatListAdapterItemEmbed(
                 )
                 containerCard.strokeWidth =
                     containerCard.resources.getDimensionPixelSize(R.dimen.chat_embed_card_stroke_width)
+                configureGifFavorite(embed, imageFavorite)
+                inlineFavorite.visibility = View.GONE
             }
             itemView.visibility = View.VISIBLE
         } catch (failure: Exception) {
@@ -234,6 +243,49 @@ class WidgetChatListAdapterItemEmbed(
         // An inline embed is nothing but its media, so tapping it opens the fullscreen viewer —
         // unlike the carded embed's picture below, which follows the embed's own link.
         inlineMedia.setOnClickListener { view -> WidgetMedia.launch(view.context, embed) }
+    }
+
+    private fun configureGifFavorite(embed: MessageEmbed, button: ImageView) {
+        val gif = embed.favoriteGif()
+        if (gif == null) {
+            button.visibility = View.GONE
+            button.setOnClickListener(null)
+            return
+        }
+        val favorites = StoreStream.getMediaFavorites()
+        var isFavorite = favorites.isFavoriteGif(gif)
+
+        fun render() {
+            button.alpha = if (isFavorite) 1f else 0.7f
+            button.setColorFilter(
+                ContextCompat.getColor(button.context, if (isFavorite) R.color.status_yellow else R.color.white),
+            )
+            button.contentDescription = button.context.getString(
+                if (isFavorite) R.string.gif_tooltip_remove_from_favorites
+                else R.string.gif_tooltip_favorited_picker_button,
+            )
+        }
+
+        button.visibility = View.VISIBLE
+        render()
+        button.setOnClickListener {
+            favorites.setFavoriteGif(gif, !isFavorite)
+            isFavorite = !isFavorite
+            render()
+            Toast.makeText(button.context, button.contentDescription, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun MessageEmbed.favoriteGif(): ModelGif? {
+        if (!with(EmbedResourceUtils) { isAnimated() }) return null
+        val preview = with(EmbedResourceUtils) { getPreviewImage() }
+        val mediaUrl = preview?.url ?: video?.proxyUrl ?: video?.url ?: return null
+        return ModelGif(
+            gifImageUrl = mediaUrl,
+            tenorGifUrl = url ?: mediaUrl,
+            width = video?.width ?: preview?.width ?: 0,
+            height = video?.height ?: preview?.height ?: 0,
+        )
     }
 
     private fun configureEmbedDivider(color: Int?) {

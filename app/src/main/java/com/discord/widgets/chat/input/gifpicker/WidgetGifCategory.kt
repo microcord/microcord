@@ -77,6 +77,8 @@ class WidgetGifCategory : AppFragment(R.layout.widget_gif_category) {
     private fun setUpTitle() {
         title.text = when (val category = gifCategory) {
             is GifCategoryItem.Standard -> category.gifCategory.categoryName
+            is GifCategoryItem.Favorite -> getString(R.string.category_favorite)
+            is GifCategoryItem.Frequent -> getString(R.string.frequently_used)
             is GifCategoryItem.Trending -> getString(R.string.gif_picker_result_type_trending_gifs)
         }
     }
@@ -99,6 +101,7 @@ class WidgetGifCategory : AppFragment(R.layout.widget_gif_category) {
         gifAdapter = GifAdapter(
             appComponent = this,
             onSelectGif = ::selectGif,
+            onToggleFavorite = gifCategoryViewModel::toggleFavorite,
             columnWidthPx = GifAdapter.calculateColumnWidth(gifRecycler, categoryColumnsCount, columnSpacePx),
         )
         gifRecycler.adapter = gifAdapter

@@ -1605,6 +1605,9 @@ screen is reconstructed or device evidence shows they are display-name surfaces.
 - The final DM-only artwork blocker was measurement: the 0dp overlay was expanded after parent layout,
   but its internal Drawee child remained 0x0. The parent palette therefore rendered without the PNG.
   `NameplateView.onLayout` now gives the image the overlay's final bounds without affecting row size.
+- Selected DM rows now load the animated APNG through LINE's decoder while showing static artwork as
+  the download/failure fallback. Playback loops only while selected and allowed by reduced-motion;
+  deselection, rebind, or detach cancels and recycles it. Member-list behavior is unchanged.
 - Forum parent channels no longer enter ordinary message-history loading; forum posts/threads remain
   valid message channels. This stops the live backend retry loop for forum parent IDs.
 - Debug builds now log only HTTP method, Retrofit route template, status, and duration. Release builds
@@ -1643,3 +1646,31 @@ latest debug APK, open a profile with an effect, and verify timed APNG layers su
 Resumable task: `app/src/main/java/com/discord/views/NameplateView.kt` |
 `widget_channels_list_item_channel_private.xml` and desktop modules `174755`, `715069`, `746002` |
 run the queued connected geometry assertion and visually confirm the restored-height DM row artwork.
+
+## 2026-08-02 emoji and GIF frecents
+
+- Backported the maintained `zt64/aliucord-plugins` Frecents behavior into native stores and picker
+  flows rather than retaining Aliucord hooks. Expression frecency uses the plugin's bounded recent-use
+  history, age weights, and lifetime-use multiplier.
+- Emoji favorites/frecents use numeric custom-emoji IDs or Unicode surrogates as canonical identity.
+  GIF favorites use decoded Tenor URLs and newest-first ordering; successful GIF sends update a
+  bounded local GIF frecency history.
+- Emoji picker sections now expose Favorites and Frequently Used before guild/Unicode sections. GIF
+  picker exposes Favorites and Frequently Used before Trending/categories. Every GIF tile has a
+  non-measuring star button: white when inactive, yellow when favorited; tapping it toggles favorite
+  state without sending the GIF or changing tile geometry.
+- Long-pressing an emoji tile now opens the existing emoji detail sheet, whose Add Favorite/Remove
+  Favorite action updates the same persisted favorite store.
+- GIFV and animated-image embeds in chat now expose the same white/yellow favorite star as picker
+  tiles. Chat-added favorites retain the embed's real preview URL; no extension rewriting is used
+  because changing a Discord CDN MP4/WebM suffix produces a nonexistent path. The star is a
+  non-measuring overlay and does not change embed geometry.
+- The Favorites landing tile previews a random saved GIF, matching the plugin.
+- Existing `STORE_FAVORITES` persistence remains compatible. New local keys are
+  `EMOJI_FRECENTS_V1`, `GIF_FRECENTS_V1`, and `GIF_HISTORY_ITEMS_V1`. Cross-device
+  `/settings-proto/2` synchronization was not added because no existing target transport owns it.
+- Focused persistence, identity, ordering, ranking, integration tests and `assembleDebug` pass.
+
+Resumable task: `app/src/main/java/com/discord/widgets/chat/input/gifpicker/**` |
+`zt64/aliucord-plugins/plugin/Frecents` | device-check GIF long-press toast/star rendering and emoji
+category-scroll synchronization; add settings-proto sync only when that transport is reconstructed.

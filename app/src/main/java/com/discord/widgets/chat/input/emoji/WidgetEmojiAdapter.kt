@@ -147,6 +147,10 @@ class WidgetEmojiAdapter(
                 item.emojiName
             }
             image.setOnClickListener { onEmojiSelected.onEmojiSelected(item.emoji) }
+            image.setOnLongClickListener {
+                onEmojiSelected.onEmojiLongPressed(item.emoji)
+                true
+            }
         }
     }
 

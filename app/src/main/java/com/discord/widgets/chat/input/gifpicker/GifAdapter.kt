@@ -18,6 +18,7 @@ import com.discord.widgets.chat.input.gifpicker.GifAdapterItem.GifItem
 class GifAdapter(
     appComponent: AppComponent,
     private val onSelectGif: ((GifItem) -> Unit)? = null,
+    private val onToggleFavorite: ((GifItem) -> Unit)? = null,
     private val columnWidthPx: Int,
     private val onSelectSuggestedTerm: ((String) -> Unit)? = null,
     private val diffCreator: DiffCreator<List<GifAdapterItem>, GifViewHolder> = DiffCreator(appComponent),
@@ -44,7 +45,12 @@ class GifAdapter(
 
     override fun onBindViewHolder(holder: GifViewHolder, position: Int) {
         when (val item = items[position]) {
-            is GifItem -> (holder as GifViewHolder.Gif).configure(item, columnWidthPx, onSelectGif)
+            is GifItem -> (holder as GifViewHolder.Gif).configure(
+                item,
+                columnWidthPx,
+                onSelectGif,
+                onToggleFavorite,
+            )
 
             is GifAdapterItem.SuggestedTermsItem.SuggestedTermsEmptyResults ->
                 (holder as GifViewHolder.SuggestedTerms).configure(item, onSelectSuggestedTerm)

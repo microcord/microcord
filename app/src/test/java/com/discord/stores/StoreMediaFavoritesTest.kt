@@ -1,6 +1,7 @@
 package com.discord.stores
 
 import com.discord.models.domain.emoji.ModelEmojiUnicode
+import com.discord.models.gifpicker.dto.ModelGif
 import com.discord.stores.StoreMediaFavorites.Favorite
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.persister.Persister
@@ -66,6 +67,29 @@ class StoreMediaFavoritesTest {
         assertEquals(
             store.getFavorites().toList(),
             store.getFavorites(setOf(Favorite.FavUnicodeEmoji::class, Favorite.FavCustomEmoji::class)).toList(),
+        )
+    }
+
+    @Test
+    fun gifFavoritesUseDecodedTenorIdentityPersistAndKeepNewestFirst() {
+        val store = StoreMediaFavorites(deck, dispatcher)
+        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
+        val encoded = ModelGif("https://img/1.gif", "https%3A%2F%2Ftenor.com%2F1", 100, 50)
+        val sameGif = encoded.copy(tenorGifUrl = "https://tenor.com/1")
+        val newer = ModelGif("https://img/2.gif", "https://tenor.com/2", 200, 100)
+
+        store.setFavoriteGif(encoded, true)
+        store.setFavoriteGif(sameGif, true)
+        store.setFavoriteGif(newer, true)
+        scheduler.triggerActions()
+
+        assertEquals(
+            listOf("https://tenor.com/2", "https://tenor.com/1"),
+            store.getFavoriteGifs().map(Favorite.FavGif::tenorGifUrl),
+        )
+        assertEquals(
+            store.getFavoriteGifs(),
+            StoreMediaFavorites(deck, dispatcher).getFavoriteGifs(),
         )
     }
 }

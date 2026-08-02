@@ -14,7 +14,12 @@ import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.AppViewFlipper
 import com.discord.models.domain.emoji.Emoji
+import com.discord.models.domain.emoji.ModelEmojiCustom
+import com.discord.models.domain.emoji.ModelEmojiUnicode
+import com.discord.stores.StoreStream
 import com.discord.utilities.rx.ui
+import com.discord.utilities.textprocessing.node.EmojiNode
+import com.discord.widgets.emoji.WidgetEmojiSheet
 import com.google.android.material.textfield.TextInputEditText
 
 /**
@@ -45,9 +50,20 @@ class WidgetEmojiPicker : AppFragment(R.layout.widget_emoji_picker) {
 
     private val emojiSelectedListener = object : OnEmojiSelectedListener {
         override fun onEmojiSelected(emoji: Emoji) {
+            StoreStream.getEmojis().onEmojiUsed(emoji)
             val handler = onPicked
             if (handler != null) handler(emoji) else host()?.onEmojiPicked(emoji)
             view?.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+        }
+
+        override fun onEmojiLongPressed(emoji: Emoji) {
+            val identity = when (emoji) {
+                is ModelEmojiCustom -> EmojiNode.EmojiIdAndType.Custom(emoji.id, emoji.isAnimated, emoji.name)
+                is ModelEmojiUnicode -> EmojiNode.generateEmojiIdAndType(emoji)
+                else -> return
+            }
+            WidgetEmojiSheet.show(parentFragmentManager, identity)
+            view?.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
         }
     }
 

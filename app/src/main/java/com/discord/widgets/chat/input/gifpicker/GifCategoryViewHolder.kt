@@ -38,6 +38,18 @@ class GifCategoryViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) 
                 icon.visibility = View.GONE
             }
 
+            is GifCategoryItem.Favorite -> configureSynthetic(
+                gifCategoryItem.gifPreviewUrl,
+                R.string.category_favorite,
+                R.drawable.ic_emoji_picker_category_favorites_star,
+            )
+
+            is GifCategoryItem.Frequent -> configureSynthetic(
+                gifCategoryItem.gifPreviewUrl,
+                R.string.frequently_used,
+                R.drawable.ic_recent_white_a60_24dp,
+            )
+
             is Trending -> {
                 setPreviewImage(gifCategoryItem.gifPreviewUrl)
                 title.text = itemView.resources.getString(R.string.gif_picker_result_type_trending_gifs)
@@ -48,6 +60,13 @@ class GifCategoryViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) 
             }
         }
         itemView.setOnClickListener { onSelectGifCategory?.invoke(gifCategoryItem) }
+    }
+
+    private fun configureSynthetic(imageUrl: String, titleRes: Int, iconRes: Int) {
+        setPreviewImage(imageUrl)
+        title.setText(titleRes)
+        icon.visibility = View.VISIBLE
+        icon.setImageResource(iconRes)
     }
 
     /**

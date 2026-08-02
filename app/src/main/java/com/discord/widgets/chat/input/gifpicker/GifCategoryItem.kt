@@ -17,6 +17,12 @@ sealed class GifCategoryItem : DiffKeyProvider, Serializable {
     /** A Tenor category; tapping it searches for [ModelGifCategory.categoryName]. */
     data class Standard(val gifCategory: ModelGifCategory) : GifCategoryItem()
 
+    /** User-starred GIFs, always first even when the list is empty. */
+    data class Favorite(val gifPreviewUrl: String) : GifCategoryItem()
+
+    /** Locally ranked recent/frequent GIFs. */
+    data class Frequent(val gifPreviewUrl: String) : GifCategoryItem()
+
     /** The synthetic first tile. It has no category name — it maps to the trending endpoint. */
     data class Trending(val gifPreviewUrl: String) : GifCategoryItem()
 }

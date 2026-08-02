@@ -3,6 +3,7 @@ package com.discord.widgets.chat.input.emoji
 import com.discord.api.emoji.GuildEmoji
 import com.discord.models.domain.emoji.Emoji
 import com.discord.models.domain.emoji.EmojiCategory
+import com.discord.models.domain.emoji.EmojiSet
 import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.models.guild.Guild
 import com.discord.widgets.chat.input.emoji.WidgetEmojiAdapter.Item
@@ -115,6 +116,31 @@ class EmojiPickerViewModelTest {
         assertTrue(results.none { it is Item.HeaderItem })
 
         assertTrue(EmojiPickerViewModel.filter(items, "nothing-matches-this").isEmpty())
+    }
+
+    @Test
+    fun favoritesAndFrecentsPrecedeGuildAndUnicodeSections() {
+        val favorite = unicodeEmoji("favorite")
+        val recent = unicodeEmoji("recent")
+        val set = EmojiSet(
+            unicodeEmojis = unicode,
+            customEmojis = emptyMap(),
+            emojiIndex = mapOf(favorite.getUniqueId() to favorite, recent.getUniqueId() to recent),
+            recentEmojis = listOf(recent),
+            favoriteEmoji = setOf(favorite),
+        )
+
+        val headers = EmojiPickerViewModel.buildItems(
+            set,
+            emptyMap(),
+            allowEmojisToAnimate = true,
+            contextType = EmojiPickerContextType.Chat,
+        ).filterIsInstance<Item.HeaderItem.StandardHeaderItem>()
+
+        assertEquals(
+            listOf(EmojiCategory.FAVORITE, EmojiCategory.RECENT, EmojiCategory.PEOPLE, EmojiCategory.NATURE),
+            headers.map(Item.HeaderItem.StandardHeaderItem::emojiCategory),
+        )
     }
 
     private fun unicodeEmoji(name: String) = ModelEmojiUnicode(names = listOf(name), surrogates = name)

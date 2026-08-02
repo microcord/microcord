@@ -78,6 +78,7 @@ class WidgetGifPickerSearch : AppFragment(R.layout.widget_gif_picker_search) {
         gifAdapter = GifAdapter(
             appComponent = this,
             onSelectGif = ::selectGif,
+            onToggleFavorite = gifPickerViewModel::toggleFavorite,
             columnWidthPx = GifAdapter.calculateColumnWidth(gifRecycler, categoryColumnsCount, columnSpacePx),
             onSelectSuggestedTerm = { term -> searchInput.setText(term) },
         )

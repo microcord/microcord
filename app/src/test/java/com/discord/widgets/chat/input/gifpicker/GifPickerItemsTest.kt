@@ -37,25 +37,27 @@ class GifPickerItemsTest {
             listOf("Reactions", "Animals"),
             withoutPreview.filterIsInstance<GifCategoryItem.Standard>().map { it.gifCategory.categoryName },
         )
+        assertTrue(withoutPreview.first() is GifCategoryItem.Favorite)
         assertTrue(withoutPreview.none { it is GifCategoryItem.Trending })
 
         val withPreview = GifPickerViewModel.buildCategoryItems(
             GifPickerViewModel.StoreState(categories, trendingGifCategoryPreviewUrl = "https://trend"),
         )
-        assertEquals(GifCategoryItem.Trending("https://trend"), withPreview.first())
-        assertEquals(categories.size + 1, withPreview.size)
+        assertEquals(GifCategoryItem.Favorite(""), withPreview.first())
+        assertEquals(GifCategoryItem.Trending("https://trend"), withPreview[1])
+        assertEquals(categories.size + 2, withPreview.size)
     }
 
     @Test
     fun serverCategoriesUseSearchWhileTrendingUsesItsDedicatedFeed() {
         val store = RecordingGifPickerStore()
-        val favorites = GifCategoryItem.Standard(ModelGifCategory("Favorites", "https://p/favorites"))
+        val favorites = GifCategoryItem.Favorite("https://p/favorites")
 
         assertEquals(
             store.searchResults,
             GifCategoryViewModel.observeStoreState(favorites, store).toBlocking().first().gifs,
         )
-        assertEquals("Favorites", store.lastSearchQuery)
+        assertEquals(null, store.lastSearchQuery)
 
         assertEquals(
             store.trendingResults,
@@ -188,6 +190,10 @@ class GifPickerItemsTest {
         }
         override fun observeGifTrendingSearchTerms() = Observable.just(emptyList<String>())
         override fun observeSuggestedSearchTerms(query: String) = Observable.just(emptyList<String>())
+        override fun observeFavoriteGifs() = Observable.just(searchResults)
+        override fun observeFrequentlyUsedGifs() = Observable.just(emptyList<ModelGif>())
+        override fun onGifUsed(gif: ModelGif) = Unit
+        override fun setFavoriteGif(gif: ModelGif, favorite: Boolean) = Unit
         override fun fetchGifCategories() = Unit
     }
 }

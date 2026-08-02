@@ -2,13 +2,11 @@ package com.discord.widgets.emoji
 
 import com.discord.models.guild.Guild
 import com.discord.widgets.emoji.EmojiSheetViewModel.Companion.CustomEmojiGuildInfo
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import rx.Observable
 
 /**
  * A custom emoji can come from a server the viewer is not in, so the popout has to describe the
@@ -61,41 +59,4 @@ class EmojiSheetGuildInfoTest {
         assertFalse(CustomEmojiGuildInfo.Unknown.isUserInGuild)
     }
 
-    /**
-     * `StoreMediaFavorites` is not reconstructed, so favourites go through a pair of seams. The
-     * defaults must be inert rather than absent: the star renders unfilled and tapping it is a
-     * no-op, instead of the sheet failing to build. **Remove this test when the store lands.**
-     */
-    @Test
-    fun `the favourites seam defaults to an empty, inert implementation`() {
-        var observed: Set<String>? = null
-        EmojiSheetViewModel.observeFavoriteEmojiKeys().subscribe { observed = it }
-        assertEquals(emptySet<String>(), observed)
-
-        // Must not throw, and must not be observable through the default read seam.
-        EmojiSheetViewModel.setFavoriteEmoji("41", true)
-        EmojiSheetViewModel.observeFavoriteEmojiKeys().subscribe { observed = it }
-        assertEquals(emptySet<String>(), observed)
-    }
-
-    /** The seams are process-wide `var`s; installing one must fully replace the default. */
-    @Test
-    fun `installing a favourites implementation replaces the default`() {
-        val written = mutableListOf<Pair<String, Boolean>>()
-        EmojiSheetViewModel.observeFavoriteEmojiKeys = { Observable.just(setOf("41")) }
-        EmojiSheetViewModel.setFavoriteEmoji = { key, favorite -> written += key to favorite }
-
-        var observed: Set<String>? = null
-        EmojiSheetViewModel.observeFavoriteEmojiKeys().subscribe { observed = it }
-        EmojiSheetViewModel.setFavoriteEmoji("41", false)
-
-        assertEquals(setOf("41"), observed)
-        assertEquals(listOf("41" to false), written)
-    }
-
-    @After
-    fun restoreSeams() {
-        EmojiSheetViewModel.observeFavoriteEmojiKeys = { Observable.just(emptySet()) }
-        EmojiSheetViewModel.setFavoriteEmoji = { _, _ -> }
-    }
 }

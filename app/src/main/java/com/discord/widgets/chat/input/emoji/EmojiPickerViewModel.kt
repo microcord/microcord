@@ -6,8 +6,10 @@ import androidx.annotation.VisibleForTesting
 import com.discord.app.AppViewModel
 import com.discord.models.domain.emoji.Emoji
 import com.discord.models.domain.emoji.EmojiCategory
+import com.discord.models.domain.emoji.EmojiSet
 import com.discord.models.domain.emoji.ModelEmojiCustom
 import com.discord.models.guild.Guild
+import com.discord.stores.StoreEmoji
 import com.discord.stores.StoreStream
 import com.discord.utilities.rx.ui
 import com.discord.widgets.chat.input.emoji.WidgetEmojiAdapter.Item
@@ -23,18 +25,13 @@ import rx.Subscription
  * [EmojiCategoryItem.categoryRange] values are derived from the same pass that builds the list,
  * which is the only way the two can be guaranteed to agree.
  *
- * Reference: `com.discord.widgets.chat.input.emoji.EmojiPickerViewModel`. Two of its inputs have no
- * source in this project and are therefore absent rather than faked:
- *
- * * **Favourites and frequently-used** come from `StoreEmoji`/`StoreEmojiCustom`; those categories
- *   are omitted from the rail entirely instead of showing empty tabs.
- * * **The Nitro upsell section** needs `EmojiAutocompletePremiumUpsellFeatureFlag` and the locked
- *   emoji set. `Item.HeaderItem.StringHeaderItem` exists for it and nothing emits one yet.
+ * Favorites and frequently-used emoji are read from [StoreEmoji] before guild and Unicode sections.
+ * The Nitro upsell remains separate because it is not part of the emoji-set ordering contract.
  */
 class EmojiPickerViewModel(
     private val context: Context,
     private val contextType: EmojiPickerContextType = EmojiPickerContextType.Chat,
-    private val catalogSource: (Context) -> Observable<Map<EmojiCategory, List<Emoji>>> = EmojiCatalog::observe,
+    private val emojiSetSource: () -> Observable<EmojiSet> = { observeEmojiSet(contextType) },
     private val guildsSource: () -> Observable<Map<Long, Guild>> = { StoreStream.getGuilds().observeGuilds() },
     private val animationsSource: () -> Observable<Boolean> =
         { StoreStream.getUserSettings().observeIsAnimatedEmojisEnabled() },
@@ -73,11 +70,11 @@ class EmojiPickerViewModel(
 
     init {
         subscription = Observable.combineLatest(
-            catalogSource(context.applicationContext),
+            emojiSetSource(),
             guildsSource(),
             animationsSource(),
-        ) { unicode, guilds, animationsEnabled ->
-            buildItems(unicode, guilds, animationsEnabled, contextType)
+        ) { emojiSet, guilds, animationsEnabled ->
+            buildItems(emojiSet, guilds, animationsEnabled, contextType)
         }.ui(this).subscribe({ onItemsChanged(it) }, { /* keep whatever is already on screen */ })
     }
 
@@ -135,6 +132,56 @@ class EmojiPickerViewModel(
     }
 
     companion object {
+
+        private fun observeEmojiSet(contextType: EmojiPickerContextType): Observable<EmojiSet> {
+            val store = StoreStream.getEmojis()
+            return when (contextType) {
+                EmojiPickerContextType.Chat ->
+                    StoreStream.getChannelsSelected().observeSelectedChannel().switchMap { channel ->
+                        if (channel == null) {
+                            store.getEmojiSet(StoreEmoji.EmojiContext.Global, false, false)
+                        } else {
+                            store.getEmojiSet(channel.guildId, channel.id)
+                        }
+                    }
+                EmojiPickerContextType.Global ->
+                    store.getEmojiSet(StoreEmoji.EmojiContext.Global, false, false)
+                is EmojiPickerContextType.Guild ->
+                    store.getEmojiSet(StoreEmoji.EmojiContext.Guild(contextType.guildId), false, false)
+            }
+        }
+
+        @VisibleForTesting
+        fun buildItems(
+            emojiSet: EmojiSet,
+            guilds: Map<Long, Guild>,
+            allowEmojisToAnimate: Boolean,
+            contextType: EmojiPickerContextType,
+        ): List<Item> = buildList {
+            fun addSection(category: EmojiCategory, emojis: Collection<Emoji>) {
+                if (emojis.isEmpty()) return
+                add(Item.HeaderItem.StandardHeaderItem(category))
+                addAll(emojis.map { emoji ->
+                    Item.EmojiItem(null, emoji, emoji.firstName, allowEmojisToAnimate)
+                })
+            }
+
+            addSection(EmojiCategory.FAVORITE, emojiSet.favoriteEmoji)
+            addSection(EmojiCategory.RECENT, emojiSet.recentEmojis)
+
+            for ((guildId, emojis) in emojiSet.customEmojis) {
+                val guild = guilds[guildId] ?: continue
+                if (emojis.isEmpty()) continue
+                add(Item.HeaderItem.GuildHeaderItem(guild))
+                addAll(emojis.map { emoji ->
+                    Item.EmojiItem(guild.name, emoji, emoji.firstName, allowEmojisToAnimate)
+                })
+            }
+
+            if (contextType !is EmojiPickerContextType.Guild) {
+                for ((category, emojis) in emojiSet.unicodeEmojis) addSection(category, emojis)
+            }
+        }
 
         /**
          * Matches on *any* of an emoji's names, case-insensitively, as a substring.

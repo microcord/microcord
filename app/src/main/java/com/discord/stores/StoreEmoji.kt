@@ -8,7 +8,7 @@ import com.discord.models.domain.emoji.EmojiSet
 import com.discord.models.domain.emoji.ModelEmojiCustom
 import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.utilities.collections.ShallowPartitionMap
-import com.discord.utilities.media.MediaFrecencyTracker
+import com.discord.utilities.media.ExpressionFrecencyTracker
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.rx.computationLatest
@@ -44,11 +44,11 @@ class StoreEmoji(
      * favourites row is empty rather than wrong.
      */
     private val observeFavoriteEmojiIds: () -> Observable<Set<String>> = { Observable.just(emptySet()) },
-    private val frecencyCache: Persister<MediaFrecencyTracker> =
-        Persister(EMOJI_FRECENCY_CACHE_KEY, MediaFrecencyTracker()),
+    private val frecencyCache: Persister<ExpressionFrecencyTracker> =
+        Persister(EMOJI_FRECENCY_CACHE_KEY, ExpressionFrecencyTracker()),
 ) : Rules.EmojiDataProvider {
 
-    private val frecency: MediaFrecencyTracker = frecencyCache.get()
+    private var frecency: ExpressionFrecencyTracker = frecencyCache.get()
 
     private var unicodeEmojisByCategory: Map<EmojiCategory, List<Emoji>> = emptyMap()
     private var namesMap: Map<String, ModelEmojiUnicode> = emptyMap()
@@ -163,7 +163,8 @@ class StoreEmoji(
 
     @StoreThread
     fun handlePreLogout() {
-        frecencyCache.clear()
+        frecencyCache.clear(persist = true)
+        frecency = ExpressionFrecencyTracker()
     }
 
     // region internals
@@ -386,10 +387,10 @@ class StoreEmoji(
     // endregion
 
     companion object {
-        const val EMOJI_FRECENCY_CACHE_KEY = "EMOJI_HISTORY_V4"
+        const val EMOJI_FRECENCY_CACHE_KEY = "EMOJI_FRECENTS_V1"
 
         private const val EMOJI_ASSET_PATH = "data/emojis.json"
-        private const val MAX_FREQUENTLY_USED_EMOJIS = 40
+        private const val MAX_FREQUENTLY_USED_EMOJIS = 32
 
         /**
          * Built from code points rather than written literally: both characters are invisible in

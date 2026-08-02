@@ -2,6 +2,7 @@ package com.discord.widgets.chat.input.gifpicker
 
 import com.discord.app.AppViewModel
 import com.discord.models.gifpicker.domain.ModelGifCategory
+import com.discord.models.gifpicker.dto.ModelGif
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
 import rx.Observable
@@ -21,6 +22,8 @@ class GifPickerViewModel(
     data class StoreState(
         val gifCategories: List<ModelGifCategory>,
         val trendingGifCategoryPreviewUrl: String,
+        val favoriteGifs: List<ModelGif> = emptyList(),
+        val frequentlyUsedGifs: List<ModelGif> = emptyList(),
     )
 
     data class ViewState(val gifCategoryItems: List<GifCategoryItem>) {
@@ -39,8 +42,12 @@ class GifPickerViewModel(
     }
 
     companion object {
-        /** The synthetic "Trending" tile leads, and only when its preview image has arrived. */
+        /** Favorites lead, followed by non-empty frecents, Trending, then server categories. */
         fun buildCategoryItems(storeState: StoreState): List<GifCategoryItem> = buildList {
+            add(GifCategoryItem.Favorite(storeState.favoriteGifs.randomOrNull()?.gifImageUrl.orEmpty()))
+            storeState.frequentlyUsedGifs.firstOrNull()?.let {
+                add(GifCategoryItem.Frequent(it.gifImageUrl))
+            }
             if (storeState.trendingGifCategoryPreviewUrl.isNotEmpty()) {
                 add(GifCategoryItem.Trending(storeState.trendingGifCategoryPreviewUrl))
             }
@@ -52,6 +59,10 @@ class GifPickerViewModel(
         ): Observable<StoreState> = Observable.combineLatest(
             storeGifPicker.observeGifCategories(),
             storeGifPicker.observeTrendingGifCategoryPreviewUrl(),
-        ) { categories, trendingPreviewUrl -> StoreState(categories, trendingPreviewUrl) }
+            storeGifPicker.observeFavoriteGifs(),
+            storeGifPicker.observeFrequentlyUsedGifs(),
+        ) { categories, trendingPreviewUrl, favorites, frequent ->
+            StoreState(categories, trendingPreviewUrl, favorites, frequent)
+        }
     }
 }

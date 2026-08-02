@@ -21,11 +21,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import rx.Observable
+import rx.schedulers.TestScheduler
 import rx.subjects.ReplaySubject
 
 class SearchGifExpressionStoresTest {
@@ -97,13 +99,15 @@ class SearchGifExpressionStoresTest {
         val deck = ObservationDeck()
         val dispatcher = Dispatcher(storeTestScheduler("gif-store-test"))
         val searchResults = ReplaySubject.create<List<GifDto>>()
+        val favorites = StoreMediaFavorites(deck, dispatcher)
         val store = StoreGifPicker(
             dispatcher,
             StoreStream.getUserSettingsSystem(),
             restAPI = { gifApi(searchResults) },
             observationDeck = deck,
+            mediaFavorites = favorites,
         )
-        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
+        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store, favorites), deck))
         val values = CopyOnWriteArrayList<List<com.discord.models.gifpicker.dto.ModelGif>>()
 
         store.observeGifsForSearchQuery("none").subscribe(values::add)
@@ -117,6 +121,40 @@ class SearchGifExpressionStoresTest {
         assertSame(StoreGifPicker.searchResultsLoadingList, values.first())
         assertEquals(emptyList<com.discord.models.gifpicker.dto.ModelGif>(), values.last())
         assertNotSame(StoreGifPicker.searchResultsLoadingList, values.last())
+    }
+
+    @Test
+    fun gifFrecentsAreCanonicalAndBoundedToThirtyTwo() {
+        val deck = ObservationDeck()
+        val scheduler = TestScheduler()
+        val dispatcher = Dispatcher(scheduler)
+        val preferences = memoryPreferences()
+        val settings = StoreUserSettingsSystem({}, dispatcher, deck, preferences, preferences).apply { restore() }
+        val favorites = StoreMediaFavorites(deck, dispatcher)
+        val store = StoreGifPicker(
+            dispatcher,
+            settings,
+            restAPI = { null },
+            observationDeck = deck,
+            mediaFavorites = favorites,
+        )
+        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store, favorites), deck))
+
+        repeat(40) { index ->
+            store.onGifUsed(
+                com.discord.models.gifpicker.dto.ModelGif(
+                    "https://img/$index.gif",
+                    "https%3A%2F%2Ftenor.com%2F$index",
+                    100,
+                    50,
+                ),
+            )
+        }
+        scheduler.triggerActions()
+
+        val frequent = store.observeFrequentlyUsedGifs().toBlocking().first()
+        assertEquals(32, frequent.size)
+        assertTrue(frequent.all { it.tenorGifUrl.startsWith("https://tenor.com/") })
     }
 
     @Test

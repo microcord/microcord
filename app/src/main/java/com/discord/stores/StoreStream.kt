@@ -228,11 +228,13 @@ class StoreStream private constructor(
     )
     private val guildsNsfw = StoreGuildsNsfw(dispatcher, channels, observationDeck)
     private val search = StoreSearch(this, dispatcher, guildsNsfw, users, observationDeck, channels, guilds)
+    private val mediaFavorites = StoreMediaFavorites(observationDeck, dispatcher)
     private val gifPicker = StoreGifPicker(
         dispatcher,
         userSettingsSystem,
         restAPI = { if (::restApi.isInitialized) restApi else null },
         observationDeck = observationDeck,
+        mediaFavorites = mediaFavorites,
     )
     private val expressionPickerNavigation = StoreExpressionPickerNavigation(observationDeck, dispatcher)
     private val expressionSuggestions = StoreExpressionSuggestions(observationDeck, dispatcher, clock)
@@ -273,7 +275,18 @@ class StoreStream private constructor(
     private val nux = StoreNux(dispatcher)
     private val reviewRequest = StoreReviewRequest(clock, notices, sessionDurablePreferences)
     private val emojiCustom = StoreEmojiCustom(guilds)
-    private val emoji = StoreEmoji(emojiCustom, users, permissions, guildsSorted)
+    private val emoji = StoreEmoji(
+        emojiCustom,
+        users,
+        permissions,
+        guildsSorted,
+        observeFavoriteEmojiIds = {
+            mediaFavorites.observeFavorites(StoreMediaFavorites.Favorite.EmojiTypes).map { favorites ->
+                favorites.filterIsInstance<StoreMediaFavorites.FavoriteEmoji>()
+                    .mapTo(LinkedHashSet(), StoreMediaFavorites.FavoriteEmoji::emojiUniqueId)
+            }
+        },
+    )
     private val emojiGuild = StoreEmojiGuild(observationDeck, dispatcher)
     private val stickers = StoreStickers(dispatcher, observationDeck = observationDeck, clock = clock)
     private val guildStickers = StoreGuildStickers(dispatcher, observationDeck) { stickerIds ->
@@ -592,7 +605,6 @@ class StoreStream private constructor(
         api = { if (::restApi.isInitialized) restApi else null },
     )
     private val inviteSettings = StoreInviteSettings()
-    private val mediaFavorites = StoreMediaFavorites(observationDeck, dispatcher)
     private val notificationUpsells = StoreNotificationUpsells(dispatcher, observationDeck)
 
     // -- Voice and stages ---------------------------------------------------------------------------
@@ -2611,6 +2623,7 @@ class StoreStream private constructor(
         requestedStageChannels.reset()
         stageChannelSelfPresence.reset()
         emoji.handlePreLogout()
+        gifPicker.handlePreLogout()
         emojiCustom.reset()
         emojiGuild.reset()
         stickers.handlePreLogout()

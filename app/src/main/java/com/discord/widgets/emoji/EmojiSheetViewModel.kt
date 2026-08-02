@@ -13,6 +13,7 @@ import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreEmoji
 import com.discord.stores.StoreEmojiCustom
 import com.discord.stores.StoreGuilds
+import com.discord.stores.StoreMediaFavorites
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUser
 import com.discord.utilities.rest.RestAPI
@@ -52,6 +53,7 @@ class EmojiSheetViewModel(
     storeUsers: StoreUser = StoreStream.getUsers(),
     storeGuilds: StoreGuilds = StoreStream.getGuilds(),
     storeChannelsSelected: StoreChannelsSelected = StoreStream.getChannelsSelected(),
+    private val storeMediaFavorites: StoreMediaFavorites = StoreStream.getMediaFavorites(),
     storeStateObservable: Observable<StoreState> = observeStoreState(
         restApi,
         emojiIdAndType,
@@ -59,6 +61,7 @@ class EmojiSheetViewModel(
         storeGuilds,
         storeEmojiCustom,
         storeChannelsSelected,
+        storeMediaFavorites,
     ),
 ) : AppViewModel<EmojiSheetViewModel.ViewState>(ViewState.Loading) {
 
@@ -192,12 +195,12 @@ class EmojiSheetViewModel(
     )
 
     fun setFavorite(favorite: Boolean) {
-        val key = when (val state = viewState) {
-            is ViewState.EmojiCustom -> favoriteKey(state.emojiCustom)
-            is ViewState.EmojiUnicode -> favoriteKey(state.emojiUnicode)
+        val value = when (val state = viewState) {
+            is ViewState.EmojiCustom -> StoreMediaFavorites.Favorite.FavCustomEmoji(state.emojiCustom)
+            is ViewState.EmojiUnicode -> StoreMediaFavorites.Favorite.FavUnicodeEmoji(state.emojiUnicode)
             else -> return
         }
-        setFavoriteEmoji(key, favorite)
+        if (favorite) storeMediaFavorites.addFavorite(value) else storeMediaFavorites.removeFavorite(value)
     }
 
     companion object {
@@ -220,20 +223,6 @@ class EmojiSheetViewModel(
             }
         }
 
-        /**
-         * `StoreMediaFavorites` has not been reconstructed. It keys favourites by
-         * `Emoji.getUniqueId()`, which is the custom emoji id as a string, or the unicode emoji's
-         * surrogate — reproduced by [favoriteKey] so this seam can be swapped for the real store
-         * without changing the view model. **Reported to the `StoreStream` wiring agent**; the two
-         * calls needed are `observeFavorites(Favorite.EmojiTypes)` and `add`/`removeFavorite`.
-         */
-        @JvmStatic
-        var observeFavoriteEmojiKeys: () -> Observable<Set<String>> = { Observable.just(emptySet()) }
-
-        /** @see observeFavoriteEmojiKeys */
-        @JvmStatic
-        var setFavoriteEmoji: (key: String, favorite: Boolean) -> Unit = { _, _ -> }
-
         private fun favoriteKey(custom: EmojiNode.EmojiIdAndType.Custom): String = custom.id.toString()
 
         private fun favoriteKey(unicode: ModelEmojiUnicode): String = unicode.getUniqueId()
@@ -245,12 +234,13 @@ class EmojiSheetViewModel(
             storeGuilds: StoreGuilds,
             storeEmojiCustom: StoreEmojiCustom,
             storeChannelsSelected: StoreChannelsSelected,
+            storeMediaFavorites: StoreMediaFavorites,
         ): Observable<StoreState> = Observable.combineLatest(
             getGuildForCustomEmoji(restApi, emojiIdAndType, storeGuilds, storeEmojiCustom),
             storeUsers.observeMe(),
             storeGuilds.observeGuilds(),
             storeChannelsSelected.observeSelectedChannel(),
-            observeFavoriteEmojiKeys(),
+            storeMediaFavorites.observeFavorites(StoreMediaFavorites.Favorite.EmojiTypes),
         ) { guildInfo, meUser: MeUser, guilds, channel, favorites ->
             StoreState(
                 customEmojiGuildInfo = guildInfo,
@@ -258,7 +248,8 @@ class EmojiSheetViewModel(
                 meUserIsPremium = meUser.isPremium,
                 joinedGuildIds = guilds.keys,
                 currentChannel = channel,
-                favoriteKeys = favorites,
+                favoriteKeys = favorites.filterIsInstance<StoreMediaFavorites.FavoriteEmoji>()
+                    .mapTo(HashSet(), StoreMediaFavorites.FavoriteEmoji::emojiUniqueId),
             )
         }
 

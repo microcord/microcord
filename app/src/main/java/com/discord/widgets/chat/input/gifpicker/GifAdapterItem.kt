@@ -16,7 +16,11 @@ sealed class GifAdapterItem(val type: ViewType) : DiffKeyProvider {
      * A single GIF tile. [query] is the search that produced it and is carried purely so that
      * re-running the same search does not diff as "unchanged" against a different result set.
      */
-    data class GifItem(val gif: ModelGif, val query: String? = "") :
+    data class GifItem(
+        val gif: ModelGif,
+        val query: String? = "",
+        val isFavorite: Boolean = false,
+    ) :
         GifAdapterItem(ViewType.VIEW_TYPE_GIF_ITEM) {
         override val key: String = hashCode().toString()
     }

@@ -1,9 +1,12 @@
 package com.discord.stores
 
 import com.discord.models.domain.emoji.ModelEmojiUnicode
+import com.discord.models.gifpicker.dto.ModelGif
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.textprocessing.node.EmojiNode
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import kotlin.reflect.KClass
 import rx.Observable
 
@@ -22,11 +25,30 @@ class StoreMediaFavorites(
             constructor(unicode: ModelEmojiUnicode) : this(unicode.getUniqueId())
         }
 
+        data class FavGif(
+            val tenorGifUrl: String,
+            val gifImageUrl: String,
+            val width: Int,
+            val height: Int,
+            val order: Int,
+        ) : Favorite() {
+            constructor(gif: ModelGif, order: Int) : this(
+                canonicalGifKey(gif.tenorGifUrl),
+                gif.gifImageUrl,
+                gif.width,
+                gif.height,
+                order,
+            )
+
+            fun toModelGif() = ModelGif(gifImageUrl, tenorGifUrl, width, height)
+        }
+
         companion object {
             val AllTypes: Set<KClass<out Favorite>> by lazy {
-                setOf(FavCustomEmoji::class, FavUnicodeEmoji::class)
+                setOf(FavCustomEmoji::class, FavUnicodeEmoji::class, FavGif::class)
             }
             val EmojiTypes: Set<KClass<out Favorite>> = setOf(FavCustomEmoji::class, FavUnicodeEmoji::class)
+            val GifTypes: Set<KClass<out Favorite>> = setOf(FavGif::class)
         }
     }
 
@@ -45,6 +67,32 @@ class StoreMediaFavorites(
     fun observeFavorites(types: Set<KClass<out Favorite>> = Favorite.AllTypes): Observable<Set<Favorite>> =
         observationDeck.connectRx(this) { getFavorites(types) }.distinctUntilChanged()
 
+    fun getFavoriteGifs(): List<Favorite.FavGif> =
+        getFavorites(Favorite.GifTypes).filterIsInstance<Favorite.FavGif>().sortedByDescending { it.order }
+
+    fun observeFavoriteGifs(): Observable<List<Favorite.FavGif>> =
+        observeFavorites(Favorite.GifTypes).map {
+            it.filterIsInstance<Favorite.FavGif>().sortedByDescending(Favorite.FavGif::order)
+        }
+
+    fun isFavoriteGif(gif: ModelGif): Boolean {
+        val key = canonicalGifKey(gif.tenorGifUrl)
+        return getFavoriteGifs().any { it.tenorGifUrl == key }
+    }
+
+    fun setFavoriteGif(gif: ModelGif, favorite: Boolean) = dispatcher.schedule {
+        val key = canonicalGifKey(gif.tenorGifUrl)
+        val existing = favorites.filterIsInstance<Favorite.FavGif>().firstOrNull { it.tenorGifUrl == key }
+        if (existing != null && !favorite) {
+            favorites.remove(existing)
+            markChanged()
+        } else if (existing == null && favorite) {
+            val order = favorites.filterIsInstance<Favorite.FavGif>().maxOfOrNull(Favorite.FavGif::order)?.plus(1) ?: 1
+            favorites.add(Favorite.FavGif(gif, order))
+            markChanged()
+        }
+    }
+
     fun addFavorite(favorite: Favorite) = dispatcher.schedule {
         if (favorites.add(favorite)) markChanged()
     }
@@ -62,5 +110,9 @@ class StoreMediaFavorites(
 
     companion object {
         const val FAVORITES_CACHE_KEY = "STORE_FAVORITES"
+
+        fun canonicalGifKey(url: String): String = runCatching {
+            URLDecoder.decode(url, StandardCharsets.UTF_8.name())
+        }.getOrDefault(url)
     }
 }
