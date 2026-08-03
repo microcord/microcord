@@ -102,9 +102,11 @@ class GatewayContractTest {
         assertThrows(ClassNotFoundException::class.java) { Class.forName("com.discord.gateway.io.Identify") }
 
         val redacted = GatewayLogRedactor.redact(
-            """{"op":2,"d":{"token":"secret","nested":{"content":"private"},"safe":7}}""",
+            """{"op":2,"d":{"token":"secret","auth_session_id_hash":"hash","static_client_session_id":"session","nested":{"content":"private"},"safe":7}}""",
         )
         assertFalse(redacted.contains("secret"))
+        assertFalse(redacted.contains("\"hash\""))
+        assertFalse(redacted.contains("\"session\""))
         assertFalse(redacted.contains("private"))
         assertTrue(redacted.contains("<redacted>"))
         assertTrue(redacted.contains("\"safe\":7"))

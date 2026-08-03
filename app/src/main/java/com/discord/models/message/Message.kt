@@ -11,6 +11,7 @@ import com.discord.api.message.MessagePoll
 import com.discord.api.message.MessageResolvedData
 import com.discord.api.message.MessageSnapshot
 import com.discord.api.message.activity.MessageActivity
+import com.discord.api.message.activity.MessageActivityInstance
 import com.discord.api.message.activity.MessageActivityType
 import com.discord.api.message.allowedmentions.MessageAllowedMentions
 import com.discord.api.message.attachment.MessageAttachment
@@ -68,6 +69,7 @@ data class Message(
     val initialAttemptTimestamp: Long? = null,
     val localAttachments: List<LocalAttachment>? = null,
     val captchaSolution: CaptchaSolution? = null,
+    val activityInstance: MessageActivityInstance? = null,
 ) {
     constructor(message: com.discord.api.message.Message) : this(
         id = message.id,
@@ -106,6 +108,7 @@ data class Message(
         messageSnapshots = message.messageSnapshots,
         poll = message.poll,
         resolved = message.resolved,
+        activityInstance = message.activityInstance,
     )
 
     fun hasAttachments() = !attachments.isNullOrEmpty()
@@ -173,6 +176,7 @@ data class Message(
         messageSnapshots = new.messageSnapshots ?: messageSnapshots,
         poll = new.poll ?: poll,
         resolved = new.resolved ?: resolved,
+        activityInstance = new.activityInstance ?: activityInstance,
     )
 
     fun synthesizeApiMessage() = com.discord.api.message.Message(
@@ -211,6 +215,7 @@ data class Message(
         messageSnapshots = messageSnapshots,
         poll = poll,
         resolved = resolved,
+        activityInstance = activityInstance,
     )
 
     override fun toString() =

@@ -130,7 +130,9 @@ class AppLauncherAdapter(
         }
 
         private fun bindCard(binding: WidgetAppLauncherActivityCardBinding, application: AppLauncherApplication) {
-            binding.appLauncherActivityImage.setImageURI(iconUrl(application.id, application.icon))
+            binding.appLauncherActivityImage.setImageURI(
+                application.imageUrl ?: iconUrl(application.id, application.icon),
+            )
             binding.appLauncherActivityName.text = application.name
             binding.appLauncherActivityDescription.text = application.description
             binding.root.contentDescription = listOf(application.name, application.description).filter(String::isNotBlank).joinToString(", ")

@@ -11,13 +11,19 @@ import android.util.Rational
 import android.view.View
 import android.view.WindowManager
 import android.webkit.PermissionRequest
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.discord.R
 import com.discord.databinding.ActivityEmbeddedActivityBinding
 import com.discord.stores.StoreStream
+import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.uri.UriHandler
+import com.discord.views.OAuthPermissionViews
+import com.discord.widgets.notice.WidgetNoticeDialog
+import com.facebook.drawee.view.SimpleDraweeView
 import rx.Subscription
 import rx.android.schedulers.AndroidSchedulers
 import rx.schedulers.Schedulers
@@ -145,6 +151,7 @@ class EmbeddedActivityActivity : AppCompatActivity() {
             session,
             onExternalUrl = ::openExternalUrl,
             onPermissionRequest = ::requestWebPermissions,
+            onAuthorizeRequest = ::requestOAuthAuthorization,
             onCrash = ::recoverWebView,
             onLoadError = { showError("Unable to load activity", retry = true) },
         )
@@ -166,6 +173,70 @@ class EmbeddedActivityActivity : AppCompatActivity() {
                 binding.activityParticipants.text = instance.participants.size.toString()
                 webView.updateInstance(instance)
             }
+    }
+
+    private fun requestOAuthAuthorization(
+        request: EmbeddedActivityAuthorizeRequest,
+        approve: () -> Unit,
+        deny: () -> Unit,
+    ) {
+        val applicationName = session?.application?.name ?: getString(R.string.apps)
+        var decided = false
+        WidgetNoticeDialog.show(
+            fragmentManager = supportFragmentManager,
+            headerText = getString(R.string.embedded_activity_oauth_title, applicationName),
+            bodyText = getString(R.string.oauth2_scopes_label).replace("!!{application}!!", applicationName),
+            okText = getString(R.string.authorize),
+            cancelText = getString(R.string.cancel),
+            aboveLayoutId = R.layout.dialog_embedded_activity_oauth,
+            cancelable = false,
+            tag = EMBEDDED_OAUTH_DIALOG_TAG,
+            listenerMap = mapOf(
+                WidgetNoticeDialog.ON_SHOW to { view -> bindOAuthDetails(view, request) },
+                R.id.notice_ok to {
+                    decided = true
+                    approve()
+                },
+                R.id.CANCEL_BUTTON to {
+                    decided = true
+                    deny()
+                },
+            ),
+            onDismiss = {
+                if (!decided) deny()
+            },
+        )
+    }
+
+    private fun bindOAuthDetails(view: View, request: EmbeddedActivityAuthorizeRequest) {
+        val currentSession = session ?: return
+        val me = StoreStream.getUsers().getMe()
+        view.findViewById<SimpleDraweeView>(R.id.embedded_oauth_user_icon)
+            .setImageURI(IconUtils.getForUser(me, size = 128))
+        view.findViewById<TextView>(R.id.embedded_oauth_user_name).text =
+            me.globalName?.takeIf(String::isNotBlank) ?: me.username
+        view.findViewById<SimpleDraweeView>(R.id.embedded_oauth_application_icon).setImageURI(
+            currentSession.application.icon?.let {
+                IconUtils.getApplicationIcon(currentSession.application.id, it, 128)
+            },
+        )
+        view.findViewById<TextView>(R.id.embedded_oauth_application_name).text = currentSession.application.name
+        view.findViewById<LinearLayout>(R.id.embedded_oauth_scopes).apply {
+            removeAllViews()
+            request.scopes.forEach { scope ->
+                val row = layoutInflater.inflate(R.layout.oauth_token_permission_list_item, this, false) as TextView
+                runCatching { OAuthPermissionViews.setScopePermissionText(row, scope) }
+                    .onFailure { row.text = scope }
+                addView(row)
+            }
+        }
+        val securityNotice = if ("messages.read" in request.scopes) {
+            R.string.oauth2_can_read_notice
+        } else {
+            R.string.oauth2_cannot_read_send_notice
+        }
+        view.findViewById<TextView>(R.id.embedded_oauth_security_notice).text =
+            getString(securityNotice).replace("**", "")
     }
 
     private fun showLoading() {
@@ -260,5 +331,6 @@ class EmbeddedActivityActivity : AppCompatActivity() {
         const val EXTRA_CUSTOM_ID = "embedded_activity_custom_id"
         const val EXTRA_REFERRER_ID = "embedded_activity_referrer_id"
         private const val STATE_INSTANCE_ID = "embedded_activity_restored_instance_id"
+        private const val EMBEDDED_OAUTH_DIALOG_TAG = "embedded_activity_oauth"
     }
 }

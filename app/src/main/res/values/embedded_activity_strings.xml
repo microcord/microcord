@@ -4,8 +4,17 @@
     <string name="embedded_activity_picture_in_picture">Picture in picture</string>
     <string name="embedded_activity_participants">Activity participants</string>
     <string name="embedded_activity_retry">Try again</string>
+    <string name="embedded_activity_oauth_title">Authorize %1$s?</string>
+    <string name="embedded_activity_oauth_permissions">This application will be able to:</string>
     <string name="embedded_activity_loading">Starting activity</string>
     <string name="embedded_activity_crashed">The activity stopped responding.</string>
     <string name="embedded_activity_thermal">Activity paused because the device is too hot.</string>
     <string name="embedded_activity_external_blocked">This activity tried to open an untrusted link.</string>
+    <string name="activity_message_art">Activity preview</string>
+    <string name="activity_message_no_participants">Start playing together</string>
+    <string name="activity_message_participant_count">%1$d playing</string>
+    <string name="activity_message_unavailable">Activity unavailable</string>
+    <string name="activity_message_age_gated">Age-restricted activity</string>
+    <string name="activity_message_nitro_required">Nitro is required for this activity</string>
+    <string name="activity_message_platform_unsupported">This activity is not available on Android</string>
 </resources>

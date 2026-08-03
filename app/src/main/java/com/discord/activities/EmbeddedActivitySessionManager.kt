@@ -63,6 +63,11 @@ sealed class EmbeddedActivityLaunchException(message: String) : IllegalStateExce
 object EmbeddedActivitySessionManager {
     private const val CLIENT_VERSION = "340.12"
     private const val INSTANCE_TIMEOUT_SECONDS = 20L
+    internal val rpcConfig = EmbeddedActivityDiscordConfig(
+        apiEndpoint = "//discord.com/api",
+        environment = "production",
+        cdnHost = "cdn.discordapp.com",
+    )
     private val nonceGenerator = NonceGenerator()
 
     fun prepare(request: EmbeddedActivityLaunchRequest): Observable<EmbeddedActivitySession> {
@@ -83,29 +88,21 @@ object EmbeddedActivitySessionManager {
                 ?: application.embeddedActivityConfig
                 ?: return@flatMap Observable.error(EmbeddedActivityLaunchException.UnknownApplication())
             validate(channel, config)
-            Observable.zip(
-                api.proxyTicket(request.applicationId, EmbeddedActivityProxyTicketRequest(channel.id)),
-                api.discordConfig(request.applicationId),
-            ) { ticket, discordConfig -> ticket to discordConfig }.flatMap { (ticket, discordConfig) ->
-                val instance = request.instanceId
-                if (instance == null) {
-                    start(api, request.applicationId, channel, sessionId).flatMap {
-                        store.observeInstancesForChannel(channel.id)
-                            .map { it[request.applicationId] }
-                            .filter { it != null }
-                            .map { checkNotNull(it) }
-                            .take(1)
-                            .timeout(INSTANCE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                    }
-                } else {
-                    api.join(request.applicationId, instance, EmbeddedActivitySessionBody(sessionId))
+            api.proxyTicket(request.applicationId, EmbeddedActivityProxyTicketRequest(channel.id)).flatMap { ticket ->
+                start(api, request.applicationId, channel, sessionId).flatMap {
+                    store.observeInstancesForChannel(channel.id)
+                        .map { it[request.applicationId] }
+                        .filter { it != null }
+                        .map { checkNotNull(it) }
+                        .take(1)
+                        .timeout(INSTANCE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 }.map { activityInstance ->
                     EmbeddedActivitySession(
                         application,
                         config,
                         activityInstance,
                         channel,
-                        discordConfig,
+                        rpcConfig,
                         ticket.ticket,
                         buildUrl(activityInstance, channel, ticket.ticket, request),
                     )
@@ -155,7 +152,10 @@ object EmbeddedActivitySessionManager {
         )
         if (channel.isGuildVocalChannel()) return direct
         return api.commandIndex(applicationId).flatMap { index ->
-            val command = index.applicationCommands.firstOrNull { it.type == PRIMARY_ENTRY_POINT_COMMAND }
+            val command = index.applicationCommands.firstOrNull {
+                it.type == EmbeddedActivityLauncher.PRIMARY_ENTRY_POINT_COMMAND_TYPE ||
+                    it.handler == EmbeddedActivityLauncher.DISCORD_LAUNCH_ACTIVITY_HANDLER
+            }
                 ?: index.applicationCommands.firstOrNull { it.name == "launch" }
                 ?: return@flatMap direct
             api.interaction(
@@ -171,7 +171,7 @@ object EmbeddedActivitySessionManager {
                         name = command.name,
                         options = null,
                         attachments = null,
-                        type = PRIMARY_ENTRY_POINT_COMMAND,
+                        type = EmbeddedActivityLauncher.PRIMARY_ENTRY_POINT_COMMAND_TYPE,
                         applicationCommand = command,
                     ),
                     sessionId = sessionId,
@@ -227,5 +227,4 @@ object EmbeddedActivitySessionManager {
         .toString()
 
     private const val INTERACTION_APPLICATION_COMMAND = 2L
-    private const val PRIMARY_ENTRY_POINT_COMMAND = 4
 }

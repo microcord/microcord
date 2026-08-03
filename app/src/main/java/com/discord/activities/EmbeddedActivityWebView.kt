@@ -41,6 +41,7 @@ class EmbeddedActivityWebView(
     private var session: EmbeddedActivitySession,
     private val onExternalUrl: (String, (Boolean) -> Unit) -> Unit,
     private val onPermissionRequest: (PermissionRequest) -> Unit,
+    private val onAuthorizeRequest: (EmbeddedActivityAuthorizeRequest, () -> Unit, () -> Unit) -> Unit,
     private val onCrash: () -> Unit,
     private val onLoadError: (String) -> Unit,
 ) : WebView(context) {
@@ -50,6 +51,7 @@ class EmbeddedActivityWebView(
     private val oauthSubscriptions = CompositeSubscription()
     private val pendingOAuth = linkedMapOf<String, Subscription>()
     private var bridgeClientId: Long? = null
+    private var authorizationPromptPending = false
     private var destroyed = false
 
     init {
@@ -235,7 +237,7 @@ class EmbeddedActivityWebView(
                         .put("id", me.id.toString())
                         .put("username", me.username)
                         .put("discriminator", me.discriminator.toString())
-                        .put("avatar", me.avatar ?: JSONObject.NULL),
+                        .apply { me.avatar?.let { put("avatar", it) } },
                 ),
         )
     }
@@ -281,7 +283,12 @@ class EmbeddedActivityWebView(
                 JSONObject().put("locale", Locale.getDefault().toLanguageTag()),
             )
             "ENCOURAGE_HW_ACCELERATION" -> reply(command, nonce, JSONObject().put("enabled", true))
-            "SET_ORIENTATION_LOCK_STATE", "SET_ACTIVITY", "CAPTURE_LOG", "SEND_ANALYTICS_EVENT",
+            "SET_ACTIVITY" -> reply(
+                command,
+                nonce,
+                args.optJSONObject("activity") ?: JSONObject().put("name", "").put("type", 0),
+            )
+            "SET_ORIENTATION_LOCK_STATE", "CAPTURE_LOG", "SEND_ANALYTICS_EVENT",
             "GET_PLATFORM_BEHAVIORS", "GET_QUEST" -> reply(command, nonce, JSONObject())
             "AUTHORIZE" -> authorize(command, nonce, args)
             "AUTHENTICATE" -> authenticate(command, nonce, args)
@@ -300,9 +307,24 @@ class EmbeddedActivityWebView(
             replyError(command, nonce, 4011, "Authorization unavailable")
             return
         }
-        subscribeOAuth(command, nonce, client.authorize(request)) { code ->
-            JSONObject().put("code", code)
+        if (authorizationPromptPending) {
+            replyError(command, nonce, 4011, "Authorization already pending")
+            return
         }
+        authorizationPromptPending = true
+        onAuthorizeRequest(
+            request,
+            {
+                authorizationPromptPending = false
+                subscribeOAuth(command, nonce, client.authorize(request)) { code ->
+                    JSONObject().put("code", code)
+                }
+            },
+            {
+                authorizationPromptPending = false
+                replyError(command, nonce, 4011, "Authorization cancelled")
+            },
+        )
     }
 
     private fun authenticate(command: String, nonce: Any?, args: JSONObject) {
@@ -315,9 +337,11 @@ class EmbeddedActivityWebView(
     }
 
     private fun oauthClient(): EmbeddedActivityOAuthClient? {
-        val api = RestAPI.embeddedActivityOAuthApiOrNull ?: return null
+        val authorizeApi = RestAPI.embeddedActivityOAuthApiOrNull ?: return null
+        val tokenApi = RestAPI.embeddedActivityOAuthTokenApiOrNull ?: return null
         return EmbeddedActivityOAuthClient(
-            api,
+            authorizeApi,
+            tokenApi,
             session.application.id,
             session.channel,
             StoreStream.getUsers().getMe().id,
@@ -342,7 +366,9 @@ class EmbeddedActivityWebView(
         val state = if (!args.has("state") || args.isNull("state")) null else {
             args.opt("state") as? String ?: throw EmbeddedActivityOAuthException.InvalidRequest()
         }
-        return EmbeddedActivityAuthorizeRequest(clientId, scopes, state)
+        val codeChallenge = args.optString("code_challenge").takeIf(String::isNotBlank)
+        val codeChallengeMethod = args.optString("code_challenge_method").takeIf(String::isNotBlank)
+        return EmbeddedActivityAuthorizeRequest(clientId, scopes, state, codeChallenge, codeChallengeMethod)
     }
 
     private fun <T> subscribeOAuth(
@@ -387,7 +413,11 @@ class EmbeddedActivityWebView(
             JSONObject()
                 .put("id", authorization.application.id.toString())
                 .put("name", authorization.application.name)
-                .put("icon", authorization.application.icon ?: JSONObject.NULL),
+                .put("description", authorization.application.description)
+                .put("icon", authorization.application.icon ?: JSONObject.NULL)
+                .apply {
+                    authorization.application.rpcOrigins?.let { put("rpc_origins", JSONArray(it)) }
+                },
         )
         .put("scopes", JSONArray(authorization.scopes))
         .put("expires", authorization.expires)
@@ -399,6 +429,7 @@ class EmbeddedActivityWebView(
         .put("discriminator", user.discriminator)
         .put("avatar", user.avatar ?: JSONObject.NULL)
         .put("global_name", user.globalName ?: JSONObject.NULL)
+        .put("public_flags", user.publicFlags)
 
     private inner class ActivityClient : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {

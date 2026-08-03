@@ -19,6 +19,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.activities.EmbeddedActivityLauncher
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isGuildForumChannel
@@ -433,6 +434,11 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             if (command.builtIn) {
                 content = command.execute?.invoke(commandData.values.associate { it.name to it.value })
                     ?: return false
+            } else if (EmbeddedActivityLauncher.isPrimaryEntryPoint(command)) {
+                EmbeddedActivityLauncher.launch(requireContext(), command.applicationId, loaded.channelId)
+                drafts.setTextChannelInput(loaded.channelId, null)
+                pendingRepliesStore?.onDeletePendingReply(loaded.channelId)
+                return true
             } else {
                 StoreStream.getInteractions().sendApplicationCommand(
                 channelId = loaded.channelId,

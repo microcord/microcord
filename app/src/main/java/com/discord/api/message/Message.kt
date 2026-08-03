@@ -6,6 +6,7 @@ import com.discord.api.channel.Channel
 import com.discord.api.guildmember.GuildMember
 import com.discord.api.interaction.Interaction
 import com.discord.api.message.activity.MessageActivity
+import com.discord.api.message.activity.MessageActivityInstance
 import com.discord.api.message.attachment.MessageAttachment
 import com.discord.api.message.call.MessageCall
 import com.discord.api.message.embed.MessageEmbed
@@ -53,6 +54,7 @@ data class Message(
     val messageSnapshots: List<MessageSnapshot>? = null,
     val poll: MessagePoll? = null,
     val resolved: MessageResolvedData? = null,
+    val activityInstance: MessageActivityInstance? = null,
 ) {
     override fun toString() =
         "Message(id=$id, channelId=$channelId, guildId=$guildId, content=<redacted>, nonce=<redacted>)"

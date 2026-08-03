@@ -16,9 +16,9 @@ import com.discord.databinding.WidgetSettingsDeveloperBinding
 import com.discord.stores.StoreStream
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.experiments.ExperimentRegistry
+import com.discord.utilities.logging.AppGatewaySocketLogger
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
-import com.discord.utilities.user.UserUtils.isStaff
 import com.hammerandchisel.libdiscord.Discord
 import java.text.DateFormat
 import java.util.Date
@@ -30,11 +30,6 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
     private val binding get() = requireNotNull(_binding)
 
     override fun onViewBound(view: View) {
-        if (!hasAccess()) {
-            if (parentFragmentManager.backStackEntryCount > 0) parentFragmentManager.popBackStack()
-            else requireActivity().finish()
-            return
-        }
         super.onViewBound(view)
         _binding = WidgetSettingsDeveloperBinding.bind(view)
         setActionBarTitle(R.string.developer_options)
@@ -55,6 +50,10 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
         binding.settingsDeveloperScreenshotBugReporting.apply {
             isChecked = preferences.getBoolean(PREF_SCREENSHOT_REPORTING, false)
             setOnCheckedListener { preferences.edit().putBoolean(PREF_SCREENSHOT_REPORTING, it).apply() }
+        }
+        binding.settingsDeveloperLogGatewayEvents.apply {
+            isChecked = AppGatewaySocketLogger.isEnabled()
+            setOnCheckedListener(AppGatewaySocketLogger::setEnabled)
         }
         binding.developerSettingsCrashKotlin.setOnClickListener {
             throw RuntimeException("This is a developer triggered crash.")
@@ -102,11 +101,9 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
 
     companion object {
         private const val PREF_SCREENSHOT_REPORTING = "prefs_ss_bug_reporting_enabled"
-        internal fun canAccess(isStaff: Boolean): Boolean = isStaff
-        private fun hasAccess(): Boolean = runCatching { StoreStream.getUsers().getMe().isStaff }.getOrDefault(false)
 
         fun launch(context: Context) {
-            if (hasAccess()) AppScreenRouter.launch(context, WidgetSettingsDeveloper::class.java)
+            AppScreenRouter.launch(context, WidgetSettingsDeveloper::class.java)
         }
     }
 

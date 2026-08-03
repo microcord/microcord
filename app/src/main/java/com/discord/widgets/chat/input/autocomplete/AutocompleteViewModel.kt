@@ -158,20 +158,23 @@ class AutocompleteViewModel(
                 .subscribe({ onAutocompletablesChanged(it) }, { /* keep the last good set */ })
             commandSubscription = commandStateSource(channelId)
                 .ui(this)
-                .subscribe({
-                    val pending = pendingRemoteQuery
-                    if (pending != null && pending == sentRemoteQuery) {
-                        val result = it.remoteResults[pending.first]?.get(pending.second)
-                        if (result is CommandAutocompleteState.Choices || result is CommandAutocompleteState.Failed) {
-                            pendingRemoteQuery = null
-                            sentRemoteQuery = null
-                        }
-                    }
-                    commandState = it
-                    commandBrowserState.onNext(it.browserState())
-                    publish()
-                }, { /* keep the last good command state */ })
+                .subscribe(::onCommandStateChanged, { /* keep the last good command state */ })
         }
+    }
+
+    @MainThread
+    internal fun onCommandStateChanged(state: CommandState) {
+        val pending = pendingRemoteQuery
+        if (pending != null && pending == sentRemoteQuery) {
+            val result = state.remoteResults[pending.first]?.get(pending.second)
+            if (result is CommandAutocompleteState.Choices || result is CommandAutocompleteState.Failed) {
+                pendingRemoteQuery = null
+                sentRemoteQuery = null
+            }
+        }
+        commandState = state
+        commandBrowserState.onNext(state.browserState())
+        publish()
     }
 
     /** The candidate set, exposed so the composer can resolve finished text into mention pills. */
@@ -298,7 +301,9 @@ class AutocompleteViewModel(
             command,
             inputMentionsMap,
             attachmentMap,
-        )
+        ).filterNot { (option, parsedValue) ->
+            !option.required && (parsedValue.value as? String)?.isBlank() == true
+        }
         val validity = AutocompleteCommandUtils.getInputValidity(
             command,
             parsed,
@@ -451,8 +456,10 @@ class AutocompleteViewModel(
                         token = COMMAND_DISCOVER_TOKEN,
                     ),
                 )
-                return
+            } else {
+                updateViewState(AutocompleteViewState.LoadingItems(COMMAND_LOADING_ITEMS))
             }
+            return
         }
         val remoteState = selectedCommandOption
             ?.takeIf(ApplicationCommandOption::autocomplete)
@@ -464,17 +471,19 @@ class AutocompleteViewModel(
             pendingRemoteQuery ==
                 (selectedCommandOption?.untranslatedName to currentToken?.formattedToken.orEmpty())
         }
-        reduceRemoteOption(currentToken, selectedCommandOption, visibleRemoteState)?.let {
+        val optionCandidates = selectedCommandOption?.let {
+            AutocompleteModelUtils.autocompletablesForCommandOption(it, autocompletables)
+        }
+        val staticChoices = optionCandidates?.values.orEmpty().flatten()
+            .filterIsInstance<ApplicationCommandChoiceAutocompletable>()
+        reduceRemoteOption(currentToken, selectedCommandOption, visibleRemoteState, staticChoices)?.let {
             updateViewState(it)
             return
         }
-        val candidates = selectedCommandOption?.let {
-            AutocompleteModelUtils.autocompletablesForCommandOption(it, autocompletables)
-        } ?: autocompletables
         updateViewState(
             reduce(
                 currentToken,
-                candidates,
+                optionCandidates ?: autocompletables,
                 stickerSource,
                 allowEmptyQuery = selectedCommandOption != null,
             ),
@@ -505,6 +514,7 @@ class AutocompleteViewModel(
 
     companion object {
         private const val COMMAND_DISCOVER_TOKEN = "/"
+        private const val COMMAND_LOADING_ITEMS = 3
         private const val REMOTE_AUTOCOMPLETE_DELAY_MS = 500L
 
         private fun observeCommandState(channelId: Long): Observable<CommandState> {
@@ -545,10 +555,21 @@ class AutocompleteViewModel(
             token: MentionToken?,
             option: ApplicationCommandOption?,
             state: CommandAutocompleteState?,
+            staticChoices: List<ApplicationCommandChoiceAutocompletable> = emptyList(),
         ): AutocompleteViewState? {
             if (option?.autocomplete != true) return null
             token ?: return AutocompleteViewState.Hidden
             if (state !is CommandAutocompleteState.Choices) {
+                if (staticChoices.isNotEmpty()) {
+                    return AutocompleteViewState.Autocomplete(
+                        isLoading = false,
+                        isError = false,
+                        isAutocomplete = true,
+                        autocompletables = staticChoices,
+                        stickers = emptyList(),
+                        token = token.token,
+                    )
+                }
                 return AutocompleteViewState.Autocomplete(
                     isLoading = true,
                     isError = state is CommandAutocompleteState.Failed,
@@ -558,7 +579,8 @@ class AutocompleteViewModel(
                     token = token.token,
                 )
             }
-            val candidates = state.choices.mapTo(LinkedHashSet()) { choice ->
+            val candidates = staticChoices.toCollection(LinkedHashSet<Autocompletable>())
+            state.choices.mapTo(candidates) { choice ->
                 ApplicationCommandChoiceAutocompletable(
                     com.discord.api.commands.CommandChoice(
                         choice.name,

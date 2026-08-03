@@ -1,5 +1,7 @@
 package com.discord.api.application
 
+import com.discord.api.embeddedactivities.EmbeddedActivityConfig
+
 /** [ThirdPartySku.distributor] value that marks a Play Store listing. */
 private const val DISTRIBUTOR_GPLAY = "google_play"
 
@@ -15,6 +17,8 @@ data class Application(
     val type: ApplicationType?,
     val guildId: Long?,
     val team: Team?,
+    val maxParticipants: Int? = null,
+    val embeddedActivityConfig: EmbeddedActivityConfig? = null,
 ) {
     val launchUri: String
         get() = deeplinkUri?.removeSuffix("/")?.plus("/_discord") ?: "dscd$id://connect/_discord"

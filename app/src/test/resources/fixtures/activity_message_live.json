@@ -1,0 +1,73 @@
+{
+  "message": {
+    "id": "120000000000000001",
+    "channel_id": "120000000000000010",
+    "guild_id": "120000000000000020",
+    "author": {"id": "120000000000000030", "username": "inviter", "discriminator": "0"},
+    "content": "",
+    "type": 0,
+    "application": {
+      "id": "880218394199220334",
+      "name": "Watch Together",
+      "description": "Watch videos together",
+      "icon": "sanitized_icon",
+      "cover_image": "sanitized_cover",
+      "max_participants": -1,
+      "embedded_activity_config": {
+        "application_id": "880218394199220334",
+        "activity_preview_video_asset_id": null,
+        "supported_platforms": ["web", "ios", "android"],
+        "default_orientation_lock_state": 2,
+        "tablet_default_orientation_lock_state": 1,
+        "requires_age_gate": false,
+        "legacy_responsive_aspect_ratio": false,
+        "premium_tier_requirement": null,
+        "free_period_starts_at": null,
+        "free_period_ends_at": null,
+        "client_platform_config": {"android": {"label_type": 0, "release_phase": "global_launch"}},
+        "shelf_rank": 3,
+        "has_csp_exception": false,
+        "displays_advertisements": false,
+        "supported_locales": [],
+        "blocked_locales": []
+      }
+    },
+    "activity_instance": {
+      "id": "gcm-120000000000000010-880218394199220334",
+      "join_secret": "must-not-project"
+    }
+  },
+  "invite": {
+    "code": "sanitizedInvite",
+    "target_type": 2,
+    "expires_at": "2099-07-22T18:30:11.100231+00:00",
+    "inviter": {"id": "120000000000000030", "username": "inviter", "discriminator": "0"},
+    "guild": {"id": "120000000000000020", "name": "Activity Guild"},
+    "channel": {"id": "120000000000000010", "type": 2, "guild_id": "120000000000000020", "name": "Activity Voice"},
+    "target_application": {
+      "id": "880218394199220334",
+      "name": "Watch Together",
+      "description": "Watch videos together",
+      "icon": "sanitized_icon",
+      "cover_image": "sanitized_cover",
+      "embedded_activity_config": {
+        "application_id": "880218394199220334",
+        "activity_preview_video_asset_id": null,
+        "supported_platforms": ["android"],
+        "default_orientation_lock_state": 2,
+        "tablet_default_orientation_lock_state": 1,
+        "requires_age_gate": false,
+        "legacy_responsive_aspect_ratio": false,
+        "premium_tier_requirement": null,
+        "free_period_starts_at": null,
+        "free_period_ends_at": null,
+        "client_platform_config": {"android": {"label_type": 0, "release_phase": "global_launch"}},
+        "shelf_rank": 3,
+        "has_csp_exception": false,
+        "displays_advertisements": false,
+        "supported_locales": [],
+        "blocked_locales": []
+      }
+    }
+  }
+}

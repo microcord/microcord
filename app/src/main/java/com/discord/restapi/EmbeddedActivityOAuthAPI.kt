@@ -17,6 +17,8 @@ interface EmbeddedActivityOAuthAPI {
         @Query("response_type") responseType: String,
         @Query("scope") scope: String,
         @Query("state") state: String?,
+        @Query("code_challenge") codeChallenge: String?,
+        @Query("code_challenge_method") codeChallengeMethod: String?,
         @Body body: EmbeddedActivityOAuthAuthorizeBody,
     ): Observable<EmbeddedActivityOAuthAuthorizeResponse>
 

@@ -21,7 +21,9 @@ data class EmbeddedActivityOAuthAuthorizeResponse(val location: String)
 data class EmbeddedActivityOAuthApplication(
     val id: Long,
     val name: String,
+    val description: String = "",
     val icon: String? = null,
+    val rpcOrigins: List<String>? = null,
 )
 
 data class EmbeddedActivityOAuthUser(
@@ -30,6 +32,7 @@ data class EmbeddedActivityOAuthUser(
     val discriminator: String = "0000",
     val avatar: String? = null,
     val globalName: String? = null,
+    val publicFlags: Int = 0,
 )
 
 data class EmbeddedActivityOAuthAuthorization(

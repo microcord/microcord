@@ -1,0 +1,30 @@
+{
+  "version": "1500000000000000002",
+  "applications": [
+    {
+      "id": "400",
+      "name": "On Demand App",
+      "description": "Commands loaded by application ID",
+      "icon": null,
+      "bot": {"id": "401", "username": "On Demand Bot", "discriminator": "0000", "bot": true},
+      "bot_id": "401",
+      "flags": "0"
+    }
+  ],
+  "application_commands": [
+    {
+      "id": "402",
+      "type": 1,
+      "application_id": "400",
+      "name": "ask",
+      "description": "Ask the bot",
+      "contexts": [0, 1, 2],
+      "integration_types": [0, 1],
+      "version": "403",
+      "options": [
+        {"type": 4, "name": "count", "description": "Count", "autocomplete": true},
+        {"type": 3, "name": "topic", "description": "Topic", "choices": [{"name": "News", "value": "news"}]}
+      ]
+    }
+  ]
+}

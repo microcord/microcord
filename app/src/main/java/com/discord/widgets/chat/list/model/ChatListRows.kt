@@ -173,6 +173,7 @@ object ChatListRows {
             )
         }
         rows += ChatListEntry.createGameInviteEntries(message)
+        rows += ChatListEntry.createActivityMessageEntries(message)
         rows += ChatListEntry.createSpotifyListenTogetherEntries(message)
         rows += ChatListEntry.createInviteEntries(message, state.inviteResolver)
         rows += ChatListEntry.createGuildTemplateEntries(message)

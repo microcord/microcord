@@ -377,6 +377,7 @@ data class WidgetChatListModelMessages(
             )
             rows += ChatListEntry.createStickerEntries(message)
             rows += ChatListEntry.createGameInviteEntries(message)
+            rows += ChatListEntry.createActivityMessageEntries(message)
             rows += ChatListEntry.createSpotifyListenTogetherEntries(message)
             rows += ChatListEntry.createInviteEntries(message, inviteResolver)
             rows += ChatListEntry.createGuildTemplateEntries(message)
@@ -538,6 +539,11 @@ data class WidgetChatListModelMessages(
             StoreStream.getRequestedStageChannels().observeRequestedStageChannels(),
         ) { channels, invites, stageInstances, requested ->
             object : InviteEmbedResolver {
+                override fun resolveInvite(inviteCode: String, eventId: String?): ModelInvite? {
+                    val key = ModelInvite.getInviteStoreKey(inviteCode, eventId?.toLongOrNull())
+                    return (invites[key] as? StoreInstantInvites.InviteState.Resolved)?.invite
+                }
+
                 override fun resolveInviteForGuildScheduledEvent(inviteCode: String, eventId: String): ModelInvite? {
                     val key = ModelInvite.getInviteStoreKey(inviteCode, eventId.toLongOrNull())
                     return (invites[key] as? StoreInstantInvites.InviteState.Resolved)?.invite

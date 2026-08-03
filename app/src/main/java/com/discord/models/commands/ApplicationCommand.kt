@@ -34,6 +34,7 @@ sealed class ApplicationCommand(
     val integrationTypes: Set<Int>? = null,
     val installationType: Int? = null,
     val nsfw: Boolean = false,
+    val handler: Int? = null,
     val apiCommand: ApplicationCommandIndexCommand? = null,
 )
 
@@ -111,6 +112,7 @@ class RemoteApplicationCommand(
     integrationTypes: Set<Int>? = null,
     installationType: Int? = null,
     nsfw: Boolean = false,
+    handler: Int? = null,
     apiCommand: ApplicationCommandIndexCommand? = null,
 ) : ApplicationCommand(
     id = id,
@@ -132,6 +134,7 @@ class RemoteApplicationCommand(
     integrationTypes = integrationTypes,
     installationType = installationType,
     nsfw = nsfw,
+    handler = handler,
     apiCommand = apiCommand,
 )
 

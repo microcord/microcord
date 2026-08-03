@@ -83,6 +83,7 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
         const val AUTOMOD_BLOCKED = 44
         const val AUTOMOD_SYSTEM_MESSAGE = 45
         const val FORWARDED_MESSAGE = 46
+        const val ACTIVITY_MESSAGE = 47
 
         /** `MessageTypes.AUTO_MODERATION_ACTION`; its single embed gets a dedicated row. */
         private const val AUTO_MOD_SYSTEM_MESSAGE_TYPE = 24
@@ -192,6 +193,19 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             return listOf(GameInviteEntry(author.id, message.id, activity, application))
         }
 
+        fun createActivityMessageEntries(message: Message): List<ChatListEntry> {
+            val instance = message.activityInstance ?: return emptyList()
+            return listOf(
+                ActivityMessageEntry(
+                    messageId = message.id,
+                    channelId = message.channelId,
+                    guildId = message.guildId ?: 0L,
+                    application = message.application,
+                    instanceId = instance.id,
+                ),
+            )
+        }
+
         fun createSpotifyListenTogetherEntries(message: Message): List<ChatListEntry> {
             val activity = message.activity ?: return emptyList()
             if (!message.isSpotifyListeningActivity()) return emptyList()
@@ -254,6 +268,19 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             eventId: String?,
             inviteResolver: InviteEmbedResolver,
         ): ChatListEntry {
+            val resolved = inviteResolver.resolveInvite(inviteCode, eventId)
+            if (resolved?.getTargetType() == com.discord.models.domain.ModelInvite.InviteTargetTypes.EMBEDDED_APPLICATION.code) {
+                return ActivityMessageEntry(
+                    messageId = message.id,
+                    channelId = resolved.channel?.id ?: message.channelId,
+                    guildId = resolved.guild?.id ?: message.guildId ?: 0L,
+                    application = resolved.getTargetApplication(),
+                    instanceId = null,
+                    inviteCode = inviteCode,
+                    inviter = resolved.getInviter() ?: message.author,
+                    invite = resolved,
+                )
+            }
             val author = message.author!!
             if (eventId != null) {
                 val eventInvite = inviteResolver.resolveInviteForGuildScheduledEvent(inviteCode, eventId)

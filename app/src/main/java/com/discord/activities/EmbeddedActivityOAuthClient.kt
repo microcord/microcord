@@ -13,6 +13,8 @@ data class EmbeddedActivityAuthorizeRequest(
     val clientId: Long,
     val scopes: List<String>,
     val state: String?,
+    val codeChallenge: String? = null,
+    val codeChallengeMethod: String? = null,
 )
 
 sealed class EmbeddedActivityOAuthException(
@@ -26,7 +28,8 @@ sealed class EmbeddedActivityOAuthException(
 }
 
 class EmbeddedActivityOAuthClient(
-    private val api: EmbeddedActivityOAuthAPI,
+    private val authorizeApi: EmbeddedActivityOAuthAPI,
+    private val tokenApi: EmbeddedActivityOAuthAPI,
     private val applicationId: Long,
     private val channel: Channel,
     private val currentUserId: Long,
@@ -44,11 +47,13 @@ class EmbeddedActivityOAuthClient(
                 guildId = channel.guildId.takeIf { it > 0L }?.toString(),
             ),
         )
-        return api.authorize(
+        return authorizeApi.authorize(
             clientId = request.clientId.toString(),
             responseType = "code",
             scope = request.scopes.joinToString(" "),
             state = request.state,
+            codeChallenge = request.codeChallenge,
+            codeChallengeMethod = request.codeChallengeMethod,
             body = body,
         ).map { response -> extractCode(response.location, request.state) }
     }
@@ -57,7 +62,7 @@ class EmbeddedActivityOAuthClient(
         if (!isValidAccessToken(accessToken)) {
             return Observable.error(EmbeddedActivityOAuthException.AuthenticationFailed())
         }
-        return api.authenticate("Bearer $accessToken").map { authorization ->
+        return tokenApi.authenticate("Bearer $accessToken").map { authorization ->
             if (authorization.application.id != applicationId || authorization.user?.id != currentUserId) {
                 throw EmbeddedActivityOAuthException.AuthenticationFailed()
             }
@@ -69,7 +74,9 @@ class EmbeddedActivityOAuthClient(
         if (request.clientId != applicationId) throw EmbeddedActivityOAuthException.InvalidClient()
         if (request.scopes.isEmpty() || request.scopes.size > MAX_SCOPES ||
             request.scopes.any { !SCOPE.matches(it) } ||
-            request.state?.let { it.length > MAX_STATE_LENGTH || it.any(Char::isISOControl) } == true
+            request.state?.let { it.length > MAX_STATE_LENGTH || it.any(Char::isISOControl) } == true ||
+            request.codeChallenge?.let { !CODE_CHALLENGE.matches(it) } == true ||
+            request.codeChallengeMethod?.let { it != "S256" || request.codeChallenge == null } == true
         ) throw EmbeddedActivityOAuthException.InvalidRequest()
     }
 
@@ -78,6 +85,7 @@ class EmbeddedActivityOAuthClient(
         private const val MAX_STATE_LENGTH = 2048
         private const val MAX_ACCESS_TOKEN_LENGTH = 8192
         private val SCOPE = Regex("[a-z0-9._:-]{1,128}")
+        private val CODE_CHALLENGE = Regex("[A-Za-z0-9_-]{43,128}")
 
         internal fun extractCode(location: String, expectedState: String?): String {
             val uri = runCatching { URI(location) }.getOrNull()

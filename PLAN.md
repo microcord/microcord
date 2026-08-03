@@ -1854,9 +1854,137 @@ user/server installation, guild eligibility, cancellation, and redirect completi
 ## 2026-08-03 chat input cleanup and Android Markdown crash
 
 - Removed the Nitro gift affordance and reused its existing measured slot as a visible Apps/compass
-  button that opens the Application Directory. Surrounding chat-input geometry does not shift; the
+  button that opens the Apps launcher. Surrounding chat-input geometry does not shift; the
   button is enabled, focusable, and accessibility-labeled.
 - Fixed an Android-only startup crash introduced by modern command-mention Markdown parsing:
   `java.util.regex.Pattern` on Android rejects JVM flag `UNICODE_CHARACTER_CLASS` (256). The pattern
   already uses explicit `\p{L}`/`\p{N}` classes, so the unsupported redundant flag was removed.
 - Focused Application Directory/Markdown tests, `assembleDebug`, and Android-test compilation pass.
+
+## 2026-08-04 current Apps launcher and embedded Activities
+
+- Reconstructed the current Apps launcher from the Discord Android 340.12 Beta Hermes bundle
+  (`index.android.bundle`/`out.js`) and ActivitiesV2 evidence. The native bottom sheet implements
+  HOME, APPLICATION_VIEW, COMMAND_VIEW, and APP_LIST_VIEW routes with search, recents, installed
+  apps, guild apps, recommendations, recent commands, and Android-supported Activities.
+- Added typed RNAPI shelf, launch, join, leave, proxy-ticket, authorization, and
+  authentication contracts; gateway V2 instance/participant state; a native XML Activity shell; and
+  the narrowly scoped hardened WebView runtime required by embedded Activities. Modern endpoints use
+  the RN client and RN headers rather than the legacy transport.
+- Application-command indexes now preserve zero-command applications, fetch an application's index
+  once on selection, merge discovery/user/guild results, render remote slash commands and static or
+  remote choices, and omit blank optional values. Built-in commands remain local and never POST an
+  interaction.
+- Activity messages and invites render Start, Join, Open, and Unavailable states. OAuth completion
+  remains inside Manticord. The forwarded-message accessory was flattened to remove duplicate author
+  chrome and nested RecyclerView/card rendering while retaining attachments, embeds, components,
+  polls, stickers, source privacy, and terminal source attribution.
+- The Apps button is rebound after FlexInput's own view setup so its listener is not replaced. Its
+  compass drawable now has the same 24dp intrinsic size as `+`; WSA hierarchy evidence measures both
+  touch targets at exactly 40x40 with unchanged spacing.
+- The focused 27-test command/browser suite passes; all other tests in the 92-test integration batch
+  passed; `assembleDebug`, `installDebug`, and the focused `ChatInputGiftButtonTest` connected test
+  pass. The installed build cold-started without an app crash.
+- The connected test cleared WSA app data, leaving the device at the auth landing screen. Live Apps
+  launcher data, OAuth authorization, Activity launch/media permissions, and backend join/leave
+  behavior remain unverified until an approved account is logged in again.
+- Live launch exposed that `/activities/discord-config/{applicationId}` can return 404 and must not
+  gate Activity startup. Hermes `NativeRPCServer.handleConnect` constructs READY config directly from
+  `GLOBAL_ENV`: `//discord.com/api`, `cdn.discordapp.com`, and `production`. Session preparation now
+  uses those exact values and no longer requests per-application config before launch.
+- Fixed remote slash-command header binding: the recovered header layout used a platform `ImageView`,
+  but `MGImages` is a Fresco-only API and cast it to `DraweeView`. The avatar is now a
+  `SimpleDraweeView`, removing the command-list `ClassCastException`.
+- Focused Activity contracts, command-browser, and RN transport tests plus `assembleDebug` and
+  `installDebug` pass after these runtime fixes. The proposed permission-store change was reverted at
+  the user's request; no permission behavior was changed in this correction.
+- Existing Activity invites no longer call the explicit activity-instance join route, which returned
+  404 for live composite instance IDs. The documented launch path now handles both join and create,
+  followed by the authoritative gateway V2 instance update. The Activity error Retry control now uses
+  `LoadingButton`'s `lb_text` attribute instead of the ignored platform `android:text` attribute.
+- Shelf assets now accept both legacy OAuth asset fields (`id`, `type`, `name`) and newer application
+  asset fields, select the named `embedded_cover`, and build the Hermes CDN URL. Shelf Activity
+  metadata is merged into matching recent/installed/server command applications before section
+  deduplication, so an Activity shown under Apps in this server retains its Launch Activity action.
+- Focused Activity contract, launcher-state, and Activity-message tests plus `assembleDebug` and
+  `installDebug` pass. The updated APK is installed on WSA and logs were cleared for live retry.
+- Live WebView console evidence showed the Embedded App SDK received READY but rejected
+  `data.user.avatar` because the bridge serialized an absent avatar as JSON null while the SDK schema
+  defines it as an optional string. READY now omits the field when absent, matching SDK 1.9/2.0; the
+  focused Activity contract test, `assembleDebug`, and `installDebug` pass and the APK is installed.
+- Activity message rows no longer set an unobservable local loading state before opening the separate
+  Activity screen, so returning from or quitting an Activity cannot leave the card button spinning.
+- Application command type 4 and handler 2 (`DISCORD_LAUNCH_ACTIVITY`) now share Primary Entry Point
+  classification. Composer submission routes commands such as `/wordle` to `EmbeddedActivityLauncher`;
+  the Activity session then performs the
+  primary-entry-point interaction and gateway instance wait instead of treating it as an ordinary
+  slash-command submission.
+- Focused Activity contracts, command browser, and Activity message-state tests plus `assembleDebug`
+  and `installDebug` pass. The APK is installed on WSA and logs were cleared for live retry.
+- Security correction: SDK AUTHORIZE requests no longer POST silently. The running Activity now keeps
+  its WebView session alive under a full Discord-themed OAuth modal showing user/application identity,
+  friendly permission rows, message-access warning, and explicit Authorize/Cancel actions.
+- SDK AUTHENTICATE no longer shares the user-authenticated OkHttp client. `/oauth2/@me` uses a
+  dedicated RN-header client with `CookieJar.NO_COOKIES` and no `RequiredHeadersInterceptor`; its only
+  Authorization value is the Activity-provided bearer token. The shared interceptor again enforces
+  the logged-in user token and cannot be overridden by arbitrary explicit request headers.
+- Focused OAuth and transport tests prove the token client sends the Activity bearer while sending no
+  user cookie, and Android-test compilation, `assembleDebug`, and `installDebug` pass. A grant created
+  before this correction is not revoked automatically; the user can remove it under Authorized Apps.
+- AUTHORIZE now preserves and validates SDK PKCE `code_challenge`/`S256` parameters so Activity
+  backends can exchange the returned code. AUTHENTICATE restores required application description,
+  RPC origins, and user public flags; SET_ACTIVITY echoes the requested SDK activity object instead
+  of returning an invalid empty object. Focused Activity OAuth/contracts/transport tests,
+  Android-test compilation, `assembleDebug`, and `installDebug` pass.
+- Activity message action buttons now disable `LoadingButton` elevation, removing the stray Material
+  shadow without changing the button's measured size or spacing; `assembleDebug` and `installDebug` pass.
+- Command-index sources now complete once per selected location even when a channel source returns
+  404/429: the failed source is cached as an empty index and is retried only after explicit gateway
+  invalidation, location change, or logout. This stops composer/App launcher refreshes from repeatedly
+  hitting `/channels/{channelId}/application-command-index`.
+- Modern index merge now retains both chat-input commands and type-4 Primary Entry Point commands.
+  Handler 2 is preserved in the domain model, so `/wordle` remains visible after typing `/w` and routes
+  into the Activity host rather than merely sending an interaction that creates an unseen instance.
+- Focused command-store, command-browser, and Activity contract tests plus `assembleDebug` and
+  `installDebug` pass. The APK is installed on WSA and logs were cleared for live verification.
+- Command-index caching is keyed by channel/guild only, matching desktop location caching. Bot-DM
+  recipient hydration now recomputes the cached command view instead of alternating cache keys and
+  refetching the same channel endpoint. The regression test switches bot context after a failed
+  channel source and proves both channel and user indexes are still requested exactly once.
+- Developer Options is now visible and directly launchable for every Manticord user; the former
+  staff/alpha gate was removed. A persisted `Log Gateway Events` switch enables the existing
+  `GatewaySocketLogger` at runtime without reconnecting.
+- Gateway logging is installed at the single `GatewaySocket` boundary and records redacted inbound
+  and outbound JSON under the `GatewayEvents` tag. Existing structured and final `AppLog` redaction
+  removes tokens, session IDs, authorization, message content, credentials, and CAPTCHA values before
+  logcat or the in-app debug log sees them. Focused logger, gateway, settings, and command-cache tests,
+  `assembleDebug`, and `installDebug` pass; the APK is installed and logs were cleared.
+- Live gateway diagnostics identified the reported reconnect as WSA network loss, not a parser crash:
+  Android disconnected Ethernet, the gateway reported `SocketException`, simultaneous REST calls
+  failed with `UnknownHostException`, and the normal HELLO/IDENTIFY/READY reconnect succeeded.
+- Gateway redaction now additionally masks auth-session hashes, static client session IDs, settings
+  proto blobs, CAPTCHA values, client secrets, and authorization codes. The rich Activity OAuth modal
+  has symmetric 16dp horizontal content padding so identity, permissions, and warning rows align with
+  the existing dialog body. Focused gateway tests, `assembleDebug`, and `installDebug` pass.
+- Intermittent Activity command routing was caused by legacy gateway query results overwriting richer
+  modern index commands with copies lacking type/handler metadata. Query results now merge by command
+  ID onto the cached modern command, preserving type 4 / handler 2 through composer submission.
+- Apps launcher no longer starts the legacy initial-command fetch after requesting the modern index.
+  Modern guild indexes are cached by guild rather than channel, while DM indexes remain channel-keyed;
+  moving between channels in one guild or reopening Apps does not refetch. Focused command-store tests
+  prove one guild and one user request across two guild channels; `assembleDebug` and `installDebug` pass.
+- Raw typed user/guild/channel command indexes now persist immediately in an account-scoped Persister,
+  restore before the request gate after process restart, clear on logout/account change, and invalidate
+  the affected guild on gateway index updates. Apps launcher no longer bypasses the store with direct
+  user/guild index calls; Installed and Server sections derive from cached installation types.
+- Focused persistence tests pass. Live WSA verification after a clean restart and eight-second wait
+  produced zero `/users/@me` or guild/channel application-command-index requests; the user confirmed
+  the repeated-request fix works.
+
+Resumable task: `app/src/main/java/com/discord/widgets/chat/input/applauncher/**` | Android 340.12
+Hermes `out.js` Apps launcher modules | log in on WSA and verify HOME/search/application/command/list
+routes against live command, directory, frecency, installed-app, and shelf data.
+
+Resumable task: `app/src/main/java/com/discord/activities/**` | Android 340.12 Hermes Activity modules
+and ActivitiesV2 | use an approved account to verify authorize/authenticate, launch, join, leave,
+proxy-ticket, media permissions, lifecycle cleanup, and voice-channel Activity cards.

@@ -2,8 +2,15 @@ package com.discord.activities
 
 import android.content.Context
 import android.content.Intent
+import com.discord.models.commands.ApplicationCommand
 
 object EmbeddedActivityLauncher {
+    const val PRIMARY_ENTRY_POINT_COMMAND_TYPE = 4
+    const val DISCORD_LAUNCH_ACTIVITY_HANDLER = 2
+
+    fun isPrimaryEntryPoint(command: ApplicationCommand) =
+        command.type == PRIMARY_ENTRY_POINT_COMMAND_TYPE || command.handler == DISCORD_LAUNCH_ACTIVITY_HANDLER
+
     @JvmStatic
     fun launch(
         context: Context,

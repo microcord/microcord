@@ -167,10 +167,9 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         binding.settingsPresenceText.setText(PresenceUtils.getStatusStringResForPresence(model.presence))
         binding.userSettingsProfileHeaderView.contentDescription = displayName(model.meUser)
 
-        val developerVisibility = if (model.isStaffOrAlpha) View.VISIBLE else View.GONE
-        binding.developerOptionsDivider.visibility = developerVisibility
-        binding.developerOptionsHeader.visibility = developerVisibility
-        binding.developerOptions.visibility = developerVisibility
+        binding.developerOptionsDivider.visibility = View.VISIBLE
+        binding.developerOptionsHeader.visibility = View.VISIBLE
+        binding.developerOptions.visibility = View.VISIBLE
 
         binding.roleSubscriptions.visibility =
             if (model.showRoleSubscriptionsButton) View.VISIBLE else View.GONE

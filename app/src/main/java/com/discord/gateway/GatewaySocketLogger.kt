@@ -24,8 +24,13 @@ internal object NoopGatewaySocketLogger : GatewaySocketLogger {
 internal object GatewayLogRedactor {
     private val sensitiveKeys = setOf(
         "analytics_token",
+        "auth_session_id_hash",
         "auth_token",
         "authorization",
+        "captcha_key",
+        "captcha_rqtoken",
+        "client_secret",
+        "code",
         "content",
         "email",
         "mfa_code",
@@ -33,7 +38,9 @@ internal object GatewayLogRedactor {
         "password",
         "phone",
         "session_id",
+        "static_client_session_id",
         "token",
+        "user_settings_proto",
     )
 
     fun redact(rawMessage: String): String = runCatching {

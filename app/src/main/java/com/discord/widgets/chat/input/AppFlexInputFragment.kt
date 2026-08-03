@@ -74,11 +74,14 @@ class AppFlexInputFragment : FlexInputFragment() {
                 parser.close()
             }
         }
-        return super.onCreateView(inflater, container, savedInstanceState)?.also { root ->
-            configureAppsButton(root) {
-                val channelId = (parentFragment as? WidgetChatInput)?.currentChannelId() ?: return@configureAppsButton
-                WidgetAppLauncher.show(parentFragmentManager, channelId, AppLauncherEntrypoint.TEXT)
-            }
+        return super.onCreateView(inflater, container, savedInstanceState)
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        configureAppsButton(view) {
+            val channelId = (parentFragment as? WidgetChatInput)?.currentChannelId() ?: return@configureAppsButton
+            WidgetAppLauncher.show(parentFragmentManager, channelId, AppLauncherEntrypoint.TEXT)
         }
     }
 

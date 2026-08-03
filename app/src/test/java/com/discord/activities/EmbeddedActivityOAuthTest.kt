@@ -23,13 +23,23 @@ class EmbeddedActivityOAuthTest {
     fun authorizeUsesRnHeadersTypedLocationAndExtractsMatchingCode() {
         withServer { server, api ->
             server.enqueue(MockResponse().setBody("{\"location\":\"https://activity.example/callback?code=oauth-code&state=state-1\"}"))
+            val challenge = "a".repeat(43)
             val code = client(api).authorize(
-                EmbeddedActivityAuthorizeRequest(12, listOf("identify", "guilds"), "state-1"),
+                EmbeddedActivityAuthorizeRequest(
+                    12,
+                    listOf("identify", "guilds"),
+                    "state-1",
+                    challenge,
+                    "S256",
+                ),
             ).toBlocking().single()
 
             assertEquals("oauth-code", code)
             server.takeRequest().also { request ->
-                assertEquals("/api/v9/oauth2/authorize?client_id=12&response_type=code&scope=identify%20guilds&state=state-1", request.path)
+                assertEquals(
+                    "/api/v9/oauth2/authorize?client_id=12&response_type=code&scope=identify%20guilds&state=state-1&code_challenge=$challenge&code_challenge_method=S256",
+                    request.path,
+                )
                 assertNotNull(request.getHeader("X-Super-Properties"))
                 assertTrue(request.getHeader("User-Agent").orEmpty().startsWith("Discord-Android/"))
                 val body = JsonParser.parseString(request.body.readUtf8()).asJsonObject
@@ -51,6 +61,8 @@ class EmbeddedActivityOAuthTest {
             val result = client(api).authenticate("activity-access-token").toBlocking().single()
 
             assertEquals("activity-access-token", result.accessToken)
+            assertEquals("Activity description", result.authorization.application.description)
+            assertEquals(64, result.authorization.user?.publicFlags)
             assertFalse(result.toString().contains("activity-access-token"))
             server.takeRequest().also { request ->
                 assertEquals("/api/v9/oauth2/@me", request.path)
@@ -76,6 +88,10 @@ class EmbeddedActivityOAuthTest {
                 client.authorize(EmbeddedActivityAuthorizeRequest(12, listOf("identify"), "bad\u0000state"))
                     .materialize().toBlocking().single().throwable is EmbeddedActivityOAuthException.InvalidRequest,
             )
+            assertTrue(
+                client.authorize(EmbeddedActivityAuthorizeRequest(12, listOf("identify"), null, "short", "S256"))
+                    .materialize().toBlocking().single().throwable is EmbeddedActivityOAuthException.InvalidRequest,
+            )
             assertEquals(0, server.requestCount)
 
             server.enqueue(MockResponse().setBody("{\"location\":\"https://activity.example/?code=code&state=wrong\"}"))
@@ -93,7 +109,7 @@ class EmbeddedActivityOAuthTest {
     }
 
     private fun client(api: EmbeddedActivityOAuthAPI) =
-        EmbeddedActivityOAuthClient(api, 12, channel(), 7)
+        EmbeddedActivityOAuthClient(api, api, 12, channel(), 7)
 
     private fun channel(): Channel = gson.fromJson(
         """{"id":2,"guild_id":1,"type":0,"name":"Text"}""",
@@ -116,7 +132,7 @@ class EmbeddedActivityOAuthTest {
 
     private companion object {
         const val AUTH_RESPONSE = """
-            {"application":{"id":"12","name":"Activity","icon":null},"scopes":["identify"],"expires":"2026-08-04T00:00:00Z","user":{"id":"7","username":"user","discriminator":"0007","avatar":null,"global_name":"User"}}
+            {"application":{"id":"12","name":"Activity","description":"Activity description","icon":null},"scopes":["identify"],"expires":"2026-08-04T00:00:00Z","user":{"id":"7","username":"user","discriminator":"0007","avatar":null,"global_name":"User","public_flags":64}}
         """
     }
 }

@@ -63,6 +63,7 @@ import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.billing.BillingUtils
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
+import com.discord.utilities.logging.AppGatewaySocketLogger
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.time.Clock
 import com.discord.utilities.websocket.OkHttpGatewayWebSocketFactory
@@ -1245,6 +1246,7 @@ class StoreStream private constructor(
             scheduler = gatewayScheduler,
             discovery = GatewayDiscovery(preferences) { api.getGateway().toBlocking().single() },
             webSocketFactory = OkHttpGatewayWebSocketFactory(),
+            gatewaySocketLogger = AppGatewaySocketLogger.INSTANCE,
         ).also { socket ->
             gatewayConnection.init(socket, voiceChannelSelected.observeSelectedVoiceChannelId())
             initGatewaySocketListeners()

@@ -3,16 +3,24 @@ package com.discord.widgets.chat.input.applauncher
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.discord.api.applicationdirectory.ApplicationDirectorySearchResult
+import com.discord.api.channel.Channel
 import com.discord.api.channel.isPrivate
+import com.discord.api.commands.ApplicationCommandIndex
+import com.discord.api.commands.ApplicationIntegrationType
+import com.discord.api.embeddedactivities.EmbeddedActivityShelf
 import com.discord.api.permission.Permission
 import com.discord.models.commands.Application
 import com.discord.models.commands.ApplicationCommand
 import com.discord.restapi.ApplicationDirectoryAPI
 import com.discord.stores.StoreApplicationCommands
 import com.discord.stores.StoreApplicationDirectory
+import com.discord.stores.StoreApplicationCommandFrecency
+import com.discord.stores.StoreEmbeddedActivities
 import com.discord.stores.StoreStream
 import com.discord.utilities.analytics.AnalyticsUtils
 import com.discord.utilities.permissions.PermissionUtils
+import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rx.restSubscribeOn
 import java.util.concurrent.TimeUnit
 import rx.Observable
 import rx.Scheduler
@@ -26,6 +34,16 @@ class AppLauncherViewModel(
     private val entrypoint: AppLauncherEntrypoint,
     private val commandsStore: StoreApplicationCommands = StoreStream.getApplicationCommands(),
     private val directoryStore: StoreApplicationDirectory = StoreStream.getApplicationDirectory(),
+    private val embeddedActivitiesStore: StoreEmbeddedActivities = StoreStream.getEmbeddedActivities(),
+    private val applicationFrecencyStore: StoreApplicationCommandFrecency = StoreStream.getApplicationCommandFrecency(),
+    private val channelProvider: (Long) -> Channel? = StoreStream.getChannels()::getChannel,
+    private val permissionsProvider: (Long) -> Long? = {
+        StoreStream.getPermissions().getPermissionsByChannel()[it]
+    },
+    private val fetchShelf: (Long?) -> Observable<EmbeddedActivityShelf> = { guildId ->
+        RestAPI.embeddedActivitiesApiOrNull?.let { embeddedActivitiesStore.fetchShelf(it, guildId, force = true) }
+            ?: Observable.error(IllegalStateException("Embedded activities API unavailable"))
+    },
     scheduler: Scheduler = Schedulers.computation(),
     private val trackSearch: (String, AppLauncherEntrypoint) -> Unit = { query, source ->
         AnalyticsUtils.Tracker.instance.track(
@@ -38,14 +56,21 @@ class AppLauncherViewModel(
     private val queries = PublishSubject.create<String>().toSerialized()
     private val stateSubject = BehaviorSubject.create(AppLauncherViewState())
 
-    private val channel = StoreStream.getChannels().getChannel(channelId)
+    private val channel = channelProvider(channelId)
     private val guildId = channel?.guildId?.takeUnless { it == 0L }
     private var applications: List<Application> = emptyList()
+    private var installedApplications: List<Application> = emptyList()
+    private var serverApplications: List<Application> = emptyList()
     private var commands: List<ApplicationCommand> = emptyList()
     private var frecentCommands: List<ApplicationCommand> = emptyList()
+    private var frecentCommandIds: List<String> = emptyList()
+    private var shelf: EmbeddedActivityShelf? = null
     private var directoryResults: List<ApplicationDirectorySearchResult> = emptyList()
     private var commandsLoading = true
     private var directoryLoading = true
+    private var installedLoading = true
+    private var serverLoading = entrypoint == AppLauncherEntrypoint.TEXT
+    private var shelfLoading = shouldLoadActivities()
     private var query = ""
     private var route = AppLauncherRoute.HOME
     private var selectedApplication: AppLauncherApplication? = null
@@ -69,6 +94,14 @@ class AppLauncherViewModel(
             commandsStore.observeGuildApplications(channelId).subscribe(
                 {
                     applications = it
+                    installedApplications = it.filter { application ->
+                        ApplicationIntegrationType.USER_INSTALL.value in application.installationTypes
+                    }
+                    serverApplications = it.filter { application ->
+                        ApplicationIntegrationType.GUILD_INSTALL.value in application.installationTypes
+                    }
+                    installedLoading = false
+                    serverLoading = false
                     publish()
                 },
                 {
@@ -113,11 +146,47 @@ class AppLauncherViewModel(
             ),
         )
         subscriptions.add(
+            applicationFrecencyStore.observeTopCommandIds(guildId).subscribe(
+                {
+                    frecentCommandIds = it
+                    publish()
+                },
+                { publish() },
+            ),
+        )
+        subscriptions.add(
             directoryStore.observeState().subscribe(::onDirectoryState, {
                 directoryLoading = false
                 publish()
             }),
         )
+        subscriptions.add(
+            embeddedActivitiesStore.observeShelf(guildId).subscribe(
+                {
+                    shelf = it.shelf
+                    if (it.shelf != null || it.error != null) shelfLoading = false
+                    publish()
+                },
+                {
+                    shelfLoading = false
+                    publish()
+                },
+            ),
+        )
+
+        if (shelfLoading) {
+            subscriptions.add(fetchShelf(guildId).restSubscribeOn(false).subscribe(
+                {
+                    shelf = it
+                    shelfLoading = false
+                    publish()
+                },
+                {
+                    shelfLoading = false
+                    publish()
+                },
+            ))
+        }
 
         channel?.let {
             commandsStore.requestApplicationCommandIndex(
@@ -125,7 +194,6 @@ class AppLauncherViewModel(
                 guildId = guildId,
                 isBotDm = it.recipients.orEmpty().any { recipient -> recipient.bot == true },
             )
-            commandsStore.requestInitialApplicationCommands(guildId, null, it.isPrivate())
         }
         directoryStore.search("", source = ApplicationDirectoryAPI.SOURCE_APP_LAUNCHER)
     }
@@ -237,8 +305,12 @@ class AppLauncherViewModel(
                         entrypoint,
                         applications,
                         frecentCommands,
+                        frecentApplications(),
+                        installedApplications,
+                        serverApplications,
+                        shelf,
                         directoryResults,
-                        commandsLoading || directoryLoading,
+                        commandsLoading || directoryLoading || installedLoading || serverLoading || shelfLoading,
                         hasLauncherPermission(),
                     )
                 } else {
@@ -304,8 +376,26 @@ class AppLauncherViewModel(
     private fun hasLauncherPermission(): Boolean {
         val currentChannel = channel ?: return false
         if (currentChannel.isPrivate()) return true
-        val permissions = StoreStream.getPermissions().getPermissionsByChannel()[channelId]
+        val permissions = permissionsProvider(channelId)
         return PermissionUtils.can(Permission.USE_APPLICATION_COMMANDS, permissions)
+    }
+
+    private fun shouldLoadActivities(): Boolean {
+        if (entrypoint == AppLauncherEntrypoint.VOICE) return true
+        if (entrypoint != AppLauncherEntrypoint.TEXT) return false
+        val currentChannel = channel ?: return false
+        if (currentChannel.type !in ACTIVITY_CHANNEL_TYPES) return false
+        return currentChannel.isPrivate() ||
+            PermissionUtils.can(Permission.USE_EMBEDDED_ACTIVITIES, permissionsProvider(channelId))
+    }
+
+    private fun frecentApplications(): List<Application> {
+        val commandApplicationIds = (frecentCommands + commands)
+            .associate { it.id to it.applicationId }
+        val applicationsById = (applications + installedApplications + serverApplications).associateBy(Application::id)
+        return frecentCommandIds.mapNotNull(commandApplicationIds::get)
+            .distinct()
+            .mapNotNull(applicationsById::get)
     }
 
     override fun onCleared() {
@@ -326,5 +416,27 @@ class AppLauncherViewModel(
         const val INTERACTION_DELAY_MS = 100L
         const val ANALYTICS_DEBOUNCE_MS = 400L
         const val MAX_QUERY_LENGTH = 100
+
+        private val ACTIVITY_CHANNEL_TYPES = setOf(
+            Channel.GUILD_TEXT,
+            Channel.GUILD_VOICE,
+            Channel.DM,
+            Channel.GROUP_DM,
+        )
+
+        internal fun indexApplications(index: ApplicationCommandIndex, installationType: Int): List<Application> {
+            val commandCounts = index.applicationCommands.groupingBy { it.applicationId }.eachCount()
+            return index.applications.map { application ->
+                Application(
+                    id = application.id,
+                    name = application.bot?.username ?: application.name,
+                    icon = application.icon,
+                    commandCount = commandCounts[application.id] ?: 0,
+                    bot = application.bot,
+                    permissions = application.permissions,
+                    installationTypes = setOf(installationType),
+                )
+            }
+        }
     }
 }

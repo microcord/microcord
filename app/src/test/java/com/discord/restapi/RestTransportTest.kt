@@ -77,6 +77,50 @@ class RestTransportTest {
     }
 
     @Test
+    fun embeddedActivityTokenClientHasNoUserTokenOrCookies() {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"application":{"id":"12","name":"Activity"},"scopes":["identify"],"expires":"2026-08-04T00:00:00Z","user":{"id":"7","username":"user","discriminator":"0007"}}""",
+            ),
+        )
+        val headers = object : RequiredHeadersInterceptor.HeadersProvider {
+            override fun getAuthToken() = "user-token"
+            override fun getFingerprint(): String? = null
+            override fun getLocale(): String? = null
+            override fun getAcceptLanguages(): String? = null
+            override fun getUserAgent() = "Manticord fixture"
+            override fun getSpotifyToken(): String? = null
+        }
+        val cookieJar = MemoryCookieJar()
+        cookieJar.saveFromResponse(
+            server.url("/api/"),
+            listOf(
+                Cookie.Builder()
+                    .name("session")
+                    .value("user-cookie")
+                    .hostOnlyDomain(server.url("/").host)
+                    .path("/")
+                    .build(),
+            ),
+        )
+        RestAPI.install(
+            RestAPIBuilder(server.url("/api/").toString(), cookieJar),
+            listOf(RequiredHeadersInterceptor(headers)),
+        )
+
+        RestAPI.embeddedActivityOAuthTokenApiOrNull!!
+            .authenticate("Bearer activity-token")
+            .toBlocking()
+            .single()
+
+        server.takeRequest().also { request ->
+            assertEquals("Bearer activity-token", request.getHeader("Authorization"))
+            assertEquals(null, request.getHeader("Cookie"))
+            assertEquals(ReactNativeRequestMetadata.USER_AGENT, request.getHeader("User-Agent"))
+        }
+    }
+
+    @Test
     fun reactNativeInterceptorIsScopedAndAddsStickerSendMetadata() {
         server.enqueue(MockResponse().setBody("ok"))
         val client = OkHttpClient.Builder()
@@ -96,12 +140,14 @@ class RestTransportTest {
         server.enqueue(MockResponse().setBody("[]"))
         server.enqueue(MockResponse().setBody("{\"activities\":[],\"applications\":[],\"assets\":{}}"))
         server.enqueue(MockResponse().setBody("{\"applications\":[],\"application_commands\":[]}"))
+        server.enqueue(MockResponse().setBody("{\"applications\":[],\"application_commands\":[]}"))
         server.enqueue(MockResponse().setResponseCode(204))
         RestAPI.install(RestAPIBuilder(server.url("/api/").toString(), MemoryCookieJar()), emptyList())
 
         RestAPI.applicationDirectoryApiOrNull!!.categories("en-US").toBlocking().single()
         RestAPI.embeddedActivitiesApiOrNull!!.shelf().toBlocking().single()
         RestAPI.reactNativeApiOrNull!!.getUserApplicationCommandIndex().toBlocking().single()
+        RestAPI.applicationDirectoryApiOrNull!!.applicationCommandIndex(10L).toBlocking().single()
         RestAPI.reactNativeApiOrNull!!.sendApplicationCommand(
             RestAPIParams.ApplicationCommand(
                 type = 4L,
@@ -129,13 +175,14 @@ class RestTransportTest {
             ),
         ).toBlocking().subscribe()
 
-        val requests = List(4) {
+        val requests = List(5) {
             val request = server.takeRequest()
             assertEquals(ReactNativeRequestMetadata.USER_AGENT, request.getHeader("User-Agent"))
             assertFalse(request.getHeader("X-Super-Properties").isNullOrBlank())
             assertFalse(request.getHeader("X-Discord-Timezone").isNullOrBlank())
             request
         }
+        assertEquals("/api/v9/applications/10/application-command-index", requests[3].path)
         assertEquals("/api/v9/interactions", requests.last().path)
         assertTrue(requests.last().body.readUtf8().contains("\"type\":4"))
     }

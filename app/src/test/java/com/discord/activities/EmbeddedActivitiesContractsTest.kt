@@ -12,6 +12,7 @@ import com.discord.api.embeddedactivities.EmbeddedActivityProxyTicketRequest
 import com.discord.api.embeddedactivities.EmbeddedActivityShelf
 import com.discord.api.embeddedactivities.EmbeddedActivityShelfApplication
 import com.discord.gateway.io.IncomingParser
+import com.discord.models.commands.RemoteApplicationCommand
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.restapi.EmbeddedActivitiesAPI
 import com.discord.restapi.RestAPIBuilder
@@ -102,6 +103,22 @@ class EmbeddedActivitiesContractsTest {
     }
 
     @Test
+    fun discordLaunchHandlerIsAnActivityEntryPointEvenWhenTypedAsChatInput() {
+        val command = RemoteApplicationCommand(
+            id = "99",
+            applicationId = 12,
+            name = "wordle",
+            options = emptyList(),
+            guildId = 1,
+            version = "1",
+            type = 1,
+            handler = EmbeddedActivityLauncher.DISCORD_LAUNCH_ACTIVITY_HANDLER,
+        )
+
+        assertTrue(EmbeddedActivityLauncher.isPrimaryEntryPoint(command))
+    }
+
+    @Test
     fun storeCachesShelfAndReconcilesV2Participants() {
         var now = 100L
         val store = StoreEmbeddedActivities(ObservationDeck(), now = { now })
@@ -123,6 +140,10 @@ class EmbeddedActivitiesContractsTest {
 
     @Test
     fun urlContainsExactMobileContextAndRedactsSession() {
+        assertEquals(
+            EmbeddedActivityDiscordConfig("//discord.com/api", "production", "cdn.discordapp.com"),
+            EmbeddedActivitySessionManager.rpcConfig,
+        )
         val request = EmbeddedActivityLaunchRequest(12, 2, customId = "custom value", referrerId = "ref")
         val url = EmbeddedActivitySessionManager.buildUrl(instance(), channel(), "proxy secret", request, "frame")
         assertEquals(

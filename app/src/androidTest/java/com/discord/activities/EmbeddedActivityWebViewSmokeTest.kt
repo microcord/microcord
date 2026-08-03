@@ -29,6 +29,7 @@ class EmbeddedActivityWebViewSmokeTest {
                 session(),
                 onExternalUrl = { _, result -> result(false) },
                 onPermissionRequest = { it.deny() },
+                onAuthorizeRequest = { _, _, deny -> deny() },
                 onCrash = {},
                 onLoadError = {},
             )

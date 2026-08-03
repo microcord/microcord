@@ -50,12 +50,15 @@ data class EmbeddedActivityAssetMetadata(
 )
 
 data class EmbeddedActivityAsset(
-    val assetId: Long,
-    val assetType: String,
-    val key: String,
-    val metadata: EmbeddedActivityAssetMetadata,
-    val updatedAt: String,
-    val visibility: String,
+    val assetId: Long? = null,
+    val assetType: String? = null,
+    val key: String? = null,
+    val metadata: EmbeddedActivityAssetMetadata? = null,
+    val updatedAt: String? = null,
+    val visibility: String? = null,
+    val id: String? = null,
+    val type: Int? = null,
+    val name: String? = null,
 )
 
 data class EmbeddedActivityShelf(

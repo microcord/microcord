@@ -2,6 +2,7 @@ package com.discord.widgets.chat.input.applauncher
 
 import com.discord.api.applicationdirectory.ApplicationDirectoryApplication
 import com.discord.api.applicationdirectory.ApplicationDirectorySearchResult
+import com.discord.api.embeddedactivities.EmbeddedActivityShelf
 import com.discord.models.commands.Application
 import com.discord.models.commands.ApplicationCommand
 
@@ -50,6 +51,7 @@ data class AppLauncherApplication(
     val commandApplication: Application? = null,
     val searchResultType: AppLauncherSearchResultType = AppLauncherSearchResultType.APPLICATION,
     val promoted: Boolean = false,
+    val imageUrl: String? = null,
 )
 
 sealed interface AppLauncherRow {
@@ -124,38 +126,64 @@ internal object AppLauncherRows {
 
     fun home(
         entrypoint: AppLauncherEntrypoint,
-        applications: List<Application>,
+        commandApplications: List<Application>,
         frecentCommands: List<ApplicationCommand>,
+        frecentApplications: List<Application>,
+        installedApplications: List<Application>,
+        serverApplications: List<Application>,
+        shelf: EmbeddedActivityShelf?,
         directoryResults: List<ApplicationDirectorySearchResult>,
         loading: Boolean,
         hasPermission: Boolean,
     ): List<AppLauncherRow> {
         val rows = mutableListOf<AppLauncherRow>()
+        val shownApplicationIds = HashSet<Long>()
+        val activities = shelfApplications(shelf)
+        val activitiesById = activities.associateBy(AppLauncherApplication::id)
         if (frecentCommands.isNotEmpty()) {
-            rows += commandSection("Recent commands", AppLauncherSectionName.RECENT_COMMANDS, frecentCommands, applications)
-        }
-
-        val available = applications.filterNot(Application::builtIn).map(::fromCommandApplication)
-        val installed = available.filter { it.commandApplication?.installationTypes?.contains(1) == true }
-        if (installed.isNotEmpty()) {
-            rows += applicationSection("Installed", AppLauncherSectionName.INSTALLED, installed)
-        }
-        if (available.isNotEmpty()) {
-            rows += applicationSection(
-                "Apps in this server",
-                AppLauncherSectionName.APPS_IN_THIS_SERVER,
-                available,
+            rows += commandSection(
+                "Recent commands",
+                AppLauncherSectionName.RECENT_COMMANDS,
+                frecentCommands,
+                commandApplications,
             )
         }
 
-        val directory = directoryResults.map(::fromDirectoryResult)
-        val activities = directory.filter { it.searchResultType == AppLauncherSearchResultType.ACTIVITY_APPLICATION }
-        if (activities.isNotEmpty()) {
+        fun unique(applications: List<Application>): List<AppLauncherApplication> = applications
+            .filterNot(Application::builtIn)
+            .filter { shownApplicationIds.add(it.id) }
+            .map { application ->
+                activitiesById[application.id]?.copy(commandApplication = application)
+                    ?: fromCommandApplication(application)
+            }
+
+        val recent = unique(frecentApplications)
+        if (recent.isNotEmpty()) {
+            rows += applicationSection("Recents", AppLauncherSectionName.RECENT_APPS, recent)
+        }
+        val installed = unique(installedApplications)
+        if (installed.isNotEmpty()) {
+            rows += applicationSection("Installed", AppLauncherSectionName.INSTALLED, installed)
+        }
+        val inServer = if (entrypoint == AppLauncherEntrypoint.TEXT) unique(serverApplications) else emptyList()
+        if (inServer.isNotEmpty()) {
+            rows += applicationSection(
+                "Apps in this server",
+                AppLauncherSectionName.APPS_IN_THIS_SERVER,
+                inServer,
+            )
+        }
+
+        val remainingActivities = activities.filter { shownApplicationIds.add(it.id) }
+        if (remainingActivities.isNotEmpty()) {
             rows += AppLauncherRow.Header("Activities", AppLauncherSectionName.ACTIVITIES)
-            rows += activities.chunked(2).map { AppLauncherRow.ActivityPair(it[0], it.getOrNull(1)) }
+            rows += remainingActivities.chunked(2).map { AppLauncherRow.ActivityPair(it[0], it.getOrNull(1)) }
         }
         if (entrypoint == AppLauncherEntrypoint.TEXT) {
-            val recommendations = directory.filterNot { it.searchResultType == AppLauncherSearchResultType.ACTIVITY_APPLICATION }
+            val recommendations = directoryResults
+                .map(::fromDirectoryResult)
+                .filterNot { it.searchResultType == AppLauncherSearchResultType.ACTIVITY_APPLICATION }
+                .filter { shownApplicationIds.add(it.id) }
             if (recommendations.isNotEmpty()) {
                 rows += AppLauncherRow.Header("Recommended", AppLauncherSectionName.NEW_TO_APPS)
                 rows += AppLauncherRow.Banner(recommendations.first())
@@ -277,6 +305,40 @@ internal object AppLauncherRows {
                 ?: AppLauncherSearchResultType.APPLICATION,
             promoted = application.flagsValue() and PROMOTED_FLAG != 0L,
         )
+    }
+
+    fun shelfApplications(shelf: EmbeddedActivityShelf?): List<AppLauncherApplication> {
+        if (shelf == null) return emptyList()
+        val applications = shelf.applications.associateBy { it.id }
+        return shelf.activities
+            .filter { "android" in it.supportedPlatforms }
+            .sortedBy { it.shelfRank }
+            .mapNotNull { config ->
+                val id = config.applicationId ?: return@mapNotNull null
+                val application = applications[id] ?: return@mapNotNull null
+                val directoryApplication = ApplicationDirectoryApplication(
+                    id = application.id,
+                    name = application.name,
+                    description = application.description,
+                    icon = application.icon,
+                    coverImage = application.coverImage,
+                    splash = application.splash,
+                    flags = application.flags,
+                    flagsNew = application.flagsNew,
+                )
+                AppLauncherApplication(
+                    id = application.id,
+                    name = application.name,
+                    description = application.description,
+                    icon = application.icon,
+                    directoryApplication = directoryApplication,
+                    searchResultType = AppLauncherSearchResultType.ACTIVITY_APPLICATION,
+                    imageUrl = shelf.assets[application.id]
+                        ?.firstOrNull { (it.name ?: it.key) == "embedded_cover" }
+                        ?.let { asset -> asset.id ?: asset.assetId?.toString() }
+                        ?.let { "https://cdn.discordapp.com/app-assets/${application.id}/$it.webp?size=512" },
+                )
+            }
     }
 
     private fun ApplicationDirectoryApplication.flagsValue(): Long =

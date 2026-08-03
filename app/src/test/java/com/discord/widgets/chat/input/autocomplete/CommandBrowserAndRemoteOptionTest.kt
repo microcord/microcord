@@ -7,12 +7,14 @@ import com.discord.models.commands.Application
 import com.discord.models.commands.ApplicationCommand
 import com.discord.models.commands.ApplicationCommandOption
 import com.discord.models.commands.ApplicationSubCommand
+import com.discord.models.commands.BuiltInCommand
 import com.discord.models.commands.RemoteApplicationCommand
 import com.discord.stores.DiscoverCommands
 import com.discord.stores.CommandAutocompleteState
 import com.discord.stores.LoadState
 import com.discord.widgets.chat.input.WidgetChatInputDiscoveryCommandsModel
 import com.discord.widgets.chat.input.autocomplete.commands.buildRemoteCommandOptionRequest
+import com.discord.widgets.chat.input.models.AutocompleteApplicationCommands
 import com.discord.widgets.chat.input.models.MentionToken
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -209,6 +211,71 @@ class CommandBrowserAndRemoteOptionTest {
     }
 
     @Test
+    fun staticChoicesRenderWhileRemoteChoicesArePendingThenMerge() {
+        val option = option(
+            "scope",
+            autocomplete = true,
+            choices = listOf(CommandChoice("Only me", "private")),
+        )
+        val token = MentionToken(LeadingIdentifier.NONE, "", false, 14)
+        val static = AutocompleteModelUtils.autocompletablesForCommandOption(option, emptyMap())
+            .getValue(LeadingIdentifier.NONE)
+            .filterIsInstance<ApplicationCommandChoiceAutocompletable>()
+
+        val pending = AutocompleteViewModel.reduceRemoteOption(token, option, null, static)
+            as AutocompleteViewState.Autocomplete
+        assertFalse(pending.isLoading)
+        assertEquals(listOf("private"), InputAutocomplete.renderedItems(pending).map { it.getInputReplacement() })
+
+        val loaded = AutocompleteViewModel.reduceRemoteOption(
+            token,
+            option,
+            CommandAutocompleteState.Choices(listOf(ApplicationCommandAutocompleteChoice("Everyone", "public"))),
+            static,
+        ) as AutocompleteViewState.Autocomplete
+        assertEquals(listOf("private", "public"), loaded.autocompletables.map { it.getInputReplacement() })
+    }
+
+    @Test
+    fun slashPrefixBrowserContainsRemoteCommands() {
+        val application = Application(10L, "Tools", commandCount = 1)
+        val remote = command("weather", emptyList())
+        val discovery = WidgetChatInputDiscoveryCommandsModel.parseModelDiscoveryCommands(
+            1L,
+            emptyList(),
+            listOf(application),
+            DiscoverCommands(listOf(remote), 0, 0, false, false, 0, null),
+            includeHeaders = true,
+            placeholdersCount = 3,
+            frecencyCommands = emptyList(),
+        )
+        val viewModel = AutocompleteViewModel(
+            channelId = 7L,
+            autocompletablesSource = { Observable.just(emptyMap()) },
+            commandStateSource = { Observable.never() },
+            commandIndexRequest = {},
+        )
+        var state: AutocompleteViewState = AutocompleteViewState.Hidden
+        viewModel.observeViewState().subscribe { state = it }
+
+        viewModel.onInputChanged("/", 1..1)
+        assertTrue(state is AutocompleteViewState.LoadingItems)
+        viewModel.onCommandStateChanged(
+            AutocompleteViewModel.CommandState(
+                applicationCommands = AutocompleteApplicationCommands(
+                    applications = listOf(application),
+                    queryCommands = listOf(remote),
+                    discoveryCommands = discovery,
+                ),
+            ),
+        )
+
+        val visible = state as AutocompleteViewState.Autocomplete
+        assertTrue(visible.autocompletables.filterIsInstance<ApplicationCommandAutocompletable>()
+            .any { it.command.applicationId == 10L && it.command.name == "weather" })
+    }
+
+    @Test
     fun rapidTypingOnlySendsTheLatestRemoteQuery() {
         val scheduler = TestScheduler()
         val requests = mutableListOf<com.discord.widgets.chat.input.models.ApplicationCommandData>()
@@ -239,17 +306,45 @@ class CommandBrowserAndRemoteOptionTest {
         assertEquals("ab", requests.single().values.single().value)
     }
 
+    @Test
+    fun blankOptionalBuiltInArgumentIsOmittedAndValid() {
+        val option = option("message", required = false)
+        val command = BuiltInCommand("-2", -1L, "tableflip", options = listOf(option)) {
+            "${it["message"] ?: ""} (flip)"
+        }
+        val viewModel = AutocompleteViewModel(
+            channelId = 7L,
+            autocompletablesSource = { Observable.just(emptyMap()) },
+            commandStateSource = { Observable.just(AutocompleteViewModel.CommandState()) },
+            commandIndexRequest = {},
+        )
+        viewModel.selectAutocompleteItem(
+            ApplicationCommandAutocompletable(
+                Application(-1L, "Built-In", commandCount = 1, builtIn = true),
+                command,
+                true,
+                true,
+            ),
+        )
+
+        val data = requireNotNull(viewModel.buildSelectedCommandData("/tableflip ", emptyList()))
+        assertTrue(data.validInputs)
+        assertTrue(data.values.isEmpty())
+        assertEquals(" (flip)", command.execute?.invoke(emptyMap()))
+    }
+
     private fun option(
         name: String,
         type: ApplicationCommandType = ApplicationCommandType.STRING,
         autocomplete: Boolean = false,
+        required: Boolean = true,
         choices: List<CommandChoice>? = null,
         untranslatedName: String = name,
         options: List<ApplicationCommandOption>? = null,
     ) = ApplicationCommandOption(
         type = type,
         name = name,
-        required = true,
+        required = required,
         default = false,
         autocomplete = autocomplete,
         choices = choices,

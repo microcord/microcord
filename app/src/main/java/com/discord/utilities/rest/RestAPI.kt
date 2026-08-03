@@ -9,6 +9,7 @@ import com.discord.restapi.RestAPIBuilder
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.ReactNativeHeadersInterceptor
 import com.discord.utilities.analytics.AnalyticSuperProperties
+import okhttp3.CookieJar
 import okhttp3.Interceptor
 
 /**
@@ -41,6 +42,9 @@ object RestAPI {
 
     @Volatile
     private var installedEmbeddedActivityOAuth: EmbeddedActivityOAuthAPI? = null
+
+    @Volatile
+    private var installedEmbeddedActivityOAuthToken: EmbeddedActivityOAuthAPI? = null
 
     /** Publishes the store graph's REST client. Safe to call more than once. */
     @JvmStatic
@@ -90,6 +94,12 @@ object RestAPI {
             interceptors = chain + ReactNativeHeadersInterceptor,
             clientName = "embeddedActivityOAuth",
         )
+        installedEmbeddedActivityOAuthToken = builder.build(
+            EmbeddedActivityOAuthAPI::class.java,
+            interceptors = listOf(ReactNativeHeadersInterceptor),
+            clientName = "embeddedActivityOAuthToken",
+            cookieJar = CookieJar.NO_COOKIES,
+        )
         install(api, apiSerializeNulls, reactNativeApi)
         return api
     }
@@ -103,6 +113,7 @@ object RestAPI {
         installedApplicationDirectory = null
         installedEmbeddedActivities = null
         installedEmbeddedActivityOAuth = null
+        installedEmbeddedActivityOAuthToken = null
     }
 
     /** Adds the same client metadata header as Discord Android 126.21. */
@@ -151,4 +162,8 @@ object RestAPI {
     @JvmStatic
     val embeddedActivityOAuthApiOrNull: EmbeddedActivityOAuthAPI?
         get() = installedEmbeddedActivityOAuth
+
+    @JvmStatic
+    val embeddedActivityOAuthTokenApiOrNull: EmbeddedActivityOAuthAPI?
+        get() = installedEmbeddedActivityOAuthToken
 }

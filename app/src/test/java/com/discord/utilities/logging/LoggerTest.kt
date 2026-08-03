@@ -18,6 +18,7 @@ class LoggerTest {
         logger.d("message", error)
 
         assertEquals(listOf(Triple("default", "message", error)), calls)
-        assertEquals(GatewaySocketLogger.LogLevel.NONE, AppGatewaySocketLogger.INSTANCE.logLevel)
+        assertEquals(GatewaySocketLogger.LogLevel.NONE, AppGatewaySocketLogger { false }.logLevel)
+        assertEquals(GatewaySocketLogger.LogLevel.VERBOSE, AppGatewaySocketLogger { true }.logLevel)
     }
 }

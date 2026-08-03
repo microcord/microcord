@@ -53,6 +53,7 @@ data class ApplicationCommandIndexCommand(
 ) {
     companion object {
         const val TYPE_CHAT_INPUT = 1
+        const val TYPE_PRIMARY_ENTRY_POINT = 4
     }
 }
 

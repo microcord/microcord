@@ -1,0 +1,45 @@
+{
+  "version": "1500000000000000001",
+  "applications": [
+    {
+      "id": "300",
+      "name": "User App",
+      "description": "Installed to the current user",
+      "icon": null,
+      "bot_id": "301",
+      "flags": "0"
+    }
+  ],
+  "application_commands": [
+    {
+      "id": "302",
+      "type": 1,
+      "application_id": "300",
+      "name": "profil",
+      "name_default": "profile",
+      "description": "Show a profile",
+      "description_default": "Show a profile",
+      "contexts": [0, 1, 2],
+      "integration_types": [1],
+      "version": "303",
+      "options": [
+        {
+          "type": 3,
+          "name": "sichtbarkeit",
+          "name_default": "visibility",
+          "description": "Visibility",
+          "choices": [
+            {"name": "Nur ich", "name_default": "Only me", "value": "private"},
+            {"name": "Alle", "name_default": "Everyone", "value": "public"}
+          ]
+        },
+        {
+          "type": 10,
+          "name": "radius",
+          "description": "Search radius",
+          "autocomplete": true
+        }
+      ]
+    }
+  ]
+}

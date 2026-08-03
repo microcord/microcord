@@ -28,6 +28,7 @@ import com.discord.restapi.RestAPIParams
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
 import com.discord.utilities.permissions.PermissionUtils
+import com.discord.utilities.persister.Persister
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
@@ -87,6 +88,11 @@ class StoreApplicationCommands(
      */
     private val storeExperiments: StoreExperiments? = null,
     private val restApi: () -> RestAPIInterface? = { RestAPI.reactNativeApiOrNull },
+    private val applicationIndexRequest: (Long) -> Observable<ApplicationCommandIndex>? = { applicationId ->
+        RestAPI.applicationDirectoryApiOrNull?.applicationCommandIndex(applicationId)
+    },
+    private val indexCachePersister: Persister<PersistedIndexCache> =
+        Persister(INDEX_CACHE_KEY, PersistedIndexCache()),
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
     private val builtInCommandsProvider: BuiltInCommandsProvider = BuiltInCommands(),
     private val nonceGenerator: NonceGenerator = NonceGenerator(),
@@ -141,10 +147,16 @@ class StoreApplicationCommands(
     private var queryGuildId: Long? = null
     private var query: String? = null
     private var indexedCommands: List<ApplicationCommand> = emptyList()
+    private val fetchedApplicationIds = LinkedHashSet<Long>()
     private var indexRequestGeneration: Long = 0L
     private var indexedChannelId: Long? = null
     private var indexedGuildId: Long? = null
     private var indexedIsBotDm: Boolean = false
+    private var indexLoading: Boolean = false
+    private var pendingIndexSources: Int = 0
+    private val loadedIndexSources = LinkedHashMap<Int, IndexedSource>()
+    private var currentUserId = 0L
+    private var persistedIndexCache = PersistedIndexCache()
 
     // -- Frecency ------------------------------------------------------------------------------
 
@@ -193,10 +205,7 @@ class StoreApplicationCommands(
         autocompleteOptionResultsSnapshot
 
     /** True when [applicationId]'s slice of the flat list is inside the loaded window. */
-    fun hasFetchedApplicationCommands(applicationId: Long): Boolean {
-        val index = applicationCommandIndexes[applicationId] ?: return false
-        return currentStartOffset <= index && currentEndOffset >= index
-    }
+    fun hasFetchedApplicationCommands(applicationId: Long): Boolean = applicationId in fetchedApplicationIds
 
     // -- Observation ---------------------------------------------------------------------------
 
@@ -260,6 +269,15 @@ class StoreApplicationCommands(
     @StoreThread
     fun handleConnectionOpen(payload: ModelPayload) {
         sessionId = payload.sessionId
+        currentUserId = payload.me?.id ?: 0L
+        val cached = indexCachePersister.get()
+        persistedIndexCache = if (currentUserId > 0L && cached.userId == currentUserId) {
+            cached
+        } else {
+            PersistedIndexCache(userId = currentUserId).also {
+                indexCachePersister.set(it, persist = true)
+            }
+        }
     }
 
     /**
@@ -299,10 +317,14 @@ class StoreApplicationCommands(
         queryGuildId = null
         query = null
         indexedCommands = emptyList()
+        fetchedApplicationIds.clear()
         indexRequestGeneration++
         indexedChannelId = null
         indexedGuildId = null
         indexedIsBotDm = false
+        indexLoading = false
+        pendingIndexSources = 0
+        loadedIndexSources.clear()
         frecencyCommands.clear()
         frecencyRequests.clear()
         autocompleteNonceData.clear()
@@ -312,6 +334,9 @@ class StoreApplicationCommands(
         pendingGatewayGuildId = null
         pendingBotUser = null
         sessionId = null
+        currentUserId = 0L
+        persistedIndexCache = PersistedIndexCache()
+        indexCachePersister.clear(persist = true)
         markChanged(
             GuildApplicationsUpdate,
             DiscoverCommandsUpdate,
@@ -379,47 +404,154 @@ class StoreApplicationCommands(
     // -- Requests ------------------------------------------------------------------------------
 
     /** Fetches the modern command indexes for the selected location and the current user's apps. */
-    fun requestApplicationCommandIndex(channelId: Long, guildId: Long?, isBotDm: Boolean) = dispatcher.schedule {
+    @JvmOverloads
+    fun requestApplicationCommandIndex(
+        channelId: Long,
+        guildId: Long?,
+        isBotDm: Boolean,
+        force: Boolean = false,
+    ) = dispatcher.schedule {
+        val sameLocation = indexedGuildId == guildId && (guildId != null || indexedChannelId == channelId)
+        if (!force && sameLocation) {
+            val botContextChanged = indexedIsBotDm != isBotDm
+            indexedChannelId = channelId
+            indexedIsBotDm = isBotDm
+            if (indexLoading) return@schedule
+            if (loadedIndexSources.size == 2) {
+                if (botContextChanged) {
+                    handleApplicationCommandIndexes(
+                        indexRequestGeneration,
+                        guildId,
+                        isBotDm,
+                        loadedIndexSources.values.toList(),
+                    )
+                }
+                return@schedule
+            }
+        }
+        val preservePartialIndex = !force && sameLocation && loadedIndexSources.isNotEmpty()
         val generation = ++indexRequestGeneration
         indexedChannelId = channelId
         indexedGuildId = guildId
         indexedIsBotDm = isBotDm
-        indexedCommands = emptyList()
-        queryCommands.clear()
-        discoverCommands = DiscoverCommands.defaultModelDiscoveryCommands().copy(loadState = LoadState.Loading)
-        handleGuildApplicationsUpdate(
-            listOf(builtInCommandsProvider.getFrecencyApplication(), builtInCommandsProvider.getBuiltInApplication()),
-        )
-        markChanged(QueryCommandsUpdate, DiscoverCommandsUpdate)
-        val api = restApi()
+        indexLoading = true
+        if (!preservePartialIndex) {
+            loadedIndexSources.clear()
+            indexedCommands = emptyList()
+            fetchedApplicationIds.clear()
+            queryCommands.clear()
+            discoverCommands = DiscoverCommands.defaultModelDiscoveryCommands().copy(loadState = LoadState.Loading)
+            handleGuildApplicationsUpdate(
+                listOf(builtInCommandsProvider.getFrecencyApplication(), builtInCommandsProvider.getBuiltInApplication()),
+            )
+            markChanged(QueryCommandsUpdate, DiscoverCommandsUpdate)
+        }
+        val guildInstall = ApplicationIntegrationType.GUILD_INSTALL.value
+        val userInstall = ApplicationIntegrationType.USER_INSTALL.value
+        if (!force) {
+            persistedIndexCache.userIndex?.let {
+                loadedIndexSources[userInstall] = IndexedSource(it, userInstall)
+            }
+            val locationIndex = if (guildId != null && guildId > 0L) {
+                persistedIndexCache.guildIndexes[guildId]
+            } else {
+                persistedIndexCache.channelIndexes[channelId]
+            }
+            locationIndex?.let { loadedIndexSources[guildInstall] = IndexedSource(it, guildInstall) }
+            if (loadedIndexSources.size == 2) {
+                indexLoading = false
+                pendingIndexSources = 0
+                handleApplicationCommandIndexes(generation, guildId, isBotDm, loadedIndexSources.values.toList())
+                return@schedule
+            }
+        }
+        pendingIndexSources = listOf(guildInstall, userInstall).count { it !in loadedIndexSources }
+        val api = RestAPI.reactNativeApiOrNull ?: restApi()
         if (api == null) {
             handleApplicationCommandIndexFailure(generation)
             return@schedule
         }
-        val location = if (guildId != null && guildId > 0L) {
-            api.getGuildApplicationCommandIndex(guildId)
-                .map { IndexedSource(it, ApplicationIntegrationType.GUILD_INSTALL.value) }
-        } else {
-            api.getChannelApplicationCommandIndex(channelId)
-                .map { IndexedSource(it, ApplicationIntegrationType.GUILD_INSTALL.value) }
+        if (guildInstall !in loadedIndexSources) {
+            val location = if (guildId != null && guildId > 0L) {
+                api.getGuildApplicationCommandIndex(guildId)
+            } else {
+                api.getChannelApplicationCommandIndex(channelId)
+            }
+            requestIndexSource(generation, guildId, isBotDm, guildInstall, location)
         }
-        val user = api.getUserApplicationCommandIndex()
-            .map { IndexedSource(it, ApplicationIntegrationType.USER_INSTALL.value) }
-        Observable.zip(location, user) { locationIndex, userIndex -> listOf(locationIndex, userIndex) }
+        if (userInstall !in loadedIndexSources) {
+            requestIndexSource(generation, guildId, isBotDm, userInstall, api.getUserApplicationCommandIndex())
+        }
+    }
+
+    private fun requestIndexSource(
+        generation: Long,
+        guildId: Long?,
+        isBotDm: Boolean,
+        installationType: Int,
+        request: Observable<ApplicationCommandIndex>,
+    ) {
+        request
             .restSubscribeOn(false)
             .appSubscribe(
                 StoreApplicationCommands::class.java,
-                errorHandler = { dispatcher.schedule { handleApplicationCommandIndexFailure(generation) } },
-            ) { indexes ->
+                errorHandler = {
+                    dispatcher.schedule {
+                        handleIndexSourceFinished(
+                            generation,
+                            IndexedSource(ApplicationCommandIndex(), installationType),
+                            guildId,
+                            isBotDm,
+                        )
+                    }
+                },
+            ) { index ->
                 dispatcher.schedule {
-                    handleApplicationCommandIndexes(generation, guildId, isBotDm, indexes)
+                    handleIndexSourceFinished(generation, IndexedSource(index, installationType), guildId, isBotDm)
                 }
             }
     }
 
     @StoreThread
+    private fun handleIndexSourceFinished(
+        generation: Long,
+        source: IndexedSource?,
+        guildId: Long? = indexedGuildId,
+        isBotDm: Boolean = indexedIsBotDm,
+    ) {
+        if (generation != indexRequestGeneration) return
+        source?.let {
+            loadedIndexSources[it.installationType] = it
+            persistIndexSource(it)
+        }
+        pendingIndexSources--
+        if (loadedIndexSources.isNotEmpty()) {
+            handleApplicationCommandIndexes(generation, guildId, isBotDm, loadedIndexSources.values.toList())
+        }
+        if (pendingIndexSources <= 0) {
+            indexLoading = false
+            if (loadedIndexSources.isEmpty()) handleApplicationCommandIndexFailure(generation)
+        }
+    }
+
+    @StoreThread
+    private fun persistIndexSource(source: IndexedSource) {
+        if (currentUserId <= 0L) return
+        persistedIndexCache = when (source.installationType) {
+            ApplicationIntegrationType.USER_INSTALL.value -> persistedIndexCache.copy(userIndex = source.index)
+            else -> indexedGuildId?.takeIf { it > 0L }?.let { guildId ->
+                persistedIndexCache.copy(guildIndexes = persistedIndexCache.guildIndexes + (guildId to source.index))
+            } ?: indexedChannelId?.let { channelId ->
+                persistedIndexCache.copy(channelIndexes = persistedIndexCache.channelIndexes + (channelId to source.index))
+            } ?: persistedIndexCache
+        }
+        indexCachePersister.set(persistedIndexCache, persist = true)
+    }
+
+    @StoreThread
     private fun handleApplicationCommandIndexFailure(generation: Long) {
         if (generation != indexRequestGeneration) return
+        indexLoading = false
         indexedCommands = emptyList()
         handleGuildApplicationsUpdate(
             listOf(builtInCommandsProvider.getFrecencyApplication(), builtInCommandsProvider.getBuiltInApplication()),
@@ -448,7 +580,7 @@ class StoreApplicationCommands(
     ) {
         if (generation != indexRequestGeneration) return
         val applications = LinkedHashMap<Long, Application>()
-        indexes.forEach { source ->
+        indexes.sortedBy(IndexedSource::installationType).forEach { source ->
             source.index.applications.forEach { app ->
                 val previous = applications[app.id]
                 applications[app.id] = Application(
@@ -457,15 +589,18 @@ class StoreApplicationCommands(
                     icon = app.icon,
                     commandCount = 0,
                     bot = app.bot ?: previous?.bot,
+                    botId = app.botId ?: app.bot?.id ?: previous?.botId,
                     permissions = app.permissions ?: previous?.permissions,
                     installationTypes = previous?.installationTypes.orEmpty() + source.installationType,
                 )
             }
         }
         val commands = LinkedHashMap<Long, ApplicationCommand>()
-        indexes.forEach { source ->
+        indexes.sortedBy(IndexedSource::installationType).forEach { source ->
             source.index.applicationCommands.forEach { command ->
-                if (command.type != ApplicationCommandIndexCommand.TYPE_CHAT_INPUT) return@forEach
+                if (command.type != ApplicationCommandIndexCommand.TYPE_CHAT_INPUT &&
+                    command.type != ApplicationCommandIndexCommand.TYPE_PRIMARY_ENTRY_POINT
+                ) return@forEach
                 val application = applications[command.applicationId]
                 val domain = command.toSlashCommand(
                     applicationPermissions = application?.permissions,
@@ -475,9 +610,10 @@ class StoreApplicationCommands(
             }
         }
         indexedCommands = commands.values.toList()
+        fetchedApplicationIds.clear()
+        indexedCommands.mapTo(fetchedApplicationIds, ApplicationCommand::applicationId)
         val counts = indexedCommands.groupingBy(ApplicationCommand::applicationId).eachCount()
         val realApplications = applications.values.map { it.copy(commandCount = counts[it.id] ?: 0) }
-            .filter { it.commandCount > 0 }
             .sortedBy(Application::name)
         handleGuildApplicationsUpdate(
             listOf(builtInCommandsProvider.getFrecencyApplication()) +
@@ -491,10 +627,20 @@ class StoreApplicationCommands(
 
     data class IndexedSource(val index: ApplicationCommandIndex, val installationType: Int)
 
+    data class PersistedIndexCache(
+        val userId: Long = 0L,
+        val userIndex: ApplicationCommandIndex? = null,
+        val guildIndexes: Map<Long, ApplicationCommandIndex> = emptyMap(),
+        val channelIndexes: Map<Long, ApplicationCommandIndex> = emptyMap(),
+    )
+
     @StoreThread
     fun handleApplicationCommandIndexUpdate(guildId: Long) {
         val channelId = indexedChannelId ?: return
         if (indexedGuildId != guildId) return
+        persistedIndexCache = persistedIndexCache.copy(guildIndexes = persistedIndexCache.guildIndexes - guildId)
+        indexCachePersister.set(persistedIndexCache, persist = true)
+        loadedIndexSources.remove(ApplicationIntegrationType.GUILD_INSTALL.value)
         requestApplicationCommandIndex(channelId, guildId, indexedIsBotDm)
     }
 
@@ -557,6 +703,7 @@ class StoreApplicationCommands(
                         name = botUser.username,
                         commandCount = 0,
                         bot = botUser.synthesizeApiUser(),
+                        botId = botUser.id,
                     ),
                     builtInCommandsProvider.getBuiltInApplication(),
                 ),
@@ -616,6 +763,7 @@ class StoreApplicationCommands(
         applicationId: Long?,
         forDmDiscover: Boolean = false,
     ) {
+        if (applicationId != null && hasFetchedApplicationCommands(applicationId)) return
         var offset = 0
         loadDirectionUp = false
         loadDirectionDown = false
@@ -642,8 +790,7 @@ class StoreApplicationCommands(
     }
 
     fun requestDiscoverCommands(applicationId: Long) {
-        val guildId = discoverGuildId ?: return
-        requestInitialApplicationCommands(guildId, applicationId)
+        requestInitialApplicationCommands(discoverGuildId, applicationId, discoverGuildId == null)
     }
 
     fun requestLoadMoreDown() {
@@ -759,7 +906,7 @@ class StoreApplicationCommands(
                 focused.name,
                 ApplicationCommandType.from(focused.type),
             )
-        val api = restApi()
+        val api = RestAPI.reactNativeApiOrNull ?: restApi()
         if (api == null) {
             handleAutocompleteFailure(nonce)
             return@schedule
@@ -856,7 +1003,10 @@ class StoreApplicationCommands(
             }
 
             applicationId != null -> {
-                if (applicationId != discoverApplicationId) {
+                val cached = indexedCommands.filter { it.applicationId == applicationId }
+                if (applicationId in fetchedApplicationIds) {
+                    handleRestApplicationCommands(applicationId, cached)
+                } else if (applicationId != discoverApplicationId) {
                     isLoadingDiscoveryCommands = true
                     getApplicationCommandsViaRest(applicationId)
                 }
@@ -875,12 +1025,12 @@ class StoreApplicationCommands(
      * is the same value in practice but is what gets stored.
      */
     private fun getApplicationCommandsViaRest(applicationId: Long) {
-        val api = RestAPI.applicationDirectoryApiOrNull
-        if (api == null) {
+        val request = applicationIndexRequest(applicationId)
+        if (request == null) {
             dispatcher.schedule { isLoadingDiscoveryCommands = false }
             return
         }
-        api.applicationCommandIndex(applicationId)
+        request
             .restSubscribeOn(false)
             .appSubscribe(
                 StoreApplicationCommands::class.java,
@@ -899,38 +1049,40 @@ class StoreApplicationCommands(
         val commands = index.applicationCommands
             .filter { it.applicationId == applicationId && it.type == ApplicationCommandIndexCommand.TYPE_CHAT_INPUT }
             .map { it.toSlashCommand(indexedApplication?.permissions, installationType = null) }
-        handleRestApplicationCommands(applicationId, commands)
+        handleRestApplicationCommands(applicationId, commands, indexedApplication)
     }
 
     @StoreThread
     private fun handleRestApplicationCommands(
         applicationId: Long,
         commands: List<ApplicationCommand>?,
+        indexedApplication: com.discord.api.commands.ApplicationCommandIndexApplication? = null,
     ) {
         discoverApplicationId = null
         isLoadingDiscoveryCommands = false
-        val index = applications.indexOfFirst { it.id == applicationId }
-        if (index == -1) return
-
         val commandCount = commands?.size ?: 0
         val updated = ArrayList(applications)
-        val previous = updated.removeAt(index)
-        if (commandCount > 0) {
-            updated.add(
-                index,
-                Application(
-                    id = applicationId,
-                    name = previous.name,
-                    icon = previous.icon,
-                    commandCount = commandCount,
-                    bot = previous.bot,
-                    builtIn = previous.builtIn,
-                ),
-            )
-        }
+        val index = updated.indexOfFirst { it.id == applicationId }
+        val previous = if (index >= 0) updated.removeAt(index) else null
+        val application = Application(
+            id = applicationId,
+            name = indexedApplication?.bot?.username ?: indexedApplication?.name ?: previous?.name ?: return,
+            icon = indexedApplication?.icon ?: previous?.icon,
+            commandCount = commandCount,
+            bot = indexedApplication?.bot ?: previous?.bot,
+            builtIn = previous?.builtIn == true,
+            permissions = indexedApplication?.permissions ?: previous?.permissions,
+            installationTypes = previous?.installationTypes.orEmpty(),
+            botId = indexedApplication?.botId ?: indexedApplication?.bot?.id ?: previous?.botId,
+        )
+        updated.add(if (index >= 0) index else updated.indexOfLast(Application::builtIn).coerceAtLeast(0), application)
         applications = updated
 
         val slashCommands = commands.orEmpty()
+        indexedCommands = (indexedCommands.filterNot { it.applicationId == applicationId } + slashCommands)
+            .distinctBy(ApplicationCommand::id)
+        fetchedApplicationIds += applicationId
+        numRemoteCommands = indexedCommands.size
         handleGuildApplicationsUpdate(applications.toList())
 
         // Resolve the DM frecency shortlist locally; there is no gateway round-trip to do it.
@@ -943,13 +1095,14 @@ class StoreApplicationCommands(
         frecencyCommands[0L] = topIds.mapNotNull { id -> allCommands.firstOrNull { it.id == id } }
         markChanged(FrecencyCommandsUpdate)
 
-        handleDiscoverCommandsUpdate(slashCommands)
-        handleQueryCommandsUpdate(slashCommands + builtInCommandsProvider.getBuiltInCommands())
+        handleDiscoverCommandsUpdate(indexedCommands)
+        handleQueryCommandsUpdate(indexedCommands.filterForQuery(query.orEmpty()))
     }
 
     @StoreThread
     private fun handleGuildApplicationsUpdate(commands: List<Application>) {
         applications = commands
+        applicationCommandIndexes.clear()
         numRemoteCommands = 0
         var index = 0
         commands.forEach { application ->
@@ -1027,7 +1180,8 @@ class StoreApplicationCommands(
     @StoreThread
     private fun handleQueryCommandsUpdate(commands: List<ApplicationCommand>) {
         queryCommands.clear()
-        queryCommands.addAll(commands)
+        val indexedById = indexedCommands.associateBy(ApplicationCommand::id)
+        queryCommands.addAll(commands.map { indexedById[it.id] ?: it })
         query?.let { prefix ->
             queryCommands.addAll(
                 builtInCommandsProvider.getBuiltInCommands()
@@ -1150,6 +1304,7 @@ class StoreApplicationCommands(
         private const val FRECENCY_EXPERIMENT_NAME = "2021-09_android_app_commands_frecency"
         private const val FRECENCY_EXPERIMENT_BUCKET = 1
         private const val FRECENCY_LIMIT = 5
+        private const val INDEX_CACHE_KEY = "STORE_APPLICATION_COMMAND_INDEX_CACHE_V1"
     }
 }
 
@@ -1402,6 +1557,7 @@ fun com.discord.api.commands.ApplicationCommand.toSlashCommand(): ApplicationCom
         contexts = contexts?.toSet(),
         integrationTypes = integrationTypes?.toSet(),
         nsfw = nsfw,
+        handler = handler,
     )
 
 fun ApplicationCommandIndexCommand.toSlashCommand(
@@ -1424,6 +1580,7 @@ fun ApplicationCommandIndexCommand.toSlashCommand(
     integrationTypes = integrationTypes?.toSet(),
     installationType = installationType,
     nsfw = nsfw,
+    handler = handler,
     apiCommand = this,
 )
 

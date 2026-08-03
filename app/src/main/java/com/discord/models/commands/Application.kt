@@ -20,6 +20,7 @@ data class Application(
     val builtIn: Boolean = false,
     val permissions: ApplicationCommandIndexPermissions? = null,
     val installationTypes: Set<Int> = emptySet(),
+    val botId: Long? = bot?.id,
 ) {
     companion object {
         fun fromApiApplication(apiApplication: com.discord.api.application.Application): Application =

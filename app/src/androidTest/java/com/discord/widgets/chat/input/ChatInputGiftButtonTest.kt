@@ -45,6 +45,7 @@ class ChatInputGiftButtonTest {
                 assertEquals(addButton.paddingLeft, appsButton.paddingLeft)
                 assertEquals(addButton.paddingTop, appsButton.paddingTop)
                 assertEquals(addButton.background.javaClass, appsButton.background.javaClass)
+
             }
         } finally {
             instrumentation.runOnMainSync(activity::finish)

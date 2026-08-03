@@ -4,6 +4,8 @@ import com.discord.api.botuikit.SelectItem
 import com.discord.api.commands.ApplicationCommandAutocompleteChoice
 import com.discord.api.commands.ApplicationCommandAutocompleteResult
 import com.discord.api.commands.ApplicationCommandIndex
+import com.discord.api.commands.ApplicationCommandIndexApplication
+import com.discord.api.commands.ApplicationCommandIndexCommand
 import com.discord.api.commands.ApplicationIntegrationType
 import com.discord.api.commands.ApplicationCommandType
 import com.discord.api.commands.GuildApplicationCommands
@@ -258,10 +260,7 @@ class ApplicationCommandStoresTest {
     @Test
     fun modernIndexesMergeLocalizedNestedCommandsAndRejectStaleLoads() {
         val fixture = commandsFixture()
-        val json = javaClass.classLoader!!.getResource("fixtures/application_command_index.json")!!.readText()
-        val index = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
-            .registerDiscordApiTypeAdapters().create()
-            .fromJson(json, ApplicationCommandIndex::class.java)
+        val index = indexFixture("application_command_index.json")
 
         fixture.dispatcher.schedule {
             fixture.store.handleApplicationCommandIndexes(
@@ -301,6 +300,106 @@ class ApplicationCommandStoresTest {
     }
 
     @Test
+    fun guildAndUserIndexesMergeApplicationsCommandsAndInstallationContexts() {
+        val fixture = commandsFixture()
+        val guildIndex = indexFixture("application_command_index.json")
+        val userIndex = indexFixture("application_command_index_user.json")
+
+        fixture.dispatcher.schedule {
+            fixture.store.handleApplicationCommandIndexes(
+                generation = 0,
+                guildId = GUILD_ID,
+                isBotDm = false,
+                indexes = listOf(
+                    StoreApplicationCommands.IndexedSource(userIndex, ApplicationIntegrationType.USER_INSTALL.value),
+                    StoreApplicationCommands.IndexedSource(guildIndex, ApplicationIntegrationType.GUILD_INSTALL.value),
+                ),
+            )
+        }
+        fixture.scheduler.triggerActions()
+
+        val applications = fixture.store.getApplications().filterNot(ModelApplication::builtIn)
+        assertEquals(listOf(100L, 400L, 300L), applications.map(ModelApplication::id))
+        assertEquals(setOf(ApplicationIntegrationType.USER_INSTALL.value), applications.last().installationTypes)
+        assertEquals(401L, applications.first { it.id == 400L }.botId)
+        assertEquals(0, applications.first { it.id == 400L }.commandCount)
+        assertEquals(
+            setOf("verwaltung ressource erstellen", "profil"),
+            fixture.store.getDiscoverCommands().commands.filterNot(ApplicationCommand::builtIn).mapTo(linkedSetOf()) { it.name },
+        )
+        val userCommand = fixture.store.getDiscoverCommands().commands.first { it.applicationId == 300L }
+        assertEquals("profile", userCommand.untranslatedName)
+        assertEquals("sichtbarkeit", userCommand.options[0].name)
+        assertEquals("visibility", userCommand.options[0].untranslatedName)
+        assertEquals(listOf("Nur ich", "Alle"), userCommand.options[0].choices.orEmpty().map { it.displayName })
+        assertEquals(listOf("private", "public"), userCommand.options[0].choices.orEmpty().map { it.value })
+        assertEquals(ApplicationCommandType.NUMBER, userCommand.options[1].type)
+        assertTrue(userCommand.options[1].autocomplete)
+    }
+
+    @Test
+    fun clickingZeroCountBotFetchesApplicationIndexAndMergesDiscoverAndQuery() {
+        val perApplication = indexFixture("application_command_index_application.json")
+        var requestedApplicationId: Long? = null
+        val fixture = commandsFixture(
+            applicationIndexRequest = { applicationId ->
+                requestedApplicationId = applicationId
+                Observable.just(perApplication)
+            },
+        )
+        val location = indexFixture("application_command_index.json")
+        fixture.dispatcher.schedule {
+            fixture.store.handleApplicationCommandIndexes(
+                generation = 0,
+                guildId = null,
+                isBotDm = true,
+                indexes = listOf(
+                    StoreApplicationCommands.IndexedSource(location, ApplicationIntegrationType.GUILD_INSTALL.value),
+                ),
+            )
+        }
+        fixture.scheduler.triggerActions()
+        assertFalse(fixture.store.hasFetchedApplicationCommands(400L))
+
+        fixture.store.requestDiscoverCommands(400L)
+        fixture.await { fixture.store.hasFetchedApplicationCommands(400L) }
+
+        assertEquals(400L, requestedApplicationId)
+        assertEquals(1, fixture.store.getApplications().first { it.id == 400L }.commandCount)
+        assertTrue(fixture.store.getDiscoverCommands().commands.any { it.applicationId == 400L && it.name == "ask" })
+        assertTrue(fixture.store.getQueryCommands().any { it.applicationId == 400L && it.name == "ask" })
+    }
+
+    @Test
+    fun clickingAnAlreadyIndexedApplicationDoesNotRefetchIt() {
+        var fetches = 0
+        val fixture = commandsFixture(applicationIndexRequest = {
+            fetches++
+            Observable.just(indexFixture("application_command_index_application.json"))
+        })
+        fixture.dispatcher.schedule {
+            fixture.store.handleApplicationCommandIndexes(
+                generation = 0,
+                guildId = GUILD_ID,
+                isBotDm = false,
+                indexes = listOf(
+                    StoreApplicationCommands.IndexedSource(
+                        indexFixture("application_command_index_user.json"),
+                        ApplicationIntegrationType.USER_INSTALL.value,
+                    ),
+                ),
+            )
+        }
+        fixture.scheduler.triggerActions()
+
+        fixture.store.requestDiscoverCommands(300L)
+        fixture.scheduler.triggerActions()
+
+        assertEquals(0, fetches)
+        assertTrue(fixture.store.getDiscoverCommands().commands.any { it.applicationId == 300L })
+    }
+
+    @Test
     fun commandIndexFailurePublishesBuiltInsWithFailureState() {
         val fixture = commandsFixture()
 
@@ -312,6 +411,158 @@ class ApplicationCommandStoresTest {
             listOf("shrug", "tableflip", "unflip", "me", "spoiler"),
             fixture.store.getDiscoverCommands().commands.map(ApplicationCommand::name),
         )
+    }
+
+    @Test
+    fun failedChannelIndexIsCachedWhileUserCommandsRemainAvailable() {
+        var channelRequests = 0
+        var userRequests = 0
+        val api = Proxy.newProxyInstance(
+            RestAPIInterface::class.java.classLoader,
+            arrayOf(RestAPIInterface::class.java),
+        ) { _, method, _ ->
+            when (method.name) {
+                "getChannelApplicationCommandIndex" -> {
+                    channelRequests++
+                    Observable.error<ApplicationCommandIndex>(IllegalStateException("missing channel index"))
+                }
+                "getUserApplicationCommandIndex" -> {
+                    userRequests++
+                    Observable.just(indexFixture("application_command_index_user.json"))
+                }
+                else -> null
+            }
+        } as RestAPIInterface
+        val fixture = commandsFixture(restApi = api)
+
+        fixture.store.requestApplicationCommandIndex(7L, null, isBotDm = false)
+        fixture.await { fixture.store.getApplications().any { it.id == 300L } }
+        fixture.store.requestApplicationCommandIndex(7L, null, isBotDm = true)
+        fixture.scheduler.triggerActions()
+
+        assertEquals(1, channelRequests)
+        assertEquals(1, userRequests)
+    }
+
+    @Test
+    fun guildIndexIsSharedAcrossChannelsInTheSameGuild() {
+        var guildRequests = 0
+        var userRequests = 0
+        val api = Proxy.newProxyInstance(
+            RestAPIInterface::class.java.classLoader,
+            arrayOf(RestAPIInterface::class.java),
+        ) { _, method, _ ->
+            when (method.name) {
+                "getGuildApplicationCommandIndex" -> {
+                    guildRequests++
+                    Observable.just(indexFixture("application_command_index.json"))
+                }
+                "getUserApplicationCommandIndex" -> {
+                    userRequests++
+                    Observable.just(indexFixture("application_command_index_user.json"))
+                }
+                else -> null
+            }
+        } as RestAPIInterface
+        val fixture = commandsFixture(restApi = api)
+
+        fixture.store.requestApplicationCommandIndex(7L, GUILD_ID, isBotDm = false)
+        Thread.sleep(25L)
+        fixture.await { fixture.store.getApplications().any { it.id == 300L } }
+        fixture.store.requestApplicationCommandIndex(8L, GUILD_ID, isBotDm = false)
+        fixture.scheduler.triggerActions()
+
+        assertEquals(1, guildRequests)
+        assertEquals(1, userRequests)
+    }
+
+    @Test
+    fun persistedAccountIndexesHydrateWithoutNetworkRequests() {
+        val cacheKey = "TEST_PERSISTED_APPLICATION_COMMAND_INDEX_CACHE"
+        Persister(cacheKey, StoreApplicationCommands.PersistedIndexCache()).set(
+            StoreApplicationCommands.PersistedIndexCache(
+                userId = 7L,
+                userIndex = indexFixture("application_command_index_user.json"),
+                guildIndexes = mapOf(GUILD_ID to indexFixture("application_command_index.json")),
+            ),
+            persist = true,
+        )
+        var requests = 0
+        val api = Proxy.newProxyInstance(
+            RestAPIInterface::class.java.classLoader,
+            arrayOf(RestAPIInterface::class.java),
+        ) { _, method, _ ->
+            if (method.name in setOf("getGuildApplicationCommandIndex", "getUserApplicationCommandIndex")) {
+                requests++
+                Observable.error<ApplicationCommandIndex>(AssertionError("network should not be used"))
+            } else null
+        } as RestAPIInterface
+        val fixture = commandsFixture(
+            restApi = api,
+            indexCachePersister = Persister(cacheKey, StoreApplicationCommands.PersistedIndexCache()),
+        )
+        val payload = GsonBuilder()
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .registerDiscordApiTypeAdapters()
+            .create()
+            .fromJson(
+                """{"user":{"id":"7","username":"me","discriminator":"0000"},"guilds":[],"private_channels":[]}""",
+                com.discord.models.domain.ModelPayload::class.java,
+            )
+        fixture.dispatcher.schedule { fixture.store.handleConnectionOpen(payload) }
+        fixture.scheduler.triggerActions()
+
+        fixture.store.requestApplicationCommandIndex(7L, GUILD_ID, isBotDm = false)
+        fixture.await { fixture.store.getApplications().any { it.id == 300L } }
+
+        assertEquals(0, requests)
+        assertTrue(fixture.store.getDiscoverCommands().commands.any { it.applicationId == 100L })
+    }
+
+    @Test
+    fun primaryEntryPointCommandsRemainDiscoverableAndQueryable() {
+        val fixture = commandsFixture()
+        val index = ApplicationCommandIndex(
+            applications = listOf(ApplicationCommandIndexApplication(12L, "Wordle")),
+            applicationCommands = listOf(
+                ApplicationCommandIndexCommand(
+                    id = 99L,
+                    type = ApplicationCommandIndexCommand.TYPE_PRIMARY_ENTRY_POINT,
+                    applicationId = 12L,
+                    name = "wordle",
+                    version = "1",
+                    handler = 2,
+                ),
+            ),
+        )
+        fixture.store.requestApplicationCommandsQuery(GUILD_ID, "wor")
+        fixture.scheduler.triggerActions()
+        fixture.dispatcher.schedule {
+            fixture.store.handleApplicationCommandIndexes(
+                generation = 0,
+                guildId = GUILD_ID,
+                isBotDm = false,
+                indexes = listOf(
+                    StoreApplicationCommands.IndexedSource(index, ApplicationIntegrationType.GUILD_INSTALL.value),
+                ),
+            )
+        }
+        fixture.scheduler.triggerActions()
+
+        assertTrue(fixture.store.getDiscoverCommands().commands.any { it.name == "wordle" })
+        assertTrue(fixture.store.getQueryCommands().any { it.name == "wordle" })
+
+        val legacyQueryResult = apiCommand(99L, "wordle")
+        fixture.dispatcher.schedule {
+            fixture.store.handleApplicationCommandsUpdate(
+                guildApplicationCommands(fixture.gateway.lastNonce, listOf(legacyQueryResult)),
+            )
+        }
+        fixture.scheduler.triggerActions()
+
+        val merged = fixture.store.getQueryCommands().single { it.id == "99" }
+        assertEquals(ApplicationCommandIndexCommand.TYPE_PRIMARY_ENTRY_POINT, merged.type)
+        assertEquals(2, merged.handler)
     }
 
     @Test
@@ -482,6 +733,11 @@ class ApplicationCommandStoresTest {
     private fun commandsFixture(
         gatewayAccepts: Boolean = true,
         restApi: RestAPIInterface? = null,
+        applicationIndexRequest: (Long) -> Observable<ApplicationCommandIndex>? = { null },
+        indexCachePersister: Persister<StoreApplicationCommands.PersistedIndexCache> = Persister(
+            "TEST_APPLICATION_COMMAND_INDEX_CACHE",
+            StoreApplicationCommands.PersistedIndexCache(),
+        ),
     ): CommandsFixture {
         val scheduler = TestScheduler()
         val dispatcher = Dispatcher(scheduler)
@@ -493,6 +749,8 @@ class ApplicationCommandStoresTest {
             storeApplicationCommandFrecency = frecency,
             gatewayRequest = gateway,
             restApi = { restApi },
+            applicationIndexRequest = applicationIndexRequest,
+            indexCachePersister = indexCachePersister,
             observationDeck = deck,
         )
         dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store, frecency), deck))
@@ -507,7 +765,17 @@ class ApplicationCommandStoresTest {
         val dispatcher: Dispatcher,
         val gateway: RecordingGateway,
         val store: StoreApplicationCommands,
-    )
+    ) {
+        fun await(condition: () -> Boolean) {
+            val deadline = System.currentTimeMillis() + 2_000L
+            while (!condition() && System.currentTimeMillis() < deadline) {
+                scheduler.triggerActions()
+                Thread.sleep(5L)
+            }
+            scheduler.triggerActions()
+            assertTrue(condition())
+        }
+    }
 
     /** Captures the nonce of the last request instead of touching a socket. */
     private class RecordingGateway(private val accepts: Boolean) :
@@ -531,6 +799,14 @@ class ApplicationCommandStoresTest {
 
     private companion object {
         const val GUILD_ID = 42L
+
+        fun indexFixture(name: String): ApplicationCommandIndex {
+            val json = ApplicationCommandStoresTest::class.java.classLoader!!
+                .getResource("fixtures/$name")!!.readText()
+            return GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+                .registerDiscordApiTypeAdapters().create()
+                .fromJson(json, ApplicationCommandIndex::class.java)
+        }
 
         fun selectItem(value: String) =
             SelectItem(label = value, value = value, emoji = null, description = null, default = false)

@@ -12,6 +12,9 @@ import com.discord.models.domain.ModelInvite
  */
 interface InviteEmbedResolver {
 
+    /** The resolved invite, regardless of its target type. */
+    fun resolveInvite(inviteCode: String, eventId: String? = null): ModelInvite? = null
+
     /** The invite behind [inviteCode] when it points at a live public stage, otherwise null. */
     fun resolveInviteCodeForPublicStage(inviteCode: String): ModelInvite? = null
 

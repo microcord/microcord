@@ -1,6 +1,7 @@
 package com.discord.models.domain
 
 import android.content.res.Resources
+import com.discord.api.application.Application
 import com.discord.api.channel.Channel
 import com.discord.api.guild.Guild
 import com.discord.api.guildscheduledevent.GuildScheduledEvent
@@ -18,6 +19,7 @@ class ModelInvite private constructor(
     private var approximateMemberCount: Int = 0
     private var approximatePresenceCount: Int = 0
     private var createdAt: String? = null
+    private var expiresAt: String? = null
     private var guildScheduledEvent: GuildScheduledEvent? = null
     private var inviter: User? = null
     private val isStatic: Boolean = code != null
@@ -27,25 +29,30 @@ class ModelInvite private constructor(
     private var newMember: Boolean = false
     private var revoked: Boolean = false
     private var targetType: Int = 0
+    private var targetApplication: Application? = null
     private var temporary: Boolean = false
     private var uses: Int = 0
 
     fun getApproximateMemberCount() = approximateMemberCount
     fun getApproximatePresenceCount() = approximatePresenceCount
     fun getCreatedAt() = createdAt?.let(::parseUtcDate) ?: 0L
-    fun getExpirationTime() = getCreatedAt() + maxAge * 1000L
+    fun getExpirationTime() = expiresAt?.let(::parseUtcDate)?.takeIf { it > 0L }
+        ?: (getCreatedAt() + maxAge * 1000L)
     fun getGuildScheduledEvent() = guildScheduledEvent
     fun getInviter() = inviter
     fun getMaxAge() = maxAge
     fun getMaxUses() = maxUses
     fun getMemberVerificationForm() = memberVerificationForm
     fun getTargetType() = targetType
+    fun getTargetApplication() = targetApplication
     fun getTimeToExpirationMillis() = getExpirationTime() - System.currentTimeMillis()
     fun getUses() = uses
     fun isNewMember() = newMember
     fun isRevoked() = revoked
     fun isStatic() = isStatic
     fun isTemporary() = temporary
+    fun isExpired(now: Long = System.currentTimeMillis()) =
+        (expiresAt != null || maxAge > 0) && getExpirationTime() <= now
 
     fun canEqual(other: Any?) = other is ModelInvite
 
@@ -66,6 +73,7 @@ class ModelInvite private constructor(
             guild == other.guild &&
             memberVerificationForm == other.memberVerificationForm &&
             guildScheduledEvent == other.guildScheduledEvent &&
+            targetApplication == other.targetApplication &&
             channel == other.channel &&
             getCreatedAt() == other.getCreatedAt() &&
             code == other.code
@@ -86,6 +94,7 @@ class ModelInvite private constructor(
         result = 31 * result + (guild?.hashCode() ?: 0)
         result = 31 * result + (memberVerificationForm?.hashCode() ?: 0)
         result = 31 * result + (guildScheduledEvent?.hashCode() ?: 0)
+        result = 31 * result + (targetApplication?.hashCode() ?: 0)
         result = 31 * result + (channel?.hashCode() ?: 0)
         result = 31 * result + getCreatedAt().hashCode()
         return 31 * result + (code?.hashCode() ?: 0)
@@ -93,7 +102,8 @@ class ModelInvite private constructor(
 
     override fun toString() =
         "ModelInvite(inviter=$inviter, guild=$guild, memberVerificationForm=$memberVerificationForm, " +
-            "guildScheduledEvent=$guildScheduledEvent, channel=$channel, createdAt=${getCreatedAt()}, code=$code, " +
+            "guildScheduledEvent=$guildScheduledEvent, targetApplication=$targetApplication, channel=$channel, " +
+            "createdAt=${getCreatedAt()}, expiresAt=$expiresAt, code=$code, " +
             "maxAge=$maxAge, revoked=$revoked, temporary=$temporary, targetType=$targetType, uses=$uses, " +
             "maxUses=$maxUses, approximatePresenceCount=$approximatePresenceCount, " +
             "approximateMemberCount=$approximateMemberCount, newMember=$newMember, isStatic=$isStatic)"
@@ -151,12 +161,15 @@ class ModelInvite private constructor(
         fun getInviteStoreKey(code: String, eventId: Long?) = eventId?.let { "$code?event=$it" } ?: code
 
         private fun parseUtcDate(value: String): Long {
+            val normalized = value.replace(Regex("\\.(\\d+)(Z|[+-]\\d{2}:\\d{2})$")) { match ->
+                ".${match.groupValues[1].padEnd(3, '0').take(3)}${match.groupValues[2]}"
+            }
             val formats = arrayOf("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", "yyyy-MM-dd'T'HH:mm:ssXXX")
             for (format in formats) {
                 runCatching {
                     return SimpleDateFormat(format, Locale.US).apply {
                         timeZone = TimeZone.getTimeZone("UTC")
-                    }.parse(value)?.time ?: 0L
+                    }.parse(normalized)?.time ?: 0L
                 }
             }
             return 0L

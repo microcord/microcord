@@ -9,6 +9,14 @@
       "permissions": {"roles": {"42": true}, "channels": {"7": false}},
       "bot_id": "101",
       "flags": "0"
+    },
+    {
+      "id": "400",
+      "name": "On Demand App",
+      "description": "Commands require the application index",
+      "icon": null,
+      "bot_id": "401",
+      "flags": "0"
     }
   ],
   "application_commands": [

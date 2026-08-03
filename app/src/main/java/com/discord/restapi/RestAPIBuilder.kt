@@ -85,6 +85,7 @@ class RestAPIBuilder(
         clientName: String? = null,
         addVersion: Boolean = true,
         contentType: String = CONTENT_TYPE_JSON,
+        cookieJar: CookieJar = this.cookieJar,
     ): T {
         require(contentType == CONTENT_TYPE_JSON || contentType == CONTENT_TYPE_TEXT)
         val gson = gson(serializeNulls)

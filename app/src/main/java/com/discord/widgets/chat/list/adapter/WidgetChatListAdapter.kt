@@ -146,6 +146,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
         ChatListEntry.AUTOMOD_BLOCKED -> WidgetChatListAdapterItemAutoModBlocked(this)
         ChatListEntry.AUTOMOD_SYSTEM_MESSAGE -> WidgetChatListAdapterItemAutoModSystemMessageEmbed(this)
         ChatListEntry.FORWARDED_MESSAGE -> WidgetChatListAdapterItemForwardedMessage(this)
+        ChatListEntry.ACTIVITY_MESSAGE -> WidgetChatListAdapterItemActivity(this)
         else -> throw invalidViewTypeException(viewType)
     }
 
