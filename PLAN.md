@@ -1716,3 +1716,20 @@ conflict behavior with an approved test account.
 Resumable task: `app/src/main/java/com/discord/widgets/chat/list/adapter/WidgetChatListAdapterEventsHandler.kt` |
 `Vendicated/AliucordPlugins/TapTap` | device-check the 200 ms threshold against long-press, links,
 media, spoilers, and thread-starter rows.
+
+## 2026-08-03 debug logs screen
+
+- Reconstructed reference `WidgetDebugging` and its nested model/adapter using the recovered layout
+  and settings/developer navigation. Developer entry and screen retain the reference staff gate.
+- `AppLog` now exposes the reference-style bounded 5,000-entry replay stream. Rows render newest
+  first as `tag -> message`; the checked menu filter hides verbose entries. Tapping expands/collapses
+  a row and long-press copies it. The reference has no clear/share/export/search/refresh actions, so
+  none were added.
+- Required security divergence: display and clipboard text pass through final redaction for tokens,
+  authorization/cookies, passwords, MFA/captcha values, private message content, and throwable text.
+  HTTP diagnostics remain method/route-template/status/duration metadata only.
+- Focused AppLog/adapter/navigation tests and `assembleDebug` pass. Toolbar overflow, clipboard, and
+  auto-scroll remain to be checked on device.
+
+Resumable task: `app/src/main/java/com/discord/widgets/settings/WidgetDebugging.kt` | reference
+`WidgetDebugging.java` | device-check verbose filtering, expansion, long-press copy, and navigation.

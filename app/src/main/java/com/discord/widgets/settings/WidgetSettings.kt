@@ -20,6 +20,7 @@ import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.rx.ui
 import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.user.UserUtils.displayName
+import com.discord.widgets.debugging.WidgetDebugging
 import com.discord.widgets.settings.account.WidgetSettingsAccount
 import com.discord.widgets.settings.developer.WidgetSettingsDeveloper
 import com.discord.widgets.notice.WidgetNoticeDialog
@@ -145,12 +146,10 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         setActionBarOptionsMenu(
             R.menu.menu_settings,
             onSelected = { item ->
-                if (item.itemId == R.id.menu_settings_log_out) showLogoutDialog(requireContext())
-            },
-            onConfigured = { menu ->
-                // `WidgetDebugging` has not been reconstructed; hide its entry rather than
-                // presenting a menu item that does nothing.
-                menu.findItem(R.id.menu_settings_debugging)?.isVisible = false
+                when (item.itemId) {
+                    R.id.menu_settings_debugging -> WidgetDebugging.launch(requireContext())
+                    R.id.menu_settings_log_out -> showLogoutDialog(requireContext())
+                }
             },
         )
     }
@@ -168,9 +167,10 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         binding.settingsPresenceText.setText(PresenceUtils.getStatusStringResForPresence(model.presence))
         binding.userSettingsProfileHeaderView.contentDescription = displayName(model.meUser)
 
-        binding.developerOptionsDivider.visibility = View.VISIBLE
-        binding.developerOptionsHeader.visibility = View.VISIBLE
-        binding.developerOptions.visibility = View.VISIBLE
+        val developerVisibility = if (model.isStaffOrAlpha) View.VISIBLE else View.GONE
+        binding.developerOptionsDivider.visibility = developerVisibility
+        binding.developerOptionsHeader.visibility = developerVisibility
+        binding.developerOptions.visibility = developerVisibility
 
         binding.roleSubscriptions.visibility =
             if (model.showRoleSubscriptionsButton) View.VISIBLE else View.GONE

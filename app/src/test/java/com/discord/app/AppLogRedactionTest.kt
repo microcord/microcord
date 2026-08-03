@@ -1,5 +1,6 @@
 package com.discord.app
 
+import android.util.Log
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
@@ -49,5 +50,41 @@ class AppLogRedactionTest {
     fun `ordinary diagnostics are left intact`() {
         val message = "Gateway reconnecting, sequence=42, attempt 3"
         assertEquals(message, AppLog.redactSecrets(message))
+    }
+
+    @Test
+    fun `log snapshot is bounded and preserves oldest to newest order`() = withLogging {
+        repeat(AppLog.MAX_BUFFERED_LOGS + 1) { AppLog.d("line-$it") }
+
+        val logs = AppLog.getLogs()
+        assertEquals(AppLog.MAX_BUFFERED_LOGS, logs.size)
+        assertEquals("line-1", logs.first().message)
+        assertEquals("line-${AppLog.MAX_BUFFERED_LOGS}", logs.last().message)
+    }
+
+    @Test
+    fun `new lifecycle subscriber receives logs recorded while detached`() = withLogging {
+        val first = mutableListOf<List<AppLog.LoggedItem>>()
+        val firstSubscription = AppLog.observeLogs().subscribe(first::add)
+        AppLog.w("while attached")
+        firstSubscription.unsubscribe()
+        AppLog.e("while detached")
+
+        val restored = AppLog.observeLogs().take(1).toBlocking().single()
+
+        assertEquals(listOf("while attached", "while detached"), restored.takeLast(2).map { it.message })
+    }
+
+    private fun withLogging(block: () -> Unit) {
+        val previousPriority = AppLog.minimumPriority
+        val previousSink = AppLog.sink
+        AppLog.minimumPriority = Log.VERBOSE
+        AppLog.sink = { _, _, _, _ -> }
+        try {
+            block()
+        } finally {
+            AppLog.minimumPriority = previousPriority
+            AppLog.sink = previousSink
+        }
     }
 }

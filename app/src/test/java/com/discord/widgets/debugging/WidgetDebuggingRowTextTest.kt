@@ -53,4 +53,20 @@ class WidgetDebuggingRowTextTest {
         val text = logRowText(item("nothing thrown"))
         assertFalse(text.contains("\n"))
     }
+
+    @Test
+    fun `checked filter hides verbose and preserves tagged diagnostics`() {
+        val logs = listOf(
+            AppLog.LoggedItem(android.util.Log.VERBOSE, "Gateway -> heartbeat", null),
+            AppLog.LoggedItem(android.util.Log.DEBUG, "HTTP -> GET /users/@me", null),
+            AppLog.LoggedItem(android.util.Log.ERROR, "RTC -> disconnected", null),
+        )
+
+        assertEquals(
+            listOf("HTTP -> GET /users/@me", "RTC -> disconnected"),
+            filterDebugLogs(logs, isFiltered = true).map { it.message },
+        )
+        assertEquals(logs, filterDebugLogs(logs, isFiltered = false))
+    }
+
 }

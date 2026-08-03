@@ -22,17 +22,16 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationBuffered
 import com.discord.utilities.rx.ui
 import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
-import java.util.concurrent.TimeUnit
 import rx.Observable
 import rx.subjects.BehaviorSubject
 
 /**
- * The in-app log viewer: everything [AppLog] has recorded since the screen was opened, newest
- * first, colour-coded by priority and expandable per row.
+ * The in-app log viewer: the bounded [AppLog] snapshot, newest first, colour-coded by priority and
+ * expandable per row.
  *
- * The list accumulates rather than replaying: [AppLog.observeLogs] is a hot `PublishSubject`, so
- * lines are buffered in 200 ms windows and `scan`-ed into a growing list. Opening the screen twice
- * therefore starts from empty both times, which is the reference behaviour.
+ * The reference's `AppLog` subject replays at most 5,000 entries. [AppLog.observeLogs] exposes that
+ * same bounded lifecycle snapshot so pausing or reopening the screen neither loses nor duplicates
+ * lines.
  *
  * **No secrets reach this screen.** `AppLog` redacts tokens, cookies, passwords, MFA codes and
  * message content before a line is ever recorded, so the viewer renders whatever survived that
@@ -46,13 +45,6 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
     private data class Model(val logs: List<LogRow>, val isFiltered: Boolean)
 
     override fun onViewBound(view: View) {
-        // Second half of the gate. [launch] refuses to start this screen in a release build, but a
-        // synthetic intent or a fragment restored from saved state never goes through it, so the
-        // screen has to refuse for itself too.
-        if (!DebugScreenGate.isEnabled) {
-            requireActivity().finish()
-            return
-        }
         super.onViewBound(view)
         val recycler: RecyclerView = view.findViewById(R.id.debugging_logs)
         logsAdapter = MGRecyclerAdapter.configure(Adapter(recycler))
@@ -68,20 +60,11 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
-        val bufferedLogs = AppLog.observeLogs()
-            .computationBuffered()
-            .distinctUntilChanged()
-            .buffer(LOG_BUFFER_MS, TimeUnit.MILLISECONDS)
-            .filter { it.isNotEmpty() }
-            .scan(emptyList<AppLog.LoggedItem>()) { existing, new -> existing + new }
-
         Observable.combineLatest(
-            bufferedLogs,
+            AppLog.observeLogs().distinctUntilChanged(),
             filterSubject.distinctUntilChanged(),
         ) { logs, isFiltered ->
-            // "Filtered" hides VERBOSE, which is almost all of the traffic.
-            val visible = if (isFiltered) logs.filter { it.priority > Log.VERBOSE } else logs
-            Model(visible.map(::LogRow), isFiltered)
+            Model(filterDebugLogs(logs, isFiltered).map(::LogRow), isFiltered)
         }
             .computationBuffered()
             .ui(this)
@@ -186,10 +169,8 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
     companion object {
         private const val COLLAPSED_MAX_LINES = 2
         private const val VIEW_TYPE_LOG = 0
-        private const val LOG_BUFFER_MS = 200L
 
         fun launch(context: Context) {
-            if (!DebugScreenGate.isEnabled) return
             AppScreenRouter.launch(context, WidgetDebugging::class.java)
         }
     }
@@ -210,4 +191,10 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
  * initialising the fragment.
  */
 internal fun logRowText(item: AppLog.LoggedItem): String =
-    item.message + (item.throwable?.let { "\n${AppLog.redactSecrets(it.toString())}" } ?: "")
+    AppLog.redactSecrets(item.message + (item.throwable?.let { "\n$it" } ?: ""))
+
+/** Reference filter: checked means hide priority 2 (VERBOSE); tags remain in `tag -> message`. */
+internal fun filterDebugLogs(
+    logs: List<AppLog.LoggedItem>,
+    isFiltered: Boolean,
+): List<AppLog.LoggedItem> = if (isFiltered) logs.filter { it.priority > Log.VERBOSE } else logs

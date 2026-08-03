@@ -3,8 +3,7 @@ package com.discord.app
 import android.app.Application
 import android.util.Log
 import rx.Observable
-import rx.subjects.PublishSubject
-import rx.subjects.SerializedSubject
+import rx.subjects.BehaviorSubject
 import java.util.UUID
 
 /**
@@ -33,7 +32,11 @@ object AppLog {
     /** Nothing is logged until [init] runs, mirroring the reference's inert default. */
     private const val PRIORITY_DISABLED = 99
 
-    private val logs = SerializedSubject(PublishSubject.create<LoggedItem>())
+    internal const val MAX_BUFFERED_LOGS = 5_000
+
+    private val logs = BehaviorSubject.create<List<LoggedItem>>(emptyList()).toSerialized()
+    private val logLock = Any()
+    private var logSnapshot = emptyList<LoggedItem>()
 
     @Volatile
     private var initialized: Boolean = false
@@ -54,7 +57,10 @@ object AppLog {
     @Volatile
     private var applicationLabel: String? = null
 
-    fun observeLogs(): Observable<LoggedItem> = logs.asObservable()
+    /** Replays the current bounded snapshot, then every later snapshot. */
+    fun observeLogs(): Observable<List<LoggedItem>> = logs.asObservable()
+
+    internal fun getLogs(): List<LoggedItem> = synchronized(logLock) { logSnapshot }
 
     fun v(message: String, throwable: Throwable? = null) = log(Log.VERBOSE, message, throwable, null)
 
@@ -95,7 +101,13 @@ object AppLog {
     private fun log(priority: Int, message: String, throwable: Throwable?, metadata: Map<String, String>?) {
         if (priority < minimumPriority) return
         val safeMessage = redactSecrets(message)
-        logs.onNext(LoggedItem(priority, safeMessage, throwable))
+        synchronized(logLock) {
+            // ponytail: copying is simple and bounded; use a ring buffer only if logging throughput
+            // makes this measurable.
+            logSnapshot = (logSnapshot + LoggedItem(priority, safeMessage, throwable))
+                .takeLast(MAX_BUFFERED_LOGS)
+            logs.onNext(logSnapshot)
+        }
 
         val sink = sink
         if (sink != null) {
@@ -152,6 +164,8 @@ object AppLog {
         "captcha_key",
         "fingerprint",
         "content",
+        "message_body",
+        "private_message",
     )
 
     private val SENSITIVE_KEY_VALUE: List<Regex> = SENSITIVE_KEYS.flatMap { key ->
