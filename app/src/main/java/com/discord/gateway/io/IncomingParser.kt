@@ -52,6 +52,7 @@ import com.discord.models.domain.ModelUserSettings
 import com.discord.models.domain.StreamCreateOrUpdate
 import com.discord.models.domain.StreamDelete
 import com.discord.models.domain.StreamServerUpdate
+import com.discord.models.domain.UserSettingsProtoUpdate
 import com.discord.models.thread.dto.ModelThreadListSync
 import com.google.gson.Gson
 import com.google.gson.JsonElement
@@ -104,6 +105,7 @@ class IncomingParser(private val gson: Gson) {
         // Current user
         "USER_UPDATE" -> gson.fromJson(data, User::class.java)
         "USER_SETTINGS_UPDATE" -> gson.fromJson(data, ModelUserSettings::class.java)
+        "USER_SETTINGS_PROTO_UPDATE" -> gson.fromJson(data, UserSettingsProtoUpdate::class.java)
         "USER_GUILD_SETTINGS_UPDATE" -> gson.fromJson(data, ModelNotificationSettings::class.java)
         "USER_NOTE_UPDATE" -> gson.fromJson(data, ModelUserNote.Update::class.java)
         "USER_REQUIRED_ACTION_UPDATE" -> gson.fromJson(data, UserRequiredActionUpdate::class.java)

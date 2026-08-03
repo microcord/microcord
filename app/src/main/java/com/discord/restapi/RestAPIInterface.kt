@@ -64,6 +64,8 @@ import com.discord.api.user.User
 import com.discord.api.user.UserProfile
 import com.discord.api.user.UserSurveyFetchResponse
 import com.discord.models.domain.Consents
+import com.discord.models.domain.UserSettingsProtoPatch
+import com.discord.models.domain.UserSettingsProtoResponse
 import com.discord.models.domain.Harvest
 import com.discord.models.domain.ModelApplicationStreamPreview
 import com.discord.models.domain.ModelAppliedGuildBoost
@@ -341,6 +343,14 @@ interface RestAPIInterface {
     fun updateUserSettingsCustomStatus(
         @Body userSettingsCustomStatus: RestAPIParams.UserSettingsCustomStatus,
     ): Observable<ModelUserSettings>
+
+    @GET("users/@me/settings-proto/2")
+    fun getFrecencyUserSettings(): Observable<UserSettingsProtoResponse>
+
+    @PATCH("users/@me/settings-proto/2")
+    fun patchFrecencyUserSettings(
+        @Body body: UserSettingsProtoPatch,
+    ): Observable<UserSettingsProtoResponse>
 
     // -- Relationships --------------------------------------------------------------------------
 

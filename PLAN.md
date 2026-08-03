@@ -1668,12 +1668,39 @@ run the queued connected geometry assertion and visually confirm the restored-he
 - The Favorites landing tile previews a random saved GIF, matching the plugin.
 - Existing `STORE_FAVORITES` persistence remains compatible. New local keys are
   `EMOJI_FRECENTS_V1`, `GIF_FRECENTS_V1`, and `GIF_HISTORY_ITEMS_V1`. Cross-device
-  `/settings-proto/2` synchronization was not added because no existing target transport owns it.
+  `/settings-proto/2` synchronization is now owned by the RNAPI settings sync described below.
 - Focused persistence, identity, ordering, ranking, integration tests and `assembleDebug` pass.
 
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/gifpicker/**` |
-`zt64/aliucord-plugins/plugin/Frecents` | device-check GIF long-press toast/star rendering and emoji
-category-scroll synchronization; add settings-proto sync only when that transport is reconstructed.
+`zt64/aliucord-plugins/plugin/Frecents` | device-check GIF star/toast rendering and emoji
+category-scroll synchronization.
+
+## 2026-08-03 RNAPI settings-proto v2 sync
+
+- Added typed GET/PATCH `/users/@me/settings-proto/2` transport and
+  `USER_SETTINGS_PROTO_UPDATE` gateway parsing for cross-device emoji favorites/frecency and GIF
+  favorites. No protobuf dependency was added; the minimal codec preserves unowned top-level fields
+  while encoding the documented type-2 schema.
+- Sync fetches after gateway ready, merges partial gateway updates, applies optimistic writes with
+  `required_data_version`, batches emoji usage for 30 seconds, respects 429 `Retry-After`, and
+  refetches after invalid-proto error 50105. Proto bodies are never logged.
+- Server fields always win when present, including intentionally empty lists. Existing local data is
+  migrated only when the matching server top-level field is absent; out-of-date migration responses
+  discard the local candidate. Cached server state remains available offline.
+- GIF usage ranking stays local because type-2 settings has no GIF-frecency field. Focused codec,
+  partial-update, migration, transport, offline, and store tests plus `assembleDebug` pass. No live
+  PATCH was issued during verification.
+- Live server payload validation found the schema was correct but unknown-field skipping was not:
+  `position += varint().toInt()` restored the pre-varint cursor under JVM compound-assignment
+  evaluation. Current unowned fields therefore shifted parsing by one byte and the decode exception
+  was silently dropped before store publication. The reader now advances length-delimited fields in
+  two explicit steps, validates wire types, and emits safe count/version diagnostics on failures.
+  Live-shaped unknown-field and ObservationDeck publication tests pass; a live GET decodes fields for
+  GIF favorites, emoji favorites, and emoji frecency successfully.
+
+Resumable task: `app/src/main/java/com/discord/stores/StoreMediaFavorites.kt` | desktop modules
+`594061`, `617617`, `416380` | validate PATCH echo, cross-device gateway update, 429 retry, and offline
+conflict behavior with an approved test account.
 
 ## 2026-08-03 TapTap local experiment
 

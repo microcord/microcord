@@ -280,12 +280,14 @@ class StoreStream private constructor(
         users,
         permissions,
         guildsSorted,
-        observeFavoriteEmojiIds = {
-            mediaFavorites.observeFavorites(StoreMediaFavorites.Favorite.EmojiTypes).map { favorites ->
-                favorites.filterIsInstance<StoreMediaFavorites.FavoriteEmoji>()
-                    .mapTo(LinkedHashSet(), StoreMediaFavorites.FavoriteEmoji::emojiUniqueId)
-            }
+        observeFavoriteAndFrequentEmojiIds = {
+            Observable.combineLatest(
+                mediaFavorites.observeFavoriteEmojiKeys(),
+                mediaFavorites.observeEmojiFrecency(),
+            ) { favorites, _ -> favorites to mediaFavorites.getEmojiFrecencyKeys() }
         },
+        getFrequentEmojiKeys = mediaFavorites::getEmojiFrecencyKeys,
+        trackEmoji = mediaFavorites::onEmojiUsed,
     )
     private val emojiGuild = StoreEmojiGuild(observationDeck, dispatcher)
     private val stickers = StoreStickers(dispatcher, observationDeck = observationDeck, clock = clock)
@@ -1114,6 +1116,12 @@ class StoreStream private constructor(
         reviewRequest.init(context)
         changeLog.init(context.applicationContext as Application)
         emoji.initBlocking(context)
+        mediaFavorites.installEmojiResolvers(
+            fromServer = { key -> emoji.unicodeEmojisNamesMap[key]?.getUniqueId() ?: key },
+            toServer = { key ->
+                emoji.unicodeEmojisNamesMap.values.firstOrNull { it.getUniqueId() == key }?.firstName ?: key
+            },
+        )
         Rules.setEmojiDataProvider(emoji)
         stickers.init()
         authentication.observeFingerprint().subscribe(
@@ -1520,6 +1528,11 @@ class StoreStream private constructor(
         dispatchSubscribe(events.getConnected(), "streamConnected", ::handleGatewayConnectedInternal)
         dispatchSubscribe(events.getConnectionReady(), "streamReady", ::handleGatewayConnectionReadyInternal)
         dispatchSubscribe(events.ready, "streamConnectionOpen", ::handleConnectionOpenInternal)
+        dispatchSubscribe(
+            events.userSettingsProtoUpdate,
+            "streamUserSettingsProtoUpdate",
+            mediaFavorites::handleGatewayUpdate,
+        )
 
         // Guilds
         dispatchSubscribe(events.guildCreate, "streamGuildCreate", ::handleGuildCreateOrUpdateInternal)
@@ -1856,6 +1869,7 @@ class StoreStream private constructor(
         applicationCommands.handleConnectionReady(ready)
         applicationInteractions.handleConnectionReady(ready)
         spotify.handleConnectionReady(ready)
+        mediaFavorites.handleConnectionReady(ready)
     }
 
     @StoreThread
@@ -2622,7 +2636,7 @@ class StoreStream private constructor(
         instantInvites.reset()
         requestedStageChannels.reset()
         stageChannelSelfPresence.reset()
-        emoji.handlePreLogout()
+        mediaFavorites.handlePreLogout()
         gifPicker.handlePreLogout()
         emojiCustom.reset()
         emojiGuild.reset()

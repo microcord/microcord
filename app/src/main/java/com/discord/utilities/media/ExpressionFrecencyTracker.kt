@@ -1,6 +1,8 @@
 package com.discord.utilities.media
 
+import com.discord.models.domain.FrecencyUserSettings
 import com.discord.utilities.time.ClockFactory
+import kotlin.math.ceil
 
 /** Current Frecents ranking: lifetime frequency weighted by up to ten recent uses. */
 class ExpressionFrecencyTracker {
@@ -21,6 +23,32 @@ class ExpressionFrecencyTracker {
             .mapNotNull { (key, entry) -> score(entry, now)?.let { key to it } }
             .sortedByDescending { it.second }
             .map { it.first }
+
+    @Synchronized
+    fun replace(values: Map<String, FrecencyUserSettings.FrecencyItem>) {
+        entries.clear()
+        values.forEach { (key, value) ->
+            entries[key] = Entry(value.totalUses, value.recentUses.takeLast(MAX_SAMPLES))
+        }
+    }
+
+    @Synchronized
+    fun toProtoEntries(now: Long = ClockFactory.get().currentTimeMillis()): Map<String, FrecencyUserSettings.FrecencyItem> =
+        entries.entries
+            .sortedByDescending { score(it.value, now) ?: 0.0 }
+            .take(MAX_PROTO_ENTRIES)
+            .associateTo(LinkedHashMap()) { (key, entry) ->
+                val weightedScore = entry.recentUses.take(MAX_SAMPLES).sumOf { timestamp ->
+                    weight((now - timestamp) / MILLIS_PER_DAY)
+                }
+                key to FrecencyUserSettings.FrecencyItem(
+                    totalUses = entry.totalUses,
+                    recentUses = entry.recentUses,
+                    frecency = if (entry.recentUses.isEmpty()) entry.totalUses else
+                        ceil(entry.totalUses * weightedScore.toDouble() / entry.recentUses.size).toInt(),
+                    score = weightedScore,
+                )
+            }
 
     private fun score(entry: Entry, now: Long): Double? {
         if (entry.totalUses <= 0) return null
@@ -45,6 +73,7 @@ class ExpressionFrecencyTracker {
 
     private companion object {
         const val MAX_SAMPLES = 10
+        const val MAX_PROTO_ENTRIES = 100
         const val MILLIS_PER_DAY = 86_400_000.0
     }
 }

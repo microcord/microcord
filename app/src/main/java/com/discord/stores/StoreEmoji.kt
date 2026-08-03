@@ -10,7 +10,6 @@ import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.utilities.collections.ShallowPartitionMap
 import com.discord.utilities.media.ExpressionFrecencyTracker
 import com.discord.utilities.permissions.PermissionUtils
-import com.discord.utilities.persister.Persister
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.textprocessing.Rules
 import com.discord.utilities.user.UserUtils.isPremium
@@ -43,12 +42,14 @@ class StoreEmoji(
      * [Emoji.getUniqueId] values. That store has not been reconstructed yet; until it is, the
      * favourites row is empty rather than wrong.
      */
-    private val observeFavoriteEmojiIds: () -> Observable<Set<String>> = { Observable.just(emptySet()) },
-    private val frecencyCache: Persister<ExpressionFrecencyTracker> =
-        Persister(EMOJI_FRECENCY_CACHE_KEY, ExpressionFrecencyTracker()),
+    private val observeFavoriteAndFrequentEmojiIds: () -> Observable<Pair<Set<String>, List<String>>> = {
+        Observable.just(emptySet<String>() to emptyList())
+    },
+    private val getFrequentEmojiKeys: (() -> List<String>)? = null,
+    private val trackEmoji: ((String) -> Unit)? = null,
 ) : Rules.EmojiDataProvider {
 
-    private var frecency: ExpressionFrecencyTracker = frecencyCache.get()
+    private val fallbackFrecency = ExpressionFrecencyTracker()
 
     private var unicodeEmojisByCategory: Map<EmojiCategory, List<Emoji>> = emptyMap()
     private var namesMap: Map<String, ModelEmojiUnicode> = emptyMap()
@@ -131,9 +132,9 @@ class StoreEmoji(
             userStore.observeMe().map { it.isPremium },
             hasExternalEmojiPermission,
             sortedGuildsStore.observeOrderedGuilds().map { it.keys.toList() },
-            observeFavoriteEmojiIds(),
-        ) { isPremium, hasExternalEmoji, sortedGuildIds, favorites ->
-            Inputs(isPremium, hasExternalEmoji, sortedGuildIds, favorites)
+            observeFavoriteAndFrequentEmojiIds(),
+        ) { isPremium, hasExternalEmoji, sortedGuildIds, emojiHistory ->
+            Inputs(isPremium, hasExternalEmoji, sortedGuildIds, emojiHistory.first, emojiHistory.second)
         }
             .distinctUntilChanged()
             .switchMap { inputs ->
@@ -149,6 +150,7 @@ class StoreEmoji(
                             includeUnavailableEmojis = includeUnavailableEmojis,
                             hasExternalEmojiPermission = inputs.hasExternalEmojiPermission,
                             favoriteEmojiIds = inputs.favoriteEmojiIds,
+                            frequentEmojiIds = inputs.frequentEmojiIds,
                         )
                     }
             }
@@ -156,16 +158,7 @@ class StoreEmoji(
 
     fun onEmojiUsed(emoji: Emoji) = onEmojiUsed(emoji.getUniqueId())
 
-    fun onEmojiUsed(emojiKey: String) {
-        frecency.track(emojiKey)
-        frecencyCache.set(frecency)
-    }
-
-    @StoreThread
-    fun handlePreLogout() {
-        frecencyCache.clear(persist = true)
-        frecency = ExpressionFrecencyTracker()
-    }
+    fun onEmojiUsed(emojiKey: String) = trackEmoji?.invoke(emojiKey) ?: fallbackFrecency.track(emojiKey)
 
     // region internals
 
@@ -175,6 +168,7 @@ class StoreEmoji(
         val hasExternalEmojiPermission: Boolean,
         val sortedGuildIds: List<Long>,
         val favoriteEmojiIds: Set<String>,
+        val frequentEmojiIds: List<String>,
     )
 
     internal fun buildUsableEmojiSet(
@@ -186,6 +180,7 @@ class StoreEmoji(
         includeUnavailableEmojis: Boolean,
         hasExternalEmojiPermission: Boolean,
         favoriteEmojiIds: Set<String>,
+        frequentEmojiIds: List<String> = getFrequentEmojiKeys?.invoke() ?: fallbackFrecency.getSortedKeys(),
     ): EmojiSet {
         val isExternalEmoji: (Long) -> Boolean = { guildId ->
             when (emojiContext) {
@@ -279,7 +274,7 @@ class StoreEmoji(
             unicodeEmojis = unicodeEmojisByCategory,
             customEmojis = usableCustomEmojis,
             emojiIndex = emojiIdsMap,
-            recentEmojis = getFrequentlyUsedEmojis(emojiIdsMap),
+            recentEmojis = getFrequentlyUsedEmojis(emojiIdsMap, frequentEmojiIds),
             favoriteEmoji = favoriteEmoji,
         )
     }
@@ -288,8 +283,8 @@ class StoreEmoji(
      * The "Frequently Used" row: frecency first, topped up with [DEFAULT_FREQUENT_EMOJIS] so a
      * fresh install still shows something.
      */
-    private fun getFrequentlyUsedEmojis(emojiIdsMap: Map<String, Emoji>): List<Emoji> {
-        val tracked = frecency.getSortedKeys()
+    private fun getFrequentlyUsedEmojis(emojiIdsMap: Map<String, Emoji>, frequentEmojiIds: List<String>): List<Emoji> {
+        val tracked = frequentEmojiIds
             .mapNotNull(emojiIdsMap::get)
             .take(MAX_FREQUENTLY_USED_EMOJIS)
         if (tracked.size >= MAX_FREQUENTLY_USED_EMOJIS) return tracked
@@ -384,10 +379,10 @@ class StoreEmoji(
         this[key] = (this[key] ?: 0) + 1
     }
 
+
     // endregion
 
     companion object {
-        const val EMOJI_FRECENCY_CACHE_KEY = "EMOJI_FRECENTS_V1"
 
         private const val EMOJI_ASSET_PATH = "data/emojis.json"
         private const val MAX_FREQUENTLY_USED_EMOJIS = 32

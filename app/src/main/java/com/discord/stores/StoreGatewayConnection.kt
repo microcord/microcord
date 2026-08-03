@@ -62,6 +62,7 @@ import com.discord.models.domain.ModelUserSettings
 import com.discord.models.domain.StreamCreateOrUpdate
 import com.discord.models.domain.StreamDelete
 import com.discord.models.domain.StreamServerUpdate
+import com.discord.models.domain.UserSettingsProtoUpdate
 import com.discord.models.thread.dto.ModelThreadListSync
 import com.discord.stores.utilities.BatchManager
 import com.discord.stores.utilities.Batched
@@ -151,6 +152,7 @@ class StoreGatewayConnection(
     // Current user
     val userUpdate = behavior<User>()
     val userSettingsUpdate = behavior<ModelUserSettings>()
+    val userSettingsProtoUpdate = behavior<UserSettingsProtoUpdate>()
     val userGuildSettingsUpdate = behavior<ModelNotificationSettings>()
     val userNoteUpdate = behavior<ModelUserNote.Update>()
     val userRequiredActionUpdate = behavior<UserRequiredActionUpdate>()
@@ -461,6 +463,7 @@ class StoreGatewayConnection(
             // Current user
             "USER_UPDATE" -> userUpdate.emit(data)
             "USER_SETTINGS_UPDATE" -> userSettingsUpdate.emit(data)
+            "USER_SETTINGS_PROTO_UPDATE" -> userSettingsProtoUpdate.emit(data)
             "USER_GUILD_SETTINGS_UPDATE" -> userGuildSettingsUpdate.emit(data)
             "USER_NOTE_UPDATE" -> userNoteUpdate.emit(data)
             "USER_REQUIRED_ACTION_UPDATE" -> userRequiredActionUpdate.emit(data)
