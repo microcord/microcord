@@ -12,7 +12,7 @@ android {
 
     defaultConfig {
         applicationId = "dev.mantikafasi.manticord"
-        minSdk = 21
+        minSdk = 22
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -50,6 +50,12 @@ android {
         unitTests.isReturnDefaultValues = true
         execution = "ANDROIDX_TEST_ORCHESTRATOR"
         animationsDisabled = true
+    }
+
+    splits {
+        abi {
+            isEnable = false
+        }
     }
 }
 
