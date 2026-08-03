@@ -11,7 +11,6 @@ import com.discord.i18n.i18nFormat
 import com.discord.models.user.MeUser
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
-import com.discord.utilities.captcha.CaptchaHelper
 import com.discord.utilities.dimmer.DimmerView
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.error.RestApiError
@@ -178,19 +177,13 @@ class WidgetUserPhoneManage : WidgetUserAccountVerifyBase(R.layout.widget_user_p
 
     private fun requireMeUser(): MeUser = StoreStream.getUsers().getMe()
 
-    /**
-     * Starts the verification for the typed number. On success the code screen opens; a captcha
-     * demand is retried once with the solved token.
-     */
-    private fun updatePhoneNumber(captchaPayload: CaptchaHelper.CaptchaPayload? = null) {
+    private fun updatePhoneNumber() {
         val phoneNumber = phoneInput.getTextOrEmpty()
         RestAPI.api
             .userAddPhone(
                 RestAPIParams.Phone(
                     phone = phoneNumber,
                     source = source,
-                    captchaKey = captchaPayload?.captchaKey,
-                    captchaRqtoken = captchaPayload?.captchaRqtoken,
                 ),
             )
             .restSubscribeOn()
@@ -199,7 +192,6 @@ class WidgetUserPhoneManage : WidgetUserAccountVerifyBase(R.layout.widget_user_p
             .appSubscribe(
                 errorClass = WidgetUserPhoneManage::class.java,
                 context = context,
-                errorHandler = { error -> maybeLaunchCaptcha(error) },
             ) {
                 WidgetUserPhoneVerify.launch(
                     requireContext(),
@@ -208,24 +200,6 @@ class WidgetUserPhoneManage : WidgetUserAccountVerifyBase(R.layout.widget_user_p
                     phoneNumber,
                     source,
                 )
-            }
-    }
-
-    /**
-     * Reference: `GrowthTeamFeatures.isPhoneVerifyCaptchaEnabled()` plus
-     * `WidgetCaptcha.processErrorsForCaptcha`. Neither `utilities/features` nor `WidgetCaptcha`
-     * exists in this reconstruction, so the flag is read from the single existing seam
-     * (`ContactSyncDependencies`, which stands in for the same experiment) and the challenge is
-     * shown by [CaptchaHelper] directly — the same substitution `WidgetContactSync` already makes.
-     * While the flag is unset the API error simply surfaces, which is visible rather than silent.
-     */
-    private fun maybeLaunchCaptcha(error: RestApiError) {
-        if (!ContactSyncDependencies.isPhoneVerifyCaptchaEnabled() || !error.isCaptchaRequired) return
-        val siteKey = error.captchaSitekey ?: return
-        CaptchaHelper.tryShowCaptcha(CaptchaHelper.CaptchaRequest.HCaptcha(siteKey, requireActivity()))
-            .ui(this)
-            .appSubscribe(WidgetUserPhoneManage::class.java) { token ->
-                updatePhoneNumber(CaptchaHelper.CaptchaPayload(token, error.captchaRqtoken))
             }
     }
 

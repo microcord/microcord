@@ -14,7 +14,6 @@ import androidx.fragment.app.viewModels
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.dialogs.DatePickerDialog
-import com.discord.utilities.captcha.CaptchaHelper
 import com.discord.utilities.time.ClockFactory
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputLayout
@@ -61,25 +60,9 @@ abstract class AuthFragment(
     protected open fun captureState() = Unit
     protected open fun render(state: AuthUiState) = Unit
 
-    /**
-     * The action a captcha is currently blocking, replayed once the challenge is solved.
-     *
-     * Deliberately in memory only: it can hold a password, so it must never reach saved instance
-     * state or a log. If the process dies mid-challenge the user re-enters the form, which is the
-     * correct trade.
-     */
-    private var captchaBlockedAction: AuthAction? = null
-
-    private val captchaLauncher = WidgetAuthCaptcha.registerForResult(this) { payload ->
-        captchaBlockedAction?.let { blocked ->
-            captchaBlockedAction = null
-            submit(blocked, payload)
-        }
-    }
-
-    protected fun submit(action: AuthAction, captcha: CaptchaHelper.CaptchaPayload? = null) {
+    protected fun submit(action: AuthAction) {
         model.update { it.copy(loading = true, fieldErrors = emptyMap(), message = null) }
-        actions.submit(action, captcha) { result ->
+        actions.submit(action) { result ->
             if (!isAdded) return@submit
             requireActivity().runOnUiThread {
                 when (result) {
@@ -93,13 +76,6 @@ abstract class AuthFragment(
                     is AuthResult.Challenge -> {
                         model.update { it.copy(loading = false) }
                         actions.navigate(result.route, result.state.copy(route = result.route))
-                    }
-                    // Hold the action, run the challenge, and re-submit it verbatim afterwards so
-                    // the user never re-types the form.
-                    is AuthResult.CaptchaRequired -> {
-                        model.update { it.copy(loading = false) }
-                        captchaBlockedAction = action
-                        WidgetAuthCaptcha.launch(requireContext(), captchaLauncher, result.error)
                     }
                 }
             }

@@ -69,20 +69,18 @@ class WidgetCallFailed : AppDialog(R.layout.view_dialog_confirmation) {
         confirmButton.setOnClickListener { sendFriendRequest(user.id, user.username) }
     }
 
-    private fun sendFriendRequest(userId: Long, username: String, captchaKey: String? = null) {
+    private fun sendFriendRequest(userId: Long, username: String) {
         RestAPI.api.addRelationship(
             userId,
-            RestAPIParams.UserRelationship(null, null, captchaKey),
+            RestAPIParams.UserRelationship(null, null),
             RELATIONSHIP_CONTEXT,
         )
             .restSubscribeOn()
             .ui(this)
             .appSubscribe(
                 errorClass = WidgetCallFailed::class.java,
-                // The reference re-prompts through `WidgetCaptchaBottomSheet` on a captcha error
-                // and maps every other abort code through `RestAPIAbortMessages`. Neither the
-                // captcha re-entry nor that message table is reconstructed yet, so every failure
-                // shows the generic message — see the handoff report.
+                // The reference maps abort codes through `RestAPIAbortMessages`; that table is
+                // not reconstructed yet, so every failure shows the generic message.
                 errorHandler = { toast(getString(R.string.default_failure_to_perform_action_message)) },
             ) {
                 toast(getString(R.string.friend_request_sent))

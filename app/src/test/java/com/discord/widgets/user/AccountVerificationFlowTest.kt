@@ -222,14 +222,14 @@ class AccountVerificationFlowTest {
      */
     @Test
     fun `no request body in these flows prints a credential`() {
-        val secrets = listOf("hunter2", "123456", "phone-token-abc", "+15551234567", "captcha-key")
+        val secrets = listOf("hunter2", "123456", "phone-token-abc", "+15551234567")
 
         val bodies = listOf(
             RestAPIParams.UserInfo.createForEmail("wumpus@example.com", "hunter2"),
             RestAPIParams.DeletePhone("hunter2"),
             RestAPIParams.VerificationPhoneCode("phone-token-abc", "hunter2", "update_phone"),
             RestAPIParams.VerificationCode("+15551234567", "123456"),
-            RestAPIParams.Phone("+15551234567", "update_phone", "captcha-key", "captcha-rqtoken"),
+            RestAPIParams.Phone("+15551234567", "update_phone"),
         )
 
         for (body in bodies) {
@@ -244,7 +244,7 @@ class AccountVerificationFlowTest {
     @Test
     fun `phone bodies keep their non-secret source`() {
         assertTrue(
-            RestAPIParams.Phone("+15551234567", "update_phone", null, null)
+            RestAPIParams.Phone("+15551234567", "update_phone")
                 .toString()
                 .contains("update_phone"),
         )

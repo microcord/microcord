@@ -1,5 +1,6 @@
 package com.discord.utilities.rest
 
+import com.discord.restapi.CaptchaInterceptor
 import com.discord.restapi.ChannelReorderDiagnostics
 import com.discord.restapi.RestAPIBuilder
 import com.discord.restapi.RestAPIInterface
@@ -44,20 +45,22 @@ object RestAPI {
     /** Builds and publishes the authenticated client variants used by production. */
     @JvmStatic
     fun install(builder: RestAPIBuilder, interceptors: List<Interceptor>): RestAPIInterface {
+        // Outermost, so a captcha retry re-runs the chain below it and picks up fresh headers.
+        val chain = listOf(CaptchaInterceptor()) + interceptors
         val api = builder.build(
             RestAPIInterface::class.java,
-            interceptors = interceptors,
+            interceptors = chain,
             clientName = "main",
         )
         val apiSerializeNulls = builder.build(
             RestAPIInterface::class.java,
             serializeNulls = true,
-            interceptors = interceptors + ChannelReorderDiagnostics,
+            interceptors = chain + ChannelReorderDiagnostics,
             clientName = "serializeNulls",
         )
         val reactNativeApi = builder.build(
             RestAPIInterface::class.java,
-            interceptors = interceptors + ReactNativeHeadersInterceptor,
+            interceptors = chain + ReactNativeHeadersInterceptor,
             clientName = "reactNative",
         )
         install(api, apiSerializeNulls, reactNativeApi)

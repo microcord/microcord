@@ -317,8 +317,8 @@ class MessageQueueTest {
         val captcha = result as MessageResult.CaptchaRequired
         assertEquals(CHANNEL_ID, captcha.channelId)
         assertEquals("100", captcha.nonce)
-        assertEquals("test-site-key", captcha.siteKey)
-        assertEquals("test-rqtoken", captcha.rqtoken)
+        assertEquals("test-site-key", captcha.challenge?.captchaSitekey)
+        assertEquals("test-rqtoken", captcha.challenge?.captchaRqtoken)
     }
 
     @Test

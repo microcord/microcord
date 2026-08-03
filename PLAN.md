@@ -578,8 +578,8 @@ classes every screen should inherit from do not exist. See
 - [ ] `StoreNavigation` is missing `ModelGlobalNavigation` (14 fields), the
       activity lifecycle callbacks, `init(Application)`, `launchNotice`, and 9 of
       its 12 navigation handlers.
-- [ ] OAuth authorize, remote-auth/QR login, and the real captcha widgets are
-      missing. `/ra/<fingerprint>` is parsed by `DeepLinkParser.kt:63` and dropped.
+- [ ] OAuth authorize and remote-auth/QR login are missing.
+      `/ra/<fingerprint>` is parsed by `DeepLinkParser.kt:63` and dropped.
 - [ ] `utilities/uri/UriHandler` absent — "safe external URI handling" is
       currently a raw `ACTION_VIEW` at `AppActivity.kt:134`, and the Chrome
       Custom Tabs user setting is read by nothing.
@@ -700,8 +700,7 @@ Store-side blockers:
 - [ ] `StoreMessageReactions` (438 lines), `StoreMessageReplies` (374 lines, so
       inline reply previews cannot render), and `StoreSlowMode` (232 lines) have
       no counterparts.
-- [ ] `MessageResult.Success` drops the created message; `CaptchaRequired`'s
-      payload shape is incompatible with the target's own `resendMessageWithCaptcha`.
+- [ ] `MessageResult.Success` drops the created message.
 - [ ] Attachment sends bypass `MessageQueue` entirely and run from
       `StoreStream.kt:1119-1215` with an uncapped `retryWhen` that never handles
       slow-mode error code 20016.
@@ -1150,9 +1149,8 @@ A slice is done only when:
 | No original tests | Regressions are hard to detect | Add one focused test per non-trivial slice |
 | Proprietary recovered assets/binary | Distribution constraints | Confirm rights before public distribution |
 | `MessageRequest.SendApplicationCommand` is not reconstructed | Slash-command sends cannot use the queue | Blocked on `models/commands/ApplicationCommandLocalSendData`, `RestAPIParams.ApplicationCommand` and the `sendApplicationCommand` endpoint, none of which exist yet; add the variant with the `SendUtils.SendPayload.ReadyToSendCommand` branch once they do |
-| Attachment sends still bypass `MessageQueue` | Uploads get no per-channel ordering, timeout, backoff or captcha handling | `StoreStream.startUpload` must move onto `MessageRequest.Send(attachments = ...)`; the multipart-capable surface is in place |
-| `CaptchaRequest.ReCaptcha` cannot run | SafetyNet fallback is unavailable | No Play Services dependency is installed; the request resolves to the reference's `captcha_failed_play_services` failure until one is added |
-| `WidgetCaptchaBottomSheet` has no dismissal callback | A closed captcha challenge never completes its Observable | Add a dismissal hook on that sheet so `CaptchaHelper.tryShowCaptcha` can reproduce the reference `CHALLENGE_CLOSED` completion |
+| Attachment sends still bypass `MessageQueue` | Uploads get no per-channel ordering, timeout or backoff | `StoreStream.startUpload` must move onto `MessageRequest.Send(attachments = ...)`; the multipart-capable surface is in place |
+| Only hCaptcha challenges can be rendered | A `recaptcha`/`recaptcha_enterprise`/`turnstile` challenge fails instead of being solved | No Play Services dependency is installed, so `CaptchaRequest.ReCaptcha` resolves to the reference's `captcha_failed_play_services` failure. The published site keys are on `CaptchaService.defaultSiteKey` for whoever adds a renderer; the current mobile client also only implements hCaptcha |
 | `com.discord.restapi.utils.RetryWithDelay` is not reconstructed | The REST retry policy lives inline in `restSubscribeOn` | Policy is reproduced faithfully (IOException-only, non-GET and 401/403/404/429/503 excluded, 1s/2s/4s, three retries); move it into `RetryWithDelay` when that package is rebuilt |
 
 ## Decision Log
@@ -1197,6 +1195,7 @@ or observable behavior. Small implementation details do not belong here.
 | 2026-07-26 | Scope the FileProvider to `Pictures/` rather than pointing it at `file_paths.xml` | Camera capture writes to `getExternalFilesDir(DIRECTORY_PICTURES)/<packageName>`, which `image_share_filepaths.xml` did not cover, so `getUriForFile` threw on every capture. `file_paths.xml` covers it only via `<external-path path="."/>` | Fixes the crash without exposing the whole of external storage through the provider |
 | 2026-07-26 | Only the coordinating agent runs Gradle and git during parallel waves | The Gradle lock serializes task execution but does not protect `app/build` from concurrent writers; and an agent commit swept 286 unrelated files into one snapshot | Parallel agents edit files only; the coordinator runs one serialized wave-boundary build and owns all commits |
 | 2026-07-26 | Keep `ObservationDeck.notify`'s try/catch, reversing an audit finding | `dexdump` proves `notify` has a 7-entry catch table with a `logLevel >= ERROR` branch; JADX dropped the region entirely, which is what produced the incorrect finding | DEX outranks decompiled Java per the AGENTS.md evidence order. Behavior is unchanged at the default `LogLevel.NONE`, where exceptions still propagate |
+| 2026-08-03 | Handle captcha at the OkHttp layer (`CaptchaInterceptor`) and send the solution as `X-Captcha-*` headers, removing the per-screen flows and the deprecated `captcha_key` body fields | The API may challenge almost any request, so per-caller handling left every untaught caller failing on an opaque 400 — and Userdoccers records the body-field form as deprecated. The current mobile client does the same thing in one global response interceptor (`superagentPatch.tsx`) | A challenged response no longer reaches Retrofit: the challenge is solved and the identical request re-sent, so callers see one slow request. `WidgetCaptcha`, `WidgetAuthCaptcha` and `WidgetGuildJoinCaptchaBottomSheet` are deleted (their layouts are retained as recovered assets); `WidgetCaptchaBottomSheet` is now the solver's prompt. Bounded at `MAX_CHALLENGES = 2`; a declined challenge surfaces as `RestApiError.Type.CAPTCHA_CANCELLED` and is silent. The send queue opts out via `CaptchaRequestPolicy` so a backgrounded send cannot park a queue worker on a modal |
 | 2026-07-27 | Add production Google Advertising ID support | The user explicitly approved `AD_ID` for replacement-client parity; recovered metadata identifies `play-services-ads-identifier:17.0.0` | GAID is fetched off-main and added to super properties only when nonblank, non-zero, and ad tracking is allowed; unavailable/limited devices omit it and no identifier is fabricated |
 | 2026-07-26 | Name the reconstructed obfuscated classes `AppScreenRouter` (`b.a.d.j`) and `BackPressHandlerRegistry` (`b.a.d.d`) | The project forbids carrying obfuscated names into the target; responsibilities were recoverable from call sites | Consumers reference the descriptive names; the mapping is recorded here so reference lookups stay possible |
 | 2026-07-26 | `AppLog` redacts every message through a `redactSecrets` pass | The security contract forbids logging tokens, cookies, MFA codes, passwords, and message content; the reference fan-out to Crashlytics/AnalyticsTracker does not exist in the target | Masks `token`/`access_token`/`refresh_token`/`session_id`/`authorization`/`cookie`/`password`/`mfa_code`/`backup_code`/`ticket`/`secret`/`api_key`/`captcha_key`/`fingerprint`/`content` in JSON, `k=v`, `k: v`, and `Bearer\|Bot\|Basic <value>` forms |
@@ -1733,3 +1732,36 @@ media, spoilers, and thread-starter rows.
 
 Resumable task: `app/src/main/java/com/discord/widgets/settings/WidgetDebugging.kt` | reference
 `WidgetDebugging.java` | device-check verbose filtering, expansion, long-press copy, and navigation.
+
+## 2026-08-03 request-wide captcha handling
+
+- Captcha moved off the individual screens and onto the OkHttp chain.
+  `restapi/CaptchaInterceptor` detects a challenge (400 + `captcha_key`, by presence and never by
+  the array's contents), solves it, and re-sends the identical request. Installed outermost on all
+  three `RestAPI` client variants, so a retry re-runs the chain below it and picks up fresh auth and
+  analytics headers. Multipart uploads replay too — `AttachmentRequestBody` reopens its stream per
+  write.
+- Solutions travel as `X-Captcha-Key` plus `X-Captcha-Rqtoken` / `X-Captcha-Session-Id` when the
+  challenge carried them. The `captcha_key`/`captcha_rqtoken` body fields are removed from
+  `AuthLogin`, `AuthRegister`, `AuthRegisterPhone`, `ForgotPassword`, `InviteCode`, `Message`,
+  `Phone` and `UserRelationship(+Add)`; Userdoccers records that form as deprecated.
+  `RestAPIParams.CaptchaCode` keeps its fields — `users/@me/captcha/verify` is not a retry.
+- `CaptchaErrorBody` gained `captcha_session_id`, `should_serve_invisible` and `user_flow`;
+  `CaptchaService` gained `recaptcha_enterprise` and `turnstile` with their published site keys.
+  `should_serve_invisible` reaches the hCaptcha widget as its `size`.
+- `CaptchaSolver`/`ActivityCaptchaSolver` bridge the OkHttp thread to the prompt: challenges are
+  serialised so concurrent challenged requests produce one prompt, every wait is bounded by
+  `TIMEOUT_MS`, and nothing thrown by the UI escapes onto the main thread.
+- Deleted: `WidgetCaptcha`, `WidgetAuthCaptcha`, `WidgetGuildJoinCaptchaBottomSheet`,
+  `WidgetFriendsFindNearbyViewModel` (existed only to survive the captcha activity),
+  `CaptchaHelper.showCaptchaHelpDialog` and the process-wide token hand-off slots, the
+  `WidgetCaptchaBottomSheet.onSolved`/`onAbandoned` statics, and the upload captcha retry path in
+  `StoreStream`. Their layouts are kept as recovered assets.
+- The message send queue keeps its own prompt through `CaptchaRequestPolicy(handleInline = false)`:
+  a queued send can run while the app is backgrounded, so it must fail fast rather than park a
+  queue worker on a modal nobody can see.
+- `CaptchaInterceptorTest` (MockWebServer) covers detect/retry, header echo and omission, the
+  `MAX_CHALLENGES` cap, decline, pass-through of ordinary 400s, both policy modes, and the
+  no-solver case. Full suite: 1,753 tests, `assembleDebug` and `lintDebug` pass.
+  `StoreStreamTest.voiceStateUpdateHydratesJoiningMemberBeforePublishingParticipant` fails here and
+  on a clean `HEAD` worktree — pre-existing and unrelated.

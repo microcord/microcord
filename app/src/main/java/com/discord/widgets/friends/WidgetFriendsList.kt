@@ -21,7 +21,6 @@ import com.discord.utilities.rest.RestAPIAbortMessages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.rx.ui
-import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
 import com.discord.widgets.channels.WidgetGroupInviteFriends
 import com.discord.widgets.channels.invite.GroupInviteFriendsSheet
 import com.discord.widgets.channels.invite.GroupInviteFriendsSheetFeatureFlag
@@ -36,7 +35,7 @@ import com.discord.widgets.user.usersheet.WidgetUserSheet
  *
  * All state comes from [FriendsListViewModel]; this class only renders it, routes row callbacks
  * back into the view model, and performs the navigation the view model cannot do itself (opening a
- * profile sheet, launching a call, starting the contact-sync flow, showing a captcha).
+ * profile sheet, launching a call, starting the contact-sync flow).
  *
  * The three-child flipper is the reference's: recycler, empty state, loading skeleton.
  */
@@ -200,32 +199,12 @@ class WidgetFriendsList : AppFragment(R.layout.widget_friends_list) {
             )
         is FriendsListViewModel.Event.LaunchVoiceCall ->
             privateCallLauncher.launchVoiceCall(event.channelId)
-        is FriendsListViewModel.Event.CaptchaError -> handleCaptchaError(event)
     }
 
     private fun showToast(text: CharSequence?) {
         val context = context ?: return
         if (text.isNullOrBlank()) return
         android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
-    }
-
-    /**
-     * Re-runs the friend request behind a captcha challenge.
-     *
-     * The reference queues this through `StoreNotices`. Here the sheet is shown directly and the
-     * result listener is installed on *this* fragment: the queued path resolves the listener target
-     * from [WidgetCaptchaBottomSheet]'s `resolvableFragments`, which names the tab host rather than
-     * this screen, so the payload would never come back to us.
-     */
-    private fun handleCaptchaError(event: FriendsListViewModel.Event.CaptchaError) {
-        WidgetCaptchaBottomSheet.registerForResult(this, CAPTCHA_REQUEST_KEY) { _, payload ->
-            viewModel.acceptFriendSuggestion(event.username, event.discriminator, payload)
-        }
-        WidgetCaptchaBottomSheet.show(
-            parentFragmentManager,
-            CAPTCHA_REQUEST_KEY,
-            WidgetCaptchaBottomSheet.errorBodyOf(event.error),
-        )
     }
 
     // endregion
@@ -256,7 +235,6 @@ class WidgetFriendsList : AppFragment(R.layout.widget_friends_list) {
         private const val ANALYTICS_SOURCE = "Friends"
         private const val LOCATION_ICON = "Friends List Icon"
         private const val LOCATION_UPSELL = "Friends List Upsell"
-        private const val CAPTCHA_REQUEST_KEY = "Add Friend Captcha"
 
         private const val VIEW_INDEX_RECYCLER = 0
         private const val VIEW_INDEX_EMPTY = 1

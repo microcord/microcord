@@ -88,7 +88,6 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     private lateinit var autocompleteViewModel: AutocompleteViewModel
 
     private var sendResultSubscription: Subscription? = null
-    private var uploadCaptchaSubscription: Subscription? = null
     private var mentionSubscription: Subscription? = null
     private var input: FlexEditText? = null
     private var expressionTray: WidgetExpressionTray? = null
@@ -203,8 +202,16 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             val failed = update as? MessageSendCoordinator.Update.Failed ?: return@subscribe
             view?.post {
                 when (val result = failed.result) {
-                    is MessageResult.CaptchaRequired -> result.siteKey?.let {
-                        WidgetCaptchaBottomSheet.show(parentFragmentManager, failed.requestId, it, result.rqtoken)
+                    is MessageResult.CaptchaRequired -> result.challenge?.let { challenge ->
+                        WidgetCaptchaBottomSheet.show(
+                            parentFragmentManager, failed.requestId, challenge,
+                        ) { solution ->
+                            if (solution != null) {
+                                coordinatorProvider()?.retry(failed.requestId, solution)
+                            } else {
+                                coordinatorProvider()?.cancel(failed.requestId)
+                            }
+                        }
                     }
                     is MessageResult.Slowmode -> Toast.makeText(
                         requireContext(), R.string.channel_slowmode_desc_short, Toast.LENGTH_SHORT,
@@ -216,21 +223,12 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 }
             }
         }
-        uploadCaptchaSubscription = uploadCaptchaChallenges.subscribe { challenge ->
-            view?.post {
-                WidgetCaptchaBottomSheet.show(
-                    parentFragmentManager, challenge.requestId, challenge.siteKey, challenge.rqtoken,
-                )
-            }
-        }
         mentionSubscription = mentionRequests.subscribe { userId -> view?.post { insertMention(userId) } }
     }
 
     override fun onStop() {
         sendResultSubscription?.unsubscribe()
         sendResultSubscription = null
-        uploadCaptchaSubscription?.unsubscribe()
-        uploadCaptchaSubscription = null
         mentionSubscription?.unsubscribe()
         mentionSubscription = null
         super.onStop()
@@ -735,9 +733,6 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         private const val TIMEOUT_HELP_ARTICLE_URL =
             "https://support.discord.com/hc/articles/360045138571"
 
-        data class UploadCaptchaChallenge(val requestId: String, val siteKey: String, val rqtoken: String?)
-
-        private val uploadCaptchaChallenges = PublishSubject.create<UploadCaptchaChallenge>().toSerialized()
         private val mentionRequests = PublishSubject.create<Long>().toSerialized()
 
         @JvmField var coordinatorProvider: () -> MessageSendCoordinator? = { null }
@@ -745,10 +740,6 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         @JvmField var pendingRepliesStore: StorePendingReplies? = null
         @JvmField var editingStore: StoreChatInputEditing? = null
         @JvmField var uploadHandler: ((UploadRequest) -> Boolean)? = null
-
-        fun requestUploadCaptcha(requestId: String, siteKey: String, rqtoken: String?) {
-            uploadCaptchaChallenges.onNext(UploadCaptchaChallenge(requestId, siteKey, rqtoken))
-        }
 
         fun requestMention(userId: Long) = mentionRequests.onNext(userId)
     }

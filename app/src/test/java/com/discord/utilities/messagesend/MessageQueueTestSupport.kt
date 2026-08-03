@@ -4,6 +4,7 @@ import com.discord.api.message.Message as ApiMessage
 import com.discord.restapi.PayloadJSON
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
+import com.discord.utilities.captcha.CaptchaRequestPolicy
 import com.discord.utilities.networking.Backoff
 import java.lang.reflect.Proxy
 import java.util.ArrayDeque
@@ -78,7 +79,12 @@ fun testBackoff(scheduler: ManualBackoffScheduler) = Backoff(
  * Implemented with [Proxy] because the project intentionally has no mocking library.
  */
 class RecordingRestApi {
-    data class SendCall(val channelId: Long, val body: RestAPIParams.Message?, val multipart: Boolean)
+    data class SendCall(
+        val channelId: Long,
+        val body: RestAPIParams.Message?,
+        val multipart: Boolean,
+        val captcha: CaptchaRequestPolicy? = null,
+    )
     data class CommandCall(val body: RestAPIParams.ApplicationCommand, val multipart: Boolean)
     data class EditCall(val channelId: Long, val messageId: Long, val content: String?)
 
@@ -110,13 +116,18 @@ class RecordingRestApi {
             }
 
             "sendMessage" -> {
-                val multipart = arguments.size > 2
+                val multipart = arguments.size > 3
                 val body = if (multipart) {
                     payloadMessage(arguments[1] as PayloadJSON<*>)
                 } else {
                     arguments[1] as RestAPIParams.Message
                 }
-                sendCalls += SendCall(arguments[0] as Long, body, multipart)
+                sendCalls += SendCall(
+                    arguments[0] as Long,
+                    body,
+                    multipart,
+                    arguments.last() as CaptchaRequestPolicy?,
+                )
                 deferred()
             }
 

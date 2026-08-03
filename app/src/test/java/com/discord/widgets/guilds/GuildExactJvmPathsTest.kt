@@ -14,7 +14,6 @@ class GuildExactJvmPathsTest {
             "create/StockGuildTemplateKt.kt",
             "invite/GuildInviteUiHelperKt.kt",
             "join/GuildJoinHelperKt.kt",
-            "join/WidgetGuildJoinCaptchaBottomSheetKt.kt",
         )
         val sourceRoot = sequenceOf(
             File("app/src/main/java/com/discord/widgets/guilds"),
@@ -26,7 +25,6 @@ class GuildExactJvmPathsTest {
             "com.discord.widgets.guilds.create.StockGuildTemplateKt",
             "com.discord.widgets.guilds.invite.GuildInviteUiHelperKt",
             "com.discord.widgets.guilds.join.GuildJoinHelperKt",
-            "com.discord.widgets.guilds.join.WidgetGuildJoinCaptchaBottomSheetKt",
         ).forEach { assertNotNull(Class.forName(it)) }
     }
 
@@ -37,6 +35,6 @@ class GuildExactJvmPathsTest {
             .filter { Modifier.isPublic(it.modifiers) && it.name == "joinGuild" }
 
         assertEquals(1, methods.size)
-        assertEquals(11, methods.single().parameterCount)
+        assertEquals(10, methods.single().parameterCount)
     }
 }

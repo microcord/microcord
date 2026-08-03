@@ -18,7 +18,7 @@ import com.discord.api.sticker.Sticker
 import com.discord.api.sticker.StickerPartial
 import com.discord.api.user.User
 import com.discord.api.utcdatetime.UtcDateTime
-import com.discord.utilities.captcha.CaptchaHelper
+import com.discord.utilities.captcha.CaptchaSolution
 
 data class Message(
     val id: Long,
@@ -59,7 +59,7 @@ data class Message(
     val lastManualAttemptTimestamp: Long? = null,
     val initialAttemptTimestamp: Long? = null,
     val localAttachments: List<LocalAttachment>? = null,
-    val captchaPayload: CaptchaHelper.CaptchaPayload? = null,
+    val captchaSolution: CaptchaSolution? = null,
 ) {
     constructor(message: com.discord.api.message.Message) : this(
         id = message.id,
@@ -167,5 +167,5 @@ data class Message(
 
     override fun toString() =
         "Message(id=$id, channelId=$channelId, guildId=$guildId, content=<redacted>, nonce=<redacted>, " +
-            "localAttachments=<redacted>, captchaPayload=<redacted>, type=$type, flags=$flags)"
+            "localAttachments=<redacted>, captchaSolution=<redacted>, type=$type, flags=$flags)"
 }

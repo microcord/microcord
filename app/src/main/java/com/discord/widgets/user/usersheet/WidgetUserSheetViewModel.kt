@@ -466,16 +466,10 @@ class WidgetUserSheetViewModel(
      * @param type `null` accepts an incoming request; otherwise a [ModelUserRelationship] type.
      * @param successToast shown once the server confirms.
      */
-    @JvmOverloads
-    fun addRelationship(
-        type: Int?,
-        username: String,
-        @StringRes successToast: Int,
-        captchaKey: String? = null,
-    ) {
+    fun addRelationship(type: Int?, username: String, @StringRes successToast: Int) {
         restAPI.api.addRelationship(
             userId,
-            RestAPIParams.UserRelationship(type, friendToken, captchaKey),
+            RestAPIParams.UserRelationship(type, friendToken),
             RELATIONSHIP_CONTEXT,
         )
             .restSubscribeOn()

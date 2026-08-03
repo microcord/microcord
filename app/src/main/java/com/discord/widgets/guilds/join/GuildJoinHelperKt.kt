@@ -5,8 +5,6 @@ package com.discord.widgets.guilds.join
 import android.content.Context
 import com.discord.api.guild.Guild
 import com.discord.restapi.RestAPIParams
-import com.discord.utilities.captcha.CaptchaErrorBody
-import com.discord.utilities.captcha.CaptchaHelper
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
@@ -24,7 +22,6 @@ fun joinGuild(
     errorClass: Class<*>,
     subscriptionHandler: ((Subscription) -> Unit)? = null,
     errorHandler: ((RestApiError) -> Unit)? = null,
-    captchaPayload: CaptchaHelper.CaptchaPayload? = null,
     onNext: (Guild) -> Unit,
 ) {
     val api = RestAPI.apiOrNull ?: return
@@ -33,7 +30,7 @@ fun joinGuild(
         isLurker,
         sessionId,
         directoryChannelId,
-        RestAPIParams.InviteCode(captchaPayload?.captchaKey, captchaPayload?.captchaRqtoken),
+        RestAPIParams.InviteCode(),
         source,
     )
         .restSubscribeOn(false)
@@ -42,33 +39,7 @@ fun joinGuild(
             errorClass,
             context = context,
             subscriptionHandler = subscriptionHandler,
-            errorHandler = { error ->
-                val captcha = CaptchaErrorBody.createFromError(error)
-                if (captcha != null) {
-                    val requestKey = "guild-join-$guildId"
-                    WidgetGuildJoinCaptchaBottomSheet.enqueue(
-                        requestKey,
-                        onCaptchaPayloadReceived = { fragment, payload ->
-                            joinGuild(
-                                fragment.requireContext(),
-                                guildId,
-                                isLurker,
-                                sessionId,
-                                directoryChannelId,
-                                source,
-                                errorClass,
-                                subscriptionHandler,
-                                errorHandler,
-                                payload,
-                                onNext,
-                            )
-                        },
-                        error = captcha,
-                    )
-                } else {
-                    errorHandler?.invoke(error)
-                }
-            },
+            errorHandler = errorHandler,
             onNext = onNext,
         )
 }

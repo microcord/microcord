@@ -9,7 +9,6 @@ import com.discord.app.AppFragment
 import com.discord.models.domain.ModelInvite
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
-import com.discord.utilities.captcha.CaptchaHelper
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
@@ -57,7 +56,6 @@ object InviteJoinHelper {
         onInvitePostError: (RestApiError?) -> Unit = {},
         onInvitePostSuccess: (ModelInvite) -> Unit = {},
         onInviteFlowFinished: (ModelInvite) -> Unit = {},
-        captchaPayload: CaptchaHelper.CaptchaPayload? = null,
     ) {
         val code = invite.code
         if (code == null) {
@@ -68,7 +66,7 @@ object InviteJoinHelper {
         RestAPI.api
             .postInviteCode(
                 code,
-                RestAPIParams.InviteCode(captchaPayload?.captchaKey, captchaPayload?.captchaRqtoken),
+                RestAPIParams.InviteCode(),
                 location,
             )
             .restSubscribeOn(false)

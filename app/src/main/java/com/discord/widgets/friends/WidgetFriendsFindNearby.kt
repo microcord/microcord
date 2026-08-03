@@ -3,7 +3,6 @@ package com.discord.widgets.friends
 import android.view.View
 import android.widget.TextView
 import android.widget.Toast
-import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppFragment
@@ -14,8 +13,6 @@ import com.discord.restapi.RestAPIParams
 import com.discord.rlottie.RLottieImageView
 import com.discord.stores.StoreStream
 import com.discord.utilities.analytics.AnalyticsTracker
-import com.discord.utilities.captcha.CaptchaErrorBody
-import com.discord.utilities.captcha.CaptchaHelper
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.error.RestApiError
@@ -28,8 +25,6 @@ import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.user.UserUtils
-import com.discord.widgets.captcha.WidgetCaptcha
-import com.discord.widgets.captcha.isCaptchaError
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.models.domain.ModelUserRelationship
 import com.google.android.material.button.MaterialButton
@@ -49,7 +44,6 @@ import rx.Observable
  */
 class WidgetFriendsFindNearby : AppFragment(R.layout.widget_friends_nearby) {
 
-    private val viewModel: WidgetFriendsFindNearbyViewModel by viewModels()
     private val nearbyManager = NearbyManager()
 
     private lateinit var resultsAdapter: WidgetFriendsAddUserAdapter
@@ -60,18 +54,6 @@ class WidgetFriendsFindNearby : AppFragment(R.layout.widget_friends_nearby) {
     private lateinit var enableButton: MaterialButton
 
     private var meUserId: Long? = null
-
-    /**
-     * Registered eagerly: an `ActivityResultLauncher` must exist before the fragment reaches
-     * STARTED. The target is read back from [viewModel], which survives the captcha activity.
-     */
-    private val captchaLauncher = WidgetCaptcha.registerForResult(this) { captchaPayload ->
-        val username = viewModel.username
-        val discriminator = viewModel.discriminator
-        if (username != null && discriminator != null) {
-            sendFriendRequest(username, discriminator, captchaPayload)
-        }
-    }
 
     /** What the screen renders. */
     sealed class Model {
@@ -238,20 +220,12 @@ class WidgetFriendsFindNearby : AppFragment(R.layout.widget_friends_nearby) {
 
     // region relationship actions
 
-    private fun sendFriendRequest(
-        username: String,
-        discriminator: Int,
-        captchaPayload: CaptchaHelper.CaptchaPayload? = null,
-    ) {
-        viewModel.username = username
-        viewModel.discriminator = discriminator
+    private fun sendFriendRequest(username: String, discriminator: Int) {
         val api = RestAPI.apiOrNull ?: return
         api.sendRelationshipRequest(
             RestAPIParams.UserRelationship.Add(
                 username = username,
                 discriminator = discriminator,
-                captchaKey = captchaPayload?.captchaKey,
-                captchaRqtoken = captchaPayload?.captchaRqtoken,
             ),
             relationshipContext(LOCATION_ADD_SUGGESTION),
         )
@@ -261,17 +235,13 @@ class WidgetFriendsFindNearby : AppFragment(R.layout.widget_friends_nearby) {
                 errorClass = WidgetFriendsFindNearby::class.java,
                 errorHandler = { error ->
                     RestAPIAbortMessages.handleAbortCodeOrDefault(error, onHandle = {
-                        if (error.isCaptchaError()) {
-                            launchCaptchaFlow(error)
-                        } else {
-                            showToast(
-                                RestAPIAbortMessages.ResponseResolver.getRelationshipResponse(
-                                    context,
-                                    error.code,
-                                    username + UserUtils.padDiscriminator(discriminator),
-                                ),
-                            )
-                        }
+                        showToast(
+                            RestAPIAbortMessages.ResponseResolver.getRelationshipResponse(
+                                context,
+                                error.code,
+                                username + UserUtils.padDiscriminator(discriminator),
+                            ),
+                        )
                     })
                 },
             ) {
@@ -313,14 +283,6 @@ class WidgetFriendsFindNearby : AppFragment(R.layout.widget_friends_nearby) {
             .appSubscribe(WidgetFriendsFindNearby::class.java) {
                 showToast(getString(successMessageStringRes))
             }
-    }
-
-    private fun launchCaptchaFlow(error: RestApiError) {
-        WidgetCaptcha.launch(
-            requireContext(),
-            captchaLauncher,
-            CaptchaErrorBody.createFromError(error),
-        )
     }
 
     private fun showToast(text: CharSequence?) {

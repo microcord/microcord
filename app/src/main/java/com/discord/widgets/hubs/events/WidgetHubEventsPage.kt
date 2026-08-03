@@ -94,7 +94,7 @@ class WidgetHubEventsPage : AppBottomSheet() {
             isLurker = false,
             sessionId = null,
             directoryChannelId = args.directoryChannelId,
-            body = RestAPIParams.InviteCode(null, null),
+            body = RestAPIParams.InviteCode(),
             context = directoryJoinContext(),
         )
             ?.restSubscribeOn()

@@ -47,17 +47,6 @@ class FirstPartyDialogMigrationTest {
         )
     }
 
-    @Test
-    fun `captcha help uses the first party notice and safe external opener`() {
-        assertContains(
-            "com/discord/utilities/captcha/CaptchaHelper.kt",
-            "WidgetNoticeDialog.Builder(activity)",
-            "UriHandler.handle(activity, CAPTCHA_HELP_URL, forceExternal = true)",
-            ".setPositiveButton(R.string.captcha_open_browser)",
-            ".setNegativeButton(R.string.cancel)",
-        )
-    }
-
     private fun assertContains(path: String, vararg snippets: String) {
         val source = source(path)
         snippets.forEach { assertTrue("$path must contain $it", source.contains(it)) }

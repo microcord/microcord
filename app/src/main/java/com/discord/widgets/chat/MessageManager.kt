@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.ShortcutManager
 import android.os.Build
 import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.fragment.app.FragmentActivity
 import com.discord.R
 import com.discord.api.message.allowedmentions.MessageAllowedMentions
 import com.discord.api.message.allowedmentions.MessageAllowedMentionsTypes
@@ -25,7 +26,7 @@ import com.discord.stores.StoreSlowMode
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUser
 import com.discord.utilities.attachments.UploadAttachment
-import com.discord.utilities.captcha.CaptchaHelper
+import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.messagesend.MessageResult
 import com.discord.utilities.rx.appSubscribe
@@ -263,20 +264,17 @@ class MessageManager(
     }
 
     private fun showCaptcha(result: MessageResult.CaptchaRequired) {
-        val activity = context as? Activity ?: return result.error.showToasts(context)
-        val siteKey = result.siteKey ?: return result.error.showToasts(context)
-        CaptchaHelper.tryShowCaptcha(CaptchaHelper.CaptchaRequest.HCaptcha(siteKey, activity, result.error.captchaRqdata))
-            .take(1)
-            .subscribe(
-                { token ->
-                    storeMessages.resendMessageWithCaptcha(
-                        result.channelId,
-                        result.nonce,
-                        CaptchaHelper.CaptchaPayload(token, result.rqtoken),
-                    )
-                },
-                { result.error.showToasts(context) },
-            )
+        val activity = context as? FragmentActivity ?: return result.error.showToasts(context)
+        val challenge = result.challenge ?: return result.error.showToasts(context)
+        WidgetCaptchaBottomSheet.show(
+            activity.supportFragmentManager,
+            result.nonce ?: result.channelId.toString(),
+            challenge,
+        ) { solution ->
+            if (solution != null) {
+                storeMessages.resendMessageWithCaptcha(result.channelId, result.nonce, solution)
+            }
+        }
     }
 
     private fun AttachmentsRequest?.toUploadAttachments(): List<UploadAttachment>? =

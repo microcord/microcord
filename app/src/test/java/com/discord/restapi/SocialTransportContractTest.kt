@@ -48,12 +48,12 @@ class SocialTransportContractTest {
         assertRequest("GET", "/api/v9/users/7/relationships")
 
         enqueue204()
-        api.addRelationship(7, RestAPIParams.UserRelationship(1, "friend", "key", "rq"), "put-context")
+        api.addRelationship(7, RestAPIParams.UserRelationship(1, "friend"), "put-context")
             .toBlocking().subscribe()
         assertRequest(
             "PUT",
             "/api/v9/users/@me/relationships/7",
-            "{\"type\":1,\"friend_token\":\"friend\",\"captcha_key\":\"key\",\"captcha_rqtoken\":\"rq\"}",
+            "{\"type\":1,\"friend_token\":\"friend\"}",
             "put-context",
         )
 
@@ -62,12 +62,12 @@ class SocialTransportContractTest {
         assertRequest("DELETE", "/api/v9/users/@me/relationships/7", context = "delete-context")
 
         enqueue204()
-        api.sendRelationshipRequest(RestAPIParams.UserRelationship.Add("fixture", 42, "key", "rq"), "post-context")
+        api.sendRelationshipRequest(RestAPIParams.UserRelationship.Add("fixture", 42), "post-context")
             .toBlocking().subscribe()
         assertRequest(
             "POST",
             "/api/v9/users/@me/relationships",
-            "{\"username\":\"fixture\",\"discriminator\":42,\"captcha_key\":\"key\",\"captcha_rqtoken\":\"rq\"}",
+            "{\"username\":\"fixture\",\"discriminator\":42}",
             "post-context",
         )
 

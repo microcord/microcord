@@ -5,6 +5,7 @@ import com.discord.models.message.Message
 import com.discord.restapi.PayloadJSON
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
+import com.discord.utilities.captcha.CaptchaRequestPolicy
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.networking.Backoff
 import com.discord.utilities.rest.FileUpload
@@ -228,9 +229,8 @@ class MessageQueue @JvmOverloads constructor(
                 )
             },
             allowedMentions = message.allowedMentions?.toRestApiParam(),
-            captchaKey = message.captchaPayload?.captchaKey,
-            captchaRqtoken = message.captchaPayload?.captchaRqtoken,
         )
+        val captchaPolicy = CaptchaRequestPolicy.preSolved(message.captchaSolution)
 
         SendUtils.getSendPayload(contentResolver, body, request.attachments)
             .doOnNext { payload ->
@@ -251,6 +251,7 @@ class MessageQueue @JvmOverloads constructor(
                 sendReadyPayload(
                     message.channelId,
                     ready,
+                    captchaPolicy,
                     if (hasStickers && !canUsePremiumStickers) reactNativeApi else api,
                 )
             }
@@ -268,13 +269,14 @@ class MessageQueue @JvmOverloads constructor(
     private fun sendReadyPayload(
         channelId: Long,
         ready: SendUtils.SendPayload.ReadyToSend,
+        captchaPolicy: CaptchaRequestPolicy,
         client: RestAPIInterface = api,
     ): Observable<com.discord.api.message.Message> {
         val parts = ready.uploads.map(FileUpload::part)
         return if (parts.isEmpty()) {
-            client.sendMessage(channelId, ready.message)
+            client.sendMessage(channelId, ready.message, captchaPolicy)
         } else {
-            client.sendMessage(channelId, PayloadJSON(ready.message), parts.toTypedArray())
+            client.sendMessage(channelId, PayloadJSON(ready.message), parts.toTypedArray(), captchaPolicy)
         }
     }
 

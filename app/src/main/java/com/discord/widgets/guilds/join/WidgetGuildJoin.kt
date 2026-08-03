@@ -9,8 +9,6 @@ import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.models.domain.ModelInvite
-import com.discord.utilities.captcha.CaptchaErrorBody
-import com.discord.utilities.captcha.CaptchaHelper
 import com.discord.utilities.intent.DeepLinkParser
 import com.discord.utilities.intent.DeepLinkRoute
 import com.discord.utilities.intent.LinkParseResult
@@ -25,7 +23,6 @@ import com.google.android.material.textfield.TextInputLayout
 open class WidgetGuildJoin : AppFragment(R.layout.widget_guild_join) {
     private lateinit var inviteInput: TextInputLayout
     private lateinit var joinButton: MaterialButton
-    private var captchaPayload: CaptchaHelper.CaptchaPayload? = null
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -34,10 +31,6 @@ open class WidgetGuildJoin : AppFragment(R.layout.widget_guild_join) {
         joinButton.setOnClickListener { handleGuildJoin() }
         inviteInput.editText?.setOnEditorActionListener { _, actionId, _ ->
             (actionId == EditorInfo.IME_ACTION_DONE).also { if (it) handleGuildJoin() }
-        }
-        WidgetGuildJoinCaptchaBottomSheet.registerForResult(this, CAPTCHA_REQUEST_KEY) { _, payload ->
-            captchaPayload = payload
-            handleGuildJoin()
         }
     }
 
@@ -77,15 +70,9 @@ open class WidgetGuildJoin : AppFragment(R.layout.widget_guild_join) {
             javaClass = javaClass,
             fragment = this,
             location = LOCATION_JOIN,
-            captchaPayload = captchaPayload,
-            onInvitePostError = { error ->
+            onInvitePostError = {
                 joinButton.isEnabled = true
-                val body = error?.let(CaptchaErrorBody::createFromError)
-                if (body != null) {
-                    WidgetGuildJoinCaptchaBottomSheet.show(parentFragmentManager, CAPTCHA_REQUEST_KEY, body)
-                } else {
-                    inviteInput.error = getString(R.string.instant_invite_expired)
-                }
+                inviteInput.error = getString(R.string.instant_invite_expired)
             },
             onInviteFlowFinished = { activity?.finish() },
         )
@@ -103,7 +90,6 @@ open class WidgetGuildJoin : AppFragment(R.layout.widget_guild_join) {
 
     companion object {
         private const val LOCATION_JOIN = "Join Guild"
-        private const val CAPTCHA_REQUEST_KEY = "guild-join-captcha"
 
         fun show(context: Context, location: String) = AppScreenRouter.launch(
             context,

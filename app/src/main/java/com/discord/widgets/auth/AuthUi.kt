@@ -1,8 +1,6 @@
 package com.discord.widgets.auth
 
 import androidx.lifecycle.ViewModel
-import com.discord.utilities.captcha.CaptchaErrorBody
-import com.discord.utilities.captcha.CaptchaHelper
 import java.io.Serializable
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -173,29 +171,12 @@ sealed class AuthResult {
     data class Success(val nextRoute: AuthRoute? = null, val message: String? = null) : AuthResult()
     data class Failure(val fieldErrors: Map<String, String> = emptyMap(), val message: String? = null) : AuthResult()
     data class Challenge(val route: AuthRoute, val state: AuthUiState) : AuthResult()
-
-    /**
-     * The API refused the request until a captcha is solved.
-     *
-     * The screen opens [com.discord.widgets.auth.WidgetAuthCaptcha] and re-submits the same action
-     * with the solved payload; nothing about the original input is lost or re-typed.
-     */
-    data class CaptchaRequired(val error: CaptchaErrorBody?) : AuthResult()
 }
 
 interface AuthUiActions {
     fun navigate(route: AuthRoute, state: AuthUiState = AuthUiState(route = route))
 
-    /**
-     * Performs [action].
-     *
-     * @param captcha payload from a challenge the user just solved, replayed with the retry.
-     */
-    fun submit(
-        action: AuthAction,
-        captcha: CaptchaHelper.CaptchaPayload? = null,
-        callback: (AuthResult) -> Unit,
-    )
+    fun submit(action: AuthAction, callback: (AuthResult) -> Unit)
 
     fun close()
 

@@ -9,6 +9,8 @@ import com.discord.utilities.analytics.AnalyticsDeviceResourceUsageMonitor
 import com.discord.utilities.analytics.AdvertisingIdProvider
 import com.discord.utilities.billing.GooglePlayBillingManager
 import com.discord.utilities.cache.SharedPreferencesProvider
+import com.discord.utilities.captcha.ActivityCaptchaSolver
+import com.discord.utilities.captcha.CaptchaSolver
 import com.discord.utilities.lifecycle.ActivityProvider
 import com.discord.utilities.lifecycle.ApplicationProvider
 import com.discord.utilities.lifecycle.Backgrounded
@@ -31,6 +33,8 @@ class App : Application() {
         SharedPreferencesProvider.init(this)
         ApplicationProvider.init(this)
         ActivityProvider.init(this)
+        // Must precede StoreStream.initialize, which builds the REST clients.
+        CaptchaSolver.install(ActivityCaptchaSolver())
         ClockFactory.init()
         ScreenshotDetector.instance = ScreenshotDetector(this, AppLog, SharedPreferencesProvider.get())
         Backgrounded.init(this)

@@ -14,8 +14,6 @@ import com.discord.models.user.User
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
 import com.discord.utilities.analytics.AnalyticsTracker
-import com.discord.utilities.captcha.CaptchaErrorBody
-import com.discord.utilities.captcha.CaptchaHelper
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.rest.RestAPI
@@ -30,8 +28,6 @@ import com.discord.utilities.view.extensions.getTextOrEmpty
 import com.discord.utilities.view.extensions.setOnImeActionDone
 import com.discord.utilities.view.extensions.setSelectionEnd
 import com.discord.utilities.view.extensions.setText
-import com.discord.widgets.captcha.WidgetCaptcha
-import com.discord.widgets.captcha.isCaptchaError
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputLayout
 
@@ -43,21 +39,12 @@ import com.google.android.material.textfield.TextInputLayout
  *
  * - the typed text has no four-digit tag, which is a *local* validation failure and never reaches
  *   the API;
- * - the API rejects the request, in which case the abort code decides between "solve a captcha and
- *   retry" and a specific inline error under the text field.
+ * - the API rejects the request, which becomes a specific inline error under the text field.
  */
 class WidgetFriendsAddById : AppFragment(R.layout.widget_friends_add_by_id) {
 
     private lateinit var inputWrap: TextInputLayout
     private lateinit var sendButton: MaterialButton
-
-    /**
-     * Registered eagerly: an `ActivityResultLauncher` must be created before the fragment reaches
-     * STARTED, so this cannot move into [onViewBound].
-     */
-    private val captchaLauncher = WidgetCaptcha.registerForResult(this) { captchaPayload ->
-        extractTargetAndSendFriendRequest(captchaPayload)
-    }
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -106,14 +93,12 @@ class WidgetFriendsAddById : AppFragment(R.layout.widget_friends_add_by_id) {
      * Splits the typed text into name and tag. Without a tag the request is not attempted at all —
      * the API cannot resolve a bare username, so sending it would only produce a confusing 400.
      */
-    private fun extractTargetAndSendFriendRequest(
-        captchaPayload: CaptchaHelper.CaptchaPayload? = null,
-    ) {
+    private fun extractTargetAndSendFriendRequest() {
         val source = inputWrap.getTextOrEmpty()
         val target = extractUsernameAndDiscriminator(source)
         val discriminator = target.discriminator
         if (discriminator != null) {
-            sendFriendRequest(target.username, discriminator, captchaPayload)
+            sendFriendRequest(target.username, discriminator)
         } else {
             setInputEditError(
                 context?.let {
@@ -127,18 +112,12 @@ class WidgetFriendsAddById : AppFragment(R.layout.widget_friends_add_by_id) {
         }
     }
 
-    private fun sendFriendRequest(
-        username: String,
-        discriminator: Int,
-        captchaPayload: CaptchaHelper.CaptchaPayload? = null,
-    ) {
+    private fun sendFriendRequest(username: String, discriminator: Int) {
         val api = RestAPI.apiOrNull ?: return
         api.sendRelationshipRequest(
             RestAPIParams.UserRelationship.Add(
                 username = username,
                 discriminator = discriminator,
-                captchaKey = captchaPayload?.captchaKey,
-                captchaRqtoken = captchaPayload?.captchaRqtoken,
             ),
             relationshipContext(LOCATION),
         )
@@ -165,27 +144,15 @@ class WidgetFriendsAddById : AppFragment(R.layout.widget_friends_add_by_id) {
 
     private fun handleSendFailure(error: RestApiError, username: String, discriminator: Int) {
         RestAPIAbortMessages.handleAbortCodeOrDefault(error, onHandle = {
-            if (error.isCaptchaError()) {
-                launchCaptchaFlow(error)
-            } else {
-                inputWrap.setErrorTextAppearance(R.style.TextAppearance_Error)
-                setInputEditError(
-                    RestAPIAbortMessages.ResponseResolver.getRelationshipResponse(
-                        context,
-                        error.code,
-                        username + UserUtils.padDiscriminator(discriminator),
-                    ),
-                )
-            }
+            inputWrap.setErrorTextAppearance(R.style.TextAppearance_Error)
+            setInputEditError(
+                RestAPIAbortMessages.ResponseResolver.getRelationshipResponse(
+                    context,
+                    error.code,
+                    username + UserUtils.padDiscriminator(discriminator),
+                ),
+            )
         })
-    }
-
-    private fun launchCaptchaFlow(error: RestApiError) {
-        WidgetCaptcha.launch(
-            requireContext(),
-            captchaLauncher,
-            CaptchaErrorBody.createFromError(error),
-        )
     }
 
     private fun setInputEditError(error: CharSequence?) {

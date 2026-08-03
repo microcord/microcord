@@ -198,7 +198,7 @@ class StoreLurking(
     /** Converts an active preview into a real membership. */
     fun postJoinGuildAsMember(guildId: Long, onSuccess: (ApiGuild) -> Unit = {}, onFailure: () -> Unit = {}) {
         val api = api ?: return onFailure()
-        api.joinGuild(guildId, false, sessionId, null, RestAPIParams.InviteCode(null, null), null)
+        api.joinGuild(guildId, false, sessionId, null, RestAPIParams.InviteCode(), null)
             .restSubscribeOn()
             .ui()
             .appSubscribe(
@@ -236,7 +236,7 @@ class StoreLurking(
         lurkedGuildsSubject.onNext(lurkedGuilds)
 
         val api = api ?: return onErrorLurking()
-        api.joinGuild(guildId, true, sessionId, null, RestAPIParams.InviteCode(null, null), null)
+        api.joinGuild(guildId, true, sessionId, null, RestAPIParams.InviteCode(), null)
             .restSubscribeOn()
             .ui()
             .appSubscribe(

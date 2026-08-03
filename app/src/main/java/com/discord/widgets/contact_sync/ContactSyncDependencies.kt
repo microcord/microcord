@@ -16,12 +16,4 @@ object ContactSyncDependencies {
     @JvmStatic
     var contactsProvider: ContactsProvider = AndroidContactsProvider
 
-    /** Shared with the phone-management flow, which applies the same experiment gate. */
-    @Volatile
-    @JvmStatic
-    var isPhoneVerifyCaptchaEnabled: () -> Boolean = {
-        StoreStream.getExperiments()
-            .getUserExperiment("2021-11_phone_verify_captcha", trackExposure = true)
-            ?.bucket == 1
-    }
 }

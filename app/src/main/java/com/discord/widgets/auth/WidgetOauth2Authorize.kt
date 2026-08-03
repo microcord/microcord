@@ -23,7 +23,6 @@ import com.discord.app.appViewModels
 import com.discord.i18n.setI18nText
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
-import com.discord.utilities.captcha.CaptchaHelper
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rest.RestAPI
@@ -56,9 +55,6 @@ import rx.Observable
  *   a server needs a permission picker this client does not have, so the screen offers the browser
  *   instead of a half-working grant.
  *
- * A `captcha_key` failure on the POST hands off to [WidgetAuthCaptcha] and retries with the solved
- * payload; that payload is passed as a request parameter and is never stored or logged.
- *
  * Reference: `com.discord.widgets.auth.WidgetOauth2Authorize`.
  */
 open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) {
@@ -71,9 +67,6 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
     private val adapter = SimpleRecyclerAdapter<PermissionModel, OAuthPermissionViewHolder>(
         createViewHolder = { inflater, parent -> OAuthPermissionViewHolder.create(inflater, parent) },
     )
-
-    protected open val captchaLauncher: ActivityResultLauncher<Intent> =
-        WidgetAuthCaptcha.registerForResult(this) { payload -> authorizeApplication(payload) }
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -181,20 +174,17 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
         adapter.setData(permissions + filler)
 
         view.findViewById<MaterialButton>(R.id.oauth_authorize_grant)
-            .setOnClickListener { authorizeApplication(null) }
+            .setOnClickListener { authorizeApplication() }
     }
 
-    private fun authorizeApplication(captchaPayload: CaptchaHelper.CaptchaPayload?) {
+    private fun authorizeApplication() {
         oauth2ViewModel.oauthAuthorize
-            .post(captchaPayload?.captchaKey, captchaPayload?.captchaRqtoken)
+            .post()
             .restSubscribeOn()
             .ui(this)
             .appSubscribe(
                 errorClass = javaClass,
-                errorHandler = { error ->
-                    val unhandled = validationManager.setErrors(error.messages).toMutableList()
-                    WidgetAuthCaptcha.processErrorsForCaptcha(requireContext(), captchaLauncher, unhandled, error)
-                },
+                errorHandler = { error -> validationManager.setErrors(error.messages) },
             ) { response ->
                 if (!isSafeRedirect(response.location)) {
                     AppLog.w("Refusing an OAuth redirect with an unsupported scheme.")
@@ -326,20 +316,10 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
             clientId.toString(), state, responseType, redirectUrl, prompt, scope, permissions,
         )
 
-        fun post(
-            captchaKey: String? = null,
-            captchaRqtoken: String? = null,
-        ): Observable<RestAPIParams.OAuth2Authorize.ResponsePost> {
-            val body = buildMap {
-                put("authorize", "true")
-                captchaKey?.let { put(CaptchaHelper.CAPTCHA_KEY, it) }
-                captchaRqtoken?.let { put("captcha_rqtoken", it) }
-            }
-            return RestAPI.api.postOauth2Authorize(
-                clientId.toString(), state, responseType, redirectUrl, prompt, scope, permissions,
-                codeChallenge, codeChallengeMethod, body,
-            )
-        }
+        fun post(): Observable<RestAPIParams.OAuth2Authorize.ResponsePost> = RestAPI.api.postOauth2Authorize(
+            clientId.toString(), state, responseType, redirectUrl, prompt, scope, permissions,
+            codeChallenge, codeChallengeMethod, mapOf("authorize" to "true"),
+        )
 
         override fun toString(): String = "OAuth2Authorize(clientId=$clientId, state=$state, " +
             "responseType=$responseType, redirectUrl=$redirectUrl, prompt=$prompt, scope=$scope, " +

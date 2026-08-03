@@ -22,7 +22,7 @@ import com.discord.restapi.RestAPIParams
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.attachments.UploadAttachment
 import com.discord.utilities.attachments.toUploadAttachment
-import com.discord.utilities.captcha.CaptchaHelper
+import com.discord.utilities.captcha.CaptchaSolution
 import com.discord.utilities.messagesend.MessageResult
 import com.discord.utilities.messagesend.MessageSendCoordinator
 import com.discord.utilities.persister.Persister
@@ -924,7 +924,7 @@ class StoreMessages @JvmOverloads constructor(
         lastManualAttemptTimestamp: Long? = null,
         initialAttemptTimestamp: Long? = null,
         numRetries: Int? = null,
-        captchaPayload: CaptchaHelper.CaptchaPayload? = null,
+        captchaSolution: CaptchaSolution? = null,
         guildId: Long? = null,
     ): Observable<MessageResult> {
         val coordinator = sendCoordinator ?: return Observable.just(MessageResult.NoValidContent)
@@ -935,7 +935,7 @@ class StoreMessages @JvmOverloads constructor(
                 content = content,
                 author = author.synthesizeApiUser(),
                 allowedMentions = allowedMentions?.toRestApiParams(),
-                captcha = captchaPayload,
+                captcha = captchaSolution,
                 attachments = attachments,
                 stickers = stickers,
             ),
@@ -988,7 +988,7 @@ class StoreMessages @JvmOverloads constructor(
     fun resendMessage(
         message: Message,
         isAutoAttempt: Boolean = false,
-        captchaPayload: CaptchaHelper.CaptchaPayload? = null,
+        captchaSolution: CaptchaSolution? = null,
     ): Observable<MessageResult> {
         val type = message.type
         val allowed =
@@ -1018,15 +1018,15 @@ class StoreMessages @JvmOverloads constructor(
             lastManualAttemptTimestamp = if (isAutoAttempt) message.lastManualAttemptTimestamp else null,
             initialAttemptTimestamp = message.initialAttemptTimestamp,
             numRetries = (message.numRetries ?: 0) + 1,
-            captchaPayload = captchaPayload,
+            captchaSolution = captchaSolution,
             guildId = message.guildId,
         )
     }
 
     /** Re-sends after the user solved a captcha challenge for a blocked message. */
-    fun resendMessageWithCaptcha(channelId: Long, nonce: String?, captchaPayload: CaptchaHelper.CaptchaPayload) {
+    fun resendMessageWithCaptcha(channelId: Long, nonce: String?, captchaSolution: CaptchaSolution) {
         val message = nonce?.let { localMessagesHolder.getMessage(channelId, it) } ?: return
-        resendMessage(message, isAutoAttempt = true, captchaPayload = captchaPayload).subscribe({ }, { })
+        resendMessage(message, isAutoAttempt = true, captchaSolution = captchaSolution).subscribe({ }, { })
     }
 
     /**

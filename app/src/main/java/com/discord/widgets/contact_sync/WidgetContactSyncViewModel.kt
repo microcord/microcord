@@ -13,7 +13,6 @@ import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
-import com.discord.utilities.captcha.CaptchaHelper
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
 import com.discord.utilities.rest.RestAPI
@@ -23,7 +22,6 @@ import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.user.UserUtils.getUserNameWithDiscriminator
-import com.discord.widgets.captcha.isCaptchaError
 import com.discord.widgets.user.phone.WidgetUserPhoneManage
 import java.util.concurrent.TimeUnit
 import rx.Observable
@@ -97,7 +95,6 @@ class WidgetContactSyncViewModel(
     storeObservable: Observable<WidgetContactSyncViewModel.StoreState> = observeStores(),
     val tracker: ContactSyncFlowAnalytics = ContactSyncFlowAnalytics(mode == ContactSyncMode.ONBOARDING),
     private var initialized: Boolean = false,
-    private val captchaLauncher: (RestApiError) -> Unit,
 ) : AppViewModel<WidgetContactSyncViewModel.ViewState>(
     initialContactSyncViewState(mode, allowPhone, allowEmail),
 ) {
@@ -224,13 +221,11 @@ class WidgetContactSyncViewModel(
     }
 
     @MainThread
-    fun onPhoneNumberSubmitted(phoneNumber: String, captchaPayload: CaptchaHelper.CaptchaPayload?) {
+    fun onPhoneNumberSubmitted(phoneNumber: String) {
         restAPI.userAddPhone(
             RestAPIParams.Phone(
                 phone = phoneNumber,
                 source = WidgetUserPhoneManage.Source.CONTACT_SYNC.source,
-                captchaKey = captchaPayload?.captchaKey,
-                captchaRqtoken = captchaPayload?.captchaRqtoken,
             ),
         )
             .restSubscribeOn()
@@ -518,17 +513,8 @@ class WidgetContactSyncViewModel(
         updateViewState(viewState.copy(displayedChild = Views.VIEW_VERIFY_PHONE))
     }
 
-    /**
-     * A captcha challenge is only *offered* when the experiment is on; otherwise even a captcha
-     * failure is reported as an invalid number, which is the reference behaviour and the reason the
-     * experiment gate is not simply dropped.
-     */
     @MainThread
     private fun handlePhoneSubmittedError(error: RestApiError) {
-        if (ContactSyncDependencies.isPhoneVerifyCaptchaEnabled() && error.isCaptchaError()) {
-            captchaLauncher(error)
-            return
-        }
         eventsSubject.onNext(Event.PhoneInvalid)
     }
 

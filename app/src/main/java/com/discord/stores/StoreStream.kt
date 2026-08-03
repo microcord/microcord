@@ -80,7 +80,6 @@ import com.discord.widgets.chat.input.ChatInputStoreBindings
 import com.discord.widgets.chat.input.WidgetChatInput
 import com.discord.widgets.chat.list.WidgetChatList
 import com.discord.widgets.chat.overlay.WidgetChatOverlay
-import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
 import com.discord.widgets.friends.FriendRelationshipUi
 import com.discord.widgets.friends.FriendRelationship
 import com.discord.widgets.friends.FriendUserUi
@@ -101,7 +100,6 @@ import com.discord.widgets.stage.StageStoreAccess
 import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.models.domain.ModelCustomStatusSetting
 import com.discord.api.presence.ClientStatus
-import com.discord.utilities.captcha.CaptchaHelper
 import com.discord.utilities.error.RestApiError
 import com.discord.workers.MessageAckWorker
 import com.discord.widgets.chat.list.actions.MessageActionCoordinator
@@ -1141,17 +1139,6 @@ class StoreStream private constructor(
         WidgetChatInput.pendingRepliesStore = pendingReplies
         WidgetChatInput.editingStore = chatInputEditing
         WidgetChatInput.uploadHandler = { request -> sendUploads(context, request) }
-        WidgetCaptchaBottomSheet.onSolved = { requestId, token, rqtoken ->
-            if (!messageSendCoordinator.retry(requestId, CaptchaHelper.CaptchaPayload(token, rqtoken))) {
-                retryCaptchaUpload(requestId, CaptchaHelper.CaptchaPayload(token, rqtoken))
-            }
-        }
-        // A challenge the user closed is a real outcome: without this the captcha-blocked send sits
-        // in the queue forever and the composer stays stuck on "sending".
-        WidgetCaptchaBottomSheet.onAbandoned = { requestId ->
-            messageSendCoordinator.cancel(requestId)
-            if (failedUploads.containsKey(requestId)) cancelUpload(requestId)
-        }
         WidgetChatOverlay.onJumpToPresent = { messagesLoader.requestNewestMessages() }
         WidgetChatOverlay.stateSource = {
             channelsSelected.observeSelectedChannel().switchMap { channel ->
@@ -1195,6 +1182,7 @@ class StoreStream private constructor(
                         nonce = nonce,
                         stickerIds = stickerId.takeIf { it != -1L }?.let(::listOf),
                     ),
+                    null,
                 ).subscribeOn(Schedulers.io()).toBlocking().single().also {
                     analytics.ackMessage(channelId)
                     NotificationClient.displaySent(applicationContext, channelId, channelName, true)
@@ -2270,7 +2258,6 @@ class StoreStream private constructor(
         content: String,
         reference: MessageReference?,
         attachments: List<UploadAttachment>,
-        captcha: CaptchaHelper.CaptchaPayload? = null,
         nonce: String,
     ) {
         val body = RestAPIParams.Message(
@@ -2279,8 +2266,6 @@ class StoreStream private constructor(
             messageReference = reference?.let {
                 RestAPIParams.Message.MessageReference(it.guildId, channelId, it.messageId)
             },
-            captchaKey = captcha?.captchaKey,
-            captchaRqtoken = captcha?.captchaRqtoken,
         )
         val upload = runCatching {
             MessageUploadPayloadBuilder.build(context.contentResolver, Gson().toJson(body), attachments)
@@ -2311,7 +2296,8 @@ class StoreStream private constructor(
         }
         preprocessingUploads.remove(nonce)
         upload.aggregateProgress.subscribe { progress -> dispatcher.schedule { messageUploads.onProgress(nonce, progress) } }
-        val requestSubscription = restApi.sendMessage(channelId, PayloadJSON(body), upload.uploads.map { it.part }.toTypedArray())
+        val requestSubscription = restApi
+            .sendMessage(channelId, PayloadJSON(body), upload.uploads.map { it.part }.toTypedArray(), null)
             .subscribeOn(Schedulers.io())
             .subscribe(
             { apiMessage ->
@@ -2329,16 +2315,9 @@ class StoreStream private constructor(
             { throwable ->
                 activeUploads.remove(nonce)
                 val error = RestApiError.from(throwable)
-                val failedType = when {
-                    error.captchaSitekey != null -> -6
-                    error.code == 200000 -> -8
-                    else -> -2
-                }
+                val failedType = if (error.code == 200000) -8 else -2
                 if (failedType != -8) {
                     failedUploads[nonce] = FailedUpload(channelId, content, reference, attachments)
-                }
-                if (failedType == -6) {
-                    error.captchaSitekey?.let { WidgetChatInput.requestUploadCaptcha(nonce, it, error.captchaRqtoken) }
                 }
                 dispatcher.schedule {
                     messages.handleLocalMessageDelete(channelId, nonce)
@@ -2385,14 +2364,6 @@ class StoreStream private constructor(
             if (::applicationContext.isInitialized) cleanupProcessedAttachments(applicationContext, it.attachments)
         }
         dispatcher.schedule { messageUploads.onSuccess(nonce) }
-    }
-
-    private fun retryCaptchaUpload(nonce: String, captcha: CaptchaHelper.CaptchaPayload) {
-        val failed = failedUploads.remove(nonce) ?: return
-        dispatcher.schedule { messages.handleLocalMessageDelete(failed.channelId, nonce) }
-        startUpload(
-            applicationContext, failed.channelId, failed.content, failed.reference, failed.attachments, captcha, nonce,
-        )
     }
 
     private fun cancelMessageSendInternal(nonce: String) {

@@ -86,15 +86,13 @@ class StoreAuthentication(
     fun login(
         login: String,
         password: String,
-        captchaKey: String? = null,
-        captchaRqtoken: String? = null,
         undelete: Boolean = false,
         loginSource: String? = null,
     ): Observable<ModelLoginResult> {
         setSavedLogin(login)
         return getFingerprintSnapshotOrGenerate().flatMap {
             requireApi().postAuthLogin(
-                RestAPIParams.AuthLogin(login, password, captchaKey, captchaRqtoken, undelete, loginSource),
+                RestAPIParams.AuthLogin(login, password, undelete, loginSource),
             ).body()
         }.doOnNext { loginResult ->
             // An MFA challenge is a 200 carrying a ticket and no token. Dispatching it would
@@ -109,8 +107,6 @@ class StoreAuthentication(
         email: String?,
         phoneToken: String?,
         password: String,
-        captchaKey: String? = null,
-        captchaRqtoken: String? = null,
         invite: String? = null,
         guildTemplateCode: String? = null,
         consent: Boolean = false,
@@ -125,8 +121,6 @@ class StoreAuthentication(
                     email,
                     phoneToken,
                     password,
-                    captchaKey,
-                    captchaRqtoken,
                     invite,
                     guildTemplateCode,
                     consent,
@@ -144,8 +138,8 @@ class StoreAuthentication(
     fun authorizeIP(token: String): Observable<Response<Void>> =
         requireApi().authorizeIP(RestAPIParams.AuthorizeIP(token))
 
-    fun forgotPassword(login: String, captchaKey: String? = null, captchaRqtoken: String? = null): Observable<Response<Void>> =
-        requireApi().forgotPassword(RestAPIParams.ForgotPassword(login, captchaKey, captchaRqtoken))
+    fun forgotPassword(login: String): Observable<Response<Void>> =
+        requireApi().forgotPassword(RestAPIParams.ForgotPassword(login))
 
     fun resendVerificationEmail(): Observable<Response<Void>> =
         requireApi().postAuthVerifyResend(RestAPIParams.EmptyBody())

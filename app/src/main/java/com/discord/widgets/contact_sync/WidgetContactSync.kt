@@ -21,7 +21,6 @@ import com.discord.i18n.FormatUtils
 import com.discord.stores.StoreStream
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.analytics.Traits
-import com.discord.utilities.captcha.CaptchaHelper
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rx.appSubscribe
@@ -37,7 +36,6 @@ import com.discord.widgets.contact_sync.WidgetContactSyncViewModel.Event
 import com.discord.widgets.contact_sync.WidgetContactSyncViewModel.ToolbarConfig
 import com.discord.widgets.contact_sync.WidgetContactSyncViewModel.ViewState
 import com.discord.widgets.contact_sync.WidgetContactSyncViewModel.Views
-import com.discord.widgets.captcha.WidgetCaptcha
 import com.discord.widgets.phone.WidgetPhoneCountryCodeBottomSheet
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputLayout
@@ -83,11 +81,8 @@ class WidgetContactSync : AppFragment(R.layout.widget_contact_sync) {
             mode = getContactSyncModeFromIntent(requireAppActivity()),
             allowPhone = getPhoneDiscoverableFromIntent(requireAppActivity()),
             allowEmail = getEmailDiscoverableFromIntent(requireAppActivity()),
-            captchaLauncher = { error -> launchCaptchaFlow(error) },
         )
     }
-
-    private val captchaLauncher = WidgetCaptcha.registerForResult(this, ::submitPhoneNumber)
 
     private val toastManager = ToastManager()
 
@@ -370,17 +365,8 @@ class WidgetContactSync : AppFragment(R.layout.widget_contact_sync) {
         addPhoneNext.isEnabled = text.isNotEmpty() && text.startsWith("+")
     }
 
-    private fun submitPhoneNumber(captchaPayload: CaptchaHelper.CaptchaPayload? = null) {
-        viewModel.onPhoneNumberSubmitted(addPhoneInput.getTextOrEmpty(), captchaPayload)
-    }
-
-    private fun launchCaptchaFlow(error: RestApiError) {
-        WidgetCaptcha.processErrorsForCaptcha(
-            requireContext(),
-            captchaLauncher,
-            error.messages.keys.toMutableList(),
-            error,
-        )
+    private fun submitPhoneNumber() {
+        viewModel.onPhoneNumberSubmitted(addPhoneInput.getTextOrEmpty())
     }
 
     private fun requestContactsPermissions() {

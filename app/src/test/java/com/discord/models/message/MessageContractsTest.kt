@@ -6,7 +6,7 @@ import com.discord.api.message.allowedmentions.MessageAllowedMentions
 import com.discord.api.message.allowedmentions.MessageAllowedMentionsTypes
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.models.domain.ModelMessageDelete
-import com.discord.utilities.captcha.CaptchaHelper
+import com.discord.utilities.captcha.CaptchaSolution
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import java.lang.reflect.Modifier
@@ -50,11 +50,11 @@ class MessageContractsTest {
             lastManualAttemptTimestamp = 11,
             initialAttemptTimestamp = 12,
             localAttachments = listOf(LocalAttachment(13, "content://private/file", "private.txt")),
-            captchaPayload = CaptchaHelper.CaptchaPayload("secret-key", "secret-token"),
+            captchaSolution = CaptchaSolution("secret-key", "secret-token"),
         )
         assertEquals(api.copy(member = null, hit = null), local.synthesizeApiMessage())
         assertEquals(2, local.component35())
-        assertEquals("secret-key", local.component39()!!.captchaKey)
+        assertEquals("secret-key", local.component39()!!.key)
         assertEquals(local, local.copy())
         assertTrue(local.hasAttachments())
         assertTrue(local.hasEmbeds())
@@ -76,7 +76,7 @@ class MessageContractsTest {
         assertEquals(local.author, merged.author)
         assertEquals(local.guildId, merged.guildId)
         assertEquals(local.localAttachments, merged.localAttachments)
-        assertEquals(local.captchaPayload, merged.captchaPayload)
+        assertEquals(local.captchaSolution, merged.captchaSolution)
 
         val mentionsJson = gson.toJson(local.allowedMentions)
         assertTrue(mentionsJson.contains("\"users\""))
@@ -94,7 +94,7 @@ class MessageContractsTest {
         assertFalse(rendered.contains("secret-key"))
         assertFalse(rendered.contains("secret-token"))
         assertFalse(api.toString().contains("message"))
-        assertFalse(local.captchaPayload.toString().contains("secret"))
+        assertFalse(local.captchaSolution.toString().contains("secret"))
     }
 
     private companion object {

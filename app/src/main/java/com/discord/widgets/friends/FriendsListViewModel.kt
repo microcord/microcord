@@ -18,7 +18,6 @@ import com.discord.stores.StoreChannels
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUserRelationships
 import com.discord.stores.updates.ObservationDeckProvider
-import com.discord.utilities.captcha.CaptchaHelper
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
 import com.discord.utilities.rest.RestAPI
@@ -28,7 +27,6 @@ import com.discord.utilities.rx.leadingEdgeThrottle
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.user.UserUtils
-import com.discord.widgets.captcha.isCaptchaError
 import java.util.concurrent.TimeUnit
 import rx.Emitter
 import rx.Observable
@@ -81,19 +79,13 @@ class FriendsListViewModel(
         data class Loaded(val showContactSyncIcon: Boolean, val items: List<Item>) : ViewState()
     }
 
-    /** One-shot outcomes. The fragment owns every toast, call launch and captcha sheet. */
+    /** One-shot outcomes. The fragment owns every toast and call launch. */
     sealed class Event {
         data class ShowToast(@StringRes val stringRes: Int) : Event()
 
         data class ShowFriendRequestErrorToast(val abortCode: Int, val username: String) : Event()
 
         data class LaunchVoiceCall(val channelId: Long) : Event()
-
-        data class CaptchaError(
-            val error: RestApiError,
-            val username: String,
-            val discriminator: Int,
-        ) : Event()
     }
 
     /**
@@ -237,19 +229,12 @@ class FriendsListViewModel(
             ) { emitShowToastEvent(successMessageStringRes) }
     }
 
-    @JvmOverloads
-    fun acceptFriendSuggestion(
-        username: String,
-        discriminator: Int,
-        captchaPayload: CaptchaHelper.CaptchaPayload? = null,
-    ) {
+    fun acceptFriendSuggestion(username: String, discriminator: Int) {
         val api = restApi() ?: return
         api.sendRelationshipRequest(
             RestAPIParams.UserRelationship.Add(
                 username = username,
                 discriminator = discriminator,
-                captchaKey = captchaPayload?.captchaKey,
-                captchaRqtoken = captchaPayload?.captchaRqtoken,
             ),
             relationshipContext(LOCATION_FRIEND_SUGGESTION),
         )
@@ -259,9 +244,7 @@ class FriendsListViewModel(
                 errorClass = FriendsListViewModel::class.java,
                 errorHandler = { error ->
                     RestAPIAbortMessages.handleAbortCodeOrDefault(error, onHandle = {
-                        if (error.isCaptchaError()) {
-                            emitCaptchaErrorEvent(error, username, discriminator)
-                        }
+                        emitShowFriendRequestAbortToast(error.code, username)
                     })
                 },
             ) { /* the relationship dispatch updates the list */ }
@@ -418,10 +401,6 @@ class FriendsListViewModel(
 
     private fun emitLaunchVoiceCallEvent(channelId: Long) {
         eventSubject.onNext(Event.LaunchVoiceCall(channelId))
-    }
-
-    private fun emitCaptchaErrorEvent(error: RestApiError, username: String, discriminator: Int) {
-        eventSubject.onNext(Event.CaptchaError(error, username, discriminator))
     }
 
     // endregion

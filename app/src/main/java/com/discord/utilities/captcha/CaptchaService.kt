@@ -2,25 +2,38 @@ package com.discord.utilities.captcha
 
 import com.google.gson.annotations.SerializedName
 
-/**
- * Which captcha provider the API asked the client to solve.
- *
- * Sent as `captcha_service` inside the error body of a request that was answered with a captcha
- * challenge. Reference: `com.discord.utilities.captcha.CaptchaService`.
- */
+/** `captcha_service` from a challenge body. */
 enum class CaptchaService {
     @SerializedName("hcaptcha")
     HCAPTCHA,
 
     @SerializedName("recaptcha")
     RECAPTCHA,
+
+    @SerializedName("recaptcha_enterprise")
+    RECAPTCHA_ENTERPRISE,
+
+    @SerializedName("turnstile")
+    TURNSTILE,
     ;
 
+    /** Published site key for providers that use a fixed one. hCaptcha's is dynamic. */
+    val defaultSiteKey: String?
+        get() = when (this) {
+            HCAPTCHA, TURNSTILE -> null
+            RECAPTCHA -> RECAPTCHA_SITE_KEY
+            RECAPTCHA_ENTERPRISE -> RECAPTCHA_ENTERPRISE_SITE_KEY
+        }
+
     companion object {
-        /** Resolves the wire name, returning `null` for an unknown or absent service. */
+        const val RECAPTCHA_SITE_KEY = "6Lef5iQTAAAAAKeIvIY-DeexoO3gj7ryl9rLMEnn"
+        const val RECAPTCHA_ENTERPRISE_SITE_KEY = "6LeYqFcqAAAAAD6iZesmNgVulsO4PkpBdr6NVG6M"
+
         fun fromWireName(name: String?): CaptchaService? = when (name?.lowercase()) {
             "hcaptcha" -> HCAPTCHA
             "recaptcha" -> RECAPTCHA
+            "recaptcha_enterprise" -> RECAPTCHA_ENTERPRISE
+            "turnstile" -> TURNSTILE
             else -> null
         }
     }

@@ -1,6 +1,8 @@
 package com.discord.widgets.captcha
 
 import android.app.Dialog
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -67,6 +69,20 @@ class HCaptchaWebDialog : DialogFragment() {
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
         inflater.inflate(R.layout.hcaptcha_fragment, container, false)
 
+    /**
+     * `hcaptcha_fragment.xml` is a `match_parent` WebView, and the page centres the widget in the
+     * viewport itself. That only works over a transparent, full-width window: left floating, the
+     * dialog draws its own opaque background behind a mostly empty page and then clips the widget
+     * at the right edge. Full width also gives the image-grid challenge room when one is served.
+     */
+    override fun onStart() {
+        super.onStart()
+        dialog?.window?.apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         val loading = view.findViewById<View>(R.id.loadingContainer)
@@ -119,7 +135,10 @@ class HCaptchaWebDialog : DialogFragment() {
             return JSONObject()
                 .put("siteKey", arguments.getString(ARG_SITE_KEY))
                 .put("locale", arguments.getString(ARG_LOCALE))
-                .put("size", "normal")
+                // `should_serve_invisible` from the challenge body. Invisible mode still shows a
+                // challenge when the provider decides the request needs one; it only skips the
+                // "I am human" checkbox for sessions hCaptcha already trusts.
+                .put("size", if (arguments.getBoolean(ARG_INVISIBLE)) "invisible" else "normal")
                 .put("theme", "dark")
                 .put("sentry", false)
                 .put("rqdata", arguments.getString(ARG_RQDATA) ?: JSONObject.NULL)
@@ -170,6 +189,7 @@ class HCaptchaWebDialog : DialogFragment() {
         private const val ARG_SITE_KEY = "site_key"
         private const val ARG_RQDATA = "rqdata"
         private const val ARG_LOCALE = "locale"
+        private const val ARG_INVISIBLE = "invisible"
 
         /**
          * Pending outcome handlers, keyed by challenge id.
@@ -192,6 +212,7 @@ class HCaptchaWebDialog : DialogFragment() {
             siteKey: String,
             rqdata: String?,
             locale: String,
+            invisible: Boolean = false,
             onOutcome: (Outcome) -> Unit,
         ) {
             outcomes[challengeId] = onOutcome
@@ -201,6 +222,7 @@ class HCaptchaWebDialog : DialogFragment() {
                     putString(ARG_SITE_KEY, siteKey)
                     putString(ARG_RQDATA, rqdata)
                     putString(ARG_LOCALE, locale)
+                    putBoolean(ARG_INVISIBLE, invisible)
                 }
             }.show(fragmentManager, "$TAG:$challengeId")
         }

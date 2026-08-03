@@ -34,9 +34,6 @@ class ContactSyncUpsellSheet : AppBottomSheet() {
             mode = ContactSyncMode.DEFAULT,
             allowPhone = false,
             allowEmail = false,
-            captchaLauncher = {
-                AppLog.e("Invalid CAPTCHA: We shouldn't be interacting with CAPTCHA on this screen.")
-            },
         )
     }
 

@@ -2,8 +2,6 @@ package com.discord.widgets.auth
 
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
-import com.discord.utilities.captcha.CaptchaErrorBody
-import com.discord.utilities.captcha.CaptchaHelper
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
@@ -19,8 +17,7 @@ import rx.Observable
  *
  * The screens themselves are deliberately dumb: they collect input, hand an [AuthAction] here, and
  * render whatever [AuthResult] comes back. This object owns the REST/store half — which endpoint,
- * which error codes mean "go to another screen" rather than "show a field error", and how a captcha
- * challenge is surfaced.
+ * which error codes mean "go to another screen" rather than "show a field error".
  *
  * The reference spreads this across the individual `Widget*` classes, each calling `RestAPI` or
  * `StoreStream.getAuthentication()` directly. It is consolidated here because this reconstruction
@@ -28,7 +25,7 @@ import rx.Observable
  * testable without an activity.
  *
  * ### Secret handling
- * Passwords, MFA codes, backup codes, tokens and captcha tokens pass through this object as method
+ * Passwords, MFA codes, backup codes and tokens pass through this object as method
  * arguments only. Nothing here logs a credential: failures are reported through [RestApiError],
  * whose `toString` already redacts messages, and every [RestAPIParams] body used below overrides
  * `toString` to redact. No value handled here is written to a `Bundle`, a `SharedPreferences` entry
@@ -48,30 +45,20 @@ object AuthRequests {
 
     private val authentication get() = StoreStream.getAuthentication()
 
-    /**
-     * Runs [action] and reports the outcome exactly once on the main thread.
-     *
-     * @param captcha payload from a challenge the user just solved, replayed with the retry.
-     */
-    fun submit(
-        action: AuthAction,
-        captcha: CaptchaHelper.CaptchaPayload? = null,
-        callback: (AuthResult) -> Unit,
-    ) {
-        val captchaKey = captcha?.captchaKey
-        val captchaRqtoken = captcha?.captchaRqtoken
+    /** Runs [action] and reports the outcome exactly once on the main thread. */
+    fun submit(action: AuthAction, callback: (AuthResult) -> Unit) {
         when (action) {
             is AuthAction.TokenLogin -> tokenLogin(action, callback)
-            is AuthAction.Login -> login(action, captchaKey, captchaRqtoken, undelete = false, callback = callback)
+            is AuthAction.Login -> login(action, undelete = false, callback = callback)
             is AuthAction.UndeleteAccount -> undelete(action, callback)
-            is AuthAction.Register -> register(action, captchaKey, captchaRqtoken, callback)
-            is AuthAction.SendPhoneCode -> sendPhoneCode(action, captchaKey, captchaRqtoken, callback)
+            is AuthAction.Register -> register(action, callback)
+            is AuthAction.SendPhoneCode -> sendPhoneCode(action, callback)
             is AuthAction.ResendPhoneCode -> resendPhoneCode(action, callback)
             is AuthAction.VerifyPhone -> verifyPhone(action, callback)
             is AuthAction.VerifyMfa -> verifyMfa(action, callback)
             is AuthAction.ResendEmail -> resendEmail(callback)
             is AuthAction.VerifyAge -> verifyAge(action, callback)
-            is AuthAction.ForgotPassword -> forgotPassword(action, captchaKey, captchaRqtoken, callback)
+            is AuthAction.ForgotPassword -> forgotPassword(action, callback)
             is AuthAction.ChangePassword -> changePassword(action, callback)
         }
     }
@@ -96,8 +83,6 @@ object AuthRequests {
      */
     private fun login(
         action: AuthAction.Login,
-        captchaKey: String?,
-        captchaRqtoken: String?,
         undelete: Boolean,
         callback: (AuthResult) -> Unit,
     ) {
@@ -106,7 +91,7 @@ object AuthRequests {
         // credential a second time because the API requires it with `undelete = true`.
         pendingLogin = action
         authentication
-            .login(identifier, action.password, captchaKey, captchaRqtoken, undelete)
+            .login(identifier, action.password, undelete)
             .dispatch(
                 tag = "REST: login",
                 callback = callback,
@@ -181,23 +166,16 @@ object AuthRequests {
             callback(AuthResult.Success(nextRoute = AuthRoute.LOGIN))
             return
         }
-        login(credentials, null, null, undelete = true, callback = callback)
+        login(credentials, undelete = true, callback = callback)
     }
 
-    private fun register(
-        action: AuthAction.Register,
-        captchaKey: String?,
-        captchaRqtoken: String?,
-        callback: (AuthResult) -> Unit,
-    ) {
+    private fun register(action: AuthAction.Register, callback: (AuthResult) -> Unit) {
         authentication
             .register(
                 username = action.username,
                 email = action.email,
                 phoneToken = action.phoneToken,
                 password = action.password,
-                captchaKey = captchaKey,
-                captchaRqtoken = captchaRqtoken,
                 consent = action.consented,
                 dateOfBirth = action.birthday?.let { TimeUtils.toUTCDateTime(it, DATE_OF_BIRTH_FORMAT) },
             )
@@ -205,14 +183,9 @@ object AuthRequests {
     }
 
     /** Starts phone registration; the code screen follows. */
-    private fun sendPhoneCode(
-        action: AuthAction.SendPhoneCode,
-        captchaKey: String?,
-        captchaRqtoken: String?,
-        callback: (AuthResult) -> Unit,
-    ) {
+    private fun sendPhoneCode(action: AuthAction.SendPhoneCode, callback: (AuthResult) -> Unit) {
         RestAPI.api
-            .postAuthRegisterPhone(RestAPIParams.AuthRegisterPhone(action.phone, captchaKey, captchaRqtoken))
+            .postAuthRegisterPhone(RestAPIParams.AuthRegisterPhone(action.phone))
             .requireSuccessfulEmpty()
             .dispatch("REST: register phone", callback) {
                 AuthResult.Challenge(
@@ -252,7 +225,7 @@ object AuthRequests {
                 .execute("REST: authorize IP", callback) {
                     val credentials = pendingLogin
                     if (credentials == null) callback(AuthResult.Success(nextRoute = AuthRoute.LOGIN))
-                    else login(credentials, null, null, undelete = false, callback = callback)
+                    else login(credentials, undelete = false, callback = callback)
                 }
         }
     }
@@ -321,19 +294,14 @@ object AuthRequests {
             )
     }
 
-    private fun forgotPassword(
-        action: AuthAction.ForgotPassword,
-        captchaKey: String?,
-        captchaRqtoken: String?,
-        callback: (AuthResult) -> Unit,
-    ) {
+    private fun forgotPassword(action: AuthAction.ForgotPassword, callback: (AuthResult) -> Unit) {
         val login = action.identifier
         if (login.isBlank()) {
             callback(AuthResult.Failure(fieldErrors = mapOf("identifier" to "Email or phone number is required.")))
             return
         }
         authentication
-            .forgotPassword(login, captchaKey, captchaRqtoken)
+            .forgotPassword(login)
             .requireSuccessfulEmpty()
             .dispatch(
                 tag = "REST: forgot password",
@@ -388,10 +356,9 @@ object AuthRequests {
 
     /**
      * Subscribes, maps success to an [AuthResult], and turns every failure into either a
-     * navigation result, a captcha challenge, or field errors the form can render.
+     * navigation result or field errors the form can render.
      *
-     * @param onError first refusal on the failure; returning `null` falls through to the default
-     *   captcha/field-error handling.
+     * @param onError first refusal on the failure; returning `null` falls through to the default.
      */
     private fun <T> Observable<T>.dispatch(
         tag: String,
@@ -424,7 +391,7 @@ object AuthRequests {
      * Turns a non-2xx `Response` into an error.
      *
      * Endpoints declared as `Observable<Response<T>>` emit normally on a 4xx, so without this a
-     * rejected phone number — or, worse, a captcha challenge — would be read as success.
+     * rejected phone number would be read as success.
      */
     private fun <T : Any> Observable<Response<T>>.requireSuccessful(): Observable<T> = flatMap { response ->
         val body = response.body()
@@ -446,11 +413,7 @@ object AuthRequests {
     }
 
     private fun defaultFailure(error: RestApiError): AuthResult {
-        if (error.isCaptchaRequired) {
-            return AuthResult.CaptchaRequired(CaptchaErrorBody.createFromError(error))
-        }
         val fieldErrors = error.messages
-            .filterKeys { it != CaptchaHelper.CAPTCHA_KEY }
             .mapNotNull { (key, values) -> values.firstOrNull()?.let { fieldNameOf(key) to it } }
             .toMap()
         return AuthResult.Failure(fieldErrors = fieldErrors, message = error.message)

@@ -136,30 +136,6 @@ class ContactSyncTest {
         assertFalse(viewModel.requireViewState().allowEmail)
     }
 
-    @Test fun `phone captcha requires the reference captcha key`() {
-        val oldGate = ContactSyncDependencies.isPhoneVerifyCaptchaEnabled
-        var launched: RestApiError? = null
-        val viewModel = viewModel(ContactSyncMode.DEFAULT) { launched = it }
-        val events = mutableListOf<WidgetContactSyncViewModel.Event>()
-        val subscription = viewModel.observeEvents().subscribe(events::add)
-        ContactSyncDependencies.isPhoneVerifyCaptchaEnabled = { true }
-        try {
-            val captcha = httpError(
-                """{"captcha_key":["captcha-required"],"captcha_sitekey":"site-key"}""",
-            )
-            viewModel.handlePhoneSubmittedErrorForTest(captcha)
-            assertSame(captcha, launched)
-
-            launched = null
-            viewModel.handlePhoneSubmittedErrorForTest(httpError("""{"captcha_sitekey":"site-key"}"""))
-            assertNull(launched)
-            assertEquals(listOf(WidgetContactSyncViewModel.Event.PhoneInvalid), events)
-        } finally {
-            subscription.unsubscribe()
-            ContactSyncDependencies.isPhoneVerifyCaptchaEnabled = oldGate
-        }
-    }
-
     // endregion
 
     // region analytics
@@ -234,10 +210,7 @@ class ContactSyncTest {
         }
     }
 
-    private fun viewModel(
-        mode: ContactSyncMode,
-        captchaLauncher: (RestApiError) -> Unit = {},
-    ) = WidgetContactSyncViewModel(
+    private fun viewModel(mode: ContactSyncMode) = WidgetContactSyncViewModel(
         mode = mode,
         restAPI = stubRestApi(),
         // The store feed is exercised separately; the flow tests drive the view model directly.
@@ -247,7 +220,6 @@ class ContactSyncTest {
             clock = MutableClock(0L),
             analytics = ContactSyncAnalytics.None,
         ),
-        captchaLauncher = captchaLauncher,
     )
 
     private fun WidgetContactSyncViewModel.handlePhoneSubmittedErrorForTest(error: RestApiError) {

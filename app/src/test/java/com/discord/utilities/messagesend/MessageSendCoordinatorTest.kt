@@ -10,7 +10,7 @@ import com.discord.models.commands.Application
 import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.models.message.Message
 import com.discord.stores.StorePendingReplies
-import com.discord.utilities.captcha.CaptchaHelper
+import com.discord.utilities.captcha.CaptchaSolution
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -110,16 +110,20 @@ class MessageSendCoordinatorTest {
         assertEquals(-6, failed.message.type)
         val result = failed.result
         assertTrue(result is MessageResult.CaptchaRequired)
-        assertEquals("test-site-key", (result as MessageResult.CaptchaRequired).siteKey)
+        assertEquals("test-site-key", (result as MessageResult.CaptchaRequired).challenge?.captchaSitekey)
         assertEquals(nonce, result.nonce)
 
-        val resent = coordinator.retry(nonce, CaptchaHelper.CaptchaPayload("solved-token", "test-rqtoken"))
+        val resent = coordinator.retry(nonce, CaptchaSolution("solved-token", "test-rqtoken"))
 
         assertTrue(resent)
-        val retryBody = restApi.sendCalls.last().body
-        assertEquals(nonce, retryBody?.nonce)
-        assertEquals("solved-token", retryBody?.captchaKey)
-        assertEquals("test-rqtoken", retryBody?.captchaRqtoken)
+        val retry = restApi.sendCalls.last()
+        assertEquals(nonce, retry.body?.nonce)
+        // Deprecated body fields are gone: the solution rides on the request policy as headers.
+        assertEquals(false, retry.captcha?.handleInline)
+        assertEquals(
+            mapOf("X-Captcha-Key" to "solved-token", "X-Captcha-Rqtoken" to "test-rqtoken"),
+            retry.captcha?.solution?.asHeaders(),
+        )
 
         restApi.respondSuccess(ApiMessage(id = 6_000L, channelId = CHANNEL_ID, content = "hi", nonce = nonce))
         assertEquals(1, updates.filterIsInstance<MessageSendCoordinator.Update.Reconciled>().size)

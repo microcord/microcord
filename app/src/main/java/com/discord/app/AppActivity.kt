@@ -582,16 +582,12 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
             .commit()
     }
 
-    override fun submit(
-        action: AuthAction,
-        captcha: com.discord.utilities.captcha.CaptchaHelper.CaptchaPayload?,
-        callback: (AuthResult) -> Unit,
-    ) {
+    override fun submit(action: AuthAction, callback: (AuthResult) -> Unit) {
         authSubmitter?.let {
             it(action, callback)
             return
         }
-        AuthRequests.submit(action, captcha, callback)
+        AuthRequests.submit(action, callback)
     }
 
     override fun close() {

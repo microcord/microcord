@@ -112,6 +112,7 @@ import com.discord.models.gifpicker.dto.GifDto
 import com.discord.models.gifpicker.dto.TrendingGifCategoriesResponseDto
 import com.discord.models.sticker.dto.ModelStickerPack
 import com.discord.models.sticker.dto.ModelStickerStoreDirectory
+import com.discord.utilities.captcha.CaptchaRequestPolicy
 import com.google.gson.JsonObject
 import okhttp3.MultipartBody
 import okhttp3.ResponseBody
@@ -128,19 +129,12 @@ import retrofit2.http.PUT
 import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Tag
 import retrofit2.http.Url
 import rx.Observable
 
 /**
  * The Discord v9 REST surface.
- *
- * Declaration order, method names and parameter names follow the reference build's Kotlin metadata,
- * so this file is grouped the way the original source was: authentication, then the account, then
- * channels and messages, guilds, invites, commerce, and finally the newer hub/monetization APIs.
- *
- * Paths are relative to the versioned base URL configured in [RestAPIBuilder]; the `v9/` segment and
- * every required header (authorization, locale, super-properties, fingerprint) are supplied by
- * [RequiredHeadersInterceptor], never by a declaration here.
  */
 interface RestAPIInterface {
 
@@ -565,6 +559,7 @@ interface RestAPIInterface {
     fun sendMessage(
         @Path("channelId") channelId: Long,
         @Body message: RestAPIParams.Message,
+        @Tag captcha: CaptchaRequestPolicy?,
     ): Observable<Message>
 
     @POST("channels/{channelId}/greet")
@@ -579,6 +574,7 @@ interface RestAPIInterface {
         @Path("channelId") channelId: Long,
         @Part("payload_json") payloadJson: PayloadJSON<RestAPIParams.Message>,
         @Part files: Array<MultipartBody.Part>,
+        @Tag captcha: CaptchaRequestPolicy?,
     ): Observable<Message>
 
     @POST("channels/{channelId}/messages/{messageId}/ack")

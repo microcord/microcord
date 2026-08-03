@@ -37,10 +37,17 @@ class CaptchaErrorBodyTest {
 
     @Test
     fun `recaptcha is recognised so the hcaptcha path is not taken`() {
-        val body = CaptchaErrorBody.createFromString("""{"captcha_service":"recaptcha"}""")
+        val body = CaptchaErrorBody.createFromString(
+            """{"captcha_key":["captcha-required"],"captcha_service":"recaptcha"}""",
+        )
         assertEquals(CaptchaService.RECAPTCHA, body?.captchaService)
+        // Without a site key of its own, reCAPTCHA falls back to its published one.
+        assertEquals(CaptchaService.RECAPTCHA_SITE_KEY, body?.effectiveSiteKey)
+        // A body with no `captcha_key` is not a challenge, whatever else it carries.
+        assertNull(CaptchaErrorBody.createFromString("""{"captcha_service":"recaptcha"}"""))
         assertEquals(CaptchaService.RECAPTCHA, CaptchaService.fromWireName("reCAPTCHA"))
-        assertNull(CaptchaService.fromWireName("turnstile"))
+        assertEquals(CaptchaService.TURNSTILE, CaptchaService.fromWireName("turnstile"))
+        assertNull(CaptchaService.fromWireName("nonesuch"))
         assertNull(CaptchaService.fromWireName(null))
     }
 

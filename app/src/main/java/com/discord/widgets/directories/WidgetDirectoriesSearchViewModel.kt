@@ -136,7 +136,7 @@ class WidgetDirectoriesSearchViewModel(
                 isLurker = false,
                 sessionId = null,
                 directoryChannelId = directoryChannelId,
-                body = RestAPIParams.InviteCode(null, null),
+                body = RestAPIParams.InviteCode(),
                 context = contextPropertiesOf("source" to DIRECTORY_JOIN_GUILD_SOURCE),
             )
             ?.restSubscribeOn()

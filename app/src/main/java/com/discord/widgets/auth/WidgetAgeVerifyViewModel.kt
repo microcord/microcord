@@ -79,12 +79,6 @@ class WidgetAgeVerifyViewModel(
                         errorStringId = R.string.age_gate_failed_to_update_birthday,
                     ),
                 )
-                is AuthResult.CaptchaRequired -> updateViewState(
-                    requireViewState().copy(
-                        isSubmitting = false,
-                        errorStringId = R.string.age_gate_failed_to_update_birthday,
-                    ),
-                )
             }
         }
     }

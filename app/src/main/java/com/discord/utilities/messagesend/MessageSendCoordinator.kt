@@ -14,7 +14,7 @@ import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StorePendingReplies
 import com.discord.utilities.attachments.UploadAttachment
-import com.discord.utilities.captcha.CaptchaHelper
+import com.discord.utilities.captcha.CaptchaSolution
 import com.discord.utilities.rest.FileUpload
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rest.SendUtils
@@ -63,7 +63,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
         val systemDm: Boolean = false,
         val allowedMentions: RestAPIParams.Message.AllowedMentions? = null,
         val reply: StorePendingReplies.PendingReply? = null,
-        val captcha: CaptchaHelper.CaptchaPayload? = null,
+        val captcha: CaptchaSolution? = null,
         val attachments: List<UploadAttachment>? = null,
         /**
          * Stickers to send with the message.
@@ -176,7 +176,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
             type = TYPE_SENDING,
             messageReference = reference?.let { MessageReference(it.guildId, input.channelId, it.messageId) },
             allowedMentions = allowedMentionsFor(input),
-            captchaPayload = input.captcha,
+            captchaSolution = input.captcha,
             stickers = input.stickers,
             hasLocalUploads = !input.attachments.isNullOrEmpty(),
             localAttachments = input.attachments?.map(UploadAttachment::toLocalAttachment),
@@ -226,12 +226,12 @@ class MessageSendCoordinator @JvmOverloads constructor(
     }
 
     /** Re-sends a previously failed request, optionally attaching a freshly solved captcha. */
-    fun retry(requestId: String, captcha: CaptchaHelper.CaptchaPayload? = null): Boolean {
+    fun retry(requestId: String, captcha: CaptchaSolution? = null): Boolean {
         val operation = operations[requestId] ?: return false
         if (operation.isEdit) return false
         operation.optimistic = operation.optimistic.copy(
             type = TYPE_SENDING,
-            captchaPayload = captcha ?: operation.optimistic.captchaPayload,
+            captchaSolution = captcha ?: operation.optimistic.captchaSolution,
             numRetries = (operation.optimistic.numRetries ?: 0) + 1,
             lastManualAttemptTimestamp = now(),
         )

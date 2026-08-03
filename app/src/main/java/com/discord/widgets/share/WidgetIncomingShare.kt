@@ -320,16 +320,12 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
         result: MessageResult.CaptchaRequired,
     ) {
         setSending(false)
-        WidgetCaptchaBottomSheet.registerForResult(this, requestId) { _, payload ->
+        val challenge = result.challenge ?: return
+        WidgetCaptchaBottomSheet.show(parentFragmentManager, requestId, challenge) { solution ->
+            if (solution == null) return@show
             setSending(true)
-            if (!coordinator.retry(requestId, payload)) showError(IllegalStateException("Message retry unavailable"))
+            if (!coordinator.retry(requestId, solution)) showError(IllegalStateException("Message retry unavailable"))
         }
-        WidgetCaptchaBottomSheet.show(
-            parentFragmentManager,
-            requestId,
-            WidgetCaptchaBottomSheet.errorBodyOf(result.error),
-            onCaptchaAttemptFailed = { setSending(false) },
-        )
     }
 
     private fun showSendFailure(result: MessageResult) {

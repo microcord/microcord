@@ -55,12 +55,10 @@ class MessageRestContractTest {
                 roles = listOf(5),
                 repliedUser = false,
             ),
-            captchaKey = "captcha",
-            captchaRqtoken = "rqtoken",
             enforceNonce = true,
         )
         enqueueMessage()
-        api.sendMessage(42, send).toBlocking().single()
+        api.sendMessage(42, send, null).toBlocking().single()
 
         val sent = server.takeRequest()
         assertEquals("POST", sent.method)
@@ -69,8 +67,6 @@ class MessageRestContractTest {
         assertEquals("hello", json["content"].asString)
         assertEquals(9L, json["application_id"].asLong)
         assertEquals(1, json["activity"].asJsonObject["type"].asInt)
-        assertEquals("captcha", json["captcha_key"].asString)
-        assertEquals("rqtoken", json["captcha_rqtoken"].asString)
         assertEquals(3L, json["message_reference"].asJsonObject["message_id"].asLong)
         assertFalse(json["allowed_mentions"].asJsonObject["replied_user"].asBoolean)
         assertFalse(json.has("enforce_nonce"))
@@ -123,6 +119,7 @@ class MessageRestContractTest {
             42,
             PayloadJSON(RestAPIParams.Message(content = "with file", nonce = "n")),
             arrayOf(file),
+            null,
         ).toBlocking().single()
 
         val request = server.takeRequest()

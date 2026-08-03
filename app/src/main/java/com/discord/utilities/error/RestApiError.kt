@@ -3,6 +3,8 @@ package com.discord.utilities.error
 import android.content.Context
 import android.widget.Toast
 import com.discord.R
+import com.discord.utilities.captcha.CaptchaCancellationException
+import com.discord.utilities.captcha.CaptchaErrorBody
 import com.discord.utilities.captcha.CaptchaHelper
 import com.google.gson.Gson
 import com.google.gson.JsonElement
@@ -60,12 +62,8 @@ class RestApiError private constructor(
     val global: Boolean,
     val messages: Map<String, List<String>>,
     val requestUrl: String?,
-    val captchaSitekey: String?,
-    val captchaRqtoken: String?,
-    /** hCaptcha enterprise `rqdata` blob, passed through to the challenge unchanged. */
-    val captchaRqdata: String?,
-    /** Raw `captcha_service` name; resolved by `CaptchaService.fromWireName`. */
-    val captchaService: String?,
+    /** Set only when `CaptchaInterceptor` did not resolve the challenge itself. */
+    val captchaChallenge: CaptchaErrorBody?,
     val cause: Throwable,
     val metadata: Map<String, String>? = null,
 ) {
@@ -85,6 +83,7 @@ class RestApiError private constructor(
         SSL,
         TIMEOUT,
         CAPTCHA_KNOWN_FAILURE,
+        CAPTCHA_CANCELLED,
         IMAGE_NOT_FOUND,
         AUTOMOD_MESSAGE_BLOCKED,
         OTHER,
@@ -109,9 +108,7 @@ class RestApiError private constructor(
 
     /** True when the API asked the client to solve a captcha before retrying. */
     val isCaptchaRequired: Boolean
-        get() = captchaSitekey != null ||
-            CaptchaHelper.CAPTCHA_KEY in messages ||
-            CAPTCHA_RQTOKEN_KEY in messages
+        get() = captchaChallenge != null
 
     /**
      * Reference `Error.Response.getMessageToast`: prefer the API's own message, then the first
@@ -138,7 +135,9 @@ class RestApiError private constructor(
         Type.NETWORK -> context.getString(R.string.network_error_connection)
         Type.SSL -> context.getString(R.string.network_error_ssl)
         Type.TIMEOUT -> context.getString(R.string.timeout_error)
-        Type.CAPTCHA_KNOWN_FAILURE -> context.getString(R.string.captcha_failed)
+        Type.CAPTCHA_KNOWN_FAILURE,
+        Type.CAPTCHA_CANCELLED,
+        -> context.getString(R.string.captcha_failed)
         Type.DISCORD_REQUEST_RESOURCE_NOT_FOUND,
         Type.IMAGE_NOT_FOUND,
         Type.AUTOMOD_MESSAGE_BLOCKED,
@@ -157,8 +156,6 @@ class RestApiError private constructor(
         "messages=${messages.mapValues { (_, values) -> values.map(::redact) }}, requestUrl=${safeUrl(requestUrl)})"
 
     companion object {
-        const val CAPTCHA_RQTOKEN_KEY = "captcha_rqtoken"
-
         /**
          * Process-wide sink for failures nobody handled, installed once during application startup.
          * Mirrors the reference `Error.init(Action3<String, Throwable, Map<String, String>>)`.
@@ -253,10 +250,7 @@ class RestApiError private constructor(
                 json?.get("global")?.takeUnless(JsonElement::isJsonNull)?.asBoolean == true,
                 messages,
                 requestUrl,
-                json?.get("captcha_sitekey")?.takeUnless(JsonElement::isJsonNull)?.asString,
-                json?.get(CAPTCHA_RQTOKEN_KEY)?.takeUnless(JsonElement::isJsonNull)?.asString,
-                json?.get("captcha_rqdata")?.takeUnless(JsonElement::isJsonNull)?.asString,
-                json?.get("captcha_service")?.takeUnless(JsonElement::isJsonNull)?.asString,
+                if (status == 400) CaptchaErrorBody.createFromString(body) else null,
                 throwable,
                 metadata = if (type == Type.DISCORD_REQUEST_ERROR_UNKNOWN) {
                     metadataOf(requestUrl, status, contentType, response?.raw()?.header("CF-Ray"))
@@ -269,6 +263,8 @@ class RestApiError private constructor(
         private fun nonHttp(throwable: Throwable): RestApiError {
             val type = when {
                 throwable is CaptchaHelper.Failure -> Type.CAPTCHA_KNOWN_FAILURE
+                // Before the IOException arm: it is one, but it is a user decision, not a fault.
+                throwable is CaptchaCancellationException -> Type.CAPTCHA_CANCELLED
                 throwable is AppCancellationException -> Type.OTHER
                 throwable is SSLException -> Type.SSL
                 throwable is UnknownHostException -> Type.NETWORK
@@ -278,8 +274,13 @@ class RestApiError private constructor(
             }
             return RestApiError(
                 type, null, 0, throwable.message, null, false, emptyMap(),
-                null, null, null, null, null, throwable,
-            )
+                null, null, throwable,
+            ).apply {
+                if (type == Type.CAPTCHA_CANCELLED) {
+                    showErrorToasts = false
+                    shouldLog = false
+                }
+            }
         }
 
         /**

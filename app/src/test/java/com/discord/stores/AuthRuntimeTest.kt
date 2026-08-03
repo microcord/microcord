@@ -90,8 +90,8 @@ class AuthRuntimeTest {
             val api = RestAPIBuilder(server.url("/api/").toString(), CookieJar.NO_COOKIES)
                 .build(RestAPIInterface::class.java)
 
-            api.postAuthLogin(RestAPIParams.AuthLogin("login", "password", null, null, false, null)).toBlocking().single()
-            api.postAuthRegister(RestAPIParams.AuthRegister("fingerprint", "user", "email", null, "password", null, null, null, null, false, null)).toBlocking().single()
+            api.postAuthLogin(RestAPIParams.AuthLogin("login", "password", false, null)).toBlocking().single()
+            api.postAuthRegister(RestAPIParams.AuthRegister("fingerprint", "user", "email", null, "password", null, null, false, null)).toBlocking().single()
             api.postMFACode(RestAPIParams.MFALogin("ticket", "code")).toBlocking().single()
             api.phoneVerificationsVerify(RestAPIParams.VerificationCode("phone", "code")).toBlocking().single()
             api.phoneVerificationsResend(RestAPIParams.VerificationCodeResend("phone")).toList().toBlocking().single()

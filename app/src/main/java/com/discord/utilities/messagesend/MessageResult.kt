@@ -1,6 +1,7 @@
 package com.discord.utilities.messagesend
 
 import com.discord.models.message.Message
+import com.discord.utilities.captcha.CaptchaErrorBody
 import com.discord.utilities.error.RestApiError
 
 /**
@@ -13,8 +14,8 @@ import com.discord.utilities.error.RestApiError
  * - [Success] carries the created API message, which the store uses to replace the optimistic local
  *   message and to feed the slow-mode cooldown tracker.
  * - [CaptchaRequired] carries the channel and nonce so a solved challenge can re-send *that*
- *   message (`resendMessageWithCaptcha(channelId, nonce, payload)`), plus the [RestApiError] the
- *   captcha sheet needs for its site key and rqdata.
+ *   message (`resendMessageWithCaptcha(channelId, nonce, solution)`), plus the [RestApiError] whose
+ *   challenge body the captcha prompt needs.
  * - [AutoModBlock] carries the blocked message so the AutoMod notice row can be rendered in place.
  *
  * [RateLimited] and [NetworkFailure] are intercepted by [MessageQueue] itself and retried; they only
@@ -45,11 +46,7 @@ sealed class MessageResult {
         val channelId: Long,
         val nonce: String?,
     ) : MessageResult() {
-        /** hCaptcha site key extracted from the error body, or null if the API did not send one. */
-        val siteKey: String? get() = error.captchaSitekey
-
-        /** Request token that must accompany the solved captcha token. */
-        val rqtoken: String? get() = error.captchaRqtoken
+        val challenge: CaptchaErrorBody? get() = error.captchaChallenge
     }
 
     /**

@@ -64,8 +64,6 @@ object RestAPIParams {
     data class AuthLogin(
         val login: String,
         val password: String,
-        val captchaKey: String?,
-        val captchaRqtoken: String?,
         val undelete: Boolean?,
         val loginSource: String?,
     ) {
@@ -82,8 +80,6 @@ object RestAPIParams {
         val email: String?,
         val phoneToken: String?,
         val password: String,
-        val captchaKey: String?,
-        val captchaRqtoken: String?,
         val invite: String?,
         val guildTemplateCode: String?,
         val consent: Boolean,
@@ -94,8 +90,6 @@ object RestAPIParams {
 
     class AuthRegisterPhone(
         val phone: String,
-        val captchaKey: String?,
-        val captchaRqtoken: String?,
     ) {
         override fun toString(): String = "AuthRegisterPhone(<redacted>)"
     }
@@ -106,6 +100,7 @@ object RestAPIParams {
 
     class BanGuildMember(val deleteMessageDays: Int? = null)
 
+    /** Not a challenge retry: here the solved key is the request's actual payload. */
     class CaptchaCode(
         val captchaKey: String?,
         val captchaRqtoken: String?,
@@ -409,8 +404,6 @@ object RestAPIParams {
 
     data class ForgotPassword(
         val login: String,
-        val captchaKey: String?,
-        val captchaRqtoken: String?,
     ) {
         override fun toString(): String = "ForgotPassword(<redacted>)"
     }
@@ -481,12 +474,8 @@ object RestAPIParams {
         val regenerate: String?,
     )
 
-    class InviteCode(
-        val captchaKey: String?,
-        val captchaRqtoken: String?,
-    ) {
-        override fun toString(): String = "InviteCode(<redacted>)"
-    }
+    /** Empty, but still required: the endpoints want a JSON object and Retrofit wants a type. */
+    class InviteCode
 
     data class InvoicePreviewBody(
         val subscriptionId: String,
@@ -516,8 +505,6 @@ object RestAPIParams {
         val stickerIds: List<Long>? = null,
         val messageReference: MessageReference? = null,
         val allowedMentions: AllowedMentions? = null,
-        val captchaKey: String? = null,
-        val captchaRqtoken: String? = null,
         // ponytail: remove with StoreStream's legacy upload call site; 126.21 never sends this field.
         @Transient
         val enforceNonce: Boolean? = null,
@@ -600,8 +587,6 @@ object RestAPIParams {
     class Phone(
         val phone: String?,
         val source: String?,
-        val captchaKey: String?,
-        val captchaRqtoken: String?,
     ) {
         override fun toString(): String = "Phone(source=$source, <redacted>)"
     }
@@ -887,19 +872,13 @@ object RestAPIParams {
     data class UserRelationship(
         val type: Int? = null,
         val friendToken: String? = null,
-        val captchaKey: String? = null,
-        val captchaRqtoken: String? = null,
     ) {
         override fun toString() = "UserRelationship(type=$type, credentials=<redacted>)"
 
         data class Add(
             val username: String,
             val discriminator: Int,
-            val captchaKey: String? = null,
-            val captchaRqtoken: String? = null,
-        ) {
-            override fun toString() = "Add(username=$username, discriminator=$discriminator, captcha=<redacted>)"
-        }
+        )
     }
 
     /**

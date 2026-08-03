@@ -29,11 +29,6 @@ class ContactSyncPermissionsSheet : AppBottomSheet() {
             mode = WidgetContactSync.getContactSyncModeFromIntent(requireAppActivity()),
             allowPhone = false,
             allowEmail = false,
-            captchaLauncher = {
-                // Nothing on this sheet submits a phone number, so a captcha here means the shared
-                // view model was driven from somewhere unexpected.
-                AppLog.e("Invalid CAPTCHA: We shouldn't be interacting with CAPTCHA on this screen.")
-            },
         )
     }
 

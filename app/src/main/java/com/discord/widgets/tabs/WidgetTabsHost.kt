@@ -305,8 +305,7 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
     private fun installCrossScreenNavigation() {
         // `WidgetFriendsList` owns its own navigation now: `FriendsListViewModel` drives it, the
         // toolbar's add-friend item goes through `WidgetFriendsAdd.show` (which also emits the
-        // "Add Friend Modal" analytics event), rows open `WidgetUserSheet` directly, and
-        // `WidgetFriendsAddById` registers its own `WidgetCaptcha.registerForResult` launcher.
+        // "Add Friend Modal" analytics event), and rows open `WidgetUserSheet` directly.
         WidgetUserStatusSheet.onCustomStatus = {
             withActiveChildManager { manager ->
                 manager.commit {
