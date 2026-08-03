@@ -8,6 +8,7 @@ object MessageActions {
     enum class Action {
         REPLY, EDIT, DELETE, COPY, PIN, UNPIN, ADD_REACTION, RETRY, CANCEL,
         PROFILE, MANAGE_REACTIONS, REMOVE_ALL_REACTIONS, MARK_UNREAD, COPY_ID, REPORT,
+        FORWARD,
     }
 
     data class Availability(val visible: Boolean, val enabled: Boolean = visible)
@@ -31,6 +32,7 @@ object MessageActions {
         val hasReactions: Boolean = false,
         val isDeveloper: Boolean = false,
         val isFailed: Boolean = false,
+        val canForward: Boolean = false,
     ) : Serializable
 
     fun evaluate(input: Input): Map<Action, Availability> {
@@ -61,6 +63,7 @@ object MessageActions {
             Action.MARK_UNREAD to Availability(!input.isFailed && input.canMarkUnread),
             Action.COPY_ID to Availability(input.isDeveloper && remote),
             Action.REPORT to Availability(input.authorId != null && !own),
+            Action.FORWARD to Availability(input.canForward),
         )
     }
 

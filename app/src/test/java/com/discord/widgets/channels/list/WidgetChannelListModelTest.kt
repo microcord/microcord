@@ -219,9 +219,14 @@ class WidgetChannelListModelTest {
         val nameplate = Nameplate("legacy", 9, "plate", "sky")
         val payload = ModelPayload().apply {
             me = com.discord.api.user.User(1, "me")
-            privateChannels = listOf(channel(5, Channel.DM, recipientIds = listOf(7)))
+            privateChannels = listOf(channel(5, Channel.DM, name = null, recipientIds = listOf(7)))
             this.users = listOf(
-                com.discord.api.user.User(7, "recipient", collectibles = Collectibles(nameplate)),
+                com.discord.api.user.User(
+                    7,
+                    "recipient",
+                    collectibles = Collectibles(nameplate),
+                    globalName = "Recipient Display",
+                ),
             )
         }
         dispatcher.schedule {
@@ -242,6 +247,7 @@ class WidgetChannelListModelTest {
 
         val row = model.items.filterIsInstance<ChannelListItemPrivate>().single()
         assertEquals(nameplate, row.nameplate)
+        assertEquals("Recipient Display", row.displayName)
         assertEquals(
             "https://cdn.discordapp.com/media/v1/collectibles-shop/9/static",
             row.nameplate?.staticImageUrl(),
@@ -362,7 +368,7 @@ class WidgetChannelListModelTest {
         type: Int,
         position: Int = 0,
         parentId: Long = 0,
-        name: String = "channel-$id",
+        name: String? = "channel-$id",
         lastMessageId: Long = 0,
         recipients: List<com.discord.api.user.User>? = null,
         recipientIds: List<Long>? = null,

@@ -5,7 +5,9 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.ChannelRecipient
 import com.discord.api.commands.ApplicationCommandAutocompleteResult
 import com.discord.api.commands.GuildApplicationCommands
+import com.discord.api.commands.GuildApplicationCommandIndexUpdate
 import com.discord.api.embeddedactivities.EmbeddedActivityInboundUpdate
+import com.discord.api.embeddedactivities.EmbeddedActivityInstance
 import com.discord.api.emoji.GuildEmojisUpdate
 import com.discord.api.forum.ForumUnreads
 import com.discord.api.friendsuggestions.FriendSuggestion
@@ -174,6 +176,7 @@ class StoreGatewayConnection(
     val guildEmojisUpdate = behavior<GuildEmojisUpdate>()
     val guildStickersUpdate = behavior<GuildStickersUpdate>()
     val guildApplicationCommands = behavior<GuildApplicationCommands>()
+    val guildApplicationCommandIndexUpdate = behavior<GuildApplicationCommandIndexUpdate>()
     val applicationCommandAutocompleteResult = behavior<ApplicationCommandAutocompleteResult>()
 
     /** One-shot moderation events: replaying them to a late subscriber would re-apply the action. */
@@ -254,6 +257,7 @@ class StoreGatewayConnection(
     val interactionFailure = behavior<InteractionStateUpdate>()
     val interactionModalCreate = behavior<InteractionModalCreate>()
     val embeddedActivityInboundUpdate = behavior<EmbeddedActivityInboundUpdate>()
+    val embeddedActivityUpdateV2 = behavior<EmbeddedActivityInstance>()
 
     fun getCoroutineDispatcher(): ExecutorCoroutineDispatcher = coroutineDispatcher
 
@@ -488,6 +492,7 @@ class StoreGatewayConnection(
             "GUILD_STICKERS_UPDATE" -> guildStickersUpdate.emit(data)
             "GUILD_INTEGRATIONS_UPDATE" -> guildIntegrationsUpdate.emit(data)
             "GUILD_APPLICATION_COMMANDS_UPDATE" -> guildApplicationCommands.emit(data)
+            "GUILD_APPLICATION_COMMAND_INDEX_UPDATE" -> guildApplicationCommandIndexUpdate.emit(data)
             "APPLICATION_COMMAND_AUTOCOMPLETE_RESPONSE" -> applicationCommandAutocompleteResult.emit(data)
 
             // Guild membership. GUILD_MEMBER_UPDATE shares the add subject: the payload is a whole
@@ -559,6 +564,7 @@ class StoreGatewayConnection(
             "INTERACTION_FAILURE" -> interactionFailure.emit(data)
             "INTERACTION_MODAL_CREATE" -> interactionModalCreate.emit(data)
             "EMBEDDED_ACTIVITY_UPDATE" -> embeddedActivityInboundUpdate.emit(data)
+            "EMBEDDED_ACTIVITY_UPDATE_V2" -> embeddedActivityUpdateV2.emit(data)
         }
     }
 

@@ -72,6 +72,21 @@ class OAuth2AuthorizeTest {
     }
 
     @Test
+    fun `a modern application install may use its configured scopes`() {
+        val request = parse("client_id" to "1", "integration_type" to "1")
+
+        assertNull(request.scope)
+        assertEquals(1, request.integrationType)
+    }
+
+    @Test
+    fun `an invalid integration type cannot bypass legacy scope validation`() {
+        val failure = runCatching { parse("client_id" to "1", "integration_type" to "2") }.exceptionOrNull()
+
+        assertEquals("integration_type", failure?.message)
+    }
+
+    @Test
     fun `bot and webhook grants are refused in-app`() {
         assertTrue(parse("client_id" to "1", "scope" to "bot").isUnsupported)
         assertTrue(parse("client_id" to "1", "scope" to "webhook.incoming").isUnsupported)

@@ -1,0 +1,286 @@
+package com.discord.widgets.chat.input.applauncher
+
+import com.discord.api.applicationdirectory.ApplicationDirectoryApplication
+import com.discord.api.applicationdirectory.ApplicationDirectorySearchResult
+import com.discord.models.commands.Application
+import com.discord.models.commands.ApplicationCommand
+
+enum class AppLauncherRoute(val routeName: String) {
+    HOME("home"),
+    APPLICATION_VIEW("application_view"),
+    COMMAND_VIEW("command_view"),
+    APP_LIST_VIEW("app_list_view"),
+}
+
+enum class AppLauncherEntrypoint { NONE, TEXT, VOICE }
+
+enum class AppLauncherCloseReason { DISMISSED, COMMAND, ACTIVITY }
+
+enum class AppLauncherEmptyStateType {
+    HOME_EMPTY,
+    SEARCH_EMPTY,
+    HOME_NO_PERMISSIONS,
+    COMMAND_NO_PERMISSIONS,
+    COMMAND_NOT_FOUND,
+}
+
+enum class AppLauncherSearchResultType(val value: Int) {
+    APPLICATION(1),
+    ACTIVITY_APPLICATION(2),
+    CONNECTION(3),
+}
+
+enum class AppLauncherSectionName(val value: String) {
+    SEARCH("search"),
+    RECENT("recent"),
+    INSTALLED("installed"),
+    ACTIVITIES("activities"),
+    RECENT_APPS("recent_apps"),
+    RECENT_COMMANDS("recent_commands"),
+    NEW_TO_APPS("new_to_apps"),
+    APPS_IN_THIS_SERVER("apps_in_this_server"),
+}
+
+data class AppLauncherApplication(
+    val id: Long,
+    val name: String,
+    val description: String,
+    val icon: String?,
+    val directoryApplication: ApplicationDirectoryApplication? = null,
+    val commandApplication: Application? = null,
+    val searchResultType: AppLauncherSearchResultType = AppLauncherSearchResultType.APPLICATION,
+    val promoted: Boolean = false,
+)
+
+sealed interface AppLauncherRow {
+    val key: String
+
+    data class Header(
+        val title: String,
+        val section: AppLauncherSectionName,
+    ) : AppLauncherRow {
+        override val key = "header:${section.value}"
+    }
+
+    data class ApplicationRow(
+        val application: AppLauncherApplication,
+        val first: Boolean = false,
+        val last: Boolean = false,
+    ) : AppLauncherRow {
+        override val key = "app:${application.id}"
+    }
+
+    data class ActivityPair(
+        val first: AppLauncherApplication,
+        val second: AppLauncherApplication?,
+    ) : AppLauncherRow {
+        override val key = "activity:${first.id}:${second?.id ?: 0}"
+    }
+
+    data class Banner(
+        val application: AppLauncherApplication,
+        val interactive: Boolean = true,
+    ) : AppLauncherRow {
+        override val key = "banner:${application.id}"
+    }
+
+    data class CommandRow(
+        val command: ApplicationCommand,
+        val application: Application?,
+    ) : AppLauncherRow {
+        override val key = "command:${command.id}"
+    }
+
+    data class ViewAll(
+        val title: String,
+        val section: AppLauncherSectionName,
+        val applications: List<AppLauncherApplication> = emptyList(),
+        val commands: List<ApplicationCommand> = emptyList(),
+    ) : AppLauncherRow {
+        override val key = "view-all:${section.value}"
+    }
+
+    data class Empty(val type: AppLauncherEmptyStateType) : AppLauncherRow {
+        override val key = "empty:$type"
+    }
+
+    data object Loading : AppLauncherRow {
+        override val key = "loading"
+    }
+}
+
+data class AppLauncherViewState(
+    val route: AppLauncherRoute = AppLauncherRoute.HOME,
+    val query: String = "",
+    val rows: List<AppLauncherRow> = listOf(AppLauncherRow.Loading),
+    val selectedApplication: AppLauncherApplication? = null,
+    val selectedCommand: ApplicationCommand? = null,
+    val title: String = "",
+    val searchPinnedDivider: Boolean = false,
+)
+
+internal object AppLauncherRows {
+    const val COLLAPSED_LIST_ITEM_MAX = 3
+
+    fun home(
+        entrypoint: AppLauncherEntrypoint,
+        applications: List<Application>,
+        frecentCommands: List<ApplicationCommand>,
+        directoryResults: List<ApplicationDirectorySearchResult>,
+        loading: Boolean,
+        hasPermission: Boolean,
+    ): List<AppLauncherRow> {
+        val rows = mutableListOf<AppLauncherRow>()
+        if (frecentCommands.isNotEmpty()) {
+            rows += commandSection("Recent commands", AppLauncherSectionName.RECENT_COMMANDS, frecentCommands, applications)
+        }
+
+        val available = applications.filterNot(Application::builtIn).map(::fromCommandApplication)
+        val installed = available.filter { it.commandApplication?.installationTypes?.contains(1) == true }
+        if (installed.isNotEmpty()) {
+            rows += applicationSection("Installed", AppLauncherSectionName.INSTALLED, installed)
+        }
+        if (available.isNotEmpty()) {
+            rows += applicationSection(
+                "Apps in this server",
+                AppLauncherSectionName.APPS_IN_THIS_SERVER,
+                available,
+            )
+        }
+
+        val directory = directoryResults.map(::fromDirectoryResult)
+        val activities = directory.filter { it.searchResultType == AppLauncherSearchResultType.ACTIVITY_APPLICATION }
+        if (activities.isNotEmpty()) {
+            rows += AppLauncherRow.Header("Activities", AppLauncherSectionName.ACTIVITIES)
+            rows += activities.chunked(2).map { AppLauncherRow.ActivityPair(it[0], it.getOrNull(1)) }
+        }
+        if (entrypoint == AppLauncherEntrypoint.TEXT) {
+            val recommendations = directory.filterNot { it.searchResultType == AppLauncherSearchResultType.ACTIVITY_APPLICATION }
+            if (recommendations.isNotEmpty()) {
+                rows += AppLauncherRow.Header("Recommended", AppLauncherSectionName.NEW_TO_APPS)
+                rows += AppLauncherRow.Banner(recommendations.first())
+                rows += applicationSectionRows(AppLauncherSectionName.NEW_TO_APPS, recommendations.drop(1))
+            }
+        }
+
+        return when {
+            rows.isNotEmpty() -> rows
+            loading -> listOf(AppLauncherRow.Loading)
+            !hasPermission -> listOf(AppLauncherRow.Empty(AppLauncherEmptyStateType.HOME_NO_PERMISSIONS))
+            else -> listOf(AppLauncherRow.Empty(AppLauncherEmptyStateType.HOME_EMPTY))
+        }
+    }
+
+    fun search(
+        query: String,
+        commands: List<ApplicationCommand>,
+        applications: List<Application>,
+        directoryResults: List<ApplicationDirectorySearchResult>,
+        loading: Boolean,
+    ): List<AppLauncherRow> {
+        val rows = mutableListOf<AppLauncherRow>()
+        if (commands.isNotEmpty()) {
+            rows += commandSection("Commands", AppLauncherSectionName.SEARCH, commands, applications, collapsed = false)
+        }
+        val local = applications.filterNot(Application::builtIn)
+            .filter { it.name.contains(query, ignoreCase = true) }
+            .map(::fromCommandApplication)
+        val localIds = local.mapTo(HashSet()) { it.id }
+        val global = directoryResults
+            .filterNot { it.data.id in localIds }
+            .map(::fromDirectoryResult)
+        val applicationResults = local + global
+        if (applicationResults.isNotEmpty()) {
+            rows += AppLauncherRow.Header("Apps", AppLauncherSectionName.SEARCH)
+            rows += applicationResults.mapIndexed { index, app ->
+                AppLauncherRow.ApplicationRow(app, index == 0, index == applicationResults.lastIndex)
+            }
+        }
+        return when {
+            rows.isNotEmpty() -> rows
+            loading -> listOf(AppLauncherRow.Loading)
+            else -> listOf(AppLauncherRow.Empty(AppLauncherEmptyStateType.SEARCH_EMPTY))
+        }
+    }
+
+    fun application(
+        application: AppLauncherApplication,
+        commands: List<ApplicationCommand>,
+        loading: Boolean,
+    ): List<AppLauncherRow> = buildList {
+        add(AppLauncherRow.Banner(application, interactive = false))
+        if (commands.isNotEmpty()) {
+            addAll(commandSection("Commands", AppLauncherSectionName.INSTALLED, commands, listOfNotNull(application.commandApplication), collapsed = false))
+        } else if (loading) {
+            add(AppLauncherRow.Loading)
+        }
+    }
+
+    fun command(command: ApplicationCommand, application: Application?): List<AppLauncherRow> =
+        listOf(AppLauncherRow.CommandRow(command, application))
+
+    private fun applicationSection(
+        title: String,
+        section: AppLauncherSectionName,
+        applications: List<AppLauncherApplication>,
+    ): List<AppLauncherRow> = listOf(AppLauncherRow.Header(title, section)) + applicationSectionRows(section, applications)
+
+    private fun applicationSectionRows(
+        section: AppLauncherSectionName,
+        applications: List<AppLauncherApplication>,
+    ): List<AppLauncherRow> {
+        val visible = applications.take(COLLAPSED_LIST_ITEM_MAX)
+        return visible.mapIndexed { index, app ->
+            AppLauncherRow.ApplicationRow(app, index == 0, index == visible.lastIndex)
+        } + if (applications.size > visible.size) {
+            listOf(AppLauncherRow.ViewAll("View all", section, applications = applications))
+        } else {
+            emptyList()
+        }
+    }
+
+    private fun commandSection(
+        title: String,
+        section: AppLauncherSectionName,
+        commands: List<ApplicationCommand>,
+        applications: List<Application>,
+        collapsed: Boolean = true,
+    ): List<AppLauncherRow> {
+        val visible = if (collapsed) commands.take(COLLAPSED_LIST_ITEM_MAX) else commands
+        val appMap = applications.associateBy(Application::id)
+        return listOf(AppLauncherRow.Header(title, section)) +
+            visible.map { AppLauncherRow.CommandRow(it, appMap[it.applicationId]) } +
+            if (collapsed && commands.size > visible.size) {
+                listOf(AppLauncherRow.ViewAll("View all", section, commands = commands))
+            } else {
+                emptyList()
+            }
+    }
+
+    fun fromCommandApplication(application: Application) = AppLauncherApplication(
+        application.id,
+        application.name,
+        "",
+        application.icon,
+        commandApplication = application,
+    )
+
+    fun fromDirectoryResult(result: ApplicationDirectorySearchResult): AppLauncherApplication {
+        val application = result.data
+        return AppLauncherApplication(
+            application.id,
+            application.name,
+            application.directoryEntry?.shortDescription?.ifBlank { application.description } ?: application.description,
+            application.icon,
+            directoryApplication = application,
+            searchResultType = AppLauncherSearchResultType.entries.firstOrNull { it.value == result.type }
+                ?: AppLauncherSearchResultType.APPLICATION,
+            promoted = application.flagsValue() and PROMOTED_FLAG != 0L,
+        )
+    }
+
+    private fun ApplicationDirectoryApplication.flagsValue(): Long =
+        flagsNew?.toLongOrNull() ?: flags ?: 0L
+
+    private const val PROMOTED_FLAG = 1L shl 29
+}

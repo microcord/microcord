@@ -3,22 +3,30 @@ package com.discord.widgets.chat.input.autocomplete
 import androidx.annotation.MainThread
 import androidx.annotation.VisibleForTesting
 import com.discord.app.AppViewModel
+import com.discord.api.commands.ApplicationCommandType
 import com.discord.models.commands.Application
 import com.discord.models.commands.ApplicationCommand
 import com.discord.models.commands.ApplicationCommandOption
+import com.discord.models.commands.ApplicationSubCommand
 import com.discord.stores.CommandAutocompleteState
 import com.discord.stores.StoreStream
 import com.discord.utilities.rx.ui
 import com.discord.widgets.chat.input.AutocompleteStickerItem
 import com.discord.widgets.chat.input.WidgetChatInputDiscoveryCommandsModel
 import com.discord.widgets.chat.input.autocomplete.commands.buildRemoteCommandOptionRequest
+import com.discord.widgets.chat.input.autocomplete.commands.AutocompleteCommandUtils
 import com.discord.widgets.chat.input.models.ApplicationCommandData
+import com.discord.widgets.chat.input.models.ApplicationCommandValue
+import com.discord.widgets.chat.input.models.AttachmentOptionValue
 import com.discord.widgets.chat.input.models.AutocompleteApplicationCommands
 import com.discord.widgets.chat.input.models.ChatInputMentionsMap
 import com.discord.widgets.chat.input.models.MentionToken
 import java.util.concurrent.TimeUnit
+import com.lytefast.flexinput.model.Attachment
 import rx.Observable
+import rx.Scheduler
 import rx.Subscription
+import rx.schedulers.Schedulers
 import rx.subjects.BehaviorSubject
 import rx.subjects.PublishSubject
 
@@ -52,6 +60,23 @@ class AutocompleteViewModel(
         { id, guildId, data ->
             StoreStream.getApplicationCommands().requestApplicationCommandAutocompleteData(guildId, id, data)
         },
+    private val commandIndexRequest: (Long) -> Unit = { id ->
+        StoreStream.getChannels().getChannel(id)?.let { channel ->
+            StoreStream.getApplicationCommands().requestApplicationCommandIndex(
+                channelId = channel.id,
+                guildId = channel.guildId.takeUnless { it == 0L },
+                isBotDm = channel.recipients.orEmpty().any { it.bot == true },
+            )
+        }
+    },
+    private val clearRemoteResults: () -> Unit = {
+        StoreStream.getApplicationCommands().clearAutocompleteResults()
+    },
+    private val channelGuildId: (Long) -> Long? = { id ->
+        StoreStream.getChannels().getChannel(id)?.guildId
+    },
+    private val remoteAutocompleteDelayMs: Long = REMOTE_AUTOCOMPLETE_DELAY_MS,
+    private val remoteRequestScheduler: Scheduler = Schedulers.computation(),
 ) : AppViewModel<AutocompleteViewState>(AutocompleteViewState.Hidden) {
 
     private var autocompletables: Map<LeadingIdentifier, Set<Autocompletable>> = emptyMap()
@@ -87,7 +112,7 @@ class AutocompleteViewModel(
 
     init {
         remoteRequestSubscription = remoteRequests
-            .debounce(REMOTE_AUTOCOMPLETE_DELAY_MS, TimeUnit.MILLISECONDS)
+            .debounce(remoteAutocompleteDelayMs, TimeUnit.MILLISECONDS, remoteRequestScheduler)
             .subscribe({ request ->
                 sentRemoteQuery = request.option.name to request.query
                 events.onNext(Event.RequestAutocompleteData(request.option))
@@ -127,6 +152,7 @@ class AutocompleteViewModel(
         selectedCommandState.onNext(SelectedCommandViewState.Hidden)
         commandBrowserState.onNext(null)
         if (channelId != null) {
+            commandIndexRequest(channelId)
             subscription = autocompletablesSource(channelId)
                 .ui(this)
                 .subscribe({ onAutocompletablesChanged(it) }, { /* keep the last good set */ })
@@ -225,7 +251,7 @@ class AutocompleteViewModel(
         selectedCommandOption = option
         pendingRemoteQuery = null
         sentRemoteQuery = null
-        StoreStream.getApplicationCommands().clearAutocompleteResults()
+        clearRemoteResults()
         selectedCommandState.onNext(
             SelectedCommandViewState.SelectedCommand(
                 command.command,
@@ -256,6 +282,64 @@ class AutocompleteViewModel(
 
     fun getSelectedCommandOptions(): List<ApplicationCommandOption> =
         selectedCommand?.command?.options.orEmpty()
+
+    fun buildSelectedCommandData(
+        input: CharSequence,
+        attachments: List<Attachment<*>>,
+    ): ApplicationCommandData? {
+        val selected = selectedCommand ?: return null
+        val command = selected.command
+        val attachmentMap = command.options
+            .filter { it.type == ApplicationCommandType.ATTACHMENT }
+            .zip(attachments)
+            .toMap()
+        val parsed = AutocompleteCommandUtils.parseCommandOptions(
+            input,
+            command,
+            inputMentionsMap,
+            attachmentMap,
+        )
+        val validity = AutocompleteCommandUtils.getInputValidity(
+            command,
+            parsed,
+            attachmentMap,
+            inputMentionsMap,
+        )
+        val leafValues = command.options.mapNotNull { option ->
+            val parsedValue = parsed[option]
+                ?: attachmentMap[option]?.uri?.toString()?.let(::AttachmentOptionValue)
+                ?: return@mapNotNull null
+            ApplicationCommandValue(
+                name = option.untranslatedName,
+                value = parsedValue.value,
+                type = option.type.type,
+            )
+        }
+        val root = (command as? ApplicationSubCommand)?.rootCommand ?: command
+        val values = if (command is ApplicationSubCommand) {
+            val group = command.parentGroupName?.let { groupName ->
+                root.options.firstOrNull { it.name == groupName }
+            }
+            val subcommand = (group?.options ?: root.options).firstOrNull { it.name == command.subCommandName }
+            val subcommandValue = ApplicationCommandValue(
+                name = subcommand?.untranslatedName ?: command.subCommandName,
+                type = ApplicationCommandType.SUBCOMMAND.type,
+                options = leafValues,
+            )
+            if (group == null) listOf(subcommandValue) else listOf(
+                ApplicationCommandValue(
+                    name = group.untranslatedName,
+                    type = ApplicationCommandType.SUBCOMMAND_GROUP.type,
+                    options = listOf(subcommandValue),
+                ),
+            )
+        } else {
+            leafValues
+        }
+        val valid = command.options.filter(ApplicationCommandOption::required).all { validity[it] == true } &&
+            validity.values.all { it } && attachments.size == attachmentMap.size
+        return ApplicationCommandData(selected.application ?: return null, root, values, valid)
+    }
 
     fun getCommandBrowserCommandPositions(
         discoveryCommands: WidgetChatInputDiscoveryCommandsModel,
@@ -309,7 +393,7 @@ class AutocompleteViewModel(
         val channelId = currentChannelId ?: return
         val token = currentToken ?: return
         val query = token.formattedToken
-        val key = option.name to query
+        val key = option.untranslatedName to query
         if (key == pendingRemoteQuery) return
         pendingRemoteQuery = key
         val application = selected.application ?: return
@@ -318,7 +402,7 @@ class AutocompleteViewModel(
                 option,
                 query,
                 channelId,
-                StoreStream.getChannels().getChannel(channelId)?.guildId,
+                channelGuildId(channelId),
                 buildRemoteCommandOptionRequest(
                     input,
                     application,
@@ -374,10 +458,11 @@ class AutocompleteViewModel(
             ?.takeIf(ApplicationCommandOption::autocomplete)
             ?.let { option ->
                 val query = currentToken?.formattedToken.orEmpty()
-                commandState.remoteResults[option.name]?.get(query)
+                commandState.remoteResults[option.untranslatedName]?.get(query)
             }
         val visibleRemoteState = remoteState.takeUnless {
-            pendingRemoteQuery == (selectedCommandOption?.name to currentToken?.formattedToken.orEmpty())
+            pendingRemoteQuery ==
+                (selectedCommandOption?.untranslatedName to currentToken?.formattedToken.orEmpty())
         }
         reduceRemoteOption(currentToken, selectedCommandOption, visibleRemoteState)?.let {
             updateViewState(it)
@@ -475,14 +560,21 @@ class AutocompleteViewModel(
             }
             val candidates = state.choices.mapTo(LinkedHashSet()) { choice ->
                 ApplicationCommandChoiceAutocompletable(
-                    com.discord.api.commands.CommandChoice(choice.name, choice.value),
-                    option.name,
+                    com.discord.api.commands.CommandChoice(
+                        choice.name,
+                        choice.value,
+                        nameLocalized = choice.nameLocalized,
+                    ),
+                    option.untranslatedName,
                 )
             }
-            return reduce(
-                token,
-                mapOf(LeadingIdentifier.NONE to candidates),
-                allowEmptyQuery = true,
+            return AutocompleteViewState.Autocomplete(
+                isLoading = false,
+                isError = false,
+                isAutocomplete = true,
+                autocompletables = candidates.toList(),
+                stickers = emptyList(),
+                token = token.token,
             )
         }
 

@@ -13,6 +13,7 @@ data class ChannelListItemPrivate(
     val isApplicationStreaming: Boolean,
     val muted: Boolean,
     val nameplate: Nameplate? = null,
+    val displayName: String? = null,
 ) : ChannelListItem, WidgetChannelListUnreads.UnreadItem {
     override val type: Int = ChannelListItem.TYPE_CHANNEL_PRIVATE
     override val key: String = "$type${channel.id}"

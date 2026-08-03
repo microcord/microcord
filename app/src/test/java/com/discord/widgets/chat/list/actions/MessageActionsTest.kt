@@ -39,6 +39,12 @@ class MessageActionsTest {
         assertFalse(actions.getValue(MessageActions.Action.COPY_ID).visible)
     }
 
+    @Test
+    fun forwardRowUsesThePrevalidatedForwardingPolicy() {
+        assertTrue(MessageActions.evaluate(input(canForward = true)).getValue(MessageActions.Action.FORWARD).visible)
+        assertFalse(MessageActions.evaluate(input()).getValue(MessageActions.Action.FORWARD).visible)
+    }
+
     private fun input(
         isLocal: Boolean = false,
         canResend: Boolean = false,
@@ -49,6 +55,7 @@ class MessageActionsTest {
         canMarkUnread: Boolean = false,
         hasReactions: Boolean = false,
         isDeveloper: Boolean = false,
+        canForward: Boolean = false,
     ) = MessageActions.Input(
         authorId = 2L,
         currentUserId = 1L,
@@ -66,5 +73,6 @@ class MessageActionsTest {
         canMarkUnread = canMarkUnread,
         hasReactions = hasReactions,
         isDeveloper = isDeveloper,
+        canForward = canForward,
     )
 }

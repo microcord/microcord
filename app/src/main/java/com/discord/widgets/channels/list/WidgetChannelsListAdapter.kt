@@ -892,9 +892,9 @@ class WidgetChannelsListAdapter(
             // A one-to-one DM already carries the recipient's name; anything else may need the
             // "Unnamed"/"Direct Message" fallback that getDisplayNameOrDefault supplies.
             val channelName = if (channel.isDM()) {
-                channel.getDisplayName()
+                item.displayName ?: channel.getDisplayName()
             } else {
-                channel.getDisplayNameOrDefault(name.context)
+                item.displayName ?: channel.getDisplayNameOrDefault(name.context)
             }
 
             root.setOnLongClickListenerConsumeClick { adapter.onSelectChannelOptions(channel) }

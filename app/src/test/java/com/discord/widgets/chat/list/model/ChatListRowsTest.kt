@@ -2,6 +2,7 @@ package com.discord.widgets.chat.list.model
 
 import com.discord.api.channel.Channel
 import com.discord.api.message.Message as ApiMessage
+import com.discord.api.message.MessageSnapshot
 import com.discord.api.message.attachment.MessageAttachment
 import com.discord.api.message.reaction.MessageReaction
 import com.discord.api.message.reaction.MessageReactionEmoji
@@ -9,17 +10,23 @@ import com.discord.api.permission.Permission
 import com.discord.api.user.User
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.message.Message
+import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.stores.StoreMessagesLoader
 import com.discord.widgets.chat.list.entries.AttachmentEntry
 import com.discord.widgets.chat.list.entries.ChatListEntry
+import com.discord.widgets.chat.list.entries.EmbedEntry
 import com.discord.widgets.chat.list.entries.LoadingEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
+import com.discord.widgets.chat.list.entries.ForwardedMessageEntry
 import com.discord.widgets.chat.list.entries.NewMessagesEntry
 import com.discord.widgets.chat.list.entries.ReactionsEntry
 import com.discord.widgets.chat.list.entries.SpacerEntry
 import com.discord.widgets.chat.list.entries.StartOfChatEntry
 import com.discord.widgets.chat.list.entries.StartOfPrivateChatEntry
+import com.discord.widgets.chat.list.entries.StickerEntry
 import com.discord.widgets.chat.list.entries.TimestampEntry
+import com.google.gson.FieldNamingPolicy
+import com.google.gson.GsonBuilder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -112,6 +119,49 @@ class ChatListRowsTest {
             .filterIsInstance<ReactionsEntry>().single()
         assertTrue(withoutPermission.canAddReactions)
         assertFalse(withoutPermission.canCreateReactions)
+    }
+
+    @Test fun liveShapedForwardKeepsParentHeaderAndFlattensSnapshotContentAndMedia() {
+        val gson = GsonBuilder()
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .registerDiscordApiTypeAdapters()
+            .create()
+        val api = requireNotNull(javaClass.getResourceAsStream("/fixtures/forwarded_message_live.json"))
+            .reader().use { gson.fromJson(it, ApiMessage::class.java) }
+        val forwarded = Message(api)
+        val state = ChatListRows.State(channel())
+        val rows = rows(listOf(forwarded))
+        val parent = rows.filterIsInstance<MessageEntry>().single()
+        val entry = rows
+            .filterIsInstance<ForwardedMessageEntry>().single()
+
+        assertEquals(ChatListEntry.MESSAGE, parent.type)
+        assertEquals("parent context", parent.message.content)
+        assertEquals(ForwardedMessageEntry.State.CONTENT, entry.state)
+        assertEquals("forwarded body", entry.message!!.content)
+        assertTrue(entry.rows.none { it is MessageEntry || it is ForwardedMessageEntry })
+        assertEquals(
+            listOf(AttachmentEntry::class, EmbedEntry::class, StickerEntry::class),
+            entry.rows.map { it::class },
+        )
+        assertFalse(entry.message!!.components.isNullOrEmpty())
+        assertEquals("Sanitized question", entry.message!!.poll!!.question.text)
+
+        val snapshot = api.messageSnapshots!!.single().message
+        val mediaOnly = forwarded.copy(
+            messageSnapshots = listOf(MessageSnapshot(snapshot.copy(content = null))),
+        )
+        val mediaOnlyEntry = ChatListRows.forwardedRows(state, mediaOnly).single()
+        assertTrue(mediaOnlyEntry.message!!.content.isNullOrEmpty())
+        assertTrue(mediaOnlyEntry.rows.any { it is AttachmentEntry })
+        assertTrue(mediaOnlyEntry.rows.none { it is MessageEntry })
+
+        val system = forwarded.copy(
+            messageSnapshots = listOf(MessageSnapshot(snapshot.copy(type = 7))),
+        )
+        val systemEntry = ChatListRows.forwardedRows(state, system).single()
+        assertEquals(7, systemEntry.message!!.type)
+        assertTrue(systemEntry.rows.none { it is MessageEntry })
     }
 
     /** The list is rendered by a reversed layout manager, so row 0 is the bottom of the screen. */

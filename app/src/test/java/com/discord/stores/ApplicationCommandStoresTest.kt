@@ -3,15 +3,25 @@ package com.discord.stores
 import com.discord.api.botuikit.SelectItem
 import com.discord.api.commands.ApplicationCommandAutocompleteChoice
 import com.discord.api.commands.ApplicationCommandAutocompleteResult
+import com.discord.api.commands.ApplicationCommandIndex
+import com.discord.api.commands.ApplicationIntegrationType
 import com.discord.api.commands.ApplicationCommandType
 import com.discord.api.commands.GuildApplicationCommands
 import com.discord.models.commands.ApplicationCommand
 import com.discord.models.commands.ApplicationCommandOption
+import com.discord.models.commands.hasModernPermission
+import com.discord.models.commands.isAvailableIn
 import com.discord.models.commands.Application as ModelApplication
 import com.discord.models.commands.RemoteApplicationCommand
+import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
+import com.discord.restapi.RestAPIInterface
+import com.discord.restapi.RestAPIParams
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.persister.Persister
 import java.nio.file.Files
+import java.lang.reflect.Proxy
+import com.google.gson.GsonBuilder
+import com.google.gson.FieldNamingPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -20,6 +30,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import rx.schedulers.TestScheduler
+import rx.Observable
 
 /**
  * Behavioural cover for the slash-command cluster.
@@ -244,6 +255,204 @@ class ApplicationCommandStoresTest {
         assertTrue(store.getAutocompleteOptionResults().isEmpty())
     }
 
+    @Test
+    fun modernIndexesMergeLocalizedNestedCommandsAndRejectStaleLoads() {
+        val fixture = commandsFixture()
+        val json = javaClass.classLoader!!.getResource("fixtures/application_command_index.json")!!.readText()
+        val index = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .registerDiscordApiTypeAdapters().create()
+            .fromJson(json, ApplicationCommandIndex::class.java)
+
+        fixture.dispatcher.schedule {
+            fixture.store.handleApplicationCommandIndexes(
+                generation = 1,
+                guildId = GUILD_ID,
+                isBotDm = false,
+                indexes = listOf(StoreApplicationCommands.IndexedSource(index, ApplicationIntegrationType.GUILD_INSTALL.value)),
+            )
+        }
+        fixture.scheduler.triggerActions()
+        assertTrue(fixture.store.getDiscoverCommands().commands.isEmpty())
+
+        fixture.dispatcher.schedule {
+            fixture.store.handleApplicationCommandIndexes(
+                generation = 0,
+                guildId = GUILD_ID,
+                isBotDm = false,
+                indexes = listOf(StoreApplicationCommands.IndexedSource(index, ApplicationIntegrationType.GUILD_INSTALL.value)),
+            )
+        }
+        fixture.scheduler.triggerActions()
+
+        val command = fixture.store.getDiscoverCommands().commands.first { it.applicationId == 100L }
+        assertEquals("verwaltung ressource erstellen", command.name)
+        assertEquals("manage resource create", command.untranslatedName)
+        assertEquals("suche", command.options[5].name)
+        assertEquals("query", command.options[5].untranslatedName)
+        assertEquals(7, command.options.size)
+        assertEquals(2L, command.options.last().choices?.single()?.value)
+        assertEquals(2, command.options[5].minLength)
+        assertEquals(20, command.options[5].maxLength)
+        assertTrue(command.isAvailableIn(GUILD_ID, false))
+        assertFalse(command.isAvailableIn(0L, true))
+        assertTrue(command.hasModernPermission(1L, listOf(42L), 0L))
+        assertFalse(command.hasModernPermission(1L, emptyList(), 0L))
+        assertFalse(command.hasModernPermission(1L, listOf(42L), 0L, channelId = 7L, guildId = GUILD_ID))
+    }
+
+    @Test
+    fun commandIndexFailurePublishesBuiltInsWithFailureState() {
+        val fixture = commandsFixture()
+
+        fixture.store.requestApplicationCommandIndex(7L, GUILD_ID, isBotDm = false)
+        fixture.scheduler.triggerActions()
+
+        assertTrue(fixture.store.getDiscoverCommands().loadState is LoadState.Failed)
+        assertEquals(
+            listOf("shrug", "tableflip", "unflip", "me", "spoiler"),
+            fixture.store.getDiscoverCommands().commands.map(ApplicationCommand::name),
+        )
+    }
+
+    @Test
+    fun newerRemoteAutocompleteRequestRejectsTheOlderResponse() {
+        val requests = mutableListOf<RestAPIParams.ApplicationCommand>()
+        val api = Proxy.newProxyInstance(
+            RestAPIInterface::class.java.classLoader,
+            arrayOf(RestAPIInterface::class.java),
+        ) { _, method, args ->
+            if (method.name == "sendApplicationCommand" && args?.singleOrNull() is RestAPIParams.ApplicationCommand) {
+                requests += args.single() as RestAPIParams.ApplicationCommand
+                Observable.empty<Void>()
+            } else null
+        } as RestAPIInterface
+        val fixture = commandsFixture(restApi = api)
+        fixture.dispatcher.schedule {
+            fixture.store.handleConnectionOpen(com.discord.models.domain.ModelPayload().apply {
+                sessionId = "session-fixture"
+            })
+        }
+        fixture.scheduler.triggerActions()
+        val option = apiOption("query", ApplicationCommandType.STRING).copy(autocomplete = true)
+        val command = apiCommand(90L, "search", listOf(option)).toSlashCommand()
+        fun data(value: String) = com.discord.widgets.chat.input.models.ApplicationCommandData(
+            ModelApplication(1L, "Fixture", commandCount = 1),
+            command,
+            listOf(com.discord.widgets.chat.input.models.ApplicationCommandValue("query", value, 3, focused = true)),
+        )
+
+        fixture.store.requestApplicationCommandAutocompleteData(GUILD_ID, 7L, data("old"))
+        fixture.scheduler.triggerActions()
+        fixture.store.requestApplicationCommandAutocompleteData(GUILD_ID, 7L, data("new"))
+        fixture.scheduler.triggerActions()
+
+        assertEquals(StoreApplicationCommands.TYPE_APPLICATION_COMMAND_AUTOCOMPLETE, requests[1].type)
+        assertEquals("session-fixture", requests[1].sessionId)
+        assertEquals(command.id, requests[1].data.id)
+        assertEquals(command.version, requests[1].data.version)
+        assertTrue(requests[1].data.options!!.single().focused == true)
+
+        fixture.dispatcher.schedule {
+            fixture.store.handleApplicationCommandAutocompleteResult(
+                ApplicationCommandAutocompleteResult(requests[0].nonce, listOf(choice("stale"))),
+            )
+            fixture.store.handleApplicationCommandAutocompleteResult(
+                ApplicationCommandAutocompleteResult(requests[1].nonce, listOf(choice("fresh"))),
+            )
+        }
+        fixture.scheduler.triggerActions()
+
+        val states = fixture.store.getAutocompleteOptionResults()["query"].orEmpty()
+        assertNull(states["old"])
+        assertEquals("fresh", (states["new"] as CommandAutocompleteState.Choices).choices.single().value)
+    }
+
+    @Test
+    fun autocompleteNormalizesValuesAndKeepsEmptyChoices() {
+        val requests = mutableListOf<RestAPIParams.ApplicationCommand>()
+        val api = Proxy.newProxyInstance(
+            RestAPIInterface::class.java.classLoader,
+            arrayOf(RestAPIInterface::class.java),
+        ) { _, method, args ->
+            if (method.name == "sendApplicationCommand" && args?.singleOrNull() is RestAPIParams.ApplicationCommand) {
+                requests += args.single() as RestAPIParams.ApplicationCommand
+                Observable.empty<Void>()
+            } else null
+        } as RestAPIInterface
+        val fixture = commandsFixture(restApi = api)
+        fixture.dispatcher.schedule {
+            fixture.store.handleConnectionOpen(com.discord.models.domain.ModelPayload().apply {
+                sessionId = "session-fixture"
+            })
+        }
+        fixture.scheduler.triggerActions()
+
+        fun request(name: String, type: ApplicationCommandType, value: Any) {
+            val option = apiOption(name, type).copy(autocomplete = true)
+            val command = apiCommand(name.hashCode().toLong(), "search", listOf(option)).toSlashCommand()
+            fixture.store.requestApplicationCommandAutocompleteData(
+                GUILD_ID,
+                7L,
+                com.discord.widgets.chat.input.models.ApplicationCommandData(
+                    ModelApplication(1L, "Fixture", commandCount = 1),
+                    command,
+                    listOf(com.discord.widgets.chat.input.models.ApplicationCommandValue(name, value, type.type, focused = true)),
+                ),
+            )
+            fixture.scheduler.triggerActions()
+        }
+
+        request("string", ApplicationCommandType.STRING, "one")
+        request("integer", ApplicationCommandType.INTEGER, 2L)
+        request("number", ApplicationCommandType.NUMBER, 2.5)
+        fixture.dispatcher.schedule {
+            fixture.store.handleApplicationCommandAutocompleteResult(
+                ApplicationCommandAutocompleteResult(requests[0].nonce, listOf(choice("value"))),
+            )
+            fixture.store.handleApplicationCommandAutocompleteResult(
+                ApplicationCommandAutocompleteResult(requests[1].nonce, listOf(choice(2.0))),
+            )
+            fixture.store.handleApplicationCommandAutocompleteResult(
+                ApplicationCommandAutocompleteResult(requests[2].nonce, emptyList()),
+            )
+        }
+        fixture.scheduler.triggerActions()
+
+        val states = fixture.store.getAutocompleteOptionResults()
+        assertEquals("value", (states["string"]!!["one"] as CommandAutocompleteState.Choices).choices.single().value)
+        assertEquals(2L, (states["integer"]!!["2"] as CommandAutocompleteState.Choices).choices.single().value)
+        assertTrue((states["number"]!!["2.5"] as CommandAutocompleteState.Choices).choices.isEmpty())
+    }
+
+    @Test
+    fun autocompleteWithoutSessionFailsWithoutPosting() {
+        var posts = 0
+        val api = Proxy.newProxyInstance(
+            RestAPIInterface::class.java.classLoader,
+            arrayOf(RestAPIInterface::class.java),
+        ) { _, method, _ ->
+            if (method.name == "sendApplicationCommand") posts++
+            Observable.empty<Void>()
+        } as RestAPIInterface
+        val fixture = commandsFixture(restApi = api)
+        val option = apiOption("query", ApplicationCommandType.STRING).copy(autocomplete = true)
+        val command = apiCommand(90L, "search", listOf(option)).toSlashCommand()
+
+        fixture.store.requestApplicationCommandAutocompleteData(
+            GUILD_ID,
+            7L,
+            com.discord.widgets.chat.input.models.ApplicationCommandData(
+                ModelApplication(1L, "Fixture", commandCount = 1),
+                command,
+                listOf(com.discord.widgets.chat.input.models.ApplicationCommandValue("query", "x", 3, focused = true)),
+            ),
+        )
+        fixture.scheduler.triggerActions()
+
+        assertEquals(0, posts)
+        assertEquals(CommandAutocompleteState.Failed, fixture.store.getAutocompleteOptionResults()["query"]?.get("x"))
+    }
+
     // -- StoreApplicationCommandFrecency -------------------------------------------------------
 
     /**
@@ -270,7 +479,10 @@ class ApplicationCommandStoresTest {
 
     // -- Fixtures ------------------------------------------------------------------------------
 
-    private fun commandsFixture(gatewayAccepts: Boolean = true): CommandsFixture {
+    private fun commandsFixture(
+        gatewayAccepts: Boolean = true,
+        restApi: RestAPIInterface? = null,
+    ): CommandsFixture {
         val scheduler = TestScheduler()
         val dispatcher = Dispatcher(scheduler)
         val deck = ObservationDeck()
@@ -280,7 +492,7 @@ class ApplicationCommandStoresTest {
             dispatcher = dispatcher,
             storeApplicationCommandFrecency = frecency,
             gatewayRequest = gateway,
-            restApi = { null },
+            restApi = { restApi },
             observationDeck = deck,
         )
         dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store, frecency), deck))
@@ -323,7 +535,7 @@ class ApplicationCommandStoresTest {
         fun selectItem(value: String) =
             SelectItem(label = value, value = value, emoji = null, description = null, default = false)
 
-        fun choice(value: String) = ApplicationCommandAutocompleteChoice(name = value, value = value)
+        fun choice(value: Any) = ApplicationCommandAutocompleteChoice(name = value.toString(), value = value)
 
         fun apiCommand(
             id: Long,

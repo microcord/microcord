@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="58dp"
+    android:layout_marginTop="4dp"
+    android:layout_marginEnd="16dp"
+    android:layout_marginBottom="4dp"
+    app:cardBackgroundColor="?attr/colorBackgroundSecondary"
+    app:cardCornerRadius="8dp"
+    app:cardElevation="0dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
+
+        <TextView
+            android:id="@+id/forwarded_message_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:text="@string/forwarded_message"
+            android:textColor="?attr/colorTextMuted"
+            android:textSize="12sp"
+            style="@style/UiKit.TextView.Bold" />
+
+        <ProgressBar
+            android:id="@+id/forwarded_message_loading"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            android:layout_margin="12dp"
+            android:contentDescription="@string/loading" />
+
+        <com.discord.utilities.view.text.LinkifiedTextView
+            android:id="@+id/forwarded_message_content"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="12dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="12dp"
+            android:textColor="?attr/colorTextNormal"
+            android:visibility="gone"
+            style="@style/UiKit.TextView" />
+
+        <TextView
+            android:id="@+id/forwarded_message_error"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="12dp"
+            android:textColor="?attr/colorTextMuted"
+            android:visibility="gone"
+            style="@style/UiKit.TextView" />
+
+        <LinearLayout
+            android:id="@+id/forwarded_message_rows"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <TextView
+            android:id="@+id/forwarded_message_poll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="12dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="12dp"
+            android:textColor="?attr/colorTextNormal"
+            android:visibility="gone"
+            style="@style/UiKit.TextView" />
+
+        <TextView
+            android:id="@+id/forwarded_message_source"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackground"
+            android:paddingStart="12dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="4dp"
+            android:textColor="?attr/colorTextMuted"
+            android:textSize="12sp"
+            android:visibility="gone"
+            style="@style/UiKit.TextView" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

@@ -46,6 +46,7 @@ import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
 import com.discord.widgets.chat.input.autocomplete.AutocompleteViewModel
 import com.discord.widgets.chat.input.autocomplete.ChatInputAutocompletables
 import com.discord.widgets.chat.input.autocomplete.InputAutocomplete
+import com.discord.widgets.chat.input.applauncher.WidgetAppLauncher
 import com.discord.widgets.chat.input.emoji.EmojiPickerContextType
 import com.discord.widgets.chat.input.emoji.WidgetEmojiPicker
 import com.discord.widgets.chat.input.expression.WidgetExpressionTray
@@ -129,6 +130,22 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         ChatInputAutocompletables.installDefaultEmojiSetSource(requireContext())
         viewModel = ViewModelProvider(this).get(ChatInputViewModel::class.java)
         autocompleteViewModel = ViewModelProvider(this).get(AutocompleteViewModel::class.java)
+        childFragmentManager.setFragmentResultListener(
+            WidgetAppLauncher.RESULT_REQUEST_KEY,
+            viewLifecycleOwner,
+        ) { _, result ->
+            val applicationId = result.getLong(WidgetAppLauncher.RESULT_APPLICATION_ID)
+            val commandId = result.getString(WidgetAppLauncher.RESULT_COMMAND_ID) ?: return@setFragmentResultListener
+            val store = StoreStream.getApplicationCommands()
+            val command = (store.getDiscoverCommands().commands + store.getQueryCommands() +
+                store.getFrecencyCommands(state?.channel?.guildId ?: 0L))
+                .firstOrNull { it.id == commandId && it.applicationId == applicationId }
+                ?: return@setFragmentResultListener
+            val application = store.getApplicationMap()[applicationId] ?: return@setFragmentResultListener
+            flexInputViewModel.showKeyboardAndHideExpressionTray()
+            autocomplete?.selectCommand(application, command)
+            input?.requestFocus()
+        }
 
         view.findViewById<View>(R.id.chat_input_context_cancel).apply {
             contentDescription = getString(R.string.cancel)
@@ -390,7 +407,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
      */
     private fun submit(attachments: List<Attachment<*>>): Boolean {
         val loaded = state ?: return false
-        val content = autocomplete?.getInputContent() ?: input?.text?.toString().orEmpty()
+        var content = autocomplete?.getInputContent() ?: input?.text?.toString().orEmpty()
         val pendingReply =
             (loaded.pendingReplyState as? ChatInputViewModel.ViewState.PendingReplyState.Replying)?.pendingReply
 
@@ -405,6 +422,34 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         }.getOrElse {
             Toast.makeText(requireContext(), R.string.invalid_attachments_failure, Toast.LENGTH_SHORT).show()
             return false
+        }
+        val commandData = autocomplete?.getApplicationCommandData(attachments)
+        if (commandData != null) {
+            if (!commandData.validInputs) {
+                Toast.makeText(requireContext(), R.string.command_validation_required_error, Toast.LENGTH_SHORT).show()
+                return false
+            }
+            val command = commandData.applicationCommand
+            if (command.builtIn) {
+                content = command.execute?.invoke(commandData.values.associate { it.name to it.value })
+                    ?: return false
+            } else {
+                StoreStream.getInteractions().sendApplicationCommand(
+                channelId = loaded.channelId,
+                guildId = loaded.channel.guildId.takeUnless { it == 0L },
+                version = command.version,
+                data = commandData,
+                attachments = uploads,
+                onFail = {
+                    view?.post {
+                        Toast.makeText(requireContext(), R.string.application_command_failed, Toast.LENGTH_SHORT).show()
+                    }
+                },
+                )
+                drafts.setTextChannelInput(loaded.channelId, null)
+                pendingRepliesStore?.onDeletePendingReply(loaded.channelId)
+                return true
+            }
         }
         val editing = loaded.editingMessage.takeIf { loaded.isEditing }
         val submission = editing?.let { coordinator.edit(it, content) } ?: coordinator.send(
@@ -721,6 +766,8 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
 
     private fun inputMethodManager(): InputMethodManager =
         requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+
+    internal fun currentChannelId(): Long? = state?.channelId
 
     private fun validationMessage(result: MessageResult): String = when (result) {
         is MessageResult.ValidationError -> result.message

@@ -22,9 +22,12 @@ import com.discord.app.AppViewModel
 import com.discord.app.appViewModels
 import com.discord.i18n.setI18nText
 import com.discord.restapi.RestAPIParams
+import com.discord.restapi.ApplicationAuthorizationBody
 import com.discord.stores.StoreStream
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
+import com.discord.utilities.intent.DeepLinkParser
+import com.discord.utilities.intent.LinkParseResult
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
@@ -36,6 +39,7 @@ import com.discord.utilities.view.validators.ValidationManager
 import com.discord.utilities.views.SimpleRecyclerAdapter
 import com.discord.views.OAuthPermissionViews
 import com.google.android.material.button.MaterialButton
+import java.net.URI
 import kotlin.random.Random
 import rx.Observable
 
@@ -92,7 +96,7 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
         // Backing out of an authorization must leave nothing behind: the app that sent the user
         // here is a separate task, and returning to a half-finished consent screen is confusing.
         setOnBackPressed({
-            requireActivity().finishAndRemoveTask()
+            oauth2ViewModel.completion?.let(::finish) ?: cancelFromUser()
             true
         })
 
@@ -104,6 +108,10 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
         if (activity?.isFinishing == true) return
+        oauth2ViewModel.completion?.let {
+            configureCompletionUI(it)
+            return
+        }
         if (oauth2ViewModel.oauthAuthorize.isUnsupported) {
             configureNotSupportedUI(requestUri())
             return
@@ -184,27 +192,52 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
             .ui(this)
             .appSubscribe(
                 errorClass = javaClass,
-                errorHandler = { error -> validationManager.setErrors(error.messages) },
+                errorHandler = { error ->
+                    validationManager.setErrors(error.messages)
+                    complete(CompletionResult.ERROR)
+                },
             ) { response ->
-                if (!isSafeRedirect(response.location)) {
-                    AppLog.w("Refusing an OAuth redirect with an unsupported scheme.")
-                    finishCancelled()
-                } else {
-                    var handled = true
-                    UriHandler.handle(
-                        requireContext(),
-                        response.location,
-                        preventCustomTab = true,
-                        onFailure = { handled = false },
-                    )
-                    if (handled) {
-                        appActivity?.setResult(android.app.Activity.RESULT_OK)
-                        requireActivity().finish()
-                    } else {
-                        finishCancelled()
+                when (val completion = classifyCompletion(oauth2ViewModel.oauthAuthorize, response.location)) {
+                    CompletionRoute.Internal -> complete(CompletionResult.SUCCESS)
+                    is CompletionRoute.External -> {
+                        var handled = true
+                        UriHandler.handle(
+                            requireContext(),
+                            completion.location,
+                            preventCustomTab = true,
+                            onFailure = { handled = false },
+                        )
+                        if (handled) finish(CompletionResult.EXTERNAL) else complete(CompletionResult.ERROR)
+                    }
+                    CompletionRoute.Invalid -> {
+                        AppLog.w("Refusing an invalid OAuth completion location.")
+                        complete(CompletionResult.ERROR)
                     }
                 }
             }
+    }
+
+    private fun complete(result: CompletionResult) {
+        oauth2ViewModel.completion = result
+        configureCompletionUI(result)
+    }
+
+    private fun configureCompletionUI(result: CompletionResult) {
+        val view = view ?: return
+        showOnly(R.id.oauth_authorize_completion)
+        view.findViewById<ImageView>(R.id.oauth_authorize_completion_icon).setImageResource(
+            if (result == CompletionResult.SUCCESS) R.drawable.ic_check_circle_green_24dp
+            else R.drawable.ic_close_circle_grey_24dp,
+        )
+        view.findViewById<TextView>(R.id.oauth_authorize_completion_title).setText(
+            if (result == CompletionResult.SUCCESS) R.string.authorized else R.string.oauth2_unknown_error,
+        )
+        view.findViewById<TextView>(R.id.oauth_authorize_completion_message).setText(
+            if (result == CompletionResult.SUCCESS) R.string.application_directory_install_success
+            else R.string.application_directory_install_error,
+        )
+        view.findViewById<MaterialButton>(R.id.oauth_authorize_completion_done)
+            .setOnClickListener { finish(result) }
     }
 
     private fun configureAgeNoticeUI(clientId: Long) {
@@ -258,20 +291,31 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
 
     private fun showOnly(visibleId: Int) {
         val view = view ?: return
-        listOf(R.id.oauth_authorize_content, R.id.oauth_authorize_loading, R.id.oauth_authorize_not_supported)
+        listOf(
+            R.id.oauth_authorize_content,
+            R.id.oauth_authorize_loading,
+            R.id.oauth_authorize_not_supported,
+            R.id.oauth_authorize_completion,
+        )
             .forEach { id ->
                 view.findViewById<View>(id).visibility = if (id == visibleId) View.VISIBLE else View.GONE
             }
     }
 
     private fun finishCancelled() {
-        appActivity?.setResult(android.app.Activity.RESULT_CANCELED)
-        activity?.finish()
+        finish(CompletionResult.CANCELLED)
     }
 
     private fun cancelFromUser() {
-        appActivity?.setResult(android.app.Activity.RESULT_CANCELED)
-        activity?.finishAndRemoveTask()
+        finish(CompletionResult.CANCELLED, removeTask = oauth2ViewModel.oauthAuthorize.internalReferrer?.toBoolean() != true)
+    }
+
+    private fun finish(result: CompletionResult, removeTask: Boolean = false) {
+        appActivity?.setResult(
+            if (result.isSuccess) android.app.Activity.RESULT_OK else android.app.Activity.RESULT_CANCELED,
+            Intent().putExtra(RESULT_COMPLETION, result.name),
+        )
+        if (removeTask) activity?.finishAndRemoveTask() else activity?.finish()
     }
 
     private fun randomFakeScopeText(): Int = FAKE_SCOPE_TEXTS[Random.nextInt(FAKE_SCOPE_TEXTS.size)]
@@ -280,6 +324,7 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
     class OAuth2ViewModel : AppViewModel<Unit>() {
         lateinit var oauthAuthorize: OAuth2Authorize
         var oauthGetResponse: RestAPIParams.OAuth2Authorize.ResponseGet? = null
+        var completion: CompletionResult? = null
     }
 
     /**
@@ -294,37 +339,59 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
         val responseType: String? = null,
         val redirectUrl: String? = null,
         val prompt: String = PROMPT_CONSENT,
-        val scope: String,
+        val scope: String? = null,
         val permissions: String? = null,
         val codeChallenge: String? = null,
         val codeChallengeMethod: String? = null,
+        val integrationType: Int? = null,
+        val guildId: Long? = null,
+        val disableGuildSelect: Boolean = false,
         val internalReferrer: String? = null,
     ) {
-        val scopeNames: List<String> get() = scope.split(" ").filter { it.isNotEmpty() }
+        val scopeNames: List<String> get() = scope.orEmpty().split(" ").filter { it.isNotEmpty() }
 
         /**
-         * Grants this client cannot complete: adding a bot or an incoming webhook needs a channel
-         * and permission picker that only the web/desktop consent screen has.
+         * Incoming webhooks still need a channel picker. Bot grants are supported when the
+         * application-directory flow already selected and locked an eligible guild.
          */
         val isUnsupported: Boolean
             get() = scopeNames.any {
-                it.equals(OAuthScope.Bot.scopeName, ignoreCase = true) ||
-                    it.equals(OAuthScope.WebhookIncoming.scopeName, ignoreCase = true)
+                it.equals(OAuthScope.WebhookIncoming.scopeName, ignoreCase = true) ||
+                    it.equals(OAuthScope.Bot.scopeName, ignoreCase = true) && guildId == null
             }
 
-        fun get(): Observable<RestAPIParams.OAuth2Authorize.ResponseGet> = RestAPI.api.getOauth2Authorize(
-            clientId.toString(), state, responseType, redirectUrl, prompt, scope, permissions,
-        )
+        fun get(): Observable<RestAPIParams.OAuth2Authorize.ResponseGet> =
+            RestAPI.applicationDirectoryApiOrNull?.previewAuthorization(
+                clientId.toString(), state, responseType, redirectUrl, prompt, scope, permissions,
+                codeChallenge, codeChallengeMethod, integrationType,
+            ) ?: scope?.let {
+                RestAPI.api.getOauth2Authorize(clientId.toString(), state, responseType, redirectUrl, prompt, it, permissions)
+            } ?: Observable.error(IllegalArgumentException(QUERY_PARAM_SCOPE))
 
-        fun post(): Observable<RestAPIParams.OAuth2Authorize.ResponsePost> = RestAPI.api.postOauth2Authorize(
-            clientId.toString(), state, responseType, redirectUrl, prompt, scope, permissions,
-            codeChallenge, codeChallengeMethod, mapOf("authorize" to "true"),
-        )
+        fun post(): Observable<RestAPIParams.OAuth2Authorize.ResponsePost> {
+            RestAPI.applicationDirectoryApiOrNull?.let { service ->
+                return service.authorize(
+                    clientId.toString(), state, responseType, redirectUrl, prompt, scope,
+                    codeChallenge, codeChallengeMethod,
+                    ApplicationAuthorizationBody(
+                        integrationType = integrationType,
+                        permissions = permissions,
+                        guildId = guildId,
+                    ),
+                )
+            }
+            val requiredScope = scope ?: return Observable.error(IllegalArgumentException(QUERY_PARAM_SCOPE))
+            return RestAPI.api.postOauth2Authorize(
+                clientId.toString(), state, responseType, redirectUrl, prompt, requiredScope,
+                permissions, codeChallenge, codeChallengeMethod, mapOf("authorize" to "true"),
+            )
+        }
 
         override fun toString(): String = "OAuth2Authorize(clientId=$clientId, state=$state, " +
             "responseType=$responseType, redirectUrl=$redirectUrl, prompt=$prompt, scope=$scope, " +
             "permissions=$permissions, codeChallenge=<redacted>, " +
-            "codeChallengeMethod=$codeChallengeMethod, internalReferrer=$internalReferrer)"
+            "codeChallengeMethod=$codeChallengeMethod, integrationType=$integrationType, " +
+            "guildId=$guildId, disableGuildSelect=$disableGuildSelect, internalReferrer=$internalReferrer)"
     }
 
     private class PermissionModel(val scope: OAuthScope? = null, val fakeText: Int? = null)
@@ -356,8 +423,22 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
         }
     }
 
+    enum class CompletionResult(val isSuccess: Boolean) {
+        SUCCESS(true),
+        EXTERNAL(true),
+        CANCELLED(false),
+        ERROR(false),
+    }
+
+    internal sealed interface CompletionRoute {
+        data object Internal : CompletionRoute
+        data class External(val location: String) : CompletionRoute
+        data object Invalid : CompletionRoute
+    }
+
     companion object {
         const val INTENT_PARAM_URI = "REQ_URI"
+        const val RESULT_COMPLETION = "OAUTH_COMPLETION"
 
         private const val PROMPT_CONSENT = "consent"
         private const val ROOT_ERROR_KEY = "_root"
@@ -370,6 +451,9 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
         private const val QUERY_PARAM_PERMISSIONS = "permissions"
         private const val QUERY_PARAM_CODE_CHALLENGE = "code_challenge"
         private const val QUERY_PARAM_CODE_CHALLENGE_METHOD = "code_challenge_method"
+        private const val QUERY_PARAM_INTEGRATION_TYPE = "integration_type"
+        private const val QUERY_PARAM_GUILD_ID = "guild_id"
+        private const val QUERY_PARAM_DISABLE_GUILD_SELECT = "disable_guild_select"
         private const val QUERY_INTERNAL_REFERRER = "internal_referrer"
 
         private val FAKE_SCOPE_TEXTS = intArrayOf(
@@ -386,15 +470,53 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
         /** Notice key the OAuth request queues under, so two requests never stack. */
         fun noticeName(clientId: Long): String = "OAUTH_REQUEST:$clientId"
 
-        internal fun isSafeRedirect(location: String): Boolean = UriHandler.isSafeScheme(location)
+        internal fun classifyCompletion(request: OAuth2Authorize, location: String): CompletionRoute {
+            val response = runCatching { URI(location) }.getOrNull()
+                ?: return CompletionRoute.Invalid
+            if (response.scheme == null || response.isOpaque && response.schemeSpecificPart.isNullOrBlank()) {
+                return CompletionRoute.Invalid
+            }
+
+            val redirect = request.redirectUrl?.let { runCatching { URI(it) }.getOrNull() }
+            if (redirect != null) {
+                if (!sameCallback(redirect, response) || !UriHandler.isSafeScheme(location)) {
+                    return CompletionRoute.Invalid
+                }
+                return if (DeepLinkParser.parse(location) is LinkParseResult.Internal) {
+                    CompletionRoute.Internal
+                } else {
+                    CompletionRoute.External(location)
+                }
+            }
+
+            return if (DeepLinkParser.parse(location) is LinkParseResult.Internal) {
+                CompletionRoute.Internal
+            } else {
+                CompletionRoute.Invalid
+            }
+        }
+
+        internal fun isSafeRedirect(location: String): Boolean =
+            runCatching { URI(location) }.getOrNull()?.scheme != null && UriHandler.isSafeScheme(location)
+
+        private fun sameCallback(expected: URI, actual: URI): Boolean =
+            expected.scheme.equals(actual.scheme, ignoreCase = true) &&
+                expected.host.equals(actual.host, ignoreCase = true) &&
+                expected.port == actual.port &&
+                expected.path.orEmpty() == actual.path.orEmpty() &&
+                expected.userInfo == null && actual.userInfo == null
+
+        internal fun completionResult(value: String?): CompletionResult =
+            CompletionResult.entries.firstOrNull { it.name == value } ?: CompletionResult.CANCELLED
 
         internal fun shouldAppendFakeScope(permissionCount: Int): Boolean = permissionCount > 0
 
         /**
          * Parses the request URL.
          *
-         * @throws IllegalArgumentException naming the first required parameter that is absent —
-         *   `client_id` and `scope` are the two the request cannot be built without.
+         * @throws IllegalArgumentException naming the first required parameter that is absent.
+         *   Modern application installs may omit `scope` when `integration_type` selects the
+         *   application's server-provided integration configuration.
          */
         fun parse(requestUrl: Uri): OAuth2Authorize = parse(
             requestUrl.queryParameterNames.orEmpty()
@@ -410,17 +532,29 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
          *
          * @throws IllegalArgumentException naming the first required parameter that is absent.
          */
-        fun parse(parameters: Map<String, String?>): OAuth2Authorize = OAuth2Authorize(
-            clientId = parameters.require(QUERY_PARAM_CLIENT_ID).toLong(),
-            state = parameters[QUERY_PARAM_STATE],
-            responseType = parameters[QUERY_PARAM_RESPONSE_TYPE],
-            redirectUrl = parameters[QUERY_PARAM_REDIRECT],
-            scope = parameters.require(QUERY_PARAM_SCOPE),
-            permissions = parameters[QUERY_PARAM_PERMISSIONS],
-            codeChallenge = parameters[QUERY_PARAM_CODE_CHALLENGE],
-            codeChallengeMethod = parameters[QUERY_PARAM_CODE_CHALLENGE_METHOD],
-            internalReferrer = parameters[QUERY_INTERNAL_REFERRER],
-        )
+        fun parse(parameters: Map<String, String?>): OAuth2Authorize {
+            val rawIntegrationType = parameters[QUERY_PARAM_INTEGRATION_TYPE]
+            val integrationType = rawIntegrationType?.toIntOrNull()
+            if (rawIntegrationType != null && integrationType !in setOf(0, 1)) {
+                throw IllegalArgumentException(QUERY_PARAM_INTEGRATION_TYPE)
+            }
+            val scope = parameters[QUERY_PARAM_SCOPE]?.takeIf(String::isNotBlank)
+                ?: if (integrationType == null) throw IllegalArgumentException(QUERY_PARAM_SCOPE) else null
+            return OAuth2Authorize(
+                clientId = parameters.require(QUERY_PARAM_CLIENT_ID).toLong(),
+                state = parameters[QUERY_PARAM_STATE],
+                responseType = parameters[QUERY_PARAM_RESPONSE_TYPE],
+                redirectUrl = parameters[QUERY_PARAM_REDIRECT],
+                scope = scope,
+                permissions = parameters[QUERY_PARAM_PERMISSIONS],
+                codeChallenge = parameters[QUERY_PARAM_CODE_CHALLENGE],
+                codeChallengeMethod = parameters[QUERY_PARAM_CODE_CHALLENGE_METHOD],
+                integrationType = integrationType,
+                guildId = parameters[QUERY_PARAM_GUILD_ID]?.toLongOrNull(),
+                disableGuildSelect = parameters[QUERY_PARAM_DISABLE_GUILD_SELECT].toBoolean(),
+                internalReferrer = parameters[QUERY_INTERNAL_REFERRER],
+            )
+        }
 
         private fun Map<String, String?>.require(name: String): String =
             get(name) ?: throw IllegalArgumentException(name)
@@ -445,6 +579,20 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
                 return
             }
             context.startActivity(createLaunchIntent(context, requestUri, request))
+        }
+
+        fun launch(
+            context: Context,
+            launcher: ActivityResultLauncher<Intent>,
+            requestUri: Uri,
+        ) {
+            val request = try {
+                parse(requestUri)
+            } catch (invalid: Exception) {
+                handleError(context, invalid)
+                return
+            }
+            launcher.launch(createLaunchIntent(context, requestUri, request))
         }
 
         /**

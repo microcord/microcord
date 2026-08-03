@@ -3,9 +3,13 @@ package com.discord.models.message
 import com.discord.api.application.Application
 import com.discord.api.botuikit.Component
 import com.discord.api.channel.Channel
+import com.discord.api.guildmember.GuildMember
 import com.discord.api.interaction.Interaction
 import com.discord.api.message.LocalAttachment
 import com.discord.api.message.MessageReference
+import com.discord.api.message.MessagePoll
+import com.discord.api.message.MessageResolvedData
+import com.discord.api.message.MessageSnapshot
 import com.discord.api.message.activity.MessageActivity
 import com.discord.api.message.activity.MessageActivityType
 import com.discord.api.message.allowedmentions.MessageAllowedMentions
@@ -53,6 +57,10 @@ data class Message(
     val call: MessageCall? = null,
     val hit: Boolean? = null,
     val roleSubscriptionData: RoleSubscriptionData? = null,
+    val messageSnapshots: List<MessageSnapshot>? = null,
+    val poll: MessagePoll? = null,
+    val resolved: MessageResolvedData? = null,
+    val member: GuildMember? = null,
     val hasLocalUploads: Boolean = false,
     val allowedMentions: MessageAllowedMentions? = null,
     val numRetries: Int? = null,
@@ -66,6 +74,7 @@ data class Message(
         channelId = message.channelId,
         guildId = message.guildId,
         author = message.author,
+        member = message.member,
         content = message.content,
         timestamp = message.timestamp,
         editedTimestamp = message.editedTimestamp,
@@ -94,6 +103,9 @@ data class Message(
         call = message.call,
         hit = message.hit,
         roleSubscriptionData = message.roleSubscriptionData,
+        messageSnapshots = message.messageSnapshots,
+        poll = message.poll,
+        resolved = message.resolved,
     )
 
     fun hasAttachments() = !attachments.isNullOrEmpty()
@@ -107,6 +119,8 @@ data class Message(
     fun isUrgent() = hasFlag(16)
     fun isEphemeralMessage() = hasFlag(64)
     fun isLoading() = hasFlag(128)
+    fun isVoiceMessage() = hasFlag(8_192)
+    fun hasSnapshot() = hasFlag(16_384)
     fun isApplicationMessage() = type == 20 || type == 23
     fun isEmbeddedMessageType() = type == 19 || type == 21
     fun isFailed() = type == -3 || type == -2 || type == -4 || type == -6 || type == -8
@@ -128,6 +142,7 @@ data class Message(
         channelId = new.channelId.takeUnless { it == 0L } ?: channelId,
         guildId = new.guildId ?: guildId,
         author = new.author ?: author,
+        member = new.member ?: member,
         content = new.content ?: content,
         timestamp = new.timestamp ?: timestamp,
         editedTimestamp = new.editedTimestamp ?: editedTimestamp,
@@ -155,14 +170,47 @@ data class Message(
         components = new.components ?: components,
         call = new.call ?: call,
         roleSubscriptionData = new.roleSubscriptionData ?: roleSubscriptionData,
+        messageSnapshots = new.messageSnapshots ?: messageSnapshots,
+        poll = new.poll ?: poll,
+        resolved = new.resolved ?: resolved,
     )
 
     fun synthesizeApiMessage() = com.discord.api.message.Message(
-        id, channelId, author, content, timestamp, editedTimestamp, tts, mentionEveryone,
-        mentions, mentionRoles, attachments, embeds, reactions, nonce, pinned, webhookId, type,
-        activity, application, applicationId, messageReference, flags, stickers, stickerItems,
-        referencedMessage, interaction, thread, components, call, guildId,
+        id = id,
+        channelId = channelId,
+        author = author,
+        member = member,
+        content = content,
+        timestamp = timestamp,
+        editedTimestamp = editedTimestamp,
+        tts = tts,
+        mentionEveryone = mentionEveryone,
+        mentions = mentions,
+        mentionRoles = mentionRoles,
+        attachments = attachments,
+        embeds = embeds,
+        reactions = reactions,
+        nonce = nonce,
+        pinned = pinned,
+        webhookId = webhookId,
+        type = type,
+        activity = activity,
+        application = application,
+        applicationId = applicationId,
+        messageReference = messageReference,
+        flags = flags,
+        stickers = stickers,
+        stickerItems = stickerItems,
+        referencedMessage = referencedMessage,
+        interaction = interaction,
+        thread = thread,
+        components = components,
+        call = call,
+        guildId = guildId,
         roleSubscriptionData = roleSubscriptionData,
+        messageSnapshots = messageSnapshots,
+        poll = poll,
+        resolved = resolved,
     )
 
     override fun toString() =

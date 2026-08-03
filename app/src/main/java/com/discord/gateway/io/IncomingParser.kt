@@ -4,7 +4,9 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.ChannelRecipient
 import com.discord.api.commands.ApplicationCommandAutocompleteResult
 import com.discord.api.commands.GuildApplicationCommands
+import com.discord.api.commands.GuildApplicationCommandIndexUpdate
 import com.discord.api.embeddedactivities.EmbeddedActivityInboundUpdate
+import com.discord.api.embeddedactivities.EmbeddedActivityInstance
 import com.discord.api.emoji.GuildEmojisUpdate
 import com.discord.api.forum.ForumUnreads
 import com.discord.api.friendsuggestions.FriendSuggestion
@@ -123,6 +125,8 @@ class IncomingParser(private val gson: Gson) {
         "GUILD_STICKERS_UPDATE" -> gson.fromJson(data, GuildStickersUpdate::class.java)
         "GUILD_INTEGRATIONS_UPDATE" -> gson.fromJson(data, ModelGuildIntegration.Update::class.java)
         "GUILD_APPLICATION_COMMANDS_UPDATE" -> gson.fromJson(data, GuildApplicationCommands::class.java)
+        "GUILD_APPLICATION_COMMAND_INDEX_UPDATE" ->
+            gson.fromJson(data, GuildApplicationCommandIndexUpdate::class.java)
         "APPLICATION_COMMAND_AUTOCOMPLETE_RESPONSE" ->
             gson.fromJson(data, ApplicationCommandAutocompleteResult::class.java)
 
@@ -187,6 +191,7 @@ class IncomingParser(private val gson: Gson) {
             gson.fromJson(data, InteractionStateUpdate::class.java)
         "INTERACTION_MODAL_CREATE" -> gson.fromJson(data, InteractionModalCreate::class.java)
         "EMBEDDED_ACTIVITY_UPDATE" -> gson.fromJson(data, EmbeddedActivityInboundUpdate::class.java)
+        "EMBEDDED_ACTIVITY_UPDATE_V2" -> gson.fromJson(data, EmbeddedActivityInstance::class.java)
 
         else -> DISPATCH_UNPARSED
     }

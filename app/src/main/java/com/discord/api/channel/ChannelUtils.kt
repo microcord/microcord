@@ -128,7 +128,7 @@ fun Channel.shouldPlayJoinLeaveSounds(): Boolean = isVoiceChannel() || isPrivate
  */
 fun Channel.getDisplayName(): String {
     if (isPrivate() && name.isNullOrEmpty()) {
-        return recipients?.joinToString { it.username } ?: ""
+        return recipients?.joinToString { it.globalName?.takeUnless(String::isBlank) ?: it.username } ?: ""
     }
     return name ?: ""
 }

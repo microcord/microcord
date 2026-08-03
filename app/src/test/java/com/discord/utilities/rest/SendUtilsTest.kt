@@ -6,6 +6,8 @@ import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.restapi.RestAPIParams
 import com.discord.utilities.attachments.uniqueUploadFileNamesFromSanitized
 import com.discord.widgets.chat.input.models.ApplicationCommandValue
+import com.google.gson.FieldNamingPolicy
+import com.google.gson.GsonBuilder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -106,6 +108,58 @@ class SendUtilsTest {
             command = command(listOf(attachmentValue("file", "content://missing"))),
             attachments = emptyList(),
         )
+    }
+
+    @Test
+    fun modernNestedCommandPayloadPreservesTypedValuesFocusAndIdentity() {
+        val leaves = listOf(
+            ApplicationCommandValue("user", "11", ApplicationCommandType.USER.type),
+            ApplicationCommandValue("role", "12", ApplicationCommandType.ROLE.type),
+            ApplicationCommandValue("mentionable", "13", ApplicationCommandType.MENTIONABLE.type),
+            ApplicationCommandValue("channel", "14", ApplicationCommandType.CHANNEL.type),
+            ApplicationCommandValue("file", "content://fixture", ApplicationCommandType.ATTACHMENT.type),
+            ApplicationCommandValue("query", "typed", ApplicationCommandType.STRING.type, focused = true),
+            ApplicationCommandValue("count", 2L, ApplicationCommandType.INTEGER.type),
+        )
+        val nested = ApplicationCommandValue(
+            "resource",
+            type = ApplicationCommandType.SUBCOMMAND_GROUP.type,
+            options = listOf(
+                ApplicationCommandValue(
+                    "create",
+                    type = ApplicationCommandType.SUBCOMMAND.type,
+                    options = leaves,
+                ),
+            ),
+        )
+        val body = command(listOf(nested)).copy(
+            guildId = 20L,
+            commandGuildId = 21L,
+            sessionId = "session-fixture",
+            applicationCommandName = "manage",
+            applicationCommandId = "200",
+            version = "201",
+        ).toRestApiParam()
+        val json = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .create().toJsonTree(body).asJsonObject
+
+        assertEquals("123", json["nonce"].asString)
+        assertEquals("session-fixture", json["session_id"].asString)
+        assertEquals("9", json["application_id"].asString)
+        assertEquals("20", json["guild_id"].asString)
+        val data = json["data"].asJsonObject
+        assertEquals("201", data["version"].asString)
+        assertEquals("21", data["guild_id"].asString)
+        assertEquals("200", data["id"].asString)
+        assertEquals(1, data["type"].asInt)
+        assertEquals("slash_ui", json["analytics_location"].asString)
+        val wireLeaves = data["options"].asJsonArray[0].asJsonObject["options"].asJsonArray[0]
+            .asJsonObject["options"].asJsonArray
+        assertEquals(listOf("11", "12", "13", "14"), wireLeaves.take(4).map { it.asJsonObject["value"].asString })
+        assertEquals("0", wireLeaves[4].asJsonObject["value"].asString)
+        assertTrue(wireLeaves[5].asJsonObject["focused"].asBoolean)
+        assertEquals(2L, wireLeaves[6].asJsonObject["value"].asLong)
+        assertEquals("content://fixture", data["attachments"].asJsonArray[0].asJsonObject["filename"].asString)
     }
 
     private fun attachmentValue(name: String, uri: String) = ApplicationCommandValue(

@@ -157,7 +157,7 @@ class AutocompleteItemViewHolder(
     }
 
     private fun bindCommandChoice(item: ApplicationCommandChoiceAutocompletable) {
-        name.text = item.choice.name
+        name.text = item.choice.displayName
     }
 
     private fun clearBinding() {

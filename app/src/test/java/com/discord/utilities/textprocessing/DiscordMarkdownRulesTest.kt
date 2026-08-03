@@ -9,10 +9,12 @@ import com.discord.utilities.textprocessing.node.BlockBackgroundNode
 import com.discord.utilities.textprocessing.node.BlockQuoteNode
 import com.discord.utilities.textprocessing.node.BulletListNode
 import com.discord.utilities.textprocessing.node.ChannelMentionNode
+import com.discord.utilities.textprocessing.node.CommandMentionNode
 import com.discord.utilities.textprocessing.node.EmojiNode
 import com.discord.utilities.textprocessing.node.HeaderNode
 import com.discord.utilities.textprocessing.node.RoleMentionNode
 import com.discord.utilities.textprocessing.node.SpoilerNode
+import com.discord.utilities.textprocessing.node.SubtextNode
 import com.discord.utilities.textprocessing.node.TimestampNode
 import com.discord.utilities.textprocessing.node.UrlNode
 import com.discord.utilities.textprocessing.node.UserMentionNode
@@ -107,23 +109,32 @@ class DiscordMarkdownRulesTest {
     }
 
     @Test
-    fun headerRuleIsOnlyEnabledForForumPosts() {
-        assertTrue(parse("## Title\n").none { it is HeaderNode<*> })
-
-        val header = parse("## Title\n", DiscordParser.ParserOptions.FORUM_POST_FIRST_MESSAGE)
+    fun headerRuleIsEnabledForCurrentChatMessages() {
+        val header = parse("## Title\n")
             .filterIsInstance<HeaderNode<*>>()
             .single()
         assertEquals("Title", plainText(header.getChildren().orEmpty()))
+        assertTrue(parse("#### not-a-heading").none { it is HeaderNode<*> })
     }
 
     @Test
-    fun listRuleIsOnlyEnabledForForumPosts() {
-        assertTrue(parse("- item\n").none { it is BulletListNode<*> })
-
-        val item = parse("- item\n", DiscordParser.ParserOptions.FORUM_POST_FIRST_MESSAGE)
+    fun listRuleSupportsCurrentOrderedAndNestedForms() {
+        val item = parse("- item\n")
             .filterIsInstance<BulletListNode<*>>()
             .single()
         assertEquals("item", plainText(item.getChildren().orEmpty()))
+
+        val ordered = parse("2. second\n").filterIsInstance<BulletListNode<*>>().single()
+        assertEquals("2", ordered.marker)
+        val nested = parse("    * nested\n").filterIsInstance<BulletListNode<*>>().single()
+        assertEquals(3, nested.nestedLevel)
+    }
+
+    @Test
+    fun subtextIsAlwaysEnabledAndRequiresTheExactLinePrefix() {
+        val subtext = parse("-# muted\n").filterIsInstance<SubtextNode<*>>().single()
+        assertEquals("muted", plainText(subtext.getChildren().orEmpty()))
+        assertTrue(parse("text -# muted").none { it is SubtextNode<*> })
     }
 
     // endregion
@@ -135,6 +146,14 @@ class DiscordMarkdownRulesTest {
         val url = parse("see https://example.com/a, ok").filterIsInstance<UrlNode<*>>().single()
 
         assertEquals("https://example.com/a", url.url)
+        assertEquals(
+            "https://example.com/a(b)",
+            parse("https://example.com/a(b))").filterIsInstance<UrlNode<*>>().single().url,
+        )
+        assertEquals(
+            "https://example.com/ü",
+            parse("https://example.com/ü)").filterIsInstance<UrlNode<*>>().single().url,
+        )
     }
 
     @Test
@@ -145,14 +164,30 @@ class DiscordMarkdownRulesTest {
     }
 
     @Test
-    fun maskedLinkRuleOnlyAppliesToSurfacesThatAllowIt() {
-        // Without masked links the brackets stay as text and only the bare URL is linked.
-        assertTrue(plainText(parse("[label](https://example.com)")).contains("[label]("))
+    fun currentAngleAutolinksCoverMailAndTelephoneSchemes() {
+        val fixtures = listOf(
+            "<person@example.com>" to "mailto:person@example.com",
+            "<+1 555 0100>" to "tel:+1-555-0100",
+            "steam://join/123" to "steam://join/123",
+        )
+        fixtures.forEach { (source, target) ->
+            assertEquals(source, target, parse(source).filterIsInstance<UrlNode<*>>().single().url)
+        }
+    }
 
-        val url = parse("[label](https://example.com)", DiscordParser.ParserOptions.ALLOW_MASKED_LINKS)
+    @Test
+    fun maskedLinkRuleAppliesToCurrentChatMessages() {
+        val url = parse("[label](https://example.com)")
             .filterIsInstance<UrlNode<*>>()
             .single()
         assertEquals("https://example.com", url.url)
+        assertEquals(
+            "https://example.com/a_(b)",
+            parse("[label](https://example.com/a_(b))").filterIsInstance<UrlNode<*>>().single().url,
+        )
+        val unsafe = "[unsafe](javascript:alert(1))"
+        assertTrue(parse(unsafe).none { it is UrlNode<*> })
+        assertEquals(unsafe, plainText(parse(unsafe)))
     }
 
     @Test
@@ -216,6 +251,16 @@ class DiscordMarkdownRulesTest {
         assertEquals("hi  there", plainText(nodes))
     }
 
+    @Test
+    fun commandMentionsUseUnicodeNamesAndPreserveMalformedForms() {
+        val command = parse("</hava durumu:123>").filterIsInstance<CommandMentionNode<*>>().single()
+        assertEquals("hava durumu", command.commandName)
+        assertEquals(123L, command.commandId)
+
+        assertTrue(parse("</four word command now:123>").none { it is CommandMentionNode<*> })
+        assertEquals("</missing-id>", plainText(parse("</missing-id>")))
+    }
+
     // endregion
 
     // region Emoji
@@ -264,6 +309,27 @@ class DiscordMarkdownRulesTest {
     fun timestampRuleAcceptsTheSuffixLessFormAndRejectsUnknownStyles() {
         assertNotNull(parse("<t:1600000000>").filterIsInstance<TimestampNode<*>>().singleOrNull())
         assertTrue(parse("<t:1600000000:z>").none { it is TimestampNode<*> })
+    }
+
+    @Test
+    fun desktopPrecedenceAndMalformedFixturesStayLiteralWhereRequired() {
+        val fixtures = listOf(
+            "`**raw**`" to "**raw**",
+            "\\*escaped*" to "*escaped*",
+            "**unclosed" to "**unclosed",
+            "||unclosed" to "||unclosed",
+            "```js\nunclosed" to "```js\nunclosed",
+            "#no-space" to "#no-space",
+        )
+        fixtures.forEach { (source, expected) -> assertEquals(source, expected, plainText(parse(source))) }
+        assertTrue(parse("||**bold**||").single() is SpoilerNode<*>)
+    }
+
+    @Test(timeout = 2_000)
+    fun bracketFloodAtUserdoccersMessageLimitIsBounded() {
+        val source = "[".repeat(1_978) + "](https://example.com)"
+        val nodes = parse(source)
+        assertEquals("https://example.com", nodes.filterIsInstance<UrlNode<*>>().single().url)
     }
 
     // endregion

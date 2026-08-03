@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/primary_dark_600">
+
+    <FrameLayout
+        android:id="@+id/activity_web_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <LinearLayout
+        android:id="@+id/activity_chrome"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:background="#CC202225"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp">
+
+        <TextView
+            android:id="@+id/activity_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@android:color/white"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/activity_participants"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/embedded_activity_participants"
+            android:paddingHorizontal="12dp"
+            android:textColor="#B5BAC1"
+            android:textSize="14sp" />
+
+        <ImageButton
+            android:id="@+id/activity_pip"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/embedded_activity_picture_in_picture"
+            android:src="@drawable/ic_launch_24dp"
+            android:tint="@android:color/white" />
+
+        <ImageButton
+            android:id="@+id/activity_close"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/embedded_activity_leave"
+            android:src="@drawable/ic_close_24dp"
+            android:tint="@android:color/white" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/activity_status"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/primary_dark_600"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="32dp">
+
+        <ProgressBar
+            android:id="@+id/activity_loading"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:indeterminate="true" />
+
+        <TextView
+            android:id="@+id/activity_error"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingTop="16dp"
+            android:textColor="@android:color/white"
+            android:textSize="16sp"
+            android:visibility="gone" />
+
+        <com.discord.views.LoadingButton
+            android:id="@+id/activity_retry"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:layout_marginTop="16dp"
+            android:text="@string/embedded_activity_retry"
+            android:visibility="gone" />
+    </LinearLayout>
+</FrameLayout>

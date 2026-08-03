@@ -21,6 +21,7 @@ import com.discord.databinding.ViewImageBinding
 import com.discord.databinding.WidgetIncomingShareBinding
 import com.discord.dialogs.ImageUploadFailedDialog
 import com.discord.models.guild.Guild
+import com.discord.models.message.Message
 import com.discord.models.user.MeUser
 import com.discord.stores.StoreSlowMode
 import com.discord.stores.StoreStream
@@ -31,6 +32,7 @@ import com.discord.utilities.messagesend.MessageResult
 import com.discord.utilities.messagesend.MessageSendCoordinator
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rx.ui
+import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.user.UserUtils.isStaff
 import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
 import com.discord.widgets.chat.input.WidgetChatInput
@@ -51,6 +53,9 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
     private var latestSearchModel: WidgetGlobalSearchModel? = null
     private var isOnCooldown = false
     private var isSending = false
+    private var forwardSource: Message? = null
+    private var forwardSent = false
+    private var forwardRequested = false
     private var cooldownSubscription: Subscription? = null
 
     override fun onViewBound(view: View) {
@@ -62,13 +67,20 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
             arguments?.getStringArrayList(ARG_URIS).orEmpty().map(Uri::parse),
             arguments?.getLong(ARG_DIRECT_SHARE_ID, 0L)?.takeIf { it > 0 },
         )
+        arguments?.getLong(ARG_FORWARD_CHANNEL_ID, 0L)?.takeIf { it > 0L }?.let { channelId ->
+            forwardRequested = true
+            val messageId = arguments?.getLong(ARG_FORWARD_MESSAGE_ID, 0L) ?: 0L
+            forwardSource = StoreStream.getMessages().getMessage(channelId, messageId)
+        }
 
         binding.actionBarToolbar.apply {
-            setNavigationOnClickListener { requireActivity().finish() }
+            if (forwardRequested) title = getString(R.string.forward_message)
+            setNavigationOnClickListener { closeShare() }
             setNavigationContentDescription(R.string.close)
         }
         binding.externalShareComment.editText?.apply {
             setText(content.message)
+            if (forwardSource != null) hint = getString(R.string.forward_message_optional_comment)
             addTextChangedListener(SimpleTextWatcher { updateSendMenu() })
             setOnEditorActionListener { _, actionId, _ ->
                 if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND && selected != null) {
@@ -127,6 +139,9 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
         }
         renderContent()
         select(null)
+        if (forwardRequested && forwardSource == null) {
+            showError(IllegalStateException("Forward source unavailable"))
+        }
     }
 
     override fun onViewBoundOrOnResume() {
@@ -146,7 +161,9 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
         val binding = binding ?: return
         previewAdapter.items = content.uris
         binding.externalShareListWrap.visibility = if (content.uris.isEmpty()) View.GONE else View.VISIBLE
-        binding.externalShareComment.hint = if (content.uris.isEmpty()) {
+        binding.externalShareComment.hint = if (forwardSource != null) {
+            getString(R.string.forward_message_optional_comment)
+        } else if (content.uris.isEmpty()) {
             getString(R.string.upload_area_leave_a_comment)
         } else {
             getString(R.string.add_a_comment_optional)
@@ -200,7 +217,7 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
     private fun updateSendMenu() {
         val binding = binding ?: return
         val comment = binding.externalShareComment.editText?.text?.toString().orEmpty()
-        val enabled = canSend(selected != null, comment, content.uris.size) && !isSending
+        val enabled = canSend(selected != null, comment, content.uris.size, forwardSource != null) && !isSending
         binding.actionBarToolbar.menu.clear()
         binding.actionBarToolbar.inflateMenu(if (enabled) R.menu.menu_external_share else R.menu.menu_empty)
         binding.actionBarToolbar.setOnMenuItemClickListener { item ->
@@ -245,6 +262,11 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
     }
 
     private fun sendToChannel(channel: Channel) {
+        val source = forwardSource
+        if (source != null && !forwardSent) {
+            sendForwardToChannel(source, channel)
+            return
+        }
         val context = requireContext()
         val attachments = runCatching {
             content.uris.mapIndexed { index, uri ->
@@ -290,7 +312,7 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
                     when (update) {
                         is MessageSendCoordinator.Update.Reconciled -> {
                             setSending(false)
-                            requireActivity().finish()
+                            closeShare()
                         }
                         is MessageSendCoordinator.Update.Failed -> {
                             if (update.result is MessageResult.CaptchaRequired) {
@@ -305,6 +327,43 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
                 }
             }
             is MessageSendCoordinator.Submission.Rejected -> showSendFailure(submission.result)
+        }
+    }
+
+    private fun sendForwardToChannel(source: Message, destination: Channel) {
+        val sourceChannel = StoreStream.getChannels().getChannel(source.channelId)
+        val permissions = StoreStream.getPermissions().getPermissionsByChannel()
+        if (!ForwardingPolicy.canForward(source, sourceChannel, permissions[source.channelId])) {
+            showError(IllegalStateException("Forward source unavailable"))
+            return
+        }
+        val issue = ForwardingPolicy.destinationIssue(
+            source,
+            sourceChannel!!,
+            destination,
+            permissions[destination.id],
+        )
+        if (issue != null) {
+            showError(IllegalStateException("Forward destination unavailable"))
+            return
+        }
+        ForwardMessageSender.send(destination.id, source, sourceChannel).restSubscribeOn().ui(this).subscribe({
+            forwardSent = true
+            val comment = binding?.externalShareComment?.editText?.text?.toString().orEmpty()
+            if (comment.isBlank()) {
+                setSending(false)
+                closeShare()
+            } else {
+                sendToChannel(destination)
+            }
+        }, ::showError)
+    }
+
+    private fun closeShare() {
+        if (parentFragmentManager.backStackEntryCount > 0) {
+            parentFragmentManager.popBackStack()
+        } else {
+            requireActivity().finish()
         }
     }
 
@@ -352,7 +411,7 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
         val permissions = StoreStream.getPermissions().getPermissionsByChannel()
         return StoreStream.getChannels().getChannelsForGuild(guild.id).values
             .filter(::isSendableChannel)
-            .filter { canSendInChannel(it, permissions[it.id]) }
+            .filter { canUseDestination(it, permissions[it.id]) }
             .sortedBy { it.position }
             .firstOrNull()
     }
@@ -368,7 +427,7 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
                 is WidgetGlobalSearchModel.ItemHeader -> true
                 is WidgetGlobalSearchModel.ItemChannel -> isSendableChannel(item.channel) &&
                     item.channel.recipients.orEmpty().none { it.system == true } &&
-                    canSendInChannel(item.channel, permissions[item.channel.id])
+                    canUseDestination(item.channel, permissions[item.channel.id])
                 is WidgetGlobalSearchModel.ItemUser -> !item.user.isSystemUser && item.user.id != meId
                 is WidgetGlobalSearchModel.ItemGuild -> shareChannel(item.guild) != null
                 else -> false
@@ -378,6 +437,13 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
             val next = filtered.drop(index + 1).firstOrNull()
             item !is WidgetGlobalSearchModel.ItemHeader || next != null && next !is WidgetGlobalSearchModel.ItemHeader
         }
+    }
+
+    private fun canUseDestination(channel: Channel, permissions: Long?): Boolean {
+        val source = forwardSource
+        if (source == null) return !forwardRequested && canSendInChannel(channel, permissions)
+        val sourceChannel = StoreStream.getChannels().getChannel(source.channelId) ?: return false
+        return ForwardingPolicy.destinationIssue(source, sourceChannel, channel, permissions) == null
     }
 
     private class AttachmentAdapter(
@@ -426,8 +492,19 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
             )
         }
 
-        internal fun canSend(selected: Boolean, comment: String, attachmentCount: Int): Boolean =
-            selected && (comment.isNotBlank() || attachmentCount > 0)
+        fun newForwardInstance(message: Message) = WidgetIncomingShare().apply {
+            arguments = bundleOf(
+                ARG_FORWARD_CHANNEL_ID to message.channelId,
+                ARG_FORWARD_MESSAGE_ID to message.id,
+            )
+        }
+
+        internal fun canSend(
+            selected: Boolean,
+            comment: String,
+            attachmentCount: Int,
+            forwarding: Boolean = false,
+        ): Boolean = selected && (forwarding || comment.isNotBlank() || attachmentCount > 0)
 
         internal fun uploadLimitMB(premiumTier: PremiumTier, guildPremiumTier: Int, isStaff: Boolean): Int = maxOf(
             when {
@@ -474,5 +551,7 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
         private const val ARG_SUBJECT = "subject"
         private const val ARG_URIS = "uris"
         private const val ARG_DIRECT_SHARE_ID = "direct_share_id"
+        private const val ARG_FORWARD_CHANNEL_ID = "forward_channel_id"
+        private const val ARG_FORWARD_MESSAGE_ID = "forward_message_id"
     }
 }

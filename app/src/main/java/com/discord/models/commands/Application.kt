@@ -1,6 +1,7 @@
 package com.discord.models.commands
 
 import com.discord.api.user.User
+import com.discord.api.commands.ApplicationCommandIndexPermissions
 import com.discord.nullserializable.NullSerializable
 
 /**
@@ -17,6 +18,8 @@ data class Application(
     val commandCount: Int,
     val bot: User? = null,
     val builtIn: Boolean = false,
+    val permissions: ApplicationCommandIndexPermissions? = null,
+    val installationTypes: Set<Int> = emptySet(),
 ) {
     companion object {
         fun fromApiApplication(apiApplication: com.discord.api.application.Application): Application =

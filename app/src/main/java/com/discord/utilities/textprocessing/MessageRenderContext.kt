@@ -8,6 +8,7 @@ import com.discord.api.role.GuildRole
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.textprocessing.node.BasicRenderContext
 import com.discord.utilities.textprocessing.node.ChannelMentionNode
+import com.discord.utilities.textprocessing.node.CommandMentionNode
 import com.discord.utilities.textprocessing.node.EmojiNode
 import com.discord.utilities.textprocessing.node.RoleMentionNode
 import com.discord.utilities.textprocessing.node.SpoilerNode
@@ -54,10 +55,13 @@ data class MessageRenderContext(
 
     /** Shows the absolute value of a relative timestamp; null keeps timestamps inert. */
     val timestampClickHandler: ((CharSequence) -> Unit)? = null,
+
+    override val commandMentionOnClick: ((Long, String) -> Unit)? = null,
 ) : BasicRenderContext,
     UserMentionNode.RenderContext,
     EmojiNode.RenderContext,
     ChannelMentionNode.RenderContext,
+    CommandMentionNode.RenderContext,
     RoleMentionNode.RenderContext,
     UrlNode.RenderContext,
     SpoilerNode.RenderContext,

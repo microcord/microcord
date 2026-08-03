@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/app_launcher_activity_card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground"
+    app:cardBackgroundColor="?attr/colorBackgroundTertiary"
+    app:cardCornerRadius="8dp"
+    app:cardElevation="0dp"
+    app:strokeColor="?attr/colorBackgroundModifierAccent"
+    app:strokeWidth="1dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <com.facebook.drawee.view.SimpleDraweeView
+            android:id="@+id/app_launcher_activity_image"
+            android:layout_width="match_parent"
+            android:layout_height="120dp"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop"
+            app:placeholderImage="?attr/ic_game_icon_placeholder" />
+
+        <TextView
+            android:id="@+id/app_launcher_activity_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:paddingHorizontal="12dp"
+            android:paddingTop="10dp"
+            style="@style/UiKit.TextView.Semibold" />
+
+        <TextView
+            android:id="@+id/app_launcher_activity_description"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:minHeight="44dp"
+            android:paddingHorizontal="12dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="10dp"
+            android:textColor="?attr/colorTextMuted"
+            style="@style/UiKit.TextView.Subtext" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

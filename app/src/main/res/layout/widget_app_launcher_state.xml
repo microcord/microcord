@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center"
+    android:minHeight="220dp"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <com.discord.views.typing.TypingDots
+        android:id="@+id/app_launcher_state_loading"
+        android:layout_width="48dp"
+        android:layout_height="wrap_content"
+        android:contentDescription="@string/loading"
+        android:visibility="gone" />
+
+    <ImageView
+        android:id="@+id/app_launcher_state_icon"
+        android:layout_width="96dp"
+        android:layout_height="96dp"
+        android:contentDescription="@null"
+        android:src="@drawable/img_clyde_empty" />
+
+    <TextView
+        android:id="@+id/app_launcher_state_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center"
+        style="@style/UiKit.TextView.H2" />
+
+    <TextView
+        android:id="@+id/app_launcher_state_body"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:textColor="?attr/colorTextMuted"
+        style="@style/UiKit.TextView" />
+</LinearLayout>

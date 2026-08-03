@@ -17,13 +17,15 @@ import com.discord.utilities.textprocessing.spans.VerticalPaddingSpan
  * a hollow bullet, matching the web client.
  */
 class BulletListNode<T : BasicRenderContext>(
-    private val nestedLevel: Int,
+    val nestedLevel: Int,
     private val includesNewline: Boolean,
+    val marker: String? = null,
 ) : Node<T>() {
 
     override fun render(builder: SpannableStringBuilder, renderContext: T) {
         val context = renderContext.context
         val start = builder.length
+        marker?.let { builder.append(it).append(". ") }
         getChildren()?.forEach { it.render(builder, renderContext) }
 
         val resources = context.resources
@@ -32,16 +34,18 @@ class BulletListNode<T : BasicRenderContext>(
         val verticalPadding = resources.getDimensionPixelSize(R.dimen.markdown_bullet_vertical_padding)
         val bulletStyle = if (nestedLevel > 1) Paint.Style.STROKE else Paint.Style.FILL
 
-        val spans = listOf(
+        val spans = mutableListOf<Any>(
             VerticalPaddingSpan(verticalPadding, verticalPadding),
             LeadingMarginSpan.Standard(leadingMargin),
-            BulletSpan(
+        )
+        if (marker == null) {
+            spans += BulletSpan(
                 gapWidth = gapWidth,
                 color = ColorCompat.getThemedColor(context, R.attr.primary_400),
                 bulletRadius = MARKDOWN_BULLET_RADIUS,
                 style = bulletStyle,
-            ),
-        )
+            )
+        }
         spans.forEach { builder.setSpan(it, start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
 
         if (includesNewline) {

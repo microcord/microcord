@@ -49,6 +49,7 @@ object MessageTextRenderer {
         onChannelMentionClicked: ((Long) -> Unit)? = null,
         onSpoilerClicked: ((SpoilerNode<*>) -> Unit)? = null,
         onEmojiClicked: ((EmojiNode.EmojiIdAndType) -> Unit)? = null,
+        onCommandMentionClicked: ((Long, String) -> Unit)? = null,
     ): Result {
         val renderContext = createRenderContext(
             view.context,
@@ -57,6 +58,7 @@ object MessageTextRenderer {
             onChannelMentionClicked,
             onSpoilerClicked,
             onEmojiClicked,
+            onCommandMentionClicked,
         )
         val preprocessor = MessagePreprocessor(
             myUserId = renderContext.myId,
@@ -90,6 +92,7 @@ object MessageTextRenderer {
         onChannelMentionClicked: ((Long) -> Unit)? = null,
         onSpoilerClicked: ((SpoilerNode<*>) -> Unit)? = null,
         onEmojiClicked: ((EmojiNode.EmojiIdAndType) -> Unit)? = null,
+        onCommandMentionClicked: ((Long, String) -> Unit)? = null,
     ): MessageRenderContext {
         val guildId = message.guildId
         val members = guildId?.let { StoreStream.getGuilds().getMembers()[it] }.orEmpty()
@@ -109,6 +112,7 @@ object MessageTextRenderer {
             spoilerOnClick = onSpoilerClicked,
             userMentionOnClick = onUserMentionClicked,
             channelMentionOnClick = onChannelMentionClicked,
+            commandMentionOnClick = onCommandMentionClicked,
             emojiClickHandler = onEmojiClicked,
         )
     }

@@ -10,10 +10,16 @@ import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.commands.ApplicationCommandType
 import com.discord.app.AppComponent
+import com.discord.i18n.setI18nText
+import com.discord.models.commands.Application
+import com.discord.models.commands.ApplicationCommand
 import com.discord.models.commands.ApplicationCommandOption
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.rx.ui
 import com.discord.widgets.chat.input.applicationcommands.SelectedApplicationCommandAdapter
 import com.discord.widgets.chat.input.autocomplete.adapter.ChatInputAutocompleteAdapter
+import com.discord.widgets.chat.input.models.ApplicationCommandData
+import com.lytefast.flexinput.model.Attachment
 
 /**
  * Binds one composer to one [AutocompleteViewModel]: it feeds edits in, renders the resulting
@@ -141,12 +147,29 @@ class InputAutocomplete(
     }
 
     private fun showAutocomplete(viewState: AutocompleteViewState.Autocomplete) {
-        adapter.setData(viewState.autocompletables, hasStickers = viewState.stickers.isNotEmpty())
+        adapter.setData(
+            renderedItems(viewState),
+            hasStickers = viewState.stickers.isNotEmpty(),
+            sizeToMax = viewState.isLoading && !viewState.isError,
+        )
         autocompleteRecyclerView.visibility = View.VISIBLE
         stickersContainer.visibility = View.GONE
-        autocompleteHeader.visibility =
-            if (viewState.autocompletables.any { it is EmojiAutocompletable }) View.VISIBLE else View.GONE
-        autocompleteHeader.setText(R.string.emoji_matching)
+        if (viewState.isAutocomplete) {
+            autocompleteHeader.visibility = if (viewState.token.isBlank()) View.GONE else View.VISIBLE
+            autocompleteHeader.setTextColor(
+                ColorCompat.getThemedColor(
+                    autocompleteHeader.context,
+                    if (viewState.isError) R.attr.colorTextDanger else R.attr.colorTextNormal,
+                ),
+            )
+            val status = statusTextRes(viewState)
+            if (status != null) autocompleteHeader.setText(status)
+            else autocompleteHeader.setI18nText(R.string.emoji_matching, "prefix" to viewState.token)
+        } else {
+            autocompleteHeader.visibility =
+                if (viewState.autocompletables.any { it is EmojiAutocompletable }) View.VISIBLE else View.GONE
+            autocompleteHeader.setI18nText(R.string.emoji_matching, "prefix" to viewState.token)
+        }
         adapter.scrollToPosition(0)
     }
 
@@ -164,6 +187,39 @@ class InputAutocomplete(
         autocompleteRecyclerView.visibility = View.GONE
         autocompleteHeader.visibility = View.GONE
         stickersContainer.visibility = View.GONE
+    }
+
+    fun getApplicationCommandData(attachments: List<Attachment<*>>): ApplicationCommandData? =
+        viewModel.buildSelectedCommandData(editText.text ?: "", attachments)
+
+    companion object {
+        private const val REMOTE_LOADING_ITEMS = 4
+
+        internal fun renderedItems(state: AutocompleteViewState.Autocomplete): List<Autocompletable> =
+            if (state.isLoading && !state.isError) {
+                List(REMOTE_LOADING_ITEMS) { ApplicationCommandLoadingPlaceholder() }
+            } else {
+                state.autocompletables
+            }
+
+        internal fun statusTextRes(state: AutocompleteViewState.Autocomplete): Int? = when {
+            state.isError -> R.string.application_command_autocomplete_failed
+            !state.isLoading && state.autocompletables.isEmpty() ->
+                R.string.application_command_autocomplete_no_options
+            else -> null
+        }
+    }
+
+    fun selectCommand(application: Application, command: ApplicationCommand) {
+        if (!viewModel.selectAutocompleteItem(ApplicationCommandAutocompletable(application, command, true, true))) return
+        applyingSelection = true
+        try {
+            editText.setText("/${command.name} ")
+            editText.setSelection(editText.length())
+        } finally {
+            applyingSelection = false
+        }
+        command.options.firstOrNull { it.required }?.let(::focusCommandOption)
     }
 
     private fun configureSelectedCommand(state: SelectedCommandViewState) {

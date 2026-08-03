@@ -2,6 +2,7 @@ package com.discord.models.commands
 
 import com.discord.api.commands.ApplicationCommandAttachment
 import com.discord.api.commands.ApplicationCommandType
+import com.discord.api.commands.ApplicationCommandIndexCommand
 import com.discord.restapi.RestAPIParams
 import com.discord.widgets.chat.input.models.ApplicationCommandValue
 
@@ -30,6 +31,7 @@ data class ApplicationCommandLocalSendData(
     val applicationCommandsValues: List<ApplicationCommandValue>,
     val version: String?,
     val interactionId: Long? = null,
+    val applicationCommand: ApplicationCommandIndexCommand? = null,
 ) {
     val nonceString: String get() = nonce.toString()
 
@@ -46,7 +48,7 @@ data class ApplicationCommandLocalSendData(
         var attachmentCounter = 0
         val options = applicationCommandsValues.toRestParams { value ->
             if (value.type == ApplicationCommandType.ATTACHMENT.type) {
-                value.copy(value = attachmentCounter++.toString())
+                value.copy(value = attachmentCounter++)
             } else {
                 value
             }
@@ -66,6 +68,8 @@ data class ApplicationCommandLocalSendData(
             name = applicationCommandName,
             options = options,
             attachments = attachments,
+            type = applicationCommand?.type ?: ApplicationCommandIndexCommand.TYPE_CHAT_INPUT,
+            applicationCommand = applicationCommand,
         )
     }
 
@@ -77,6 +81,7 @@ data class ApplicationCommandLocalSendData(
         data = toRestApiApplicationCommandDataParam(),
         sessionId = sessionId,
         nonce = nonceString,
+        analyticsLocation = "slash_ui",
     )
 
     override fun toString(): String = "ApplicationCommandLocalSendData(nonce=$nonce, " +

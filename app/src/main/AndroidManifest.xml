@@ -162,6 +162,13 @@
             android:theme="@style/AppTheme.Dark"
             android:windowSoftInputMode="adjustResize|stateHidden" />
         <activity
+            android:name="com.discord.activities.EmbeddedActivityActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="true"
+            android:theme="@style/AppTheme.Dark" />
+        <activity
             android:name="com.discord.app.AppActivity$Main"
             android:exported="true"
             android:label="@string/manticord_app_name"

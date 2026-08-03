@@ -23,17 +23,18 @@ import com.discord.simpleast.core.parser.ParseSpec
 import com.discord.simpleast.core.parser.Parser
 import com.discord.simpleast.core.parser.Rule
 import com.discord.simpleast.core.simple.SimpleMarkdownRules
-import com.discord.simpleast.markdown.MarkdownRules
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.textprocessing.node.BasicRenderContext
 import com.discord.utilities.textprocessing.node.BlockBackgroundNode
 import com.discord.utilities.textprocessing.node.BlockQuoteNode
 import com.discord.utilities.textprocessing.node.BulletListNode
 import com.discord.utilities.textprocessing.node.ChannelMentionNode
+import com.discord.utilities.textprocessing.node.CommandMentionNode
 import com.discord.utilities.textprocessing.node.EmojiNode
 import com.discord.utilities.textprocessing.node.HeaderNode
 import com.discord.utilities.textprocessing.node.RoleMentionNode
 import com.discord.utilities.textprocessing.node.SpoilerNode
+import com.discord.utilities.textprocessing.node.SubtextNode
 import com.discord.utilities.textprocessing.node.TimestampNode
 import com.discord.utilities.textprocessing.node.UrlNode
 import com.discord.utilities.textprocessing.node.UserMentionNode
@@ -54,10 +55,10 @@ object Rules {
     /** Unanchored form, shared with the composer so it can find custom emoji anywhere in a draft. */
     const val REGEX_CUSTOM_EMOJI = "<(a)?:([a-zA-Z_0-9]+):(\\d+)>"
 
-    private const val REGEX_URL = "(https?://[^\\s<]+[^<.,:;\"')\\]\\s])"
+    private const val REGEX_URL = "((?:https?|steam)://[^\\s<]+[^<.,:;\"'\\]\\s])"
     private const val REGEX_LINK_INSIDE = "(?:\\[[^]]*]|[^]]|](?=[^\\[]*]))*"
     private const val REGEX_LINK_HREF_AND_TITLE =
-        "\\s*<?((?:[^\\s\\\\]|\\\\.)*?)>?(?:\\s+['\"]([\\s\\S]*?)['\"])?\\s*"
+        "\\s*<?((?:\\([^)]*\\)|[^\\s\\\\()]|\\\\.)*?)>?(?:\\s+['\"]([\\s\\S]*?)['\"])?\\s*"
     private const val LINK = "^\\[($REGEX_LINK_INSIDE)]\\($REGEX_LINK_HREF_AND_TITLE\\)"
     private const val HOOKED_LINK = "^\\$\\[($REGEX_LINK_INSIDE)?]\\($REGEX_LINK_HREF_AND_TITLE\\)"
 
@@ -72,12 +73,22 @@ object Rules {
     private val PATTERN_TIMESTAMP: Pattern = Pattern.compile("^<t:(-?\\d{1,17})(?::(t|T|d|D|f|F|R))?>")
     private val PATTERN_URL: Pattern = Pattern.compile("^$REGEX_URL")
     private val PATTERN_URL_NO_EMBED: Pattern = Pattern.compile("^<$REGEX_URL>")
+    private val PATTERN_MAILTO: Pattern = Pattern.compile("^<([^\\s<>@]+@[^\\s<>@]+\\.[^\\s<>@]+)>")
+    private val PATTERN_TEL: Pattern = Pattern.compile(
+        "^<((?:(?:tel|sms):\\+?|\\+)(?:(?:[0-9]|\\([0-9]+\\)))(?:[- ./]?(?:[0-9]|\\([0-9]+\\)))+)>",
+    )
     private val PATTERN_MASKED_LINK: Pattern = Pattern.compile(LINK)
     private val PATTERN_HOOKED_LINK: Pattern = Pattern.compile(HOOKED_LINK)
     private val PATTERN_SOFT_HYPHEN: Pattern = Pattern.compile("^\\u00AD")
     private val PATTERN_SPOILER: Pattern = Pattern.compile("^\\|\\|([\\s\\S]+?)\\|\\|")
-    private val PATTERN_LIST_ITEM: Pattern = Pattern.compile("^([^\\S\\r\\n]*)[*-][ \\s]?(.*)([\\n|\$])?")
-    private val PATTERN_HEADER_ITEM: Pattern = MarkdownRules.PATTERN_HEADER_ITEM
+    private val PATTERN_LIST_ITEM: Pattern =
+        Pattern.compile("^([^\\S\\r\\n]*)([*-]|\\d+\\.) +(.*)(\\n|\$)?")
+    private val PATTERN_HEADER_ITEM: Pattern =
+        Pattern.compile("^ *(#{1,3})(?:\\s+)([^\\n]+?)#*\\s*(?:\\n|\$)")
+    private val PATTERN_SUBTEXT: Pattern = Pattern.compile("^ *-# +((?!(-#)+)[^\\n]+?) *(?:\\n|\$)")
+    private val PATTERN_COMMAND_MENTION: Pattern = Pattern.compile(
+        "^</((?:[-_\\p{L}\\p{N}]{1,32})(?: [-_\\p{L}\\p{N}]{1,32}){0,2}):(\\d+)>",
+    )
 
     /** A masked link this dense in brackets is an attempt to make the link parser backtrack. */
     private val PATHOLOGICAL_MASKED_LINK_ATTACK_SUSPICIOUS_CHARS = setOf('[', ']')
@@ -238,6 +249,21 @@ object Rules {
             )
         }
 
+    /** `-# muted supporting text`; unlike headings, this is enabled in every message parser. */
+    fun <T : BasicRenderContext, S> createSubtextRule(): Rule.BlockRule<T, SubtextNode<T>, S> =
+        object : Rule.BlockRule<T, SubtextNode<T>, S>(PATTERN_SUBTEXT) {
+            override fun parse(
+                matcher: Matcher,
+                parser: Parser<T, in SubtextNode<T>, S>,
+                state: S,
+            ): ParseSpec<T, S> = ParseSpec(
+                SubtextNode(),
+                state,
+                matcher.start(1),
+                matcher.end(1),
+            )
+        }
+
     /** `- item` / `* item`, with one level of indentation supported. */
     fun <T : BasicRenderContext, S> createListItemRule(): Rule<T, BulletListNode<T>, S> =
         object : Rule<T, BulletListNode<T>, S>(PATTERN_LIST_ITEM) {
@@ -246,14 +272,16 @@ object Rules {
                 parser: Parser<T, in BulletListNode<T>, S>,
                 state: S,
             ): ParseSpec<T, S> {
-                val nestedLevel = if (matcher.group(1).isNullOrEmpty()) 1 else 2
-                // Group 3 only captures when the item is terminated by a newline of its own.
-                val includesNewline = !matcher.group(3).isNullOrEmpty()
+                val nestedLevel = (matcher.group(1).orEmpty().length / 2 + 1).coerceAtMost(11)
+                val rawMarker = matcher.group(2).orEmpty()
+                val orderedMarker = rawMarker.removeSuffix(".").takeIf { rawMarker.endsWith('.') }
+                // Group 4 only captures when the item is terminated by a newline of its own.
+                val includesNewline = !matcher.group(4).isNullOrEmpty()
                 return ParseSpec(
-                    BulletListNode(nestedLevel, includesNewline),
+                    BulletListNode(nestedLevel, includesNewline, orderedMarker),
                     state,
-                    matcher.start(2),
-                    matcher.end(2),
+                    matcher.start(3),
+                    matcher.end(3),
                 )
             }
         }
@@ -302,6 +330,19 @@ object Rules {
                 }
                 return ParseSpec(UserMentionNode(type), state)
             }
+        }
+
+    /** `</name subcommand:id>`, with the same Unicode command-name boundaries as desktop. */
+    fun <T : CommandMentionNode.RenderContext, S> createCommandMentionRule(): Rule<T, CommandMentionNode<T>, S> =
+        object : Rule<T, CommandMentionNode<T>, S>(PATTERN_COMMAND_MENTION) {
+            override fun parse(
+                matcher: Matcher,
+                parser: Parser<T, in CommandMentionNode<T>, S>,
+                state: S,
+            ): ParseSpec<T, S> = ParseSpec(
+                CommandMentionNode(matcher.group(1).orEmpty(), matcher.group(2).toLongOrDefault()),
+                state,
+            )
         }
 
     // endregion
@@ -380,6 +421,26 @@ object Rules {
     /** A bare `https://` link. */
     fun <T : UrlNode.RenderContext, S> createUrlRule(): Rule<T, UrlNode<T>, S> =
         object : Rule<T, UrlNode<T>, S>(PATTERN_URL) {
+            override fun match(inspectionSource: CharSequence, lastCapture: String?, state: S): Matcher? {
+                val matcher = super.match(inspectionSource, lastCapture, state) ?: return null
+                val url = matcher.group(1).orEmpty()
+                var openParenthesisSearchStart = 0
+                var trimmedLength = url.length
+                for (index in url.lastIndex downTo 0) {
+                    if (url[index] != ')') break
+                    val opening = url.indexOf('(', openParenthesisSearchStart)
+                    if (opening < 0) {
+                        trimmedLength--
+                    } else {
+                        openParenthesisSearchStart = opening + 1
+                    }
+                }
+                if (trimmedLength == url.length) return matcher
+
+                matcher.region(0, matcher.start(1) + trimmedLength)
+                return matcher.takeIf { it.lookingAt() }
+            }
+
             override fun parse(
                 matcher: Matcher,
                 parser: Parser<T, in UrlNode<T>, S>,
@@ -397,6 +458,35 @@ object Rules {
             ): ParseSpec<T, S> = ParseSpec(UrlNode(matcher.group(1).orEmpty()), state)
         }
 
+    /** `<name@example.com>` */
+    fun <T : UrlNode.RenderContext, S> createMailtoRule(): Rule<T, UrlNode<T>, S> =
+        object : Rule<T, UrlNode<T>, S>(PATTERN_MAILTO) {
+            override fun parse(
+                matcher: Matcher,
+                parser: Parser<T, in UrlNode<T>, S>,
+                state: S,
+            ): ParseSpec<T, S> {
+                val address = matcher.group(1).orEmpty()
+                return ParseSpec(UrlNode("mailto:$address", address), state)
+            }
+        }
+
+    /** `<+1 555 0100>`, `<tel:...>` and `<sms:...>`. */
+    fun <T : UrlNode.RenderContext, S> createTelephoneRule(): Rule<T, UrlNode<T>, S> =
+        object : Rule<T, UrlNode<T>, S>(PATTERN_TEL) {
+            override fun parse(
+                matcher: Matcher,
+                parser: Parser<T, in UrlNode<T>, S>,
+                state: S,
+            ): ParseSpec<T, S> {
+                val display = matcher.group(1).orEmpty()
+                val target = display.replace(Regex("[ /]+"), "-").let {
+                    if (it.startsWith("tel:") || it.startsWith("sms:")) it else "tel:$it"
+                }
+                return ParseSpec(UrlNode(target, display), state)
+            }
+        }
+
     /** `[label](https://...)`, only enabled for surfaces that allow masked links. */
     fun <T : UrlNode.RenderContext, S> createMaskedLinkRule(): Rule<T, UrlNode<T>, S> =
         object : Rule<T, UrlNode<T>, S>(PATTERN_MASKED_LINK) {
@@ -404,7 +494,9 @@ object Rules {
                 if (isLikelyPathologicalAttack(inspectionSource)) {
                     null
                 } else {
-                    super.match(inspectionSource, lastCapture, state)
+                    super.match(inspectionSource, lastCapture, state)?.takeIf {
+                        runCatching { toPunyCodeAsciiUrl(it.group(2).orEmpty()) }.isSuccess
+                    }
                 }
 
             override fun parse(

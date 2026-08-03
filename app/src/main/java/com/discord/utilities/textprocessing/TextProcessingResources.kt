@@ -53,7 +53,12 @@ internal object EmojiImages {
  * Converts a URL to its ASCII (punycode) form so a spoofed unicode host cannot be shown as a
  * legitimate one. Mirrors `StringUtilsKt.toPunyCodeASCIIUrl`.
  */
+private val ALLOWED_URL_SCHEMES = setOf("http", "https", "steam", "mailto", "tel", "sms")
+
 internal fun toPunyCodeAsciiUrl(url: String): String {
+    val protocol = url.substringBefore(':', missingDelimiterValue = "").lowercase()
+    require(protocol in ALLOWED_URL_SCHEMES) { "Unsupported URL scheme" }
+    if (protocol != "http" && protocol != "https") return url
     val parsed = java.net.URL(url)
     val ascii = java.net.URL(
         parsed.protocol,

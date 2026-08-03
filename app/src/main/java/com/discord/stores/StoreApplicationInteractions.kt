@@ -61,7 +61,7 @@ class StoreApplicationInteractions(
     private val storeLocalActionComponentState: StoreLocalActionComponentState,
     private val sharedPrefs: SharedPreferences = SharedPreferencesProvider.get(),
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
-    private val restApi: () -> RestAPIInterface? = { RestAPI.apiOrNull },
+    private val restApi: () -> RestAPIInterface? = { RestAPI.reactNativeApiOrNull },
     private val nonceGenerator: NonceGenerator = NonceGenerator(),
     private val now: () -> Long = System::currentTimeMillis,
     /**
@@ -133,6 +133,8 @@ class StoreApplicationInteractions(
     private val interactionModalCreate = PublishSubject.create<InteractionModalCreate>()
 
     private var sessionId: String? = null
+
+    fun getSessionId(): String? = sessionId
 
     // -- Reads ---------------------------------------------------------------------------------
 
@@ -422,6 +424,7 @@ class StoreApplicationInteractions(
             applicationCommandId = data.applicationCommand.id,
             applicationCommandsValues = data.values,
             version = version ?: data.applicationCommand.version,
+            applicationCommand = data.applicationCommand.apiCommand,
         )
         handleSendApplicationCommandRequest(localSendData, attachments, onSuccess, onFail)
     }

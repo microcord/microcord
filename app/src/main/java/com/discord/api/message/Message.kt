@@ -50,6 +50,9 @@ data class Message(
     val member: GuildMember? = null,
     val hit: Boolean? = null,
     val roleSubscriptionData: RoleSubscriptionData? = null,
+    val messageSnapshots: List<MessageSnapshot>? = null,
+    val poll: MessagePoll? = null,
+    val resolved: MessageResolvedData? = null,
 ) {
     override fun toString() =
         "Message(id=$id, channelId=$channelId, guildId=$guildId, content=<redacted>, nonce=<redacted>)"
@@ -59,4 +62,65 @@ data class MessageReference(
     val guildId: Long?,
     val channelId: Long?,
     val messageId: Long?,
+    val type: Int? = null,
+    val failIfNotExists: Boolean? = null,
+    val forwardOnly: ForwardOnly? = null,
+)
+
+data class ForwardOnly(
+    val attachmentIds: List<Long>? = null,
+    val embedIndices: List<Int>? = null,
+)
+
+data class MessageSnapshot(val message: Message)
+
+data class MessageResolvedData(
+    val users: Map<Long, User>? = null,
+    val members: Map<Long, ResolvedGuildMember>? = null,
+)
+
+data class ResolvedGuildMember(
+    val roles: List<Long> = emptyList(),
+    val nick: String? = null,
+    val premiumSince: String? = null,
+    val joinedAt: UtcDateTime? = null,
+    val pending: Boolean = false,
+    val avatar: String? = null,
+    val communicationDisabledUntil: UtcDateTime? = null,
+)
+
+data class MessagePoll(
+    val question: PollMedia,
+    val answers: List<PollAnswer>,
+    val expiry: UtcDateTime?,
+    val allowMultiselect: Boolean,
+    val layoutType: Int,
+    val results: PollResults? = null,
+)
+
+data class PollAnswer(
+    val answerId: Int,
+    val pollMedia: PollMedia,
+)
+
+data class PollMedia(
+    val text: String? = null,
+    val emoji: PollEmoji? = null,
+)
+
+data class PollEmoji(
+    val id: Long? = null,
+    val name: String? = null,
+    val animated: Boolean? = null,
+)
+
+data class PollResults(
+    val finalized: Boolean,
+    val answerCounts: List<PollAnswerCount>,
+)
+
+data class PollAnswerCount(
+    val id: Int,
+    val count: Int,
+    val meVoted: Boolean,
 )

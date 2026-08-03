@@ -23,4 +23,7 @@ data class ApplicationCommandOption(
     val autocomplete: Boolean = false,
     val minValue: Number? = null,
     val maxValue: Number? = null,
+    val minLength: Int? = null,
+    val maxLength: Int? = null,
+    val untranslatedName: String = name,
 )

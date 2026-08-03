@@ -19,7 +19,7 @@ object DiscordParser {
 
     /** Selects which parser a surface gets, and therefore which rules are enabled. */
     enum class ParserOptions {
-        /** Chat messages: no masked links, entity mentions enabled. */
+        /** Current chat messages: masked links, headings, lists and entity mentions enabled. */
         DEFAULT,
 
         /** Surfaces that are allowed to show `[label](url)`, such as system and bot content. */
@@ -32,7 +32,12 @@ object DiscordParser {
         FORUM_POST_FIRST_MESSAGE,
     }
 
-    private val SAFE_LINK_PARSER = createParser(allowMaskedLinks = false, supportEntityMentions = true)
+    private val SAFE_LINK_PARSER = createParser(
+        allowMaskedLinks = true,
+        supportEntityMentions = true,
+        renderHeaders = true,
+        renderLists = true,
+    )
     private val MASKED_LINK_PARSER = createParser(allowMaskedLinks = true, supportEntityMentions = true)
     private val REPLY_PARSER = createParser(
         allowMaskedLinks = false,
@@ -67,11 +72,14 @@ object DiscordParser {
         parser.addRule(Rules.createCodeBlockRule())
         parser.addRule(Rules.createInlineCodeRule())
         parser.addRule(Rules.createSpoilerRule())
+        parser.addRule(Rules.createSubtextRule())
 
         if (allowMaskedLinks) {
             parser.addRule(Rules.createMaskedLinkRule())
         }
         parser.addRule(Rules.createUrlNoEmbedRule())
+        parser.addRule(Rules.createMailtoRule())
+        parser.addRule(Rules.createTelephoneRule())
         parser.addRule(Rules.createUrlRule())
 
         parser.addRule(Rules.createCustomEmojiRule())
@@ -82,6 +90,7 @@ object DiscordParser {
             parser.addRule(Rules.createChannelMentionRule())
             parser.addRule(Rules.createRoleMentionRule())
             parser.addRule(Rules.createUserMentionRule())
+            parser.addRule(Rules.createCommandMentionRule())
         }
 
         parser.addRule(Rules.createUnicodeEmojiRule())

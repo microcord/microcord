@@ -1,0 +1,54 @@
+{
+  "version": "1500000000000000000",
+  "applications": [
+    {
+      "id": "100",
+      "name": "Fixture App",
+      "description": "Sanitized command fixture",
+      "icon": null,
+      "permissions": {"roles": {"42": true}, "channels": {"7": false}},
+      "bot_id": "101",
+      "flags": "0"
+    }
+  ],
+  "application_commands": [
+    {
+      "id": "200",
+      "type": 1,
+      "application_id": "100",
+      "name": "verwaltung",
+      "name_default": "manage",
+      "description": "Localized description",
+      "description_default": "Manage a resource",
+      "default_member_permissions": "32",
+      "contexts": [0, 2],
+      "integration_types": [0, 1],
+      "version": "201",
+      "options": [
+        {
+          "type": 2,
+          "name": "ressource",
+          "name_default": "resource",
+          "description": "Resource commands",
+          "options": [
+            {
+              "type": 1,
+              "name": "erstellen",
+              "name_default": "create",
+              "description": "Create a resource",
+              "options": [
+                {"type": 6, "name": "user", "description": "User", "required": true},
+                {"type": 8, "name": "role", "description": "Role"},
+                {"type": 9, "name": "mentionable", "description": "Mentionable"},
+                {"type": 7, "name": "channel", "description": "Channel", "channel_types": [0]},
+                {"type": 11, "name": "attachment", "description": "Attachment"},
+                {"type": 3, "name": "suche", "name_default": "query", "description": "Query", "autocomplete": true, "min_length": 2, "max_length": 20},
+                {"type": 4, "name": "count", "description": "Count", "choices": [{"name": "Two", "value": 2}]}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

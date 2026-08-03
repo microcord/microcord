@@ -30,6 +30,8 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.view.extensions.setForwardingWindowInsetsListener
 import com.discord.widgets.auth.WidgetOauth2Authorize
 import com.discord.widgets.auth.WidgetRemoteAuth
+import com.discord.widgets.applicationdirectory.WidgetApplicationDirectory
+import com.discord.widgets.applicationdirectory.WidgetApplicationDirectoryDetail
 import com.discord.widgets.directories.WidgetDirectoriesSearch
 import com.discord.widgets.friends.WidgetFriendsAdd
 import com.discord.widgets.friends.WidgetFriendsAddById
@@ -356,6 +358,9 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
             // switcher is what resolves a name, so the link opens it pre-filled.
             is DeepLinkRoute.Query ->
                 if (!WidgetGlobalSearchDialog.showForQuery(childFragmentManager, route)) return
+            is DeepLinkRoute.ApplicationDirectory -> route.applicationId?.let {
+                WidgetApplicationDirectoryDetail.launch(requireContext(), it)
+            } ?: WidgetApplicationDirectory.launch(requireContext())
             // `/discovery` opens directory search against the Discord-owned HQ directory channel.
             is DeepLinkRoute.Discovery -> AppScreenRouter.launch(
                 requireContext(),
@@ -370,6 +375,8 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
                 requireContext(),
                 WidgetOauth2Authorize.authorizeUri(route.parameters),
             )
+            is DeepLinkRoute.OAuthCallback ->
+                StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE, true)
             DeepLinkRoute.Home ->
                 StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE, true)
             DeepLinkRoute.Friends -> StoreStream.getTabsNavigation().selectTab(NavigationTab.FRIENDS, true)

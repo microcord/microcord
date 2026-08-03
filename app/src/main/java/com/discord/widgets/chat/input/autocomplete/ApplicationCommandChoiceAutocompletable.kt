@@ -6,8 +6,8 @@ data class ApplicationCommandChoiceAutocompletable(
     val choice: CommandChoice,
     val optionName: String? = null,
 ) : Autocompletable() {
-    private val textMatchers = listOf(choice.name)
+    private val textMatchers = listOf(choice.displayName, choice.name).distinct()
 
-    override fun getInputReplacement() = choice.value
+    override fun getInputReplacement() = choice.value.toString()
     override fun getInputTextMatchers() = textMatchers
 }

@@ -3,13 +3,13 @@ package com.discord.widgets.chat.list.actions
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
 import android.graphics.Rect
 import android.os.Bundle
 import android.view.View
 import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentManager
+import androidx.fragment.app.commit
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
@@ -48,6 +48,8 @@ import com.discord.widgets.mobile_reports.WidgetMobileReports
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.tos.WidgetTosReportViolation
 import com.discord.widgets.user.usersheet.WidgetUserSheet
+import com.discord.widgets.share.ForwardingPolicy
+import com.discord.widgets.share.WidgetIncomingShare
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
 
@@ -158,10 +160,12 @@ class WidgetChatListActions : AppBottomSheet() {
             }
             dismiss()
         }
-        bind(root, R.id.dialog_chat_actions_share, model.isDeveloper && !isLocal) {
-            share(model)
-            dismiss()
-        }
+        root.findViewById<TextView>(R.id.dialog_chat_actions_share).setText(R.string.forward_message)
+        bind(
+            root,
+            R.id.dialog_chat_actions_share,
+            ForwardingPolicy.canForward(message, model.channel, model.permissions),
+        ) { forward(message) }
         bind(root, R.id.dialog_chat_actions_pin, manage.canTogglePinned) {
             MessageActionDialogs.showPinMessageConfirmation(parentFragmentManager, requireContext(), message, this) {
                 dismiss()
@@ -246,13 +250,13 @@ class WidgetChatListActions : AppBottomSheet() {
         )
     }
 
-    private fun share(model: Model) {
-        val guild = model.guild?.id?.toString() ?: "@me"
-        val url = "https://discord.com/channels/$guild/${model.message.channelId}/${model.message.id}"
-        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, url)
-        }, getString(R.string.share)))
+    private fun forward(message: Message) {
+        val target = parentFragment ?: return
+        dismiss()
+        target.parentFragmentManager.commit {
+            replace(target.id, WidgetIncomingShare.newForwardInstance(message))
+            addToBackStack("forward_message")
+        }
     }
 
     private fun canPublish(model: Model): Boolean =

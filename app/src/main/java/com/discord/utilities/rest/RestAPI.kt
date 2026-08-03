@@ -2,6 +2,9 @@ package com.discord.utilities.rest
 
 import com.discord.restapi.CaptchaInterceptor
 import com.discord.restapi.ChannelReorderDiagnostics
+import com.discord.restapi.ApplicationDirectoryAPI
+import com.discord.restapi.EmbeddedActivitiesAPI
+import com.discord.restapi.EmbeddedActivityOAuthAPI
 import com.discord.restapi.RestAPIBuilder
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.ReactNativeHeadersInterceptor
@@ -29,6 +32,15 @@ object RestAPI {
 
     @Volatile
     private var installedReactNative: RestAPIInterface? = null
+
+    @Volatile
+    private var installedApplicationDirectory: ApplicationDirectoryAPI? = null
+
+    @Volatile
+    private var installedEmbeddedActivities: EmbeddedActivitiesAPI? = null
+
+    @Volatile
+    private var installedEmbeddedActivityOAuth: EmbeddedActivityOAuthAPI? = null
 
     /** Publishes the store graph's REST client. Safe to call more than once. */
     @JvmStatic
@@ -63,6 +75,21 @@ object RestAPI {
             interceptors = chain + ReactNativeHeadersInterceptor,
             clientName = "reactNative",
         )
+        installedApplicationDirectory = builder.build(
+            ApplicationDirectoryAPI::class.java,
+            interceptors = chain + ReactNativeHeadersInterceptor,
+            clientName = "applicationDirectory",
+        )
+        installedEmbeddedActivities = builder.build(
+            EmbeddedActivitiesAPI::class.java,
+            interceptors = chain + ReactNativeHeadersInterceptor,
+            clientName = "embeddedActivities",
+        )
+        installedEmbeddedActivityOAuth = builder.build(
+            EmbeddedActivityOAuthAPI::class.java,
+            interceptors = chain + ReactNativeHeadersInterceptor,
+            clientName = "embeddedActivityOAuth",
+        )
         install(api, apiSerializeNulls, reactNativeApi)
         return api
     }
@@ -73,6 +100,9 @@ object RestAPI {
         installed = null
         installedSerializeNulls = null
         installedReactNative = null
+        installedApplicationDirectory = null
+        installedEmbeddedActivities = null
+        installedEmbeddedActivityOAuth = null
     }
 
     /** Adds the same client metadata header as Discord Android 126.21. */
@@ -109,4 +139,16 @@ object RestAPI {
     @JvmStatic
     val reactNativeApiOrNull: RestAPIInterface?
         get() = installedReactNative
+
+    @JvmStatic
+    val applicationDirectoryApiOrNull: ApplicationDirectoryAPI?
+        get() = installedApplicationDirectory
+
+    @JvmStatic
+    val embeddedActivitiesApiOrNull: EmbeddedActivitiesAPI?
+        get() = installedEmbeddedActivities
+
+    @JvmStatic
+    val embeddedActivityOAuthApiOrNull: EmbeddedActivityOAuthAPI?
+        get() = installedEmbeddedActivityOAuth
 }

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_launcher_search_apps">Search apps and commands</string>
+    <string name="app_launcher_search_activities">Search activities</string>
+    <string name="app_launcher_promoted">Promoted</string>
+    <string name="app_launcher_use_command">Use command</string>
+    <string name="app_launcher_add_app">Add App</string>
+    <string name="app_launcher_launch_activity">Launch Activity</string>
+    <string name="app_launcher_home_empty_title">No apps yet</string>
+    <string name="app_launcher_home_empty_body">Apps and activities available here will appear in this list.</string>
+    <string name="app_launcher_search_empty_title">No results found</string>
+    <string name="app_launcher_search_empty_body">Try another search.</string>
+    <string name="app_launcher_no_permissions_title">You can’t use apps here</string>
+    <string name="app_launcher_no_permissions_body">You don’t have permission to use application commands in this channel.</string>
+    <string name="app_launcher_command_not_found_title">Command unavailable</string>
+    <string name="app_launcher_command_not_found_body">This command is no longer available.</string>
+    <string name="app_launcher_required_options">Complete the required options before sending.</string>
+    <string name="app_launcher_connection_result">Connection</string>
+</resources>

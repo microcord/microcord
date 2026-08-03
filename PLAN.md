@@ -1568,6 +1568,8 @@ while talking and logs contain `Setting screenshare true` followed by nonzero ou
   `global_name` wire mapping.
 - Guild user popouts no longer pass the current guild member as a group-DM AKA. That false AKA state
   hid the secondary unique username whenever a nickname or global display name was primary.
+- Direct-message names now prefer hydrated `StoreUser.globalName` and fall back to embedded recipient
+  `global_name`, then username. This covers the DM list and shared unnamed-private-channel headers.
 - Focused model, chat, member-list, voice-display, settings, and autocomplete tests pass;
   `:app:assembleDebug` passes.
 
@@ -1765,3 +1767,96 @@ Resumable task: `app/src/main/java/com/discord/widgets/settings/WidgetDebugging.
   no-solver case. Full suite: 1,753 tests, `assembleDebug` and `lintDebug` pass.
   `StoreStreamTest.voiceStateUpdateHydratesJoiningMemberBeforePublishingParticipant` fails here and
   on a clean `HEAD` worktree — pre-existing and unrelated.
+## 2026-08-03 modern application commands
+
+- Reconstructed current application-command indexes and interaction submission using Aliucord PR 431
+  only as historical evidence, with Discord Userdoccers and desktop modules `168186`/`545152` as the
+  current contract. Guild/channel and user indexes merge with stale-response rejection and gateway
+  invalidation refetch.
+- Typed command models now cover localized names/descriptions, subcommands/groups, option types 1-11,
+  choices, min/max values and lengths, context/integration/permission gates, focused autocomplete,
+  attachments, and numeric normalization (`INTEGER` to `Long`, `NUMBER` to `Double`).
+- Interaction payloads include command type/version/root identity, full command data, application,
+  session/guild/channel IDs, nonce, analytics location, and attachment indices. Loading/failure and
+  submit-failure states remain observable.
+- Focused REST/gateway/store/serialization/autocomplete tests and `assembleDebug` pass. Live command
+  index authorization, invalidation, localized nested submission, and attachment selection remain for
+  approved-account device testing.
+
+Resumable task: `app/src/main/java/com/discord/stores/StoreApplicationCommands.kt` | Userdoccers
+application-command index docs and desktop module `545152` | live-test index fetch/invalidation and
+nested localized command submission with attachments.
+
+## 2026-08-03 forwarded messages and sharing
+
+- Added typed forward references (`type=1`), `HAS_SNAPSHOT`, immutable message snapshots, resolved
+  users/members, flags, polls, and bounded nested snapshot parsing from the current Userdoccers and
+  desktop modules `762230`, `885918`, `843626`, `513480`, `320095`, `655758`.
+- Message actions and `WidgetIncomingShare` can select a permitted destination and send the exact
+  create-message forward body, optionally followed by context text. Existing channel permissions and
+  server validation fail closed; no message content is logged.
+- A dedicated forwarded container renders text, attachments, embeds, stickers, components, polls,
+  source privacy, loading/deleted/error/depth states, and accessibility. Partial snapshot users are
+  normalized without Kotlin `copy`, because Gson may leave omitted discriminator fields JVM-null.
+- Focused wire/policy/store/share/render/privacy/logout tests and `assembleDebug` pass. No live forward
+  was sent; guild-level forwarding-disable/gated-channel state remains server-enforced.
+
+Resumable task: `app/src/main/java/com/discord/widgets/share/ForwardedMessage.kt` | Userdoccers message
+forwarding and desktop module `885918` | live-test cross-guild privacy, permission rejection, optional
+context message, and nested snapshot rendering.
+
+## 2026-08-03 modern Discord Markdown
+
+- Updated the native parser from current desktop webpack evidence (`46054`, `29814`, `223637`,
+  `873879`, `683412`, `478676`) rather than replacing it with generic CommonMark.
+- Added headings, subtext, ordered/nested lists, masked links, command mentions, mail/tel/steam
+  autolinks, URL-scheme rejection, callbacks, and copy/unparse handling while preserving mentions,
+  timestamps, emoji, spoilers, code, quotes, Discord delimiter precedence, punycode, and untrusted-link
+  confirmation.
+- Bare links trim only unmatched trailing parentheses; balanced parenthesized targets remain linked.
+  Malformed/unclosed input, Unicode boundaries, nesting precedence, and bounded pathological-input
+  behavior are fixture-tested.
+- Focused Markdown tests and `assembleDebug` pass. Android emits nested lists as per-item nodes where
+  desktop groups the list AST; game/soundboard/static-route mentions remain unsupported.
+
+Resumable task: `app/src/main/java/com/discord/utilities/textprocessing/Rules.kt` | desktop Markdown
+modules above | add game/soundboard/static-route mentions when their typed models and click routes exist.
+
+## 2026-08-03 Application Directory and OAuth installation
+
+- Added the desktop-style Application Directory at `/discovery/applications`, distinct from the
+  application-command index. Typed search/browse supports categories, debounce, pagination, ranked
+  page merge, stale-response rejection, and loading/empty/error states using current Userdoccers and
+  desktop modules `435220`, `993748`, `651753`, `869362`, `692848`, `887909`.
+- Application detail exposes Add App with user/server context selection, guild eligibility (owner or
+  `MANAGE_GUILD`), requested scopes/permissions, integration type, guild lock, OAuth cancellation,
+  error handling, custom install URLs, and safe redirect routing through the existing OAuth screen.
+- Install eligibility follows `integration_types_config` key presence, not bot presence or non-null
+  nested OAuth params: `USER_INSTALL` works without guild lookup, `GUILD_INSTALL` uses eligible guilds,
+  both contexts show a Discord-themed selector, and legacy `install_params` remains guild-only.
+- Application Directory UI uses first-party Discord-themed `SelectorDialog`, `WidgetNoticeDialog`,
+  `LoadingButton`, `TypingDots`, themed inputs/cards/toolbars, and Up navigation. Stock Android dialogs,
+  spinners, adapters, progress indicators, and raw buttons were removed; loading/empty/error/retry,
+  accessibility, cancellation, and search/category restoration are covered.
+- Every `LoadingButton` is now driven explicitly: category, Add App, Privacy, Terms, retry, and load
+  more leave progress state when their request completes. Live WSA verification showed the directory
+  list, Featured selector, detail content, Add App, Privacy, and Terms controls rendered without the
+  prior permanent three-dot state. A live guild-only app correctly opened the Discord selector.
+- Featured collections/carousels, similar-app recommendations, and editable per-permission toggles
+  remain out of scope; empty search supplies browse results and requested bot permissions stay fixed.
+- Focused REST/store/navigation/OAuth flow tests, `assembleDebug`, and Android-test compilation pass.
+  No live OAuth authorization or application installation was performed.
+
+Resumable task: `app/src/main/java/com/discord/widgets/applicationdirectory/**` | Userdoccers
+Application Directory/OAuth docs and desktop modules above | device-test search pagination, detail,
+user/server installation, guild eligibility, cancellation, and redirect completion.
+
+## 2026-08-03 chat input cleanup and Android Markdown crash
+
+- Removed the Nitro gift affordance and reused its existing measured slot as a visible Apps/compass
+  button that opens the Application Directory. Surrounding chat-input geometry does not shift; the
+  button is enabled, focusable, and accessibility-labeled.
+- Fixed an Android-only startup crash introduced by modern command-mention Markdown parsing:
+  `java.util.regex.Pattern` on Android rejects JVM flag `UNICODE_CHARACTER_CLASS` (256). The pattern
+  already uses explicit `\p{L}`/`\p{N}` classes, so the unsupported redundant flag was removed.
+- Focused Application Directory/Markdown tests, `assembleDebug`, and Android-test compilation pass.

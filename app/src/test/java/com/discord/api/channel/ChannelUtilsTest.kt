@@ -79,9 +79,9 @@ class ChannelUtilsTest {
     }
 
     @Test fun `display name falls back to recipients only for unnamed private channels`() {
-        val recipients = listOf(user(1, "ada"), user(2, "grace"))
+        val recipients = listOf(user(1, "ada", globalName = "Ada Display"), user(2, "grace"))
         assertEquals(
-            "ada, grace",
+            "Ada Display, grace",
             channel(type = Channel.GROUP_DM, name = null, recipients = recipients).getDisplayName(),
         )
         assertEquals(
@@ -152,8 +152,12 @@ class ChannelUtilsTest {
         assertEquals(listOf(1L, 2L), sorted.map(Channel::id))
     }
 
-    private fun user(id: Long, username: String = "user", system: Boolean? = null) =
-        User(id = id, username = username, system = system)
+    private fun user(
+        id: Long,
+        username: String = "user",
+        system: Boolean? = null,
+        globalName: String? = null,
+    ) = User(id = id, username = username, system = system, globalName = globalName)
 
     private fun channel(
         id: Long = 10,

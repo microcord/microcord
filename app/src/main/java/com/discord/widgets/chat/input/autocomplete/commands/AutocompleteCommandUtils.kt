@@ -208,9 +208,10 @@ object AutocompleteCommandUtils {
             val raw = source.trim()
             val match = mentionMap.mentions.values.firstOrNull { it.matchesText(raw) }
             val choiceValue = if (option.autocomplete && match is ApplicationCommandChoiceAutocompletable) {
-                match.choice.value
+                match.choice.value.toString()
             } else {
-                option.choices?.firstOrNull { it.name.trim() == raw }?.value ?: raw
+                option.choices?.firstOrNull { it.displayName.trim() == raw || it.name.trim() == raw }
+                    ?.value?.toString() ?: raw
             }
             put(option, option.parseValue(choiceValue, source, match, attachments[option]))
         }
@@ -229,7 +230,7 @@ object AutocompleteCommandUtils {
         mentions: ChatInputMentionsMap,
     ): Boolean {
         choices?.takeIf { it.isNotEmpty() }?.let { choices ->
-            return choices.any { it.value == parsed.value.toString() }
+            return choices.any { it.value.toString() == parsed.value.toString() }
         }
         if (autocomplete) {
             return mentions.mentions.values.filterIsInstance<ApplicationCommandChoiceAutocompletable>()
@@ -237,6 +238,8 @@ object AutocompleteCommandUtils {
         }
         return when (type) {
             ApplicationCommandType.STRING -> parsed is StringOptionValue && parsed.value.toString().isNotBlank()
+                && minLength?.let { parsed.value.toString().length >= it } != false
+                && maxLength?.let { parsed.value.toString().length <= it } != false
             ApplicationCommandType.INTEGER -> parsed is IntegerOptionValue &&
                 minValue?.toLong()?.let { parsed.value as Long >= it } != false &&
                 maxValue?.toLong()?.let { parsed.value as Long <= it } != false

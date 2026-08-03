@@ -8,4 +8,6 @@ data class ApplicationCommandData(
     val name: String,
     val options: List<ApplicationCommandValue>?,
     val attachments: List<ApplicationCommandAttachment>?,
+    val type: Int = ApplicationCommandIndexCommand.TYPE_CHAT_INPUT,
+    val applicationCommand: ApplicationCommandIndexCommand? = null,
 )

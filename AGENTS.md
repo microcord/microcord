@@ -112,6 +112,10 @@ invalid decompiler constructs into the target.
   dependencies from the reference.
 - Implement the complete store state surface, not only fields used by the first
   caller being rebuilt.
+- Every `StoreV2` mutation must run on the single `StoreStream` dispatcher that
+  is registered with `StoreThreadScheduler`. Do not create standalone
+  dispatchers, executors, or schedulers for stores; route all mutation callbacks
+  back through the owning store-graph dispatcher.
 - Before implementing a first-party DTO, Gateway payload, domain model, store
   state, or Kotlin data class, inventory every reference field.
 - Match field type, generic element type, nullability, default, mutability,
@@ -124,6 +128,10 @@ invalid decompiler constructs into the target.
   serialization, or observed runtime behavior depends on them.
 - Recreate every first-party custom view, fragment, dialog, bottom sheet,
   adapter row, and layout variant used by the feature.
+- User-visible flows must reuse existing Discord-themed first-party components
+  and styles. Do not introduce stock Android dialogs, buttons, text fields,
+  progress indicators, or pickers when a Discord component exists; when none
+  exists, create the smallest first-party Discord-themed view.
 - Match view state, visibility, interaction, scrolling, animation, lifecycle,
   restoration, accessibility, loading, empty, and error behavior.
 - Preserve the reference navigation chrome and exit behavior on every screen.
@@ -146,6 +154,17 @@ invalid decompiler constructs into the target.
 - Resolve resource attribute errors by installing the owning dependency before
   editing recovered XML.
 - Record significant version deviations in the `PLAN.md` decision log.
+
+## API Transport Rules
+
+- Every endpoint or behavior sourced from the modern React Native client,
+  Hermes bundle, or RN Userdoccers contract must use the RNAPI service/client
+  with `ReactNativeHeadersInterceptor`. Never add a modern endpoint to the
+  legacy `RestAPI.api` transport.
+- Keep reconstructed 126.21 legacy endpoints on the legacy client unless
+  runtime evidence shows that Discord moved them to the RN transport.
+- Add a transport test proving every new RN endpoint receives the RN headers
+  and does not silently fall back to the legacy client.
 
 ## Resource Rules
 
@@ -193,6 +212,18 @@ Use Windows wrapper commands from the project root:
 
 Run `assembleRelease` before closing a release-oriented phase. State explicitly
 when a check was not run or no device was available.
+
+- Do not run unnecessary, repetitive, or broad test suites. Run the smallest
+  focused check that covers the changed behavior, then one final integration
+  build/test batch after related edits are complete. Do not rerun unchanged
+  checks after every small edit.
+
+## Git Workflow
+
+- Merge commits are forbidden. Integrate upstream only with `git rebase`.
+- With an uncommitted worktree, stash tracked and untracked changes, rebase onto
+  the upstream branch, reapply the stash, resolve conflicts, and verify before
+  dropping the temporary stash. Never use `git merge` for upstream updates.
 
 ## Scope Discipline
 

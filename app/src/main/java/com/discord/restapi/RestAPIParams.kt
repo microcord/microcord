@@ -59,6 +59,9 @@ object RestAPIParams {
         val data: com.discord.api.commands.ApplicationCommandData,
         val sessionId: String?,
         val nonce: String,
+        val analyticsLocation: String? = null,
+        val sectionName: String? = null,
+        val source: String? = null,
     )
 
     data class AuthLogin(
@@ -525,6 +528,14 @@ object RestAPIParams {
             val guildId: Long?,
             val channelId: Long,
             val messageId: Long?,
+            val type: Int? = null,
+            val failIfNotExists: Boolean? = null,
+            val forwardOnly: ForwardOnly? = null,
+        )
+
+        data class ForwardOnly(
+            val attachmentIds: List<Long>? = null,
+            val embedIndices: List<Int>? = null,
         )
 
         data class AllowedMentions(

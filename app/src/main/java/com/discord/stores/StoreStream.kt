@@ -491,8 +491,9 @@ class StoreStream private constructor(
         observationDeck = observationDeck,
         restApi = { if (::restApi.isInitialized) restApi else null },
     )
+    private val applicationDirectory = StoreApplicationDirectory(dispatcher, observationDeck)
     private val applicationStreamPreviews = StoreApplicationStreamPreviews(dispatcher, clock)
-    private val embeddedActivities = StoreEmbeddedActivities(observationDeck)
+    private val embeddedActivities = StoreEmbeddedActivities(observationDeck, dispatcher = dispatcher)
     private val applications = StoreApplication(
         dispatcher,
         observationDeck,
@@ -804,6 +805,7 @@ class StoreStream private constructor(
         applicationCommands,
         localActionComponentState,
         applicationInteractions,
+        applicationDirectory,
         embeddedActivities,
         applications,
         applicationAssets,
@@ -1615,6 +1617,9 @@ class StoreStream private constructor(
             guildScheduledEvents::handleGuildScheduledEventUserRemove)
         dispatchSubscribe(events.guildApplicationCommands, "guildApplicationCommands",
             applicationCommands::handleApplicationCommandsUpdate)
+        dispatchSubscribe(events.guildApplicationCommandIndexUpdate, "guildApplicationCommandIndexUpdate") {
+            applicationCommands.handleApplicationCommandIndexUpdate(it.guildId)
+        }
         dispatchSubscribe(events.applicationCommandAutocompleteResult, "applicationCommandAutocompleteResult",
             applicationCommands::handleApplicationCommandAutocompleteResult)
 
@@ -1795,6 +1800,8 @@ class StoreStream private constructor(
             applicationInteractions::handleInteractionModalCreate)
         dispatchSubscribe(events.embeddedActivityInboundUpdate, "embeddedActivityInboundUpdate",
             embeddedActivities::handleEmbeddedActivityInboundUpdate)
+        dispatchSubscribe(events.embeddedActivityUpdateV2, "embeddedActivityUpdateV2",
+            embeddedActivities::handleEmbeddedActivityUpdateV2)
 
         // User-scoped side channels. `userConnectionUpdate` is not subscribed here: it is handed to
         // StoreUserConnections as its `connectionUpdates` source, which re-fetches on each signal.
@@ -3032,6 +3039,7 @@ class StoreStream private constructor(
         @JvmStatic fun getApplicationCommandFrecency() = requireInstance().applicationCommandFrecency
         @JvmStatic fun getApplicationCommands() = requireInstance().applicationCommands
         @JvmStatic fun getInteractions() = requireInstance().applicationInteractions
+        @JvmStatic fun getApplicationDirectory() = requireInstance().applicationDirectory
         @JvmStatic fun getLocalActionComponentState() = requireInstance().localActionComponentState
         @JvmStatic fun getEmbeddedActivities() = requireInstance().embeddedActivities
         @JvmStatic fun getApplication() = requireInstance().applications

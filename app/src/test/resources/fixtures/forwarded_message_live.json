@@ -1,0 +1,91 @@
+{
+  "id": "100000000000000001",
+  "channel_id": "200000000000000001",
+  "guild_id": "300000000000000001",
+  "content": "parent context",
+  "flags": 16384,
+  "author": {
+    "id": "400000000000000001",
+    "username": "sender"
+  },
+  "message_reference": {
+    "type": 1,
+    "guild_id": "300000000000000002",
+    "channel_id": "200000000000000002",
+    "message_id": "100000000000000002"
+  },
+  "message_snapshots": [
+    {
+      "message": {
+        "content": "forwarded body",
+        "timestamp": "2026-01-01T00:00:00Z",
+        "author": {
+          "id": "400000000000000002",
+          "username": "source-author"
+        },
+        "mentions": [
+          {
+            "id": "400000000000000003",
+            "username": "mentioned"
+          }
+        ],
+        "resolved": {
+          "users": {
+            "400000000000000003": {
+              "id": "400000000000000003",
+              "username": "mentioned"
+            }
+          },
+          "members": {
+            "400000000000000003": {
+              "roles": [],
+              "nick": "Resolved Nick"
+            }
+          }
+        },
+        "attachments": [
+          {
+            "id": "500000000000000001",
+            "filename": "asset.bin",
+            "size": 4,
+            "url": "https://cdn.invalid/asset.bin",
+            "proxy_url": "https://proxy.invalid/asset.bin"
+          }
+        ],
+        "embeds": [
+          {
+            "type": "rich",
+            "title": "sanitized embed"
+          }
+        ],
+        "sticker_items": [
+          {
+            "id": "600000000000000001",
+            "name": "sanitized sticker",
+            "format_type": 1
+          }
+        ],
+        "components": [
+          {
+            "type": 1,
+            "components": [
+              {
+                "type": 2,
+                "style": 1,
+                "label": "Open",
+                "custom_id": "sanitized-action"
+              }
+            ]
+          }
+        ],
+        "poll": {
+          "question": { "text": "Sanitized question" },
+          "answers": [],
+          "expiry": "2026-01-02T00:00:00Z",
+          "allow_multiselect": false,
+          "layout_type": 1
+        }
+      }
+    }
+  ]
+}

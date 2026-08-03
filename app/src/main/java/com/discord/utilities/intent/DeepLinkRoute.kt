@@ -4,6 +4,7 @@ sealed interface DeepLinkRoute {
     data object Home : DeepLinkRoute
     data object Friends : DeepLinkRoute
     data object Discovery : DeepLinkRoute
+    data class ApplicationDirectory(val applicationId: Long? = null) : DeepLinkRoute
     data class Invite(val code: String, val eventId: Long?, val source: String?) : DeepLinkRoute
     data class Gift(val code: String) : DeepLinkRoute
     data class GuildTemplate(val code: String) : DeepLinkRoute
@@ -22,6 +23,9 @@ sealed interface DeepLinkRoute {
     data class StaticChannel(val guildId: Long, val destination: String) : DeepLinkRoute
     data class Authorization(val connect: Boolean, val parameters: Map<String, String>) : DeepLinkRoute {
         override fun toString() = "Authorization(connect=$connect, parameters=<redacted>)"
+    }
+    data class OAuthCallback(val parameters: Map<String, String>) : DeepLinkRoute {
+        override fun toString() = "OAuthCallback(parameters=<redacted>)"
     }
     data class Query(
         val type: String,

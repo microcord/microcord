@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    style="@style/UiKit.ViewGroup.Page.LinearLayout">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/app_bar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:background="?attr/primary_630"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <androidx.appcompat.widget.Toolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:title="@string/application_directory_title"
+            app:navigationContentDescription="@string/back"
+            app:navigationIcon="?attr/ic_action_bar_back"
+            style="@style/AppTheme.Toolbar" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginBottom="8dp"
+            style="@style/UiKit.TextInputLayout.Search.ActionBar">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/search"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/application_directory_search_hint"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:maxLength="100"
+                style="@style/UiKit.TextInputLayout.EditText.SingleLine.Search" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.discord.views.LoadingButton
+            android:id="@+id/category"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginBottom="8dp"
+            android:contentDescription="@string/application_directory_choose_category"
+            app:lb_background_color="?attr/colorBackgroundTertiary"
+            app:lb_text="@string/application_directory_all_categories" />
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/applications"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:paddingVertical="8dp"
+        app:layout_constraintBottom_toTopOf="@id/load_more"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/app_bar" />
+
+    <com.discord.views.typing.TypingDots
+        android:id="@+id/progress"
+        android:layout_width="48dp"
+        android:layout_height="wrap_content"
+        android:contentDescription="@string/loading"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/app_bar" />
+
+    <TextView
+        android:id="@+id/message"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:padding="24dp"
+        android:drawablePadding="16dp"
+        android:textColor="?attr/colorTextNormal"
+        app:drawableTopCompat="@drawable/img_clyde_empty"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/app_bar"
+        style="@style/UiKit.TextView.NoResults" />
+
+    <com.discord.views.LoadingButton
+        android:id="@+id/load_more"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="8dp"
+        app:lb_text="@string/application_directory_load_more"
+        app:lb_progress_color="@color/white"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+</androidx.constraintlayout.widget.ConstraintLayout>

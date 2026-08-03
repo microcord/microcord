@@ -532,6 +532,19 @@ interface RestAPIInterface {
         @Path("botId") botId: Long,
     ): Observable<List<com.discord.api.commands.ApplicationCommand>>
 
+    @GET("guilds/{guildId}/application-command-index")
+    fun getGuildApplicationCommandIndex(
+        @Path("guildId") guildId: Long,
+    ): Observable<com.discord.api.commands.ApplicationCommandIndex>
+
+    @GET("channels/{channelId}/application-command-index")
+    fun getChannelApplicationCommandIndex(
+        @Path("channelId") channelId: Long,
+    ): Observable<com.discord.api.commands.ApplicationCommandIndex>
+
+    @GET("users/@me/application-command-index")
+    fun getUserApplicationCommandIndex(): Observable<com.discord.api.commands.ApplicationCommandIndex>
+
     @GET("channels/{channelId}/messages/{messageId}/interaction-data")
     fun getInteractionData(
         @Path("channelId") channelId: Long,

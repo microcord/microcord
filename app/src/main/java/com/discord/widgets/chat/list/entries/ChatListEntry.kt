@@ -82,6 +82,7 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
         const val GUILD_SCHEDULED_EVENT_INVITE = 43
         const val AUTOMOD_BLOCKED = 44
         const val AUTOMOD_SYSTEM_MESSAGE = 45
+        const val FORWARDED_MESSAGE = 46
 
         /** `MessageTypes.AUTO_MODERATION_ACTION`; its single embed gets a dedicated row. */
         private const val AUTO_MOD_SYSTEM_MESSAGE_TYPE = 24

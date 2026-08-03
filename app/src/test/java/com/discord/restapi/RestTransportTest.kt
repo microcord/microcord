@@ -29,7 +29,10 @@ class RestTransportTest {
     private val server = MockWebServer()
 
     @After
-    fun stopServer() = server.shutdown()
+    fun stopServer() {
+        RestAPI.reset()
+        server.shutdown()
+    }
 
     @Test
     fun builderAddsVersionHeadersAndPersistsCookies() {
@@ -86,6 +89,55 @@ class RestTransportTest {
         assertEquals(ReactNativeRequestMetadata.USER_AGENT, sent.getHeader("User-Agent"))
         assertFalse(sent.getHeader("X-Super-Properties").isNullOrBlank())
         assertFalse(sent.getHeader("X-Discord-Timezone").isNullOrBlank())
+    }
+
+    @Test
+    fun modernApplicationAndActivityClientsAlwaysUseReactNativeHeaders() {
+        server.enqueue(MockResponse().setBody("[]"))
+        server.enqueue(MockResponse().setBody("{\"activities\":[],\"applications\":[],\"assets\":{}}"))
+        server.enqueue(MockResponse().setBody("{\"applications\":[],\"application_commands\":[]}"))
+        server.enqueue(MockResponse().setResponseCode(204))
+        RestAPI.install(RestAPIBuilder(server.url("/api/").toString(), MemoryCookieJar()), emptyList())
+
+        RestAPI.applicationDirectoryApiOrNull!!.categories("en-US").toBlocking().single()
+        RestAPI.embeddedActivitiesApiOrNull!!.shelf().toBlocking().single()
+        RestAPI.reactNativeApiOrNull!!.getUserApplicationCommandIndex().toBlocking().single()
+        RestAPI.reactNativeApiOrNull!!.sendApplicationCommand(
+            RestAPIParams.ApplicationCommand(
+                type = 4L,
+                channelId = "7",
+                applicationId = "10",
+                guildId = "20",
+                data = com.discord.api.commands.ApplicationCommandData(
+                    version = "2",
+                    guildId = "20",
+                    id = "30",
+                    name = "search",
+                    options = listOf(
+                        com.discord.api.commands.ApplicationCommandValue(
+                            name = "query",
+                            value = "fixture",
+                            type = 3,
+                            options = null,
+                            focused = true,
+                        ),
+                    ),
+                    attachments = null,
+                ),
+                sessionId = "session-fixture",
+                nonce = "nonce-fixture",
+            ),
+        ).toBlocking().subscribe()
+
+        val requests = List(4) {
+            val request = server.takeRequest()
+            assertEquals(ReactNativeRequestMetadata.USER_AGENT, request.getHeader("User-Agent"))
+            assertFalse(request.getHeader("X-Super-Properties").isNullOrBlank())
+            assertFalse(request.getHeader("X-Discord-Timezone").isNullOrBlank())
+            request
+        }
+        assertEquals("/api/v9/interactions", requests.last().path)
+        assertTrue(requests.last().body.readUtf8().contains("\"type\":4"))
     }
 
     @Test

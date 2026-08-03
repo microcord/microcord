@@ -304,6 +304,23 @@ class MessageSendCoordinatorTest {
         assertEquals(listOf<MessageResult>(MessageResult.UserCancelled), commandResults)
     }
 
+    @Test
+    fun failedApplicationCommandSettlesAndLetsTheChannelQueueContinue() {
+        val command = commandData(1234L)
+        val commandResults = mutableListOf<MessageResult>()
+        coordinator.sendApplicationCommand(
+            ApiMessage(id = command.nonce, channelId = CHANNEL_ID, nonce = command.nonceString),
+            command,
+        ).subscribe { commandResults += it }
+
+        restApi.respondApiError(400, """{"code":40060,"message":"Interaction failed"}""")
+
+        assertTrue(commandResults.single() is MessageResult.UnknownFailure)
+        val next = coordinator.send(MessageSendCoordinator.Send(channelId = CHANNEL_ID, content = "after"))
+        assertTrue(next is MessageSendCoordinator.Submission.Accepted)
+        assertEquals(1, restApi.sendCalls.size)
+    }
+
     private fun acceptedNonce(submission: MessageSendCoordinator.Submission) =
         (submission as MessageSendCoordinator.Submission.Accepted).requestId
 

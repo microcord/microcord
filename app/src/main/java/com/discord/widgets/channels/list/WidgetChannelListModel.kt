@@ -5,6 +5,7 @@ import com.discord.api.channel.getDMRecipient
 import com.discord.api.channel.getSortByMostRecent
 import com.discord.api.channel.getSortByNameAndType
 import com.discord.api.channel.isCategory
+import com.discord.api.channel.isDM
 import com.discord.api.channel.isThread
 import com.discord.api.guild.GuildFeature
 import com.discord.api.guild.GuildMaxVideoChannelUsers
@@ -52,6 +53,7 @@ import com.discord.widgets.channels.list.items.ChannelListItemTextChannel
 import com.discord.widgets.channels.list.items.ChannelListItemThread
 import com.discord.widgets.channels.list.items.ChannelListItemVoiceChannel
 import com.discord.widgets.channels.list.items.ChannelListItemVoiceUser
+import com.discord.utilities.user.UserUtils.displayName
 import com.discord.widgets.guildscheduledevent.GuildScheduledEventLocationInfo
 import com.discord.widgets.stage.model.StageChannel
 import rx.Observable
@@ -493,6 +495,12 @@ data class WidgetChannelListModel(
         ): WidgetChannelListModel {
             val rows = channels.map { channel ->
                 val recipientId = channel.getDMRecipient()?.id
+                    ?: channel.recipientIds?.singleOrNull().takeIf { channel.isDM() }
+                val recipientDisplayNames = (channel.recipientIds ?: channel.recipients.orEmpty().map { it.id })
+                    .mapNotNull { id ->
+                        users[id]?.displayName ?: channel.recipients?.firstOrNull { it.id == id }
+                            ?.let { it.globalName?.takeUnless(String::isBlank) ?: it.username }
+                    }
                 ChannelListItemPrivate(
                     channel = channel,
                     presence = presences[recipientId],
@@ -505,6 +513,8 @@ data class WidgetChannelListModel(
                     } else {
                         channel.getDMRecipient()?.collectibles?.nameplate
                     },
+                    displayName = channel.name?.takeUnless(String::isBlank)
+                        ?: recipientDisplayNames.joinToString().takeUnless(String::isBlank),
                 )
             }
             return WidgetChannelListModel(

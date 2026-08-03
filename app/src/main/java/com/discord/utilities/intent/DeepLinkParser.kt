@@ -46,6 +46,13 @@ object DeepLinkParser {
             host == "discord.gift" && parts.size == 1 -> parts[0].takeIf(code::matches)?.let(DeepLinkRoute::Gift)
             host == "discord.new" && parts.size == 1 -> parts[0].takeIf(code::matches)?.let(DeepLinkRoute::GuildTemplate)
             (appScheme && host == "app" && path == "/") || path == "/app" -> DeepLinkRoute.Home
+            parts.take(2) == listOf("discovery", "applications") && parts.size in 2..4 -> when {
+                parts.size == 2 || parts[2] == "search" -> DeepLinkRoute.ApplicationDirectory()
+                parts[2] == "categories" && parts.size == 4 && positive(parts[3]) != null ->
+                    DeepLinkRoute.ApplicationDirectory()
+                parts.size == 3 -> positive(parts[2])?.let(DeepLinkRoute::ApplicationDirectory)
+                else -> null
+            }
             path == "/discovery" -> DeepLinkRoute.Discovery
             parts.firstOrNull() == "invite" && parts.size == 2 -> invite(parts[1], query)
             parts.firstOrNull() == "gifts" && parts.size == 2 -> parts[1].takeIf(code::matches)?.let(DeepLinkRoute::Gift)
@@ -59,8 +66,11 @@ object DeepLinkParser {
             parts.firstOrNull() == "settings" || parts.firstOrNull() == "feature" -> setting(parts)
             parts.firstOrNull() in setOf("oauth2", "connect") && parts.getOrNull(1) == "authorize" && parts.size == 2 ->
                 DeepLinkRoute.Authorization(parts[0] == "connect", query)
+            parts.firstOrNull() == "oauth2" && parts.getOrNull(1) in setOf("authorized", "callback") && parts.size == 2 ->
+                DeepLinkRoute.OAuthCallback(query)
             host == "action" && parts.size == 2 && parts[1] == "authorize" && parts[0] in setOf("oauth2", "connect") ->
                 DeepLinkRoute.Authorization(parts[0] == "connect", query)
+            host == "action" && parts == listOf("oauth2", "callback") -> DeepLinkRoute.OAuthCallback(query)
             parts.firstOrNull() == "connect" && parts.size <= 2 ->
                 parts.getOrNull(1)?.let(::positive)?.let(DeepLinkRoute::Voice)
                     ?: if (parts.size == 1) DeepLinkRoute.Voice(null) else null

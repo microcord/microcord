@@ -26,8 +26,8 @@ class MessageContractsTest {
     fun preservesCompleteMessageContracts() {
         val api = gson.fromJson(FULL_MESSAGE, ApiMessage::class.java)
 
-        assertEquals(33, ApiMessage::class.java.declaredFields.count { !Modifier.isStatic(it.modifiers) })
-        assertEquals(39, Message::class.java.declaredFields.count { !Modifier.isStatic(it.modifiers) })
+        assertEquals(36, ApiMessage::class.java.declaredFields.count { !Modifier.isStatic(it.modifiers) })
+        assertEquals(42, Message::class.java.declaredFields.count { !Modifier.isStatic(it.modifiers) })
         assertEquals(1L, api.id)
         assertEquals(2L, api.channelId)
         assertEquals(3L, api.guildId)
@@ -53,8 +53,8 @@ class MessageContractsTest {
             captchaSolution = CaptchaSolution("secret-key", "secret-token"),
         )
         assertEquals(api.copy(member = null, hit = null), local.synthesizeApiMessage())
-        assertEquals(2, local.component35())
-        assertEquals("secret-key", local.component39()!!.key)
+        assertEquals(2, local.component39())
+        assertEquals("secret-key", local.component43()!!.key)
         assertEquals(local, local.copy())
         assertTrue(local.hasAttachments())
         assertTrue(local.hasEmbeds())

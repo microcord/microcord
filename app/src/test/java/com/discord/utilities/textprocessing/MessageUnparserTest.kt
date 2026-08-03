@@ -21,4 +21,19 @@ class MessageUnparserTest {
 
         assertEquals("hello @Ada#0007 <@99> :wave:", result.toString())
     }
+
+    @Test
+    fun preservesCommandAndTimestampWireFormsWhileUnparsingEmoji() {
+        val emojis = EmojiSet(emptyMap(), emptyMap(), emptyMap(), emptyList(), emptySet())
+
+        val result = MessageUnparser.unparse(
+            "</weather now:123> <t:1700000000:R> <a:wave:456>",
+            guild = null,
+            channels = emptyMap(),
+            users = emptyMap(),
+            emojiSet = emojis,
+        )
+
+        assertEquals("</weather now:123> <t:1700000000:R> :wave:", result.toString())
+    }
 }

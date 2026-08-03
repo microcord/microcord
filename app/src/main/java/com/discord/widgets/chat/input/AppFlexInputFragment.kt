@@ -9,7 +9,10 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
+import android.widget.ImageView
 import com.discord.R
+import com.discord.widgets.chat.input.applauncher.AppLauncherEntrypoint
+import com.discord.widgets.chat.input.applauncher.WidgetAppLauncher
 import com.lytefast.flexinput.fragment.FlexInputFragment
 import com.lytefast.flexinput.managers.KeyboardManager
 import org.xmlpull.v1.XmlPullParser
@@ -71,7 +74,12 @@ class AppFlexInputFragment : FlexInputFragment() {
                 parser.close()
             }
         }
-        return super.onCreateView(inflater, container, savedInstanceState)
+        return super.onCreateView(inflater, container, savedInstanceState)?.also { root ->
+            configureAppsButton(root) {
+                val channelId = (parentFragment as? WidgetChatInput)?.currentChannelId() ?: return@configureAppsButton
+                WidgetAppLauncher.show(parentFragmentManager, channelId, AppLauncherEntrypoint.TEXT)
+            }
+        }
     }
 
     private companion object {
@@ -79,5 +87,28 @@ class AppFlexInputFragment : FlexInputFragment() {
 
         fun inputMethodManager(context: Context) =
             context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+    }
+}
+
+internal fun configureAppsButton(root: View, onClick: () -> Unit) {
+    val addButton = root.findViewById<ImageView>(R.id.add_btn)
+    root.findViewById<ImageView>(R.id.gift_btn)?.apply {
+        addButton?.let { source ->
+            layoutParams.width = source.layoutParams.width
+            layoutParams.height = source.layoutParams.height
+            minimumWidth = source.minimumWidth
+            minimumHeight = source.minimumHeight
+            setPadding(source.paddingLeft, source.paddingTop, source.paddingRight, source.paddingBottom)
+            background = source.background?.constantState?.newDrawable(resources)?.mutate()
+            imageTintList = source.imageTintList
+        }
+        visibility = View.VISIBLE
+        setImageResource(R.drawable.ic_compass)
+        contentDescription = context.getString(R.string.apps)
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+        isClickable = true
+        isFocusable = true
+        isEnabled = true
+        setOnClickListener { onClick() }
     }
 }

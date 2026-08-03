@@ -53,7 +53,7 @@ class CallParticipantsAdapter @JvmOverloads constructor(
     var onInviteFriendsClicked: (View) -> Unit = {}
     var onEventClicked: (GuildScheduledEvent) -> Unit = {}
     var onStartEventClicked: (GuildScheduledEvent) -> Unit = {}
-    var onEmbeddedActivityClicked: () -> Unit = {}
+    var onEmbeddedActivityClicked: (EmbeddedActivity) -> Unit = {}
 
     override fun onCreateViewHolder(
         parent: ViewGroup,
@@ -239,7 +239,7 @@ class CallParticipantsAdapter @JvmOverloads constructor(
                     PileView.Item({ url }, null)
                 },
             )
-            clickableContainer.setOnClickListener { adapter.onEmbeddedActivityClicked() }
+            clickableContainer.setOnClickListener { adapter.onEmbeddedActivityClicked(data.embeddedActivity) }
         }
 
         private companion object {

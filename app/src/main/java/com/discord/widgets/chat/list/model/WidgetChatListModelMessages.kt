@@ -354,6 +354,22 @@ data class WidgetChatListModelMessages(
                 parseCtaData(message, meUserId, guildMembers, channel, permissionsForChannel),
                 permissionsForChannel,
             )
+            if (message.hasSnapshot()) {
+                rows += ChatListRows.forwardedRows(
+                    ChatListRows.State(
+                        channel = channel,
+                        guildMembers = guildMembers,
+                        guildRoles = guildRoles,
+                        messageStates = messageState?.let { mapOf(message.id to it) }.orEmpty(),
+                        permissions = permissionsForChannel,
+                        animateEmojis = animateEmojis,
+                        autoPlayGifs = autoPlayGifs,
+                        renderEmbeds = renderEmbeds,
+                        inviteResolver = inviteResolver,
+                    ),
+                    message,
+                )
+            }
             val threadSpineStart = rows.size
             rows += ChatListEntry.createEmbedEntries(
                 message, messageState, blockedChunkExpanded, animateEmojis, autoPlayGifs, renderEmbeds,

@@ -17,8 +17,11 @@ import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.icon.IconUtils
+import com.discord.widgets.chat.list.entries.AttachmentEntry
 import com.discord.widgets.chat.list.entries.ChatListEntry
+import com.discord.widgets.chat.list.entries.EmbedEntry
 import com.discord.widgets.chat.list.entries.EphemeralMessageEntry
+import com.discord.widgets.chat.list.entries.ForwardedMessageEntry
 import com.discord.widgets.chat.list.entries.InviteEmbedResolver
 import com.discord.widgets.chat.list.entries.LoadingEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
@@ -126,6 +129,7 @@ object ChatListRows {
         state: State,
         message: Message,
         isMinimal: Boolean = false,
+        forwardDepth: Int = 0,
     ): List<ChatListEntry> {
         val channel = state.channel
         val author = state.guildMembers[message.author?.id]
@@ -145,6 +149,7 @@ object ChatListRows {
             animateEmojis = state.animateEmojis,
             permissionsForChannel = state.permissions,
         )
+        rows += forwardedRows(state, message, forwardDepth)
         rows += ChatListEntry.createEmbedEntries(
             message = message,
             messageState = messageState,
@@ -159,6 +164,14 @@ object ChatListRows {
             nickOrUsernames = nickOrUsernames,
         )
         rows += ChatListEntry.createStickerEntries(message)
+        if (forwardDepth > 0 && !message.components.isNullOrEmpty()) {
+            rows += ChatListEntry.createBotComponentEntries(
+                message,
+                channel.guildId,
+                componentStoreState = null,
+                animateEmojis = state.animateEmojis,
+            )
+        }
         rows += ChatListEntry.createGameInviteEntries(message)
         rows += ChatListEntry.createSpotifyListenTogetherEntries(message)
         rows += ChatListEntry.createInviteEntries(message, state.inviteResolver)
@@ -185,6 +198,50 @@ object ChatListRows {
         if (message.isEphemeralMessage() || (message.isInteraction() && message.isFailed())) {
             rows += EphemeralMessageEntry(message)
         }
+        return rows
+    }
+
+    internal fun forwardedRows(
+        state: State,
+        message: Message,
+        forwardDepth: Int = 0,
+    ): List<ForwardedMessageEntry> = ForwardedMessageEntry.resolve(message, forwardDepth).map { forwarded ->
+        val snapshot = forwarded.message
+        if (snapshot == null) forwarded else forwarded.copy(
+            rows = forwardedAccessoryRows(state, snapshot),
+        )
+    }
+
+    private fun forwardedAccessoryRows(state: State, message: Message): List<ChatListEntry> {
+        val rows = ArrayList<ChatListEntry>()
+        var mediaIndex = 0
+        message.attachments.orEmpty().forEach { attachment ->
+            rows += AttachmentEntry(
+                embedIndex = mediaIndex++,
+                guildId = state.channel.guildId,
+                message = message,
+                messageState = state.messageStates[message.id],
+                attachment = attachment,
+                isBlockedExpanded = false,
+                allowAnimatedEmojis = state.animateEmojis,
+                autoPlayGifs = state.autoPlayGifs,
+                isThreadStarterMessage = false,
+            )
+        }
+        if (state.renderEmbeds) message.embeds.orEmpty().forEach { embed ->
+            rows += EmbedEntry(
+                embedIndex = mediaIndex++,
+                guildId = state.channel.guildId,
+                message = message,
+                messageState = state.messageStates[message.id],
+                embed = embed,
+                isBlockedExpanded = false,
+                allowAnimatedEmojis = state.animateEmojis,
+                autoPlayGifs = state.autoPlayGifs,
+                isThreadStarterMessage = false,
+            )
+        }
+        rows += ChatListEntry.createStickerEntries(message)
         return rows
     }
 

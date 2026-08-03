@@ -1,0 +1,50 @@
+{
+  "results": [
+    {
+      "type": 1,
+      "data": {
+        "id": "100000000000000001",
+        "name": "Fixture App",
+        "description": "A sanitized directory fixture.",
+        "icon": "fixture-icon",
+        "flags": 8388608,
+        "flags_new": "8589934592",
+        "is_verified": true,
+        "is_discoverable": true,
+        "approximate_guild_count": 1250,
+        "approximate_user_install_count": 42,
+        "tags": ["utility"],
+        "install_params": {
+          "scopes": ["applications.commands", "bot"],
+          "permissions": "32"
+        },
+        "integration_types_config": {
+          "0": {
+            "oauth2_install_params": {
+              "scopes": ["applications.commands", "bot"],
+              "permissions": "32"
+            }
+          },
+          "1": {
+            "oauth2_install_params": {
+              "scopes": ["applications.commands"],
+              "permissions": "0"
+            }
+          }
+        },
+        "categories": [{"id": 5, "name": "Utilities"}],
+        "directory_entry": {
+          "guild_count": 1250,
+          "supported_locales": ["en-US"],
+          "short_description": "Useful fixture app",
+          "detailed_description": "Detailed sanitized fixture description."
+        }
+      }
+    }
+  ],
+  "num_pages": 2,
+  "counts_by_category": {"5": 1},
+  "result_count": 1,
+  "type": 1,
+  "load_id": "fixture-load-id"
+}

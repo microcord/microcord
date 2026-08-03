@@ -12,6 +12,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.activities.EmbeddedActivityLauncher
 import com.discord.api.channel.Channel
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppToast
@@ -251,10 +252,14 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
                 participantsAdapter.onInviteFriendsClicked = {
                     launchChannelInvite(this, channel, INVITE_ANALYTICS_SOURCE)
                 }
-                participantsAdapter.onEmbeddedActivityClicked = {
-                    showNotice(
-                        R.string.embedded_activities_desktop_only_modal_title,
-                        R.string.embedded_activities_desktop_only_modal_description,
+                participantsAdapter.onEmbeddedActivityClicked = { activity ->
+                    val instanceId = StoreStream.getEmbeddedActivities()
+                        .getInstancesForChannel(channel.id)[activity.applicationId]?.compositeInstanceId
+                    EmbeddedActivityLauncher.launch(
+                        requireContext(),
+                        activity.applicationId,
+                        channel.id,
+                        instanceId,
                     )
                 }
             }

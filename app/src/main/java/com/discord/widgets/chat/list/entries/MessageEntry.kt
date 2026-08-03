@@ -82,7 +82,9 @@ data class MessageEntry(
         fun resolveType(message: Message, isMinimal: Boolean): Int {
             if (isMinimal) return ChatListEntry.MESSAGE_MINIMAL
             val messageType = message.type
-            if (message.isInteraction() ||
+            if (message.hasSnapshot() ||
+                message.isInteraction() ||
+                messageType == null ||
                 messageType == TYPE_DEFAULT ||
                 messageType == TYPE_LOCAL ||
                 messageType == TYPE_LOCAL_SLOWMODE

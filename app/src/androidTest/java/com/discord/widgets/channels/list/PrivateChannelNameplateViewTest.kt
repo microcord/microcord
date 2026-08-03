@@ -136,7 +136,8 @@ class PrivateChannelNameplateViewTest {
         assertEquals(root.height, nameplate.bottom)
         val source = RectF(0f, 0f, 448f, 84f)
         val bounds = Rect(0, 0, 360, 64)
-        image.hierarchy.actualImageScaleType.getTransform(Matrix(), bounds, 448, 84, 0f, 0f)
+        requireNotNull(image.hierarchy.actualImageScaleType)
+            .getTransform(Matrix(), bounds, 448, 84, 0f, 0f)
             .mapRect(source)
         assertEquals(RectF(360f - 448f * 64f / 84f, 0f, 360f, 64f), source)
         assertTrue(source.left >= bounds.left && source.right <= bounds.right)
@@ -166,7 +167,7 @@ class PrivateChannelNameplateViewTest {
         memberNameplate.layout(0, 0, root.width, root.height)
         memberContentEnd.layout(content.right, 0, content.right, 0)
         val memberDestination = RectF(0f, 0f, 448f, 84f)
-        memberImage.hierarchy.actualImageScaleType
+        requireNotNull(memberImage.hierarchy.actualImageScaleType)
             .getTransform(Matrix(), bounds, 448, 84, 0f, 0f)
             .mapRect(memberDestination)
 
