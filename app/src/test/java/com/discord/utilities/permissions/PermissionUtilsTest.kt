@@ -8,17 +8,12 @@ import com.discord.api.stageinstance.StageInstance
 import com.discord.api.stageinstance.StageInstancePrivacyLevel
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.member.GuildMember
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PermissionUtilsTest {
-
-    @After fun tearDown() {
-        PermissionUtils.newThreadsPermissionsEnabled = { false }
-    }
 
     // region @everyone fallback
 
@@ -129,22 +124,9 @@ class PermissionUtilsTest {
 
     // region thread derivation
 
-    @Test fun `legacy public thread grants send from create public threads`() {
+    @Test fun `private thread is invisible until joined without manage threads`() {
         val roles = mapOf(
-            GUILD to role(GUILD, Permission.VIEW_CHANNEL or Permission.CREATE_PUBLIC_THREADS),
-        )
-        val permissions = PermissionUtils.computeThreadPermissions(
-            userId = USER,
-            thread = channel(id = THREAD, type = Channel.PUBLIC_THREAD),
-            parentChannel = channel(id = CHANNEL, type = Channel.GUILD_TEXT),
-            guildOwnerId = OWNER, member = member(), guildRoles = roles, hasJoined = false,
-        )
-        assertTrue(PermissionUtils.can(Permission.SEND_MESSAGES, permissions))
-    }
-
-    @Test fun `legacy private thread is invisible until joined without manage threads`() {
-        val roles = mapOf(
-            GUILD to role(GUILD, Permission.VIEW_CHANNEL or Permission.CREATE_PRIVATE_THREADS),
+            GUILD to role(GUILD, Permission.VIEW_CHANNEL or Permission.SEND_MESSAGES_IN_THREADS),
         )
         val thread = channel(id = THREAD, type = Channel.PRIVATE_THREAD)
         val parent = channel(id = CHANNEL, type = Channel.GUILD_TEXT)
@@ -160,7 +142,7 @@ class PermissionUtilsTest {
         assertTrue(PermissionUtils.can(Permission.SEND_MESSAGES, joined))
     }
 
-    @Test fun `legacy private thread stays visible for thread managers`() {
+    @Test fun `private thread stays visible for thread managers`() {
         val roles = mapOf(GUILD to role(GUILD, Permission.VIEW_CHANNEL or Permission.MANAGE_THREADS))
         val permissions = PermissionUtils.computeThreadPermissions(
             USER,
@@ -171,8 +153,7 @@ class PermissionUtilsTest {
         assertTrue(PermissionUtils.can(Permission.VIEW_CHANNEL, permissions))
     }
 
-    @Test fun `new threads permissions gate sending on send messages in threads`() {
-        PermissionUtils.newThreadsPermissionsEnabled = { true }
+    @Test fun `sending in a thread is gated on send messages in threads`() {
         val parent = channel(id = CHANNEL, type = Channel.GUILD_TEXT)
         val thread = channel(id = THREAD, type = Channel.PUBLIC_THREAD)
 

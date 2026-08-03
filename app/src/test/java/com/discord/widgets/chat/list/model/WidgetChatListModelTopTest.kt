@@ -9,8 +9,7 @@ import org.junit.Test
 
 class WidgetChatListModelTopTest {
     private val welcome = StartOfChatEntry(
-        1, "general", true, false, false, false, null, null, "", false, false,
-        false, null, null,
+        1, "general", true, false, false, false, null, null, "", false, false, null, null,
     )
 
     @Test fun oldestLoadedUsesWelcomeEntry() {

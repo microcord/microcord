@@ -123,8 +123,6 @@ class WidgetUserSheetViewModel(
         val userStageRoles: StageRoles?,
         val userRequestToSpeakState: StageRequestToSpeakState,
         val myStageRoles: StageRoles?,
-        /** This guild may use timeouts. Reference: `GuildCommunicationDisabledGuildsFeatureFlag`. */
-        val canDisableCommunication: Boolean,
     )
 
     sealed class ViewState {
@@ -313,7 +311,6 @@ class WidgetUserSheetViewModel(
                     isMe = isMe,
                     manageUserContext = manageUserContext,
                     voiceState = channelVoiceState,
-                    canDisableCommunication = storeState.canDisableCommunication,
                     isCommunicationDisabled = guildMember?.isCommunicationDisabled() == true,
                 ),
                 stageViewState = UserProfileStageActionsView.ViewState(
@@ -375,7 +372,6 @@ class WidgetUserSheetViewModel(
         isMe: Boolean,
         manageUserContext: ManageUserContext?,
         voiceState: VoiceState?,
-        canDisableCommunication: Boolean,
         isCommunicationDisabled: Boolean,
     ): UserProfileAdminView.ViewState? {
         if (channel == null) return null
@@ -388,8 +384,7 @@ class WidgetUserSheetViewModel(
         } else {
             manageUserContext?.canKick == true
         }
-        val showDisableCommunication = canDisableCommunication &&
-            manageUserContext?.canDisableCommunication == true && !isMe
+        val showDisableCommunication = manageUserContext?.canDisableCommunication == true && !isMe
         val showBan = manageUserContext?.canBan == true
         // Server-muting a stage speaker is done through the stage's own controls instead.
         val showServerMute = voiceState != null &&

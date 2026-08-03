@@ -27,9 +27,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.channel.guildChannelIcon
 import com.discord.utilities.toolbar.positionUnreadCountView
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
-import com.discord.widgets.channels.WidgetGroupInviteFriends
 import com.discord.widgets.channels.invite.GroupInviteFriendsSheet
-import com.discord.widgets.channels.invite.GroupInviteFriendsSheetFeatureFlag
 import com.discord.widgets.channels.threads.browser.WidgetThreadBrowser
 import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.friends.WidgetFriendsAdd
@@ -153,7 +151,6 @@ object WidgetHomeHeaderManager {
             isCallConnected = model.isCallConnected,
             isSmallScreen = resources.displayMetrics.widthPixels <=
                 SMALL_SCREEN_WIDTH_DP * resources.displayMetrics.density,
-            threadExperimentEnabled = model.threadExperimentEnabled,
             threadCount = model.threadCount,
             isChannelNsfw = model.isChannelNsfw,
             isNsfwUnconsented = model.isNsfwUnConsented,
@@ -175,19 +172,18 @@ object WidgetHomeHeaderManager {
         isSystemDm: Boolean = false,
         isCallConnected: Boolean = false,
         isSmallScreen: Boolean = false,
-        threadExperimentEnabled: Boolean = false,
         threadCount: Int = 0,
         isChannelNsfw: Boolean = false,
         isNsfwUnconsented: Boolean = false,
         nsfwAllowed: NsfwAllowance? = null,
     ): MenuState {
-        val showThreadBrowser = threadExperimentEnabled && threadCount > 0 &&
+        val showThreadBrowser = threadCount > 0 &&
             !isChannelNsfwGated(isChannelNsfw, isNsfwUnconsented, nsfwAllowed)
         val showPins = channelType in PINNED_MESSAGES_CHANNEL_TYPES
         val header = when (channelType) {
             Channel.DM, Channel.GROUP_DM, Channel.DIRECTORY -> MenuState(sidePanel = true)
             Channel.GUILD_TEXT, Channel.GUILD_ANNOUNCEMENT, Channel.GUILD_FORUM -> MenuState(
-                search = !isSmallScreen || !threadExperimentEnabled,
+                search = !isSmallScreen,
                 sidePanel = true,
                 threadBrowser = showThreadBrowser,
             )
@@ -250,10 +246,8 @@ object WidgetHomeHeaderManager {
                 channelId = channel.id,
                 source = ANALYTICS_SOURCE,
             )
-        } else if (GroupInviteFriendsSheetFeatureFlag.INSTANCE.isEnabled()) {
-            GroupInviteFriendsSheet.show(widgetHome.childFragmentManager, channel.id, ANALYTICS_SOURCE)
         } else {
-            WidgetGroupInviteFriends.launch(widgetHome.requireContext(), channel.id, ANALYTICS_SOURCE)
+            GroupInviteFriendsSheet.show(widgetHome.childFragmentManager, channel.id, ANALYTICS_SOURCE)
         }
     }
 

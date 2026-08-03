@@ -48,7 +48,7 @@ class WidgetChatListAdapterItemStart(
         super.onConfigure(position, data)
         val entry = data as StartOfChatEntry
         when {
-            entry.isGuildForumPost && entry.canAccessRedesignedForumChannels ->
+            entry.isGuildForumPost ->
                 configureForumPost(entry.channelName, entry.appliedTags, entry.availableTags)
             entry.isThread -> configureThread(entry)
             else -> configureChannel(entry)

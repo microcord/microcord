@@ -5,14 +5,12 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.time.Clock
 import com.discord.utilities.time.ClockFactory
-import com.discord.widgets.chat.list.TextInVoiceFeatureFlag
 
 class TextInVoiceOnboardingManager {
     val clock: Clock = ClockFactory.get()
 
     fun shouldShowTextInVoiceOnboarding(userId: Long, guildId: Long?): Boolean =
         guildId != null &&
-            TextInVoiceFeatureFlag.isEnabled(guildId) &&
             !StoreStream.getNotices().hasSeen(NOTICE_NAME_TEXT_IN_VOICE_ONBOARDED) &&
             clock.currentTimeMillis() >= SnowflakeUtils.DISCORD_EPOCH + (userId ushr 22) + MIN_VIEW_AGE_IN_MS
 

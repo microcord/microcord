@@ -14,16 +14,14 @@ import org.w3c.dom.Element
 class WidgetHomeHeaderManagerTest {
 
     @Test
-    fun `guild header actions match screen width and thread experiment`() {
+    fun `guild header actions match screen width`() {
         val wide = WidgetHomeHeaderManager.menuState(
             channelType = Channel.GUILD_TEXT,
-            threadExperimentEnabled = true,
             threadCount = 4,
         )
         val small = WidgetHomeHeaderManager.menuState(
             channelType = Channel.GUILD_TEXT,
             isSmallScreen = true,
-            threadExperimentEnabled = true,
             threadCount = 4,
         )
 
@@ -38,7 +36,6 @@ class WidgetHomeHeaderManagerTest {
     fun `nsfw gate hides the thread browser`() {
         val state = WidgetHomeHeaderManager.menuState(
             channelType = Channel.GUILD_FORUM,
-            threadExperimentEnabled = true,
             threadCount = 1,
             isChannelNsfw = true,
             nsfwAllowed = NsfwAllowance.DISALLOWED,

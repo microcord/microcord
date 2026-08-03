@@ -223,19 +223,17 @@ class WidgetGuildInviteShare : AppFragment(R.layout.widget_guild_invite_share) {
             copyLinkClick(view.context, invite, mostRecentIntent)
         }
 
-        val inviteExperiment = viewModel.getDefaultInviteExperiment()
         neverExpire.setChecked(model.settings?.maxAge == ModelInvite.Settings.NEVER, false)
-        neverExpire.setSubtext(getInviteLinkText(requireContext(), inviteExperiment), false)
+        neverExpire.setSubtext(getInviteLinkText(requireContext()), false)
         neverExpire.setContainerClickListener(
             View.OnClickListener {
                 neverExpire.toggle()
                 val settings = model.settings
                 if (settings != null) {
-                    val maxAge = when {
-                        neverExpire.isChecked() -> ModelInvite.Settings.NEVER
-                        inviteExperiment?.bucket == 1 ->
-                            ModelInvite.Settings.SEVEN_DAYS
-                        else -> ModelInvite.Settings.ONE_DAY
+                    val maxAge = if (neverExpire.isChecked()) {
+                        ModelInvite.Settings.NEVER
+                    } else {
+                        ModelInvite.Settings.SEVEN_DAYS
                     }
                     viewModel.updateInviteSettings(settings.mergeMaxAge(maxAge))
                 }
@@ -310,14 +308,8 @@ class WidgetGuildInviteShare : AppFragment(R.layout.widget_guild_invite_share) {
             inviteStoreKey: String? = null,
             source: String,
         ) {
-            // Reference:
-            //     if (GuildInviteShareSheetFeatureFlag.INSTANCE.isEnabled()) {
-            //         WidgetGuildInviteShareSheet.show(fragmentManager, channelId, guildId, source)
-            //         return
-            //     }
-            // `WidgetGuildInviteShareSheet` + `GuildInviteShareSheetViewModel` are not
-            // reconstructed yet, so the experiment is deliberately not consulted: consulting it
-            // would track an exposure for a surface that cannot open. Restore both lines together.
+            // The reference opens `WidgetGuildInviteShareSheet` here instead; neither it nor
+            // `GuildInviteShareSheetViewModel` is reconstructed yet.
             @Suppress("UNUSED_EXPRESSION")
             fragmentManager
 

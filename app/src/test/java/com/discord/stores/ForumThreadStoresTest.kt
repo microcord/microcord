@@ -111,11 +111,6 @@ class ForumThreadStoresTest {
             messageAck.handleConnectionOpen(readyPayload())
         }
 
-        // The experiment gate is off for guild 2, so nothing is requested at all.
-        fixture.forumPostReadStates.requestForumUnreads(guildId = 2, channelId = 30)
-        fixture.scheduler.triggerActions()
-        assertEquals(emptyList<Any>(), fixture.gatewayRequests)
-
         fixture.forumPostReadStates.requestForumUnreads(guildId = 1, channelId = 30)
         fixture.scheduler.triggerActions()
         assertEquals(1, fixture.gatewayRequests.size)
@@ -215,7 +210,6 @@ class ForumThreadStoresTest {
             storeChannels = channels,
             storeUser = users,
             observationDeck = deck,
-            canAccessForumChannels = { guildId -> guildId == 1L },
         )
 
         init {

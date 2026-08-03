@@ -227,7 +227,6 @@ class WidgetUserSheetActionsTest {
             userStageRoles = StageRoles.AUDIENCE,
             userRequestToSpeakState = StageRequestToSpeakState.NONE,
             myStageRoles = StageRoles(isSpeaker = true, isModerator = true, isInvitedToSpeak = false),
-            canDisableCommunication = false,
         )
     }
 

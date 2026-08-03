@@ -23,7 +23,6 @@ import com.discord.utilities.time.ClockFactory
 import com.discord.widgets.botuikit.BotComponentExperiments
 import com.discord.widgets.botuikit.ComponentChatListState
 import com.discord.widgets.botuikit.ComponentStateMapper
-import com.discord.widgets.chat.list.ViewThreadsFeatureFlag
 import com.discord.widgets.chat.list.entries.BlockedMessagesEntry
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.EphemeralMessageEntry
@@ -339,14 +338,9 @@ data class WidgetChatListModelMessages(
                     Channel.PRIVATE_THREAD,
                 )
             ) StoreStream.getChannels().getChannel(channel.parentId) else null
-            val isForumPostFirstMessage = channel.isGuildForumPost(parentChannel) && channel.id == message.id &&
-                StoreStream.getExperiments().getGuildExperiment(
-                    "2022-03_android_forum_channel_redesign", channel.guildId, false,
-                )?.bucket == 1
-            val isForumPostAuthor = channel.isGuildForumPost(parentChannel) && channel.ownerId == message.author?.id &&
-                StoreStream.getExperiments().getGuildExperiment(
-                    "2022-03_android_forum_channel_redesign", channel.guildId, false,
-                )?.bucket == 1
+            val isForumPostFirstMessage = channel.isGuildForumPost(parentChannel) && channel.id == message.id
+            val isForumPostAuthor = channel.isGuildForumPost(parentChannel) &&
+                channel.ownerId == message.author?.id
             rows += MessageEntry(
                 message, messageState, author, firstMention, roles, names, shouldConcat,
                 blockedChunkExpanded, animateEmojis, replyData, interactionAuthor,
@@ -405,7 +399,7 @@ data class WidgetChatListModelMessages(
                 )
             }
             if (message.hasLocalUploads && !message.isFailed()) rows += UploadProgressEntry(message.nonce.orEmpty(), message.channelId)
-            if (ViewThreadsFeatureFlag.isEnabled() && message.hasThread() && thread != null) {
+            if (message.hasThread() && thread != null) {
                 for (index in threadSpineStart until rows.size) rows[index].shouldShowThreadSpine = true
                 rows += ChatListEntry.createThreadEmbedEntries(
                     channel, guildMembers, message, thread, threadEmbedMetadata, guildRoles,

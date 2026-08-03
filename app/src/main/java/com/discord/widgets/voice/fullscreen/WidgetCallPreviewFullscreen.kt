@@ -117,7 +117,6 @@ class WidgetCallPreviewFullscreen : AppFragment(R.layout.widget_call_preview_ful
         }
 
         val (showTextInVoice, showInvite) = actionBarMenuVisibility(
-            state.textInVoiceEnabled,
             state.isConnectEnabled,
             state.isChannelNsfw,
             state.isNsfwUnconsented,
@@ -320,7 +319,6 @@ class WidgetCallPreviewFullscreen : AppFragment(R.layout.widget_call_preview_ful
         const val EXTRA_CHANNEL_ID = "com.discord.intent.extra.EXTRA_CHANNEL_ID"
 
         internal fun actionBarMenuVisibility(
-            textInVoiceEnabled: Boolean,
             isConnectEnabled: Boolean,
             isChannelNsfw: Boolean,
             isNsfwUnconsented: Boolean,
@@ -328,7 +326,7 @@ class WidgetCallPreviewFullscreen : AppFragment(R.layout.widget_call_preview_ful
         ): Pair<Boolean, Boolean> {
             val blocked = isChannelNsfw &&
                 (isNsfwUnconsented || nsfwAllowed == NsfwAllowance.DISALLOWED)
-            return (textInVoiceEnabled && isConnectEnabled && !blocked) to !blocked
+            return (isConnectEnabled && !blocked) to !blocked
         }
 
         internal fun unreadIndicatorMargins(landscape: Boolean, tablet: Boolean): Pair<Int, Int> =

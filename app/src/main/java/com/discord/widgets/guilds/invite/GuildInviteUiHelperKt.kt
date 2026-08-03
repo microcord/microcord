@@ -11,7 +11,6 @@ import com.discord.app.AppToast
 import com.discord.i18n.i18nFormat
 import com.discord.i18n.i18nPlural
 import com.discord.models.domain.ModelInvite
-import com.discord.models.experiments.domain.Experiment
 import com.discord.models.invite.InviteUtils
 
 fun copyLinkClick(context: Context, invite: ModelInvite?, mostRecentIntent: Intent) =
@@ -43,13 +42,12 @@ fun shareLinkClick(context: Context?, guildInvite: GuildInvite, channel: Channel
     shareLink(context, guildInvite.toLink())
 }
 
-fun getInviteLinkText(context: Context, experiment: Experiment?): CharSequence {
-    val days = if (experiment?.bucket == 1) 7 else 1
-    return context.i18nFormat(
-        R.string.invite_links_expire_after_default,
-        "days" to context.i18nPlural(R.plurals.duration_days_days, days, "days" to days),
-    )
-}
+fun getInviteLinkText(context: Context): CharSequence = context.i18nFormat(
+    R.string.invite_links_expire_after_default,
+    "days" to context.i18nPlural(R.plurals.duration_days_days, DEFAULT_EXPIRATION_DAYS, "days" to DEFAULT_EXPIRATION_DAYS),
+)
+
+private const val DEFAULT_EXPIRATION_DAYS = 7
 
 fun getInviteSettingsText(context: Context, expirationDurationMs: Long): CharSequence =
     if (expirationDurationMs <= 0L) {

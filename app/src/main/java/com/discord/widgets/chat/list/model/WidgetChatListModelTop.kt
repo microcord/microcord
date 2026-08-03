@@ -41,12 +41,9 @@ data class WidgetChatListModelTop(val item: ChatListEntry) {
         val channelOwnerUser: User?,
         val mutualGuilds: List<Guild>,
         val parentChannel: Channel?,
-        val canAccessRedesignedForumChannels: Boolean,
     )
 
     companion object {
-        private const val FORUM_REDESIGN_EXPERIMENT = "2022-03_android_forum_channel_redesign"
-
         @JvmStatic
         fun get(channel: Channel): Observable<WidgetChatListModelTop> =
             StoreStream.getMessagesLoader().getMessagesLoadedState(channel.id)
@@ -116,7 +113,6 @@ data class WidgetChatListModelTop(val item: ChatListEntry) {
                 }.orEmpty(),
                 isTextInVoice = channel.isVoiceChannel(),
                 isGuildForumPost = channel.isGuildForumPost(inputs.parentChannel),
-                canAccessRedesignedForumChannels = inputs.canAccessRedesignedForumChannels,
                 availableTags = inputs.parentChannel?.availableTags,
                 appliedTags = channel.appliedTags,
             )
@@ -142,11 +138,6 @@ data class WidgetChatListModelTop(val item: ChatListEntry) {
                 stores.getUsers().observeUser(channel.ownerId),
                 mutualGuilds,
                 stores.getChannels().observeChannel(channel.parentId),
-                stores.getExperiments().observeGuildExperiment(
-                    FORUM_REDESIGN_EXPERIMENT,
-                    channel.guildId,
-                    false,
-                ).map { it?.bucket == 1 },
                 ::SecondaryInputs,
             )
             return Observable.combineLatest(primary, secondary) { first, second ->
@@ -161,7 +152,6 @@ data class WidgetChatListModelTop(val item: ChatListEntry) {
                         second.ownerUser,
                         second.mutualGuilds,
                         second.parentChannel,
-                        second.forumRedesign,
                     ),
                 )
             }
@@ -179,7 +169,6 @@ data class WidgetChatListModelTop(val item: ChatListEntry) {
             val ownerUser: User?,
             val mutualGuilds: List<Guild>,
             val parentChannel: Channel?,
-            val forumRedesign: Boolean,
         )
     }
 }

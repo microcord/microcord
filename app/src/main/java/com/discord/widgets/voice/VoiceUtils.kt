@@ -15,7 +15,6 @@ import com.discord.app.AppPermissionsRequests
 import com.discord.stores.StoreStream
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.user.UserUtils.isNewUser
-import com.discord.widgets.chat.list.TextInVoiceFeatureFlag
 import com.discord.widgets.stage.StageChannelAPI
 import com.discord.widgets.stage.StageChannelJoinHelper
 import com.discord.widgets.stage.start.WidgetModeratorStartStage
@@ -193,7 +192,7 @@ object VoiceUtils {
 
     private fun showControls(channel: Channel, context: Context, fragmentManager: FragmentManager) {
         val activeChannelId = StoreStream.getVoiceChannelSelected().getSelectedVoiceChannelId()
-        if (TextInVoiceFeatureFlag.isEnabled(channel.guildId) && activeChannelId == channel.id) {
+        if (activeChannelId == channel.id) {
             WidgetCallFullscreen.launch(context, channel.id, animate = true)
             return
         }

@@ -7,7 +7,6 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isStageVoiceChannel
-import com.discord.api.guild.GuildFeature
 import com.discord.api.guild.GuildMaxVideoChannelUsers
 import com.discord.api.guildscheduledevent.GuildScheduledEvent
 import com.discord.api.guildscheduledevent.GuildScheduledEventStatus
@@ -17,9 +16,6 @@ import com.discord.models.domain.ModelApplicationStream
 import com.discord.rtcconnection.RtcConnection
 import com.discord.stores.StoreApplicationStreamPreviews
 import com.discord.stores.StoreCalls
-import com.discord.stores.StoreChannels
-import com.discord.stores.StoreExperiments
-import com.discord.stores.StoreGuilds
 import com.discord.stores.StoreMediaSettings
 import com.discord.stores.StorePermissions
 import com.discord.stores.StoreStream
@@ -103,7 +99,6 @@ class WidgetVoiceBottomSheetViewModel(
             val callModel: CallModel,
             val noiseCancellation: Boolean?,
             val myPermissions: Long?,
-            val textInVoiceEnabled: Boolean,
         ) : StoreState()
     }
 
@@ -167,9 +162,7 @@ class WidgetVoiceBottomSheetViewModel(
         }
 
         // Once video or text-in-voice is live the sheet is too small to be the call surface.
-        val shouldForwardToFullscreen = callModel.isConnected &&
-            forwardToFullscreenIfVideoActivated &&
-            (callModel.isVideoCall || storeState.textInVoiceEnabled)
+        val shouldForwardToFullscreen = callModel.isConnected && forwardToFullscreenIfVideoActivated
         if (shouldForwardToFullscreen) {
             eventSubject.onNext(Event.LaunchVideoCall(channel.id, null))
             return
@@ -493,9 +486,6 @@ class WidgetVoiceBottomSheetViewModel(
 
     companion object {
 
-        /** `2022-03_text_in_voice`, per the reference's `TextInVoiceFeatureFlag`. */
-        private const val TEXT_IN_VOICE_EXPERIMENT = "2022-03_text_in_voice"
-
         /** Channel types whose participants this sheet can render. */
         private val SUPPORTED_CHANNEL_TYPES =
             setOf(Channel.DM, Channel.GROUP_DM, Channel.GUILD_VOICE, Channel.GUILD_STAGE_VOICE)
@@ -503,46 +493,19 @@ class WidgetVoiceBottomSheetViewModel(
         fun observeStoreState(
             channelId: Long,
             permissionsStore: StorePermissions = StoreStream.getPermissions(),
-            channelsStore: StoreChannels = StoreStream.getChannels(),
-            experimentsStore: StoreExperiments = StoreStream.getExperiments(),
-            guildsStore: StoreGuilds = StoreStream.getGuilds(),
-        ): Observable<StoreState> = channelsStore.observeChannel(channelId).switchMap { channel ->
-            Observable.combineLatest(
-                CallModel.get(channelId),
-                permissionsStore.observePermissionsForChannel(channelId),
-                observeTextInVoiceEnabled(channel?.guildId, experimentsStore, guildsStore),
-            ) { callModel, myPermissions, textInVoiceEnabled ->
-                if (callModel == null || callModel.channel.type !in SUPPORTED_CHANNEL_TYPES) {
-                    StoreState.Invalid
-                } else {
-                    StoreState.Valid(
-                        callModel = callModel,
-                        noiseCancellation = callModel.voiceSettings.noiseProcessing ==
-                            StoreMediaSettings.NoiseProcessing.Cancellation,
-                        myPermissions = myPermissions,
-                        textInVoiceEnabled = textInVoiceEnabled,
-                    )
-                }
-            }
-        }
-
-        /**
-         * Reference: `widgets/chat/list/TextInVoiceFeatureFlag`. Inlined rather than depended on,
-         * because the target's copy of that class is a resolver seam defaulting to `true`, which
-         * would forward every call straight to the fullscreen surface.
-         */
-        private fun observeTextInVoiceEnabled(
-            guildId: Long?,
-            experimentsStore: StoreExperiments,
-            guildsStore: StoreGuilds,
-        ): Observable<Boolean> {
-            if (guildId == null || guildId == 0L) return Observable.just(false)
-            return Observable.combineLatest(
-                experimentsStore.observeGuildExperiment(TEXT_IN_VOICE_EXPERIMENT, guildId, true),
-                guildsStore.observeGuild(guildId),
-            ) { experiment, guild ->
-                experiment?.bucket == 1 ||
-                    guild?.hasFeature(GuildFeature.TEXT_IN_VOICE_ENABLED) == true
+        ): Observable<StoreState> = Observable.combineLatest(
+            CallModel.get(channelId),
+            permissionsStore.observePermissionsForChannel(channelId),
+        ) { callModel, myPermissions ->
+            if (callModel == null || callModel.channel.type !in SUPPORTED_CHANNEL_TYPES) {
+                StoreState.Invalid
+            } else {
+                StoreState.Valid(
+                    callModel = callModel,
+                    noiseCancellation = callModel.voiceSettings.noiseProcessing ==
+                        StoreMediaSettings.NoiseProcessing.Cancellation,
+                    myPermissions = myPermissions,
+                )
             }
         }
 

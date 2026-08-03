@@ -37,14 +37,12 @@ class WidgetChannelNotificationSettingsTest {
             settings,
             joinedThread = null,
             approximateMemberCount = 2_501,
-            canAccessRedesignedForumChannels = true,
         )
 
         assertEquals(ModelNotificationSettings.FREQUENCY_MENTIONS, model.notificationSetting)
         assertEquals(ModelNotificationSettings.FREQUENCY_ALL, model.parentNotificationSetting)
         assertEquals(ModelNotificationSettings.FORUM_THREAD_CREATED_ON, model.forumPostNotificationSetting)
         assertTrue(model.isAboveNotifyAllSize)
-        assertTrue(model.canAccessRedesignedForumChannels)
         assertFalse(model.notificationSettingIsInherited)
     }
 
@@ -72,7 +70,6 @@ class WidgetChannelNotificationSettingsTest {
         assertEquals(ModelNotificationSettings.FREQUENCY_ALL, model.notificationSetting)
         assertTrue(model.notificationSettingIsInherited)
         assertFalse(model.isGuildMuted)
-        assertFalse(model.canAccessRedesignedForumChannels)
     }
 
     private fun channel(id: Long, type: Int, parentId: Long = 0, guildId: Long = 10) = Channel(

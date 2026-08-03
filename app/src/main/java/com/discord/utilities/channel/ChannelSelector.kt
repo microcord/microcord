@@ -23,7 +23,6 @@ import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.filterNull
 import com.discord.utilities.rx.takeSingleUntilTimeout
 import com.discord.utilities.rx.ui
-import com.discord.widgets.chat.list.TextInVoiceFeatureFlag
 import com.discord.widgets.voice.sheet.WidgetVoiceBottomSheet
 import java.lang.ref.WeakReference
 
@@ -247,9 +246,7 @@ class ChannelSelector(
             .filterNull()
             .takeSingleUntilTimeout()
             .appSubscribe(ChannelSelector::class.java) { channel ->
-                val isVocalSelection =
-                    (!TextInVoiceFeatureFlag.isEnabled(channel.guildId) && channel.isVoiceChannel()) ||
-                        channel.isStageVoiceChannel()
+                val isVocalSelection = channel.isStageVoiceChannel()
                 val textChannelId = if (isVocalSelection) guildId else channelId
                 gotoChannel(guildId, textChannelId, peekParent, analyticsLocation)
                 if (isVocalSelection) {

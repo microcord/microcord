@@ -44,7 +44,6 @@ import com.discord.utilities.textprocessing.MessageRenderContext
 import com.discord.utilities.uri.UriHandler
 import com.discord.widgets.guildcommunicationdisabled.start.WidgetDisableGuildCommunication
 import com.discord.widgets.guildcommunicationdisabled.start.WidgetEnableGuildCommunication
-import com.discord.widgets.guilds.profile.WidgetChangeGuildIdentity
 import com.discord.widgets.servers.WidgetServerSettingsEditMember
 import com.discord.widgets.settings.profile.WidgetEditUserOrGuildMemberProfile
 import com.discord.widgets.stage.usersheet.UserProfileStageActionsView
@@ -426,13 +425,7 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetProfileIdentityButton.show(state.isMe && guildId != null)
         binding.userSheetProfileIdentityButton.setOnClickListener { view ->
             guildId ?: return@setOnClickListener
-            if (StoreStream.getExperiments()
-                    .getUserExperiment("2021-10_premium_guild_member_profiles", true)?.bucket == 1
-            ) {
-                WidgetEditUserOrGuildMemberProfile.launch(view.context, guildId)
-            } else {
-                WidgetChangeGuildIdentity.launch(guildId, "User Bottom Sheet", view.context)
-            }
+            WidgetEditUserOrGuildMemberProfile.launch(view.context, guildId)
         }
         // Reference also offers "Add to Server" for bots; `WidgetOAuthAuthorize` is not
         // reconstructed, so the row stays hidden rather than leading nowhere.

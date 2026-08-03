@@ -105,10 +105,8 @@ data class NotificationData(
             Channel.PRIVATE_THREAD,
         )
 
-        /** The reference gates forum pushes through the forum-redesign experiment at evaluation time. */
-        fun isValid(canAccessForumChannels: (Long) -> Boolean = { true }): Boolean = when (pushType) {
+        fun isValid(): Boolean = when (pushType) {
             PushType.ACTIVITY_START -> activityType != ACTIVITY_TYPE_STREAMING
-            PushType.FORUM_THREAD_CREATED -> canAccessForumChannels(normalizedGuildId)
             PushType.GUILD_SCHEDULED_EVENT_UPDATE -> guildScheduledEventEntityType in setOf(
                 GuildScheduledEventEntityType.STAGE_INSTANCE,
                 GuildScheduledEventEntityType.VOICE,
@@ -116,6 +114,7 @@ data class NotificationData(
             )
             PushType.APPLICATION_LIBRARY_INSTALL_COMPLETE,
             PushType.CALL_RING,
+            PushType.FORUM_THREAD_CREATED,
             PushType.GENERIC_PUSH_NOTIFICATION_SENT,
             PushType.MESSAGE_CREATE,
             PushType.RELATIONSHIP_ADD,

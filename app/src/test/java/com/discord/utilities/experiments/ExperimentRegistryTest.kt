@@ -6,12 +6,12 @@ import org.junit.Test
 
 class ExperimentRegistryTest {
     @Test
-    fun `registry contains the shipped user and guild experiments`() {
-        assertEquals(38, ExperimentRegistry.registeredExperiments.size)
-        assertTrue("2021-10_premium_guild_member_profiles" in ExperimentRegistry.registeredExperiments)
+    fun `registry contains the still-gated experiments`() {
+        assertEquals(23, ExperimentRegistry.registeredExperiments.size)
+        assertTrue("2021-12_connected_accounts_playstation" in ExperimentRegistry.registeredExperiments)
         assertEquals(
-            RegisteredExperiment.Type.GUILD,
-            ExperimentRegistry.registeredExperiments.getValue("2022-03_android_forum_channel_redesign").type,
+            RegisteredExperiment.Type.USER,
+            ExperimentRegistry.registeredExperiments.getValue("2021-05_opensl_default_enable_android").type,
         )
         assertEquals(
             listOf("Control: Standard message gestures", "Treatment 1: Double tap to reply or edit"),

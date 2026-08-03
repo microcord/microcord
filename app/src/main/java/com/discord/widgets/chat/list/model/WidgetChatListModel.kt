@@ -19,9 +19,6 @@ import com.discord.stores.StoreMessagesLoader
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreThreadDraft
 import com.discord.utilities.permissions.PermissionUtils
-import com.discord.widgets.chat.list.CreateThreadsFeatureFlag
-import com.discord.widgets.chat.list.NewThreadsPermissionsFeatureFlag
-import com.discord.widgets.chat.list.ViewThreadsFeatureFlag
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapter
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.LoadingEntry
@@ -267,12 +264,10 @@ data class WidgetChatListModel(
             checkGuildFeature: Boolean,
         ): Boolean {
             guild ?: return false
-            val permissionAllowed = PermissionUtils.can(Permission.CREATE_PRIVATE_THREADS, permissions) &&
-                (NewThreadsPermissionsFeatureFlag.isEnabled(guild.id) || PermissionUtils.hasAccessWrite(channel, permissions))
+            val permissionAllowed = PermissionUtils.can(Permission.CREATE_PRIVATE_THREADS, permissions)
             val channelAllowed = !channel.isThread() && !channel.isVoiceChannel() && !channel.isAnnouncementChannel()
             val featureAllowed = !checkGuildFeature || guild.hasFeature(GuildFeature.PRIVATE_THREADS)
-            return ViewThreadsFeatureFlag.isEnabled() && CreateThreadsFeatureFlag.isEnabled(guild.id) &&
-                permissionAllowed && channelAllowed && featureAllowed
+            return permissionAllowed && channelAllowed && featureAllowed
         }
 
         private fun canCreatePublicThread(
@@ -283,12 +278,10 @@ data class WidgetChatListModel(
         ): Boolean {
             guild ?: return false
             val permissionAllowed = PermissionUtils.can(Permission.CREATE_PUBLIC_THREADS, permissions) &&
-                (message == null || PermissionUtils.can(Permission.MANAGE_MESSAGES, permissions)) &&
-                (NewThreadsPermissionsFeatureFlag.isEnabled(guild.id) || PermissionUtils.hasAccessWrite(channel, permissions))
+                (message == null || PermissionUtils.can(Permission.MANAGE_MESSAGES, permissions))
             val channelAllowed = message?.isSystemMessage() != true && !channel.isThread() &&
                 message?.hasThread() != true && !channel.isVoiceChannel()
-            return ViewThreadsFeatureFlag.isEnabled() && CreateThreadsFeatureFlag.isEnabled(guild.id) &&
-                permissionAllowed && channelAllowed
+            return permissionAllowed && channelAllowed
         }
 
         private data class ChannelPrimary(

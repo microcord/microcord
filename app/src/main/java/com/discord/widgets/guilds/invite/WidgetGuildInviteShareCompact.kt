@@ -203,7 +203,7 @@ class WidgetGuildInviteShareCompact : AppFragment(R.layout.widget_guild_invite_s
 
         settingsEdit.visibility = if (viewState.showInviteSettings) View.VISIBLE else View.GONE
         neverExpire.visibility = if (viewState.showInviteSettings) View.VISIBLE else View.GONE
-        neverExpire.text = getInviteLinkText(requireContext(), viewModel.getDefaultInviteExperiment())
+        neverExpire.text = getInviteLinkText(requireContext())
     }
 
     private companion object {

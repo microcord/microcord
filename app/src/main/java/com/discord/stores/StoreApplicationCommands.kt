@@ -82,11 +82,6 @@ class StoreApplicationCommands(
      * which is the same answer the store gives for a DM.
      */
     private val storePermissions: StorePermissions? = null,
-    /**
-     * `null` while `StoreExperiments` is not wired. The frecency shortlist is then always empty,
-     * matching an un-enrolled user.
-     */
-    private val storeExperiments: StoreExperiments? = null,
     private val restApi: () -> RestAPIInterface? = { RestAPI.reactNativeApiOrNull },
     private val applicationIndexRequest: (Long) -> Observable<ApplicationCommandIndex>? = { applicationId ->
         RestAPI.applicationDirectoryApiOrNull?.applicationCommandIndex(applicationId)
@@ -244,20 +239,10 @@ class StoreApplicationCommands(
             }
         }.distinctUntilChanged()
 
-    /**
-     * The frequently-used shortlist, capped at five.
-     *
-     * Gated on the `2021-09_android_app_commands_frecency` experiment exactly as the reference:
-     * outside bucket 1 the list is empty and the picker shows no "Frequently Used" application.
-     */
+    /** The frequently-used shortlist, capped at five. */
     fun observeFrecencyCommands(guildId: Long): Observable<List<ApplicationCommand>> =
-        observationDeck.connectRx(*sourcesWith(FrecencyCommandsUpdate, storeExperiments)) {
-            val experiment = storeExperiments?.getUserExperiment(FRECENCY_EXPERIMENT_NAME, false)
-            if (experiment?.bucket == FRECENCY_EXPERIMENT_BUCKET) {
-                getFrecencyCommands(guildId).take(FRECENCY_LIMIT)
-            } else {
-                emptyList()
-            }
+        observationDeck.connectRx(FrecencyCommandsUpdate) {
+            getFrecencyCommands(guildId).take(FRECENCY_LIMIT)
         }.startWith(emptyList<ApplicationCommand>())
 
     fun observeAutocompleteResults(): Observable<Map<String, Map<String, CommandAutocompleteState>>> =
@@ -1301,8 +1286,6 @@ class StoreApplicationCommands(
         /** `RestAPIParams.ApplicationCommand.type` for an autocomplete request. */
         const val TYPE_APPLICATION_COMMAND_AUTOCOMPLETE = 4L
 
-        private const val FRECENCY_EXPERIMENT_NAME = "2021-09_android_app_commands_frecency"
-        private const val FRECENCY_EXPERIMENT_BUCKET = 1
         private const val FRECENCY_LIMIT = 5
         private const val INDEX_CACHE_KEY = "STORE_APPLICATION_COMMAND_INDEX_CACHE_V1"
     }

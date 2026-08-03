@@ -301,11 +301,7 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
         configureMenu(state)
         setActionBarTitle(state.titleText.orEmpty())
         setActionBarTitleColor(android.graphics.Color.WHITE)
-        root.setBackgroundResource(
-            if (state.displayMode == WidgetCallFullscreenViewModel.DisplayMode.GRID && !state.isTextInVoiceEnabled) {
-                R.color.primary_dark_800
-            } else R.color.primary_dark_900
-        )
+        root.setBackgroundResource(R.color.primary_dark_900)
         when (state.displayMode) {
             WidgetCallFullscreenViewModel.DisplayMode.GRID -> configureGrid(state)
             WidgetCallFullscreenViewModel.DisplayMode.STAGE -> configureStage(state)

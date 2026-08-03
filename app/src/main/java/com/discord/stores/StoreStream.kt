@@ -253,7 +253,6 @@ class StoreStream private constructor(
         observationDeck,
         getChannel = channels::findChannelById,
         getJoinedThreadFlags = { threadsJoined.getJoinedThread(it)?.flags ?: 0 },
-        canAccessRedesignedForumChannels = { guildId -> canAccessRedesignedForumChannels(guildId) },
     )
     private val guildMemberCounts = StoreGuildMemberCounts(observationDeck)
     private val experiments = StoreExperiments(
@@ -369,7 +368,6 @@ class StoreStream private constructor(
     private val messagesMostRecent = StoreMessagesMostRecent(
         observationDeck,
         storeChannels = channels,
-        forumChannelsEnabled = { guildId -> canAccessRedesignedForumChannels(guildId) },
     )
     private val readStates = StoreReadStates(clock)
     private val messages = StoreMessages(observationDeck)
@@ -479,7 +477,6 @@ class StoreStream private constructor(
         storeApplicationCommandFrecency = applicationCommandFrecency,
         gatewayRequest = gatewayConnection::requestApplicationCommands,
         storePermissions = permissions,
-        storeExperiments = experiments,
         restApi = { if (::restApi.isInitialized) restApi else null },
         observationDeck = observationDeck,
     )
@@ -541,7 +538,6 @@ class StoreStream private constructor(
         storeChannels = channels,
         storeUser = users,
         observationDeck = observationDeck,
-        canAccessForumChannels = { guildId -> canAccessRedesignedForumChannels(guildId) },
     )
     private val notificationRenderer = NotificationRenderer()
     private val notifications = StoreNotifications(
@@ -1435,15 +1431,6 @@ class StoreStream private constructor(
                 notificationRenderer.renderGateway(applicationContext, data)
         }
     }
-
-    /**
-     * `ForumUtils.canAccessRedesignedForumChannels(guildId)` — guild experiment
-     * `2022-03_android_forum_channel_redesign`, treatment bucket 1. Verified against the Vineflower
-     * decompile of `widgets/forums/ForumUtils`; `ForumUtils` itself is not reconstructed yet, so the
-     * lookup lives here until it is.
-     */
-    private fun canAccessRedesignedForumChannels(guildId: Long): Boolean =
-        experiments.getGuildExperiment(FORUM_REDESIGN_EXPERIMENT, guildId)?.bucket == 1
 
     private fun accessibilityMonitorBind(context: Context) =
         com.discord.utilities.accessibility.AccessibilityMonitor.INSTANCE.bindContext(context)
@@ -2908,7 +2895,6 @@ class StoreStream private constructor(
         private const val USER_AGENT = "Discord-Android/126021"
         private const val GATEWAY_INIT_TIMEOUT_MS = 10_000L
         private const val GATEWAY_TAG = "ManticordGateway"
-        private const val FORUM_REDESIGN_EXPERIMENT = "2022-03_android_forum_channel_redesign"
         @Volatile private var instance: StoreStream? = null
 
         private fun acceptLanguages(): String {

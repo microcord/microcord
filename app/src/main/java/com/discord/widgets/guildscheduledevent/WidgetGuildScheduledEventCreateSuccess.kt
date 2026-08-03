@@ -58,17 +58,14 @@ class WidgetGuildScheduledEventCreateSuccess : AppFragment(R.layout.widget_guild
         val settings = model.settings
         neverExpire.visibility = if (state.showInviteSettings) View.VISIBLE else View.GONE
         neverExpire.setChecked(settings?.maxAge == ModelInvite.Settings.NEVER)
-        neverExpire.setSubtext(getInviteLinkText(requireContext(), viewModel.getDefaultInviteExperiment()))
+        neverExpire.setSubtext(getInviteLinkText(requireContext()))
         neverExpire.setContainerClickListener {
             val current = model.settings ?: return@setContainerClickListener
             neverExpire.toggle()
-            val defaultMaxAge = if (viewModel.getDefaultInviteExperiment()?.bucket == 1) {
-                ModelInvite.Settings.SEVEN_DAYS
-            } else {
-                ModelInvite.Settings.ONE_DAY
-            }
             viewModel.updateInviteSettings(
-                current.mergeMaxAge(if (neverExpire.isChecked) ModelInvite.Settings.NEVER else defaultMaxAge),
+                current.mergeMaxAge(
+                    if (neverExpire.isChecked) ModelInvite.Settings.NEVER else ModelInvite.Settings.SEVEN_DAYS,
+                ),
             )
             model.targetChannel?.id?.let(viewModel::generateInviteLink)
         }

@@ -12,9 +12,6 @@ import com.discord.models.guild.Guild
 import com.discord.stores.StoreStream
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rx.ui
-import com.discord.widgets.chat.list.CreateThreadsFeatureFlag
-import com.discord.widgets.chat.list.NewThreadsPermissionsFeatureFlag
-import com.discord.widgets.chat.list.ViewThreadsFeatureFlag
 import rx.Observable
 
 class WidgetThreadBrowserViewModel(
@@ -61,15 +58,9 @@ class WidgetThreadBrowserViewModel(
             if (permissions == null || channel == null || guild == null || channel.isThread() || channel.isVoiceChannel()) {
                 return false
             }
-            if (!ViewThreadsFeatureFlag.isEnabled() || !CreateThreadsFeatureFlag.isEnabled(guild.id)) return false
-
-            val newPermissions = NewThreadsPermissionsFeatureFlag.isEnabled(guild.id)
-            val canWrite = PermissionUtils.hasAccessWrite(channel, permissions)
-            val canCreatePublic = PermissionUtils.can(Permission.CREATE_PUBLIC_THREADS, permissions) &&
-                (newPermissions || canWrite)
+            val canCreatePublic = PermissionUtils.can(Permission.CREATE_PUBLIC_THREADS, permissions)
             val canCreatePrivate = !channel.isAnnouncementChannel() &&
-                PermissionUtils.can(Permission.CREATE_PRIVATE_THREADS, permissions) &&
-                (newPermissions || canWrite)
+                PermissionUtils.can(Permission.CREATE_PRIVATE_THREADS, permissions)
             return canCreatePublic || canCreatePrivate
         }
 

@@ -21,9 +21,7 @@ import com.discord.utilities.rest.RestAPIAbortMessages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.rx.ui
-import com.discord.widgets.channels.WidgetGroupInviteFriends
 import com.discord.widgets.channels.invite.GroupInviteFriendsSheet
-import com.discord.widgets.channels.invite.GroupInviteFriendsSheetFeatureFlag
 import com.discord.widgets.contact_sync.ContactSyncFlowAnalytics
 import com.discord.widgets.contact_sync.WidgetContactSync
 import com.discord.widgets.tabs.NavigationTab
@@ -167,11 +165,7 @@ class WidgetFriendsList : AppFragment(R.layout.widget_friends_list) {
                     R.id.menu_friends_contact_sync ->
                         launchContactSync(requireContext(), LOCATION_ICON)
                     R.id.menu_friends_start_group ->
-                        if (GroupInviteFriendsSheetFeatureFlag.INSTANCE.isEnabled()) {
-                            GroupInviteFriendsSheet.show(parentFragmentManager, source = ANALYTICS_SOURCE)
-                        } else {
-                            WidgetGroupInviteFriends.launch(requireContext(), ANALYTICS_SOURCE)
-                        }
+                        GroupInviteFriendsSheet.show(parentFragmentManager, source = ANALYTICS_SOURCE)
                     else -> Unit
                 }
             },

@@ -2,7 +2,6 @@ package com.discord.widgets.guildscheduledevent
 
 import android.content.res.Resources
 import com.discord.models.domain.ModelInvite
-import com.discord.models.experiments.domain.Experiment
 import com.discord.stores.StoreChannels
 import com.discord.stores.StoreGuildScheduledEvents
 import com.discord.stores.StoreGuilds
@@ -58,9 +57,6 @@ class WidgetGuildScheduledEventCreateSuccessViewModel(
             (channelId ?: defaultChannel?.id)?.let { inviteGenerator.generateForAppComponent(this, it) }
         }
     }
-
-    fun getDefaultInviteExperiment(): Experiment? =
-        storeInviteSettings.getInviteGuildExperiment(guildId, true)
 
     fun updateInviteSettings(settings: ModelInvite.Settings) =
         storeInviteSettings.setInviteSettings(settings)

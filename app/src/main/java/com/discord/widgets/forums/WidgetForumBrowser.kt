@@ -154,11 +154,11 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
     private fun configureScrolling(state: WidgetForumBrowserViewModel.ViewState.Loaded) {
         layoutManager.setOnLayoutCompletedCallback { onLayoutCompleted(state) }
         scrollListener.setOnScrollCallback { enqueueVisibleFirstMessages(state) }
-        scrollListener.setOnScrollEndCallback { viewModel.maybeFetchOlderPosts(state.channelId, state.guildId) }
+        scrollListener.setOnScrollEndCallback { viewModel.maybeFetchOlderPosts(state.channelId) }
         scrollListener.setOnScrollStateChangedCallback { scrollState ->
             enqueueVisibleFirstMessages(state)
             if (scrollState == RecyclerView.SCROLL_STATE_IDLE) {
-                viewModel.maybeFetchForumPostFirstMessages(state.channelId, state.guildId)
+                viewModel.maybeFetchForumPostFirstMessages(state.channelId)
             }
         }
     }
@@ -166,7 +166,7 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
     private fun onLayoutCompleted(state: WidgetForumBrowserViewModel.ViewState.Loaded) {
         if (adapterItems.filterIsInstance<ForumBrowserItem.PostItem>().any { it.post.isActivePost }) {
             enqueueVisibleFirstMessages(state)
-            viewModel.maybeFetchForumPostFirstMessages(state.channelId, state.guildId, initial = true)
+            viewModel.maybeFetchForumPostFirstMessages(state.channelId, initial = true)
             viewModel.requestForumUnreads(state.channelId, state.guildId)
         }
     }
@@ -180,7 +180,7 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
         for (index in from..to) {
             val item = adapterItems[index] as? ForumBrowserItem.PostItem ?: continue
             if (item.post.isActivePost) {
-                viewModel.enqueueForumPostFirstMessageFetch(state.channelId, state.guildId, item.post.channel.id)
+                viewModel.enqueueForumPostFirstMessageFetch(state.channelId, item.post.channel.id)
             }
         }
     }

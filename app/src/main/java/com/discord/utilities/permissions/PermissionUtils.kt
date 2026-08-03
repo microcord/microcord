@@ -47,18 +47,6 @@ enum class SlowModeType {
  */
 object PermissionUtils {
 
-    /**
-     * Whether the 2021-08 threads-permissions rework applies to [guildId].
-     *
-     * The reference reads `NewThreadsPermissionsFeatureFlag`, which ORs the
-     * `2021-08_threads_permissions` guild experiment bucket with the
-     * `NEW_THREAD_PERMISSIONS` guild feature. Neither `StoreExperiments` nor that flag
-     * exists in this target yet, so this hook defaults to the legacy behaviour and is
-     * settable by whoever reconstructs the flag.
-     */
-    @JvmStatic
-    var newThreadsPermissionsEnabled: (guildId: Long) -> Boolean = { false }
-
     // region primitive checks
 
     /** Whether [computedPermissions] contains every bit of [permission]. */
@@ -287,13 +275,9 @@ object PermissionUtils {
      * The effective permissions for [userId] inside [thread].
      *
      * Threads have no overwrites of their own, so the parent channel's permissions are
-     * computed first and then adjusted:
-     *
-     * * With the new-threads-permissions flag on, posting is governed purely by
-     *   [Permission.SEND_MESSAGES_IN_THREADS], and a private thread the user has not
-     *   joined is invisible unless they can manage threads.
-     * * With the flag off, the *create* permission for the thread's visibility grants
-     *   posting, and an unjoined private thread still requires thread management.
+     * computed first and then adjusted: posting is governed purely by
+     * [Permission.SEND_MESSAGES_IN_THREADS], and a private thread the user has not joined is
+     * invisible unless they can manage threads.
      */
     @JvmStatic
     fun computeThreadPermissions(
@@ -313,27 +297,14 @@ object PermissionUtils {
             guildRoles,
             parentChannel.permissionOverwrites.orEmpty(),
         )
-        if (newThreadsPermissionsEnabled(thread.guildId)) {
-            if (thread.isPrivateThread() && !hasJoined &&
-                !can(Permission.MANAGE_THREADS, permissions)
-            ) {
-                return Permission.NONE
-            }
-            return if (can(Permission.SEND_MESSAGES_IN_THREADS, permissions)) {
-                permissions or Permission.SEND_MESSAGES
-            } else {
-                permissions and Permission.SEND_MESSAGES.inv()
-            }
+        if (thread.isPrivateThread() && !hasJoined && !can(Permission.MANAGE_THREADS, permissions)) {
+            return Permission.NONE
         }
-        if (thread.isPrivateThread()) {
-            if (can(Permission.CREATE_PRIVATE_THREADS, permissions)) {
-                permissions = permissions or Permission.SEND_MESSAGES
-            }
-            if (!hasJoined && !can(Permission.MANAGE_THREADS, permissions)) return Permission.NONE
-        } else if (can(Permission.CREATE_PUBLIC_THREADS, permissions)) {
-            permissions = permissions or Permission.SEND_MESSAGES
+        return if (can(Permission.SEND_MESSAGES_IN_THREADS, permissions)) {
+            permissions or Permission.SEND_MESSAGES
+        } else {
+            permissions and Permission.SEND_MESSAGES.inv()
         }
-        return permissions
     }
 
     /**

@@ -13,12 +13,11 @@ class WidgetCallPreviewFullscreenTest {
     fun actionBarAndInsetRulesMatch12621() {
         assertEquals(
             true to true,
-            WidgetCallPreviewFullscreen.actionBarMenuVisibility(true, true, false, false, null),
+            WidgetCallPreviewFullscreen.actionBarMenuVisibility(true, false, false, null),
         )
         assertEquals(
             false to false,
             WidgetCallPreviewFullscreen.actionBarMenuVisibility(
-                true,
                 true,
                 true,
                 false,
@@ -27,7 +26,7 @@ class WidgetCallPreviewFullscreenTest {
         )
         assertEquals(
             false to false,
-            WidgetCallPreviewFullscreen.actionBarMenuVisibility(true, true, true, true, null),
+            WidgetCallPreviewFullscreen.actionBarMenuVisibility(true, true, true, null),
         )
         assertEquals(32 to 32, WidgetCallPreviewFullscreen.unreadIndicatorMargins(false, false))
         assertEquals(32 to 28, WidgetCallPreviewFullscreen.unreadIndicatorMargins(true, false))

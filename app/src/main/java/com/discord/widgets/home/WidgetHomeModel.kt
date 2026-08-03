@@ -10,7 +10,6 @@ import com.discord.models.presence.Presence
 import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreStream
 import com.discord.utilities.rx.leadingEdgeThrottle
-import com.discord.widgets.chat.list.CreateThreadsFeatureFlag
 import java.util.concurrent.TimeUnit
 import rx.Observable
 
@@ -34,7 +33,6 @@ data class WidgetHomeModel(
     val isCallConnected: Boolean,
     val nsfwAllowed: NsfwAllowance?,
     val threadCount: Int,
-    val threadExperimentEnabled: Boolean,
 ) {
 
     val channel: Channel? = selectedChannel.maybeChannel
@@ -110,8 +108,7 @@ data class WidgetHomeModel(
                 StoreStream.getUserRelationships().observe(),
                 StoreStream.getThreadsActive().observeActiveThreadsForChannel(selectedGuildId, threadParentId),
                 getParentChannelObservable(channel),
-                Observable.just(CreateThreadsFeatureFlag.isEnabled(selectedGuildId)),
-            ) { me, presences, selectedVoiceChannel, unreadCount, relationships, activeThreads, parentChannel, threadsEnabled ->
+            ) { me, presences, selectedVoiceChannel, unreadCount, relationships, activeThreads, parentChannel ->
                 val dmRecipient = channel?.getDMRecipient()
                 WidgetHomeModel(
                     selectedChannel = selectedChannel,
@@ -126,7 +123,6 @@ data class WidgetHomeModel(
                         selectedVoiceChannel?.id == channel.id,
                     nsfwAllowed = me.nsfwAllowance,
                     threadCount = activeThreads.size,
-                    threadExperimentEnabled = threadsEnabled,
                 )
             }.leadingEdgeThrottle(THROTTLE_MS, TimeUnit.MILLISECONDS)
         }

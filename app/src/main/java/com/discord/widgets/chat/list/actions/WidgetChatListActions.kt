@@ -40,13 +40,8 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.user.UserUtils.discriminatorWithPadding
 import com.discord.utilities.textprocessing.node.EditedMessageNode
 import com.discord.widgets.chat.managereactions.WidgetManageReactions
-import com.discord.widgets.chat.list.CreateThreadsFeatureFlag
-import com.discord.widgets.chat.list.NewThreadsPermissionsFeatureFlag
-import com.discord.widgets.chat.list.ViewThreadsFeatureFlag
-import com.discord.widgets.mobile_reports.ReportsFeatureFlag
 import com.discord.widgets.mobile_reports.WidgetMobileReports
 import com.discord.widgets.notice.WidgetNoticeDialog
-import com.discord.widgets.tos.WidgetTosReportViolation
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.widgets.share.ForwardingPolicy
 import com.discord.widgets.share.WidgetIncomingShare
@@ -153,11 +148,7 @@ class WidgetChatListActions : AppBottomSheet() {
             dismiss()
         }
         bind(root, R.id.dialog_chat_actions_report, message.author?.id != model.me.id) {
-            if (ReportsFeatureFlag.isEnabled()) {
-                WidgetMobileReports.launchMessageReport(requireContext(), message.id, channelId)
-            } else {
-                WidgetTosReportViolation.show(requireContext(), model.messageAuthorName, message.channelId, message.id)
-            }
+            WidgetMobileReports.launchMessageReport(requireContext(), message.id, channelId)
             dismiss()
         }
         root.findViewById<TextView>(R.id.dialog_chat_actions_share).setText(R.string.forward_message)
@@ -280,12 +271,10 @@ class WidgetChatListActions : AppBottomSheet() {
         val guild = model.guild ?: return false
         val permissions = model.permissions
         val permissionAllowed = PermissionUtils.can(Permission.CREATE_PUBLIC_THREADS, permissions) &&
-            PermissionUtils.can(Permission.MANAGE_MESSAGES, permissions) &&
-            (NewThreadsPermissionsFeatureFlag.isEnabled(guild.id) || PermissionUtils.hasAccessWrite(channel, permissions))
+            PermissionUtils.can(Permission.MANAGE_MESSAGES, permissions)
         val channelAllowed = !model.message.isSystemMessage() && !channel.isThread() &&
             !model.message.hasThread() && !channel.isVoiceChannel()
-        return ViewThreadsFeatureFlag.isEnabled() && CreateThreadsFeatureFlag.isEnabled(guild.id) &&
-            permissionAllowed && channelAllowed
+        return permissionAllowed && channelAllowed
     }
 
     private fun bind(root: View, id: Int, visible: Boolean, click: () -> Unit) =

@@ -29,9 +29,7 @@ import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.streams.StreamContext
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
-import com.discord.widgets.channels.WidgetGroupInviteFriends
 import com.discord.widgets.channels.invite.GroupInviteFriendsSheet
-import com.discord.widgets.channels.invite.GroupInviteFriendsSheetFeatureFlag
 import com.discord.widgets.guildscheduledevent.WidgetEndGuildScheduledEventBottomSheet
 import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventDetailsBottomSheet
 import com.discord.widgets.guildscheduledevent.WidgetPreviewGuildScheduledEvent
@@ -514,9 +512,7 @@ internal fun launchChannelInvite(fragment: Fragment, channel: Channel, source: S
             channel.id,
             source = source,
         )
-    } else if (GroupInviteFriendsSheetFeatureFlag.INSTANCE.isEnabled()) {
-        GroupInviteFriendsSheet.show(fragment.childFragmentManager, channel.id, source)
     } else {
-        WidgetGroupInviteFriends.launch(fragment.requireContext(), channel.id, source)
+        GroupInviteFriendsSheet.show(fragment.childFragmentManager, channel.id, source)
     }
 }

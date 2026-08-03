@@ -55,7 +55,6 @@ class WidgetThreadStatusViewModel(
         val parentChannel: Channel?,
         val canArchive: Boolean,
         val isModerator: Boolean,
-        val canAccessRedesignedForumChannels: Boolean,
     )
 
     data class ViewState(val threadStatus: Status, val isLoading: Boolean = false)
@@ -81,10 +80,8 @@ class WidgetThreadStatusViewModel(
 
         val status = when {
             selectedChannel == null || !selectedChannel.isThread() -> Status.Hide
-            // A post in a redesigned forum carries its own status bar, so this one stands down.
-            parentChannel != null &&
-                parentChannel.isGuildForumChannel() &&
-                storeState.canAccessRedesignedForumChannels -> Status.Hide
+            // A forum post carries its own status bar, so this one stands down.
+            parentChannel != null && parentChannel.isGuildForumChannel() -> Status.Hide
             metadata?.archived == true -> Status.Archived(
                 isLocked = metadata.locked,
                 canArchive = storeState.canArchive,
@@ -144,9 +141,6 @@ class WidgetThreadStatusViewModel(
          *   this store yet, so the default is `null` and membership falls back to the thread
          *   member the gateway attaches to the channel itself. Pass the real store once the store
          *   graph owns one.
-         * @param observeCanAccessRedesignedForumChannels the forum-redesign experiment gate. The
-         *   reference reads it from `ForumUtils`/`StoreExperiments`; neither exists here yet, so the
-         *   default reports the redesign off and this banner keeps rendering for forum posts.
          */
         @JvmStatic
         fun observeStoreState(
@@ -154,9 +148,6 @@ class WidgetThreadStatusViewModel(
             storeChannels: StoreChannels = StoreStream.getChannels(),
             storePermissions: StorePermissions = StoreStream.getPermissions(),
             storeThreadsActiveJoined: StoreThreadsActiveJoined? = null,
-            observeCanAccessRedesignedForumChannels: (guildId: Long) -> Observable<Boolean> = {
-                Observable.just(false)
-            },
         ): Observable<StoreState> =
             storeChannelsSelected.observeSelectedChannel()
                 .filterNull()
@@ -165,15 +156,13 @@ class WidgetThreadStatusViewModel(
                         observeActiveJoinedThreads(storeThreadsActiveJoined, selectedChannel),
                         storePermissions.observePermissionsForChannel(selectedChannel.id),
                         storeChannels.observeChannel(selectedChannel.parentId),
-                        observeCanAccessRedesignedForumChannels(selectedChannel.guildId),
-                    ) { activeJoinedThreads, permissions, parentChannel, canAccessRedesignedForums ->
+                    ) { activeJoinedThreads, permissions, parentChannel ->
                         StoreState(
                             activeJoinedThreads = activeJoinedThreads,
                             selectedChannel = selectedChannel,
                             parentChannel = parentChannel,
                             canArchive = canUnarchiveThread(selectedChannel, permissions),
                             isModerator = PermissionUtils.can(Permission.MANAGE_THREADS, permissions),
-                            canAccessRedesignedForumChannels = canAccessRedesignedForums,
                         )
                     }.distinctUntilChanged()
                 }

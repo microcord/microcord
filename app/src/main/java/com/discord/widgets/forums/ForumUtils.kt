@@ -11,37 +11,11 @@ import com.discord.stores.ArchivedThreadsStore
 import com.discord.stores.StoreChannels
 import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreEmoji
-import com.discord.stores.StoreExperiments
 import com.discord.stores.StoreStream
 import com.discord.utilities.cache.SharedPreferencesProvider
 import rx.Observable
 
 object ForumUtils {
-    private const val FORUM_EXPERIMENT = "2021-07_threads_only_channel"
-    private const val REDESIGN_EXPERIMENT = "2022-03_android_forum_channel_redesign"
-
-    fun canAccessForumChannels(guildId: Long, experiments: StoreExperiments = StoreStream.getExperiments()) =
-        experiments.getGuildExperiment(FORUM_EXPERIMENT, guildId)?.bucket == 1
-
-    fun canAccessRedesignedForumChannels(
-        guildId: Long,
-        experiments: StoreExperiments = StoreStream.getExperiments(),
-    ) = experiments.getGuildExperiment(REDESIGN_EXPERIMENT, guildId)?.bucket == 1
-
-    fun observeCanCreateForumChannels(
-        guildId: Long,
-        experiments: StoreExperiments = StoreStream.getExperiments(),
-    ): Observable<Boolean> = experiments.observeGuildExperiment(FORUM_EXPERIMENT, guildId)
-        .map { it?.bucket == 1 }
-        .distinctUntilChanged()
-
-    fun observeCanAccessRedesignedForumChannels(
-        guildId: Long,
-        experiments: StoreExperiments = StoreStream.getExperiments(),
-    ): Observable<Boolean> = experiments.observeGuildExperiment(REDESIGN_EXPERIMENT, guildId)
-        .map { it?.bucket == 1 }
-        .distinctUntilChanged()
-
     fun isGuildNsfwGateAgreed(guildId: Long): Boolean = guildId.toString() in
         SharedPreferencesProvider.get().getStringSet(NSFW_GUILDS_ALLOWED_KEY, emptySet()).orEmpty()
 
@@ -54,12 +28,8 @@ object ForumUtils {
     fun observeSelectedPostChannel(
         channels: StoreChannels = StoreStream.getChannels(),
         selected: StoreChannelsSelected = StoreStream.getChannelsSelected(),
-        experiments: StoreExperiments = StoreStream.getExperiments(),
     ): Observable<Channel?> = selected.observeSelectedChannel().map { channel ->
-        channel?.takeIf {
-            canAccessRedesignedForumChannels(it.guildId, experiments) &&
-                channels.getChannel(it.parentId)?.isGuildForumChannel() == true
-        }
+        channel?.takeIf { channels.getChannel(it.parentId)?.isGuildForumChannel() == true }
     }.distinctUntilChanged()
 
     fun maybeLoadAndObserveThreadListing(

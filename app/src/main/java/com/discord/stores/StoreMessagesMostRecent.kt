@@ -34,14 +34,6 @@ class StoreMessagesMostRecent @JvmOverloads constructor(
      * [updateParentChannelMostRecentIds].
      */
     private val storeChannels: StoreChannels? = null,
-    /**
-     * Whether the redesigned forum experience is enabled for a guild.
-     *
-     * The reference reads `ForumUtils.canAccessRedesignedForumChannels(guildId)`; `ForumUtils`
-     * does not exist in this target yet, so this defaults to enabled — forum channels only exist
-     * at all in builds where the redesign shipped, and the propagation is a no-op otherwise.
-     */
-    private val forumChannelsEnabled: (guildId: Long) -> Boolean = { true },
 ) : StoreV2() {
     private val mostRecentIds = HashMap<Long, Long>()
     private var snapshot: Map<Long, Long> = emptyMap()
@@ -140,7 +132,6 @@ class StoreMessagesMostRecent @JvmOverloads constructor(
      */
     @StoreThread
     private fun updateParentChannelMostRecentIds(channel: Channel): Boolean {
-        if (!forumChannelsEnabled(channel.guildId)) return false
         if (!channel.isThread() || channel.threadMetadata?.archived == true) return false
         val parent = storeChannels?.getChannel(channel.parentId) ?: return false
         if (!parent.isGuildForumChannel()) return false

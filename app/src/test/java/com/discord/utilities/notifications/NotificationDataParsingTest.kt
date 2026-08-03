@@ -92,8 +92,7 @@ class NotificationDataParsingTest {
 
         assertTrue(parse(PushType.ACTIVITY_START, "activity_type" to "0").isValid())
         assertFalse(parse(PushType.ACTIVITY_START, "activity_type" to "1").isValid())
-        assertTrue(parse(PushType.FORUM_THREAD_CREATED).isValid { true })
-        assertFalse(parse(PushType.FORUM_THREAD_CREATED).isValid { false })
+        assertTrue(parse(PushType.FORUM_THREAD_CREATED).isValid())
         listOf("1", "2", "3").forEach { entityType ->
             assertTrue(parse(
                 PushType.GUILD_SCHEDULED_EVENT_UPDATE,

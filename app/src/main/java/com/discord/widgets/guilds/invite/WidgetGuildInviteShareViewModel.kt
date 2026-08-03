@@ -7,7 +7,6 @@ import com.discord.api.channel.getDisplayName
 import com.discord.api.guildscheduledevent.GuildScheduledEvent
 import com.discord.app.AppViewModel
 import com.discord.models.domain.ModelInvite
-import com.discord.models.experiments.domain.Experiment
 import com.discord.models.invite.InviteUtils
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreChannels
@@ -121,9 +120,6 @@ class WidgetGuildInviteShareViewModel(
     fun updateSearchQuery(searchQuery: String) = filterPublisher.onNext(searchQuery)
 
     fun refreshUi() = refreshUiSubject.onNext(Unit)
-
-    fun getDefaultInviteExperiment(): Experiment? =
-        inviteSettings.getInviteGuildExperiment(guildId, trackExposure = true)
 
     /**
      * Sends the current link into [channelId] and marks the row Sent on success only — a failed

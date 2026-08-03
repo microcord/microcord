@@ -61,8 +61,6 @@ object WidgetUserSheetViewModelStoreState {
      * @param storeMediaSettings my local audio settings.
      * @param streamContextService resolves the user's Go Live stream. The reference passes
      *   `StreamContextService`, which is not reconstructed; the default reports no stream.
-     * @param observeCanDisableCommunication the timeout feature gate. Reference:
-     *   `GuildCommunicationDisabledGuildsFeatureFlag`; not reconstructed, so timeouts are off.
      */
     @JvmStatic
     @JvmOverloads
@@ -83,7 +81,6 @@ object WidgetUserSheetViewModelStoreState {
         storeUserNotes: StoreUserNotes = StoreStream.getUserNotes(),
         storeStageChannels: StoreStageChannels = StoreStream.getStageChannels(),
         streamContextService: (Long) -> Observable<StreamContext?> = { Observable.just(null) },
-        observeCanDisableCommunication: (Long) -> Observable<Boolean> = { Observable.just(false) },
     ): Observable<WidgetUserSheetViewModel.StoreState?> {
         val channelObservable: Observable<Channel?> =
             channelId?.let { storeChannels.observeChannel(it) } ?: Observable.just(null)
@@ -131,10 +128,6 @@ object WidgetUserSheetViewModelStoreState {
                         ?.map<StoreMediaSettings.VoiceConfiguration?> { it }
                         ?: Observable.just(null)
                 val richPresence = ModelRichPresence.get(user.id, storeUserPresence)
-                val canDisableCommunication: Observable<Boolean> = scopedGuildId
-                    ?.let(observeCanDisableCommunication)
-                    ?: Observable.just(false)
-
                 // A stage the *caller* is in; the stage actions section is about my membership of
                 // it, not the target's.
                 val stageChannel = bootstrap.selectedVoiceChannel
@@ -165,7 +158,6 @@ object WidgetUserSheetViewModelStoreState {
                     userStageRoles,
                     userRequestToSpeakState,
                     myStageRoles,
-                    canDisableCommunication,
                 ) { inputs ->
                     inputs.toStoreState(user, bootstrap.me, bootstrap.channel, stageChannel)
                 }
@@ -220,7 +212,6 @@ object WidgetUserSheetViewModelStoreState {
         val userStageRoles: StageRoles?,
         val userRequestToSpeakState: StageRequestToSpeakState,
         val myStageRoles: StageRoles?,
-        val canDisableCommunication: Boolean,
     )
 
     private fun Inputs.toStoreState(
@@ -251,10 +242,9 @@ object WidgetUserSheetViewModelStoreState {
         userStageRoles = userStageRoles,
         userRequestToSpeakState = userRequestToSpeakState,
         myStageRoles = myStageRoles,
-        canDisableCommunication = canDisableCommunication,
     )
 
-    /** Sixteen-source `combineLatest`, built from RxJava's iterable overload. */
+    /** Fifteen-source `combineLatest`, built from RxJava's iterable overload. */
     @Suppress("UNCHECKED_CAST", "LongParameterList")
     private fun <R> combineInputs(
         computedMembers: Observable<Map<Long, GuildMember>>,
@@ -272,7 +262,6 @@ object WidgetUserSheetViewModelStoreState {
         userStageRoles: Observable<StageRoles?>,
         userRequestToSpeakState: Observable<StageRequestToSpeakState>,
         myStageRoles: Observable<StageRoles?>,
-        canDisableCommunication: Observable<Boolean>,
         combine: (Inputs) -> R,
     ): Observable<R> = Observable.combineLatest(
         listOf<Observable<*>>(
@@ -291,7 +280,6 @@ object WidgetUserSheetViewModelStoreState {
             userStageRoles,
             userRequestToSpeakState,
             myStageRoles,
-            canDisableCommunication,
         ),
     ) { values ->
         combine(
@@ -311,7 +299,6 @@ object WidgetUserSheetViewModelStoreState {
                 userStageRoles = values[12] as StageRoles?,
                 userRequestToSpeakState = values[13] as StageRequestToSpeakState,
                 myStageRoles = values[14] as StageRoles?,
-                canDisableCommunication = values[15] as Boolean,
             ),
         )
     }

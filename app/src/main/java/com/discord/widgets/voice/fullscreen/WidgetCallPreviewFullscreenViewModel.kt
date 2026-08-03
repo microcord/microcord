@@ -24,7 +24,6 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
 import com.discord.utilities.voice.VoiceChannelJoinability
-import com.discord.widgets.chat.list.TextInVoiceFeatureFlag
 import com.discord.widgets.voice.model.CallModel
 import com.discord.widgets.voice.sheet.CallParticipantsAdapter
 import rx.Observable
@@ -171,7 +170,6 @@ class WidgetCallPreviewFullscreenViewModel internal constructor(
             ViewState(
                 voiceChannel = valid.voiceChannel,
                 isTextInVoiceChannelSelected = valid.selectedTextChannel.isVoiceChannel(),
-                textInVoiceEnabled = valid.isTextInVoiceEnabled,
                 titleText = valid.voiceChannel.getDisplayName(),
                 otherChannelsMentionsCount =
                     (valid.totalMentionsCount - valid.channelMentionsCount).coerceAtLeast(0),
@@ -209,7 +207,6 @@ class WidgetCallPreviewFullscreenViewModel internal constructor(
         data class Valid(
             val voiceChannel: Channel,
             val selectedTextChannel: Channel,
-            val isTextInVoiceEnabled: Boolean,
             val totalMentionsCount: Int,
             val channelMentionsCount: Int,
             val isNsfwUnconsented: Boolean,
@@ -223,7 +220,6 @@ class WidgetCallPreviewFullscreenViewModel internal constructor(
     data class ViewState(
         val voiceChannel: Channel,
         val isTextInVoiceChannelSelected: Boolean,
-        val textInVoiceEnabled: Boolean,
         val titleText: String?,
         val otherChannelsMentionsCount: Int,
         val channelMentionsCount: Int,
@@ -246,14 +242,12 @@ class WidgetCallPreviewFullscreenViewModel internal constructor(
             Observable.combineLatest(
                 storeUser.observeMe(),
                 storeChannelsSelected.observeSelectedChannel(),
-                TextInVoiceFeatureFlag.observeEnabled(voiceChannel?.guildId),
                 storeMentions.observeTotalMentions(),
                 storeMentions.observeMentionCounts(),
                 CallModel.get(voiceChannelId),
                 storeVoiceChannelSelected.observeSelectedChannel(),
             ) { me,
                 selectedTextChannel,
-                isTextInVoiceEnabled,
                 totalMentionsCount,
                 mentionCounts,
                 callModel,
@@ -264,7 +258,6 @@ class WidgetCallPreviewFullscreenViewModel internal constructor(
                     StoreState.Valid(
                         voiceChannel = voiceChannel,
                         selectedTextChannel = selectedTextChannel,
-                        isTextInVoiceEnabled = isTextInVoiceEnabled,
                         totalMentionsCount = totalMentionsCount,
                         channelMentionsCount = mentionCounts[voiceChannel.id] ?: 0,
                         isNsfwUnconsented =

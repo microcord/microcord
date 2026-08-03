@@ -149,7 +149,7 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
             ),
         )
 
-        if (channel.isGuildForumChannel() && model.canAccessRedesignedForumChannels) {
+        if (channel.isGuildForumChannel()) {
             configureForum(root, model)
         } else {
             root.findViewById<LinearLayout>(R.id.forum_channel_notification_settings).isVisible = false
@@ -230,11 +230,8 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
         val parentNotificationSetting: Int?,
         val notificationSettingIsInherited: Boolean,
         val isAboveNotifyAllSize: Boolean,
-        val canAccessRedesignedForumChannels: Boolean,
     ) {
         companion object {
-            private const val FORUM_REDESIGN_EXPERIMENT = "2022-03_android_forum_channel_redesign"
-
             fun observe(channelId: Long): Observable<Model?> =
                 StoreStream.getChannels().observeChannel(channelId).switchMap { channel ->
                     if (channel == null) return@switchMap Observable.just<Model?>(null)
@@ -249,12 +246,7 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
                         StoreStream.getGuilds().observeGuild(channel.guildId),
                         StoreStream.getUserGuildSettings().observeGuildSettings(channel.guildId),
                         StoreStream.getGuildProfiles().observeGuildProfile(channel.guildId),
-                        StoreStream.getExperiments().observeGuildExperiment(
-                            FORUM_REDESIGN_EXPERIMENT,
-                            channel.guildId,
-                            false,
-                        ),
-                    ) { joinedThread, parent, guild, settings, profile, forumExperiment ->
+                    ) { joinedThread, parent, guild, settings, profile ->
                         guild?.let {
                             create(
                                 channel,
@@ -263,7 +255,6 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
                                 settings,
                                 joinedThread,
                                 profile?.data?.approximateMemberCount,
-                                forumExperiment?.bucket == 1,
                             )
                         }
                     }
@@ -291,7 +282,6 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
                     parentNotificationSetting = settings.messageNotifications,
                     notificationSettingIsInherited = overrideFrequency == null,
                     isAboveNotifyAllSize = false,
-                    canAccessRedesignedForumChannels = false,
                 )
             }
 
@@ -302,7 +292,6 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
                 guildSettings: ModelNotificationSettings,
                 joinedThread: StoreThreadsJoined.JoinedThread?,
                 approximateMemberCount: Int?,
-                canAccessRedesignedForumChannels: Boolean,
             ): Model {
                 val override = guildSettings.getChannelOverride(channel.id)
                 val parentNotificationSetting = notificationLevel(guildSettings, parentChannel, guild)
@@ -336,7 +325,6 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
                     parentNotificationSetting = parentNotificationSetting,
                     notificationSettingIsInherited = notificationSetting == ModelNotificationSettings.FREQUENCY_UNSET,
                     isAboveNotifyAllSize = (approximateMemberCount ?: 0) > 2_500,
-                    canAccessRedesignedForumChannels = canAccessRedesignedForumChannels,
                 )
             }
 

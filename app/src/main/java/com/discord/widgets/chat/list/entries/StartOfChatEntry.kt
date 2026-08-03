@@ -17,7 +17,6 @@ data class StartOfChatEntry(
     val threadCreatorName: String,
     val isTextInVoice: Boolean,
     val isGuildForumPost: Boolean,
-    val canAccessRedesignedForumChannels: Boolean,
     val availableTags: List<ForumTag>?,
     val appliedTags: List<ForumTagId>?,
 ) : ChatListEntry() {

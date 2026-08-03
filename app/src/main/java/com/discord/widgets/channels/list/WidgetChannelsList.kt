@@ -38,9 +38,7 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.view.rounded.RoundedCoordinatorLayout
 import com.discord.views.CustomAppBarLayout
 import com.discord.views.ThemedColor
-import com.discord.widgets.channels.WidgetGroupInviteFriends
 import com.discord.widgets.channels.invite.GroupInviteFriendsSheet
-import com.discord.widgets.channels.invite.GroupInviteFriendsSheetFeatureFlag
 import com.discord.widgets.directories.WidgetDirectoryChannel
 import com.discord.widgets.friends.EmptyFriendsStateView
 import com.discord.widgets.hubs.events.WidgetHubEventsPage
@@ -113,11 +111,7 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
             WidgetGlobalSearchDialog.show(parentFragmentManager, "@")
         }
         startGroup.setOnClickListener {
-            if (GroupInviteFriendsSheetFeatureFlag.INSTANCE.isEnabled()) {
-                GroupInviteFriendsSheet.show(parentFragmentManager, source = ANALYTICS_SOURCE)
-            } else {
-                WidgetGroupInviteFriends.launch(requireContext(), ANALYTICS_SOURCE)
-            }
+            GroupInviteFriendsSheet.show(parentFragmentManager, source = ANALYTICS_SOURCE)
         }
         view.findViewById<View>(R.id.channels_list_premium_guild_hint_button)
             .setOnClickListener { ackPremiumGuildHint() }

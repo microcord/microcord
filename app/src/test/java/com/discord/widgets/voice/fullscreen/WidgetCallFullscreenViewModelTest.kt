@@ -113,7 +113,6 @@ class WidgetCallFullscreenViewModelTest {
         activeEvent = null,
         textInVoiceMentionsCount = 0,
         textInVoiceUnreadsCount = 0,
-        isTextInVoiceEnabled = true,
         isTextInVoiceChannelSelected = false,
         allVideoParticipants = emptyMap(),
     )

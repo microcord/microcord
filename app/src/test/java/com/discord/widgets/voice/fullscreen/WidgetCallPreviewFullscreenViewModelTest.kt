@@ -165,7 +165,6 @@ class WidgetCallPreviewFullscreenViewModelTest {
     ) = WidgetCallPreviewFullscreenViewModel.StoreState.Valid(
         voiceChannel = channel(),
         selectedTextChannel = channel(77L),
-        isTextInVoiceEnabled = true,
         totalMentionsCount = 2,
         channelMentionsCount = 5,
         isNsfwUnconsented = true,

@@ -38,12 +38,6 @@ class StoreForumPostReadStates(
     private val storeChannels: StoreChannels,
     private val storeUser: StoreUser,
     private val observationDeck: ObservationDeck,
-    /**
-     * Reference `ForumUtils.canAccessRedesignedForumChannels(guildId)`, a guild experiment lookup.
-     * `StoreExperiments` does not exist in this project yet, so the gate is injected rather than
-     * defaulted — a default here would silently decide the feature for every caller.
-     */
-    private val canAccessForumChannels: (Long) -> Boolean,
 ) : StoreV2() {
 
     private val threadUnreadCounts = LinkedHashMap<Long, Int>()
@@ -72,7 +66,6 @@ class StoreForumPostReadStates(
      * as fully unread.
      */
     fun requestForumUnreads(guildId: Long, channelId: Long) = dispatcher.schedule {
-        if (!canAccessForumChannels(guildId)) return@schedule
         if (!processedForumUnreadRequests.add(channelId)) return@schedule
         val acks = storeMessageAck.getAll()
         val threadMessagePairs = storeThreadsActive.getAllActiveThreadsInternal()[guildId].orEmpty()

@@ -93,12 +93,6 @@ object ForumPostCreateManager {
             }
     }
 
-    @JvmStatic
-    fun observeIsForumPostCreateInProgress(guildId: Long): Observable<Boolean> = Observable.combineLatest(
-        ForumUtils.observeCanAccessRedesignedForumChannels(guildId),
-        isCreateInProgress,
-    ) { canAccess, inProgress -> canAccess && inProgress }
-
     internal fun isValidFirstMessage(
         content: String,
         attachmentsRequest: AttachmentsRequest?,

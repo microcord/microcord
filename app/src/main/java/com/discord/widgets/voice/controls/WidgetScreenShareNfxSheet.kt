@@ -70,9 +70,8 @@ class WidgetScreenShareNfxSheet : AppBottomSheet() {
      * Only sheets opened *from* the voice bottom sheet carry [VoiceBottomSheetParams]; opened from
      * anywhere else there is nothing to go back to and this is a no-op.
      *
-     * The reference has a second branch here that opens `WidgetCallPreviewFullscreen` instead when
-     * the `TextInVoiceFeatureFlag` is on. Neither that flag nor that screen exists in this
-     * reconstruction yet, so only the bottom-sheet branch is wired.
+     * The reference has a second branch here that opens `WidgetCallPreviewFullscreen` instead;
+     * only the bottom-sheet branch is wired.
      */
     private fun maybeNavigateToVoiceBottomSheet() {
         val params = voiceBottomSheetParams ?: return

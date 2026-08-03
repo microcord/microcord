@@ -36,9 +36,8 @@ import com.discord.utilities.view.extensions.getTextOrEmpty
 import com.discord.views.CheckedSetting
 import com.discord.views.RadioManager
 import com.discord.widgets.channels.permissions.WidgetCreateChannelAddMember
-import com.discord.widgets.forums.ForumUtils
 import rx.Observable
-import rx.functions.Func6
+import rx.functions.Func5
 
 class WidgetCreateChannel : AppFragment(R.layout.widget_create_channel) {
     private val guildId get() = extraLong(INTENT_GUILD_ID, -1L)
@@ -139,7 +138,6 @@ class WidgetCreateChannel : AppFragment(R.layout.widget_create_channel) {
             state.canCreateCommunityChannels && !disableAnnouncementType
         binding.createChannelStageContainer.isVisible =
             state.canCreateCommunityChannels && state.canManageRoles
-        binding.createChannelForumContainer.isVisible = state.canCreateForumChannels
         binding.createChannelTypeContainer.isVisible = initialType != Channel.CATEGORY
         binding.createChannelNameLayout.hint =
             getString(if (initialType == Channel.CATEGORY) R.string.category_name else R.string.form_label_channel_name)
@@ -211,7 +209,6 @@ class WidgetCreateChannel : AppFragment(R.layout.widget_create_channel) {
         arguments?.takeIf { it.containsKey(key) }?.getBoolean(key) ?: mostRecentIntent.getBooleanExtra(key, false)
 
     internal data class Model(
-        val canCreateForumChannels: Boolean,
         val canCreate: Boolean,
         val canManageRoles: Boolean,
         val canCreateCommunityChannels: Boolean,
@@ -226,10 +223,9 @@ class WidgetCreateChannel : AppFragment(R.layout.widget_create_channel) {
                     stores.getPermissions().observePermissionsForGuild(guildId),
                     stores.getPermissions().observePermissionsForChannel(categoryId ?: 0L),
                     stores.getGuilds().observeSortedRoles(guildId),
-                    ForumUtils.observeCanCreateForumChannels(guildId),
-                    Func6<MeUser, Guild?, Long?, Long?, List<GuildRole>, Boolean, Model?> {
-                            me, guild, guildPermissions, categoryPermissions, roles, canCreateForum ->
-                        create(me, guild, guildPermissions, categoryPermissions, roles, canCreateForum)
+                    Func5<MeUser, Guild?, Long?, Long?, List<GuildRole>, Model?> {
+                            me, guild, guildPermissions, categoryPermissions, roles ->
+                        create(me, guild, guildPermissions, categoryPermissions, roles)
                     },
                 ).computationLatest().distinctUntilChanged()
             }
@@ -240,12 +236,10 @@ class WidgetCreateChannel : AppFragment(R.layout.widget_create_channel) {
                 guildPermissions: Long?,
                 categoryPermissions: Long?,
                 roles: List<GuildRole>,
-                canCreateForumChannels: Boolean,
             ): Model? {
                 guild ?: return null
                 val effectivePermissions = categoryPermissions ?: guildPermissions
                 return Model(
-                    canCreateForumChannels = canCreateForumChannels,
                     canCreate = PermissionUtils.canAndIsElevated(
                         Permission.MANAGE_CHANNELS,
                         effectivePermissions,

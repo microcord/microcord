@@ -61,7 +61,6 @@ import com.discord.utilities.video.VideoPlayerIdleDetector
 import com.discord.utilities.voice.VoiceEngineServiceController
 import com.discord.views.calls.VideoCallParticipantView
 import com.discord.widgets.channels.TextInVoiceOnboardingManager
-import com.discord.widgets.chat.list.TextInVoiceFeatureFlag
 import com.discord.widgets.guildscheduledevent.ScheduledEventUi
 import com.discord.widgets.stage.StageRoles
 import com.discord.widgets.stage.model.StageCallModel
@@ -316,7 +315,6 @@ class WidgetCallFullscreenViewModel constructor(
                 activeEvent = activeEvent,
                 textInVoiceMentionsCount = state.channelMentionsCount,
                 textInVoiceUnreadsCount = state.unreadsCount,
-                isTextInVoiceEnabled = state.isTextInVoiceEnabled,
                 isTextInVoiceChannelSelected = state.isTextInVoiceChannelSelected,
                 allVideoParticipants = allUsers,
             ),
@@ -583,7 +581,7 @@ class WidgetCallFullscreenViewModel constructor(
 
     fun selectTextChannelAfterFinish() {
         val state = viewState as? ViewState.Valid ?: return
-        if (state.isTextInVoiceEnabled && state.isTextInVoiceChannelSelected) {
+        if (state.isTextInVoiceChannelSelected) {
             state.callModel.guild?.let { ChannelSelector.getInstance().selectPreviousChannel(it.id) }
         }
     }
@@ -723,11 +721,10 @@ class WidgetCallFullscreenViewModel constructor(
                 }
                 val second = Observable.combineLatest(
                     experimentsStore.observeUserExperiment(STOP_OFFSCREEN_VIDEO_EXPERIMENT, true),
-                    TextInVoiceFeatureFlag.observeEnabled(channel.guildId),
                     channelsSelectedStore.observeSelectedChannel(),
                     mentionsStore.observeMentionCounts(),
-                ) { experiment, textEnabled, selectedChannel, mentionCounts ->
-                    ObservationSecond(experiment?.bucket == 1, textEnabled, selectedChannel, mentionCounts)
+                ) { experiment, selectedChannel, mentionCounts ->
+                    ObservationSecond(experiment?.bucket == 1, selectedChannel, mentionCounts)
                 }
                 val third = Observable.combineLatest(
                     StoreStream.getReadStates().observeUnreadCountForChannel(
@@ -759,7 +756,6 @@ class WidgetCallFullscreenViewModel constructor(
                         connectivityState = a.connectivity,
                         myStageRoles = a.stageRoles,
                         stopOffscreenVideo = b.stopOffscreenVideo,
-                        isTextInVoiceEnabled = b.textEnabled,
                         isTextInVoiceChannelSelected = b.selectedChannel?.isVoiceChannel() == true,
                         channelMentionsCount = b.mentionCounts[channelId] ?: 0,
                         unreadsCount = c.unreadCount,
@@ -1185,7 +1181,6 @@ class WidgetCallFullscreenViewModel constructor(
             val connectivityState: StoreConnectivity.DelayedState,
             val myStageRoles: StageRoles?,
             val stopOffscreenVideo: Boolean,
-            val isTextInVoiceEnabled: Boolean,
             val isTextInVoiceChannelSelected: Boolean,
             val channelMentionsCount: Int,
             val unreadsCount: Int,
@@ -1229,7 +1224,6 @@ class WidgetCallFullscreenViewModel constructor(
             val activeEvent: GuildScheduledEvent?,
             val textInVoiceMentionsCount: Int,
             val textInVoiceUnreadsCount: Int,
-            val isTextInVoiceEnabled: Boolean,
             val isTextInVoiceChannelSelected: Boolean,
             val allVideoParticipants: Map<String, CallParticipant.UserOrStreamParticipant>,
         ) : ViewState() {
@@ -1241,7 +1235,7 @@ class WidgetCallFullscreenViewModel constructor(
                     }
                     if (callModel.isConnected && overlayStatus == OverlayStatus.ENABLED) add(MenuItem.LAUNCH_OVERLAY)
                     if (callModel.selectedVideoDevice != null && callModel.videoDevices.size > 1) add(MenuItem.SWITCH_CAMERA)
-                    if (!callModel.channel.isStageVoiceChannel() && isTextInVoiceEnabled) add(MenuItem.TEXT_IN_VOICE)
+                    if (!callModel.channel.isStageVoiceChannel()) add(MenuItem.TEXT_IN_VOICE)
                     if (!callModel.channel.isStageVoiceChannel()) add(MenuItem.SHOW_PARTICIPANT_LIST)
                 }
             }
@@ -1279,7 +1273,6 @@ class WidgetCallFullscreenViewModel constructor(
     )
     private data class ObservationSecond(
         val stopOffscreenVideo: Boolean,
-        val textEnabled: Boolean,
         val selectedChannel: Channel?,
         val mentionCounts: Map<Long, Int>,
     )

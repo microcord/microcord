@@ -8,7 +8,6 @@ import com.discord.api.channel.isGuildTextyChannel
 import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.permission.Permission
 import com.discord.models.domain.ModelInvite
-import com.discord.models.experiments.domain.Experiment
 import com.discord.restapi.RestAPIParams
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
@@ -19,13 +18,8 @@ import com.discord.utilities.rx.takeSingleUntilTimeout
 import rx.Observable
 import rx.subjects.BehaviorSubject
 
-class StoreInviteSettings(
-    private val guildExperimentProvider: (String, Long, Boolean) -> Experiment? =
-        { name, guildId, trackExposure ->
-            StoreStream.getExperiments().getGuildExperiment(name, guildId, trackExposure)
-        },
-) : Store() {
-    private var inviteSettings = ModelInvite.Settings(ModelInvite.Settings.ONE_DAY)
+class StoreInviteSettings : Store() {
+    private var inviteSettings = ModelInvite.Settings(ModelInvite.Settings.SEVEN_DAYS)
     private val pendingInviteCodeSubject = BehaviorSubject.create(null as InviteCode?)
     private val inviteSettingsSubject = BehaviorSubject.create(inviteSettings)
 
@@ -48,7 +42,7 @@ class StoreInviteSettings(
             .map { channels -> channels.values.sortedWith(Channel.getSortByNameAndType()).firstOrNull()?.id }
             .take(1)
             .flatMap { channelId ->
-                channelId?.let { generateInvite(it, getInviteSettings(guildId)).map { invite -> invite as ModelInvite? } }
+                channelId?.let { generateInvite(it).map { invite -> invite as ModelInvite? } }
                     ?: Observable.just<ModelInvite?>(null)
             }
 
@@ -81,21 +75,10 @@ class StoreInviteSettings(
 
     fun getInviteCode(): Observable<InviteCode?> = pendingInviteCodeSubject.distinctUntilChanged()
 
-    @JvmOverloads
-    fun getInviteGuildExperiment(guildId: Long, trackExposure: Boolean = false): Experiment? =
-        guildExperimentProvider(EXPIRATION_EXPERIMENT, guildId, trackExposure)
-
-    fun getInviteSettings(guildId: Long): ModelInvite.Settings =
-        if (getInviteGuildExperiment(guildId)?.bucket == 1) {
-            ModelInvite.Settings(ModelInvite.Settings.SEVEN_DAYS)
-        } else {
-            ModelInvite.Settings(ModelInvite.Settings.ONE_DAY)
-        }
-
     fun getInviteSettings(): Observable<ModelInvite.Settings> =
         inviteSettingsSubject.computationLatest().distinctUntilChanged()
 
-    fun handleGuildSelected(guildId: Long) = setInviteSettings(getInviteSettings(guildId))
+    fun handleGuildSelected(guildId: Long) = setInviteSettings(ModelInvite.Settings(ModelInvite.Settings.SEVEN_DAYS))
 
     @JvmOverloads
     fun setInviteCode(inviteCode: String, source: String, eventId: Long? = null) =
@@ -151,7 +134,5 @@ class StoreInviteSettings(
     companion object {
         const val LOCATION_DEEPLINK = "Deeplink"
         const val LOCATION_JOIN = "Join Guild Modal"
-
-        private const val EXPIRATION_EXPERIMENT = "2021-03_android_extend_invite_expiration"
     }
 }

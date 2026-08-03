@@ -44,11 +44,6 @@ class StoreUserGuildSettings(
      */
     private val getJoinedThreadFlags: (Long) -> Int = { 0 },
     private val analytics: Analytics = Analytics.NONE,
-    /**
-     * Feature gate for the redesigned forum notification flags. Reference:
-     * `ForumUtils.canAccessRedesignedForumChannels(guildId)`.
-     */
-    private val canAccessRedesignedForumChannels: (Long) -> Boolean = { true },
     private val guildSettingsCache: Persister<Map<Long, ModelNotificationSettings>> =
         Persister(GUILD_SETTINGS_CACHE_KEY, emptyMap()),
     private val hiddenMutedChannelsCache: Persister<Set<Long>> =
@@ -240,7 +235,7 @@ class StoreUserGuildSettings(
         }
 
     fun setChannelNotificationFlags(context: Context, channel: Channel, flags: Int) {
-        if (!channel.isGuildForumChannel() || !canAccessRedesignedForumChannels(channel.guildId)) return
+        if (!channel.isGuildForumChannel()) return
         updateUserGuildSettings(
             context,
             channel.guildId,

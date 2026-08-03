@@ -41,20 +41,17 @@ class WidgetForumBrowserViewModel(
 
     fun observeEvents(): Observable<Event> = events
 
-    fun enqueueForumPostFirstMessageFetch(parentChannelId: Long, guildId: Long, postId: Long) {
-        if (ForumUtils.canAccessRedesignedForumChannels(guildId)) {
-            StoreStream.getForumPostMessages().enqueueForumPostFirstMessageFetch(parentChannelId, postId)
-        }
+    fun enqueueForumPostFirstMessageFetch(parentChannelId: Long, postId: Long) {
+        StoreStream.getForumPostMessages().enqueueForumPostFirstMessageFetch(parentChannelId, postId)
     }
 
-    fun maybeFetchForumPostFirstMessages(parentChannelId: Long, guildId: Long, initial: Boolean = false) {
-        if (!ForumUtils.canAccessRedesignedForumChannels(guildId)) return
+    fun maybeFetchForumPostFirstMessages(parentChannelId: Long, initial: Boolean = false) {
         if (initial && !initiallyFetchedChannels.add(parentChannelId)) return
         StoreStream.getForumPostMessages().flushForumPostFirstMessageQueue(parentChannelId)
     }
 
-    fun maybeFetchOlderPosts(parentChannelId: Long, guildId: Long) {
-        if (!ForumUtils.canAccessRedesignedForumChannels(guildId) || !canFetchMoreOlderPosts || isFetchingMoreOlderPosts) return
+    fun maybeFetchOlderPosts(parentChannelId: Long) {
+        if (!canFetchMoreOlderPosts || isFetchingMoreOlderPosts) return
         isFetchingMoreOlderPosts = true
         StoreStream.getArchivedThreads().fetchGuildForumThreadListing(parentChannelId) {
             isFetchingMoreOlderPosts = false
@@ -62,9 +59,7 @@ class WidgetForumBrowserViewModel(
     }
 
     fun requestForumUnreads(parentChannelId: Long, guildId: Long) {
-        if (ForumUtils.canAccessRedesignedForumChannels(guildId)) {
-            StoreStream.getForumPostReadStates().requestForumUnreads(guildId, parentChannelId)
-        }
+        StoreStream.getForumPostReadStates().requestForumUnreads(guildId, parentChannelId)
     }
 
     private fun handleStoreState(state: StoreState) {
@@ -249,10 +244,9 @@ class WidgetForumBrowserViewModel(
                 Observable.combineLatest(
                     StoreStream.getTabsNavigation().observeSelectedTab(),
                     StoreStream.getThreadsActive().observeActiveThreadsForChannel(channel.guildId, channel.id),
-                    ForumUtils.observeCanAccessRedesignedForumChannels(channel.guildId),
-                ) { tab, active, canAccess -> Triple(tab, active, canAccess) }
-                    .switchMap { (tab, active, canAccess) ->
-                        if (!canAccess || tab != NavigationTab.HOME) Observable.just<StoreState>(StoreState.Invalid)
+                ) { tab, active -> tab to active }
+                    .switchMap { (tab, active) ->
+                        if (tab != NavigationTab.HOME) Observable.just<StoreState>(StoreState.Invalid)
                         else observeLoaded(channel, active)
                     }
             }

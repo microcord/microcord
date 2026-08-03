@@ -132,11 +132,7 @@ class WidgetSettingsAccount : AppFragment(R.layout.widget_settings_account) {
         }
         nameContainer.setOnClickListener { WidgetSettingsAccountContactsNameEdit.launch(it.context) }
         view?.findViewById<View>(R.id.settings_account_email_container)?.setOnClickListener {
-            val confirmedFlow = shouldUseConfirmedEmailFlow(
-                user.isVerified,
-                StoreStream.getExperiments().getUserExperiment(EMAIL_CONFIRM_EXPERIMENT, true)?.bucket,
-            )
-            WidgetSettingsAccountEmailEdit.launch(it.context, confirmedFlow)
+            WidgetSettingsAccountEmailEdit.launch(it.context, user.isVerified)
         }
         view?.findViewById<View>(R.id.settings_account_phone_container)?.setOnClickListener {
             WidgetUserPhoneManage.launch(
@@ -300,14 +296,10 @@ class WidgetSettingsAccount : AppFragment(R.layout.widget_settings_account) {
     companion object {
         private const val EXTRA_HINT_DATA_MANAGEMENT = "com.discord.extra.HINT_DATA_MANAGEMENT"
         private const val EXTRA_REDIRECT = "extra_redirect"
-        private const val EMAIL_CONFIRM_EXPERIMENT = "2022-01_email_change_confirmation"
         private const val CONTACT_SYNC_EXPERIMENT = "2021-04_contact_sync_android_main"
         private const val CONTACTS_TYPE = "contacts"
         private const val MFA_ENABLED_VIEW_INDEX = 0
         private const val MFA_DISABLED_VIEW_INDEX = 1
-
-        internal fun shouldUseConfirmedEmailFlow(isVerified: Boolean, experimentBucket: Int?): Boolean =
-            isVerified && experimentBucket == 1
 
         @JvmStatic
         @JvmOverloads

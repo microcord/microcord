@@ -284,13 +284,12 @@ object ChatListRows {
             // Only the guild nickname is reachable here; the account username would need
             // `StoreUser`, which this builder does not take.
             threadCreatorName = creator?.nick.orEmpty(),
-            // Text-in-voice and the redesigned forum surface are behind experiments that
-            // `StoreExperiments` would resolve; both flags default off until it exists.
+            // Text-in-voice is behind an experiment `StoreExperiments` would resolve; it
+            // defaults off until it exists.
             isTextInVoice = false,
             // A forum *post* is a thread whose parent is a forum channel; the parent is not part
             // of this state, so it is resolved by the caller when it can be.
             isGuildForumPost = channel.isGuildForumPost(state.parentChannel),
-            canAccessRedesignedForumChannels = false,
             availableTags = channel.availableTags,
             appliedTags = channel.appliedTags,
         )

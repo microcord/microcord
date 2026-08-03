@@ -30,8 +30,6 @@ import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.views.CheckedSetting
-import com.discord.widgets.chat.list.NewThreadsPermissionsFeatureFlag
-import com.discord.widgets.guildcommunicationdisabled.start.GuildCommunicationDisabledGuildsFeatureFlag
 import com.discord.widgets.roles.RoleIconView
 import com.discord.widgets.settings.SettingsNavigation
 import com.discord.widgets.settings.StatefulViews
@@ -259,27 +257,6 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
                 setting.visibility = model.isCommunityServer.visibility
             }
         }
-        requireView().findViewById<CheckedSetting>(R.id.role_settings_moderate_member).visibility =
-            model.hasGuildCommunicationDisabledFeature.visibility
-        if (!model.useNewThreadPermissions) {
-            requireView().findViewById<CheckedSetting>(R.id.role_settings_send_messages)
-                .setSubtext(getString(R.string.role_permissions_send_messages_description))
-            requireView().findViewById<CheckedSetting>(R.id.role_settings_send_messages_in_threads)
-                .apply {
-                    setText(getString(R.string.interim_send_messages_in_threads))
-                    setSubtext(getString(R.string.interim_role_permissions_send_messages_in_threads_description))
-                }
-            requireView().findViewById<CheckedSetting>(R.id.role_settings_create_public_threads)
-                .apply {
-                    setText(getString(R.string.interim_create_public_threads))
-                    setSubtext(getString(R.string.interim_role_permissions_create_public_threads_description))
-                }
-            requireView().findViewById<CheckedSetting>(R.id.role_settings_create_private_threads)
-                .apply {
-                    setText(getString(R.string.interim_create_private_threads))
-                    setSubtext(getString(R.string.interim_role_permissions_create_private_threads_description))
-                }
-        }
     }
 
     private fun enablePermission(setting: CheckedSetting, model: Model, permission: Long) {
@@ -336,8 +313,6 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
         val myPermissions: Long?,
         val myPermissionsFromOtherRoles: Long,
         val isCommunityServer: Boolean,
-        val useNewThreadPermissions: Boolean,
-        val hasGuildCommunicationDisabledFeature: Boolean,
     ) {
         val isEveryoneRole get() = role.id == guildId
         fun canManage() = manageStatus == ManageStatus.CAN_MANAGE_CONDITIONAL ||
@@ -361,9 +336,7 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
                         StoreStream.getGuilds().observeComputed(guildId),
                         StoreStream.getGuilds().observeRoles(guildId),
                         StoreStream.getPermissions().observePermissionsForGuild(guildId),
-                        GuildCommunicationDisabledGuildsFeatureFlag.INSTANCE
-                            .observeCanGuildAccessCommunicationDisabled(guildId),
-                    ) { guild, members, roles, permissions, timeoutEnabled ->
+                    ) { guild, members, roles, permissions ->
                         create(
                             guildId,
                             roleId,
@@ -372,8 +345,6 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
                             members[me.id],
                             roles,
                             permissions,
-                            NewThreadsPermissionsFeatureFlag.isEnabled(guildId),
-                            timeoutEnabled,
                         )
                     }
                 }.distinctUntilChanged()
@@ -387,8 +358,6 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
                 member: GuildMember?,
                 roles: Map<Long, GuildRole>,
                 permissions: Long?,
-                newThreadPermissions: Boolean,
-                timeoutEnabled: Boolean,
             ): Model? {
                 val role = roles[roleId] ?: return null
                 if (guild == null || member == null) return null
@@ -403,8 +372,6 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
                     permissions,
                     permissionsWithoutRole(member.getRoles(), roles, roleId, guildId),
                     GuildFeature.COMMUNITY in guild.features,
-                    newThreadPermissions,
-                    timeoutEnabled,
                 )
             }
 
