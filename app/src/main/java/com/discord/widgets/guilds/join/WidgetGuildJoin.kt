@@ -53,15 +53,7 @@ open class WidgetGuildJoin : AppFragment(R.layout.widget_guild_join) {
                     joinButton.isEnabled = true
                     inviteInput.error = getString(R.string.instant_invite_expired)
                 },
-            ) { response ->
-                val invite = response.body()
-                if (invite == null) {
-                    joinButton.isEnabled = true
-                    inviteInput.error = getString(R.string.instant_invite_expired)
-                } else {
-                    accept(invite)
-                }
-            }
+            ) { invite -> accept(invite) }
     }
 
     private fun accept(invite: ModelInvite) {

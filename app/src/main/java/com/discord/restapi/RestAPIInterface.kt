@@ -1241,7 +1241,7 @@ interface RestAPIInterface {
         @Path("code") code: String,
         @Query("with_counts") withCounts: Boolean,
         @Query("guild_scheduled_event_id") guildScheduledEventId: Long? = null,
-    ): Observable<Response<ModelInvite>>
+    ): Observable<ModelInvite>
 
     @GET("guilds/templates/{guildTemplateCode}")
     fun getGuildTemplateCode(

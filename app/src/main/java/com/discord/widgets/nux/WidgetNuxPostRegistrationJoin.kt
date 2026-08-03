@@ -71,7 +71,6 @@ class WidgetNuxPostRegistrationJoin : AppFragment(R.layout.widget_nux_post_regis
         action.isEnabled = false
         GuildTemplateAnalytics.track(STEP_ASK_TO_JOIN, STEP_ACCEPT_INVITE, startedAtMillis, false)
         api.getInviteCode(code, true)
-            .map { response -> requireNotNull(response.body()) { "empty invite response" } }
             .restSubscribeOn(false)
             .ui(this)
             .appSubscribe(

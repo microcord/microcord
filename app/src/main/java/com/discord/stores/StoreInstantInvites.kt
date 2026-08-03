@@ -24,13 +24,11 @@ import rx.Observable
  * resolves to different content depending on `?event=`, and collapsing them would make one card
  * overwrite the other.
  *
- * The error split matters and is the reason the row has three visual states:
- * - [RestApiError.Type.DISCORD_REQUEST_ERROR] — the server says the code is dead. Terminal, and
- *   toasts are suppressed because the card renders the failure itself.
+ * The error split gives the invite card its three visual states:
+ * - A dead code is terminal, and toasts are suppressed because the card renders the failure itself.
  * - [RestApiError.Type.NETWORK] — the request never landed. [fetchInviteIfNotLoaded] retries over
  *   this state, so the card recovers when connectivity returns.
- * - Anything else leaves the key on [InviteState.Loading]; the reference's `when` has only these
- *   two arms.
+ * - Anything else leaves the key on [InviteState.Loading].
  *
  * A resolved invite that carries a scheduled event hands it to [onGuildScheduledEventResolved], so
  * the event store can answer for an event in a guild the user has not joined.
@@ -152,17 +150,15 @@ class StoreInstantInvites(
             setChatInvites(inviteKey, InviteState.Loading)
             val api = restApi() ?: return@schedule
             api.getInviteCode(inviteCode, true, eventId)
-                // `logNetworkAction` in the reference both unwraps the retrofit Response and emits
-                // the invite-resolve analytics event. No analytics layer exists here, so this is
-                // the unwrap alone.
-                .map { response -> requireNotNull(response.body()) { "empty invite response" } }
                 .restSubscribeOn(false)
                 .appSubscribe(
                     StoreInstantInvites::class.java,
                     errorHandler = { error ->
                         onError?.invoke()
                         when (error.type) {
-                            RestApiError.Type.DISCORD_REQUEST_ERROR -> {
+                            RestApiError.Type.DISCORD_REQUEST_ERROR,
+                            RestApiError.Type.DISCORD_REQUEST_RESOURCE_NOT_FOUND,
+                            -> {
                                 error.showErrorToasts = false
                                 dispatcher.schedule { setChatInvites(inviteKey, InviteState.Invalid) }
                             }

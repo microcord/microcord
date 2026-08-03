@@ -150,6 +150,7 @@ class WidgetChatListAdapterItemInvite(
     }
 
     private fun configureLoadingUI() {
+        resetResolvedViews()
         header.setText(R.string.instant_invite_resolving)
         name.text = null
         name.setTextColor(ThemedColor.resolve(itemView.context, R.attr.primary_100))
@@ -167,6 +168,7 @@ class WidgetChatListAdapterItemInvite(
     }
 
     private fun configureInvalidUI(model: Model.Invalid?) {
+        resetResolvedViews()
         val context = itemView.context
         val isInviter = model?.authorUser?.id == model?.meId && model?.authorUser != null
 
@@ -344,6 +346,16 @@ class WidgetChatListAdapterItemInvite(
         if (iconUrl == url) return
         IconUtils.setIcon(image, url, R.dimen.avatar_size_large)
         iconUrl = url
+    }
+
+    /**
+     * Undoes the view changes only [configureResolvedUI] makes, which a recycled holder would
+     * otherwise keep: another guild's banner, and the icon hidden for a friend invite.
+     */
+    private fun resetResolvedViews() {
+        splashContainer.visibility = View.GONE
+        IconUtils.setIcon(splash, null as String?)
+        image.visibility = View.VISIBLE
     }
 
     private fun displayWidthPx(): Int = itemView.resources.displayMetrics.widthPixels
