@@ -33,15 +33,46 @@ class MessageComponentMergeTest {
         url = url,
     )
 
-    private fun select(disabled: Boolean = false) = SelectComponent(
+    private fun select(
+        disabled: Boolean = false,
+        minValues: Int? = 1,
+        maxValues: Int? = 2,
+    ) = SelectComponent(
         type = ComponentType.SELECT,
         customId = "select-id",
         disabled = disabled,
         placeholder = "Pick",
-        minValues = 1,
-        maxValues = 2,
+        minValues = minValues,
+        maxValues = maxValues,
         options = listOf(first, second),
     )
+
+    @Test
+    fun `absent select bounds default to one rather than zero`() {
+        val merged = select(minValues = null, maxValues = null)
+            .mergeToMessageComponent(0, ActionInteractionComponentState.Enabled, ComponentStoreState())
+
+        assertEquals(1, merged.minValues)
+        assertEquals(1, merged.maxValues)
+    }
+
+    @Test
+    fun `an explicit zero minimum is preserved`() {
+        val merged = select(minValues = 0, maxValues = 3)
+            .mergeToMessageComponent(0, ActionInteractionComponentState.Enabled, ComponentStoreState())
+
+        assertEquals(0, merged.minValues)
+        assertEquals(3, merged.maxValues)
+    }
+
+    @Test
+    fun `a premium button cannot be interacted with`() {
+        val merged = button().copy(style = ButtonStyle.PREMIUM, skuId = 42L)
+            .mergeToMessageComponent(0, ActionInteractionComponentState.Enabled, ComponentStoreState())
+
+        assertEquals(ActionInteractionComponentState.Disabled, merged.stateInteraction)
+        assertEquals(42L, merged.skuId)
+    }
 
     @Test
     fun `action row merge carries index and children`() {

@@ -4,7 +4,12 @@ import android.view.View
 import android.widget.LinearLayout
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import com.discord.R
+import com.discord.api.botuikit.ComponentType
 import com.discord.api.botuikit.SelectItem
+import com.discord.api.channel.getDisplayName
+import com.discord.api.channel.isGuildTextyChannel
+import com.discord.stores.StoreStream
+import com.discord.utilities.user.UserUtils.displayName
 import com.discord.widgets.botuikit.views.ComponentActionListener
 import com.discord.widgets.botuikit.views.select.ComponentContext
 import com.discord.widgets.botuikit.views.select.SelectComponentBottomSheet
@@ -46,6 +51,44 @@ class WidgetChatListAdapterItemBotComponentRow(
         componentRoot.replaceViews(views)
     }
 
+    /**
+     * A snowflake select declares no options; the choices are whatever the guild currently holds.
+     */
+    private fun snowflakeOptions(componentType: ComponentType): List<SelectItem> {
+        val guildId = entry.guildId ?: return emptyList()
+        return when (componentType) {
+            ComponentType.ROLE_SELECT -> guildRoleOptions(guildId)
+            ComponentType.CHANNEL_SELECT -> guildChannelOptions(guildId)
+            ComponentType.USER_SELECT -> guildMemberOptions(guildId)
+            ComponentType.MENTIONABLE_SELECT -> guildMemberOptions(guildId) + guildRoleOptions(guildId)
+            else -> emptyList()
+        }
+    }
+
+    private fun guildRoleOptions(guildId: Long): List<SelectItem> =
+        StoreStream.getGuilds().getRoles()[guildId].orEmpty().values
+            .sortedByDescending { it.position }
+            .map { option(it.name, it.id) }
+
+    private fun guildChannelOptions(guildId: Long): List<SelectItem> =
+        StoreStream.getChannels().getAllChannels().values
+            .filter { it.guildId == guildId && it.isGuildTextyChannel() }
+            .sortedBy { it.position }
+            .map { option(it.getDisplayName(), it.id) }
+
+    private fun guildMemberOptions(guildId: Long): List<SelectItem> {
+        val users = StoreStream.getUsers().getUsers()
+        return StoreStream.getGuilds().getMembers()[guildId].orEmpty().values
+            .mapNotNull { member ->
+                val user = users[member.userId] ?: return@mapNotNull null
+                option(member.nick ?: user.displayName, member.userId)
+            }
+            .sortedBy { it.label }
+    }
+
+    private fun option(label: String, id: Long) =
+        SelectItem(label = label, value = id.toString(), emoji = null, description = null, default = false)
+
     override fun onButtonComponentClick(componentIndex: Int, customId: String) {
         adapter.onBotUiComponentClicked(
             applicationId = entry.applicationId,
@@ -68,6 +111,7 @@ class WidgetChatListAdapterItemBotComponentRow(
      */
     override fun onSelectComponentClick(
         componentIndex: Int,
+        componentType: ComponentType,
         customId: String,
         placeholder: String?,
         options: List<SelectItem>,
@@ -91,6 +135,7 @@ class WidgetChatListAdapterItemBotComponentRow(
                 componentIndex = result.getInt(SelectComponentBottomSheet.RESULT_COMPONENT_INDEX),
                 customId = result.getString(SelectComponentBottomSheet.RESULT_CUSTOM_ID),
                 values = result.getStringArrayList(SelectComponentBottomSheet.RESULT_VALUES),
+                componentType = componentType,
             )
         }
 
@@ -108,7 +153,7 @@ class WidgetChatListAdapterItemBotComponentRow(
             placeholder = placeholder,
             min = minOptionsToSelect,
             max = maxOptionsToSelect,
-            options = options,
+            options = options.ifEmpty { snowflakeOptions(componentType) },
             selectedItems = selectedItems,
             emojiAnimationsEnabled = emojiAnimationsEnabled,
         )

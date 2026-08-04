@@ -16,7 +16,9 @@ class ComponentInflater(val context: Context) {
     ): ComponentView<out MessageComponent>? = when (component) {
         ComponentType.ACTION_ROW -> ActionRowComponentView.inflateComponent(context, root)
         ComponentType.BUTTON -> ButtonComponentView.inflateComponent(context, root)
-        ComponentType.SELECT -> SelectComponentView.inflateComponent(context, root)
+        ComponentType.SELECT, ComponentType.USER_SELECT, ComponentType.ROLE_SELECT,
+        ComponentType.MENTIONABLE_SELECT, ComponentType.CHANNEL_SELECT,
+        -> SelectComponentView.inflateComponent(context, root)
         ComponentType.TEXT, ComponentType.UNKNOWN -> null
     }
 

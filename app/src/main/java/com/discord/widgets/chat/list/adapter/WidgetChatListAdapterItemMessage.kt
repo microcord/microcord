@@ -325,7 +325,9 @@ class WidgetChatListAdapterItemMessage(
             } else {
                 0
             }
-        textView.visibility = if (rendered.isNotEmpty()) View.VISIBLE else View.GONE
+        // The parser always appends a zero-width space, so `rendered` is never empty; an embed-only
+        // message would keep a blank line between the author and the embed.
+        textView.visibility = if (text.isNotEmpty()) View.VISIBLE else View.GONE
         textView.setDraweeSpanStringBuilder(rendered)
         // A message that has not reached the server yet, or that slow mode rejected, is dimmed.
         textView.alpha =

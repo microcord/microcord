@@ -46,6 +46,7 @@ data class ButtonMessageComponent(
     val style: ButtonStyle,
     val emoji: ComponentEmoji? = null,
     val url: String? = null,
+    val skuId: Long? = null,
     val emojiAnimationsEnabled: Boolean,
 ) : ActionMessageComponent()
 
@@ -90,7 +91,8 @@ fun ButtonComponent.mergeToMessageComponent(
     type = type,
     index = index,
     stateInteraction = when {
-        disabled -> ActionInteractionComponentState.Disabled
+        // A premium button routes to a purchase surface this build has no counterpart for.
+        disabled || style == ButtonStyle.PREMIUM -> ActionInteractionComponentState.Disabled
         url != null -> ActionInteractionComponentState.Enabled
         else -> buttonStateInteraction
     },
@@ -99,6 +101,7 @@ fun ButtonComponent.mergeToMessageComponent(
     style = style,
     emoji = emoji,
     url = url,
+    skuId = skuId,
     emojiAnimationsEnabled = componentStoreState.animateEmojis,
 )
 
@@ -123,8 +126,8 @@ fun SelectComponent.mergeToMessageComponent(
     },
     customId = customId,
     placeholder = placeholder,
-    minValues = minValues,
-    maxValues = maxValues,
+    minValues = minValues ?: DEFAULT_SELECT_VALUES,
+    maxValues = maxValues ?: DEFAULT_SELECT_VALUES,
     options = options,
     selectedOptions = componentStoreState.selections?.get(index)
         ?: options.filter { it.default },
@@ -137,3 +140,6 @@ fun LayoutMessageComponent.childError(): ActionInteractionComponentState.Failed?
         .map(ActionMessageComponent::stateInteraction)
         .filterIsInstance<ActionInteractionComponentState.Failed>()
         .firstOrNull()
+
+/** `min_values` and `max_values` are both optional and both default to one. */
+private const val DEFAULT_SELECT_VALUES = 1

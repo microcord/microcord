@@ -27,6 +27,8 @@ class SelectComponentView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyle: Int = 0,
 ) : ConstraintLayout(context, attrs, defStyle), ComponentView<SelectMessageComponent> {
+    private var boundType: ComponentType = ComponentType.SELECT
+
     override fun configure(
         component: SelectMessageComponent,
         componentProvider: ComponentProvider,
@@ -37,7 +39,9 @@ class SelectComponentView @JvmOverloads constructor(
         val text = requireNotNull(findViewById<MaterialTextView>(R.id.select_component_selection_text))
         val chevron = requireNotNull(findViewById<ImageView>(R.id.select_component_chevron))
         val loadingDots = requireNotNull(findViewById<TypingDots>(R.id.select_component_loading))
-        val placeholder = component.placeholder ?: resources.getString(R.string.message_select_component_default_placeholder)
+        boundType = component.type
+        val placeholder = component.placeholder
+            ?: resources.getString(R.string.message_select_component_default_placeholder)
 
         when {
             component.selectedOptions.isEmpty() -> {
@@ -68,8 +72,12 @@ class SelectComponentView @JvmOverloads constructor(
                         R.layout.widget_chat_list_bot_ui_select_component_pill,
                         selectionRoot,
                         false,
-                    ) as MaterialTextView
-                    pill.text = selected.label
+                    )
+                    pill.findViewById<MaterialTextView>(R.id.select_component_pill_text).text = selected.label
+                    ComponentViewUtils.run {
+                        pill.findViewById<SimpleDraweeView>(R.id.select_component_pill_emoji)
+                            .setEmojiOrHide(selected.emoji, component.emojiAnimationsEnabled)
+                    }
                     selectionRoot.addView(pill)
                 }
             }
@@ -84,6 +92,7 @@ class SelectComponentView @JvmOverloads constructor(
         setOnClickListener {
             componentActionListener.onSelectComponentClick(
                 component.index,
+                component.type,
                 component.customId,
                 placeholder,
                 component.options,
@@ -96,7 +105,7 @@ class SelectComponentView @JvmOverloads constructor(
         isClickable = enabled && !loading
     }
 
-    override fun type() = ComponentType.SELECT
+    override fun type() = boundType
 
     companion object {
         fun inflateComponent(context: Context, root: ViewGroup): SelectComponentView =

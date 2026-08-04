@@ -92,8 +92,9 @@ class WidgetChatListAdapterEventsHandler(
         componentIndex: Int,
         customId: String?,
         values: List<String>?,
+        componentType: ComponentType,
     ) {
-        val data = componentInteractionData(customId, values) ?: return
+        val data = componentInteractionData(customId, values, componentType) ?: return
         StoreStream.getInteractions().sendComponentInteraction(
             applicationId,
             guildId,
@@ -424,6 +425,7 @@ class WidgetChatListAdapterEventsHandler(
         internal fun componentInteractionData(
             customId: String?,
             values: List<String>?,
+            componentType: ComponentType,
         ): RestAPIParams.ComponentInteractionData? {
             customId ?: return null
             return if (values == null) {
@@ -433,7 +435,7 @@ class WidgetChatListAdapterEventsHandler(
                 )
             } else {
                 RestAPIParams.ComponentInteractionData.SelectComponentInteractionData(
-                    ComponentType.SELECT,
+                    componentType,
                     customId,
                     values,
                 )

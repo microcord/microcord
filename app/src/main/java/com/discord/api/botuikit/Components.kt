@@ -32,17 +32,29 @@ data class ButtonComponent(
     val disabled: Boolean,
     val emoji: ComponentEmoji?,
     val url: String?,
+    val skuId: Long? = null,
 ) : ActionComponent()
 
+/**
+ * A select of any kind: the string select plus the four snowflake selects.
+ *
+ * [minValues] and [maxValues] are nullable because absent and `0` mean different things — absent
+ * defaults to one, and only [minValues] may legitimately be zero.
+ */
 data class SelectComponent(
     override val type: ComponentType,
     val customId: String,
     val disabled: Boolean,
     val placeholder: String?,
-    val minValues: Int,
-    val maxValues: Int,
+    val minValues: Int?,
+    val maxValues: Int?,
     val options: List<SelectItem>,
+    val required: Boolean? = null,
+    val defaultValues: List<SelectDefaultValue>? = null,
+    val channelTypes: List<Int>? = null,
 ) : ActionComponent()
+
+data class SelectDefaultValue(val id: Long, val type: String) : Serializable
 
 data class TextComponent(
     override val type: ComponentType,
@@ -81,11 +93,21 @@ enum class ComponentType(val type: Int, val clazz: Class<out Component>) {
     BUTTON(2, ButtonComponent::class.java),
     SELECT(3, SelectComponent::class.java),
     TEXT(4, TextComponent::class.java),
+    USER_SELECT(5, SelectComponent::class.java),
+    ROLE_SELECT(6, SelectComponent::class.java),
+    MENTIONABLE_SELECT(7, SelectComponent::class.java),
+    CHANNEL_SELECT(8, SelectComponent::class.java),
+    ;
+
+    /** Every select shares one view and one sheet; only where the options come from differs. */
+    val isSelect: Boolean
+        get() = this == SELECT || this == USER_SELECT || this == ROLE_SELECT ||
+            this == MENTIONABLE_SELECT || this == CHANNEL_SELECT
 }
 
 @JsonAdapter(ButtonStyleTypeAdapter::class)
 enum class ButtonStyle {
-    UNKNOWN, PRIMARY, SECONDARY, SUCCESS, DANGER, LINK,
+    UNKNOWN, PRIMARY, SECONDARY, SUCCESS, DANGER, LINK, PREMIUM,
 }
 
 @JsonAdapter(TextStyleTypeAdapter::class)

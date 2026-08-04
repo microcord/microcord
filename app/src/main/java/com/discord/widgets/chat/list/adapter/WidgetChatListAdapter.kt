@@ -28,6 +28,7 @@ import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.utilities.time.Clock
 import com.discord.utilities.time.ClockFactory
+import com.discord.api.botuikit.ComponentType
 import com.discord.widgets.botuikit.ComponentProvider
 import com.discord.widgets.chat.list.FragmentLifecycleListener
 import com.discord.widgets.chat.list.entries.ChatListEntry
@@ -252,6 +253,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
         componentIndex: Int,
         customId: String?,
         values: List<String>?,
+        componentType: ComponentType = ComponentType.BUTTON,
     ) {
         eventHandler.onBotUiComponentClicked(
             applicationId,
@@ -262,6 +264,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
             componentIndex,
             customId,
             values,
+            componentType,
         )
     }
 
@@ -368,6 +371,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
             componentIndex: Int,
             customId: String?,
             values: List<String>?,
+            componentType: ComponentType,
         ) = Unit
 
         fun onCallMessageClicked(voiceChannelId: Long, callStatus: WidgetChatListAdapterItemCallMessage.CallStatus) = Unit

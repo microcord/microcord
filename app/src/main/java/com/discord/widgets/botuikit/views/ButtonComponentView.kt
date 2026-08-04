@@ -1,9 +1,7 @@
 package com.discord.widgets.botuikit.views
 
 import android.content.Context
-import android.content.Intent
 import android.content.res.ColorStateList
-import android.net.Uri
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
@@ -15,6 +13,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import com.discord.R
 import com.discord.api.botuikit.ButtonStyle
+import com.discord.utilities.uri.UriHandler
 import com.discord.api.botuikit.ComponentType
 import com.discord.models.botuikit.ActionInteractionComponentState
 import com.discord.models.botuikit.ButtonMessageComponent
@@ -50,9 +49,12 @@ class ButtonComponentView @JvmOverloads constructor(
             emoji.setEmojiOrHide(component.emoji, component.emojiAnimationsEnabled)
         }
         linkIcon.visibility = if (component.style == ButtonStyle.LINK) View.VISIBLE else View.GONE
-        val (start, end) = buttonLabelPaddingDp(component.label != null, component.hasEmoji(), component.hasIcon())
+        val text = component.label
+            ?: context.getString(R.string.interaction_premium_button_unavailable)
+                .takeIf { component.style == ButtonStyle.PREMIUM }
+        val (start, end) = buttonLabelPaddingDp(text != null, component.hasEmoji(), component.hasIcon())
         label.setPadding(dpToPixels(start), 0, dpToPixels(end), 0)
-        label.text = component.label
+        label.text = text
         label.visibility = if (loading) View.INVISIBLE else View.VISIBLE
         label.setEnabledAlpha(enabled, 0.5f)
         emoji.setEnabledAlpha(enabled)
@@ -73,18 +75,16 @@ class ButtonComponentView @JvmOverloads constructor(
             ButtonStyle.PRIMARY -> R.color.brand_500
             ButtonStyle.SUCCESS -> R.color.status_green_600
             ButtonStyle.DANGER -> R.color.status_red_500
-            ButtonStyle.UNKNOWN, ButtonStyle.SECONDARY, ButtonStyle.LINK -> R.color.primary_dark_500
+            ButtonStyle.UNKNOWN, ButtonStyle.SECONDARY, ButtonStyle.LINK, ButtonStyle.PREMIUM ->
+                R.color.primary_dark_500
         }
         ViewCompat.setBackgroundTintList(button, ColorStateList.valueOf(ContextCompat.getColor(context, color)))
     }
 
     override fun type() = ComponentType.BUTTON
 
-    private fun openWebUrl(url: String) {
-        val uri = Uri.parse(url)
-        if (uri.scheme != "https" && uri.scheme != "http") return
-        context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    }
+    /** The URL is the application's, so it goes through the same untrusted-link path as any embed. */
+    private fun openWebUrl(url: String) = UriHandler.handleOrUntrusted(context, url)
 
 
     companion object {

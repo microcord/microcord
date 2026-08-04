@@ -12,14 +12,14 @@ import org.junit.Test
 
 class WidgetChatListAdapterEventsHandlerTest {
     @Test fun componentInteractionDataMatchesButtonAndSelectPayloads() {
-        assertNull(WidgetChatListAdapterEventsHandler.componentInteractionData(null, null))
+        assertNull(WidgetChatListAdapterEventsHandler.componentInteractionData(null, null, ComponentType.BUTTON))
 
         assertEquals(
             RestAPIParams.ComponentInteractionData.ButtonComponentInteractionData(
                 ComponentType.BUTTON,
                 "confirm",
             ),
-            WidgetChatListAdapterEventsHandler.componentInteractionData("confirm", null),
+            WidgetChatListAdapterEventsHandler.componentInteractionData("confirm", null, ComponentType.BUTTON),
         )
         assertEquals(
             RestAPIParams.ComponentInteractionData.SelectComponentInteractionData(
@@ -30,6 +30,7 @@ class WidgetChatListAdapterEventsHandlerTest {
             WidgetChatListAdapterEventsHandler.componentInteractionData(
                 "roles",
                 listOf("one", "two"),
+                ComponentType.SELECT,
             ),
         )
     }

@@ -1,5 +1,6 @@
 package com.discord.widgets.botuikit.views
 
+import com.discord.api.botuikit.ComponentType
 import com.discord.api.botuikit.SelectItem
 
 interface ComponentActionListener {
@@ -7,6 +8,7 @@ interface ComponentActionListener {
 
     fun onSelectComponentClick(
         componentIndex: Int,
+        componentType: ComponentType,
         customId: String,
         placeholder: String?,
         options: List<SelectItem>,

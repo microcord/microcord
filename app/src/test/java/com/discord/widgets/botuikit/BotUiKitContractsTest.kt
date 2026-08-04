@@ -50,6 +50,7 @@ class BotUiKitContractsTest {
             ButtonStyle.PRIMARY,
             emoji,
             null,
+            null,
             true,
         )
         val select = SelectMessageComponent(
