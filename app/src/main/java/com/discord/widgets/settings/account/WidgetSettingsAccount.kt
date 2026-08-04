@@ -8,7 +8,6 @@ import android.widget.TextView
 import androidx.core.widget.NestedScrollView
 import com.airbnb.lottie.LottieAnimationView
 import com.discord.R
-import com.discord.api.auth.mfa.DisableMfaRequestBody
 import com.discord.api.connectedaccounts.ConnectedAccount
 import com.discord.app.AppFragment
 import com.discord.app.AppToast
@@ -33,6 +32,7 @@ import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.views.CheckedSetting
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.settings.SettingsNavigation
+import com.discord.widgets.settings.account.mfa.WidgetEnableMFASteps
 import com.discord.widgets.settings.SettingsStrings
 import com.discord.widgets.user.account.WidgetUserAccountVerifyBase
 import com.discord.widgets.user.email.WidgetUserEmailVerify
@@ -40,6 +40,7 @@ import com.discord.widgets.user.phone.WidgetUserPhoneManage
 import com.google.android.material.button.MaterialButton
 import com.discord.utilities.dimmer.DimmerView
 import rx.Observable
+import rx.functions.Action1
 
 class WidgetSettingsAccount : AppFragment(R.layout.widget_settings_account) {
 
@@ -61,6 +62,7 @@ class WidgetSettingsAccount : AppFragment(R.layout.widget_settings_account) {
     private lateinit var mfaSalesPitch: TextView
     private lateinit var mfaEnable: MaterialButton
     private lateinit var backupCodes: TextView
+    private lateinit var authenticators: TextView
     private lateinit var removeMfa: TextView
     private lateinit var smsBackup: CheckedSetting
     private lateinit var smsPhone: TextView
@@ -91,6 +93,7 @@ class WidgetSettingsAccount : AppFragment(R.layout.widget_settings_account) {
         mfaSalesPitch = view.findViewById(R.id.settings_account_mfa_sales_pitch)
         mfaEnable = view.findViewById(R.id.settings_account_mfa_enable)
         backupCodes = view.findViewById(R.id.settings_account_view_backup_codes)
+        authenticators = view.findViewById(R.id.settings_account_authenticators)
         removeMfa = view.findViewById(R.id.settings_account_remove_two_fa)
         smsBackup = view.findViewById(R.id.settings_account_sms_backup)
         smsPhone = view.findViewById(R.id.settings_account_sms_phone)
@@ -151,6 +154,9 @@ class WidgetSettingsAccount : AppFragment(R.layout.widget_settings_account) {
             StoreMFA.MFAActivationState.NONE -> user.mfaEnabled
         }
         configureMfa(displayedMfa, model.pendingMFAState.activationState != StoreMFA.MFAActivationState.NONE)
+        mfaEnable.setOnClickListener { WidgetEnableMFASteps.launch(it.context) }
+        backupCodes.setOnClickListener { WidgetSettingsAccountBackupCodes.launch(it.context) }
+        authenticators.setOnClickListener { WidgetSettingsAuthenticators.launch(it.context) }
         removeMfa.setOnClickListener { showRemoveMfaModal() }
         configureSmsBackup(user, model.pendingMFAState.isTogglingSMSBackup)
 
@@ -182,7 +188,7 @@ class WidgetSettingsAccount : AppFragment(R.layout.widget_settings_account) {
         mfaLottie.visibility = if (enabled) View.GONE else View.VISIBLE
         mfaSalesPitch.visibility = if (enabled) View.GONE else View.VISIBLE
         mfaEnable.visibility = if (enabled) View.GONE else View.VISIBLE
-        listOf(mfaEnable, backupCodes, removeMfa).forEach { it.isEnabled = !pending }
+        listOf(mfaEnable, backupCodes, authenticators, removeMfa).forEach { it.isEnabled = !pending }
         mfaDisabledContainer.setEnabledAlpha(!pending)
         mfaEnabledContainer.setEnabledAlpha(!pending)
     }
@@ -197,14 +203,27 @@ class WidgetSettingsAccount : AppFragment(R.layout.widget_settings_account) {
         smsBackup.setSubtext(disabledMessage ?: getString(R.string.mfa_sms_auth_sales_pitch), false)
         smsBackup.isEnabled = disabledMessage == null && !toggling
         smsPhone.setEnabledAlpha(disabledMessage == null && !toggling)
+        val actionable = disabledMessage == null && !toggling
         smsBackup.setContainerClickListener(
-            if (disabledMessage == null && !toggling && !user.hasPhone) {
+            if (actionable && !user.hasPhone) {
                 View.OnClickListener {
                     WidgetUserPhoneManage.launch(
                         requireContext(),
                         WidgetUserAccountVerifyBase.Mode.NO_HISTORY_FROM_USER_SETTINGS,
                         WidgetUserPhoneManage.Source.MFA_PHONE_UPDATE,
                     )
+                }
+            } else {
+                null
+            },
+        )
+        // The switch is reverted immediately and only moves once USER_UPDATE confirms the change,
+        // so a cancelled password prompt cannot leave it showing a setting the account does not have.
+        smsBackup.setOnCheckedListener(
+            if (actionable && user.hasPhone) {
+                Action1 { enable ->
+                    smsBackup.setChecked(user.isMfaSMSEnabled, false)
+                    WidgetEnableSMSBackupDialog.show(parentFragmentManager, enable)
                 }
             } else {
                 null
@@ -244,25 +263,26 @@ class WidgetSettingsAccount : AppFragment(R.layout.widget_settings_account) {
         }
     }
 
+    /** The code prompt is gone: the endpoint is MFA-gated, so `MfaInterceptor` collects it. */
     private fun showRemoveMfaModal() {
-        val activity = appActivity ?: return
-        WidgetNoticeDialog.showInputModal(
-            activity = activity,
-            headerText = getString(R.string.two_fa_remove),
-            bodyText = getString(R.string.user_settings_mfa_enable_code_body),
-            hintText = getString(R.string.two_fa_auth_code),
-            onOKClicked = { _, code ->
-                RestAPI.api.disableMFA(DisableMfaRequestBody(code))
-                    .restSubscribeOn()
-                    .withDimmer(dimmer)
-                    .ui(this)
-                    .appSubscribe(WidgetSettingsAccount::class.java, context) { response ->
-                        AppToast.show(this, R.string.user_settings_mfa_removed)
-                        StoreStream.getAuthentication().setAuthed(response.token)
-                        StoreStream.getMFA().updatePendingMFAState(StoreMFA.MFAActivationState.PENDING_DISABLED)
-                    }
-            },
-        )
+        WidgetNoticeDialog.Builder(requireContext())
+            .setTitle(R.string.two_fa_remove)
+            .setMessage(R.string.two_fa_remove_confirmation)
+            .setNegativeButton(R.string.cancel)
+            .setPositiveButton(R.string.two_fa_remove) { removeMfa() }
+            .show(parentFragmentManager)
+    }
+
+    private fun removeMfa() {
+        RestAPI.api.disableMFA()
+            .restSubscribeOn()
+            .withDimmer(dimmer)
+            .ui(this)
+            .appSubscribe(WidgetSettingsAccount::class.java, context) { response ->
+                AppToast.show(this, R.string.user_settings_mfa_removed)
+                StoreStream.getAuthentication().setAuthed(response.token)
+                StoreStream.getMFA().updatePendingMFAState(StoreMFA.MFAActivationState.PENDING_DISABLED)
+            }
     }
 
     data class Model(

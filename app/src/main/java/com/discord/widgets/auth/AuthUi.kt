@@ -1,6 +1,9 @@
 package com.discord.widgets.auth
 
 import androidx.lifecycle.ViewModel
+import com.discord.R
+import com.discord.api.auth.mfa.MfaChallenge
+import com.discord.api.auth.mfa.MfaMethodType
 import java.io.Serializable
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -39,9 +42,12 @@ data class AuthUiState(
     val route: AuthRoute = AuthRoute.LANDING,
     val loading: Boolean = false,
     val fieldErrors: Map<String, String> = emptyMap(),
+    /** Failure text that belongs to no single input; [message] is its success counterpart. */
+    val error: String? = null,
     val message: String? = null,
     val identifier: String = "",
     val username: String = "",
+    val globalName: String = "",
     val email: String? = null,
     val phone: String? = null,
     val phonePurpose: AuthPhonePurpose = AuthPhonePurpose.REGISTRATION,
@@ -61,15 +67,23 @@ data class AuthUiState(
     internal val phoneToken: String? get() = AuthCredentialMemory[credentialHandle]?.phoneToken
     internal val ticket: String? get() = AuthCredentialMemory[credentialHandle]?.ticket
     internal val resetToken: String? get() = AuthCredentialMemory[credentialHandle]?.resetToken
+    internal val mfaChallenge: MfaChallenge? get() = AuthCredentialMemory[credentialHandle]?.mfaChallenge
+    internal val loginInstanceId: String? get() = AuthCredentialMemory[credentialHandle]?.loginInstanceId
 
     /** Keeps bearer credentials outside this serializable state and every Bundle containing it. */
     internal fun withCredentials(
         phoneToken: String? = this.phoneToken,
         ticket: String? = this.ticket,
         resetToken: String? = this.resetToken,
+        mfaChallenge: MfaChallenge? = this.mfaChallenge,
+        loginInstanceId: String? = this.loginInstanceId,
     ): AuthUiState {
         AuthCredentialMemory.remove(credentialHandle)
-        return copy(credentialHandle = AuthCredentialMemory.store(phoneToken, ticket, resetToken))
+        return copy(
+            credentialHandle = AuthCredentialMemory.store(
+                phoneToken, ticket, resetToken, mfaChallenge, loginInstanceId,
+            ),
+        )
     }
 
     internal fun clearCredentials(): AuthUiState {
@@ -87,7 +101,8 @@ data class AuthUiState(
      * off their password-style inputs at submit time and are never held here.
      */
     override fun toString(): String = "AuthUiState(route=$route, loading=$loading, " +
-        "fieldErrorKeys=${fieldErrors.keys}, identifier=<redacted>, username=$username, " +
+        "fieldErrorKeys=${fieldErrors.keys}, hasError=${error != null}, " +
+        "identifier=<redacted>, username=$username, globalName=$globalName, " +
         "email=<redacted>, phone=<redacted>, phonePurpose=$phonePurpose, phoneToken=<redacted>, ticket=<redacted>, " +
         "resetToken=<redacted>, birthday=$birthday, identityMode=$identityMode, " +
         "consentRequired=$consentRequired, consented=$consented, requiredAction=$requiredAction, " +
@@ -100,16 +115,24 @@ private object AuthCredentialMemory {
         val phoneToken: String?,
         val ticket: String?,
         val resetToken: String?,
+        val mfaChallenge: MfaChallenge?,
+        val loginInstanceId: String?,
     )
 
     private val credentials = ConcurrentHashMap<String, Credentials>()
 
     operator fun get(handle: String?): Credentials? = handle?.let(credentials::get)
 
-    fun store(phoneToken: String?, ticket: String?, resetToken: String?): String? {
-        if (phoneToken == null && ticket == null && resetToken == null) return null
+    fun store(
+        phoneToken: String?,
+        ticket: String?,
+        resetToken: String?,
+        mfaChallenge: MfaChallenge?,
+        loginInstanceId: String?,
+    ): String? {
+        if (phoneToken == null && ticket == null && resetToken == null && mfaChallenge == null) return null
         return UUID.randomUUID().toString().also {
-            credentials[it] = Credentials(phoneToken, ticket, resetToken)
+            credentials[it] = Credentials(phoneToken, ticket, resetToken, mfaChallenge, loginInstanceId)
         }
     }
 
@@ -119,6 +142,9 @@ private object AuthCredentialMemory {
 }
 
 sealed class AuthAction {
+    /** True when the flow continues on the same screen and will reuse the same ticket or token. */
+    open val keepsCredentials: Boolean get() = false
+
     class Login(val identifier: String, val password: String) : AuthAction() {
         override fun toString() = "Login(identifier=<redacted>, password=<redacted>)"
     }
@@ -134,6 +160,8 @@ sealed class AuthAction {
         val password: String,
         val birthday: Long?,
         val consented: Boolean,
+        val globalName: String? = null,
+        val promotionalEmailOptIn: Boolean? = null,
     ) : AuthAction() {
         override fun toString() = "Register(credentials=<redacted>, birthday=$birthday, consented=$consented)"
     }
@@ -151,8 +179,22 @@ sealed class AuthAction {
     class ResendPhoneCode(val phone: String) : AuthAction() {
         override fun toString() = "ResendPhoneCode(phone=<redacted>)"
     }
-    class VerifyMfa(val ticket: String, val code: String) : AuthAction() {
-        override fun toString() = "VerifyMfa(ticket=<redacted>, code=<redacted>)"
+    class VerifyMfa(
+        val ticket: String,
+        val code: String,
+        val authenticatorType: MfaMethodType,
+        val loginInstanceId: String? = null,
+    ) : AuthAction() {
+        override fun toString() = "VerifyMfa(ticket=<redacted>, code=<redacted>, authenticatorType=$authenticatorType)"
+    }
+
+    class SendMfaSms(val ticket: String) : AuthAction() {
+        override val keepsCredentials get() = true
+        override fun toString() = "SendMfaSms(ticket=<redacted>)"
+    }
+
+    class OneTimeLogin(val ticket: String) : AuthAction() {
+        override fun toString() = "OneTimeLogin(ticket=<redacted>)"
     }
     class ResendEmail(val email: String?) : AuthAction() {
         override fun toString() = "ResendEmail(email=<redacted>)"
@@ -162,7 +204,7 @@ sealed class AuthAction {
         override fun toString() = "ForgotPassword(identifier=<redacted>)"
     }
     data class UndeleteAccount(val restore: Boolean) : AuthAction()
-    class ChangePassword(val currentPassword: String, val newPassword: String, val mfaCode: String?) : AuthAction() {
+    class ChangePassword(val currentPassword: String, val newPassword: String) : AuthAction() {
         override fun toString() = "ChangePassword(credentials=<redacted>)"
     }
 }
@@ -200,33 +242,43 @@ class AuthUiViewModel : ViewModel() {
     fun restore(state: AuthUiState) = states.onNext(state)
 }
 
+/**
+ * Client-side form validation.
+ *
+ * Failures are string resource ids, not text: these run without a `Context` (including from
+ * [AuthRequests], which has none) and the screen resolves them when it renders.
+ */
 object AuthUiRules {
-    fun login(identifier: String, password: String): Map<String, String> = buildMap {
-        if (identifier.isBlank()) put("identifier", "Email or phone number is required.")
-        if (password.isBlank()) put("password", "Password is required.")
+    fun login(identifier: String, password: String): Map<String, Int> = buildMap {
+        if (identifier.isBlank()) put("identifier", R.string.login_required)
+        if (password.isBlank()) put("password", R.string.password_required)
     }
 
-    fun token(token: String): Map<String, String> =
-        if (token.isBlank()) mapOf("token" to "Token is required.") else emptyMap()
+    fun token(token: String): Map<String, Int> =
+        if (token.isBlank()) mapOf("token" to R.string.manticord_token_required) else emptyMap()
 
-    fun identity(mode: AuthIdentityMode, value: String): Map<String, String> = buildMap {
+    fun identity(mode: AuthIdentityMode, value: String): Map<String, Int> = buildMap {
         val valid = when (mode) {
             AuthIdentityMode.EMAIL -> value.trim().let { email ->
                 email.count { it == '@' } == 1 && email.substringAfter('@').contains('.') && !email.any(Char::isWhitespace)
             }
             AuthIdentityMode.PHONE -> value.count(Char::isDigit) >= 7
         }
-        if (!valid) put("identifier", if (mode == AuthIdentityMode.EMAIL) "Enter a valid email." else "Enter a valid phone number.")
+        if (!valid) {
+            put("identifier", if (mode == AuthIdentityMode.EMAIL) R.string.email_invalid else R.string.phone_invalid)
+        }
     }
 
-    fun account(username: String, password: String, consentRequired: Boolean, consented: Boolean) = buildMap {
-        if (username.isBlank()) put("username", "Username is required.")
-        if (password.length < 6) put("password", "Password must be at least 6 characters.")
-        if (consentRequired && !consented) put("consent", "You must agree before continuing.")
+    fun account(username: String, password: String, consentRequired: Boolean, consented: Boolean): Map<String, Int> = buildMap {
+        if (username.isBlank()) put("username", R.string.username_required)
+        if (password.length < MINIMUM_PASSWORD_LENGTH) put("password", R.string.password_length_error)
+        if (consentRequired && !consented) put("consent", R.string.consent_required)
     }
 
-    fun code(code: String, minimum: Int = 6) =
-        if (code.length >= minimum) emptyMap() else mapOf("code" to "Enter the complete verification code.")
+    fun code(code: String, minimum: Int = 6): Map<String, Int> =
+        if (code.length >= minimum) emptyMap() else mapOf("code" to R.string.two_fa_token_required)
+
+    const val MINIMUM_PASSWORD_LENGTH = 6
 
     fun routeFor(action: AuthRequiredAction) = when (action) {
         AuthRequiredAction.VERIFY_EMAIL -> AuthRoute.EMAIL_VERIFICATION

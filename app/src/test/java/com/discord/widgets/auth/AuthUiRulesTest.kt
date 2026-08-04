@@ -1,5 +1,6 @@
 package com.discord.widgets.auth
 
+import com.discord.api.auth.mfa.MfaMethodType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -16,7 +17,10 @@ class AuthUiRulesTest {
         assertEquals(AuthRoute.EMAIL_VERIFICATION, AuthUiRules.routeFor(AuthRequiredAction.VERIFY_EMAIL))
         assertEquals(AuthRoute.PHONE_VERIFICATION, AuthUiRules.routeFor(AuthRequiredAction.VERIFY_PHONE))
         assertEquals(AuthRoute.FORCE_PASSWORD, AuthUiRules.routeFor(AuthRequiredAction.UPDATE_PASSWORD))
-        assertEquals("VerifyMfa(ticket=<redacted>, code=<redacted>)", AuthAction.VerifyMfa("ticket", "123456").toString())
+        assertEquals(
+            "VerifyMfa(ticket=<redacted>, code=<redacted>, authenticatorType=TOTP)",
+            AuthAction.VerifyMfa("ticket", "123456", MfaMethodType.TOTP).toString(),
+        )
         assertEquals("TokenLogin(token=<redacted>)", AuthAction.TokenLogin("secret").toString())
         assertEquals("Server", (AuthLandingContent.GuildInvite(1, "Server", null, null, 500)).name)
     }

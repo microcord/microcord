@@ -8,7 +8,6 @@ import java.util.concurrent.TimeUnit
 import okhttp3.CookieJar
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
-import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -39,7 +38,9 @@ class StoreInstantInvitesTest {
 
     @Test
     fun `a transport failure stays retryable`() {
-        val state = fetch(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+        // A refused connection rather than a dropped socket: OkHttp retries the latter, which then
+        // blocks on a server with nothing left enqueued and races the client's own read timeout.
+        val state = fetch(client = apiFor("http://localhost:1/"))
 
         assertEquals(StoreInstantInvites.InviteState.LoadFailed, state)
     }
@@ -52,12 +53,15 @@ class StoreInstantInvitesTest {
     }
 
     /** Drives one `fetchInviteIfNotLoaded` to whatever terminal state it lands on. */
-    private fun fetch(response: MockResponse): StoreInstantInvites.InviteState {
-        server.enqueue(response)
+    private fun fetch(
+        response: MockResponse? = null,
+        client: RestAPIInterface = api,
+    ): StoreInstantInvites.InviteState {
+        response?.let(server::enqueue)
         val scheduler = TestScheduler()
         val dispatcher = Dispatcher(scheduler)
         val deck = ObservationDeck()
-        val store = StoreInstantInvites(dispatcher, deck, restApi = { api })
+        val store = StoreInstantInvites(dispatcher, deck, restApi = { client })
         dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
         val key = ModelInvite.getInviteStoreKey(INVITE_CODE, null)
 
@@ -75,8 +79,10 @@ class StoreInstantInvitesTest {
         throw AssertionError("invite never left Loading")
     }
 
-    private val api: RestAPIInterface by lazy {
-        RestAPIBuilder(server.url("/api/").toString(), CookieJar.NO_COOKIES)
+    private val api: RestAPIInterface by lazy { apiFor(server.url("/api/").toString()) }
+
+    private fun apiFor(baseUrl: String): RestAPIInterface {
+        return RestAPIBuilder(baseUrl, CookieJar.NO_COOKIES)
             .build(RestAPIInterface::class.java)
     }
 

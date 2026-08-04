@@ -1,5 +1,6 @@
 package com.discord.gateway.io
 
+import com.discord.api.auth.AuthSessionChange
 import com.discord.api.channel.Channel
 import com.discord.api.channel.ChannelRecipient
 import com.discord.api.commands.ApplicationCommandAutocompleteResult
@@ -111,6 +112,7 @@ class IncomingParser(private val gson: Gson) {
         "USER_GUILD_SETTINGS_UPDATE" -> gson.fromJson(data, ModelNotificationSettings::class.java)
         "USER_NOTE_UPDATE" -> gson.fromJson(data, ModelUserNote.Update::class.java)
         "USER_REQUIRED_ACTION_UPDATE" -> gson.fromJson(data, UserRequiredActionUpdate::class.java)
+        "AUTH_SESSION_CHANGE" -> gson.fromJson(data, AuthSessionChange::class.java)
         "SESSIONS_REPLACE" -> gson.fromJson<List<ModelSession>>(data, sessionListType)
 
         // Relationships and friend suggestions

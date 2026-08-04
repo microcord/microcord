@@ -3,6 +3,7 @@ package com.discord.stores
 import androidx.fragment.app.FragmentActivity
 import com.discord.panels.PanelState
 import com.discord.models.authentication.AuthState
+import com.discord.models.requiredaction.RequiredAction as ModelRequiredAction
 import com.discord.utilities.intent.AppIntentContract
 import com.discord.utilities.intent.LinkParseResult
 import com.discord.widgets.home.PanelLayout
@@ -18,13 +19,21 @@ data class AuthNavigationState(
     val ageGate: StoreNavigation.AgeGate? = null,
 )
 
+/** Where routing can send the user: the token's own gate plus every session gate that has a screen. */
 enum class RequiredAction {
     UPDATE_PASSWORD,
     AGREEMENTS,
     TOS_UPDATE_ACKNOWLEDGMENT,
-    REQUIRE_VERIFIED_EMAIL,
-    REQUIRE_VERIFIED_PHONE,
-    REQUIRE_CAPTCHA,
+    VERIFY_ACCOUNT,
+}
+
+private fun ModelRequiredAction.toNavigationAction(): RequiredAction? = when (this) {
+    ModelRequiredAction.AGREEMENTS -> RequiredAction.AGREEMENTS
+    ModelRequiredAction.TOS_UPDATE_ACKNOWLEDGMENT -> RequiredAction.TOS_UPDATE_ACKNOWLEDGMENT
+    ModelRequiredAction.NONE -> null
+    // Every remaining value is cleared by adding or reverifying an email or phone, which is one
+    // screen; which factors it offers comes from the action itself, not from the route.
+    else -> RequiredAction.VERIFY_ACCOUNT
 }
 
 sealed class MainRoute {
@@ -66,20 +75,42 @@ class StoreNavigation internal constructor(private val stream: StoreStream) {
         .filter { it is PendingIntentState.Value }
         .map { (it as PendingIntentState.Value).contract }
 
+    private var lastAuthState: AuthNavigationState? = null
+    private var sessionRequiredAction: RequiredAction? = null
+
     fun updateAuthState(state: AuthNavigationState) {
+        lastAuthState = state
         mainRouteSubject.onNext(resolveMainRoute(state))
     }
 
     fun updateAuthState(authState: AuthState?, initializedForAuthenticatedUser: Boolean) {
+        updatePasswordRequired = AuthState.isUpdatePasswordRequired(authState)
         updateAuthState(
             AuthNavigationState(
                 initialized = true,
                 authenticated = authState != null,
                 initializedForAuthenticatedUser = initializedForAuthenticatedUser,
-                requiredAction = if (AuthState.isUpdatePasswordRequired(authState)) RequiredAction.UPDATE_PASSWORD else null,
+                requiredAction = effectiveRequiredAction(),
             ),
         )
     }
+
+    /**
+     * The session gate from `READY.required_action` / `USER_REQUIRED_ACTION_UPDATE`.
+     *
+     * Separate from the token's own `update_password`, which outranks it: a password the server has
+     * already rejected must be replaced before any verification screen is worth showing.
+     */
+    fun updateUserRequiredAction(action: ModelRequiredAction) {
+        sessionRequiredAction = action.toNavigationAction()
+        val previous = lastAuthState ?: return
+        updateAuthState(previous.copy(requiredAction = effectiveRequiredAction()))
+    }
+
+    private var updatePasswordRequired = false
+
+    private fun effectiveRequiredAction(): RequiredAction? =
+        if (updatePasswordRequired) RequiredAction.UPDATE_PASSWORD else sessionRequiredAction
 
     @Synchronized
     fun routeIntent(contract: AppIntentContract): IntentRouteResult = when (contract) {

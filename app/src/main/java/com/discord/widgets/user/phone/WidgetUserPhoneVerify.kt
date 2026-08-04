@@ -134,9 +134,8 @@ class WidgetUserPhoneVerify : WidgetUserAccountVerifyBase(R.layout.widget_user_p
                 context = context,
                 // A rejected code leaves the field cleared and focused so it can be retyped.
                 errorHandler = { codeVerificationView.clearCode() },
-            ) { response ->
-                val token = response.body()?.token ?: return@appSubscribe
-                handleCodeReceived(token)
+            ) { verification ->
+                handleCodeReceived(verification.token)
             }
     }
 

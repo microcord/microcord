@@ -6,11 +6,71 @@ data class BackupCode(
     val consumed: Boolean,
 )
 
-/** Body of `POST users/@me/mfa/totp/disable`. */
-data class DisableMfaRequestBody(
-    private val code: String,
+/** `mfa_type` on `mfa/finish`, and the trailing path segment of `auth/mfa/{type}`. */
+enum class MfaMethodType(val wireName: String) {
+    WEBAUTHN("webauthn"),
+    TOTP("totp"),
+    BACKUP("backup"),
+    SMS("sms"),
+    PASSWORD("password"),
+    ;
+
+    companion object {
+        fun from(wireName: String?): MfaMethodType? = values().firstOrNull { it.wireName == wireName }
+    }
+}
+
+/**
+ * [challenge] carries WebAuthn credential request options; [backupCodesAllowed] means the TOTP
+ * prompt also accepts a backup code.
+ */
+data class MfaMethod(
+    val type: MfaMethodType,
+    val challenge: String? = null,
+    val backupCodesAllowed: Boolean = false,
+)
+
+/** The `mfa` object of a 401 `MFA_REQUIRED`, and the normalised method flags of a login response. */
+data class MfaChallenge(
+    val ticket: String,
+    val methods: List<MfaMethod>,
 ) {
-    override fun toString(): String = "DisableMfaRequestBody(code=<redacted>)"
+    override fun toString(): String =
+        "MfaChallenge(ticket=<redacted>, methods=${methods.map(MfaMethod::type)})"
+}
+
+/** Body of `POST mfa/finish`. */
+class FinishMfaRequestBody(
+    private val ticket: String,
+    private val mfaType: String,
+    private val data: String,
+) {
+    constructor(ticket: String, type: MfaMethodType, data: String) : this(ticket, type.wireName, data)
+
+    override fun toString(): String = "FinishMfaRequestBody(ticket=<redacted>, mfaType=$mfaType, data=<redacted>)"
+}
+
+/** Response to `POST mfa/finish`: the elevation JWT, good for five minutes. */
+data class FinishMfaResponse(
+    val token: String,
+) {
+    override fun toString(): String = "FinishMfaResponse(token=<redacted>)"
+}
+
+/** Response to `POST auth/mfa/sms/send`: the redacted number the code went to. */
+data class SendMfaSmsResponse(
+    val phone: String?,
+)
+
+/** An enrolled security key or passkey. [type] is always 1 (`WEBAUTHN`). */
+data class Authenticator(
+    val id: String,
+    val name: String?,
+    val type: Int = WEBAUTHN_TYPE,
+) {
+    companion object {
+        const val WEBAUTHN_TYPE = 1
+    }
 }
 
 /** Response to `POST users/@me/mfa/totp/disable`: a freshly minted auth token. */

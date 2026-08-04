@@ -36,7 +36,7 @@ class WidgetAuthRegisterIdentity : AuthFragment(R.layout.widget_auth_register_id
         val value = input.getTextOrEmpty().trim()
         val errors = AuthUiRules.identity(model.state.identityMode, value)
         when {
-            errors.isNotEmpty() -> model.update { it.copy(fieldErrors = errors) }
+            errors.isNotEmpty() -> model.update { it.copy(fieldErrors = errors.resolve()) }
             model.state.identityMode == AuthIdentityMode.EMAIL -> actions.navigate(
                 AuthRoute.REGISTER_ACCOUNT,
                 AuthUiState(route = AuthRoute.REGISTER_ACCOUNT, email = value),

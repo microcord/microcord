@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" style="@style/UiKit.ViewGroup.Page">
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="16dp">
+        <TextView android:text="@string/mfa_v2_choose" style="@style/UiKit.TextView.H1.Bold"/>
+        <TextView android:textColor="?attr/colorHeaderSecondary" android:layout_marginTop="4dp" android:layout_marginBottom="16dp" android:text="@string/mfa_v2_choose_description" style="@style/UiKit.TextView.Subtext"/>
+        <LinearLayout android:orientation="vertical" android:id="@+id/mfa_method_sheet_list" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

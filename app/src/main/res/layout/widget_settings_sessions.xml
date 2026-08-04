@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.CoordinatorLayout.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout">
+        <androidx.appcompat.widget.Toolbar app:navigationContentDescription="@string/back" app:navigationIcon="?attr/ic_action_bar_back" app:subtitle="@string/user_settings" app:title="@string/auth_sessions" style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout style="@style/UiKit.ViewGroup.LinearLayout">
+            <TextView android:text="@string/auth_sessions_description" style="@style/UiKit.Settings.Item.Addition"/>
+            <TextView android:id="@+id/sessions_current_header" android:text="@string/auth_sessions_current" android:visibility="gone" style="@style/UiKit.Settings.Item.Header"/>
+            <androidx.recyclerview.widget.RecyclerView android:id="@+id/sessions_current_list" android:paddingLeft="16dp" android:paddingRight="16dp" style="@style/UiKit.ViewGroup.RecyclerView"/>
+            <TextView android:id="@+id/sessions_others_header" android:text="@string/auth_sessions_others" android:visibility="gone" style="@style/UiKit.Settings.Item.Header"/>
+            <androidx.recyclerview.widget.RecyclerView android:id="@+id/sessions_others_list" android:paddingLeft="16dp" android:paddingRight="16dp" style="@style/UiKit.ViewGroup.RecyclerView"/>
+            <LinearLayout android:id="@+id/sessions_legacy_notice" android:orientation="horizontal" android:gravity="center_vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:visibility="gone" android:paddingLeft="16dp" android:paddingTop="8dp" android:paddingRight="16dp" android:paddingBottom="8dp">
+                <ImageView android:layout_width="44dp" android:layout_height="44dp" android:padding="10dp" android:background="@drawable/drawable_circle_session_icon" android:src="@drawable/ic_warning_circle_24dp" android:importantForAccessibility="no" app:tint="?attr/colorInteractiveActive"/>
+                <LinearLayout android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="16dp">
+                    <TextView android:textAppearance="@style/UiKit.TextView.Semibold" android:textSize="@dimen/uikit_textsize_medium" android:textColor="?attr/colorHeaderPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/auth_sessions_unknown_legacy"/>
+                    <TextView android:textAppearance="@style/UiKit.TextView" android:textSize="@dimen/uikit_textsize_small" android:textColor="?attr/colorTextLink" android:id="@+id/sessions_legacy_change_password" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="@string/auth_sessions_unknown_legacy_log_out"/>
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/sessions_log_out_others" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:visibility="gone" android:background="?attr/selectableItemBackground" android:paddingLeft="16dp" android:paddingTop="16dp" android:paddingRight="16dp" android:paddingBottom="16dp">
+                <TextView android:textAppearance="@style/UiKit.TextView.Semibold" android:textSize="@dimen/uikit_textsize_medium" android:textColor="?attr/colorButtonDangerBackground" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/auth_sessions_others_log_out_action"/>
+                <TextView android:textAppearance="@style/UiKit.TextView" android:textSize="@dimen/uikit_textsize_small" android:textColor="?attr/colorTextMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="@string/auth_sessions_others_log_out_description"/>
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

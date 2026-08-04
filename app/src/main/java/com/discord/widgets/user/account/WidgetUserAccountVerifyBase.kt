@@ -170,9 +170,8 @@ abstract class WidgetUserAccountVerifyBase(@LayoutRes contentLayoutId: Int) : Ap
         ): Boolean = when {
             mode == Mode.UNFORCED -> true
             mode == Mode.NO_HISTORY_FROM_USER_SETTINGS -> true
-            isMissingPhone && requiredAction == RequiredAction.REQUIRE_VERIFIED_PHONE -> true
-            (isMissingPhone || isMissingEmailOrUnverified) &&
-                requiredAction == RequiredAction.REQUIRE_VERIFIED_EMAIL -> true
+            isMissingPhone && requiredAction.acceptsPhone -> true
+            (isMissingPhone || isMissingEmailOrUnverified) && requiredAction.acceptsEmail -> true
             else -> false
         }
 

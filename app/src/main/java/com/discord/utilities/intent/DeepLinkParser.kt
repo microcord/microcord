@@ -80,6 +80,8 @@ object DeepLinkParser {
                         ?: if (parts.size == 2) DeepLinkRoute.Lurk(guildId, null) else null
                 }
             parts.firstOrNull() == "ra" && parts.size == 2 && code.matches(parts[1]) -> DeepLinkRoute.RemoteAuth(parts[1])
+            parts == listOf("login", "one-time") ->
+                query["token"]?.takeIf(String::isNotBlank)?.let(DeepLinkRoute::OneTimeLogin)
             parts.firstOrNull() == "guild" && parts.getOrNull(2) == "premiumguild" && parts.size == 3 -> when (parts[1]) {
                 "@me" -> DeepLinkRoute.PremiumGuild(null)
                 else -> positive(parts[1])?.let(DeepLinkRoute::PremiumGuild)

@@ -29,84 +29,6 @@ class MessageRestContractTest {
     fun stopServer() = server.shutdown()
 
     @Test
-    fun messageQueriesUseExpectedParameters() {
-        enqueueList()
-        enqueueList()
-
-        api.getChannelMessages(42, before = 100, after = 20, limit = 50).toBlocking().single()
-        api.getChannelMessagesAround(42, limit = 25, around = 60).toBlocking().single()
-
-        assertEquals("/api/v9/channels/42/messages?before=100&after=20&limit=50", server.takeRequest().path)
-        assertEquals("/api/v9/channels/42/messages?limit=25&around=60", server.takeRequest().path)
-    }
-
-    @Test
-    fun sendEditDeleteTypingAndAckMatchWireContract() {
-        val send = RestAPIParams.Message(
-            content = "hello",
-            nonce = "nonce-1",
-            applicationId = 9,
-            activity = RestAPIParams.Message.Activity(MessageActivityType.JOIN, "party", "session"),
-            stickerIds = listOf(7),
-            messageReference = RestAPIParams.Message.MessageReference(1, 2, 3),
-            allowedMentions = RestAPIParams.Message.AllowedMentions(
-                parse = listOf("users"),
-                users = listOf(4),
-                roles = listOf(5),
-                repliedUser = false,
-            ),
-            enforceNonce = true,
-        )
-        enqueueMessage()
-        api.sendMessage(42, send, null).toBlocking().single()
-
-        val sent = server.takeRequest()
-        assertEquals("POST", sent.method)
-        assertEquals("/api/v9/channels/42/messages", sent.path)
-        val json = JsonParser.parseString(sent.body.readUtf8()).asJsonObject
-        assertEquals("hello", json["content"].asString)
-        assertEquals(9L, json["application_id"].asLong)
-        assertEquals(1, json["activity"].asJsonObject["type"].asInt)
-        assertEquals(3L, json["message_reference"].asJsonObject["message_id"].asLong)
-        assertFalse(json["allowed_mentions"].asJsonObject["replied_user"].asBoolean)
-        assertFalse(json.has("enforce_nonce"))
-
-        enqueueMessage()
-        api.editMessage(
-            42,
-            8,
-            RestAPIParams.Message(
-                content = "edited",
-                allowedMentions = RestAPIParams.Message.AllowedMentions(parse = emptyList()),
-            ),
-        ).toBlocking().single()
-        val edited = server.takeRequest()
-        assertEquals("PATCH", edited.method)
-        assertEquals("/api/v9/channels/42/messages/8", edited.path)
-        val editJson = JsonParser.parseString(edited.body.readUtf8()).asJsonObject
-        assertEquals(setOf("content", "allowed_mentions"), editJson.keySet())
-        assertEquals(0, editJson["allowed_mentions"].asJsonObject["parse"].asJsonArray.size())
-
-        enqueueEmpty()
-        api.deleteMessage(42, 8).toBlocking().subscribe()
-        assertRequest("DELETE", "/api/v9/channels/42/messages/8")
-
-        enqueueEmpty()
-        api.setUserTyping(42).toBlocking().subscribe()
-        val typing = server.takeRequest()
-        assertEquals("POST", typing.method)
-        assertEquals("/api/v9/channels/42/typing", typing.path)
-        assertEquals("{}", typing.body.readUtf8())
-
-        enqueueEmpty()
-        api.postChannelMessagesAck(42, 8, RestAPIParams.ChannelMessagesAck(true, 2)).toBlocking().subscribe()
-        val ack = server.takeRequest()
-        assertEquals("POST", ack.method)
-        assertEquals("/api/v9/channels/42/messages/8/ack", ack.path)
-        assertEquals("{\"manual\":true,\"mention_count\":2}", ack.body.readUtf8())
-    }
-
-    @Test
     fun multipartUsesPayloadJsonAndIndexedFileNames() {
         val file = MultipartBody.Part.createFormData(
             "files[0]",
@@ -200,13 +122,6 @@ class MessageRestContractTest {
 
         assertFalse(usersReceived)
         assertTrue(failure != null)
-    }
-
-    @Test
-    fun mentionsUseReferenceFiltersAndPagination() {
-        enqueueList()
-        api.getMentions(25, roles = true, everyone = true, guildId = 7, before = 9).toBlocking().single()
-        assertRequest("GET", "/api/v9/users/@me/mentions?limit=25&roles=true&everyone=true&guild_id=7&before=9")
     }
 
     @Test

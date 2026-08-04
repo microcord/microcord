@@ -209,6 +209,10 @@
                 <data android:pathPrefix="/ra/" />
                 <data android:pathPrefix="/events/" />
                 <data android:pathPrefix="/connect/authorize" />
+                <!-- The only credential recovery the app redeems itself. A plain password reset
+                     mails a `/reset#token=` link instead, whose token is in the fragment; the
+                     reference hands those to the browser, so we do not claim that path. -->
+                <data android:pathPrefix="/login/one-time" />
             </intent-filter>
             <!-- Discord-owned domains cannot verify this app's package and signing certificate. -->
             <intent-filter>

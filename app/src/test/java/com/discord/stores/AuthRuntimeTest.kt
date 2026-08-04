@@ -2,6 +2,7 @@ package com.discord.stores
 
 import android.content.SharedPreferences
 import com.discord.api.auth.RequiredAction
+import com.discord.api.auth.mfa.MfaMethodType
 import com.discord.models.authentication.AuthState
 import com.discord.models.domain.auth.ModelLoginResult
 import com.discord.restapi.RestAPIBuilder
@@ -76,6 +77,43 @@ class AuthRuntimeTest {
         assertFalse(store.getAuthState().toString().contains("direct-secret"))
     }
 
+    /**
+     * An MFA ticket is single use, so a second POST always fails. Retrofit's observable is cold:
+     * anything in the chain that re-subscribes to it silently re-sends the whole request.
+     */
+    @Test
+    fun mfaVerificationPostsExactlyOnce() {
+        val server = MockWebServer()
+        try {
+            server.enqueue(MockResponse().setBody("{\"token\":\"mfa\"}"))
+            server.enqueue(MockResponse().setResponseCode(400).setBody("{\"code\":60008}"))
+            val preferences = memoryPreferences()
+            val dispatcher = Dispatcher(Schedulers.immediate())
+            dispatcher.registerDispatchHandlers(DispatchHandler {})
+            lateinit var store: StoreAuthentication
+            store = StoreAuthentication(
+                dispatcher,
+                preferences,
+                memoryPreferences(),
+                onAuthStateChanged = storeCallback@{ store.handleAuthStateInternal(it) },
+                onLoginResult = storeCallback@{ store.handleLoginResultInternal(it) },
+            )
+            store.init()
+            store.bindApi(
+                RestAPIBuilder(server.url("/api/").toString(), CookieJar.NO_COOKIES)
+                    .build(RestAPIInterface::class.java),
+            )
+
+            val result = store.authMFA(MfaMethodType.TOTP, "123456", "ticket").toBlocking().single()
+
+            assertEquals("mfa", result.token)
+            assertEquals("/api/v9/auth/mfa/totp", server.takeRequest().path)
+            assertEquals(1, server.requestCount)
+        } finally {
+            server.shutdown()
+        }
+    }
+
     @Test
     fun authApiFactoryCoversLoginRegistrationMfaVerificationAndLogout() {
         val server = MockWebServer()
@@ -92,7 +130,7 @@ class AuthRuntimeTest {
 
             api.postAuthLogin(RestAPIParams.AuthLogin("login", "password", false, null)).toBlocking().single()
             api.postAuthRegister(RestAPIParams.AuthRegister("fingerprint", "user", "email", null, "password", null, null, false, null)).toBlocking().single()
-            api.postMFACode(RestAPIParams.MFALogin("ticket", "code")).toBlocking().single()
+            api.postMFACode(MfaMethodType.TOTP.wireName, RestAPIParams.MFALogin("ticket", "code")).toBlocking().single()
             api.phoneVerificationsVerify(RestAPIParams.VerificationCode("phone", "code")).toBlocking().single()
             api.phoneVerificationsResend(RestAPIParams.VerificationCodeResend("phone")).toList().toBlocking().single()
             api.postAuthVerifyResend(RestAPIParams.EmptyBody()).toBlocking().single()

@@ -14,6 +14,9 @@ import androidx.fragment.app.viewModels
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.dialogs.DatePickerDialog
+import com.discord.stores.StoreStream
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.ui
 import com.discord.utilities.time.ClockFactory
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputLayout
@@ -42,7 +45,22 @@ abstract class AuthFragment(
 
     override fun onStart() {
         super.onStart()
-        stateSubscription = model.observe().subscribe(::render)
+        stateSubscription = model.observe().subscribe { state ->
+            renderScreenError(state)
+            render(state)
+        }
+    }
+
+    /**
+     * Shows [AuthUiState.error] in the layout's `auth_error` label, if it has one.
+     *
+     * A failure that no input owns — a rate limit, a disabled account, a dead connection — would
+     * otherwise be silent, because [AuthRequests] suppresses the toast in favour of inline text.
+     */
+    private fun renderScreenError(state: AuthUiState) {
+        val label = view?.findViewById<TextView>(R.id.auth_error) ?: return
+        label.text = state.error
+        label.visibility = if (state.error.isNullOrBlank()) View.GONE else View.VISIBLE
     }
 
     override fun onStop() {
@@ -51,8 +69,16 @@ abstract class AuthFragment(
         super.onStop()
     }
 
+    override fun onViewBound(view: View) {
+        super.onViewBound(view)
+        // A request whose callback could not be delivered — the view went away mid-flight, or a
+        // configuration change swapped it — must not leave the new view dimmed and refusing input.
+        if (model.state.loading) model.update { it.copy(loading = false) }
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
-        captureState()
+        // Fragments on the back stack are saved too, and they have no view to read inputs from.
+        if (view != null) captureState()
         outState.putSerializable(STATE, model.state)
         super.onSaveInstanceState(outState)
     }
@@ -61,17 +87,24 @@ abstract class AuthFragment(
     protected open fun render(state: AuthUiState) = Unit
 
     protected fun submit(action: AuthAction) {
-        model.update { it.copy(loading = true, fieldErrors = emptyMap(), message = null) }
+        // Two triggers can land on one code — an autopaste on resume and a manual paste, say. The
+        // second must not spend a ticket the first has already consumed.
+        if (model.state.loading) return
+        cancelPendingVerify()
+        model.update { it.copy(loading = true, fieldErrors = emptyMap(), error = null, message = null) }
         actions.submit(action) { result ->
             if (!isAdded) return@submit
             requireActivity().runOnUiThread {
                 when (result) {
                     is AuthResult.Success -> {
-                        model.update { it.clearCredentials().copy(loading = false, message = result.message) }
+                        model.update {
+                            val state = if (action.keepsCredentials) it else it.clearCredentials()
+                            state.copy(loading = false, message = result.message)
+                        }
                         result.nextRoute?.let(actions::navigate)
                     }
                     is AuthResult.Failure -> model.update {
-                        it.copy(loading = false, fieldErrors = result.fieldErrors, message = result.message)
+                        it.copy(loading = false, fieldErrors = result.fieldErrors, error = result.message)
                     }
                     is AuthResult.Challenge -> {
                         model.update { it.copy(loading = false) }
@@ -81,6 +114,9 @@ abstract class AuthFragment(
             }
         }
     }
+
+    /** [AuthUiRules] reports failures as string resource ids; the screen supplies the strings. */
+    protected fun Map<String, Int>.resolve(): Map<String, String> = mapValues { (_, res) -> getString(res) }
 
     protected fun TextInputLayout.text() = editText?.text?.toString().orEmpty()
     protected fun TextInputLayout.setErrorFrom(state: AuthUiState, key: String) { error = state.fieldErrors[key] }
@@ -93,6 +129,28 @@ abstract class AuthFragment(
     }
 
     protected open fun pasteCodeFromClipboard(): Boolean = false
+
+    private var pendingVerify: Runnable? = null
+    private var pendingVerifyView: View? = null
+
+    /**
+     * Queues [verify], replacing any verify an earlier paste left pending.
+     *
+     * The delay lets the pasted digits land on screen before the dimmer covers them. Without the
+     * replacement an autopaste on resume and a manual paste each queue their own, and one code gets
+     * spent twice.
+     */
+    protected fun postVerify(view: View, delayMs: Long, verify: () -> Unit) {
+        cancelPendingVerify()
+        pendingVerify = Runnable(verify).also { view.postDelayed(it, delayMs) }
+        pendingVerifyView = view
+    }
+
+    private fun cancelPendingVerify() {
+        pendingVerify?.let { pendingVerifyView?.removeCallbacks(it) }
+        pendingVerify = null
+        pendingVerifyView = null
+    }
 
     protected fun clipboardCode(length: Int, stripSpaces: Boolean = false): String? {
         val context = context ?: return null
@@ -153,6 +211,22 @@ class WidgetAuthRequiredAction : AuthFragment(R.layout.widget_user_account_verif
         view.findViewById<View>(R.id.verify_account_by_email).setOnClickListener { navigate(AuthRequiredAction.VERIFY_EMAIL) }
         view.findViewById<View>(R.id.verify_account_by_phone).setOnClickListener { navigate(AuthRequiredAction.VERIFY_PHONE) }
         view.findViewById<TextView>(R.id.verify_account_support).setOnClickListener { actions.openSupport() }
+    }
+
+    /** Which factors are offered comes from the gate itself; some accept only one of the two. */
+    override fun onViewBoundOrOnResume() {
+        super.onViewBoundOrOnResume()
+        StoreStream.getUserRequiredActions().observeUserRequiredAction()
+            .ui(this)
+            .appSubscribe(WidgetAuthRequiredAction::class.java) { action ->
+                model.update {
+                    if (action.isVerificationGate) {
+                        it.copy(allowEmail = action.acceptsEmail, allowPhone = action.acceptsPhone)
+                    } else {
+                        it
+                    }
+                }
+            }
     }
 
     private fun navigate(action: AuthRequiredAction) = actions.navigate(AuthUiRules.routeFor(action), model.state.copy(route = AuthUiRules.routeFor(action)))

@@ -408,8 +408,10 @@ class StoreMediaFavorites(
             .onFailure { AppLog.e("SettingsProtoV2", "$source decode failed", it) }
             .getOrNull()
 
+    // Peeked, not consumed: an error this does not recognise still has to classify downstream.
     private fun invalidSettingsCode(error: HttpException): Int? = runCatching {
-        JsonParser.parseString(error.response()?.errorBody()?.string()).asJsonObject["code"].asInt
+        JsonParser.parseString(error.response()?.errorBody()?.source()?.peek()?.readUtf8())
+            .asJsonObject["code"].asInt
     }.getOrNull()
 
     companion object {

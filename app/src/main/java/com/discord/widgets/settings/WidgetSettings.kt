@@ -87,6 +87,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         bindRoute(binding.account, ::WidgetSettingsAccount)
         bindRoute(binding.profile, ::WidgetEditUserOrGuildMemberProfile)
         bindRoute(binding.authorizedApps, ::WidgetSettingsAuthorizedApps)
+        bindRoute(binding.sessions, ::WidgetSettingsSessions)
         bindRoute(binding.textImagesSettings, ::WidgetSettingsMedia)
         bindRoute(binding.appearance, ::WidgetSettingsAppearance)
         bindRoute(binding.language, ::WidgetSettingsLanguage)
@@ -255,6 +256,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
             R.id.account,
             R.id.profile,
             R.id.authorized_apps,
+            R.id.sessions,
             R.id.text_images_settings,
             R.id.appearance,
             R.id.language,

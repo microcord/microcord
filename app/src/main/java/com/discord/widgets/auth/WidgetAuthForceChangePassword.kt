@@ -29,16 +29,10 @@ class WidgetAuthForceChangePassword :
         val currentPassword = current.editText?.text?.toString().orEmpty()
         val newPassword = next.editText?.text?.toString().orEmpty()
         when {
-            currentPassword.isBlank() -> current.error = "Current password is required."
-            newPassword.length < 6 -> next.error = "Password must be at least 6 characters."
-            else -> submit(
-                AuthAction.ChangePassword(
-                    currentPassword,
-                    newPassword,
-                    requireView().findViewById<TextInputLayout>(R.id.change_password_two_factor)
-                        .editText?.text?.toString()?.ifBlank { null },
-                ),
-            )
+            currentPassword.isBlank() -> current.error = getString(R.string.password_required)
+            newPassword.length < AuthUiRules.MINIMUM_PASSWORD_LENGTH ->
+                next.error = getString(R.string.password_length_error)
+            else -> submit(AuthAction.ChangePassword(currentPassword, newPassword))
         }
     }
 

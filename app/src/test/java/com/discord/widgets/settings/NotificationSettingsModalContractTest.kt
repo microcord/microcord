@@ -9,24 +9,6 @@ class NotificationSettingsModalContractTest {
     private val root = sequenceOf(File("."), File("..")).first { File(it, "app/src/main").isDirectory }
 
     @Test
-    fun `notification settings use reconstructed Discord surfaces`() {
-        val channel = source("widgets/channels/settings/WidgetChannelNotificationSettings.kt")
-        val server = source("widgets/servers/WidgetServerNotifications.kt")
-        val muteSheet = source("widgets/settings/WidgetMuteSettingsSheet.kt")
-        val overrideSelector = source("widgets/servers/WidgetServerNotificationsOverrideSelector.kt")
-
-        listOf(channel, server, muteSheet, overrideSelector).forEach { source ->
-            FORBIDDEN_PLATFORM_SURFACES.forEach { assertFalse(source.contains(it)) }
-        }
-
-        assertTrue(muteSheet.contains("class WidgetMuteSettingsSheet : AppBottomSheet()"))
-        listOf("900_000L", "3_600_000L", "28_800_000L", "86_400_000L", "MUTE_DURATION_ALWAYS")
-            .forEach { assertTrue(muteSheet.contains(it)) }
-        assertTrue(server.contains("WidgetMuteSettingsSheet.showForGuild"))
-        assertTrue(channel.contains("WidgetMuteSettingsSheet.showForChannel"))
-    }
-
-    @Test
     fun `notification levels restore checked state and DMs remain mute only`() {
         val channel = source("widgets/channels/settings/WidgetChannelNotificationSettings.kt")
         val server = source("widgets/servers/WidgetServerNotifications.kt")

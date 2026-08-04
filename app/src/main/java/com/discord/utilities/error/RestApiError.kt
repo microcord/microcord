@@ -4,6 +4,7 @@ import android.content.Context
 import android.widget.Toast
 import com.discord.R
 import com.discord.utilities.captcha.CaptchaCancellationException
+import com.discord.utilities.mfa.MfaCancellationException
 import com.discord.utilities.captcha.CaptchaErrorBody
 import com.discord.utilities.captcha.CaptchaHelper
 import com.google.gson.Gson
@@ -84,6 +85,8 @@ class RestApiError private constructor(
         TIMEOUT,
         CAPTCHA_KNOWN_FAILURE,
         CAPTCHA_CANCELLED,
+        MFA_CANCELLED,
+        ACCOUNT_SUSPENDED,
         IMAGE_NOT_FOUND,
         AUTOMOD_MESSAGE_BLOCKED,
         OTHER,
@@ -138,9 +141,11 @@ class RestApiError private constructor(
         Type.CAPTCHA_KNOWN_FAILURE,
         Type.CAPTCHA_CANCELLED,
         -> context.getString(R.string.captcha_failed)
+        Type.ACCOUNT_SUSPENDED -> context.getString(R.string.account_suspended_body)
         Type.DISCORD_REQUEST_RESOURCE_NOT_FOUND,
         Type.IMAGE_NOT_FOUND,
         Type.AUTOMOD_MESSAGE_BLOCKED,
+        Type.MFA_CANCELLED,
         Type.OTHER,
         -> context.getString(R.string.network_error_unknown)
     }
@@ -263,8 +268,10 @@ class RestApiError private constructor(
         private fun nonHttp(throwable: Throwable): RestApiError {
             val type = when {
                 throwable is CaptchaHelper.Failure -> Type.CAPTCHA_KNOWN_FAILURE
-                // Before the IOException arm: it is one, but it is a user decision, not a fault.
+                // Before the IOException arm: both are, but they are user decisions, not faults.
                 throwable is CaptchaCancellationException -> Type.CAPTCHA_CANCELLED
+                throwable is MfaCancellationException -> Type.MFA_CANCELLED
+                throwable is AccountSuspendedException -> Type.ACCOUNT_SUSPENDED
                 throwable is AppCancellationException -> Type.OTHER
                 throwable is SSLException -> Type.SSL
                 throwable is UnknownHostException -> Type.NETWORK
@@ -276,7 +283,7 @@ class RestApiError private constructor(
                 type, null, 0, throwable.message, null, false, emptyMap(),
                 null, null, throwable,
             ).apply {
-                if (type == Type.CAPTCHA_CANCELLED) {
+                if (type == Type.CAPTCHA_CANCELLED || type == Type.MFA_CANCELLED) {
                     showErrorToasts = false
                     shouldLog = false
                 }
@@ -306,11 +313,14 @@ class RestApiError private constructor(
             cfRay?.let { put("CF-Ray", it) }
         }
 
+        /** Key [messages] uses for a form-level `_errors` array, which belongs to no input. */
+        const val MISC_ERRORS = "_misc"
+
         private fun flattenErrors(node: JsonObject, path: String, output: MutableMap<String, List<String>>) {
             node.entrySet().forEach { (key, value) ->
                 val childPath = if (path.isEmpty()) key else "$path.$key"
                 if (key == "_errors" && value.isJsonArray) {
-                    output[path.ifEmpty { "_misc" }] = value.asJsonArray.mapNotNull {
+                    output[path.ifEmpty { MISC_ERRORS }] = value.asJsonArray.mapNotNull {
                         it.takeIf(JsonElement::isJsonObject)?.asJsonObject?.get("message")?.asString
                     }
                 } else if (value.isJsonObject) {

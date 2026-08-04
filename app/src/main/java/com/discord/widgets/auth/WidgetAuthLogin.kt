@@ -34,7 +34,7 @@ class WidgetAuthLogin : AuthFragment(R.layout.widget_auth_login, AuthRoute.LOGIN
     private fun login() {
         captureState()
         val errors = AuthUiRules.login(model.state.identifier, password.text())
-        if (errors.isNotEmpty()) model.update { it.copy(fieldErrors = errors) }
+        if (errors.isNotEmpty()) model.update { it.copy(fieldErrors = errors.resolve()) }
         else submit(AuthAction.Login(model.state.identifier, password.text()))
     }
 
@@ -50,7 +50,7 @@ class WidgetAuthLogin : AuthFragment(R.layout.widget_auth_login, AuthRoute.LOGIN
             isPassword = true,
             okText = getString(R.string.login),
             shouldHideKeyboard = true,
-            inputValidator = { AuthUiRules.token(it)["token"] },
+            inputValidator = { AuthUiRules.token(it)["token"]?.let(::getString) },
         )
     }
 

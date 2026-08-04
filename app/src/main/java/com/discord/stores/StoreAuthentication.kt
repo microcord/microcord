@@ -9,17 +9,27 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.util.Patterns
 import androidx.core.content.ContextCompat
+import com.discord.api.auth.AuthSessionChange
+import com.discord.api.auth.ForgotPasswordResponse
 import com.discord.api.auth.RegisterResponse
 import com.discord.api.auth.RequiredAction
+import com.discord.api.auth.mfa.MfaMethodType
+import com.discord.api.auth.mfa.SendMfaSmsResponse
 import com.discord.api.channel.Channel
 import com.discord.models.authentication.AuthState
+import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.auth.ModelLoginResult
 import com.discord.models.user.MeUser
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
+import com.discord.restapi.cookie.CookieJars
 import com.discord.stores.authentication.AuthStateCache
+import com.discord.utilities.error.AccountSuspendedException
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.time.TimeUtils
+import com.google.gson.FieldNamingPolicy
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import java.util.concurrent.TimeUnit
 import retrofit2.HttpException
 import retrofit2.Response
@@ -49,6 +59,7 @@ class StoreAuthentication(
     private var _isConsentRequired: Boolean? = null
     private val ageGateError = BehaviorSubject.create<String?>()
     private var authState: AuthState? = null
+    private var authSessionIdHash: String? = null
     private val authStateCache = AuthStateCache(preferences)
     /**
      * Seeded with `null` so a subscriber attaching before [init] immediately learns "logged out"
@@ -93,7 +104,7 @@ class StoreAuthentication(
         return getFingerprintSnapshotOrGenerate().flatMap {
             requireApi().postAuthLogin(
                 RestAPIParams.AuthLogin(login, password, undelete, loginSource),
-            ).body()
+            ).loginBody()
         }.doOnNext { loginResult ->
             // An MFA challenge is a 200 carrying a ticket and no token. Dispatching it would
             // publish a null-token auth state and fire the "logged in" event; the caller must be
@@ -111,6 +122,9 @@ class StoreAuthentication(
         guildTemplateCode: String? = null,
         consent: Boolean = false,
         dateOfBirth: String? = null,
+        globalName: String? = null,
+        giftCodeSkuId: String? = null,
+        promotionalEmailOptIn: Boolean? = null,
     ): Observable<RegisterResponse> {
         setSavedLogin(email)
         return getFingerprintSnapshotOrGenerate().flatMap { currentFingerprint ->
@@ -125,26 +139,59 @@ class StoreAuthentication(
                     guildTemplateCode,
                     consent,
                     dateOfBirth,
+                    globalName,
+                    giftCodeSkuId,
+                    promotionalEmailOptIn,
                 ),
-            ).body()
+            )
         }.doOnNext { result ->
             handleLoginResult(ModelLoginResult(token = result.token, ticket = null, userSettings = null, requiredActions = null))
         }
     }
 
-    fun authMFA(code: String, ticket: String): Observable<ModelLoginResult> =
-        requireApi().postMFACode(RestAPIParams.MFALogin(ticket, code)).body().doOnNext(::handleLoginResult)
+    fun authMFA(
+        authenticatorType: MfaMethodType,
+        code: String,
+        ticket: String,
+        loginInstanceId: String? = null,
+    ): Observable<ModelLoginResult> = requireApi()
+        .postMFACode(authenticatorType.wireName, RestAPIParams.MFALogin(ticket, code, loginInstanceId))
+        .loginBody()
+        .doOnNext(::handleLoginResult)
 
-    fun authorizeIP(token: String): Observable<Response<Void>> =
+    /** Starts the SMS leg of a login challenge; returns the redacted number the code went to. */
+    fun sendMfaSms(ticket: String): Observable<SendMfaSmsResponse> =
+        requireApi().sendMFASms(RestAPIParams.MFASendSms(ticket))
+
+    fun oneTimeLogin(ticket: String): Observable<ModelLoginResult> =
+        requireApi().oneTimeLogin(RestAPIParams.OneTimeLogin(ticket)).doOnNext(::handleLoginResult)
+
+    fun authorizeIP(token: String): Observable<Unit> =
         requireApi().authorizeIP(RestAPIParams.AuthorizeIP(token))
 
-    fun forgotPassword(login: String): Observable<Response<Void>> =
+    fun forgotPassword(login: String): Observable<ForgotPasswordResponse> =
         requireApi().forgotPassword(RestAPIParams.ForgotPassword(login))
 
-    fun resendVerificationEmail(): Observable<Response<Void>> =
+    fun resendVerificationEmail(): Observable<Unit> =
         requireApi().postAuthVerifyResend(RestAPIParams.EmptyBody())
 
     fun handleLoginResult(loginResult: ModelLoginResult) = dispatcher.schedule { onLoginResult(loginResult) }
+
+    @StoreThread
+    fun handleConnectionOpen(payload: ModelPayload) {
+        StoreThreadScheduler.assertCurrentThread()
+        authSessionIdHash = payload.authSessionIdHash
+    }
+
+    /** A password reset moves the connection to a new auth session without dropping it. */
+    @StoreThread
+    fun handleAuthSessionChange(change: AuthSessionChange) {
+        StoreThreadScheduler.assertCurrentThread()
+        authSessionIdHash = change.authSessionIdHash
+    }
+
+    /** Which entry of `auth/sessions` is this connection, so the list can refuse to revoke it. */
+    fun getAuthSessionIdHash(): String? = authSessionIdHash
 
     fun loginWithToken(token: String) {
         require(token.isNotBlank()) { "Token is required." }
@@ -188,11 +235,12 @@ class StoreAuthentication(
         authStateCache.cacheAuthState(state)
         if (state == null) {
             // Logout must leave nothing of the previous account behind: every Kryo-backed
-            // Persister value and the whole preference store go, not just the token. Without this
-            // the next account inherits the previous one's guild order, folders, read states and
-            // settings.
+            // Persister value, the whole preference store, and the cookie jar — which lives in its
+            // own preference file and holds the `__Secure-recent_mfa` elevation bypass. Without
+            // this the next account inherits guild order, folders, read states and settings.
             Persister.reset()
             preferences.edit().clear().apply()
+            CookieJars.clear()
         }
     }
 
@@ -301,6 +349,31 @@ class StoreAuthentication(
             ?: Observable.error(HttpException(response))
     }
 
+    /**
+     * As [body], but recognises the suspension response.
+     *
+     * A suspended account answers login and MFA with a 403 whose body looks like a success
+     * (`user_id` plus `suspended_user_token`) and carries no error code, so the generic classifier
+     * would report it as an ordinary forbidden.
+     */
+    private fun Observable<Response<ModelLoginResult>>.loginBody(): Observable<ModelLoginResult> =
+        flatMap { response ->
+            // Emit the response already in hand. Deferring to `body()` here would re-subscribe to
+            // the cold Retrofit observable and post the whole request a second time, spending a
+            // single-use MFA ticket that the first attempt had already consumed.
+            val result = response.body()
+            if (response.isSuccessful && result != null) return@flatMap Observable.just(result)
+            if (response.isSuccessful) return@flatMap Observable.error(HttpException(response))
+            // Peeked, not consumed: the same body still has to classify the failure downstream.
+            val suspended = runCatching {
+                response.errorBody()?.source()?.peek()?.readUtf8()
+                    ?.let { SUSPENSION_GSON.fromJson(it, ModelLoginResult::class.java) }
+            }.getOrNull()?.suspendedUserToken?.takeUnless(String::isBlank)
+            Observable.error(
+                if (suspended != null) AccountSuspendedException() else HttpException(response),
+            )
+        }
+
     @SuppressLint("MissingPermission")
     private fun getDeviceEmail(context: Context): String? {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.GET_ACCOUNTS) != PackageManager.PERMISSION_GRANTED) return null
@@ -312,6 +385,10 @@ class StoreAuthentication(
     companion object {
         const val CACHE_KEY_FINGERPRINT = "STORE_AUTHED_FINGERPRINT"
         const val CACHE_KEY_LOGIN = "STORE_AUTHED_LOGIN"
+
+        private val SUSPENSION_GSON: Gson = GsonBuilder()
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .create()
         private const val RNA_CACHE_NAME = "CacheStore"
         private const val RNA_TOKEN_KEY = "token"
 

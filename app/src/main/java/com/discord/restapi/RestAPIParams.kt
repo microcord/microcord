@@ -72,11 +72,19 @@ object RestAPIParams {
     ) {
         override fun toString(): String = "AuthLogin(<redacted>)"
 
+        /** Where a login was started from, when that was not the plain login screen. */
         object LoginSource {
-            const val LOGIN_SOURCE_KEYCHAIN_AUTO = "keychain_auto_login"
+            const val GIFT = "gift"
+            const val GUILD_TEMPLATE = "guild_template"
+            const val GUILD_INVITE = "guild_invite"
+            const val DM_INVITE = "dm_invite"
+            const val FRIEND_INVITE = "friend_invite"
+            const val ROLE_SUBSCRIPTION = "role_subscription"
+            const val ROLE_SUBSCRIPTION_SETTING = "role_subscription_setting"
         }
     }
 
+    /** [globalName] is the display name; registration has been pomelo-native since usernames split. */
     data class AuthRegister(
         val fingerprint: String,
         val username: String,
@@ -87,6 +95,9 @@ object RestAPIParams {
         val guildTemplateCode: String?,
         val consent: Boolean,
         val dateOfBirth: String? = null,
+        val globalName: String? = null,
+        val giftCodeSkuId: String? = null,
+        val promotionalEmailOptIn: Boolean? = null,
     ) {
         override fun toString(): String = "AuthRegister(<redacted>)"
     }
@@ -369,10 +380,8 @@ object RestAPIParams {
         override fun toString(): String = "DeletePhone(<redacted>)"
     }
 
-    class DisableAccount(
-        val password: String,
-        val code: String? = null,
-    ) {
+    /** MFA-gated: [com.discord.restapi.MfaInterceptor] supplies the verification, not a body field. */
+    class DisableAccount(val password: String) {
         override fun toString(): String = "DisableAccount(<redacted>)"
     }
 
@@ -404,6 +413,21 @@ object RestAPIParams {
     ) {
         override fun toString(): String = "EnableMFA(<redacted>)"
     }
+
+    data class ValidatePassword(val password: String) {
+        override fun toString(): String = "ValidatePassword(password=<redacted>)"
+    }
+
+    data class UsernameAttempt(val username: String)
+
+    data class OneTimeLogin(val ticket: String) {
+        override fun toString(): String = "OneTimeLogin(ticket=<redacted>)"
+    }
+
+    /** Body of `POST auth/sessions/logout`; 1-64 session id hashes. */
+    data class LogoutAuthSessions(val sessionIdHashes: List<String>)
+
+    data class RenameAuthenticator(val name: String)
 
     data class ForgotPassword(
         val login: String,
@@ -488,11 +512,25 @@ object RestAPIParams {
 
     data class LeaveGuildBody(val lurking: Boolean = false)
 
+    /**
+     * Body of `POST auth/mfa/{type}`.
+     *
+     * [loginInstanceId] ties the verification to the login attempt that issued the ticket; the
+     * server rejects a mismatch even when the code is right.
+     */
     data class MFALogin(
         val ticket: String,
         val code: String,
+        val loginInstanceId: String? = null,
+        val loginSource: String? = null,
+        val giftCodeSkuId: String? = null,
     ) {
         override fun toString(): String = "MFALogin(<redacted>)"
+    }
+
+    /** Body of `POST auth/mfa/sms/send`. */
+    data class MFASendSms(val ticket: String) {
+        override fun toString(): String = "MFASendSms(ticket=<redacted>)"
     }
 
     class MemberVerificationForm(
@@ -863,7 +901,6 @@ object RestAPIParams {
         val newPassword: String? = null,
         val username: String? = null,
         val pushToken: String? = null,
-        val code: String? = null,
         val discriminator: String? = null,
         val flags: Int? = null,
         val dateOfBirth: String? = null,

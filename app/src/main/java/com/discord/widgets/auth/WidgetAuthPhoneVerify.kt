@@ -6,6 +6,8 @@ import com.discord.R
 import com.discord.i18n.i18nRender
 import com.discord.views.CodeVerificationView
 
+private const val PASTE_VERIFY_DELAY_MS = 500L
+
 class WidgetAuthPhoneVerify : AuthFragment(R.layout.widget_auth_phone_verify, AuthRoute.PHONE_VERIFICATION) {
     private var ignoreAutopaste = true
 
@@ -50,7 +52,7 @@ class WidgetAuthPhoneVerify : AuthFragment(R.layout.widget_auth_phone_verify, Au
         val code = clipboardCode(6, stripSpaces = true) ?: return false
         val verification = view?.findViewById<CodeVerificationView>(R.id.auth_phone_verify_code) ?: return false
         verification.setCode(code)
-        verification.postDelayed({ verify(verification.code) }, 500L)
+        postVerify(verification, PASTE_VERIFY_DELAY_MS) { verify(verification.code) }
         return true
     }
 

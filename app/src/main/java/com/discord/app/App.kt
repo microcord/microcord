@@ -12,6 +12,8 @@ import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.captcha.ActivityCaptchaSolver
 import com.discord.utilities.captcha.CaptchaSolver
+import com.discord.utilities.mfa.ActivityMfaSolver
+import com.discord.utilities.mfa.MfaSolver
 import com.discord.utilities.lifecycle.ActivityProvider
 import com.discord.utilities.lifecycle.ApplicationProvider
 import com.discord.utilities.lifecycle.Backgrounded
@@ -40,6 +42,7 @@ class App : Application() {
         ActivityProvider.init(this)
         // Must precede StoreStream.initialize, which builds the REST clients.
         CaptchaSolver.install(ActivityCaptchaSolver())
+        MfaSolver.install(ActivityMfaSolver())
         ClockFactory.init()
         ScreenshotDetector.instance = ScreenshotDetector(this, AppLog, SharedPreferencesProvider.get())
         Backgrounded.init(this)

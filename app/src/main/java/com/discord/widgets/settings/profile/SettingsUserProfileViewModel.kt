@@ -19,6 +19,7 @@ import com.discord.stores.StoreStream
 import com.discord.stores.StoreUserProfile
 import com.discord.utilities.channel.GuildChannelsInfo
 import com.discord.utilities.premium.grantsAccessToCustomTagAndAnimatedAvatarFeatures
+import com.discord.utilities.user.UserUtils.isPremiumTier2
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
@@ -97,8 +98,18 @@ class SettingsUserProfileViewModel(
             val isPronounsChanged: Boolean
                 get() = currentPronouns.orEmpty() != savedProfile?.pronouns.orEmpty()
 
-            /** The global pronouns a blank guild field falls back to. */
+            /** The account-wide values a blank guild field falls back to. */
             val defaultPronouns = userProfile.userProfile?.pronouns.orEmpty()
+            val defaultBio = user.bio.orEmpty()
+
+            /**
+             * A per-guild bio, avatar and banner are Nitro features, so outside a guild this is
+             * always true. Pronouns and the nickname are not gated.
+             *
+             * Keyed on [guild] rather than [meMember] so a member that has not loaded yet cannot
+             * briefly present the gated fields as editable.
+             */
+            val canEditGuildProfile = guild == null || user.isPremiumTier2
 
             /** Only meaningful outside a guild scope; a guild profile has no display name. */
             val isDisplayNameChanged: Boolean

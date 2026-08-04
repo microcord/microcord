@@ -7,7 +7,6 @@ import com.discord.R
 import com.discord.app.AppDialog
 import com.discord.app.AppLog
 import com.discord.databinding.WidgetDisableDeleteAccountDialogBinding
-import com.discord.models.user.MeUser
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
@@ -44,33 +43,15 @@ class WidgetDisableDeleteAccountDialog : AppDialog(R.layout.widget_disable_delet
         binding.disableDeleteBody.setText(mode.bodyStringId)
         binding.disableDeleteConfirm.setText(getString(mode.confirmStringId))
         binding.disableDeleteCancel.setOnClickListener { dismiss() }
-        binding.disableDeleteCodeWrap.addBindedTextWatcher(this) {
-            binding.disableDeleteCodeWrap.error = null
-        }
         binding.disableDeletePasswordWrap.addBindedTextWatcher(this) {
             binding.disableDeletePasswordWrap.error = null
         }
         binding.disableDeleteConfirm.setOnClickListener { submit(mode) }
     }
 
-    override fun onViewBoundOrOnResume() {
-        super.onViewBoundOrOnResume()
-        StoreStream.getUsers().observeMe()
-            .ui(this)
-            .appSubscribe(WidgetDisableDeleteAccountDialog::class.java) { configureUI(it) }
-    }
-
-    private fun configureUI(me: MeUser) {
-        binding.disableDeleteCodeWrap.visibility = if (me.mfaEnabled) View.VISIBLE else View.GONE
-    }
-
     private fun submit(mode: Mode) {
         binding.disableDeleteConfirm.setIsLoading(true)
-        val body = RestAPIParams.DisableAccount(
-            password = binding.disableDeletePasswordWrap.getTextOrEmpty(),
-            code = binding.disableDeleteCodeWrap.getTextOrEmpty()
-                .takeIf { binding.disableDeleteCodeWrap.visibility == View.VISIBLE },
-        )
+        val body = RestAPIParams.DisableAccount(binding.disableDeletePasswordWrap.getTextOrEmpty())
         mode.request(RestAPI.api, body)
             .restSubscribeOn()
             .ui(this)
@@ -85,15 +66,9 @@ class WidgetDisableDeleteAccountDialog : AppDialog(R.layout.widget_disable_delet
 
     private fun handleError(error: RestApiError) {
         binding.disableDeleteConfirm.setIsLoading(false)
-        when (error.code) {
-            INVALID_PASSWORD_CODE -> {
-                binding.disableDeletePasswordWrap.error = error.message
-                error.showErrorToasts = false
-            }
-            INVALID_MFA_CODE -> {
-                binding.disableDeleteCodeWrap.error = error.message
-                error.showErrorToasts = false
-            }
+        if (error.code == INVALID_PASSWORD_CODE) {
+            binding.disableDeletePasswordWrap.error = error.message
+            error.showErrorToasts = false
         }
     }
 
@@ -125,7 +100,6 @@ class WidgetDisableDeleteAccountDialog : AppDialog(R.layout.widget_disable_delet
         private const val EXTRA_MODE = "extra_mode"
         private const val INVALID_MODE = -1
         private const val INVALID_PASSWORD_CODE = 50018
-        private const val INVALID_MFA_CODE = 60008
 
         @JvmStatic
         fun show(fragmentManager: FragmentManager, mode: Mode) {

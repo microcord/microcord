@@ -4,15 +4,23 @@ import com.discord.api.activity.ActivityActionConfirmation
 import com.discord.api.activity.ActivityMetadata
 import com.discord.api.application.Application
 import com.discord.api.application.ApplicationAsset
+import com.discord.api.auth.AuthSessionsResponse
+import com.discord.api.auth.ForgotPasswordResponse
+import com.discord.api.auth.PasswordStrength
 import com.discord.api.auth.RegisterResponse
-import com.discord.api.auth.mfa.DisableMfaRequestBody
+import com.discord.api.auth.UsernameEligibility
+import com.discord.api.auth.UsernameSuggestion
+import com.discord.api.auth.mfa.Authenticator
 import com.discord.api.auth.mfa.DisableMfaResponse
 import com.discord.api.auth.mfa.EnableMfaResponse
+import com.discord.api.auth.mfa.FinishMfaRequestBody
+import com.discord.api.auth.mfa.FinishMfaResponse
 import com.discord.api.auth.mfa.GetBackupCodesRequestBody
 import com.discord.api.auth.mfa.GetBackupCodesResponse
 import com.discord.api.auth.mfa.GetBackupCodesSendVerificationKeyRequestBody
 import com.discord.api.auth.mfa.GetBackupCodesSendVerificationKeyResponse
 import com.discord.api.auth.mfa.GetBackupCodesVerificationRequestBody
+import com.discord.api.auth.mfa.SendMfaSmsResponse
 import com.discord.api.bugreport.BugReportConfig
 import com.discord.api.channel.Channel
 import com.discord.api.commands.ApplicationCommandData
@@ -145,28 +153,55 @@ interface RestAPIInterface {
     fun postAuthFingerprint(@Body body: RestAPIParams.EmptyBody): Observable<FingerprintResponse>
 
     @POST("auth/register")
-    fun postAuthRegister(@Body body: RestAPIParams.AuthRegister): Observable<Response<RegisterResponse>>
+    fun postAuthRegister(@Body body: RestAPIParams.AuthRegister): Observable<RegisterResponse>
 
     @POST("auth/register/phone")
-    fun postAuthRegisterPhone(@Body body: RestAPIParams.AuthRegisterPhone): Observable<Response<Void>>
+    fun postAuthRegisterPhone(@Body body: RestAPIParams.AuthRegisterPhone): Observable<Unit>
 
     @POST("auth/login")
     fun postAuthLogin(@Body body: RestAPIParams.AuthLogin): Observable<Response<ModelLoginResult>>
 
     @POST("auth/logout")
-    fun logout(@Body body: RestAPIParams.UserDevices): Observable<Response<Void>>
+    fun logout(@Body body: RestAPIParams.UserDevices): Observable<Unit>
 
     @POST("auth/forgot")
-    fun forgotPassword(@Body body: RestAPIParams.ForgotPassword): Observable<Response<Void>>
+    fun forgotPassword(@Body body: RestAPIParams.ForgotPassword): Observable<ForgotPasswordResponse>
+
+    /**
+     * Redeems the ticket from a `discord.com/login/one-time?token=` mail.
+     *
+     * The only credential recovery completed in-app; `auth/forgot` answering `password_reset`
+     * instead mails a `/reset#token=` link, and a fragment is something no client parses.
+     */
+    @POST("auth/one-time-login")
+    fun oneTimeLogin(@Body body: RestAPIParams.OneTimeLogin): Observable<ModelLoginResult>
 
     @POST("auth/verify/resend")
-    fun postAuthVerifyResend(@Body body: RestAPIParams.EmptyBody): Observable<Response<Void>>
+    fun postAuthVerifyResend(@Body body: RestAPIParams.EmptyBody): Observable<Unit>
 
-    @POST("auth/mfa/totp")
-    fun postMFACode(@Body body: RestAPIParams.MFALogin): Observable<Response<ModelLoginResult>>
+    @GET("auth/sessions")
+    fun getAuthSessions(): Observable<AuthSessionsResponse>
+
+    /** MFA-gated. */
+    @POST("auth/sessions/logout")
+    fun logoutAuthSessions(@Body body: RestAPIParams.LogoutAuthSessions): Observable<Unit>
+
+    /** [authenticatorType] is an [com.discord.api.auth.mfa.MfaMethodType] wire name. */
+    @POST("auth/mfa/{authenticatorType}")
+    fun postMFACode(
+        @Path("authenticatorType") authenticatorType: String,
+        @Body body: RestAPIParams.MFALogin,
+    ): Observable<Response<ModelLoginResult>>
+
+    @POST("auth/mfa/sms/send")
+    fun sendMFASms(@Body body: RestAPIParams.MFASendSms): Observable<SendMfaSmsResponse>
+
+    /** Elevates the session for a sensitive action; the JWT goes back as `X-Discord-MFA-Authorization`. */
+    @POST("mfa/finish")
+    fun finishMFA(@Body body: FinishMfaRequestBody): Observable<FinishMfaResponse>
 
     @POST("auth/authorize-ip")
-    fun authorizeIP(@Body body: RestAPIParams.AuthorizeIP): Observable<Response<Void>>
+    fun authorizeIP(@Body body: RestAPIParams.AuthorizeIP): Observable<Unit>
 
     @POST("users/@me/mfa/codes")
     fun getBackupCodes(@Body body: GetBackupCodesRequestBody): Observable<GetBackupCodesResponse>
@@ -181,8 +216,9 @@ interface RestAPIInterface {
         @Body body: GetBackupCodesVerificationRequestBody,
     ): Observable<GetBackupCodesResponse>
 
+    /** MFA-gated: [com.discord.restapi.MfaInterceptor] supplies the verification, not a body field. */
     @POST("users/@me/mfa/totp/disable")
-    fun disableMFA(@Body body: DisableMfaRequestBody): Observable<DisableMfaResponse>
+    fun disableMFA(): Observable<DisableMfaResponse>
 
     @POST("users/@me/mfa/totp/enable")
     fun enableMFA(@Body body: RestAPIParams.EnableMFA): Observable<EnableMfaResponse>
@@ -193,8 +229,33 @@ interface RestAPIInterface {
     @POST("users/@me/mfa/sms/disable")
     fun disableMfaSMS(@Body body: RestAPIParams.ActivateMfaSMS): Observable<Void>
 
+    /** No POST counterpart: creating a key needs platform attestation this build cannot produce. */
+    @GET("users/@me/mfa/webauthn/credentials")
+    fun getAuthenticators(): Observable<List<Authenticator>>
+
+    /** MFA-gated. */
+    @PATCH("users/@me/mfa/webauthn/credentials/{authenticatorId}")
+    fun renameAuthenticator(
+        @Path("authenticatorId") authenticatorId: String,
+        @Body body: RestAPIParams.RenameAuthenticator,
+    ): Observable<Authenticator>
+
+    /** MFA-gated. Removing the last one disables MFA for the account. */
+    @DELETE("users/@me/mfa/webauthn/credentials/{authenticatorId}")
+    fun deleteAuthenticator(@Path("authenticatorId") authenticatorId: String): Observable<Unit>
+
     @GET("auth/location-metadata")
     fun getLocationMetadata(): Observable<ModelLocationMetadata>
+
+    @POST("auth/password/validate")
+    fun validatePassword(@Body body: RestAPIParams.ValidatePassword): Observable<PasswordStrength>
+
+    /** Unauthenticated twins of the pomelo endpoints, for use before an account exists. */
+    @GET("unique-username/username-suggestions-unauthed")
+    fun getUsernameSuggestion(@Query("global_name") globalName: String?): Observable<UsernameSuggestion>
+
+    @POST("unique-username/username-attempt-unauthed")
+    fun getUsernameEligibility(@Body body: RestAPIParams.UsernameAttempt): Observable<UsernameEligibility>
 
     // -- OAuth2 ---------------------------------------------------------------------------------
 
@@ -262,13 +323,25 @@ interface RestAPIInterface {
     @POST("phone-verifications/verify")
     fun phoneVerificationsVerify(
         @Body body: RestAPIParams.VerificationCode,
-    ): Observable<Response<ModelPhoneVerificationToken>>
+    ): Observable<ModelPhoneVerificationToken>
 
     @POST("phone-verifications/resend")
     fun phoneVerificationsResend(@Body body: RestAPIParams.VerificationCodeResend): Observable<Void>
 
     @POST("users/@me/phone")
     fun userPhoneWithToken(@Body body: RestAPIParams.VerificationPhoneCode): Observable<Void>
+
+    /**
+     * Same two-step shape as `users/@me/phone`, for a `REQUIRE_REVERIFIED_PHONE` gate.
+     *
+     * The number supplied must match the one already on the account; this proves ownership rather
+     * than changing it.
+     */
+    @POST("users/@me/phone/reverify")
+    fun userReverifyPhone(@Body body: RestAPIParams.Phone): Observable<Void>
+
+    @POST("users/@me/phone/reverify")
+    fun userReverifyPhoneWithToken(@Body body: RestAPIParams.VerificationPhoneCode): Observable<Void>
 
     @HTTP(method = "DELETE", path = "users/@me/phone", hasBody = true)
     fun userPhoneDelete(@Body body: RestAPIParams.DeletePhone): Observable<Void>

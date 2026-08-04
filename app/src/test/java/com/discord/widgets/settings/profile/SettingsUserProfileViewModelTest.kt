@@ -3,6 +3,7 @@ package com.discord.widgets.settings.profile
 import com.discord.api.premium.PremiumTier
 import com.discord.api.user.NsfwAllowance
 import com.discord.api.user.UserProfile
+import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
 import com.discord.models.user.MeUser
 import com.discord.nullserializable.NullSerializable
@@ -145,6 +146,21 @@ class SettingsUserProfileViewModelTest {
 
         assertEquals("any/all", profile?.pronouns)
         assertNull(profile?.accentColor)
+    }
+
+    @Test fun `a per-server bio needs nitro but a nickname and pronouns do not`() {
+        val guild = Guild(id = 7)
+        val free = loaded(user = user(), member = member(), pronouns = "any/all").copy(guild = guild)
+        val nitro = loaded(
+            user = user(premiumTier = PremiumTier.TIER_2),
+            member = member(),
+            pronouns = "any/all",
+        ).copy(guild = guild)
+
+        assertFalse(free.canEditGuildProfile)
+        assertTrue(nitro.canEditGuildProfile)
+        // The account-wide profile is never gated.
+        assertTrue(loaded(user = user()).canEditGuildProfile)
     }
 
     @Test fun `changed pronouns make the screen dirty`() {

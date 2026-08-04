@@ -1,15 +1,15 @@
 package com.discord.widgets.auth
 
+import com.discord.R
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
 import com.discord.utilities.error.RestApiError
+import com.discord.utilities.lifecycle.ApplicationProvider
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.time.TimeUtils
-import retrofit2.HttpException
-import retrofit2.Response
 import rx.Observable
 
 /**
@@ -56,6 +56,8 @@ object AuthRequests {
             is AuthAction.ResendPhoneCode -> resendPhoneCode(action, callback)
             is AuthAction.VerifyPhone -> verifyPhone(action, callback)
             is AuthAction.VerifyMfa -> verifyMfa(action, callback)
+            is AuthAction.SendMfaSms -> sendMfaSms(action, callback)
+            is AuthAction.OneTimeLogin -> oneTimeLogin(action, callback)
             is AuthAction.ResendEmail -> resendEmail(callback)
             is AuthAction.VerifyAge -> verifyAge(action, callback)
             is AuthAction.ForgotPassword -> forgotPassword(action, callback)
@@ -68,7 +70,7 @@ object AuthRequests {
     private fun tokenLogin(action: AuthAction.TokenLogin, callback: (AuthResult) -> Unit) {
         val errors = AuthUiRules.token(action.token)
         if (errors.isNotEmpty()) {
-            callback(AuthResult.Failure(fieldErrors = errors))
+            callback(AuthResult.Failure(fieldErrors = errors.resolve()))
             return
         }
         authentication.loginWithToken(action.token)
@@ -91,23 +93,26 @@ object AuthRequests {
         // credential a second time because the API requires it with `undelete = true`.
         pendingLogin = action
         authentication
-            .login(identifier, action.password, undelete)
+            .login(identifier, action.password, undelete, loginSource())
             .dispatch(
                 tag = "REST: login",
                 callback = callback,
                 onSuccess = { result ->
                     // An MFA challenge is a 200 with a ticket and no token. StoreAuthentication has
                     // already declined to dispatch it as a login, so the code screen is next.
-                    val ticket = result.ticket
-                    if (result.mfa && ticket != null) {
-                        pendingLogin = null
+                    val challenge = result.mfaChallenge()
+                    pendingLogin = null
+                    if (result.mfa && challenge != null) {
                         AuthResult.Challenge(
                             AuthRoute.MFA,
                             AuthUiState(route = AuthRoute.MFA, identifier = identifier)
-                                .withCredentials(ticket = ticket),
+                                .withCredentials(
+                                    ticket = challenge.ticket,
+                                    mfaChallenge = challenge,
+                                    loginInstanceId = result.loginInstanceId,
+                                ),
                         )
                     } else {
-                        pendingLogin = null
                         AuthResult.Success()
                     }
                 },
@@ -169,15 +174,21 @@ object AuthRequests {
         login(credentials, undelete = true, callback = callback)
     }
 
+    /** The invite or template that opened the landing screen is accepted on the server side. */
     private fun register(action: AuthAction.Register, callback: (AuthResult) -> Unit) {
+        val landing = pendingLandingContext
         authentication
             .register(
                 username = action.username,
                 email = action.email,
                 phoneToken = action.phoneToken,
                 password = action.password,
+                invite = landing?.inviteCode,
+                guildTemplateCode = landing?.guildTemplateCode,
                 consent = action.consented,
                 dateOfBirth = action.birthday?.let { TimeUtils.toUTCDateTime(it, DATE_OF_BIRTH_FORMAT) },
+                globalName = action.globalName?.takeUnless(String::isBlank),
+                promotionalEmailOptIn = action.promotionalEmailOptIn,
             )
             .dispatch("REST: register", callback) { AuthResult.Success() }
     }
@@ -186,7 +197,6 @@ object AuthRequests {
     private fun sendPhoneCode(action: AuthAction.SendPhoneCode, callback: (AuthResult) -> Unit) {
         RestAPI.api
             .postAuthRegisterPhone(RestAPIParams.AuthRegisterPhone(action.phone))
-            .requireSuccessfulEmpty()
             .dispatch("REST: register phone", callback) {
                 AuthResult.Challenge(
                     AuthRoute.PHONE_VERIFICATION,
@@ -210,7 +220,6 @@ object AuthRequests {
     private fun verifyPhone(action: AuthAction.VerifyPhone, callback: (AuthResult) -> Unit) {
         val request = RestAPI.api
             .phoneVerificationsVerify(RestAPIParams.VerificationCode(action.phone, action.code))
-            .requireSuccessful()
 
         if (action.purpose != AuthPhonePurpose.LOGIN) {
             request.dispatch("REST: verify phone", callback) { verification ->
@@ -221,7 +230,6 @@ object AuthRequests {
 
         request.execute("REST: verify phone", callback) { verification ->
             authentication.authorizeIP(verification.token)
-                .requireSuccessfulEmpty()
                 .execute("REST: authorize IP", callback) {
                     val credentials = pendingLogin
                     if (credentials == null) callback(AuthResult.Success(nextRoute = AuthRoute.LOGIN))
@@ -251,14 +259,26 @@ object AuthRequests {
 
     private fun verifyMfa(action: AuthAction.VerifyMfa, callback: (AuthResult) -> Unit) {
         authentication
-            .authMFA(action.code, action.ticket)
+            .authMFA(action.authenticatorType, action.code, action.ticket, action.loginInstanceId)
             .dispatch("REST: mfa", callback) { AuthResult.Success() }
+    }
+
+    /** The reply carries the redacted number, which the SMS screen shows as "sent to …". */
+    private fun sendMfaSms(action: AuthAction.SendMfaSms, callback: (AuthResult) -> Unit) {
+        authentication
+            .sendMfaSms(action.ticket)
+            .dispatch("REST: mfa sms", callback) { AuthResult.Success(message = it.phone) }
+    }
+
+    private fun oneTimeLogin(action: AuthAction.OneTimeLogin, callback: (AuthResult) -> Unit) {
+        authentication
+            .oneTimeLogin(action.ticket)
+            .dispatch("REST: one time login", callback) { AuthResult.Success() }
     }
 
     private fun resendEmail(callback: (AuthResult) -> Unit) {
         authentication
             .resendVerificationEmail()
-            .requireSuccessfulEmpty()
             .dispatch("REST: resend verification email", callback) { AuthResult.Success() }
     }
 
@@ -297,12 +317,11 @@ object AuthRequests {
     private fun forgotPassword(action: AuthAction.ForgotPassword, callback: (AuthResult) -> Unit) {
         val login = action.identifier
         if (login.isBlank()) {
-            callback(AuthResult.Failure(fieldErrors = mapOf("identifier" to "Email or phone number is required.")))
+            callback(AuthResult.Failure(fieldErrors = mapOf("identifier" to string(R.string.login_required))))
             return
         }
         authentication
             .forgotPassword(login)
-            .requireSuccessfulEmpty()
             .dispatch(
                 tag = "REST: forgot password",
                 callback = callback,
@@ -320,8 +339,21 @@ object AuthRequests {
                         null
                     }
                 },
-            ) { AuthResult.Success(message = login) }
+            ) { response ->
+                lastResetIsOneTimeLogin = response.isOneTimeLogin
+                AuthResult.Success(message = login)
+            }
     }
+
+    /**
+     * Whether the last `auth/forgot` mail carries a one-time login link.
+     *
+     * The other answer sends a `/reset#token=` link only a browser can complete, so the two need
+     * different wording on the "check your email" toast.
+     */
+    @Volatile
+    var lastResetIsOneTimeLogin: Boolean = false
+        private set
 
     private fun changePassword(action: AuthAction.ChangePassword, callback: (AuthResult) -> Unit) {
         RestAPI.api
@@ -329,7 +361,6 @@ object AuthRequests {
                 RestAPIParams.UserInfo(
                     password = action.currentPassword,
                     newPassword = action.newPassword,
-                    code = action.mfaCode,
                 ),
             )
             .dispatch("REST: change password", callback) { AuthResult.Success() }
@@ -350,6 +381,24 @@ object AuthRequests {
 
     internal fun cancelPendingLogin() {
         pendingLogin = null
+    }
+
+    /** The invite or guild template the app was opened with, if any. */
+    class LandingContext(val inviteCode: String?, val guildTemplateCode: String?)
+
+    private fun loginSource(): String? = pendingLandingContext?.let {
+        when {
+            it.guildTemplateCode != null -> RestAPIParams.AuthLogin.LoginSource.GUILD_TEMPLATE
+            it.inviteCode != null -> RestAPIParams.AuthLogin.LoginSource.GUILD_INVITE
+            else -> null
+        }
+    }
+
+    @Volatile
+    private var pendingLandingContext: LandingContext? = null
+
+    fun setLandingContext(context: LandingContext?) {
+        pendingLandingContext = context
     }
 
     // region plumbing
@@ -387,36 +436,32 @@ object AuthRequests {
             ) { value -> onSuccess(value) }
     }
 
-    /**
-     * Turns a non-2xx `Response` into an error.
-     *
-     * Endpoints declared as `Observable<Response<T>>` emit normally on a 4xx, so without this a
-     * rejected phone number would be read as success.
-     */
-    private fun <T : Any> Observable<Response<T>>.requireSuccessful(): Observable<T> = flatMap { response ->
-        val body = response.body()
-        if (response.isSuccessful && body != null) {
-            Observable.just(body)
-        } else {
-            Observable.error(HttpException(response))
-        }
-    }
+    /** No fragment here, so validation ids resolve against the application context. */
+    private fun Map<String, Int>.resolve(): Map<String, String> = mapValues { (_, res) -> string(res) }
+
+    private fun string(res: Int): String = ApplicationProvider.get().getString(res)
 
     /**
-     * As [requireSuccessful], for the endpoints whose success body is empty (`Response<Void>`).
+     * Splits a failure into per-input errors and one screen-level message.
      *
-     * A separate name rather than an overload: `Void` also satisfies the generic receiver above, so
-     * two same-named extensions would be ambiguous at the call site.
+     * Reference shows the response message only when no input owns the failure, so `Invalid Form
+     * Body` never appears next to the field errors it summarises. A form-level `_errors` array is
+     * nobody's field, and the reference drops it; it goes to the screen instead of being lost.
      */
-    private fun Observable<Response<Void>>.requireSuccessfulEmpty(): Observable<Unit> = flatMap { response ->
-        if (response.isSuccessful) Observable.just(Unit) else Observable.error(HttpException(response))
-    }
-
     private fun defaultFailure(error: RestApiError): AuthResult {
         val fieldErrors = error.messages
+            .filterKeys { it != RestApiError.MISC_ERRORS }
             .mapNotNull { (key, values) -> values.firstOrNull()?.let { fieldNameOf(key) to it } }
             .toMap()
-        return AuthResult.Failure(fieldErrors = fieldErrors, message = error.message)
+        val message = if (fieldErrors.isNotEmpty()) {
+            null
+        } else {
+            error.messages[RestApiError.MISC_ERRORS]?.firstOrNull()
+                ?: error.message
+                // Toasts are suppressed above, so a bodiless failure still needs something to show.
+                ?: error.displayString(ApplicationProvider.get())
+        }
+        return AuthResult.Failure(fieldErrors = fieldErrors, message = message)
     }
 
     /** Maps a server field name onto the key the auth forms use for that input. */

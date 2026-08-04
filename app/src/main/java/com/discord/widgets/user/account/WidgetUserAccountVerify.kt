@@ -73,16 +73,15 @@ class WidgetUserAccountVerify : WidgetUserAccountVerifyBase(R.layout.widget_user
         /**
          * Opens the gate for [action].
          *
-         * A phone number is accepted for any of the three actions that can be cleared by proving
-         * ownership; an e-mail only clears the e-mail requirement. That asymmetry is the reference's
-         * and it is why the two flags are computed separately rather than from one `when`.
+         * 126.21 let a phone number clear the e-mail requirement too; the current API is strict,
+         * so each gate now offers only the factors it actually accepts. An action with no factor
+         * (a captcha gate this build has no screen for) falls back to offering both rather than
+         * rendering an empty screen.
          */
         @JvmStatic
         fun launch(context: Context, action: RequiredAction) {
-            val phoneAllowed = action == RequiredAction.REQUIRE_VERIFIED_PHONE ||
-                action == RequiredAction.REQUIRE_VERIFIED_EMAIL ||
-                action == RequiredAction.REQUIRE_CAPTCHA
-            val emailAllowed = action == RequiredAction.REQUIRE_VERIFIED_EMAIL
+            val phoneAllowed = action.acceptsPhone || !action.isVerificationGate
+            val emailAllowed = action.acceptsEmail || !action.isVerificationGate
             val intent = WidgetUserAccountVerifyBase.getLaunchIntent(Mode.FORCED, phoneAllowed, emailAllowed)
             AnalyticsTracker.openModal("Suspicious Activity", "")
             AppScreenRouter.launch(context, WidgetUserAccountVerify::class.java, intent)

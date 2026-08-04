@@ -1805,6 +1805,14 @@ class StoreStream private constructor(
         // StoreUserConnections as its `connectionUpdates` source, which re-fetches on each signal.
         dispatchSubscribe(events.userRequiredActionUpdate, "streamUserRequiredActionUpdate",
             userRequiredActions::handleUserRequiredActionUpdate)
+        dispatchSubscribe(events.authSessionChange, "authSessionChange",
+            authentication::handleAuthSessionChange)
+        // Without this the session gate never reaches routing: agreements, verified email and
+        // verified phone all resolve to `MainRoute.LoggedIn` and the user lands in an app the
+        // server will refuse.
+        userRequiredActions.observeUserRequiredAction()
+            .distinctUntilChanged()
+            .subscribe(navigation::updateUserRequiredAction)
         dispatchSubscribe(events.userSubscriptionsUpdate, "userSubscriptionsUpdate") {
             subscriptions.handleUserSubscriptionsUpdate()
         }
@@ -2692,6 +2700,7 @@ class StoreStream private constructor(
         gatewayInitTimeout?.cancel()
         gatewayInitTimeout = null
         payload.authToken?.let(authentication::setAuthed)
+        authentication.handleConnectionOpen(payload)
         users.handleConnectionOpen(payload)
         payload.userSettings?.let {
             userSettings.handleConnectionOpen(it)

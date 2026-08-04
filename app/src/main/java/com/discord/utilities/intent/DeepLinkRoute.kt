@@ -18,6 +18,11 @@ sealed interface DeepLinkRoute {
     data class RemoteAuth(val fingerprint: String) : DeepLinkRoute {
         override fun toString() = "RemoteAuth(fingerprint=<redacted>)"
     }
+    /** `discord.com/login/one-time?token=`, the only credential recovery the app redeems itself. */
+    data class OneTimeLogin(val ticket: String) : DeepLinkRoute {
+        override fun toString() = "OneTimeLogin(ticket=<redacted>)"
+    }
+
     data class PremiumGuild(val guildId: Long?) : DeepLinkRoute
     data class Event(val guildOrChannelId: Long, val eventId: Long) : DeepLinkRoute
     data class StaticChannel(val guildId: Long, val destination: String) : DeepLinkRoute

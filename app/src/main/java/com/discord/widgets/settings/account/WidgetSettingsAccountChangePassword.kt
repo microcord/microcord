@@ -31,8 +31,6 @@ open class WidgetSettingsAccountChangePassword :
 
     protected lateinit var currentPassword: TextInputLayout
     protected lateinit var newPassword: TextInputLayout
-    protected lateinit var mfaCode: TextInputLayout
-    private lateinit var mfaTitle: TextView
     private lateinit var save: LoadingButton
     private lateinit var dimmer: DimmerView
     private val state = StatefulViews(R.id.change_password_new_password_input)
@@ -56,45 +54,19 @@ open class WidgetSettingsAccountChangePassword :
         setActionBarDisplayHomeAsUpEnabled()
         currentPassword = view.findViewById(R.id.change_password_current_password_input)
         newPassword = view.findViewById(R.id.change_password_new_password_input)
-        mfaCode = view.findViewById(R.id.change_password_two_factor)
-        mfaTitle = view.findViewById(R.id.change_password_two_factor_title)
         save = view.findViewById(R.id.change_password_save)
         dimmer = view.findViewById(R.id.dimmer_view)
 
         state.setupUnsavedChangesConfirmation(this)
         save.setIsLoading(false)
         save.setText(getText(R.string.change_password))
-        listOf(currentPassword, newPassword, mfaCode).forEach { input ->
+        listOf(currentPassword, newPassword).forEach { input ->
             input.addBindedTextWatcher(this) { input.error = null }
         }
+        save.setOnClickListener { saveNewPassword() }
     }
 
-    override fun onViewBoundOrOnResume() {
-        super.onViewBoundOrOnResume()
-        StoreStream.getUsers().observeMe()
-            .ui(this)
-            .appSubscribe(javaClass) { configureUI(it) }
-    }
-
-    private fun configureUI(me: MeUser) {
-        val mfaVisibility = if (me.mfaEnabled) View.VISIBLE else View.GONE
-        mfaTitle.visibility = mfaVisibility
-        mfaCode.visibility = mfaVisibility
-        if (me.mfaEnabled) {
-            validationManager.addInput(
-                Input.TextInputLayoutInput(
-                    MFA_FIELD,
-                    mfaCode,
-                    BasicTextInputValidator.createRequiredInputValidator(R.string.two_fa_token_required),
-                ),
-            )
-        } else {
-            validationManager.removeInput(MFA_FIELD)
-        }
-        save.setOnClickListener { saveNewPassword(me) }
-    }
-
-    private fun saveNewPassword(me: MeUser) {
+    private fun saveNewPassword() {
         if (!validationManager.validate(false)) return
         hideKeyboard()
         save.setIsLoading(true)
@@ -104,7 +76,6 @@ open class WidgetSettingsAccountChangePassword :
                 password = currentPassword.getTextOrEmpty(),
                 newPassword = replacement,
                 pushToken = StoreStream.getNotifications().getPushToken(),
-                code = mfaCode.getTextOrEmpty().takeIf { me.mfaEnabled },
             ),
         )
             .restSubscribeOn()
@@ -135,7 +106,6 @@ open class WidgetSettingsAccountChangePassword :
 
     companion object {
         const val CURRENT_PASSWORD_FIELD = "password"
-        const val MFA_FIELD = "mfa"
         const val NEW_PASSWORD_FIELD = "new_password"
 
         @JvmStatic

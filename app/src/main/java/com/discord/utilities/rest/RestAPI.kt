@@ -5,6 +5,7 @@ import com.discord.restapi.ChannelReorderDiagnostics
 import com.discord.restapi.ApplicationDirectoryAPI
 import com.discord.restapi.EmbeddedActivitiesAPI
 import com.discord.restapi.EmbeddedActivityOAuthAPI
+import com.discord.restapi.MfaInterceptor
 import com.discord.restapi.RestAPIBuilder
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.ReactNativeHeadersInterceptor
@@ -61,8 +62,10 @@ object RestAPI {
     /** Builds and publishes the authenticated client variants used by production. */
     @JvmStatic
     fun install(builder: RestAPIBuilder, interceptors: List<Interceptor>): RestAPIInterface {
-        // Outermost, so a captcha retry re-runs the chain below it and picks up fresh headers.
-        val chain = listOf(CaptchaInterceptor()) + interceptors
+        // Both retry by re-running the chain below them, so each picks up fresh headers. MFA sits
+        // outside captcha because its retry then carries the elevation through a captcha replay;
+        // the other order re-prompts the user for a code the request already earned.
+        val chain = listOf(MfaInterceptor(), CaptchaInterceptor()) + interceptors
         val api = builder.build(
             RestAPIInterface::class.java,
             interceptors = chain,

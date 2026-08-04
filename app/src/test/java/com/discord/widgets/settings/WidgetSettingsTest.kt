@@ -38,6 +38,7 @@ class WidgetSettingsTest {
             com.discord.R.id.account,
             com.discord.R.id.profile,
             com.discord.R.id.authorized_apps,
+            com.discord.R.id.sessions,
             com.discord.R.id.text_images_settings,
             com.discord.R.id.appearance,
             com.discord.R.id.language,

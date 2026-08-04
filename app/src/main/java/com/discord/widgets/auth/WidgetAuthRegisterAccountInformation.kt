@@ -12,6 +12,8 @@ private const val BIRTHDAY_VALUE = "auth_birthday_value"
 class WidgetAuthRegisterAccountInformation :
     AuthFragment(R.layout.widget_auth_register_account_information, AuthRoute.REGISTER_ACCOUNT) {
 
+    private val displayName
+        get() = requireView().findViewById<TextInputLayout>(R.id.auth_register_account_information_display_name_wrap)
     private val username
         get() = requireView().findViewById<TextInputLayout>(R.id.auth_register_account_information_username_wrap)
     private val password
@@ -33,8 +35,9 @@ class WidgetAuthRegisterAccountInformation :
             passwordForBirthday = null
             model.update { it.copy(birthday = result.getLong(BIRTHDAY_VALUE)) }
             val state = model.state
-            submit(AuthAction.Register(state.email, state.phoneToken, state.username, password, state.birthday, state.consented))
+            submit(state.registerAction(password))
         }
+        displayName.editText?.setText(model.state.globalName)
         username.editText?.setText(model.state.username)
         consent.visibility = if (model.state.consentRequired) View.VISIBLE else View.GONE
         view.findViewById<LoadingButton>(R.id.auth_register_account_information_button).setOnClickListener { next() }
@@ -47,19 +50,17 @@ class WidgetAuthRegisterAccountInformation :
         val passwordText = password.text()
         val errors = AuthUiRules.account(state.username, passwordText, state.consentRequired, state.consented)
         when {
-            errors.isNotEmpty() -> model.update { it.copy(fieldErrors = errors) }
+            errors.isNotEmpty() -> model.update { it.copy(fieldErrors = errors.resolve()) }
             state.birthday == null -> {
                 passwordForBirthday = passwordText
                 actions.navigate(AuthRoute.BIRTHDAY, state.copy(route = AuthRoute.BIRTHDAY))
             }
-            else -> submit(
-                AuthAction.Register(state.email, state.phoneToken, state.username, passwordText, state.birthday, state.consented),
-            )
+            else -> submit(state.registerAction(passwordText))
         }
     }
 
     override fun captureState() = model.update {
-        it.copy(username = username.text(), consented = consent.isChecked)
+        it.copy(username = username.text(), globalName = displayName.text(), consented = consent.isChecked)
     }
 
     override fun onDestroy() {
@@ -74,4 +75,16 @@ class WidgetAuthRegisterAccountInformation :
         requireView().findViewById<LoadingButton>(R.id.auth_register_account_information_button)
             .setIsLoading(state.loading)
     }
+
+    /** The display name is optional; the API generates one from the username when it is blank. */
+    private fun AuthUiState.registerAction(password: String) = AuthAction.Register(
+        email = email,
+        phoneToken = phoneToken,
+        username = username,
+        password = password,
+        birthday = birthday,
+        consented = consented,
+        globalName = globalName.takeUnless(String::isBlank),
+        promotionalEmailOptIn = if (consentRequired) consented else null,
+    )
 }

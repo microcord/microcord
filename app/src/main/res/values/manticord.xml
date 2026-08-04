@@ -6,4 +6,5 @@
     <string name="manticord_boot_title" translatable="false">MantiCord boot</string>
     <string name="manticord_login_with_token" translatable="false">Log in with token</string>
     <string name="manticord_token" translatable="false">Token</string>
+    <string name="manticord_token_required" translatable="false">A token is required.</string>
 </resources>

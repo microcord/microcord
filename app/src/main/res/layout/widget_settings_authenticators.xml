@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.CoordinatorLayout.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout">
+        <androidx.appcompat.widget.Toolbar app:navigationContentDescription="@string/back" app:navigationIcon="?attr/ic_action_bar_back" app:subtitle="@string/user_settings" app:title="@string/passkey_and_security_key" style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout style="@style/UiKit.ViewGroup.LinearLayout">
+            <TextView android:text="@string/passkey_and_security_key_description" style="@style/UiKit.Settings.Item.Addition"/>
+            <TextView android:id="@+id/authenticators_empty" android:text="@string/passkey_and_security_key_empty" android:visibility="gone" style="@style/UiKit.Settings.Item.Addition"/>
+            <androidx.recyclerview.widget.RecyclerView android:id="@+id/authenticators_list" android:paddingLeft="16dp" android:paddingRight="16dp" style="@style/UiKit.ViewGroup.RecyclerView"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

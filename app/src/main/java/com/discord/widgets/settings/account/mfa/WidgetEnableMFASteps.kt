@@ -51,20 +51,20 @@ class WidgetEnableMFASteps : AppFragment(R.layout.widget_enable_mfa_steps) {
             }
     }
 
+    /**
+     * The secret and password live only in the activity-scoped view model.
+     *
+     * They used to round-trip through `onSaveInstanceState`, which the view model already makes
+     * unnecessary for rotation and which is wrong for process death: a saved `Bundle` is written to
+     * disk, and neither a TOTP secret nor an account password belongs there. After process death the
+     * password is simply asked for again.
+     */
     override fun onViewStateRestored(savedInstanceState: Bundle?) {
         super.onViewStateRestored(savedInstanceState)
-        viewModel.setTotpSecret(
-            savedInstanceState?.getString(STATE_TOTP_SECRET_KEY)
-                ?: WidgetEnableMFAViewModel.generateNewTotpKey(),
-        )
-        savedInstanceState?.getString(STATE_TOTP_PASSWORD_KEY)?.let(viewModel::setPassword)
-            ?: showPasswordModal()
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        outState.putString(STATE_TOTP_SECRET_KEY, viewModel.getTotpSecret())
-        outState.putString(STATE_TOTP_PASSWORD_KEY, viewModel.getPassword())
+        if (viewModel.getTotpSecret() == null) {
+            viewModel.setTotpSecret(WidgetEnableMFAViewModel.generateNewTotpKey())
+        }
+        if (viewModel.getPassword() == null) showPasswordModal()
     }
 
     private fun showPasswordModal() {
@@ -79,8 +79,6 @@ class WidgetEnableMFASteps : AppFragment(R.layout.widget_enable_mfa_steps) {
     companion object {
         const val KEY_SCREEN = 2
         const val SUCCESS_SCREEN = 3
-        private const val STATE_TOTP_PASSWORD_KEY = "STATE_TOTP_PASSWORD_KEY"
-        private const val STATE_TOTP_SECRET_KEY = "STATE_TOTP_SECRET_KEY"
 
         @JvmStatic
         fun launch(context: Context) =

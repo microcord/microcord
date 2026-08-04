@@ -1,5 +1,6 @@
 package com.discord.widgets.auth
 
+import android.os.Bundle
 import android.view.View
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.ViewModel
@@ -16,6 +17,7 @@ import rx.Subscription
 
 class WidgetAuthLanding : AuthFragment(R.layout.widget_auth_landing, AuthRoute.LANDING) {
     private var landingSubscription: Subscription? = null
+    private var oneTimeLoginRedeemed = false
 
     private val landingModel: WidgetAuthLandingViewModel by viewModels {
         val route = (DeepLinkParser.parse(mostRecentIntent.dataString) as? LinkParseResult.Internal)?.route
@@ -27,6 +29,10 @@ class WidgetAuthLanding : AuthFragment(R.layout.widget_auth_landing, AuthRoute.L
             )
         }
         val guildTemplateCode = (route as? DeepLinkRoute.GuildTemplate)?.code
+        AuthRequests.setLandingContext(
+            AuthRequests.LandingContext(invite?.inviteCode, guildTemplateCode)
+                .takeIf { invite != null || guildTemplateCode != null },
+        )
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T = WidgetAuthLandingViewModel(
@@ -39,11 +45,31 @@ class WidgetAuthLanding : AuthFragment(R.layout.widget_auth_landing, AuthRoute.L
         }
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        oneTimeLoginRedeemed = savedInstanceState?.getBoolean(STATE_REDEEMED) == true
+    }
+
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         view.findViewById<MaterialButton>(R.id.auth_landing_login).setOnClickListener {
             actions.navigate(AuthRoute.LOGIN)
         }
+        redeemOneTimeLogin()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(STATE_REDEEMED, oneTimeLoginRedeemed)
+        super.onSaveInstanceState(outState)
+    }
+
+    /** Latched because tickets are single-use: a rotation must not replay a spent one. */
+    private fun redeemOneTimeLogin() {
+        if (oneTimeLoginRedeemed) return
+        val route = (DeepLinkParser.parse(mostRecentIntent.dataString) as? LinkParseResult.Internal)?.route
+        val ticket = (route as? DeepLinkRoute.OneTimeLogin)?.ticket ?: return
+        oneTimeLoginRedeemed = true
+        submit(AuthAction.OneTimeLogin(ticket))
     }
 
     override fun onStart() {
@@ -77,5 +103,9 @@ class WidgetAuthLanding : AuthFragment(R.layout.widget_auth_landing, AuthRoute.L
                 AuthUiState(route = AuthRoute.AGE_GATED, underageMessage = error),
             )
         }
+    }
+
+    private companion object {
+        const val STATE_REDEEMED = "one_time_login_redeemed"
     }
 }

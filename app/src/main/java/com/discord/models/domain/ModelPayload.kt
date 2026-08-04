@@ -47,6 +47,9 @@ class ModelPayload() {
         internal set
     var authToken: String? = null
         internal set
+    /** Identifies which entry of `auth/sessions` is this connection. */
+    var authSessionIdHash: String? = null
+        internal set
     var requiredAction: String? = null
         internal set
     var experiments: Map<Long, UserExperimentDto>? = null

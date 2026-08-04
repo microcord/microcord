@@ -1,6 +1,7 @@
 package com.discord.stores
 
 import com.discord.api.activity.Activity
+import com.discord.api.auth.AuthSessionChange
 import com.discord.api.channel.Channel
 import com.discord.api.channel.ChannelRecipient
 import com.discord.api.commands.ApplicationCommandAutocompleteResult
@@ -158,6 +159,7 @@ class StoreGatewayConnection(
     val userGuildSettingsUpdate = behavior<ModelNotificationSettings>()
     val userNoteUpdate = behavior<ModelUserNote.Update>()
     val userRequiredActionUpdate = behavior<UserRequiredActionUpdate>()
+    val authSessionChange = behavior<AuthSessionChange>()
     val userConnectionUpdate = behavior<Unit>()
     val userSubscriptionsUpdate = behavior<Unit>()
     val userPaymentSourcesUpdate = behavior<Unit>()
@@ -472,6 +474,7 @@ class StoreGatewayConnection(
             "USER_GUILD_SETTINGS_UPDATE" -> userGuildSettingsUpdate.emit(data)
             "USER_NOTE_UPDATE" -> userNoteUpdate.emit(data)
             "USER_REQUIRED_ACTION_UPDATE" -> userRequiredActionUpdate.emit(data)
+            "AUTH_SESSION_CHANGE" -> authSessionChange.emit(data)
             "USER_CONNECTIONS_UPDATE" -> userConnectionUpdate.emit(Unit)
             "USER_SUBSCRIPTIONS_UPDATE" -> userSubscriptionsUpdate.emit(Unit)
             "USER_PAYMENT_SOURCES_UPDATE" -> userPaymentSourcesUpdate.emit(Unit)

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="wrap_content" style="@style/UiKit.ViewGroup.Page">
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="16dp">
+        <TextView android:id="@+id/mfa_title" android:text="@string/mfa_v2_choose" style="@style/UiKit.TextView.H1.Bold"/>
+        <TextView android:textColor="?attr/colorHeaderSecondary" android:id="@+id/mfa_body" android:layout_marginTop="4dp" style="@style/UiKit.TextView.Subtext"/>
+        <LinearLayout android:orientation="vertical" android:id="@+id/mfa_method_list" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp"/>
+        <com.google.android.material.textfield.TextInputLayout android:id="@+id/mfa_code_wrap" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:visibility="gone" style="@style/UiKit.TextInputLayout">
+            <com.google.android.material.textfield.TextInputEditText android:imeOptions="actionDone" style="@style/UiKit.TextInputLayout.EditText.SingleLine"/>
+        </com.google.android.material.textfield.TextInputLayout>
+        <TextView android:textColor="?attr/colorTextLink" android:id="@+id/mfa_switch_method" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:visibility="gone" android:text="@string/mfa_v2_go_to_select" style="@style/UiKit.TextView.Subtext"/>
+        <com.discord.views.LoadingButton android:id="@+id/mfa_confirm" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:visibility="gone" app:lb_background_color="@color/brand_500" app:lb_progress_color="@color/white" app:lb_text="@string/confirm" app:lb_text_color="@drawable/button_text_color_primary_100"/>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

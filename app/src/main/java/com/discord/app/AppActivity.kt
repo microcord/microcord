@@ -546,9 +546,7 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
             when (route.action) {
                 RequiredAction.UPDATE_PASSWORD -> WidgetAuthForceChangePassword::class.java.name
                 RequiredAction.AGREEMENTS, RequiredAction.TOS_UPDATE_ACKNOWLEDGMENT -> "com.discord.widgets.tos.WidgetTos"
-                RequiredAction.REQUIRE_VERIFIED_EMAIL, RequiredAction.REQUIRE_VERIFIED_PHONE ->
-                    WidgetAuthRequiredAction::class.java.name
-                RequiredAction.REQUIRE_CAPTCHA -> WidgetAuthRequiredAction::class.java.name
+                RequiredAction.VERIFY_ACCOUNT -> WidgetAuthRequiredAction::class.java.name
             },
         )
     }

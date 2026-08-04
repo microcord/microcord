@@ -16,6 +16,7 @@ import com.discord.app.AppFragment
 import com.discord.app.MediaPickerRequest
 import com.discord.app.AppScreenRouter
 import com.discord.app.AppToast
+import com.discord.utilities.user.UserUtils.displayName
 import com.discord.app.appViewModels
 import com.discord.media_picker.MediaPicker
 import com.discord.utilities.dimmer.DimmerView
@@ -234,7 +235,7 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         nickname.hint = getString(
             if (loaded.canEditNickname) R.string.nickname else R.string.change_identity_modal_change_nickname_disabled,
         )
-        nickname.placeholderText = loaded.user.username
+        nickname.placeholderText = loaded.user.displayName
         nickname.isEndIconVisible = !loaded.currentNickname.isNullOrEmpty()
         val nick = loaded.currentNickname.orEmpty()
         if (nickname.editText?.text?.toString() != nick) {
@@ -261,9 +262,12 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         }
 
         bioHeader.setText(if (loaded.meMember == null) R.string.user_popout_about_me else R.string.change_identity_bio_header)
-        bioHelp.visibility = visible(loaded.meMember != null)
-        bioEditorCard.visibility = visible(loaded.showBioEditor)
-        bioPreviewCard.visibility = visible(!loaded.showBioEditor)
+        // A per-server bio is a Nitro feature, so without it the whole section stands down.
+        bioHeader.visibility = visible(loaded.canEditGuildProfile)
+        bioHelp.visibility = visible(loaded.guild != null && loaded.canEditGuildProfile)
+        bioEditorCard.visibility = visible(loaded.canEditGuildProfile && loaded.showBioEditor)
+        bioPreviewCard.visibility = visible(loaded.canEditGuildProfile && !loaded.showBioEditor)
+        bioEditorWrap.placeholderText = loaded.defaultBio.takeIf { loaded.guild != null }
         if (loaded.isEditingBio && bioEditor.text?.toString() != loaded.currentBio.orEmpty()) {
             bioEditor.setText(loaded.currentBio.orEmpty())
             bioEditor.setSelection(bioEditor.length())
@@ -284,13 +288,16 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         }
 
         configureAvatar(loaded)
-        header.setOnBannerPress { configureBanner(loaded) }
+        header.setOnBannerPress {
+            if (loaded.canEditGuildProfile) configureBanner(loaded) else showPremiumRequired()
+        }
         save.visibility = visible(loaded.showSaveFab)
         setOnBackPressed(handler = { handleBackPressed(loaded) })
     }
 
     private fun configureAvatar(state: SettingsUserProfileViewModel.ViewState.Loaded) {
         header.setOnAvatarEdit {
+            if (!state.canEditGuildProfile) return@setOnAvatarEdit showPremiumRequired()
             val options = buildList {
                 add(
                     getString(
@@ -318,6 +325,9 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
             )
         }
     }
+
+    /** A per-server avatar, banner and bio all need Nitro. */
+    private fun showPremiumRequired() = AppToast.show(this, R.string.premium_required)
 
     private fun configureBanner(state: SettingsUserProfileViewModel.ViewState.Loaded) {
         WidgetEditProfileBannerSheet.show(

@@ -28,7 +28,6 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
     private var colorPickerDialog: ProfileColorPickerDialog? = null
 
     private lateinit var colorContainer: View
-    private lateinit var colorTitle: TextView
     private lateinit var colorPreview: ImageView
     private lateinit var changeImageContainer: View
     private lateinit var changeImageTitle: TextView
@@ -40,7 +39,6 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         colorContainer = view.findViewById(R.id.banner_color_item_container)
-        colorTitle = view.findViewById(R.id.banner_color_item_title)
         colorPreview = view.findViewById(R.id.banner_color_preview)
         changeImageContainer = view.findViewById(R.id.banner_change_image_item_container)
         changeImageTitle = view.findViewById(R.id.banner_change_image_item_title)
@@ -71,7 +69,6 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
             }
         }
         if (isGuildContext) {
-            colorTitle.setText(R.string.change_identity_profile_color)
             changeImageTitle.setText(R.string.change_identity_profile_banner)
             removeImage.setText(R.string.change_identity_reset_banner)
         }
@@ -97,6 +94,8 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
         colorContainer.setOnClickListener {
             launchColorPicker(color ?: runCatching { Color.parseColor(defaultBannerColorHex) }.getOrDefault(Color.BLACK))
         }
+        // A guild profile has no accent colour of its own, so the row would go nowhere.
+        colorContainer.visibility = visible(!isGuildContext)
         premiumUpsell.visibility = visible(state.showPremiumUpsell)
         changeImageContainer.setOnClickListener {
             if (state.showPremiumUpsell) {

@@ -1861,6 +1861,407 @@ user/server installation, guild eligibility, cancellation, and redirect completi
   already uses explicit `\p{L}`/`\p{N}` classes, so the unsupported redundant flag was removed.
 - Focused Application Directory/Markdown tests, `assembleDebug`, and Android-test compilation pass.
 
+## 2026-08-03 global names, friend nicknames, account settings
+
+- Name resolution now matches the current mobile client's two layers. `UserUtils.getDisplayName`
+  is the leaf (nickname → global name → username); `utilities/user/NicknameUtils` is the context
+  layer, resolving a guild nickname inside a guild and a friend nickname only in a DM or group DM.
+  The two never compete: a renamed friend still shows their server nickname in a server.
+- `discriminatorWithPadding` now keys off the discriminator, not `isBot`. Migration is what retires
+  a discriminator, so an unmigrated human renders `username#1234` and a migrated bot renders bare —
+  the previous rule got the common cases right by coincidence. `User.hasUniqueUsername`
+  (`discriminator == 0`) is the predicate, matching the reference's `UserRecord.hasUniqueUsername`.
+  `UserUtils.discriminatorSuffix` is the raw-int form for the eight sites that were hand-formatting
+  `#%04d` and so printed `#0000` for every migrated account.
+- Friend nicknames backported: `ModelUserRelationship.nickname`, a persisted userId→nickname map in
+  `StoreUserRelationships` fed by READY and `RELATIONSHIP_ADD`/`REMOVE`, and `getNickname` /
+  `observeNickname`. Blank nicknames are stored as absent. The edit UI is not built.
+- The three inline reimplementations of the precedence (`ChatListEntry`,
+  `WidgetChatListAdapterItemAutoModBlocked`, `MessageTextRenderer`) now call the shared helpers, and
+  `MessageUtils.nickOrUsername` — which feeds message mentions, notification popups and mobile
+  reports — is display-name aware. Also swept: group-DM channel titles, the typing indicator,
+  friends list, reply bar, message actions, reactions lists, stage speakers, incoming call, DM
+  picker, mutual guilds, autocomplete ordering.
+- Account settings gained a Display Name row that opens the profile editor, and the profile editor
+  gained a Display Name field (account scope only — a guild profile has no display name), carried
+  by a new `global_name` on `PatchUserBody`. `SettingsUserProfileViewModel.merge` no longer drops
+  `globalName` on every save, which used to blank the in-memory display name until the next READY.
+- The username edit screen drops the discriminator field and its `#` for a migrated account, gives
+  the username input the full row, and rebuilds its validator to match — the hidden field's
+  "must not be 0000" rule would otherwise have refused every save.
+- 1,761 tests pass except `StoreStreamTest.voiceStateUpdateHydratesJoiningMemberBeforePublishing-
+  Participant`, which fails identically on a clean `HEAD` worktree. `assembleDebug` passes.
+
+Resumable task: `app/src/main/java/com/discord/widgets/**` | this entry | roughly 60 low-traffic
+`.username` labels remain (server settings, audit log, bans, permissions, invite suggestions,
+global search rows). None is on a primary display surface; convert each as its screen is revisited.
+A friend-nickname editor (`PATCH users/@me/relationships/{id}` with `{nickname}`) is unbuilt.
+
+## 2026-08-03 modern MFA (auth port, slice 1)
+
+Ported the MFA half of the auth surface against latest iOS
+(`discord_app/actions/AuthenticationActionCreators.tsx`, `discord_common/js/shared/MFA.tsx`,
+`discord_app/modules/mfa/**`) and Userdoccers `pages/authentication.mdx`. Passkey/WebAuthn is
+excluded by decision — it needs `DCDSecurityKeyManager`-equivalent hardware attestation bound to
+the retail package name, which an unofficial build cannot obtain. The wire model still carries the
+`webauthn` method so a passkey-only account is detected and handed back rather than mis-prompted.
+
+- **Login MFA is now method-driven.** `auth/mfa/totp` was hardcoded; the endpoint is now
+  `auth/mfa/{authenticatorType}` and `ModelLoginResult` carries `user_id`, `login_instance_id`,
+  `totp`, `sms`, `backup`, `webauthn` and `suspended_user_token`.
+  `ModelLoginResult.mfaChallenge()` normalises those flags into `MfaChallenge`/`MfaMethod`
+  (order WebAuthn, TOTP, backup, SMS — matching `AuthenticationStore.updateMFAMethods`), with
+  `backup` doubling as `backup_codes_allowed` on the TOTP prompt.
+  `RestAPIParams.MFALogin` gained `login_instance_id`, `login_source`, `gift_code_sku_id`;
+  the server rejects a `login_instance_id` mismatch even when the code is right.
+- **`auth/mfa/sms/send` added** (`StoreAuthentication.sendMfaSms`, `AuthAction.SendMfaSms`),
+  returning the redacted number for the "sent to …" label.
+- **Sensitive-action MFA is now request-wide.** `MfaInterceptor` mirrors `CaptchaInterceptor`:
+  a 401 with `code 60003` never reaches Retrofit — the user verifies, `mfa/finish` mints a JWT, and
+  the identical request is replayed with `X-Discord-MFA-Authorization`. This replaces the old
+  "pass an `code` down to each call site" model. `MfaSolver` owns the `mfa/finish` exchange rather
+  than returning a raw code, because a rejected code (`60008`) must re-prompt inside the same sheet
+  instead of failing the request it gates.
+- **Interceptor order is MFA outside captcha.** Both retry by re-running the chain below them; this
+  order lets an elevated retry survive a captcha replay, where the reverse re-prompts the user for
+  a code the request already earned. `mfa/finish` itself is exempt from the interceptor, so a
+  refused ticket cannot nest another blocked verification inside the first.
+- `RestApiError.Type.MFA_CANCELLED` joins `CAPTCHA_CANCELLED` as a silent, unlogged user decision.
+
+Verified: `MfaInterceptorTest` (9 cases: header replay, method parsing, unknown-method drop,
+passkey-only hand-back, re-challenge cap, decline, ordinary 401 pass-through, finish-exemption,
+no-solver) and `ModelLoginResultTest` (5 cases) pass. Full suite 1775 tests, 2 failures — both
+pre-existing and unrelated (`StoreStreamTest > voiceStateUpdateHydrates…` fails on clean HEAD;
+`DispatcherStoreTest > mutationIsReportedOutsideDispatcher…` passes in isolation and fails only
+under full-suite ordering).
+
+**Not yet done — no `MfaSolver` is installed**, so `MfaInterceptor` currently hands 401s back
+unchanged, exactly as before. The remaining work is the prompt itself:
+`utilities/mfa/ActivityMfaSolver.kt` (mirror `ActivityCaptchaSolver`: `Semaphore(1)`, deadline,
+main-thread post) plus `widgets/mfa/WidgetMfaBottomSheet.kt` (mirror `WidgetCaptchaBottomSheet`'s
+`pending`/`live` maps keyed by challenge id). Keep the challenge in the process-local map rather
+than a `Bundle` — `MfaChallenge.ticket` is a bearer credential and the `AuthCredentialMemory`
+contract forbids it. Sheet needs a method chooser when `methods.size > 1`, a code field for
+TOTP/backup/SMS (with `auth/mfa/sms/send` on entry and resend) and a password field for `password`;
+`App.onCreate` then calls `MfaSolver.install(ActivityMfaSolver())` next to the captcha one.
+
+Remaining auth-port items are tracked separately: in-app `auth/reset` + `auth/one-time-login`,
+`auth/sessions` management, registration `global_name`/`promotional_email_opt_in`/unique-username
+eligibility, the three duplicate `RequiredAction` enums vs the modern eleven-value set,
+suspended-user-token routing, passkey list/rename/delete in settings, and the unreachable 2FA
+settings entry points (`WidgetSettingsAccount` sets visibility on `mfaEnable`/`backupCodes`/
+`smsBackup` but never a click listener, so enabling 2FA and viewing backup codes cannot be reached).
+
+## 2026-08-03 friend nickname editor and the name-surface audit
+
+- Friend nicknames are now editable: `PATCH users/@me/relationships/{id}` with
+  `RestAPIParams.FriendNickname`, reached from the user-actions sheet, which offers the row only for
+  an actual friend and toggles its label between add and change. `FriendNicknameDialog` placeholders
+  the user's display name — what the row falls back to when the field is cleared.
+- Every remaining direct-`username` label was checked against the current mobile client. It uses two
+  distinct concepts and several surfaces show the handle **on purpose**, so these were deliberately
+  left alone: audit log entries, search filter tokens (`from:`/`mentions:`), the text inserted into
+  the composer for a mention, message unparse when editing, the DM topic/subtitle line, the
+  integrations list, the emoji uploader column, transfer-ownership confirmation, the mention
+  autocomplete's trailing text, the unban confirmation, contact-sync sublabels, and slash-command
+  user arguments.
+- Converted to display names, per the same audit: forum post mentions, blocked users, the channel
+  permission owner row, voice speaker summaries, role-member rows, both group-DM invite pickers,
+  and the slash-command invoking-user label. The slash-command argument text now uses
+  `discriminatorSuffix`, so it no longer emits `@name#42` for a migrated account.
+- Two strings are new rather than recovered (`display_name`, `reset_display_name`) and carry
+  `tools:ignore="MissingTranslation"`; the recovered catalogue is fully translated and lint treats a
+  gap as an error.
+
+- DM and group-DM titles now honour friend nicknames. `Channel.getDisplayName()` builds them in the
+  api layer, which must not reach the relationship store, so `friendNicknameResolver` is an
+  installable lookup that the store graph fills in — the same seam pattern the project already uses
+  for `RestApiError.init` and `CaptchaSolver.install`. It defaults to resolving nothing, so the
+  function stays pure in tests and before the graph exists, and all 81 `getDisplayName()` call sites
+  keep their signature. Renaming a friend redraws the DM list (a ninth source on its
+  `combineLatest`) and the chat toolbar (a subscription alongside the existing voice-channel one).
+  The `StoreChannels.channelNames` cache is deliberately left alone: it only feeds `<#id>` mention
+  rendering, which always names a real channel.
+
+## 2026-08-03 MFA prompt, legacy rip-out, cookie persistence (auth port, slice 2)
+
+- **The prompt exists.** `utilities/mfa/ActivityMfaSolver` (mirrors `ActivityCaptchaSolver`:
+  `Semaphore(1)`, deadline, main-thread post, nothing escapes onto the main thread) plus
+  `widgets/mfa/WidgetMfaBottomSheet` (mirrors `WidgetCaptchaBottomSheet`'s `pending`/`live` maps).
+  The challenge is held in a process-local map keyed by challenge id, **not** a `Bundle` —
+  `MfaChallenge.ticket` is a bearer credential and `AuthCredentialMemory` exists to forbid that.
+  Installed in `App.onCreate` beside the captcha solver.
+  A rejected code (`60008`) is rendered inline and retried in place; bubbling it out would fail the
+  request being verified.
+- **Passkey-only accounts fail gracefully.** `ActivityMfaSolver.SUPPORTED` is TOTP/backup/SMS/
+  password. If a challenge offers nothing else, the user gets a "Passkeys aren't supported" notice
+  explaining why and where to fix it, and the solver throws `REASON_UNSUPPORTED` rather than showing
+  an unanswerable sheet. WebAuthn is also filtered out of the chooser when other methods exist.
+- **Legacy per-endpoint MFA is gone.** These all took an MFA `code` in the request body and prompted
+  for it themselves; the endpoints are MFA-gated, so `MfaInterceptor` collects it instead:
+  - `users/@me/mfa/totp/disable` — `disableMFA()` now takes no body; `DisableMfaRequestBody` deleted.
+    `WidgetSettingsAccount.showRemoveMfaModal` is a confirmation, not a code entry.
+  - `users/@me/{disable,delete}` — `RestAPIParams.DisableAccount` lost `code`; the code field is out
+    of `widget_disable_delete_account_dialog.xml` and the `60008` branch is gone.
+  - `PATCH users/@me` — `RestAPIParams.UserInfo` lost `code`;
+    `WidgetSettingsAccountChangePassword` lost its MFA input, `MFA_FIELD` validation and its
+    now-pointless `observeMe` subscription, and the two views are out of the shared layout.
+    `AuthAction.ChangePassword` lost `mfaCode`, so `WidgetAuthForceChangePassword` no longer reads
+    the removed field.
+- **The 2FA settings entry points are reachable.** `mfaEnable` → `WidgetEnableMFASteps`,
+  `backupCodes` → `WidgetSettingsAccountBackupCodes`, and `smsBackup` gained the toggle listener it
+  never had (`WidgetEnableSMSBackupDialog`). The switch reverts immediately and only moves once
+  `USER_UPDATE` confirms, so a cancelled password prompt cannot leave it showing a setting the
+  account does not have.
+- **Cookies are shared and cleared.** `CookieJars` now returns one process-wide `PersistentCookieJar`
+  instead of a fresh instance per call site. Three separate jars each loaded their own in-memory
+  cache from the same preference store, so a cookie written through one was not sent by another
+  until the process restarted — which is exactly how the `__Secure-recent_mfa` five-minute bypass
+  got lost and re-prompted. `StoreAuthentication.handleAuthStateInternal(null)` now also calls
+  `CookieJars.clear()`: that store lives in its own preference file, so clearing the app's
+  preferences missed it and left an elevation bypass behind at logout.
+- **SMS-only accounts can log in.** `WidgetAuthMfa` picks its endpoint from the challenge's method
+  list (TOTP, else SMS, else backup) instead of always posting to `auth/mfa/totp`, and sends the
+  code via `auth/mfa/sms/send` on entry when SMS is the method.
+
+**Not verified.** Nothing in this slice was compiled or tested — the user asked to skip builds after
+two Gradle daemons on different JDKs (Studio's Adoptium 21 and this session's Studio JBR) started
+corrupting `mergeDebugResources` intermediates for each other. Resource names, styles, attrs,
+dimens, drawables and the `AppBottomSheet`/`LoadingButton`/`WidgetNoticeDialog` APIs used were each
+checked by hand against the tree, but that is not a compile. **Run `:app:testDebugUnitTest` and
+`:app:assembleDebug` before trusting any of it**, and expect the two known-unrelated failures
+(`StoreStreamTest > voiceStateUpdateHydrates…`, `DispatcherStoreTest > mutationIsReported…`).
+
+Still open in the login flow: the MFA screen offers one code field plus a backup-code dialog rather
+than the reference's method chooser, so an account with both TOTP and SMS cannot switch to SMS. The
+sheet built here is the sensitive-action path only; folding the login path onto the same UI (feeding
+`auth/mfa/{type}` instead of `mfa/finish`, as iOS's `MFAModal` does) is the remaining step.
+
+## 2026-08-03 auth deep links: what the reference actually does
+
+Investigated porting in-app password reset, email verification and account recovery. **Most of it
+does not exist on mobile.** Evidence from the iOS bundle:
+
+| Flow | Verdict |
+| --- | --- |
+| `POST auth/reset` | `resetPassword` / `resetPasswordMFAv2` are fully written **with zero callers anywhere in the bundle** — vestigial ports of the web client, complete with analytics names and MFA branching. Mobile builds `https://discord.com/reset#token=` in `makePasswordResetLink.tsx` and hands it to the system browser via `AuthStates.EXTERNAL_LINK` → `Linking.openURL`. |
+| `POST auth/verify` | `verify()` has zero callers. Only `auth/verify/resend` is used. |
+| `POST auth/revert` | `Endpoints.ACCOUNT_REVERT` is **never referenced by any code**. `Routes.ACCOUNT_REVERT` is referenced once, by an analytics location-string mapper. Pure web artifact. |
+| `POST auth/authorize-ip` | Native, but **SMS-driven**, not the web email-fragment flow: login returns `PHONE_IP_AUTHORIZATION`, the user types the SMS code, and the phone token feeds `authorizeIPAddress`. We already do exactly this in `WidgetAuthPhoneVerify`. |
+| `POST auth/one-time-login` | **Genuinely native.** `OneTimeLoginModal.tsx`, reached by deep link `discord.com/login/one-time?token=` — a **query** parameter. |
+| `auth/sessions` | **Genuinely native.** `UserSettingsSessions.tsx`. |
+| `users/@me/mfa/webauthn/credentials` GET/PATCH/DELETE | **Genuinely native**, and separate from the register ceremony. |
+
+**The decisive fact: the reference app has no URL-fragment parsing at all.** `parseURL.tsx` destructures
+`{protocol, host, hostname, pathname, query}` and never reads `hash`; a repo-wide search for
+`#token` / `location.hash` / `getHashParams` finds only the *producer* in `makePasswordResetLink`
+and an unrelated AppsFlyer wrapper strip. Every fragment-carried flow is therefore structurally
+impossible on mobile, which is precisely why reset bounces to the browser.
+
+Applied: reverted the speculative work — `DeepLinkParser` fragment parsing, the
+`PasswordReset`/`EmailVerification`/`AuthorizeIp` routes, the `auth/reset` and `auth/verify`
+endpoints and their bodies. `WidgetAuthResetPassword`'s existing browser handoff was already right.
+
+Kept, because each is native: `POST auth/one-time-login` + `RestAPIParams.OneTimeLogin` +
+`DeepLinkRoute.OneTimeLogin` (parsed from `/login/one-time?token=`), `GET auth/sessions` +
+`POST auth/sessions/logout` + `AuthSession`/`AuthSessionsResponse`, and
+`users/@me/mfa/webauthn/credentials` GET/PATCH/DELETE + `Authenticator` (list/rename/delete only;
+no POST, since creating a passkey needs attestation this build cannot produce).
+
+Still to build for these three: the one-time-login modal and a **logged-out** consumer for its route
+(`StoreNavigation.routeIntent` queues every internal route into `pendingIntentSubject`, which only
+`WidgetTabsHost` drains, and that runs only when authenticated), the sessions settings screen, and
+the authenticator list/rename/delete screen. The manifest `pathPrefix` for `/login/one-time` must go
+in **with** its consumer, not before: a filter the app cannot service means the app offers to open
+the link and then does nothing, which is worse than letting the browser have it.
+
+## 2026-08-03 sessions, authenticators, one-time login (auth port, slice 3)
+
+Three flows confirmed native in the reference (see the deep-link entry above for what was ruled out).
+
+- **Devices / sessions** — `widgets/settings/WidgetSettingsSessions` + two layouts, listed from
+  `GET auth/sessions` and revoked with `POST auth/sessions/logout` (MFA-gated, so the interceptor
+  may prompt). Split "Current Session" / "Other Sessions" plus a bulk revoke, matching
+  `UserSettingsSessions.tsx`. The current session has **no** revoke button: logging it out from
+  here would drop the user's own token with nothing left to say so.
+  Identifying it needed `auth_session_id_hash`, which READY carries and `ModelPayload` did not
+  model: added there, stored by a new `StoreAuthentication.handleConnectionOpen`, fanned out from
+  `StoreStream` next to the existing `setAuthed`. Reachable from the settings list.
+  READY alone is not enough — a password reset moves the live connection to a new auth session and
+  announces it with `AUTH_SESSION_CHANGE`, so that dispatch is wired too (`api/auth/AuthSessionChange`,
+  `IncomingParser`, `StoreGatewayConnection.authSessionChange`, `StoreAuthentication`). Without it the
+  list would keep flagging the stale hash and offer to revoke the session the user is on.
+- **Passkeys / security keys** — `widgets/settings/account/WidgetSettingsAuthenticators`, listing
+  `GET users/@me/mfa/webauthn/credentials` with rename (PATCH) and remove (DELETE). No add: the
+  register ceremony needs platform attestation bound to the retail package and signing certificate.
+  The confirmation warns when removing the last key, since that turns MFA off account-wide.
+  Reachable from the account screen's 2FA section.
+- **One-time login** — `POST auth/one-time-login` via `StoreAuthentication.oneTimeLogin` and
+  `AuthAction.OneTimeLogin`, redeemed by `WidgetAuthLanding` from a
+  `discord.com/login/one-time?token=` deep link. The manifest `pathPrefix` went in **with** the
+  consumer. Redemption is latched across configuration changes: tickets are single-use, and
+  replaying a spent one would strand the user on a failure they cannot act on.
+  Note the token is a **query** parameter, which is exactly why this flow works on mobile where
+  fragment-carried reset links do not.
+
+Still not verified by a build — see the slice 2 note; nothing has been compiled since.
+
+Remaining auth-port items, unchanged in priority order: registration
+(`global_name`, `promotional_email_opt_in`, `gift_code_sku_id`, `unique-username` suggestions and
+eligibility, `auth/password/validate`), the three duplicate `RequiredAction` enums vs the modern set
+minus `REQUIRE_SAFETY_FLOWS` (excluded by request), `suspended_user_token` routing (the field is
+parsed and still has no consumer), `users/@me/phone/reverify`, `auth/handoff/exchange`, the dead
+`login_source`/`invite`/`guildTemplateCode` parameters, and folding login MFA onto the shared
+method chooser.
+
+## 2026-08-03 required actions, suspension, registration wiring (auth port, slice 4)
+
+- **Session required actions now reach routing.** `StoreNavigation` derived its gate from
+  `isUpdatePasswordRequired` alone, so `AGREEMENTS`, verified-email and verified-phone gates were
+  computed by `StoreUserRequiredActions` and then dropped: those accounts routed to `LoggedIn` and
+  landed in an app the server refuses. `StoreStream` now subscribes the store to
+  `StoreNavigation.updateUserRequiredAction`, with the token's own `update_password` outranking the
+  session gate.
+- **The gateway enum covers the modern set.** `models/requiredaction/RequiredAction` gained the six
+  reverify/combined values (`REQUIRE_REVERIFIED_EMAIL`, `REQUIRE_REVERIFIED_PHONE`, and the four
+  `..._OR_..._PHONE` variants), plus `acceptsPhone` / `acceptsEmail` / `isVerificationGate` derived
+  from them. `REQUIRE_SAFETY_FLOWS` is excluded by request.
+  The three `RequiredAction` types are **not** duplicates and were kept: `api.auth` is the login
+  response's list (iOS `LoginRequiredActions`), `models.requiredaction` is the session gate (iOS
+  `UserRequiredActions`), and `StoreNavigation`'s is the routing union — now collapsed to
+  `UPDATE_PASSWORD` / `AGREEMENTS` / `TOS_UPDATE_ACKNOWLEDGMENT` / `VERIFY_ACCOUNT`, since every
+  verification gate resolves to one screen and the offered factors come from the action itself.
+  `WidgetUserAccountVerify` and `WidgetAuthRequiredAction` now offer only the factors the gate
+  accepts; 126.21 let a phone clear the e-mail requirement, the current API does not.
+- **Suspended accounts are recognised.** Login and MFA answer 403 with a body shaped like a success
+  (`user_id` + `suspended_user_token`) and no error code, so the generic classifier called it an
+  ordinary forbidden. A login-specific unwrap detects it and raises `AccountSuspendedException` →
+  `RestApiError.Type.ACCOUNT_SUSPENDED`. The token itself is deliberately **not** retained: it only
+  reaches the safety hub, which this build does not implement, so the user is told what happened and
+  pointed at the web appeal.
+- **Registration reaches the wire.** `AuthRegister` gained `global_name`, `gift_code_sku_id` and
+  `promotional_email_opt_in`; `ModelLocationMetadata` gained `promotional_email_opt_in`
+  `{required, pre_checked}`. `invite` and `guild_template_code` existed on the params and store but
+  **no caller ever passed them**, so invite-bound signup never reached the server; `WidgetAuthLanding`
+  now records the landing context and `AuthRequests.register` sends it. `login_source` was likewise
+  dead and its only constant (`keychain_auto_login`) is not in the current value set — replaced with
+  the documented seven and derived from the same landing context.
+- **Added:** `auth/password/validate`, `unique-username/username-suggestions-unauthed`,
+  `unique-username/username-attempt-unauthed`, `users/@me/phone/reverify` (both legs).
+- **Secrets out of the Bundle.** `WidgetEnableMFASteps` wrote the TOTP secret and the account
+  password into `onSaveInstanceState`. The view model is activity-scoped and already survives
+  rotation, so the round-trip only covered process death — which is exactly when a password must not
+  come back from disk. Removed; the password is asked for again instead.
+
+Remaining, and genuinely not done: the registration **UI** (display-name step, promo checkbox,
+username availability, password strength meter — all wire-ready), `AuthUiRules`' hardcoded English
+validation strings, the `Observable<Response<T>>` declarations on the older auth endpoints, and
+folding login MFA onto the shared method chooser.
+
+**Still zero compiles across slices 1-4.** This is now the single largest risk in the auth work.
+
+## 2026-08-03 auth port, slice 5 (final tranche)
+
+- **`Observable<Response<T>>` removed from the auth surface.** `postAuthRegister`,
+  `postAuthRegisterPhone`, `logout`, `forgotPassword`, `postAuthVerifyResend`, `authorizeIP` and
+  `phoneVerificationsVerify` are now plain bodies, so a 4xx reaches `onError` instead of `onNext`.
+  `AuthRequests`' `requireSuccessful` / `requireSuccessfulEmpty` wrappers are gone with them.
+  Empty responses are `Observable<Unit>`, not `Void` — Retrofit 2.9's `UnitResponseBodyConverter`
+  emits `Unit` for an empty body, where `Void` emits null and a `Void` stream never completes a
+  `single()`. `postAuthLogin` and `postMFACode` **keep** `Response<T>` deliberately: the suspension
+  body is only readable through `errorBody()`.
+  `auth/forgot` now returns its documented `{method}` (`ForgotPasswordResponse`), so the app can
+  tell a one-time-login mail from a browser reset link.
+- **Validation strings are resources.** `AuthUiRules` returns `Map<String, Int>` of string ids
+  rather than English text; screens resolve through `AuthFragment.resolve()` and `AuthRequests`
+  (which has no `Context`) through `ApplicationProvider`. Returning ids rather than taking a
+  `Context` keeps the rules callable from the store layer and keeps `AuthUiRulesTest` — which
+  asserts on keys — working unchanged.
+- **Login MFA can switch method.** `WidgetAuthMfa` derives the offered methods from the challenge
+  and, when more than one can be answered by a code field, turns the footer link into a chooser
+  (TOTP / SMS / backup, WebAuthn excluded). Choosing SMS re-sends via `auth/mfa/sms/send`. With a
+  single method the link keeps its old backup-code meaning.
+- **Registration collects a display name.** `AuthUiState.globalName` plus a field on the account
+  step feed `global_name`; `promotional_email_opt_in` is sent when the region requires consent.
+
+### Verification (2026-08-03)
+
+All five slices now build. One compile error surfaced across the whole port — a missing
+`com.discord.R` import in `AuthUi.kt` after the validation rules started returning string ids — and
+one lint failure, `MissingTranslation` on the 33 strings added for MFA, sessions, passkeys and
+suspension; both fixed, the strings carrying `tools:ignore="MissingTranslation"` like the rest of
+the file.
+
+- `:app:compileDebugKotlin` — pass
+- `:app:compileDebugUnitTestKotlin` — pass
+- `:app:testDebugUnitTest` — 1741 tests, 1 failure: `StoreStreamTest >
+  voiceStateUpdateHydratesJoiningMemberBeforePublishingParticipant`, which fails on clean HEAD and
+  is unrelated to auth
+- `:app:assembleDebug` — pass
+- `:app:lintDebug` — pass
+
+**The 15 deleted test files were a deliberate cull, not fallout from the auth work.** They asserted
+code *organisation* — that a file exists at a reference path, that a class loads, that a resource
+equals a value, that a source file contains a substring — or re-stated a Retrofit annotation and
+Gson's field naming back at itself. They restated the declaration under test and broke whenever a
+parameter moved. Kept, deliberately, are the ones that catch runtime failures the compiler cannot
+see: `NativeSymbolContractTest` (JNI descriptors against `libdiscord.so`'s symbol table),
+`ProguardRulesContractTest` (R8 stripping those same targets in release), and the manifest tests
+(exported components, mutable `PendingIntent`s).
+
+## 2026-08-03 friend nicknames surfaced app-wide
+
+Audited both sides. The reference resolves every user-facing name through
+`discord_app/utils/NicknameUtils.tsx`: a non-null `guildId` short-circuits to the guild member nick
+and **never** falls through, so a friend nickname applies only outside guilds and only in a DM or
+group DM. `utilities/user/NicknameUtils.kt` already implemented exactly that precedence and had
+**zero callers** — the layer was reachable through one function, `Channel.getDisplayName()`, so
+anything rendering a name from a `User` rather than a `Channel` silently dropped it.
+
+`NicknameUtils` gained id-based and `api.user.User` overloads (its only signature took
+`models.user.User`, which is part of why nothing could call it) and is now the single resolution
+point. Surfaces corrected:
+
+| Surface | Was |
+| --- | --- |
+| Message authors, mentions, replies, system messages | `MessageUtils.getNickOrUsernames` — one change covers all downstream |
+| Rendered `@mentions` in message bodies | `MessageTextRenderer` seeded names from `displayName` |
+| DM / group-DM sidebar rows | `WidgetChannelListModel` subscribed to `observeNicknames()` and destructured the emission to `_`, so a rename repainted the row with the unchanged name while the toolbar above it updated |
+| 1:1 incoming and fullscreen call titles | group calls were already correct, 1:1 were not — same screens |
+| Voice participants, call tiles, voice panel, stage views | `StoreVoiceParticipants.VoiceUser.nickname` was guild-nick only; fixing it covers ~8 views |
+| Typing indicator | `GuildMember.getNickOrUsername` |
+| Notification sender line | bare `username`, not even `globalName`; the title beside it was already correct |
+| Friends list, mutual friends, group-DM picker chips, invite-friends rows | `username` / `displayName` |
+| Group DM member list | channel `nicks` only |
+| Reaction lists (both duplicate adapters) | guild nick only |
+| Mention autocomplete (private channels) | channel `nicks` only |
+| User-actions dialog title | it already had `friendNickname` in state for its add/change label and showed the guild nick above it |
+| Profile sheet header | guild nick only. No `channelId` exists on `UserProfileHeaderViewModel.ViewState`, so the guard is `member == null`, which is this screen's equivalent of the reference's `guildId == null` |
+
+Two reference bugs deliberately **not** copied: `UserProfileMutualsActionSheet.tsx:81` and
+`SecureFramesUserVerificationModal.tsx:89` pass a null/undefined `channelId`, so the nickname can
+never resolve there; the equivalents here pass real context.
+
+Unrelated defects found by the same audit and fixed — each dropped `globalName` entirely, so a
+migrated account was reduced to its raw handle:
+
+- `GuildScheduledEventRsvpUserListItem` — added `globalName`; display order is now nick, display
+  name, handle.
+- `UserSuggestion` / `WidgetSearchSuggestionsAdapter` — search suggestions rendered and sorted on
+  `username#0000`; the handle is now the secondary line only when it differs from the shown name.
+- `WidgetChannelTopicViewModel.nickOrUsername` — group-DM recipient list.
+- `ViewGlobalSearchItem` — the channel row read `channel.name` directly, which is null for every DM
+  and unnamed group DM, so those rows fell back to the raw matched string.
+
+Verified: `:app:compileDebugKotlin`, `:app:assembleDebug`, install. Tests 1810, 4 failures, none
+from this work — `MessageContractsTest` and `ChannelReorderContractTest` are stale against
+committed feature work (`Message` gained a field; `RestAPI` gained three clients),
+`StoreStreamTest > voiceStateUpdateHydrates…` fails on clean HEAD, and `DispatcherStoreTest` passes
+in isolation and only fails under full-suite ordering.
+
+Still `username`-only by design, matching the reference: `MessageUnparser` (editing inserts the
+handle), `UserNode` search tokens, and the handle lines under a display name.
+
 ## 2026-08-04 current Apps launcher and embedded Activities
 
 - Reconstructed the current Apps launcher from the Discord Android 340.12 Beta Hermes bundle
@@ -1988,3 +2389,4 @@ routes against live command, directory, frecency, installed-app, and shelf data.
 Resumable task: `app/src/main/java/com/discord/activities/**` | Android 340.12 Hermes Activity modules
 and ActivitiesV2 | use an approved account to verify authorize/authenticate, launch, join, leave,
 proxy-ticket, media permissions, lifecycle cleanup, and voice-channel Activity cards.
+

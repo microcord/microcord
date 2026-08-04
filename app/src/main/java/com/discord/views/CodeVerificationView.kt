@@ -97,21 +97,27 @@ class CodeVerificationView(context: Context, attrs: AttributeSet?) : LinearLayou
         refresh()
     }
 
+    /** Fills the cells without submitting; the caller decides when the pasted code is verified. */
     fun setCode(code: CharSequence) {
         val value = code.toString()
         if (value == this.code) return
         this.code = value
-        refresh()
+        refresh(notify = false)
     }
 
     fun clearCode() {
         if (code.isNotEmpty()) {
             code = ""
-            refresh()
+            refresh(notify = false)
         }
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val ours = event.keyCode == KeyEvent.KEYCODE_DEL ||
+            event.keyCode == KeyEvent.KEYCODE_0 ||
+            (event.unicodeChar != 0 && event.keyCode != KeyEvent.KEYCODE_ENTER)
+        // Anything else — Back above all — has to reach the rest of the window.
+        if (!ours) return super.dispatchKeyEvent(event)
         if (event.action == KeyEvent.ACTION_DOWN) {
             when {
                 event.keyCode == KeyEvent.KEYCODE_DEL -> if (code.isNotEmpty()) {
@@ -119,7 +125,7 @@ class CodeVerificationView(context: Context, attrs: AttributeSet?) : LinearLayou
                     refresh()
                 }
                 event.keyCode == KeyEvent.KEYCODE_0 -> append('0')
-                event.unicodeChar != 0 -> append(event.unicodeChar.toChar())
+                else -> append(event.unicodeChar.toChar())
             }
         }
         return true
@@ -139,7 +145,7 @@ class CodeVerificationView(context: Context, attrs: AttributeSet?) : LinearLayou
         }
     }
 
-    private fun refresh() {
+    private fun refresh(notify: Boolean = true) {
         cells.forEachIndexed { index, cell ->
             cell.text = code.getOrNull(index)?.toString().orEmpty()
             cell.background = if (index == minOf(code.length, cells.lastIndex)) {
@@ -148,7 +154,7 @@ class CodeVerificationView(context: Context, attrs: AttributeSet?) : LinearLayou
                 unfocusedBackground
             }
         }
-        if (code.length == cells.size) onCodeEntered(code)
+        if (notify && code.length == cells.size) onCodeEntered(code)
     }
 
     private fun showKeyboard() {
