@@ -8,6 +8,7 @@ import android.widget.PopupMenu
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.i18n.I18nHooks
 import com.discord.models.domain.ModelGuildBoostSlot
 import com.discord.models.guild.Guild
 import com.discord.utilities.icon.IconUtils
@@ -124,7 +125,11 @@ class WidgetSettingsGuildBoostSubscriptionAdapter(
             IconUtils.setIcon(icon, guild)
             banner.setImageURI(IconUtils.getBannerForGuild(guild, 1024))
             name.text = guild.name
-            count.text = itemView.resources.getQuantityString(R.plurals.guild_settings_premium_guild_tier_requirement_required, item.boostCount, item.boostCount)
+            count.text = I18nHooks.plural(
+                itemView.context,
+                R.plurals.guild_settings_premium_guild_tier_requirement_required,
+                item.boostCount,
+            )
             progress.configure(guild.id, guild.premiumTier, guild.premiumSubscriptionCount)
         }
     }

@@ -64,7 +64,9 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
             NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(R.drawable.ic_notifications_white_24dp)
                 .setContentTitle(context.getString(R.string.manticord_app_name))
-                .setContentText(context.getString(R.string.new_messages))
+                // `new_messages` is the unread divider's template ("{count} since {timestamp}"),
+                // not a standalone label.
+                .setContentText(context.getString(R.string.new_messages_divider))
                 .build(),
         )
         if (data.kind == NotificationKind.MESSAGE || data.kind == NotificationKind.DIRECT_MESSAGE) {

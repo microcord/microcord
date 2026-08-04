@@ -18,6 +18,7 @@ import com.discord.app.AppScreenRouter
 import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
+import com.discord.i18n.I18nHooks
 import com.discord.stores.StoreStream
 import com.discord.widgets.tabs.NavigationTab
 import com.facebook.drawee.view.SimpleDraweeView
@@ -57,7 +58,9 @@ class WidgetUserMutualGuilds : AppFragment(R.layout.widget_user_mutual_guilds) {
             State.Loading -> { setActionBarTitle(R.string.mutual_guilds); adapter.rows = emptyList() }
             is State.Error -> adapter.rows = listOf(Row.Empty(state.message ?: getString(R.string.no_mutual_guilds)))
             is State.Loaded -> {
-                setActionBarTitle(resources.getQuantityString(R.plurals.user_profile_mutual_guilds_count, state.guilds.size, state.guilds.size))
+                setActionBarTitle(
+                    I18nHooks.plural(requireContext(), R.plurals.user_profile_mutual_guilds_count, state.guilds.size),
+                )
                 setActionBarSubtitle(state.username)
                 adapter.rows = state.guilds.map(Row::GuildRow).ifEmpty { listOf(Row.Empty(getString(R.string.no_mutual_guilds))) }
             }
