@@ -80,7 +80,13 @@ data class MessageEntry(
          * renders as an ordinary body; the remaining branches pick a specialised row.
          */
         fun resolveType(message: Message, isMinimal: Boolean): Int {
-            if (isMinimal) return ChatListEntry.MESSAGE_MINIMAL
+            val type = rowType(message)
+            // Only an ordinary body has a compact form. A system notice, call or failed row carries
+            // no content of its own, so collapsing one renders an empty line.
+            return if (isMinimal && type == ChatListEntry.MESSAGE) ChatListEntry.MESSAGE_MINIMAL else type
+        }
+
+        private fun rowType(message: Message): Int {
             val messageType = message.type
             if (message.hasSnapshot() ||
                 message.isInteraction() ||

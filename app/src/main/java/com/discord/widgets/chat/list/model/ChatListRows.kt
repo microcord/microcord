@@ -10,6 +10,7 @@ import com.discord.api.permission.Permission
 import com.discord.api.role.GuildRole
 import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
+import com.discord.api.message.MessageFlags
 import com.discord.models.message.Message
 import com.discord.stores.StoreMessageState
 import com.discord.stores.StoreMessagesLoader
@@ -34,6 +35,7 @@ import com.discord.widgets.chat.list.entries.StartOfPrivateChatEntry
 import com.discord.widgets.chat.list.entries.TimestampEntry
 import com.discord.widgets.chat.list.entries.UploadProgressEntry
 import java.util.Calendar
+import kotlin.math.abs
 
 /**
  * Turns a channel's messages into the [ChatListEntry] rows `WidgetChatListAdapter` renders.
@@ -52,8 +54,7 @@ import java.util.Calendar
  * [build] returns rows newest-first, matching the reversed layout manager the chat list uses.
  */
 object ChatListRows {
-    private const val CONCATENATION_WINDOW_MS = 7 * 60 * 1000L
-    private const val MAX_CONCATENATED_MESSAGES = 5
+    private const val MESSAGE_GROUP_INTERVAL_MS = 7 * 60 * 1000L
 
     /**
      * Everything a row needs beyond the message itself.
@@ -96,21 +97,24 @@ object ChatListRows {
         }
 
         var previous: Message? = null
-        var groupSize = 0
+        var groupStart: Message? = null
         var unreadAdded = false
         messages.forEach { message ->
             val timestamp = timestamp(message)
             if (previous == null || !sameDay(timestamp, timestamp(previous!!))) {
                 rows += TimestampEntry(message.id, timestamp)
             }
+            // Reference short-circuits grouping here, so the oldest unread always keeps its header.
+            var startsGroup = false
             if (!unreadAdded && state.unreadMessageId != null && message.id > state.unreadMessageId) {
                 rows += NewMessagesEntry(state.channel.id, message.id)
                 unreadAdded = true
+                startsGroup = true
             }
 
-            val concatenate = canConcatenate(previous, message, groupSize)
-            rows += messageRows(state, message, isMinimal = concatenate)
-            groupSize = if (concatenate) groupSize + 1 else 1
+            startsGroup = startsGroup || isNewMessageGroup(state, groupStart, message)
+            rows += messageRows(state, message, isMinimal = !startsGroup)
+            if (startsGroup) groupStart = message
             previous = message
         }
 
@@ -295,17 +299,53 @@ object ChatListRows {
         )
     }
 
-    private fun canConcatenate(previous: Message?, message: Message, groupSize: Int): Boolean {
-        if (previous == null || groupSize >= MAX_CONCATENATED_MESSAGES) return false
-        if (message.type == REPLY_MESSAGE_TYPE || message.messageReference != null) return false
-        if (previous.isFailed() || isSystem(previous) || message.isFailed() || isSystem(message)) return false
-        val previousTime = timestamp(previous)
-        val currentTime = timestamp(message)
-        return previous.author?.id != null && previous.author?.id == message.author?.id &&
-            currentTime >= previousTime && currentTime - previousTime <= CONCATENATION_WINDOW_MS
+    /**
+     * Reference `isNewMessageGroup`, ported condition for condition and in the same order.
+     *
+     * Everything is compared against [groupStart], not the preceding message, so a group can never
+     * span more than [MESSAGE_GROUP_INTERVAL_MS] end to end.
+     */
+    private fun isNewMessageGroup(state: State, groupStart: Message?, message: Message): Boolean {
+        if (groupStart == null) return true
+
+        // A spine that does not reach the author's avatar reads as a rendering fault.
+        if (message.hasFlag(MessageFlags.HAS_THREAD) || isCommandType(message)) return true
+
+        val type = message.type ?: TYPE_DEFAULT
+        if (type > TYPE_DEFAULT) {
+            if (!isSystem(groupStart)) return true
+            return type == REPLY_MESSAGE_TYPE
+        }
+        if (isSystem(groupStart)) return true
+
+        val authorId = groupStart.author?.id
+        if (authorId == null || authorId != message.author?.id) return true
+        if (groupStart.hasFlag(MessageFlags.EPHEMERAL) != message.hasFlag(MessageFlags.EPHEMERAL)) return true
+        // Only the username override, and only when the incoming message is the webhook's.
+        if (message.webhookId != null && groupStart.author?.username != message.author?.username) return true
+        if (state.channel.isGuildForumPost(state.parentChannel) && groupStart.id == state.channel.id) return true
+        if (!sameDay(timestamp(groupStart), timestamp(message))) return true
+        if (abs(timestamp(message) - timestamp(groupStart)) >= MESSAGE_GROUP_INTERVAL_MS) return true
+
+        val groupStartSilent = groupStart.hasFlag(MessageFlags.SUPPRESS_NOTIFICATIONS)
+        val messageSilent = message.hasFlag(MessageFlags.SUPPRESS_NOTIFICATIONS)
+        if (messageSilent && !groupStartSilent) return true
+        // A silent group only breaks for something that would have notified.
+        if (groupStartSilent && !messageSilent && mentionsAnyone(message)) return true
+
+        return message.applicationId != groupStart.applicationId
     }
 
-    private fun isSystem(message: Message) = message.isSystemMessage() && !message.isLocal()
+    private fun mentionsAnyone(message: Message) = !message.mentions.isNullOrEmpty() ||
+        !message.mentionRoles.isNullOrEmpty() ||
+        message.mentionEveryone == true
+
+    private fun isCommandType(message: Message) =
+        message.type == TYPE_CHAT_INPUT_COMMAND || message.type == TYPE_CONTEXT_MENU_COMMAND
+
+    /** Reference `isSystemMessage`; a pending or rejected send is still the user's own message. */
+    private fun isSystem(message: Message) =
+        message.type !in USER_MESSAGE_TYPES && !message.isLocal() && !message.isFailed()
 
     private fun timestamp(message: Message) =
         message.timestamp?.dateTimeMillis ?: snowflakeTimestamp(message.id)
@@ -321,6 +361,11 @@ object ChatListRows {
             a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
     }
 
-    /** `MessageTypes.REPLY`; a reply always starts its own block. */
+    private const val TYPE_DEFAULT = 0
     private const val REPLY_MESSAGE_TYPE = 19
+    private const val TYPE_CHAT_INPUT_COMMAND = 20
+    private const val TYPE_CONTEXT_MENU_COMMAND = 23
+
+    /** `MessageTypesSets.USER_MESSAGE`; everything else counts as a system message here. */
+    private val USER_MESSAGE_TYPES = setOf(0, 19, 20, 23, 26, 41, 45, 47, 68)
 }

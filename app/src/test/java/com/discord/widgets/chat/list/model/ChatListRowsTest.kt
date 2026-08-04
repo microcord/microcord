@@ -53,13 +53,13 @@ class ChatListRowsTest {
         assertTrue(start.channelIcon?.isNotBlank() == true)
     }
 
-    @Test fun groupsAtMostFiveMessagesWithinSevenMinutes() {
-        val messages = (1L..6L).map { message(it, it * 60_000) }
+    @Test fun groupsMessagesWithinSevenMinutesOfTheGroupStart() {
+        val messages = (1L..6L).map { message(it, it * 60_000) } + message(7, 8 * 60_000)
         val bodies = rows(messages).filterIsInstance<MessageEntry>()
 
         assertEquals(2, bodies.count { it.type == ChatListEntry.MESSAGE })
-        assertEquals(4, bodies.count { it.type == ChatListEntry.MESSAGE_MINIMAL })
-        assertEquals(6, bodies.map { it.message.id }.distinct().size)
+        assertEquals(5, bodies.count { it.type == ChatListEntry.MESSAGE_MINIMAL })
+        assertEquals(7, bodies.map { it.message.id }.distinct().size)
     }
 
     @Test fun addsStableUnreadAndDayDividers() {
