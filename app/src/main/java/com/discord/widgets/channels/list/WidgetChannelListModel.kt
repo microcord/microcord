@@ -927,11 +927,6 @@ data class WidgetChannelListModel(
                 }
             }
 
-            // The invite row goes to the very top, below the MFA notice when one is present.
-            if (guild.ableToInstantInvite && !isHub) {
-                items.add(guild.unelevated.toIndex(), ChannelListItemInvite(selectedGuildId, false))
-            }
-
             if (guildJoinRequest != null && member != null &&
                 guildJoinRequest.applicationStatus != ApplicationStatus.APPROVED && member.pending
             ) {
