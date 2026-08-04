@@ -15,6 +15,7 @@ import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
 import com.discord.widgets.botuikit.BotComponentExperiments
 import com.discord.widgets.botuikit.ComponentChatListState.ComponentStoreState
 import com.discord.widgets.botuikit.ComponentStateMapper
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 /**
  * One row of the chat list.
@@ -374,16 +375,12 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             guildMembers: Map<Long, GuildMember>,
         ): Map<Long, String> {
             val names = HashMap<Long, String>()
-            message.author?.let { user ->
-                val nick = guildMembers[user.id]?.nick?.takeUnless(String::isBlank)
-                    ?: user.member?.nick?.takeUnless(String::isBlank)
-                names[user.id] = nick ?: user.globalName?.takeUnless(String::isBlank) ?: user.username
+            fun put(user: com.discord.api.user.User) {
+                val nick = guildMembers[user.id]?.nick ?: user.member?.nick
+                names[user.id] = user.getDisplayName(nick)
             }
-            message.mentions.orEmpty().forEach { user ->
-                val nick = guildMembers[user.id]?.nick?.takeUnless(String::isBlank)
-                    ?: user.member?.nick?.takeUnless(String::isBlank)
-                names[user.id] = nick ?: user.globalName?.takeUnless(String::isBlank) ?: user.username
-            }
+            message.author?.let(::put)
+            message.mentions.orEmpty().forEach(::put)
             channel.nicks.orEmpty().forEach { names[it.id] = it.nick }
             return names
         }

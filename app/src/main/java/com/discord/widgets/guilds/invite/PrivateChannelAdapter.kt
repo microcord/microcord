@@ -12,6 +12,7 @@ import com.discord.api.channel.getDisplayName
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
+import com.discord.utilities.user.UserUtils.displayName
 
 /**
  * Suggestion list of the full-screen invite-share flow.
@@ -52,7 +53,7 @@ class PrivateChannelAdapter(
                 is InviteSuggestionItem.ChannelItem -> configureChannel(data.channel)
                 is InviteSuggestionItem.UserItem -> {
                     IconUtils.setIcon(icon, data.user)
-                    name.text = data.user.username
+                    name.text = data.user.displayName
                 }
                 InviteSuggestionItem.SearchNoResultsItem -> Unit
             }

@@ -55,6 +55,8 @@ class UserProfileHeaderViewModel @JvmOverloads constructor(
             val reducedMotionEnabled: Boolean,
             val allowAnimationInReducedMotion: Boolean,
             val isMe: Boolean,
+            /** Where this profile is being viewed from; decides whether a friend nickname applies. */
+            val channelId: Long? = null,
             val bannerGuildId: Long? = null,
             val themeColors: List<Int>? = null,
         ) : ViewState() {
@@ -156,6 +158,7 @@ class UserProfileHeaderViewModel @JvmOverloads constructor(
                 allowAnimationInReducedMotion =
                     (currentState as? ViewState.Loaded)?.allowAnimationInReducedMotion ?: false,
                 isMe = userId == storeState.me.id,
+                channelId = storeState.channel?.id,
             )
         }
     }

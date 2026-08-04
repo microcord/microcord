@@ -14,6 +14,7 @@ sealed class GuildScheduledEventRsvpUserListItem : MGRecyclerDataPayload {
     data class RsvpUser(
         val userId: Long,
         val username: String,
+        val globalName: String?,
         val userAvatar: String?,
         val discriminator: Int,
         val nickname: String?,
@@ -24,14 +25,16 @@ sealed class GuildScheduledEventRsvpUserListItem : MGRecyclerDataPayload {
         override val type: Int = TYPE_EVENT_RSVP_USER
         override val key: String = userId.toString()
 
-        /** The nickname wins; the discriminator is only shown when there is no nickname. */
-        val displayName: String = nickname ?: username
+        /** Guild nickname, else the account display name, else the handle. */
+        val displayName: String =
+            nickname ?: globalName?.takeUnless(String::isBlank) ?: username
 
         companion object {
             fun from(guildScheduledEventUser: GuildScheduledEventUser, guildId: Long): RsvpUser =
                 RsvpUser(
                     userId = guildScheduledEventUser.user.id,
                     username = guildScheduledEventUser.user.username,
+                    globalName = guildScheduledEventUser.user.globalName,
                     userAvatar = guildScheduledEventUser.user.avatar,
                     discriminator = guildScheduledEventUser.user.discriminator,
                     nickname = guildScheduledEventUser.guildMember.nick,

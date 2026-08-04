@@ -21,6 +21,9 @@ import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.StatusView
 import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.stores.StoreStream
+import com.discord.utilities.user.UserUtils.displayName
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 /**
  * Rows for the Friends tab.
@@ -87,7 +90,9 @@ class WidgetFriendsListAdapter(recycler: RecyclerView) :
             super.onConfigure(position, data)
             val item = data as FriendsListViewModel.Item.Friend
             itemView.setOnClickListener { view -> adapter.onClickUserProfile(view, item.user) }
-            name.text = item.user.username
+            name.text = item.user.getDisplayName(
+                StoreStream.getUserRelationships().getNickname(item.user.id),
+            )
             status.setPresence(item.presence)
             PresenceUtils.setPresenceText(
                 item.presence,

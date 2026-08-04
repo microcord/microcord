@@ -1,5 +1,6 @@
 package com.discord.widgets.chat.overlay
 
+import com.discord.utilities.user.NicknameUtils
 import com.discord.api.guild.GuildVerificationLevel
 import com.discord.models.member.GuildMember
 import com.discord.stores.StoreChannelsSelected
@@ -55,7 +56,7 @@ sealed class ChatTypingModel {
                     StoreStream.getGuilds().observeComputed(channel.guildId, userIds),
                 ) { users, members ->
                     users.values.map { user ->
-                        GuildMember.getNickOrUsername(members[user.id], user) as CharSequence
+                        NicknameUtils.getName(channel.guildId.takeIf { it != 0L }, channel.id, user) as CharSequence
                     }.take(4)
                 }
             }.distinctUntilChanged()

@@ -21,6 +21,8 @@ import com.facebook.drawee.span.DraweeSpanStringBuilder
 import com.facebook.drawee.span.SimpleDraweeSpanTextView
 import com.facebook.drawee.view.SimpleDraweeView
 import java.util.Locale
+import com.discord.utilities.user.UserUtils
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 class SettingsMemberView constructor(
     context: Context,
@@ -64,7 +66,7 @@ class SettingsMemberView constructor(
             R.dimen.avatar_size_large,
             changeDetector = avatarChangeDetector,
         )
-        memberTitle.configureUsername(nickname ?: user.username)
+        memberTitle.configureUsername(user.getDisplayName(nickname))
         memberTitle.configureTag(
             user.isBot,
             if (user.isSystemUser) R.string.system_dm_tag_system else R.string.bot_tag,
@@ -152,6 +154,6 @@ internal fun setAvatar(
 }
 
 internal fun formatUsername(user: User): String =
-    String.format(Locale.ROOT, "%s#%04d", user.username, user.discriminator)
+    user.username + UserUtils.discriminatorSuffix(user.discriminator)
 
 internal fun mediaProxySize(requested: Int) = IconUtils.getMediaProxySize(requested)

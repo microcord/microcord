@@ -22,6 +22,7 @@ import com.discord.views.ThemedColor
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
 import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 /**
  * The local notice shown to an author whose own message AutoMod refused to send.
@@ -57,9 +58,7 @@ class WidgetChatListAdapterItemAutoModBlocked(
             )
         }
 
-        username.text = entry.author?.nick?.takeUnless(String::isBlank)
-            ?: entry.message.author?.globalName?.takeUnless(String::isBlank)
-            ?: entry.message.author?.username
+        username.text = entry.message.author?.getDisplayName(entry.author?.nick)
         username.setTextColor(
             GuildMember.getColor(entry.author, ThemedColor.resolve(context, R.attr.colorHeaderPrimary)),
         )

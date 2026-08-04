@@ -200,6 +200,60 @@ fun <T> Observable<T>.leadingEdgeThrottle(windowDuration: Long, timeUnit: TimeUn
  * [subscriptionHandler] receives the live [Subscription] so the caller can cancel the work later —
  * `MessageQueue` uses it to record the in-flight request.
  */
+/**
+ * [appSubscribe] for an endpoint declared `Observable<Void>`.
+ *
+ * A 204 makes Retrofit emit `null`. The generic overload infers `T` as the non-null `Void`, so a
+ * caller's `{ ... }` gets an implicit `it: Void` and the compiler plants a null check that throws
+ * before the body runs — turning a successful request into a failure toast. This overload takes a
+ * value-less callback instead, and being the more specific receiver it wins overload resolution, so
+ * existing call sites need no change.
+ */
+fun Observable<Void>.appSubscribe(
+    errorClass: Class<*>,
+    context: Context? = null,
+    subscriptionHandler: ((Subscription) -> Unit)? = null,
+    errorHandler: ((RestApiError) -> Unit)? = null,
+    onCompleted: () -> Unit = {},
+    onTerminated: () -> Unit = {},
+    onNext: () -> Unit,
+) {
+    appSubscribe(
+        errorTag = errorClass.simpleName,
+        context = context,
+        subscriptionHandler = subscriptionHandler,
+        errorHandler = errorHandler,
+        onCompleted = onCompleted,
+        onTerminated = onTerminated,
+        onNext = onNext,
+    )
+}
+
+/** [appSubscribe] for `Observable<Void>` with an explicit error tag. See the overload above. */
+fun Observable<Void>.appSubscribe(
+    errorTag: String,
+    context: Context? = null,
+    subscriptionHandler: ((Subscription) -> Unit)? = null,
+    errorHandler: ((RestApiError) -> Unit)? = null,
+    onCompleted: () -> Unit = {},
+    onTerminated: () -> Unit = {},
+    onNext: () -> Unit,
+) {
+    val contextRef = WeakReference(context)
+    val subscription = subscribe(
+        { onNext() },
+        { failure ->
+            RestApiError.handle(failure, errorTag, errorHandler, contextRef.get())
+            onTerminated()
+        },
+        {
+            onCompleted()
+            onTerminated()
+        },
+    )
+    subscriptionHandler?.invoke(subscription)
+}
+
 fun <T> Observable<T>.appSubscribe(
     errorClass: Class<*>,
     context: Context? = null,

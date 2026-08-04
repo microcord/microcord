@@ -4,6 +4,7 @@ import com.discord.utilities.search.network.SearchQuery
 import com.discord.utilities.search.query.FilterType
 import com.discord.utilities.search.validation.SearchData
 import java.util.Locale
+import com.discord.utilities.user.UserUtils
 
 /**
  * `from:alice#0001` / `mentions:alice#0001`.
@@ -13,7 +14,7 @@ import java.util.Locale
 data class UserNode(val userName: String, val discriminator: Int) : AnswerNode() {
 
     override val text: String
-        get() = userName + "#" + String.format(Locale.ROOT, "%04d", discriminator)
+        get() = userName + UserUtils.discriminatorSuffix(discriminator)
 
     override val validFilters: Set<FilterType>
         get() = setOf(FilterType.FROM, FilterType.MENTIONS)

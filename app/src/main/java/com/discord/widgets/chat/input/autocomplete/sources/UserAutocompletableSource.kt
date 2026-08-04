@@ -1,5 +1,6 @@
 package com.discord.widgets.chat.input.autocomplete.sources
 
+import com.discord.utilities.user.NicknameUtils
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isPrivate
 import com.discord.api.permission.Permission
@@ -59,7 +60,7 @@ class UserAutocompletableSource(
                 result.add(
                     UserAutocompletable(
                         user = user,
-                        nickname = nicks[id]?.nick,
+                        nickname = nicks[id]?.nick ?: NicknameUtils.getNickname(null, channel.id, id),
                         presence = presences[id],
                         canUserReadChannel = true,
                     ),

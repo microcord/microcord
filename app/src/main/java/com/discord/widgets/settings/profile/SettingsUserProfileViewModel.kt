@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.annotation.MainThread
 import com.discord.api.guildmember.PatchGuildMemberBody
 import com.discord.api.user.PatchUserBody
+import com.discord.api.user.PatchUserProfileBody
 import com.discord.api.user.UserProfile
 import com.discord.app.AppViewModel
 import com.discord.models.guild.Guild
@@ -33,6 +34,10 @@ import rx.Observable
 import rx.subjects.PublishSubject
 import java.io.Serializable
 
+/** What one completed save request changed, applied to the state the save started from. */
+private typealias SavedEdit =
+    (SettingsUserProfileViewModel.ViewState.Loaded) -> SettingsUserProfileViewModel.ViewState.Loaded
+
 class SettingsUserProfileViewModel(
     private val guildId: Long?,
     private val storeUserProfile: StoreUserProfile = StoreStream.getUserProfiles(),
@@ -49,6 +54,8 @@ class SettingsUserProfileViewModel(
         val banner: NullSerializable<String>?,
         val bannerColor: NullSerializable<String>?,
         val nickname: String?,
+        val displayName: String?,
+        val pronouns: String?,
         val bio: String?,
         val isEditingBio: Boolean,
     ) : Serializable
@@ -71,17 +78,31 @@ class SettingsUserProfileViewModel(
             val currentBannerImage: NullSerializable<String>? = null,
             val currentBannerColorHex: NullSerializable<String>? = null,
             val currentNickname: String? = null,
+            val currentDisplayName: String? = null,
+            val currentPronouns: String? = null,
             val currentBio: String?,
             val bioAst: List<Node<MessageRenderContext>>?,
             val isEditingBio: Boolean,
             val canEditNickname: Boolean,
         ) : ViewState() {
+            /** The metadata this screen edits: the guild profile in a guild, the global one otherwise. */
+            val savedProfile = if (meMember != null) userProfile.guildMemberProfile else userProfile.userProfile
             val isDirty = currentAvatar != null || currentBannerImage != null ||
-                currentBannerColorHex != null ||
-                currentBio.orEmpty() != (if (meMember != null) meMember.bio else user.bio).orEmpty() ||
-                (meMember != null && currentNickname.orEmpty() != meMember.nick.orEmpty())
+                currentBannerColorHex != null || isBioChanged || isPronounsChanged ||
+                (meMember != null && currentNickname.orEmpty() != meMember.nick.orEmpty()) ||
+                (meMember == null && isDisplayNameChanged)
             val showSaveFab = isDirty && !isEditingBio
-            val isBioChanged = currentBio != user.bio
+            val isBioChanged: Boolean
+                get() = currentBio.orEmpty() != (if (meMember != null) meMember.bio else user.bio).orEmpty()
+            val isPronounsChanged: Boolean
+                get() = currentPronouns.orEmpty() != savedProfile?.pronouns.orEmpty()
+
+            /** The global pronouns a blank guild field falls back to. */
+            val defaultPronouns = userProfile.userProfile?.pronouns.orEmpty()
+
+            /** Only meaningful outside a guild scope; a guild profile has no display name. */
+            val isDisplayNameChanged: Boolean
+                get() = currentDisplayName.orEmpty() != user.globalName.orEmpty()
             val showBioEditor = isEditingBio || currentBio.isNullOrBlank()
             val nonDefaultColorPreviewHex = when (currentBannerColorHex) {
                 is NullSerializable.Value -> currentBannerColorHex.value
@@ -139,6 +160,8 @@ class SettingsUserProfileViewModel(
     @MainThread fun updateBannerImage(value: String?) = update { copy(currentBannerImage = value.serializable()) }
     @MainThread fun updateBannerColor(value: String?) = update { copy(currentBannerColorHex = value.serializable()) }
     @MainThread fun updateNickname(value: String) = update { copy(currentNickname = value) }
+    @MainThread fun updateDisplayName(value: String) = update { copy(currentDisplayName = value) }
+    @MainThread fun updatePronouns(value: String) = update { copy(currentPronouns = value) }
     @MainThread fun updateIsEditingBio(value: Boolean) = update { copy(isEditingBio = value) }
 
     @MainThread
@@ -156,15 +179,22 @@ class SettingsUserProfileViewModel(
     fun observeHeaderViewState(): Observable<UserProfileHeaderViewModel.ViewState> = observeViewState()
         .map { state ->
             val loaded = state as ViewState.Loaded
-            val user = if (loaded.meMember == null && loaded.currentAvatar != null) {
-                loaded.user.copy(avatar = loaded.currentAvatar.value)
-            } else loaded.user
+            // Unsaved edits are previewed, not just the persisted values: a blank draft name reads
+            // as "cleared" and the header falls back to the username, exactly as it will after save.
+            val editedAvatar = if (loaded.meMember == null && loaded.currentAvatar != null) {
+                loaded.currentAvatar.value
+            } else loaded.user.avatar
+            val user = loaded.user.copy(
+                avatar = editedAvatar,
+                globalName = loaded.currentDisplayName ?: loaded.user.globalName,
+            )
             val banner = when (val current = loaded.currentBannerImage) {
                 is NullSerializable.Value -> current.value
                 is NullSerializable.Null -> if (loaded.meMember != null) loaded.user.banner else null
                 null -> loaded.meMember?.bannerHash ?: loaded.user.banner
             }
             val member = loaded.meMember?.copy(
+                nick = loaded.currentNickname ?: loaded.meMember.nick,
                 avatarHash = when (val current = loaded.currentAvatar) {
                     is NullSerializable.Value -> current.value
                     is NullSerializable.Null -> null
@@ -207,6 +237,8 @@ class SettingsUserProfileViewModel(
             it.currentBannerImage,
             it.currentBannerColorHex,
             it.currentNickname,
+            it.currentDisplayName,
+            it.currentPronouns,
             it.currentBio,
             it.isEditingBio,
         )
@@ -222,35 +254,65 @@ class SettingsUserProfileViewModel(
         updateViewState(restoreDraft(state, draft, ::parseBio))
     }
 
+    /**
+     * Identity and profile metadata live on separate endpoints, so a save is up to two sequential
+     * requests, each resolving to the edit it made to the view state. A failure abandons the fold
+     * and leaves the screen on its unsaved edits; whatever did land has already reached the store,
+     * so the next store emission reconciles it.
+     */
     @MainThread
     fun saveChanges(context: Context) {
         val state = viewState as? ViewState.Loaded ?: return
-        val request = guildId?.let { id ->
-            api.updateMeGuildMember(id, guildMemberPatch(state)).map<Any> { member ->
-                state.copy(
-                    meMember = GuildMember.from(member, id),
-                    currentAvatar = null,
-                    currentBannerImage = null,
-                    currentBannerColorHex = null,
-                )
-            }
-        } ?: api.patchUser(userPatch(state)).map<Any> { user ->
-            storeUserProfile.updateUser(user)
-            state.copy(
-                user = merge(state.user, user),
-                currentAvatar = null,
-                currentBannerImage = null,
-                currentBannerColorHex = null,
-            )
-        }
-        request.restSubscribeOn().ui(this).appSubscribe(
-            SettingsUserProfileViewModel::class.java,
-            context = context,
-            errorHandler = { eventSubject.onNext(Event.UserUpdateRequestCompleted) },
-        ) { updated ->
-            @Suppress("UNCHECKED_CAST")
-            updateViewState(updated as ViewState.Loaded)
+        val requests = listOfNotNull(identityRequest(state), profileRequest(state))
+        if (requests.isEmpty()) {
             eventSubject.onNext(Event.UserUpdateRequestCompleted)
+            return
+        }
+        val cleared = state.copy(
+            currentAvatar = null,
+            currentBannerImage = null,
+            currentBannerColorHex = null,
+        )
+        Observable.concat(Observable.from(requests))
+            .toList()
+            .map { edits -> edits.fold(cleared) { saved, edit -> edit(saved) } }
+            .restSubscribeOn()
+            .ui(this)
+            .appSubscribe(
+                SettingsUserProfileViewModel::class.java,
+                context = context,
+                errorHandler = { eventSubject.onNext(Event.UserUpdateRequestCompleted) },
+            ) { updated ->
+                updateViewState(updated)
+                eventSubject.onNext(Event.UserUpdateRequestCompleted)
+            }
+    }
+
+    private fun identityRequest(state: ViewState.Loaded): Observable<SavedEdit>? {
+        val id = guildId
+        if (id != null) {
+            val body = guildMemberPatch(state) ?: return null
+            return api.updateMeGuildMember(id, body).map { member ->
+                val edit: SavedEdit = { it.copy(meMember = GuildMember.from(member, id)) }
+                edit
+            }
+        }
+        val body = userPatch(state) ?: return null
+        return api.patchUser(body).map { user ->
+            storeUserProfile.updateUser(user)
+            val edit: SavedEdit = { it.copy(user = merge(it.user, user)) }
+            edit
+        }
+    }
+
+    private fun profileRequest(state: ViewState.Loaded): Observable<SavedEdit>? {
+        val body = profilePatch(state) ?: return null
+        val id = guildId
+        val request = if (id != null) api.patchGuildProfile(id, body) else api.patchUserProfile(body)
+        return request.map { metadata ->
+            storeUserProfile.updateProfileMetadata(state.user.id, metadata)
+            val edit: SavedEdit = { it.withSavedProfile(metadata) }
+            edit
         }
     }
 
@@ -287,6 +349,8 @@ class SettingsUserProfileViewModel(
                 currentBannerImage = current?.currentBannerImage,
                 currentBannerColorHex = current?.currentBannerColorHex,
                 currentNickname = current?.currentNickname ?: storeState.meMember?.nick,
+                currentDisplayName = current?.currentDisplayName ?: storeState.user.globalName,
+                currentPronouns = current?.currentPronouns ?: savedPronouns(storeState),
                 currentBio = bio,
                 bioAst = bio?.let(parseBio),
                 isEditingBio = current?.isEditingBio ?: false,
@@ -294,19 +358,57 @@ class SettingsUserProfileViewModel(
             )
         }
 
-        internal fun userPatch(state: ViewState.Loaded) = PatchUserBody(
-            state.currentAvatar,
-            state.currentBannerImage,
-            state.currentBannerColorHex,
-            if (state.isBioChanged) state.currentBio.serializable() else null,
-        )
+        internal fun userPatch(state: ViewState.Loaded): PatchUserBody? {
+            val globalName = if (state.isDisplayNameChanged) state.currentDisplayName.serializable() else null
+            if (state.currentAvatar == null && globalName == null) return null
+            return PatchUserBody(state.currentAvatar, globalName)
+        }
 
-        internal fun guildMemberPatch(state: ViewState.Loaded) = PatchGuildMemberBody(
-            state.currentNickname,
-            state.currentAvatar,
-            state.currentBannerImage,
-            state.currentBio,
-        )
+        internal fun guildMemberPatch(state: ViewState.Loaded): PatchGuildMemberBody? {
+            // An unchanged nickname is omitted; a cleared one is an empty string, not a null.
+            val nick = state.currentNickname.orEmpty()
+                .takeIf { it != state.meMember?.nick.orEmpty() }
+            if (nick == null && state.currentAvatar == null) return null
+            return PatchGuildMemberBody(nick, state.currentAvatar)
+        }
+
+        /**
+         * The bio and pronouns are non-nullable server-side, so an empty string is how they are
+         * cleared; the banner and accent colour need an explicit null instead.
+         */
+        internal fun profilePatch(state: ViewState.Loaded): PatchUserProfileBody? {
+            val bio = if (state.isBioChanged) state.currentBio.orEmpty() else null
+            val pronouns = if (state.isPronounsChanged) state.currentPronouns.orEmpty() else null
+            // A guild profile has no accent colour of its own.
+            val accentColor = if (state.meMember != null) null else state.currentBannerColorHex?.toAccentColor()
+            if (bio == null && pronouns == null && state.currentBannerImage == null && accentColor == null) {
+                return null
+            }
+            return PatchUserProfileBody(state.currentBannerImage, bio, pronouns, accentColor)
+        }
+
+        private fun NullSerializable<String>.toAccentColor(): NullSerializable<Int> =
+            (this as? NullSerializable.Value)?.value?.removePrefix("#")?.toIntOrNull(16)
+                ?.let { NullSerializable.Value(it) }
+                ?: NullSerializable.Null()
+
+        private fun ViewState.Loaded.withSavedProfile(
+            metadata: UserProfile.ProfileMetadata,
+        ): ViewState.Loaded = if (metadata.guildId != null) {
+            copy(
+                userProfile = userProfile.copy(guildMemberProfile = metadata),
+                meMember = meMember?.copy(bio = metadata.bio, bannerHash = metadata.banner),
+            )
+        } else {
+            copy(
+                userProfile = userProfile.copy(userProfile = metadata),
+                user = user.copy(
+                    bio = metadata.bio,
+                    banner = metadata.banner,
+                    bannerColor = metadata.accentColor?.let { "#%06X".format(it) },
+                ),
+            )
+        }
 
         internal fun restoreDraft(
             state: ViewState.Loaded,
@@ -317,6 +419,8 @@ class SettingsUserProfileViewModel(
             currentBannerImage = draft.banner,
             currentBannerColorHex = draft.bannerColor,
             currentNickname = draft.nickname,
+            currentDisplayName = draft.displayName,
+            currentPronouns = draft.pronouns,
             currentBio = draft.bio,
             bioAst = draft.bio?.let(parseBio),
             isEditingBio = draft.isEditingBio,
@@ -332,11 +436,18 @@ class SettingsUserProfileViewModel(
                 ) { guild, profile, member, info -> StoreState(user, guild, profile, member, info) }
             }
 
+        private fun savedPronouns(storeState: StoreState): String {
+            val profile = storeState.userProfile
+            val metadata = if (storeState.meMember != null) profile.guildMemberProfile else profile.userProfile
+            return metadata?.pronouns.orEmpty()
+        }
+
         private fun String?.serializable(): NullSerializable<String> =
             this?.let { NullSerializable.Value(it) } ?: NullSerializable.Null()
 
         private fun merge(old: MeUser, new: com.discord.api.user.User) = old.copy(
             username = new.username,
+            globalName = new.globalName,
             avatar = if (new.avatar == null) old.avatar else new.avatar.value,
             banner = if (new.banner == null) old.banner else new.banner.value,
             discriminator = new.discriminator.toIntOrNull() ?: old.discriminator,

@@ -47,6 +47,7 @@ import com.discord.widgets.share.ForwardingPolicy
 import com.discord.widgets.share.WidgetIncomingShare
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 class WidgetChatListActions : AppBottomSheet() {
     interface Host {
@@ -352,7 +353,7 @@ class WidgetChatListActions : AppBottomSheet() {
             ) = Model(
                 message = message,
                 guild = guild,
-                messageAuthorName = member?.nick ?: message.author?.username.orEmpty(),
+                messageAuthorName = message.author?.getDisplayName(member?.nick).orEmpty(),
                 messageContent = messageContent ?: message.content,
                 manageMessageContext = ManageMessageContext.from(
                     message,

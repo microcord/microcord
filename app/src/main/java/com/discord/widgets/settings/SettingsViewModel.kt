@@ -164,7 +164,8 @@ class SettingsViewModel(
                         isMeUserVerified = meUser.isVerified,
                         allowAnimatedEmojis = animatedEmojis,
                         showPresence = true,
-                        editable = true,
+                        // This header is a summary; avatar and banner are edited in the profile screen.
+                        editable = false,
                         reducedMotionEnabled = reducedMotion,
                         allowAnimationInReducedMotion = false,
                         isMe = true,

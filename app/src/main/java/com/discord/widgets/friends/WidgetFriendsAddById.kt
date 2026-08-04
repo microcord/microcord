@@ -149,7 +149,7 @@ class WidgetFriendsAddById : AppFragment(R.layout.widget_friends_add_by_id) {
                 RestAPIAbortMessages.ResponseResolver.getRelationshipResponse(
                     context,
                     error.code,
-                    username + UserUtils.padDiscriminator(discriminator),
+                    username + UserUtils.discriminatorSuffix(discriminator),
                 ),
             )
         })

@@ -78,6 +78,10 @@ class StoreUserProfile(
 
     fun updateUser(user: User) = dispatcher.schedule { handleUser(user) }
 
+    /** Folds the metadata returned by a profile PATCH back into [userId]'s cached profile. */
+    fun updateProfileMetadata(userId: Long, metadata: UserProfile.ProfileMetadata) =
+        dispatcher.schedule { handleProfileMetadata(userId, metadata) }
+
     @StoreThread
     fun handleUserProfile(userProfile: UserProfile) {
         StoreThreadScheduler.assertCurrentThread()
@@ -119,7 +123,23 @@ class StoreUserProfile(
     private fun handleUser(user: User) {
         StoreThreadScheduler.assertCurrentThread()
         val profile = profiles[user.id] ?: return
-        profiles[user.id] = profile.copy(user = user, guildMember = null)
+        profiles[user.id] = profile.copy(user = user)
+        markChanged()
+    }
+
+    /** A guild-scoped response carries its `guild_id`; a global one does not. */
+    @StoreThread
+    private fun handleProfileMetadata(userId: Long, metadata: UserProfile.ProfileMetadata) {
+        StoreThreadScheduler.assertCurrentThread()
+        val profile = profiles[userId] ?: return
+        val updated = if (metadata.guildId != null) {
+            profile.copy(guildMemberProfile = metadata)
+        } else {
+            profile.copy(userProfile = metadata)
+        }
+        val resolved = resolveProfileEffects(updated)
+        profiles[userId] = resolved
+        loadProfileEffects(resolved)
         markChanged()
     }
 

@@ -1,6 +1,7 @@
 package com.discord.stores
 
 import android.content.Context
+import com.discord.utilities.user.NicknameUtils
 import com.discord.api.channel.Channel
 import com.discord.api.voice.state.StageRequestToSpeakState
 import com.discord.api.voice.state.VoiceState
@@ -87,7 +88,10 @@ class StoreVoiceParticipants(
     ) {
         val isSpeaking: Boolean =
             voiceState != null && _isSpeaking && !voiceState.mute && !voiceState.deaf
+        // A guild nick wins in a guild channel; in a private call there is no member, so the
+        // friend nickname is what applies.
         val nickname: String? = guildMember?.nick
+            ?: NicknameUtils.getNickname(null, voiceState?.channelId, user.id)
         val callStreamId: Int? = streams?.callStreamId
         val applicationStreamId: Int? = streams?.applicationStreamId
         /** The stream this user is broadcasting. */

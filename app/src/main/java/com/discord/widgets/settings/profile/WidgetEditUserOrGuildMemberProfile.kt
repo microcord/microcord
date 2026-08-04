@@ -57,6 +57,10 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
     private lateinit var guildHelp: TextView
     private lateinit var nickContainer: View
     private lateinit var nickname: TextInputLayout
+    private lateinit var displayNameContainer: View
+    private lateinit var displayName: TextInputLayout
+    private lateinit var pronouns: TextInputLayout
+    private lateinit var pronounsHelp: TextView
     private lateinit var bioHeader: TextView
     private lateinit var bioHelp: TextView
     private lateinit var bioPreviewCard: CardView
@@ -104,6 +108,10 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         guildHelp = view.findViewById(R.id.guild_member_profile_help_text_overall)
         nickContainer = view.findViewById(R.id.nick_container)
         nickname = view.findViewById(R.id.set_nickname_text)
+        displayNameContainer = view.findViewById(R.id.display_name_container)
+        displayName = view.findViewById(R.id.set_display_name_text)
+        pronouns = view.findViewById(R.id.set_pronouns_text)
+        pronounsHelp = view.findViewById(R.id.pronouns_help_text)
         bioHeader = view.findViewById(R.id.bio_header)
         bioHelp = view.findViewById(R.id.bio_help_text)
         bioPreviewCard = view.findViewById(R.id.bio_preview_card)
@@ -126,6 +134,14 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
             if (!bindingText) viewModel.updateNickname(it?.toString().orEmpty())
         }
         nickname.setEndIconOnClickListener { viewModel.updateNickname("") }
+        displayName.editText?.doAfterTextChanged {
+            if (!bindingText) viewModel.updateDisplayName(it?.toString().orEmpty())
+        }
+        displayName.setEndIconOnClickListener { viewModel.updateDisplayName("") }
+        pronouns.editText?.doAfterTextChanged {
+            if (!bindingText) viewModel.updatePronouns(it?.toString().orEmpty())
+        }
+        pronouns.setEndIconOnClickListener { viewModel.updatePronouns("") }
         bioEditor.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
         bioPreviewCard.setOnClickListener { viewModel.updateIsEditingBio(true) }
         save.setOnClickListener {
@@ -203,6 +219,17 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         }
 
         nickContainer.visibility = visible(loaded.guild != null)
+        // The display name is account-wide, so it has no place on a per-guild profile.
+        displayNameContainer.visibility = visible(loaded.guild == null)
+        displayName.placeholderText = loaded.user.username
+        displayName.isEndIconVisible = !loaded.currentDisplayName.isNullOrEmpty()
+        val globalName = loaded.currentDisplayName.orEmpty()
+        if (displayName.editText?.text?.toString() != globalName) {
+            bindingText = true
+            displayName.editText?.setText(globalName)
+            displayName.editText?.setSelection(globalName.length)
+            bindingText = false
+        }
         nickname.isEnabled = loaded.canEditNickname
         nickname.hint = getString(
             if (loaded.canEditNickname) R.string.nickname else R.string.change_identity_modal_change_nickname_disabled,
@@ -214,6 +241,22 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
             bindingText = true
             nickname.editText?.setText(nick)
             nickname.editText?.setSelection(nick.length)
+            bindingText = false
+        }
+
+        // In a guild, a blank field falls back to the account-wide pronouns.
+        pronounsHelp.visibility = visible(loaded.meMember != null)
+        pronouns.placeholderText = if (loaded.meMember != null && loaded.defaultPronouns.isNotEmpty()) {
+            loaded.defaultPronouns
+        } else {
+            getString(R.string.profile_customization_pronouns_placeholder)
+        }
+        pronouns.isEndIconVisible = !loaded.currentPronouns.isNullOrEmpty()
+        val currentPronouns = loaded.currentPronouns.orEmpty()
+        if (pronouns.editText?.text?.toString() != currentPronouns) {
+            bindingText = true
+            pronouns.editText?.setText(currentPronouns)
+            pronouns.editText?.setSelection(currentPronouns.length)
             bindingText = false
         }
 

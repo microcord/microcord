@@ -8,6 +8,8 @@ data class ModelUserRelationship(
     val type: Int = TYPE_NONE,
     val user: User? = null,
     @SerializedName("user_id") val userId: Long? = null,
+    /** Per-friend nickname, shown instead of their display name outside guilds. */
+    val nickname: String? = null,
 ) {
     fun hydrate(users: Map<Long, User>): ModelUserRelationship =
         if (userId == null) this else copy(user = users[userId], userId = null)

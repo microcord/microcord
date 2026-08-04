@@ -207,16 +207,13 @@ class WidgetSearchSuggestionsAdapter(
             val suggestion = (data as SingleTypePayload<*>).data as UserSuggestion
             val user = suggestion.user
             val usernameWithDiscriminator =
-                user.username + UserUtils.padDiscriminator(user.discriminator)
+                user.username + UserUtils.discriminatorSuffix(user.discriminator)
 
-            val nick = suggestion.guildMember?.nick
-            if (nick.isNullOrEmpty()) {
-                name.text = usernameWithDiscriminator
-                secondaryName.text = ""
-            } else {
-                name.text = nick
-                secondaryName.text = usernameWithDiscriminator
-            }
+            // The handle is the secondary line whenever it differs from the shown name, so a
+            // migrated account is not reduced to its raw username here.
+            val displayName = suggestion.displayName
+            name.text = displayName
+            secondaryName.text = if (displayName == usernameWithDiscriminator) "" else usernameWithDiscriminator
 
             IconUtils.setIcon(
                 imageView = avatar,

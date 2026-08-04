@@ -18,6 +18,8 @@ import com.discord.app.AppScreenRouter
 import com.discord.models.guild.Guild
 import com.discord.models.presence.Presence
 import com.discord.models.user.User
+import com.discord.stores.StoreStream
+import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.StatusView
@@ -97,7 +99,10 @@ class WidgetUserMutualFriends : AppFragment(R.layout.widget_user_mutual_friends)
         fun bind(friend: Friend) {
             itemView.setOnClickListener { WidgetUserSheet.show(parentFragmentManager, friend.user.id) }
             itemView.contentDescription = friend.user.username
-            itemView.findViewById<TextView>(R.id.user_profile_adapter_item_friend_user_name).text = friend.user.username
+            itemView.findViewById<TextView>(R.id.user_profile_adapter_item_friend_user_name).text =
+                friend.user.getDisplayName(
+                    StoreStream.getUserRelationships().getNickname(friend.user.id),
+                )
             itemView.findViewById<StatusView>(R.id.user_profile_adapter_item_friend_status).setPresence(friend.presence)
             itemView.findViewById<SimpleDraweeSpanTextView>(R.id.user_profile_adapter_item_friend_user_game).apply {
                 PresenceUtils.setPresenceText(friend.presence, friend.isApplicationStreaming == true, this, true)

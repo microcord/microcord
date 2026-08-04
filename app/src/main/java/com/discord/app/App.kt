@@ -9,6 +9,7 @@ import com.discord.utilities.analytics.AnalyticsDeviceResourceUsageMonitor
 import com.discord.utilities.analytics.AdvertisingIdProvider
 import com.discord.utilities.billing.GooglePlayBillingManager
 import com.discord.utilities.cache.SharedPreferencesProvider
+import com.discord.utilities.error.RestApiError
 import com.discord.utilities.captcha.ActivityCaptchaSolver
 import com.discord.utilities.captcha.CaptchaSolver
 import com.discord.utilities.lifecycle.ActivityProvider
@@ -30,6 +31,10 @@ class App : Application() {
 
         BootLog.record(BootLogEvent.PROCESS_START)
         AppLog.init(this)
+        // Without this every REST failure nobody classified is swallowed silently.
+        RestApiError.init { tag, throwable, metadata ->
+            AppLog.e(tag, "unhandled REST failure", throwable, metadata)
+        }
         SharedPreferencesProvider.init(this)
         ApplicationProvider.init(this)
         ActivityProvider.init(this)

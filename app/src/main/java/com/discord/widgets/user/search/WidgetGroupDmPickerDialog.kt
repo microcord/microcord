@@ -15,6 +15,7 @@ import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.FragmentManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.R
 import com.discord.chips_view.ChipsView
 import com.discord.models.domain.ModelUserRelationship
@@ -155,9 +156,12 @@ class WidgetGroupDmPickerDialog : DialogFragment() {
                 return
             }
             selected[user.id] = user
+            val chipName = user.getDisplayName(
+                StoreStream.getUserRelationships().getNickname(user.id),
+            )
             chips?.b(
-                user.username,
-                getString(R.string.remove_role_or_user).replace("!!{name}!!", user.username),
+                chipName,
+                getString(R.string.remove_role_or_user).replace("!!{name}!!", chipName),
                 user.id,
                 RecipientChip(user),
             )

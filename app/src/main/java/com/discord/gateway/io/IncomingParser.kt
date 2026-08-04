@@ -114,7 +114,8 @@ class IncomingParser(private val gson: Gson) {
         "SESSIONS_REPLACE" -> gson.fromJson<List<ModelSession>>(data, sessionListType)
 
         // Relationships and friend suggestions
-        "RELATIONSHIP_ADD", "RELATIONSHIP_REMOVE" -> gson.fromJson(data, ModelUserRelationship::class.java)
+        "RELATIONSHIP_ADD", "RELATIONSHIP_UPDATE", "RELATIONSHIP_REMOVE" ->
+            gson.fromJson(data, ModelUserRelationship::class.java)
         "FRIEND_SUGGESTION_CREATE" -> gson.fromJson(data, FriendSuggestion::class.java)
         "FRIEND_SUGGESTION_DELETE" -> gson.fromJson(data, FriendSuggestionDelete::class.java)
 

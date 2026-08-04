@@ -14,6 +14,8 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.rx.ui
 import rx.Observable
+import com.discord.utilities.user.UserUtils
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 class WidgetApplicationCommandBottomSheetViewModel(
     val interactionId: Long,
@@ -183,9 +185,9 @@ class WidgetApplicationCommandBottomSheetViewModel(
                     val user = id?.let(users::get)
                     SlashCommandParam(
                         option.name,
-                        user?.username.orEmpty(),
+                        user?.getDisplayName(id?.let(members::get)?.nick).orEmpty(),
                         id?.let(members::get)?.color,
-                        user?.let { "@${it.username}#${it.discriminator}" }.orEmpty(),
+                        user?.let { "@${it.username}${UserUtils.discriminatorSuffix(it.discriminator)}" }.orEmpty(),
                     )
                 }
                 ApplicationCommandType.ROLE -> {
@@ -205,9 +207,9 @@ class WidgetApplicationCommandBottomSheetViewModel(
                     } else {
                         SlashCommandParam(
                             option.name,
-                            user?.username.orEmpty(),
+                            user?.getDisplayName(id?.let(members::get)?.nick).orEmpty(),
                             id?.let(members::get)?.color,
-                            user?.let { "@${it.username}#${it.discriminator}" }.orEmpty(),
+                            user?.let { "@${it.username}${UserUtils.discriminatorSuffix(it.discriminator)}" }.orEmpty(),
                         )
                     }
                 }

@@ -16,6 +16,8 @@ import com.discord.models.message.Message
 import com.discord.utilities.locale.LocaleManager
 import com.discord.utilities.time.TimeUtils
 import java.util.Locale
+import com.discord.utilities.user.NicknameUtils
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 /**
  * Message ordering, per-channel display names, and the copy for the two system messages whose text
@@ -91,7 +93,12 @@ object MessageUtils {
         val result = HashMap<Long, String>((mentions?.size ?: 0) + 1)
         val effectiveNicks = nicks ?: channel?.nicks
         fun put(user: User) {
-            result[user.id] = nickOrUsername(user, guildMembers[user.id], effectiveNicks)
+            result[user.id] = nickOrUsername(
+                user,
+                guildMembers[user.id],
+                effectiveNicks,
+                NicknameUtils.getNickname(channel?.guildId, channel?.id, user.id),
+            )
         }
         mentions?.forEach(::put)
         author?.let(::put)
@@ -100,7 +107,7 @@ object MessageUtils {
     }
 
     /**
-     * Channel nick, then guild nick, then username.
+     * Channel nick, then guild nick, then the account display name.
      *
      * The reference reaches this through `GuildMember.Companion.getNickOrUsername(user, member,
      * channel, nicks)`; the target's model only exposes the two-argument form, so the channel-nick
@@ -110,9 +117,10 @@ object MessageUtils {
         user: User,
         guildMember: GuildMember?,
         nicks: List<ChannelRecipientNick>?,
-    ): String = nicks?.firstOrNull { it.id == user.id }?.nick
-        ?: guildMember?.nick
-        ?: user.username
+        contextNickname: String?,
+    ): String = user.getDisplayName(
+        contextNickname ?: nicks?.firstOrNull { it.id == user.id }?.nick ?: guildMember?.nick,
+    )
 
     /**
      * Which of the thirteen "user joined" greetings a join message shows.

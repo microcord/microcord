@@ -328,8 +328,9 @@ data class WidgetChannelListModel(
                 StoreStream.getUserGuildSettings().observeGuildSettings(PRIVATE_CHANNELS_GUILD_ID),
                 StoreStream.getMessagesMostRecent().observeRecentMessageIds(),
                 StoreStream.getUsers().observeAllUsers(),
+                StoreStream.getUserRelationships().observeNicknames(),
             ) { channels, selectedChannelId, presences, mentionCounts, streamingUserIds, settings,
-                mostRecentIds, users ->
+                mostRecentIds, users, friendNicknames ->
                 privateListBuilder(
                     channels = channels.values.sortedWith(
                         Channel.getSortByMostRecent(mostRecentIds),
@@ -340,6 +341,7 @@ data class WidgetChannelListModel(
                     streamingUserIds = streamingUserIds,
                     notificationSettings = settings,
                     users = users,
+                    friendNicknames = friendNicknames,
                 )
             }.leadingEdgeThrottle(250L, TimeUnit.MILLISECONDS)
 
@@ -492,14 +494,19 @@ data class WidgetChannelListModel(
             streamingUserIds: Set<Long>,
             notificationSettings: ModelNotificationSettings,
             users: Map<Long, com.discord.models.user.User> = emptyMap(),
+            friendNicknames: Map<Long, String> = emptyMap(),
         ): WidgetChannelListModel {
             val rows = channels.map { channel ->
                 val recipientId = channel.getDMRecipient()?.id
                     ?: channel.recipientIds?.singleOrNull().takeIf { channel.isDM() }
+                // A private channel is where the friend nickname applies, so it outranks the
+                // account display name here; without it the row disagrees with the chat toolbar.
                 val recipientDisplayNames = (channel.recipientIds ?: channel.recipients.orEmpty().map { it.id })
                     .mapNotNull { id ->
-                        users[id]?.displayName ?: channel.recipients?.firstOrNull { it.id == id }
-                            ?.let { it.globalName?.takeUnless(String::isBlank) ?: it.username }
+                        friendNicknames[id]?.takeUnless(String::isBlank)
+                            ?: users[id]?.displayName
+                            ?: channel.recipients?.firstOrNull { it.id == id }
+                                ?.let { it.globalName?.takeUnless(String::isBlank) ?: it.username }
                     }
                 ChannelListItemPrivate(
                     channel = channel,

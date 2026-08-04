@@ -124,21 +124,42 @@ object UserUtils {
     val User.displayName: String
         get() = globalName?.takeUnless(String::isBlank) ?: username
 
-    /** Guild nicknames take precedence over the account display name. */
+    /** Guild and friend nicknames take precedence over the account display name. */
     fun User.getDisplayName(nickname: String? = null): String =
         nickname?.takeUnless(String::isBlank) ?: displayName
 
-    /** Bot discriminators are retained for old bot identities only. */
+    /** As [displayName], for the renderers that hold the raw API model rather than the domain one. */
+    val ApiUser.displayName: String
+        get() = globalName?.takeUnless(String::isBlank) ?: username
+
+    /** As [getDisplayName], for the raw API model. */
+    fun ApiUser.getDisplayName(nickname: String? = null): String =
+        nickname?.takeUnless(String::isBlank) ?: displayName
+
+    /**
+     * Whether the account has migrated to the unique-username system, i.e. has no discriminator.
+     *
+     * Bots and webhooks keep theirs, so this is not the same as "is a human".
+     */
+    val User.hasUniqueUsername: Boolean
+        get() = discriminator == 0
+
+    /** Empty once an account has migrated; migration is what retires the discriminator, not bot-ness. */
     val User.discriminatorWithPadding: String
-        get() = if (isBot && discriminator != 0) padDiscriminator(discriminator) else ""
+        get() = discriminatorSuffix(discriminator)
+
+    /** [padDiscriminator] for callers holding a raw discriminator, empty for a migrated account. */
+    fun discriminatorSuffix(discriminator: Int): String =
+        if (discriminator == 0) "" else padDiscriminator(discriminator)
 
     /** Formats [discriminator] as `#0001`. */
     fun padDiscriminator(discriminator: Int): String =
         String.format(Locale.US, "#%04d", discriminator)
 
     /**
-     * The unique username, with a legacy discriminator only for bots.
+     * The account's identifier: the unique username, or `username#1234` before migration.
      *
+     * This is the handle, never the display name — the two are shown together on profiles.
      * Returns a plain [String] when neither styling argument is supplied, so callers that
      * only need text do not pay for a [SpannableString].
      */

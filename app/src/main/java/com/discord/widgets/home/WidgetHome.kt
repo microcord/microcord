@@ -61,6 +61,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private var selectedChannelSubscription: Subscription? = null
     private var voiceChannelSubscription: Subscription? = null
     private var mentionSubscription: Subscription? = null
+    private var friendNicknameSubscription: Subscription? = null
     private var unreadCount = 0
     private var initialChannelShown = false
     private var startPanelState: PanelState = PanelState.Closed
@@ -157,6 +158,12 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                 StoreStream.getChannelsSelected().getSelectedChannel()?.let(::configureToolbar)
             }
         }
+        // A DM's title is built from its recipients, so renaming one has to redraw the toolbar.
+        friendNicknameSubscription = StoreStream.getUserRelationships().observeNicknames().subscribe {
+            activity?.runOnUiThread {
+                StoreStream.getChannelsSelected().getSelectedChannel()?.let(::configureToolbar)
+            }
+        }
         mentionSubscription = StoreStream.getMentions().observeTotalMentions().subscribe { count ->
             activity?.runOnUiThread {
                 unreadCount = count
@@ -174,6 +181,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         voiceChannelSubscription = null
         mentionSubscription?.unsubscribe()
         mentionSubscription = null
+        friendNicknameSubscription?.unsubscribe()
+        friendNicknameSubscription = null
         super.onStop()
     }
 

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page.LinearLayout">
+    <TextView android:id="@+id/friend_nickname_dialog_header" android:text="@string/friend_nickname" android:padding="16dp" android:layout_width="match_parent" style="@style/UiKit.TextView.H1.Bold"/>
+    <View style="@style/UiKit.Divider"/>
+    <LinearLayout android:paddingLeft="16dp" android:paddingTop="16dp" android:paddingRight="16dp" android:paddingBottom="8dp" style="@style/UiKit.ViewGroup.LinearLayout">
+        <TextView android:id="@+id/friend_nickname_dialog_body" android:text="@string/friend_nickname_description" android:layout_width="match_parent" style="@style/UiKit.TextView"/>
+        <com.google.android.material.textfield.TextInputLayout android:id="@+id/friend_nickname_dialog_input" android:hint="@string/friend_nickname" android:layout_marginTop="16dp" app:endIconContentDescription="@string/reset_friend_nickname" app:endIconDrawable="@drawable/ic_close_circle_nova_grey_24dp" app:endIconMode="custom" app:endIconTint="?attr/colorInteractiveNormal" style="@style/UiKit.TextInputLayout">
+            <com.google.android.material.textfield.TextInputEditText android:maxLength="32" android:inputType="textPersonName" android:imeOptions="actionDone" style="@style/UiKit.TextInputLayout.EditText.SingleLine">
+                <requestFocus/>
+            </com.google.android.material.textfield.TextInputEditText>
+        </com.google.android.material.textfield.TextInputLayout>
+    </LinearLayout>
+    <View style="@style/UiKit.Settings.Divider"/>
+    <LinearLayout style="@style/UiKit.Dialog.ButtonContainer">
+        <com.google.android.material.button.MaterialButton android:id="@+id/friend_nickname_dialog_cancel" android:text="@string/cancel" style="@style/UiKit.Material.Button.Secondary.Fit"/>
+        <com.google.android.material.button.MaterialButton android:id="@+id/friend_nickname_dialog_save" android:text="@string/save" android:layout_marginStart="8dp" style="@style/UiKit.Material.Button.Fit"/>
+    </LinearLayout>
+</LinearLayout>

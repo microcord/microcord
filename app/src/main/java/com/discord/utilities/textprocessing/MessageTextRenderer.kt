@@ -1,6 +1,7 @@
 package com.discord.utilities.textprocessing
 
 import android.content.Context
+import com.discord.utilities.user.NicknameUtils
 import com.discord.models.message.Message
 import com.discord.stores.StoreMessageState
 import com.discord.stores.StoreStream
@@ -9,6 +10,8 @@ import com.discord.utilities.textprocessing.node.SpoilerNode
 import com.discord.utilities.textprocessing.node.ZeroSpaceWidthNode
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.facebook.drawee.span.DraweeSpanStringBuilder
+import com.discord.utilities.user.UserUtils.displayName
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 /**
  * Convenience bridge between a [Message] and the markdown pipeline for chat surfaces.
@@ -96,11 +99,13 @@ object MessageTextRenderer {
     ): MessageRenderContext {
         val guildId = message.guildId
         val members = guildId?.let { StoreStream.getGuilds().getMembers()[it] }.orEmpty()
-        val userNames = StoreStream.getUsers().getUsers().mapValuesTo(HashMap()) { it.value.username }
+        val userNames = StoreStream.getUsers().getUsers().mapValuesTo(HashMap()) { it.value.displayName }
         message.mentions.orEmpty().forEach { user ->
-            userNames[user.id] = members[user.id]?.nick?.takeUnless(String::isBlank)
-                ?: user.member?.nick?.takeUnless(String::isBlank)
-                ?: user.username
+            userNames[user.id] = user.getDisplayName(
+                members[user.id]?.nick
+                    ?: user.member?.nick
+                    ?: NicknameUtils.getNickname(guildId, message.channelId, user.id),
+            )
         }
         return MessageRenderContext(
             context = context,

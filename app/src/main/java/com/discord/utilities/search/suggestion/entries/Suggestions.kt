@@ -1,5 +1,6 @@
 package com.discord.utilities.search.suggestion.entries
 
+import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
 import com.discord.utilities.search.query.FilterType
@@ -86,6 +87,8 @@ data class UserSuggestion(
     val discriminator: Int = user.discriminator
     val userId: Long = user.id
     val nickname: String? = guildMember?.nick
+    /** Guild nickname, else the account display name, else the handle. */
+    val displayName: String = user.getDisplayName(guildMember?.nick)
     val usernameWithDiscriminator: String = usernameWithDiscriminator(userName, discriminator)
 
     override val category: SearchSuggestion.Category = when (targetType) {
@@ -94,8 +97,8 @@ data class UserSuggestion(
     }
 
     override fun compareTo(other: UserSuggestion): Int {
-        val mine = nickname ?: usernameWithDiscriminator
-        val theirs = other.nickname ?: other.usernameWithDiscriminator
+        val mine = displayName
+        val theirs = other.displayName
         val byDisplayName = mine.compareTo(theirs)
         return if (byDisplayName != 0) {
             byDisplayName
@@ -106,7 +109,7 @@ data class UserSuggestion(
 
     companion object {
         private fun usernameWithDiscriminator(userName: String, discriminator: Int): String =
-            userName + UserUtils.padDiscriminator(discriminator)
+            userName + UserUtils.discriminatorSuffix(discriminator)
 
         /** Matches on `name#0000` or on the guild nickname, either way case-insensitively. */
         fun canComplete(

@@ -255,6 +255,7 @@ class WidgetUserSheet : AppBottomSheet() {
             reducedMotionEnabled = reducedMotion,
             allowAnimationInReducedMotion = false,
             isMe = state.isMe,
+            channelId = state.channel?.id,
         )
         val header = binding.userSheetProfileHeaderView
         header.updateViewState(headerState)

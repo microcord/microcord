@@ -60,6 +60,7 @@ import com.discord.api.sticker.Sticker
 import com.discord.api.thread.ThreadListing
 import com.discord.api.thread.ThreadMember
 import com.discord.api.user.PatchUserBody
+import com.discord.api.user.PatchUserProfileBody
 import com.discord.api.user.User
 import com.discord.api.user.UserProfile
 import com.discord.api.user.UserSurveyFetchResponse
@@ -299,6 +300,9 @@ interface RestAPIInterface {
     @PATCH("users/@me")
     fun patchUser(@Body patchUserBody: PatchUserBody): Observable<User>
 
+    @PATCH("users/@me/profile")
+    fun patchUserProfile(@Body body: PatchUserProfileBody): Observable<UserProfile.ProfileMetadata>
+
     @GET("users/@me/notes/{userId}")
     fun getUserNote(@Path("userId") userId: Long): Observable<ModelUserNote>
 
@@ -370,6 +374,13 @@ interface RestAPIInterface {
         @Path("userId") userId: Long,
         @Body body: RestAPIParams.UserRelationship,
         @Header(X_CONTEXT_PROPERTIES) context: String,
+    ): Observable<Void>
+
+    /** Sets or clears the per-friend nickname. An empty [RestAPIParams.FriendNickname.nickname] clears it. */
+    @PATCH("users/@me/relationships/{userId}")
+    fun updateRelationshipNickname(
+        @Path("userId") userId: Long,
+        @Body body: RestAPIParams.FriendNickname,
     ): Observable<Void>
 
     @GET("users/{userId}/relationships")
@@ -959,6 +970,12 @@ interface RestAPIInterface {
         @Path("guildId") guildId: Long,
         @Body body: PatchGuildMemberBody,
     ): Observable<GuildMember>
+
+    @PATCH("guilds/{guildId}/profile/@me")
+    fun patchGuildProfile(
+        @Path("guildId") guildId: Long,
+        @Body body: PatchUserProfileBody,
+    ): Observable<UserProfile.ProfileMetadata>
 
     @PUT("guilds/{guildId}/bans/{userId}")
     fun banGuildMember(

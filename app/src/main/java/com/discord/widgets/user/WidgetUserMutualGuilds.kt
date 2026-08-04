@@ -23,6 +23,7 @@ import com.discord.widgets.tabs.NavigationTab
 import com.facebook.drawee.view.SimpleDraweeView
 import rx.Observable
 import rx.Subscription
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 class WidgetUserMutualGuilds : AppFragment(R.layout.widget_user_mutual_guilds) {
     sealed class State {
@@ -99,7 +100,7 @@ class WidgetUserMutualGuilds : AppFragment(R.layout.widget_user_mutual_guilds) {
                 visibility = if (guild.icon == null) View.VISIBLE else View.GONE; text = guild.shortName
             }
             val hasGuildMemberAvatar = item.member?.hasAvatar() == true
-            val identity = item.nick ?: item.user?.username
+            val identity = item.user?.getDisplayName(item.nick)
             itemView.findViewById<TextView>(R.id.user_profile_adapter_item_user_display_name).apply {
                 text = identity
                 visibility = if (item.nick != null || hasGuildMemberAvatar) View.VISIBLE else View.GONE

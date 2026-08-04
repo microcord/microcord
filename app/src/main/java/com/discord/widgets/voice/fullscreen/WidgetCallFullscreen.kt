@@ -18,6 +18,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.discord.utilities.user.NicknameUtils
 import com.discord.R
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isPrivate
@@ -373,7 +374,9 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
         privateCallBlurredGrid.configure(state.privateCallUserListItems)
         privateCallConnectivity.isVisible = state.showLowConnectivityBar
         privateCallStatusPrimary.text = if (state.callModel.channel.isPrivate()) {
-            state.callModel.dmRecipient?.displayName ?: state.callModel.channel.getDisplayName()
+            state.callModel.dmRecipient
+                ?.let { NicknameUtils.getName(null, state.callModel.channel.id, it.user) }
+                ?: state.callModel.channel.getDisplayName()
         } else state.callModel.channel.getDisplayName()
         privateCallStatusSecondary.setText(if (state.callModel.isConnected) R.string.ongoing_call else R.string.voice_status_not_connected)
         startDurationTicker(state.callModel)

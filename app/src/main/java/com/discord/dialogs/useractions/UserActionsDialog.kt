@@ -39,6 +39,7 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
     private lateinit var blockItem: TextView
     private lateinit var unblockItem: TextView
     private lateinit var removeFriendItem: TextView
+    private lateinit var friendNicknameItem: TextView
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -47,6 +48,7 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         blockItem = view.findViewById(R.id.user_actions_dialog_block_item)
         unblockItem = view.findViewById(R.id.user_actions_dialog_unblock_item)
         removeFriendItem = view.findViewById(R.id.user_actions_dialog_remove_friend_item)
+        friendNicknameItem = view.findViewById(R.id.user_actions_dialog_friend_nickname_item)
 
         blockItem.setOnClickListener { viewModel.blockUser() }
         unblockItem.setOnClickListener {
@@ -54,6 +56,12 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         }
         removeFriendItem.setOnClickListener {
             viewModel.removeRelationship(R.string.friend_has_been_deleted)
+        }
+        friendNicknameItem.setOnClickListener {
+            val state = viewModel.viewState as? UserActionsDialogViewModel.ViewState.Loaded
+                ?: return@setOnClickListener
+            FriendNicknameDialog.show(parentFragmentManager, state.user.id, state.friendNickname)
+            dismiss()
         }
     }
 
@@ -77,7 +85,9 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         )
         userName.text = getSpannableForUserNameWithDiscrim(
             user = state.user,
-            nickname = state.userNickname,
+            // The dialog already resolves the friend nickname for its add/change label; the name at
+            // the top used only the guild nick, so the same sheet showed two different names.
+            nickname = state.userNickname ?: state.friendNickname,
             context = requireContext(),
             primaryColorRes = R.attr.colorHeaderPrimary,
             primaryFont = R.attr.font_primary_semibold,
@@ -90,6 +100,10 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         blockItem.visibility = if (state.showBlockItem) View.VISIBLE else View.GONE
         unblockItem.visibility = if (state.showUnblockItem) View.VISIBLE else View.GONE
         removeFriendItem.visibility = if (state.showRemoveFriendItem) View.VISIBLE else View.GONE
+        friendNicknameItem.visibility = if (state.showFriendNicknameItem) View.VISIBLE else View.GONE
+        friendNicknameItem.setText(
+            if (state.friendNickname == null) R.string.add_friend_nickname else R.string.change_friend_nickname,
+        )
     }
 
     private fun handleEvent(event: UserActionsDialogViewModel.Event) {

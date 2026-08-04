@@ -2,6 +2,8 @@ package com.discord.widgets.channels
 
 import android.content.Context
 import androidx.annotation.MainThread
+import com.discord.utilities.user.NicknameUtils
+import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDMRecipient
 import com.discord.api.channel.getDisplayName
@@ -373,8 +375,10 @@ class WidgetChannelTopicViewModel(
      * username. Mirrors `GuildMember.getNickOrUsername(user, member, channel, nicks)` in the
      * reference — that overload does not exist on the target's [GuildMember] yet.
      */
-    private fun nickOrUsername(user: User, channel: Channel): String =
-        channel.nicks?.firstOrNull { it.id == user.id }?.nick ?: user.username
+    private fun nickOrUsername(user: User, channel: Channel): String = user.getDisplayName(
+        channel.nicks?.firstOrNull { it.id == user.id }?.nick
+            ?: NicknameUtils.getNickname(null, channel.id, user.id),
+    )
 
     companion object {
 

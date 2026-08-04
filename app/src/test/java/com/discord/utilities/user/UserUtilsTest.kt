@@ -51,15 +51,21 @@ class UserUtilsTest {
         assertFalse(user(premiumTier = PremiumTier.TIER_1).canUsePremiumStickers)
     }
 
-    @Test fun `only bots retain legacy discriminators`() = with(UserUtils) {
+    @Test fun `the discriminator retires on migration, not on being human`() = with(UserUtils) {
         assertEquals("#0001", padDiscriminator(1))
         assertEquals("#1234", padDiscriminator(1234))
-        assertEquals("", user(discriminator = 42).discriminatorWithPadding)
-        assertEquals("#0042", user(discriminator = 42, isBot = true).discriminatorWithPadding)
-        assertEquals(
-            "ada#0042",
-            user(username = "ada", discriminator = 42, isBot = true).getUserNameWithDiscriminator(),
-        )
+
+        val migrated = user(username = "ada", discriminator = 0)
+        assertTrue(migrated.hasUniqueUsername)
+        assertEquals("", migrated.discriminatorWithPadding)
+        assertEquals("ada", migrated.getUserNameWithDiscriminator())
+
+        // A bot keeps its discriminator, and so would a human who had not migrated.
+        val bot = user(username = "ada", discriminator = 42, isBot = true)
+        assertFalse(bot.hasUniqueUsername)
+        assertEquals("#0042", bot.discriminatorWithPadding)
+        assertEquals("ada#0042", bot.getUserNameWithDiscriminator())
+        assertEquals("#0042", user(username = "ada", discriminator = 42).discriminatorWithPadding)
     }
 
     @Test fun `display name prefers nickname then global name then username`() = with(UserUtils) {

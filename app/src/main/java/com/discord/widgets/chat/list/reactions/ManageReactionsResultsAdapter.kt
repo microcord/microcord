@@ -5,12 +5,14 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import com.discord.utilities.user.NicknameUtils
 import com.discord.R
 import com.discord.stores.StoreMessageReactions
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 class ManageReactionsResultsAdapter(
     recycler: RecyclerView,
@@ -37,7 +39,10 @@ class ManageReactionsResultsAdapter(
 
         override fun onConfigure(position: Int, data: ResultItem) {
             val item = data as ResultItem.ReactionUser
-            name.text = item.guildMember?.nick ?: item.user.username
+            name.text = item.user.getDisplayName(
+                item.guildMember?.nick
+                    ?: NicknameUtils.getNickname(null, item.channelId, item.user.id),
+            )
             IconUtils.setIcon(avatar, item.user, R.dimen.avatar_size_standard, guildMember = item.guildMember)
             remove.visibility = if (item.canDelete) View.VISIBLE else View.GONE
             remove.setOnClickListener(if (item.canDelete) View.OnClickListener {

@@ -3,6 +3,7 @@ package com.discord.widgets.chat.input.autocomplete
 import com.discord.api.channel.getDisplayName
 import com.discord.utilities.user.UserUtils.getUserNameWithDiscriminator
 import java.util.Locale
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 /**
  * Total ordering over autocomplete rows.
@@ -62,8 +63,8 @@ class AutocompletableComparator : Comparator<Autocompletable> {
 
             is UserAutocompletable -> {
                 val other = o2 as UserAutocompletable
-                val left = o1.nickname ?: o1.user.getUserNameWithDiscriminator().toString()
-                val right = other.nickname ?: other.user.getUserNameWithDiscriminator().toString()
+                val left = o1.user.getDisplayName(o1.nickname)
+                val right = other.user.getDisplayName(other.nickname)
                 left.lower().compareTo(right.lower())
             }
         }

@@ -7,6 +7,7 @@ import android.content.SharedPreferences
 import android.os.Build
 import android.os.LocaleList
 import android.util.Log
+import com.discord.utilities.user.NicknameUtils
 import com.discord.BuildConfig
 import com.discord.api.activity.ActivityEmoji
 import com.discord.api.channel.Channel
@@ -130,6 +131,7 @@ import rx.Observable
 import rx.Scheduler
 import rx.subjects.BehaviorSubject
 import rx.schedulers.Schedulers
+import com.discord.utilities.user.UserUtils.displayName
 
 class StoreStream private constructor(
     val dispatcher: Dispatcher,
@@ -1133,6 +1135,8 @@ class StoreStream private constructor(
             {},
         )
         WidgetChatList.installStores(messages, messagesLoader)
+        // Private-channel titles are built in the api layer, which cannot reach this store.
+        com.discord.api.channel.friendNicknameResolver = userRelationships::getNickname
         WidgetChatList.actionCoordinator = messageActionCoordinator
         WidgetChatInput.coordinatorProvider = { messageSendCoordinator }
         WidgetChatInput.pendingRepliesStore = pendingReplies
@@ -1149,7 +1153,7 @@ class StoreStream private constructor(
                     WidgetChatOverlay.State(
                         channelId = channel.id,
                         viewingOldMessages = detached,
-                        typingUsers = typingIds.mapNotNull { allUsers[it]?.username }.take(4),
+                        typingUsers = typingIds.mapNotNull { allUsers[it]?.displayName }.take(4),
                         channelRateLimit = channel.rateLimitPerUser,
                     )
                 }
@@ -1418,7 +1422,7 @@ class StoreStream private constructor(
             guildId = channel.guildId.takeIf { it != 0L },
             title = channel.getDisplayName(),
             body = message.content.orEmpty(),
-            sender = message.author?.username.orEmpty(),
+            sender = NicknameUtils.getName(channel.guildId.takeIf { it != 0L }, channel.id, message.author),
             timestamp = clock.currentTimeMillis(),
             authGeneration = authGeneration,
             allowReply = true,
@@ -1671,6 +1675,11 @@ class StoreStream private constructor(
         }
         dispatchSubscribe(events.userNoteUpdate, "handleUserNoteUpdated", userNotes::handleNoteUpdate)
         dispatchSubscribe(events.relationshipAdd, "streamRelationshipAdd") { relationship ->
+            users.handleUserRelationshipAdd(relationship)
+            userRelationships.handleRelationshipAdd(relationship)
+        }
+        // An update is an upsert of the same shape; it is what carries a friend nickname change.
+        dispatchSubscribe(events.relationshipUpdate, "streamRelationshipUpdate") { relationship ->
             users.handleUserRelationshipAdd(relationship)
             userRelationships.handleRelationshipAdd(relationship)
         }

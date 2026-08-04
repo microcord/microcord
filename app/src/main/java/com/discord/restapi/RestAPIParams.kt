@@ -878,6 +878,14 @@ object RestAPIParams {
         }
     }
 
+    /**
+     * `PATCH users/@me/relationships/{id}` body.
+     *
+     * [NullSerializable] because clearing has to put an explicit `null` on the wire; Gson omits a
+     * plain null field, which the server reads as "leave it alone".
+     */
+    data class FriendNickname(val nickname: NullSerializable<String>)
+
     data class UserNoteUpdate(val note: String?)
 
     data class UserRelationship(

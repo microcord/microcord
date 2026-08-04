@@ -239,7 +239,7 @@ class WidgetFriendsFindNearby : AppFragment(R.layout.widget_friends_nearby) {
                             RestAPIAbortMessages.ResponseResolver.getRelationshipResponse(
                                 context,
                                 error.code,
-                                username + UserUtils.padDiscriminator(discriminator),
+                                username + UserUtils.discriminatorSuffix(discriminator),
                             ),
                         )
                     })

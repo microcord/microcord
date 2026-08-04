@@ -165,6 +165,7 @@ class StoreGatewayConnection(
 
     // Relationships
     val relationshipAdd = behavior<ModelUserRelationship>()
+    val relationshipUpdate = behavior<ModelUserRelationship>()
     val relationshipRemove = behavior<ModelUserRelationship>()
     val friendSuggestionCreate = behavior<FriendSuggestion>()
     val friendSuggestionDelete = behavior<FriendSuggestionDelete>()
@@ -478,6 +479,7 @@ class StoreGatewayConnection(
 
             // Relationships
             "RELATIONSHIP_ADD" -> relationshipAdd.emit(data)
+            "RELATIONSHIP_UPDATE" -> relationshipUpdate.emit(data)
             "RELATIONSHIP_REMOVE" -> relationshipRemove.emit(data)
             "FRIEND_SUGGESTION_CREATE" -> friendSuggestionCreate.emit(data)
             "FRIEND_SUGGESTION_DELETE" -> friendSuggestionDelete.emit(data)

@@ -61,6 +61,7 @@ import com.lytefast.flexinput.widget.FlexEditText
 import java.io.File
 import rx.Subscription
 import rx.subjects.PublishSubject
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 internal fun FlexInputWidgetBinding.renderSendPermission(ableToSendMessages: Boolean) {
     cannotSendText.visibility = if (ableToSendMessages) View.GONE else View.VISIBLE
@@ -735,7 +736,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val member = pending.messageReference.guildId?.let { guildId ->
             author?.id?.let { StoreStream.getGuilds().getMember(guildId, it) }
         }
-        val username = member?.nick?.takeUnless(String::isBlank) ?: author?.username.orEmpty()
+        val username = author?.getDisplayName(member?.nick).orEmpty()
         val text = FormatUtils.format(getString(R.string.mobile_replying_to), "username" to username)
             .replace("**", "")
         description.text = SpannableString(text).apply {

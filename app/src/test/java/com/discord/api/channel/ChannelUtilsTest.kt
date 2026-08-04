@@ -93,6 +93,25 @@ class ChannelUtilsTest {
         assertEquals("", channel(type = Channel.DM, name = "").getDisplayName())
     }
 
+    @Test fun `a friend nickname overrides the recipient's own name`() {
+        val recipients = listOf(user(1, "ada"), user(2, "grace"))
+        val previous = friendNicknameResolver
+        friendNicknameResolver = { id -> if (id == 1L) "Countess" else null }
+        try {
+            assertEquals(
+                "Countess, grace",
+                channel(type = Channel.GROUP_DM, name = null, recipients = recipients).getDisplayName(),
+            )
+            // An explicitly named channel is never rebuilt from its recipients.
+            assertEquals(
+                "squad",
+                channel(type = Channel.GROUP_DM, name = "squad", recipients = recipients).getDisplayName(),
+            )
+        } finally {
+            friendNicknameResolver = previous
+        }
+    }
+
     @Test fun `pinned reads the channel flag`() {
         assertFalse(channel(type = Channel.PUBLIC_THREAD).isPinned())
         assertFalse(channel(type = Channel.PUBLIC_THREAD, flags = Channel.FLAGS_NONE).isPinned())

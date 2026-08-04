@@ -26,6 +26,7 @@ import com.discord.widgets.settings.developer.WidgetSettingsDeveloper
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.user.Badge
 import com.discord.widgets.user.WidgetUserStatusSheet
+import com.discord.widgets.settings.profile.WidgetEditUserOrGuildMemberProfile
 import com.discord.widgets.user.profile.UserProfileHeaderViewModel
 import com.google.android.material.shape.MaterialShapeDrawable
 import com.google.android.material.shape.ShapeAppearanceModel
@@ -84,6 +85,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         }
 
         bindRoute(binding.account, ::WidgetSettingsAccount)
+        bindRoute(binding.profile, ::WidgetEditUserOrGuildMemberProfile)
         bindRoute(binding.authorizedApps, ::WidgetSettingsAuthorizedApps)
         bindRoute(binding.textImagesSettings, ::WidgetSettingsMedia)
         bindRoute(binding.appearance, ::WidgetSettingsAppearance)
@@ -251,6 +253,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         /** Rows whose destination screen exists; everything else is hidden by [hideUnavailableRows]. */
         internal val implementedRouteIds = setOf(
             R.id.account,
+            R.id.profile,
             R.id.authorized_apps,
             R.id.text_images_settings,
             R.id.appearance,

@@ -18,6 +18,8 @@ import com.facebook.drawee.backends.pipeline.Fresco
 import com.facebook.drawee.view.SimpleDraweeView
 import com.facebook.imagepipeline.request.ImageRequestBuilder
 import java.util.Locale
+import com.discord.utilities.user.UserUtils
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 class ChannelPermissionOwnerView(context: Context, attrs: AttributeSet) :
     ConstraintLayout(context, attrs) {
@@ -67,12 +69,8 @@ class ChannelPermissionOwnerView(context: Context, attrs: AttributeSet) :
             .setImageRequest(ImageRequestBuilder.newBuilderWithSource(Uri.parse(url)).build())
             .setAutoPlayAnimations(true)
             .build()
-        name.text = owner.nickname ?: user.username
-        description.text = if (user.discriminator == 0) {
-            user.username
-        } else {
-            String.format(Locale.ROOT, "%s#%04d", user.username, user.discriminator)
-        }
+        name.text = user.getDisplayName(owner.nickname)
+        description.text = user.username + UserUtils.discriminatorSuffix(user.discriminator)
         crown.visibility = if (owner.isOwner) View.VISIBLE else View.GONE
     }
 

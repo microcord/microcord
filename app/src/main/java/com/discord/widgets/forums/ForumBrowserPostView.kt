@@ -38,6 +38,7 @@ import com.facebook.drawee.span.DraweeSpanStringBuilder
 import com.facebook.drawee.view.SimpleDraweeView
 import com.facebook.imagepipeline.request.ImageRequest
 import kotlin.math.max
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 class ForumBrowserPostView @JvmOverloads constructor(
     context: Context,
@@ -128,7 +129,7 @@ class ForumBrowserPostView @JvmOverloads constructor(
         var rendered = content
         post.firstMessage?.mentions.orEmpty().forEach { mention ->
             val member = post.guildMembers[mention.id]
-            rendered = rendered.replace(Regex("<@!?${mention.id}>"), "@${member?.nick ?: mention.username}")
+            rendered = rendered.replace(Regex("<@!?${mention.id}>"), "@${mention.getDisplayName(member?.nick)}")
         }
         post.channelNames.forEach { (id, name) -> rendered = rendered.replace("<#$id>", "#$name") }
         post.guildRoles.forEach { (id, role) -> rendered = rendered.replace("<@&$id>", "@${role.name}") }

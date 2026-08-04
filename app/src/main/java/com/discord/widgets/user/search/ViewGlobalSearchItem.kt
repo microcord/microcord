@@ -15,6 +15,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
+import com.discord.api.channel.getDisplayName
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.models.user.User
@@ -80,7 +81,13 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
             else -> icon.setActualImageResource(R.drawable.ic_channel_text_grey_18dp)
         }
         group.setTextAndVisibility(data.guild?.name)
-        name.text = styledText(data.matchedResult, data.channel.name ?: data.matchedResult.value.toString())
+        // `channel.name` is null for every DM and for unnamed group DMs; `getDisplayName()` is what
+        // resolves those from their recipients, friend nicknames included.
+        name.text = styledText(
+            data.matchedResult,
+            data.channel.getDisplayName().takeUnless(String::isBlank)
+                ?: data.matchedResult.value.toString(),
+        )
 
         when (data.channel.type) {
             Channel.GROUP_DM -> {

@@ -19,6 +19,7 @@ import java.util.concurrent.TimeUnit
 import rx.Observable
 import rx.subjects.BehaviorSubject
 import rx.subjects.PublishSubject
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 class ServerSettingsRoleMembersViewModel(
     private val guildId: Long,
@@ -114,7 +115,7 @@ class ServerSettingsRoleMembersViewModel(
                 member,
                 PermissionOwner.Member(
                     user,
-                    (member.nick ?: user.getUserNameWithDiscriminator()).toString(),
+                    user.getDisplayName(member.nick),
                     false,
                 ),
             )

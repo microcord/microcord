@@ -2,6 +2,8 @@ package com.discord.widgets.channels
 
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import com.discord.stores.StoreStream
+import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.R
 import com.discord.databinding.WidgetGroupInviteFriendsItemBinding
 import com.discord.models.user.User
@@ -9,6 +11,7 @@ import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.utilities.presence.PresenceUtils
+import com.discord.utilities.user.UserUtils.displayName
 
 class WidgetGroupInviteFriendsAdapter(
     recycler: RecyclerView,
@@ -39,14 +42,17 @@ class WidgetGroupInviteFriendsAdapter(
         private val binding = WidgetGroupInviteFriendsItemBinding.bind(itemView)
 
         override fun onConfigure(position: Int, data: WidgetGroupInviteFriends.Model.FriendItem) {
-            binding.friendsListItemName.text = data.user?.username
+            val friendName = data.user?.let {
+                it.getDisplayName(StoreStream.getUserRelationships().getNickname(it.id))
+            }
+            binding.friendsListItemName.text = friendName
             binding.friendsListItemStatus.setPresence(data.presence)
             binding.userSelectedCheckbox.isChecked = data.isSelected
-            binding.userSelectedCheckbox.contentDescription = data.user?.username
+            binding.userSelectedCheckbox.contentDescription = friendName
             binding.friendContainer.setOnClickListener {
                 data.user?.let { adapter.listener?.invoke(it, !data.isSelected) }
             }
-            binding.friendContainer.contentDescription = data.user?.username
+            binding.friendContainer.contentDescription = friendName
             PresenceUtils.setPresenceText(
                 data.presence,
                 data.isApplicationStreaming,

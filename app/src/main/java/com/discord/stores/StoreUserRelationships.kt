@@ -10,6 +10,7 @@ import rx.Observable
 class StoreUserRelationships(
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
     private val relationshipsCache: Persister<Map<Long, Int>> = Persister(CACHE_KEY, UNLOADED_SENTINEL),
+    private val nicknamesCache: Persister<Map<Long, String>> = Persister(NICKNAMES_CACHE_KEY, emptyMap()),
 ) : StoreV2() {
     sealed class UserRelationshipsState {
         data object Unloaded : UserRelationshipsState()
@@ -19,11 +20,15 @@ class StoreUserRelationships(
     private var relationshipsState: UserRelationshipsState = UserRelationshipsState.Unloaded
     private var relationshipsStateSnapshot: UserRelationshipsState = UserRelationshipsState.Unloaded
 
+    private var nicknames: Map<Long, String> = emptyMap()
+    private var nicknamesSnapshot: Map<Long, String> = emptyMap()
+
     @StoreThread
     fun init() {
         StoreThreadScheduler.assertCurrentThread()
         relationshipsCache.get().takeUnless { it == UNLOADED_SENTINEL }?.let {
             relationshipsState = UserRelationshipsState.Loaded(LinkedHashMap(it))
+            nicknames = LinkedHashMap(nicknamesCache.get())
             markChanged()
         }
     }
@@ -31,23 +36,41 @@ class StoreUserRelationships(
     fun getRelationshipsState() = relationshipsStateSnapshot
     fun getRelationships() = (relationshipsStateSnapshot as? UserRelationshipsState.Loaded)?.relationships.orEmpty()
 
+    /** The nickname the user gave this friend, or null. Blank nicknames are stored as null. */
+    fun getNickname(userId: Long): String? = nicknamesSnapshot[userId]
+
+    fun getNicknames(): Map<Long, String> = nicknamesSnapshot
+
     @StoreThread
     fun handleConnectionOpen(payload: ModelPayload) {
         StoreThreadScheduler.assertCurrentThread()
-        relationshipsState = UserRelationshipsState.Loaded(
-            payload.relationships.orEmpty().associate { it.id to it.type },
-        )
+        val relationships = payload.relationships.orEmpty()
+        relationshipsState = UserRelationshipsState.Loaded(relationships.associate { it.id to it.type })
+        nicknames = relationships.mapNotNull { relationship ->
+            relationship.nickname?.takeUnless(String::isBlank)?.let { relationship.id to it }
+        }.toMap()
         markChanged()
     }
 
     @StoreThread fun handlePreLogout() {
         StoreThreadScheduler.assertCurrentThread()
         relationshipsState = UserRelationshipsState.Unloaded
+        nicknames = emptyMap()
         markChanged()
     }
 
-    @StoreThread fun handleRelationshipAdd(relationship: ModelUserRelationship) = update { it[relationship.id] = relationship.type }
-    @StoreThread fun handleRelationshipRemove(relationship: ModelUserRelationship) = update { it.remove(relationship.id) }
+    @StoreThread fun handleRelationshipAdd(relationship: ModelUserRelationship) = update(
+        types = { it[relationship.id] = relationship.type },
+        nicks = { nicks ->
+            val nickname = relationship.nickname?.takeUnless(String::isBlank)
+            if (nickname == null) nicks.remove(relationship.id) else nicks[relationship.id] = nickname
+        },
+    )
+
+    @StoreThread fun handleRelationshipRemove(relationship: ModelUserRelationship) = update(
+        types = { it.remove(relationship.id) },
+        nicks = { it.remove(relationship.id) },
+    )
 
     fun observe(): Observable<Map<Long, Int>> = observationDeck.connectRx(this) { getRelationships() }.distinctUntilChanged()
     fun observe(userId: Long): Observable<Int?> = observe().map { it[userId] }.distinctUntilChanged()
@@ -60,25 +83,38 @@ class StoreUserRelationships(
     fun observeUserRelationshipsState(): Observable<UserRelationshipsState> =
         observationDeck.connectRx(this) { relationshipsStateSnapshot }.distinctUntilChanged()
 
+    fun observeNicknames(): Observable<Map<Long, String>> =
+        observationDeck.connectRx(this) { getNicknames() }.distinctUntilChanged()
+
+    fun observeNickname(userId: Long): Observable<String?> =
+        observeNicknames().map { it[userId] }.distinctUntilChanged()
+
     override fun snapshotData() {
         relationshipsStateSnapshot = when (val state = relationshipsState) {
             is UserRelationshipsState.Loaded -> UserRelationshipsState.Loaded(LinkedHashMap(state.relationships).also(relationshipsCache::set))
             UserRelationshipsState.Unloaded -> UserRelationshipsState.Unloaded.also { relationshipsCache.clear() }
         }
+        nicknamesSnapshot = LinkedHashMap(nicknames).also(nicknamesCache::set)
     }
 
     @StoreThread
-    private fun update(block: (MutableMap<Long, Int>) -> Unit) {
+    private fun update(
+        types: (MutableMap<Long, Int>) -> Unit,
+        nicks: (MutableMap<Long, String>) -> Unit,
+    ) {
         StoreThreadScheduler.assertCurrentThread()
-        val before = (relationshipsState as? UserRelationshipsState.Loaded)?.relationships.orEmpty()
-        val changed = LinkedHashMap(before).apply(block)
-        if (changed == before) return
-        relationshipsState = UserRelationshipsState.Loaded(changed)
+        val beforeTypes = (relationshipsState as? UserRelationshipsState.Loaded)?.relationships.orEmpty()
+        val changedTypes = LinkedHashMap(beforeTypes).apply(types)
+        val changedNicks = LinkedHashMap(nicknames).apply(nicks)
+        if (changedTypes == beforeTypes && changedNicks == nicknames) return
+        relationshipsState = UserRelationshipsState.Loaded(changedTypes)
+        nicknames = changedNicks
         markChanged()
     }
 
     companion object {
         const val CACHE_KEY = "STORE_USER_RELATIONSHIPS_V9"
+        const val NICKNAMES_CACHE_KEY = "STORE_USER_RELATIONSHIP_NICKNAMES_V1"
         private val UNLOADED_SENTINEL = mapOf(-1L to -1)
     }
 }

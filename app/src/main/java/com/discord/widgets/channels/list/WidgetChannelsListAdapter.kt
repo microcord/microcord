@@ -85,6 +85,7 @@ import com.discord.widgets.guildscheduledevent.GuildScheduledEventLocationInfo
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textview.MaterialTextView
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 /**
  * The channels sidebar adapter: one view holder per [ChannelListItem] type.
@@ -1331,7 +1332,7 @@ class WidgetChannelsListAdapter(
         }
 
         private fun speakerSummary(speakers: List<UserGuildMember>): CharSequence {
-            val first = speakers.first().user.username
+            val first = speakers.first().let { it.user.getDisplayName(it.guildMember?.nick) }
             if (speakers.size == 1) return first
             return userSummaryLabel.i18nFormat(
                 R.string.user_summary_with_others,

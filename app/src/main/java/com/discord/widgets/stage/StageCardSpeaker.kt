@@ -2,6 +2,7 @@ package com.discord.widgets.stage
 
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 /**
  * A speaker as the stage-discovery cards render them.
@@ -13,5 +14,5 @@ data class StageCardSpeaker(
     val user: User,
     val guildMember: GuildMember?,
 ) {
-    val displayName: String = guildMember?.nick ?: user.username
+    val displayName: String = user.getDisplayName(guildMember?.nick)
 }

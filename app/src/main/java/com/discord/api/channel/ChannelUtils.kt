@@ -10,6 +10,7 @@ import com.discord.models.presence.Presence
 import com.discord.models.user.CoreUser
 import com.discord.models.user.User
 import com.discord.utilities.user.UserUtils
+import com.discord.utilities.user.UserUtils.displayName
 
 /**
  * The canonical channel predicates and derived values.
@@ -120,15 +121,25 @@ fun Channel.isHQDirectoryChannel(): Boolean = id == HQ_DIRECTORY_CHANNEL_ID
 fun Channel.shouldPlayJoinLeaveSounds(): Boolean = isVoiceChannel() || isPrivate()
 
 /**
+ * Resolves the viewer's private nickname for a user, used only for private-channel titles.
+ *
+ * A friend nickname lives in the relationship store, which this layer must not depend on, so the
+ * store graph installs a lookup here at startup. The default resolves nothing, which keeps
+ * [getDisplayName] a pure function in tests and before the graph exists.
+ */
+@JvmField
+var friendNicknameResolver: (Long) -> String? = { null }
+
+/**
  * The name to show for this channel.
  *
- * Private channels are allowed to have no name at all; the client then falls back to
- * the comma-separated recipient usernames. Everything else falls back to the empty
- * string rather than `null` so callers never render "null".
+ * Private channels are allowed to have no name at all; the client then falls back to the
+ * comma-separated recipient names, each of which a friend nickname overrides. Everything else falls
+ * back to the empty string rather than `null` so callers never render "null".
  */
 fun Channel.getDisplayName(): String {
     if (isPrivate() && name.isNullOrEmpty()) {
-        return recipients?.joinToString { it.globalName?.takeUnless(String::isBlank) ?: it.username } ?: ""
+        return recipients?.joinToString { friendNicknameResolver(it.id) ?: it.displayName } ?: ""
     }
     return name ?: ""
 }

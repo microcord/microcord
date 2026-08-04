@@ -38,6 +38,7 @@ class UserActionsDialogViewModel(
         val user: User?,
         val relationshipType: Int?,
         val guildMember: GuildMember?,
+        val friendNickname: String?,
     )
 
     sealed class ViewState {
@@ -46,10 +47,14 @@ class UserActionsDialogViewModel(
         data class Loaded(
             val user: User,
             val userNickname: String?,
+            val friendNickname: String?,
             val showBlockItem: Boolean,
             val showUnblockItem: Boolean,
             val showRemoveFriendItem: Boolean,
-        ) : ViewState()
+        ) : ViewState() {
+            /** Only a friend can carry a friend nickname, so only they are offered one. */
+            val showFriendNicknameItem: Boolean get() = showRemoveFriendItem
+        }
     }
 
     /** One-shot outcomes; the dialog toasts and closes on either. */
@@ -81,6 +86,7 @@ class UserActionsDialogViewModel(
             ViewState.Loaded(
                 user = user,
                 userNickname = storeState.guildMember?.nick,
+                friendNickname = storeState.friendNickname,
                 showBlockItem = type != ModelUserRelationship.TYPE_BLOCKED,
                 showUnblockItem = type == ModelUserRelationship.TYPE_BLOCKED,
                 showRemoveFriendItem = type == ModelUserRelationship.TYPE_FRIEND,
@@ -142,7 +148,10 @@ class UserActionsDialogViewModel(
                 StoreStream.getUsers().observeUser(userId),
                 StoreStream.getUserRelationships().observe(userId),
                 member,
-            ) { user, relationshipType, guildMember -> StoreState(user, relationshipType, guildMember) }
+                StoreStream.getUserRelationships().observeNickname(userId),
+            ) { user, relationshipType, guildMember, friendNickname ->
+                StoreState(user, relationshipType, guildMember, friendNickname)
+            }
                 .distinctUntilChanged()
         }
 

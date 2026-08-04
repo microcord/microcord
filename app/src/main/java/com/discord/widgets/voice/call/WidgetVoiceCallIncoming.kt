@@ -7,6 +7,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.annotation.MainThread
 import androidx.core.view.ViewCompat
+import com.discord.utilities.user.NicknameUtils
 import com.discord.R
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isMultiUserDM
@@ -22,6 +23,7 @@ import com.discord.widgets.voice.fullscreen.grid.PrivateCallGridView
 import com.discord.widgets.voice.model.CallModel
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import rx.Observable
+import com.discord.utilities.user.UserUtils.displayName
 
 /**
  * The full-screen "incoming call" surface: who is calling, and accept / accept-with-video /
@@ -135,7 +137,7 @@ open class WidgetVoiceCallIncoming : AppFragment(R.layout.widget_voice_call_inco
         statusPrimary.text = if (callModel.channel.isMultiUserDM()) {
             callModel.channel.getDisplayName()
         } else {
-            callModel.dmRecipient?.user?.username
+            NicknameUtils.getName(null, callModel.channel.id, callModel.dmRecipient?.user)
         }
         statusSecondary.setText(
             if (callModel.isVideoCall) R.string.incoming_video_call else R.string.incoming_call,

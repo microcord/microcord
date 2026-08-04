@@ -76,6 +76,8 @@ class SettingsUserProfileViewModelTest {
                 banner = NullSerializable.Value("data:image/png;base64,banner"),
                 bannerColor = NullSerializable.Null(),
                 nickname = "nick",
+                displayName = null,
+                pronouns = "any/all",
                 bio = "new bio",
                 isEditingBio = true,
             ),
@@ -85,25 +87,73 @@ class SettingsUserProfileViewModelTest {
         assertTrue(restored.currentBannerImage is NullSerializable.Value)
         assertTrue(restored.currentBannerColorHex is NullSerializable.Null)
         assertEquals("nick", restored.currentNickname)
+        assertEquals("any/all", restored.currentPronouns)
         assertEquals("new bio", restored.currentBio)
         assertTrue(restored.isEditingBio)
     }
 
-    @Test fun `global save sends only changed fields and explicit clears`() {
+    @Test fun `identity and profile fields go to their own endpoints`() {
         val state = loaded(
             user = user(bio = "same", avatar = "avatar"),
             bio = "same",
             avatar = NullSerializable.Null(),
             banner = NullSerializable.Value("data:image/png;base64,banner"),
-            color = NullSerializable.Null(),
+            color = NullSerializable.Value("#5865F2"),
         )
 
-        val patch = SettingsUserProfileViewModel.userPatch(state)
+        val account = SettingsUserProfileViewModel.userPatch(state)
+        val profile = SettingsUserProfileViewModel.profilePatch(state)
 
-        assertTrue(patch.avatar is NullSerializable.Null)
-        assertTrue(patch.banner is NullSerializable.Value)
-        assertTrue(patch.bannerColor is NullSerializable.Null)
-        assertNull(patch.bio)
+        // The avatar is an account field; the banner and accent colour are profile metadata.
+        assertTrue(account?.avatar is NullSerializable.Null)
+        assertNull(account?.globalName)
+        assertTrue(profile?.banner is NullSerializable.Value)
+        assertEquals(0x5865F2, profile?.accentColor?.value)
+        assertNull(profile?.bio)
+        assertNull(profile?.pronouns)
+    }
+
+    @Test fun `an untouched screen sends nothing`() {
+        val state = loaded(user = user(bio = "same"), bio = "same")
+
+        assertNull(SettingsUserProfileViewModel.userPatch(state))
+        assertNull(SettingsUserProfileViewModel.profilePatch(state))
+        assertNull(SettingsUserProfileViewModel.guildMemberPatch(state))
+    }
+
+    @Test fun `cleared bio and pronouns are sent as empty strings, not nulls`() {
+        val state = loaded(user = user(bio = "old"), bio = "", pronouns = "")
+            .copy(userProfile = profileWith(pronouns = "they/them"))
+
+        val profile = SettingsUserProfileViewModel.profilePatch(state)
+
+        assertEquals("", profile?.bio)
+        assertEquals("", profile?.pronouns)
+        assertNull(profile?.banner)
+        assertNull(profile?.accentColor)
+    }
+
+    @Test fun `a guild profile never carries an accent colour`() {
+        val state = loaded(
+            user = user(),
+            member = member(),
+            pronouns = "any/all",
+            color = NullSerializable.Value("#5865F2"),
+        )
+
+        val profile = SettingsUserProfileViewModel.profilePatch(state)
+
+        assertEquals("any/all", profile?.pronouns)
+        assertNull(profile?.accentColor)
+    }
+
+    @Test fun `changed pronouns make the screen dirty`() {
+        val saved = loaded(user = user(), pronouns = "they/them")
+            .copy(userProfile = profileWith(pronouns = "they/them"))
+
+        assertFalse(saved.isDirty)
+        assertTrue(saved.copy(currentPronouns = "she/her").isDirty)
+        assertTrue(saved.copy(currentPronouns = "").isDirty)
     }
 
     @Test fun `cropped avatar preview survives draft restore and is saved`() {
@@ -116,50 +166,59 @@ class SettingsUserProfileViewModelTest {
                 banner = null,
                 bannerColor = null,
                 nickname = null,
+                displayName = null,
+                pronouns = null,
                 bio = initial.currentBio,
                 isEditingBio = false,
             ),
         )
 
         assertEquals(dataUrl, restored.currentAvatar?.value)
-        assertEquals(dataUrl, SettingsUserProfileViewModel.userPatch(restored).avatar?.value)
+        assertEquals(dataUrl, SettingsUserProfileViewModel.userPatch(restored)?.avatar?.value)
         assertTrue(restored.showSaveFab)
     }
 
-    @Test fun `guild save includes nickname avatar banner and bio`() {
+    @Test fun `guild save splits the member fields from the profile fields`() {
         val state = loaded(
             user = user(),
-            member = GuildMember(
-                color = 0,
-                hoistRoleId = 0,
-                roles = emptyList(),
-                nick = "old",
-                premiumSince = null,
-                pending = false,
-                joinedAt = null,
-                guildId = 7,
-                userId = 1,
-                bio = "old bio",
-            ),
+            member = member(nick = "old", bio = "old bio"),
             nickname = "new",
             bio = "new bio",
             avatar = NullSerializable.Null(),
             banner = NullSerializable.Value("data:image/png;base64,banner"),
         )
 
-        val patch = SettingsUserProfileViewModel.guildMemberPatch(state)
+        val memberPatch = SettingsUserProfileViewModel.guildMemberPatch(state)
+        val profile = SettingsUserProfileViewModel.profilePatch(state)
 
-        assertEquals("new", patch.nick)
-        assertTrue(patch.avatar is NullSerializable.Null)
-        assertTrue(patch.banner is NullSerializable.Value)
-        assertEquals("new bio", patch.bio)
+        assertEquals("new", memberPatch?.nick)
+        assertTrue(memberPatch?.avatar is NullSerializable.Null)
+        assertTrue(profile?.banner is NullSerializable.Value)
+        assertEquals("new bio", profile?.bio)
     }
+
+    private fun profileWith(pronouns: String) =
+        UserProfile(userProfile = UserProfile.ProfileMetadata(pronouns = pronouns))
+
+    private fun member(nick: String? = "guild nick", bio: String? = "guild bio") = GuildMember(
+        color = 0,
+        hoistRoleId = 0,
+        roles = emptyList(),
+        nick = nick,
+        premiumSince = null,
+        pending = false,
+        joinedAt = null,
+        guildId = 7,
+        userId = 1,
+        bio = bio,
+    )
 
     private fun loaded(
         user: MeUser,
         member: GuildMember? = null,
         nickname: String? = member?.nick,
         bio: String? = member?.bio ?: user.bio,
+        pronouns: String? = null,
         avatar: NullSerializable<String>? = null,
         banner: NullSerializable<String>? = null,
         color: NullSerializable<String>? = null,
@@ -172,6 +231,7 @@ class SettingsUserProfileViewModelTest {
         currentBannerImage = banner,
         currentBannerColorHex = color,
         currentNickname = nickname,
+        currentPronouns = pronouns,
         currentBio = bio,
         bioAst = emptyList(),
         isEditingBio = false,

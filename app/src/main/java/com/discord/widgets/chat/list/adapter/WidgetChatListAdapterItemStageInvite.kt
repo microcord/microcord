@@ -22,6 +22,7 @@ import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.button.MaterialButton
 import rx.Observable
 import rx.Subscription
+import com.discord.utilities.user.UserUtils.getDisplayName
 
 /**
  * The card an invite gets when it points at a stage that is live right now.
@@ -152,7 +153,7 @@ class WidgetChatListAdapterItemStageInvite(
     private fun speaker(user: User, guildMember: GuildMember?) = StageCardSpeakersView.Speaker(
         user = user,
         guildMember = guildMember,
-        displayName = guildMember?.nick ?: user.username,
+        displayName = user.getDisplayName(guildMember?.nick),
     )
 
     private data class Model(

@@ -14,6 +14,7 @@ import android.widget.LinearLayout
 import androidx.cardview.widget.CardView
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.discord.utilities.user.NicknameUtils
 import com.discord.R
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
@@ -203,7 +204,11 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
 
     private fun configureNames(user: User, member: GuildMember?, state: UserProfileHeaderViewModel.ViewState.Loaded) {
         val accountName = user.getUserNameWithDiscriminator()
-        val displayName = user.getDisplayName(member?.nick)
+        // A guild member id short-circuits the lookup, so a member with no nickname stays on the
+        // account display name rather than falling through to a friend nickname.
+        val contextNickname = member?.nick
+            ?: NicknameUtils.getNickname(member?.guildId, state.channelId, user.id)
+        val displayName = user.getDisplayName(contextNickname)
         val primary = if (displayName == user.username) accountName else displayName
         primaryName.configureUsername(primary)
         primaryName.configureTag(user.isBot, if (user.isSystemUser) R.string.system_dm_tag_system else R.string.bot_tag_bot, false)

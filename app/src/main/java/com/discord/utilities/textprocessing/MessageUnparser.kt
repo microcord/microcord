@@ -32,7 +32,7 @@ object MessageUnparser {
                 ?: match.value
             match.groups[5] != null -> match.groupValues[5].toLongOrNull()
                 ?.let(users::get)
-                ?.let { "@${it.username}${UserUtils.padDiscriminator(it.discriminator)}" }
+                ?.let { "@${it.username}${UserUtils.discriminatorSuffix(it.discriminator)}" }
                 ?: match.value
             else -> match.groupValues[6].toLongOrNull()
                 ?.let { id -> guild?.roles?.firstOrNull { it.id == id } }

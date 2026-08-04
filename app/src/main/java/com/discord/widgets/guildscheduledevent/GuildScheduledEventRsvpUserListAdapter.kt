@@ -42,10 +42,11 @@ class GuildScheduledEventRsvpUserListAdapter(
             itemView.setOnClickListener { adapter.onItemClick(item.userId) }
 
             userName.text = item.displayName
-            // A nickname replaces `username#0001` entirely, so the tag is only meaningful without
-            // one. The row is recycled, so the previous item's tag has to be cleared explicitly.
-            if (item.nickname == null) {
-                discriminator.text = UserUtils.padDiscriminator(item.discriminator)
+            // A nickname replaces the tag entirely, and a migrated account has none. The row is
+            // recycled, so the previous item's tag has to be cleared explicitly.
+            val tag = UserUtils.discriminatorSuffix(item.discriminator)
+            if (item.nickname == null && tag.isNotEmpty()) {
+                discriminator.text = tag
                 discriminator.visibility = View.VISIBLE
             } else {
                 discriminator.text = ""

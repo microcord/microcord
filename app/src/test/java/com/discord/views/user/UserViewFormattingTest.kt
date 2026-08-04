@@ -7,7 +7,8 @@ import org.junit.Test
 class UserViewFormattingTest {
     @Test
     fun preservesLegacyDiscriminatorAndMediaProxySizing() {
-        assertEquals("member#0000", formatUsername(CoreUser(1, "member")))
+        assertEquals("member", formatUsername(CoreUser(1, "member")))
+        assertEquals("member#0042", formatUsername(CoreUser(1, "member", discriminator = 42)))
         assertEquals(80, mediaProxySize(72))
     }
 }

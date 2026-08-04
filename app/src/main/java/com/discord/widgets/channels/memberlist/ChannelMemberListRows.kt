@@ -1,5 +1,6 @@
 package com.discord.widgets.channels.memberlist
 
+import com.discord.utilities.user.NicknameUtils
 import com.discord.api.channel.Channel
 import com.discord.api.presence.ClientStatus
 import com.discord.api.role.GuildRole
@@ -193,7 +194,9 @@ object ChannelMemberListRows {
                     user,
                     null,
                     presences[user.id],
-                    user.getDisplayName(nicks[user.id]),
+                    user.getDisplayName(
+                        nicks[user.id] ?: NicknameUtils.getNickname(null, channel.id, user.id),
+                    ),
                     user.id == channel.ownerId,
                     user.id in streamingUserIds,
                 ))
