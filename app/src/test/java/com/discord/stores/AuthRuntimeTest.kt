@@ -77,10 +77,7 @@ class AuthRuntimeTest {
         assertFalse(store.getAuthState().toString().contains("direct-secret"))
     }
 
-    /**
-     * An MFA ticket is single use, so a second POST always fails. Retrofit's observable is cold:
-     * anything in the chain that re-subscribes to it silently re-sends the whole request.
-     */
+    /** Retrofit's observable is cold, so a re-subscribe silently re-spends the single-use ticket. */
     @Test
     fun mfaVerificationPostsExactlyOnce() {
         val server = MockWebServer()

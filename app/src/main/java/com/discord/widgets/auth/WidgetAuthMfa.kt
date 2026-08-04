@@ -46,7 +46,7 @@ class WidgetAuthMfa : AuthFragment(R.layout.widget_auth_mfa, AuthRoute.MFA) {
         view.findViewById<MaterialButton>(R.id.auth_mfa_resend).setOnClickListener { sendSms() }
         when (codeMethod) {
             MfaMethodType.SMS -> sendSms()
-            // Nothing but backup codes is on offer, and they are too long for the field behind it.
+            // Backup codes are the only offer, and they are too long for the field behind this.
             MfaMethodType.BACKUP -> WidgetAuthMfaDialog.showBackupCodes(this)
             else -> Unit
         }

@@ -37,11 +37,7 @@ class RestApiErrorLoginShapeTest {
         assertEquals("You are being rate limited.", error.message)
     }
 
-    /**
-     * `StoreAuthentication.loginBody` reads the error body to spot a suspended account, and
-     * `StoreMediaFavorites` reads it to spot code 50105. Consuming it there leaves this classifier
-     * with an empty string, which downgrades every login failure to a bare "bad request".
-     */
+    /** Upstream readers peek for suspension and code 50105; consuming would blank this out. */
     @Test
     fun `a body read once still classifies`() {
         val response = errorResponse(

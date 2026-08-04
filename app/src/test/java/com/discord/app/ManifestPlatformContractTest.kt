@@ -41,8 +41,6 @@ class ManifestPlatformContractTest {
         assertEquals(
             setOf(
                 "com.spotify.music",
-                "com.samsung.android.game.gametools",
-                "com.samsung.android.game.gamehome",
                 "com.authy.authy",
                 "com.google.android.apps.authenticator2",
             ),

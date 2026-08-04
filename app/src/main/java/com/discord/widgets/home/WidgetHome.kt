@@ -45,7 +45,6 @@ import com.discord.utilities.toolbar.positionUnreadCountView
 import com.discord.utilities.user.UserUtils.hasUnreadUrgentMessages
 import com.discord.widgets.chat.input.AppFlexInputViewModel
 import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventUpsellBottomSheet
-import com.discord.widgets.notice.WidgetNoticeNuxSamsungLink
 import com.discord.widgets.playstation.WidgetPlaystationIntegrationUpsellBottomSheet
 import com.discord.widgets.settings.WidgetMuteSettingsSheet
 import com.discord.widgets.user.calls.PrivateCallLauncher
@@ -111,7 +110,6 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         }
         WidgetChannelSidebarActions.onNotifications = ::openMuteSettings
         WidgetChannelSidebarActions.onSearch = ::openSearch
-        WidgetNoticeNuxSamsungLink.enqueue(requireContext())
     }
 
     /**

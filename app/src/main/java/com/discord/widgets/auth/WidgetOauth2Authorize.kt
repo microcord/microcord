@@ -280,7 +280,7 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
         finishCancelled()
     }
 
-    /** Builds the request description; overridden by the Samsung variant. */
+    /** Builds the request description; open so a caller can special-case an application. */
     protected open fun createOauthAuthorize(requestUrl: Uri): OAuth2Authorize = parse(requestUrl)
 
     @Suppress("DEPRECATION")

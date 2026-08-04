@@ -80,9 +80,9 @@
         tools:ignore="ProtectedPermissions" />
 
     <!--
-        Android 11 package visibility. Without this block the app cannot resolve the Spotify,
-        Samsung Game Tools/Home or authenticator apps, nor the chooser/pick/get-content/custom-tab
-        intents it launches, on API 30+.
+        Android 11 package visibility. Without this block the app cannot resolve the Spotify or
+        authenticator apps, nor the chooser/pick/get-content/custom-tab intents it launches,
+        on API 30+.
     -->
     <queries>
         <intent>
@@ -120,8 +120,6 @@
         </intent>
 
         <package android:name="com.spotify.music" />
-        <package android:name="com.samsung.android.game.gametools" />
-        <package android:name="com.samsung.android.game.gamehome" />
         <package android:name="com.authy.authy" />
         <package android:name="com.google.android.apps.authenticator2" />
     </queries>
