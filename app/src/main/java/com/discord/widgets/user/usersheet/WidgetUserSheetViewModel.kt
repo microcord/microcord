@@ -551,7 +551,8 @@ class WidgetUserSheetViewModel(
                 context = context,
             ) { metadata ->
                 val url = metadata.buttonUrls?.getOrNull(buttonIndex) ?: return@appSubscribe
-                com.discord.utilities.uri.UriHandler.handle(context, url)
+                // The URL comes from the game's own presence payload, so it is never trusted.
+                com.discord.utilities.uri.UriHandler.handleOrUntrusted(context, url)
             }
     }
 

@@ -1,6 +1,7 @@
 package com.discord.widgets.user.profile
 
 import androidx.annotation.MainThread
+import androidx.core.graphics.ColorUtils
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isMultiUserDM
 import com.discord.api.premium.PremiumTier
@@ -172,6 +173,7 @@ internal data class ProfileThemeColors(
     val noteOverlay: Int,
     val borderOverlay: Int,
     val button: Int,
+    val rolePillSurface: Int,
     val textDefault: Int,
     val textMuted: Int,
     val textSubtle: Int,
@@ -198,11 +200,24 @@ internal data class ProfileThemeColors(
                 noteOverlay = if (profileIsDark) DARK_NOTE else LIGHT_NOTE,
                 borderOverlay = if (profileIsDark) DARK_BORDER else LIGHT_BORDER,
                 button = contrastButton(primary),
+                rolePillSurface = rolePillSurface(secondary, profileIsDark),
                 textDefault = if (profileIsDark) 0xF5FFFFFF.toInt() else 0xF5000000.toInt(),
                 textMuted = if (profileIsDark) 0xC2FFFFFF.toInt() else 0xC2000000.toInt(),
                 textSubtle = if (profileIsDark) 0xE0FFFFFF.toInt() else 0xE0000000.toInt(),
                 isDark = profileIsDark,
             )
+        }
+
+        /**
+         * `BACKGROUND_MOD_MUTED` under a profile theme: the secondary colour fully saturated and
+         * pinned to the opposite end of the lightness range, at 5% over the gradient.
+         */
+        private fun rolePillSurface(secondary: Int, profileIsDark: Boolean): Int {
+            val hsl = FloatArray(3)
+            ColorUtils.colorToHSL(secondary, hsl)
+            hsl[1] = 1f
+            hsl[2] = if (profileIsDark) 0.92f else 0.08f
+            return ColorUtils.setAlphaComponent(ColorUtils.HSLToColor(hsl), 0x0D)
         }
 
         /** Discord adjusts LAB lightness in chroma.js steps until white contrast is between 7 and 10. */

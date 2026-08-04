@@ -51,7 +51,7 @@ class WidgetGuildClone : WidgetGuildCreate(R.layout.widget_guild_clone) {
                 )
                 val roles = guild.roles.orEmpty().filterNot { it.name == "@everyone" }.sortedByDescending { it.id }
                 binding.guildTemplatePreviewRolesLayout.visibility = if (roles.isEmpty()) View.GONE else View.VISIBLE
-                binding.guildTemplatePreviewRoles.updateView(roles, themedColor(R.attr.primary_300), guild.id)
+                binding.guildTemplatePreviewRoles.updateView(roles, guild.id)
             }
         }
     }

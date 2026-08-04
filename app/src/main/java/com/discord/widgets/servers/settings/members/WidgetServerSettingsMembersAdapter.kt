@@ -62,11 +62,7 @@ class WidgetServerSettingsMembersAdapter(
             super.onConfigure(position, data)
             memberView.configure(data.user, data.guildMember)
 
-            rolesList.updateView(
-                data.roles,
-                ColorCompat.getColor(rolesList, R.color.status_grey_500),
-                data.guildMember.guildId,
-            )
+            rolesList.updateView(data.roles, data.guildMember.guildId)
             rolesList.visibility = if (data.roles.isNotEmpty()) View.VISIBLE else View.GONE
 
             // Exactly one of the two is shown; the padlock is the only signal that the row is

@@ -2,7 +2,6 @@ package com.discord.widgets.user.profile
 
 import android.content.Context
 import android.util.AttributeSet
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.widget.LinearLayout
@@ -40,13 +39,16 @@ class UserProfileConnectionsView(context: Context, attrs: AttributeSet) : Linear
         recycler.isNestedScrollingEnabled = false
     }
 
-    fun updateViewState(
+    internal fun updateViewState(
         viewState: ViewState,
         onConnectedAccountClick: (String, Int, String?) -> Unit,
         onMutualGuildsItemClick: () -> Unit,
         onMutualFriendsItemClick: () -> Unit,
+        theme: ProfileThemeColors? = null,
     ) {
         adapter.onClick = onConnectedAccountClick
+        // Rows are inflated on demand, so they are never reached by the sheet's theme sweep.
+        adapter.theme = theme
         adapter.items = viewState.connectedAccountItems
         mutualGuilds.setOnClickListener { onMutualGuildsItemClick() }
         mutualFriends.setOnClickListener { onMutualFriendsItemClick() }
@@ -62,6 +64,7 @@ class UserProfileConnectionsView(context: Context, attrs: AttributeSet) : Linear
                 notifyDataSetChanged()
             }
         var onClick: (String, Int, String?) -> Unit = { _, _, _ -> }
+        var theme: ProfileThemeColors? = null
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = AccountViewHolder(
             LayoutInflater.from(parent.context).inflate(R.layout.icon_list_item_text_view, parent, false) as TextView,
@@ -77,10 +80,15 @@ class UserProfileConnectionsView(context: Context, attrs: AttributeSet) : Linear
             holder.text.text = account.name
             holder.text.contentDescription = String.format("%s, %s", account.type, account.name)
             holder.text.setOnClickListener { onClick(account.name, iconAttr, profileUrl) }
+            // The glyph is a brand mark and carries its own colours; only the label follows the
+            // profile theme.
+            holder.text.setTextColor(theme?.textDefault ?: holder.defaultTextColor)
         }
     }
 
-    private class AccountViewHolder(val text: TextView) : RecyclerView.ViewHolder(text)
+    private class AccountViewHolder(val text: TextView) : RecyclerView.ViewHolder(text) {
+        val defaultTextColor: Int = text.currentTextColor
+    }
 
     private fun platformInfo(account: ConnectedAccount): Pair<Int, String?> {
         val platform = Platform.from(account)

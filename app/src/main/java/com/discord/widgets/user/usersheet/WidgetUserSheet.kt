@@ -12,6 +12,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.cardview.widget.CardView
 import androidx.core.content.getSystemService
@@ -68,6 +69,8 @@ import com.google.android.material.card.MaterialCardView
  * volume and mute. All of that selection happens in [WidgetUserSheetViewModel]; this class only
  * binds the result.
  */
+private const val PROFILE_TINT_ICON = "profile_tint_icon"
+
 class WidgetUserSheet : AppBottomSheet() {
 
     private var _binding: WidgetUserSheetBinding? = null
@@ -297,6 +300,7 @@ class WidgetUserSheet : AppBottomSheet() {
             ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorInteractiveNormal)
         ImageViewCompat.setImageTintList(binding.userSheetMoreButton, ColorStateList.valueOf(iconColor))
         TextViewCompat.setCompoundDrawableTintList(binding.userSheetCopyId, ColorStateList.valueOf(iconColor))
+        tintTaggedIcons(iconColor)
         profileActionButtons().forEach { button ->
             button.setTextColor(ColorStateList.valueOf(colors?.textDefault ?: iconColor))
             TextViewCompat.setCompoundDrawableTintList(button, ColorStateList.valueOf(iconColor))
@@ -317,6 +321,24 @@ class WidgetUserSheet : AppBottomSheet() {
             colors,
             requireNotNull(defaultNoteTheme),
         )
+    }
+
+    /**
+     * Icons the profile theme owns, marked `profile_tint_icon` in XML. Destructive icons are left
+     * alone: they are red in both themes.
+     */
+    private fun tintTaggedIcons(color: Int) {
+        val tint = ColorStateList.valueOf(color)
+        fun walk(view: View) {
+            if (view.tag == PROFILE_TINT_ICON) {
+                when (view) {
+                    is ImageView -> ImageViewCompat.setImageTintList(view, tint)
+                    is TextView -> TextViewCompat.setCompoundDrawableTintList(view, tint)
+                }
+            }
+            if (view is ViewGroup) repeat(view.childCount) { walk(view.getChildAt(it)) }
+        }
+        walk(binding.userSheetContent)
     }
 
     private fun profileCards(): List<CardView> = listOf(
@@ -496,9 +518,8 @@ class WidgetUserSheet : AppBottomSheet() {
             binding.userSheetGuildHeader.text = state.guildSectionHeaderText ?: getString(R.string.roles)
             binding.userSheetRolesList.updateView(
                 state.roleItems,
-                profileThemeColors?.textMuted
-                    ?: ColorCompat.getThemedColor(requireContext(), R.attr.primary_300),
                 state.currentGuildId ?: 0L,
+                profileThemeColors,
             )
         }
         binding.userSheetAdminCard.show(showAdmin)
@@ -520,6 +541,7 @@ class WidgetUserSheet : AppBottomSheet() {
                 { _, _, url -> UriHandler.handle(context, url) },
                 { WidgetUserMutualGuilds.show(requireContext(), state.user.id) },
                 { WidgetUserMutualFriends.show(requireContext(), state.user) },
+                profileThemeColors,
             )
         }
     }
