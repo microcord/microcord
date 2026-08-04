@@ -27,7 +27,6 @@ class StoreDirectories(
     private val guildStore: StoreGuilds,
     private val guildScheduledEventsStore: StoreGuildScheduledEvents,
     private val restApi: RestAPIInterface,
-    private val hubEventsEnabled: (Long) -> Boolean,
     private val requestScheduler: Scheduler = Schedulers.io(),
 ) : StoreV2(), DirectoriesStore, HubDirectoriesStore {
 
@@ -119,7 +118,6 @@ class StoreDirectories(
         directoryGuildScheduledEventsMapSnapshot[directoryChannelId]
 
     override fun fetchGuildScheduledEventsForChannel(guildId: Long, directoryChannelId: Long) {
-        if (!hubEventsEnabled(guildId)) return
         restApi.getDirectoryGuildScheduledEvents(
             directoryChannelId,
             DirectoryEntryType.GuildScheduledEvent.key,

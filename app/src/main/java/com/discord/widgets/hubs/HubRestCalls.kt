@@ -20,7 +20,3 @@ internal fun <T> Observable<Response<T>>.unwrapBody(): Observable<T> = map { res
     checkNotNull(response.body()) { "Empty response body (HTTP ${response.code()})" }
 }
 
-internal fun isMultiDomainEnabled(): Boolean =
-    StoreStream.getExperiments().getUserExperiment(MULTI_DOMAIN_EXPERIMENT, trackExposure = true)?.bucket == 1
-
-private const val MULTI_DOMAIN_EXPERIMENT = "2021-08_hub_multi_domain_mobile"

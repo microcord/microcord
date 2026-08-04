@@ -297,15 +297,13 @@ class WidgetSettingsAccount : AppFragment(R.layout.widget_settings_account) {
                 StoreStream.getMFA().observeState(),
                 StoreStream.getGuilds().observeGuilds(),
                 StoreStream.getUserConnections().observeConnectedAccounts(),
-                StoreStream.getExperiments().observeUserExperiment(CONTACT_SYNC_EXPERIMENT, true),
-            ) { me, mfa, guilds, connections, experiment ->
+            ) { me, mfa, guilds, connections ->
                 Model(
                     meUser = me,
                     pendingMFAState = mfa,
                     ownsAnyGuilds = guilds.values.any { it.ownerId == me.id },
                     contactSyncConnection = connections.connectedAccounts
-                        .lastOrNull { it.type == CONTACTS_TYPE }
-                        .takeIf { experiment?.bucket == 1 },
+                        .lastOrNull { it.type == CONTACTS_TYPE },
                 )
             }.distinctUntilChanged()
         }
@@ -316,7 +314,6 @@ class WidgetSettingsAccount : AppFragment(R.layout.widget_settings_account) {
     companion object {
         private const val EXTRA_HINT_DATA_MANAGEMENT = "com.discord.extra.HINT_DATA_MANAGEMENT"
         private const val EXTRA_REDIRECT = "extra_redirect"
-        private const val CONTACT_SYNC_EXPERIMENT = "2021-04_contact_sync_android_main"
         private const val CONTACTS_TYPE = "contacts"
         private const val MFA_ENABLED_VIEW_INDEX = 0
         private const val MFA_DISABLED_VIEW_INDEX = 1

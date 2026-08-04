@@ -66,7 +66,6 @@ class LiveRtcConnectionController(
             networkMonitor = networkMonitor,
             mutedUsers = mutedUsers,
             userVolumes = userVolumes,
-            enableMediaSinkWants = true,
             loggingTagPrefix = "StoreRtcConnection",
         )
         rtcConnection = connection

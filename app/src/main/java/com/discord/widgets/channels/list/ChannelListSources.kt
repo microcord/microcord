@@ -108,23 +108,12 @@ object ChannelListSources {
         { Observable.just(emptyMap()) }
 
     @JvmField
-    var hubEnabled: () -> Boolean = {
-        StoreStream.getExperiments()
-            .getUserExperiment("2021-06_desktop_school_hubs", true)
-            ?.bucket == 1
-    }
+    var hubEnabled: () -> Boolean = { true }
 
     @JvmField
     var hubStudyGroupEnabled: () -> Boolean = {
         StoreStream.getExperiments()
             .getUserExperiment("2021-10_study_group", true)
-            ?.bucket == 1
-    }
-
-    @JvmField
-    var hubEventsEnabled: (guildId: Long) -> Boolean = { guildId ->
-        StoreStream.getExperiments()
-            .getGuildExperiment("2021-11_hub_events", guildId, true)
             ?.bucket == 1
     }
 }

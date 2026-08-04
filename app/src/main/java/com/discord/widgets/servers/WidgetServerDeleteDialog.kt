@@ -88,13 +88,7 @@ class WidgetServerDeleteDialog : AppDialog(R.layout.widget_server_delete_dialog)
     }
 }
 
-/**
- * State and the delete call for [WidgetServerDeleteDialog].
- *
- * The reference's post-delete step enqueues a feedback sheet behind the `2020-12_guild_delete_feedback`
- * experiment; neither `StoreExperiments` nor `widgets/guild_delete_feedback` exists here, so the
- * dialog simply dismisses — which is the un-bucketed behaviour.
- */
+/** State and the delete call for [WidgetServerDeleteDialog]. */
 class ServerDeleteViewModel(
     private val guildId: Long,
     storeStateObservable: Observable<StoreState> = observeStoreState(guildId),

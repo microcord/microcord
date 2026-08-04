@@ -430,8 +430,6 @@ class FriendsListViewModel(
         private const val LOCATION = "Friends List"
         private const val LOCATION_FRIEND_SUGGESTION = "Friends List - Friend Suggestion"
 
-        /** Experiment that gates both the contact-sync toolbar icon and the upsell row. */
-        private const val CONTACT_SYNC_EXPERIMENT = "2021-04_contact_sync_android_main"
         private const val CONTACTS_CONNECTION_TYPE = "contacts"
 
         /** `X-Context-Properties` is a base64 JSON blob naming where the action was taken. */
@@ -583,7 +581,6 @@ class FriendsListViewModel(
             val userRelationships = StoreStream.getUserRelationships()
             val userConnections = StoreStream.getUserConnections()
             val applicationStreaming = StoreStream.getApplicationStreaming()
-            val experiments = StoreStream.getExperiments()
             val contactSync = StoreStream.getContactSync()
             val friendSuggestions = StoreStream.getFriendSuggestions()
 
@@ -595,7 +592,6 @@ class FriendsListViewModel(
                     userRelationships,
                     applicationStreaming,
                     userConnections,
-                    experiments,
                     contactSync,
                 )
                 .leadingEdgeThrottle(1L, TimeUnit.SECONDS)
@@ -607,14 +603,9 @@ class FriendsListViewModel(
                     val hasSyncingContactsConnection = connectedAccounts.any {
                         it.type == CONTACTS_CONNECTION_TYPE && it.friendSync
                     }
-                    val experiment = experiments.getUserExperiment(
-                        CONTACT_SYNC_EXPERIMENT,
-                        !hasContactsConnection,
-                    )
-                    val inTreatment = experiment?.bucket == 1
                     val showUpsell = !contactSync.getFriendsListUpsellDismissed() &&
-                        inTreatment && !hasSyncingContactsConnection
-                    val showIcon = inTreatment && !hasContactsConnection
+                        !hasSyncingContactsConnection
+                    val showIcon = !hasContactsConnection
 
                     StoreState(
                         showContactSyncIcon = showIcon && !showUpsell,
@@ -624,11 +615,7 @@ class FriendsListViewModel(
                         users = users.getUsers(),
                         presences = presences.getPresences(),
                         applicationStreams = applicationStreaming.getStreamsByUser(),
-                        friendSuggestions = if (inTreatment) {
-                            friendSuggestions.getFriendSuggestions()
-                        } else {
-                            emptyMap()
-                        },
+                        friendSuggestions = friendSuggestions.getFriendSuggestions(),
                     )
                 }
         }

@@ -378,7 +378,6 @@ data class WidgetChannelListModel(
                     meUserId = meUserId,
                     hubEnabled = ChannelListSources.hubEnabled(),
                     hubStudyGroupEnabled = ChannelListSources.hubStudyGroupEnabled(),
-                    hubEventsEnabled = ChannelListSources.hubEventsEnabled(guildId),
                 ) to guild.guild
             }
             return Observable.combineLatest(
@@ -542,8 +541,8 @@ data class WidgetChannelListModel(
          *
          * @param canSeeGuildRoleSubscriptions gate for surfacing locked role-subscription
          *   channels; `false` hides them entirely.
-         * @param hubEnabled / @param hubStudyGroupEnabled / @param hubEventsEnabled stand in for
-         *   `GrowthTeamFeatures`, which does not exist in this project.
+         * @param hubStudyGroupEnabled stands in for `GrowthTeamFeatures`, which does not exist in
+         *   this project.
          */
         @JvmStatic
         @Suppress("LongParameterList", "LongMethod", "ComplexMethod")
@@ -571,7 +570,6 @@ data class WidgetChannelListModel(
             meUserId: Long = 0L,
             hubEnabled: Boolean = false,
             hubStudyGroupEnabled: Boolean = false,
-            hubEventsEnabled: Boolean = false,
         ): List<ChannelListItem> {
             val items = ArrayList<ChannelListItem>(guildChannels.size + joinedThreads.size)
             val isHub = guild.guild?.isHub() == true
@@ -901,12 +899,10 @@ data class WidgetChannelListModel(
                                 ),
                             )
                             if (isHub) {
-                                val eventsRow = guild.guild
-                                    ?.takeIf { hubEventsEnabled && !channel.isHqDirectoryChannel() }
-                                    ?.let { ChannelListItemGuildScheduledEvents(guildScheduledEvents, it) }
+                                // Reference `useCanSeeEventsInChannelList` is `!isHub`: a hub never
+                                // carries an events row.
                                 items.addAll(
-                                    listOfNotNull(
-                                        eventsRow,
+                                    listOf(
                                         directoryItem,
                                         ChannelListItemAddServer(),
                                         ChannelListItemInvite(selectedGuildId, true),

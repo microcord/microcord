@@ -9,15 +9,11 @@ import com.discord.utilities.rx.ui
 
 /**
  * Redeems the emailed hub verification code, and resends it on request.
- *
- * @param multiDomainEnabled see [WidgetHubEmailViewModel]; it is forwarded on the resend so the
- *   second email is generated the same way as the first.
  */
 class WidgetHubAuthenticationViewModel(
     private val email: String,
     private val guildId: Long?,
     private val restAPI: RestAPIInterface = RestAPI.api,
-    private val multiDomainEnabled: Boolean = isMultiDomainEnabled(),
 ) : AppViewModel<HubAuthenticationState>(HubAuthenticationState()) {
 
     fun resendEmail() {
@@ -25,7 +21,7 @@ class WidgetHubAuthenticationViewModel(
             RestAPIParams.VerifyEmail(
                 email = email,
                 guildId = guildId,
-                allowMultipleGuilds = multiDomainEnabled,
+                allowMultipleGuilds = true,
             ),
         )
             .unwrapBody()

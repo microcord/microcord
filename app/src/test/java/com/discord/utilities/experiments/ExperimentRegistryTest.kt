@@ -7,8 +7,8 @@ import org.junit.Test
 class ExperimentRegistryTest {
     @Test
     fun `registry contains the still-gated experiments`() {
-        assertEquals(23, ExperimentRegistry.registeredExperiments.size)
-        assertTrue("2021-12_connected_accounts_playstation" in ExperimentRegistry.registeredExperiments)
+        assertEquals(11, ExperimentRegistry.registeredExperiments.size)
+        assertTrue("2021-10_study_group" in ExperimentRegistry.registeredExperiments)
         assertEquals(
             RegisteredExperiment.Type.USER,
             ExperimentRegistry.registeredExperiments.getValue("2021-05_opensl_default_enable_android").type,

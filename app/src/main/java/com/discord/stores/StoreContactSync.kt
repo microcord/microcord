@@ -32,7 +32,6 @@ class StoreContactSync(
     private val clock: Clock,
     private val connectionsStore: StoreUserConnections,
     private val usersStore: StoreUser,
-    private val experimentsStore: StoreExperiments,
     private val userSettingsStore: StoreUserSettings,
     private val api: () -> RestAPIInterface? = { null },
     /** Optional test replacement for the device contact reader. */
@@ -77,14 +76,7 @@ class StoreContactSync(
         val upsellDismissed = dismissState[UPSELL_DISMISS_KEY]
         val upsellShownServerSide = userSettingsStore.getContactSyncUpsellShown()
 
-        // Exposure is only tracked when the user could actually be shown the upsell, so the
-        // experiment's population is not polluted by accounts that already linked contacts.
-        val experiment = experimentsStore.getUserExperiment(
-            CONTACT_SYNC_EXPERIMENT,
-            trackExposure = contactsConnection == null,
-        )
-        val shouldShowUpsell = experiment?.bucket == 1 &&
-            contactsConnection == null &&
+        val shouldShowUpsell = contactsConnection == null &&
             me.hasPhone &&
             upsellDismissed != true &&
             upsellShownServerSide != true &&
@@ -161,7 +153,6 @@ class StoreContactSync(
 
     companion object {
         internal const val NOTICE_NAME = "CONTACT_SYNC_UPSELL"
-        private const val CONTACT_SYNC_EXPERIMENT = "2021-04_contact_sync_android_main"
         private const val CONTACTS_CONNECTION_TYPE = "contacts"
         private const val DISMISS_STATE_CACHE_KEY = "CONTACT_SYNC_DISMISS_STATE"
         private const val LAST_UPLOAD_TIME_CACHE_KEY = "CONTACT_SYNC_LAST_UPLOAD_TIME"

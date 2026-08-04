@@ -18,7 +18,6 @@ import com.discord.utilities.rx.ui
  */
 class WidgetHubDomainsViewModel(
     private val restAPI: RestAPIInterface = RestAPI.api,
-    private val multiDomainEnabled: Boolean = isMultiDomainEnabled(),
 ) : AppViewModel<DomainsState>(DomainsState()) {
 
     fun onGuildClicked(guildId: Long, email: String) {
@@ -26,7 +25,7 @@ class WidgetHubDomainsViewModel(
             RestAPIParams.VerifyEmail(
                 email = email,
                 guildId = guildId,
-                allowMultipleGuilds = multiDomainEnabled,
+                allowMultipleGuilds = true,
             ),
         )
             .unwrapBody()

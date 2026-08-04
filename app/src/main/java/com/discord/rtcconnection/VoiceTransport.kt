@@ -293,7 +293,6 @@ class VoiceTransport(
                 networkMonitor = networkMonitor,
                 mutedUsers = mutedUsers,
                 userVolumes = userVolumes,
-                enableMediaSinkWants = true,
                 loggingTagPrefix = "Voice",
             )
             created.addListener(VoiceConnectionListener())
@@ -430,7 +429,6 @@ class VoiceTransport(
                 rtcConnectionType = RtcConnection.Type.Stream(streamOwnerId),
                 networkMonitor = networkMonitor,
                 parentMediaSessionId = voiceController.metadata?.mediaSessionId,
-                enableMediaSinkWants = true,
                 loggingTagPrefix = "Stream",
                 streamKey = streamKey,
             )

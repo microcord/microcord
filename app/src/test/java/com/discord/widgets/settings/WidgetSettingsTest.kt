@@ -89,7 +89,6 @@ class WidgetSettingsTest {
             defaultRestrictedGuilds = true,
             friendSourceFlags = null,
             contactSyncConnection = null,
-            showContactSync = false,
             userDiscoveryFlags = 0,
             consentState = consentState,
             harvestState = null,

@@ -605,7 +605,6 @@ class StoreStream private constructor(
         clock,
         userConnections,
         users,
-        experiments,
         userSettings,
         api = { if (::restApi.isInitialized) restApi else null },
     )

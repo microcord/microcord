@@ -14,13 +14,9 @@ import com.discord.utilities.rx.ui
  * One request drives the whole screen: submitting an address either matches a hub (the flow shows the
  * "check your email" page), matches several (the flow pushes the picker), or matches none (the flow
  * shows the waitlist page).
- *
- * @param multiDomainEnabled the `2021-08_hub_multi_domain_mobile` experiment. It decides whether the
- *   server may answer with several matching guilds instead of one.
  */
 class WidgetHubEmailViewModel(
     private val restAPI: RestAPIInterface = RestAPI.api,
-    private val multiDomainEnabled: Boolean = isMultiDomainEnabled(),
 ) : AppViewModel<HubEmailState>(HubEmailState()) {
 
     /** Returns to the email input page, discarding a finished lookup. */
@@ -38,7 +34,7 @@ class WidgetHubEmailViewModel(
             RestAPIParams.VerifyEmail(
                 email = email,
                 guildId = null,
-                allowMultipleGuilds = multiDomainEnabled,
+                allowMultipleGuilds = true,
                 // useVerificationCode keeps its default (true): every hub call site leaves it out.
             ),
         )

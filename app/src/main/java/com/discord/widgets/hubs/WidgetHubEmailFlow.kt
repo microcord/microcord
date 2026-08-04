@@ -212,7 +212,7 @@ class WidgetHubEmailFlow : AppFragment(R.layout.widget_hub_email_flow) {
                     HubDomainArgs(submittedEmail, success.response.guildsInfo.map(DomainGuildInfo::from)).toArgsIntent(),
                 )
                 viewModel.reset()
-            } else if (!success.response.hasMatchingGuild && isMultiDomainEnabled()) {
+            } else if (!success.response.hasMatchingGuild) {
                 AppScreenRouter.launchForResult(
                     context,
                     activityResultHandler,

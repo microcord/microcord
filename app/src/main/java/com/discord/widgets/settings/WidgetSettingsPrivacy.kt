@@ -352,10 +352,6 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
     // region contact sync
 
     private fun configureContactSync(viewState: SettingsPrivacyViewModel.ViewState.Loaded) {
-        contactSyncContainer.visibility =
-            if (viewState.showContactSync) View.VISIBLE else View.GONE
-        if (!viewState.showContactSync) return
-
         contactSyncInfo.text = SettingsStrings.render(
             requireContext(),
             R.string.contact_sync_info_settings_2,
@@ -669,7 +665,6 @@ class SettingsPrivacyViewModel(
         val defaultRestrictedGuilds: Boolean,
         val friendSourceFlags: ModelUserSettings.FriendSourceFlags?,
         val contactSyncConnection: ConnectedAccount?,
-        val showContactSync: Boolean,
         val userDiscoveryFlags: Int,
         val consentState: StoreUserSettings.ConsentState,
         val harvestState: HarvestState?,
@@ -686,7 +681,6 @@ class SettingsPrivacyViewModel(
             val defaultRestrictedGuilds: Boolean,
             val friendSourceFlags: ModelUserSettings.FriendSourceFlags?,
             val contactSyncConnection: ConnectedAccount?,
-            val showContactSync: Boolean,
             val userDiscoveryFlags: Int,
             val consents: Consents?,
             val consentError: Throwable?,
@@ -719,9 +713,6 @@ class SettingsPrivacyViewModel(
     }
 
     companion object {
-        /** The experiment bucket that turns the contact-sync section on. */
-        private const val CONTACT_SYNC_ENABLED_BUCKET = 1
-        private const val CONTACT_SYNC_EXPERIMENT = "2021-04_contact_sync_android_main"
         private const val CONTACT_SYNC_CONNECTION_TYPE = "contacts"
 
         internal fun toViewState(storeState: StoreState): ViewState {
@@ -737,7 +728,6 @@ class SettingsPrivacyViewModel(
                 defaultRestrictedGuilds = storeState.defaultRestrictedGuilds,
                 friendSourceFlags = storeState.friendSourceFlags,
                 contactSyncConnection = storeState.contactSyncConnection,
-                showContactSync = storeState.showContactSync,
                 userDiscoveryFlags = storeState.userDiscoveryFlags,
                 consents = consents,
                 consentError = (storeState.consentState as? StoreUserSettings.ConsentState.Failed)?.error,
@@ -754,18 +744,15 @@ class SettingsPrivacyViewModel(
                 userSettings.observeFriendSourceFlags(),
                 StoreStream.getUserConnections().observeConnectedAccounts()
                     .map(::findContactSyncConnection),
-                StoreStream.getExperiments()
-                    .observeUserExperiment(CONTACT_SYNC_EXPERIMENT, trackExposure = true),
                 userSettings.observeFriendDiscoveryFlags(),
             ) { me, explicitContentFilter, defaultRestrictedGuilds, friendSourceFlags,
-                contactSyncConnection, contactSyncExperiment, userDiscoveryFlags ->
+                contactSyncConnection, userDiscoveryFlags ->
                 LocalState(
                     me = me,
                     explicitContentFilter = explicitContentFilter,
                     defaultRestrictedGuilds = defaultRestrictedGuilds,
                     friendSourceFlags = friendSourceFlags,
                     contactSyncConnection = contactSyncConnection,
-                    showContactSync = contactSyncExperiment?.bucket == CONTACT_SYNC_ENABLED_BUCKET,
                     userDiscoveryFlags = userDiscoveryFlags,
                 )
             }
@@ -782,7 +769,6 @@ class SettingsPrivacyViewModel(
                         defaultRestrictedGuilds = localState.defaultRestrictedGuilds,
                         friendSourceFlags = localState.friendSourceFlags,
                         contactSyncConnection = localState.contactSyncConnection,
-                        showContactSync = localState.showContactSync,
                         userDiscoveryFlags = localState.userDiscoveryFlags,
                         consentState = consentState,
                         harvestState = harvestState,
@@ -818,7 +804,6 @@ class SettingsPrivacyViewModel(
             val defaultRestrictedGuilds: Boolean,
             val friendSourceFlags: ModelUserSettings.FriendSourceFlags?,
             val contactSyncConnection: ConnectedAccount?,
-            val showContactSync: Boolean,
             val userDiscoveryFlags: Int,
         )
     }

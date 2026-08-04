@@ -143,7 +143,6 @@ class StoreDirectoriesTest {
             guilds,
             scheduledEvents,
             api,
-            hubEventsEnabled = { true },
             requestScheduler = Schedulers.immediate(),
         )
 

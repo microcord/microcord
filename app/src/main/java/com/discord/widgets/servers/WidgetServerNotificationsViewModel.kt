@@ -22,19 +22,14 @@ import rx.Observable
  * `getNotificationOverrides` stream. Both are folded into one [ViewState] here, so the screen never
  * renders a header from one guild against overrides from another.
  *
- * Two of the reference's inputs have no source in this project and are therefore constructor
- * parameters rather than silently-dropped fields:
+ * `guildProfile` has no source in this project and is therefore a constructor parameter rather than
+ * a silently-dropped field:
  *
  * - **`guildProfile`** — the reference reads `StoreStream.getGuildProfiles().observeGuildProfile()`.
  *   `StoreGuildProfiles` exists but `StoreStream` neither constructs nor exposes it, so
  *   [guildProfileSource] defaults to "no profile". Consequence: `approximateMemberCount` is unknown,
  *   so [ViewState.Loaded.isAboveNotifyAllSize] and [ViewState.Loaded.isAboveHighlightsSize] are
  *   `false` and the large-server gating on "All messages" never engages.
- * - **`highlightsEnabled`** — the reference calls
- *   `GrowthTeamFeatures.isHighlightsSettingsEnabled()`, which resolves the `2022-03_highlights_settings`
- *   user experiment through `StoreExperiments`. Neither exists here, so [highlightsEnabledSource]
- *   defaults to `false` — the same answer an unenrolled account gets — and the highlights section
- *   stays hidden.
  */
 class WidgetServerNotificationsViewModel(
     val guildId: Long,
@@ -210,7 +205,7 @@ class WidgetServerNotificationsViewModel(
             guildId: Long,
             guildProfileSource: (Long) -> Observable<StoreGuildProfiles.GuildProfileData?> =
                 { Observable.just(null) },
-            highlightsEnabledSource: Observable<Boolean> = Observable.just(false),
+            highlightsEnabledSource: Observable<Boolean> = Observable.just(true),
         ): Observable<StoreState> = Observable.combineLatest(
             StoreStream.getGuilds().observeGuild(guildId),
             StoreStream.getUserGuildSettings().observeGuildSettings(guildId),
