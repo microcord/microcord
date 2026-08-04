@@ -1,16 +1,10 @@
 package com.discord.widgets.share
 
-import androidx.annotation.StringRes
-import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isSystemDM
-import com.discord.api.message.Message as ApiMessage
 import com.discord.api.message.MessageFlags
-import com.discord.api.message.MessageSnapshot
 import com.discord.api.permission.Permission
-import com.discord.api.sticker.Sticker
-import com.discord.api.sticker.StickerPartial
 import com.discord.models.message.Message
 import com.discord.restapi.RestAPIParams
 import com.discord.restapi.RestAPIInterface
@@ -20,7 +14,10 @@ import com.discord.utilities.rest.RestAPI
 import rx.Observable
 
 object ForwardingPolicy {
+    enum class DestinationIssue { CHANNEL, SEND_MESSAGES, ATTACHMENTS, EMBEDS, STICKERS, VOICE }
+
     private val forwardableTypes = setOf(0, 19, 20, 23, 35)
+    private const val SEND_VOICE_MESSAGES = 70_368_744_177_664L
     private const val BLOCKED_FLAGS =
         MessageFlags.CROSSPOSTED or
             MessageFlags.IS_CROSSPOST or
@@ -41,87 +38,42 @@ object ForwardingPolicy {
             message.activity == null && message.call == null && (message.flags.orZero() and BLOCKED_FLAGS) == 0L &&
             (source.isPrivate() || PermissionUtils.can(Permission.READ_MESSAGE_HISTORY, sourcePermissions))
 
-    fun canSendTo(destination: Channel, destinationPermissions: Long?): Boolean {
-        if (destination.type !in SENDABLE_TYPES || destination.isSystemDM()) return false
-        if (destination.guildId == 0L) return true
-        val send = if (destination.type in THREAD_TYPES) {
-            Permission.SEND_MESSAGES_IN_THREADS
-        } else {
-            Permission.SEND_MESSAGES
-        }
-        return PermissionUtils.can(Permission.VIEW_CHANNEL or send, destinationPermissions)
-    }
-
-    /**
-     * Reference `getDestinationIsUnavailable`: the reason this destination cannot receive [message],
-     * as a label to show on its row. Destinations stay listed and explain themselves rather than
-     * disappearing.
-     *
-     * [destination] is null for a user with no open DM, which only the age-restriction rule reaches.
-     */
-    @StringRes
-    fun destinationUnavailable(
+    fun destinationIssue(
         message: Message,
-        sourceIsAgeRestricted: Boolean,
-        destination: Channel?,
-        destinationIsAgeRestricted: Boolean,
+        source: Channel,
+        destination: Channel,
         destinationPermissions: Long?,
-        guildStickers: Map<Long, Sticker> = emptyMap(),
-    ): Int? {
-        if (sourceIsAgeRestricted && !destinationIsAgeRestricted) {
-            return R.string.message_forwarding_nsfw_not_allowed
+    ): DestinationIssue? {
+        if (destination.type !in SENDABLE_TYPES || destination.isSystemDM()) return DestinationIssue.CHANNEL
+        if (destination.guildId != 0L) {
+            val send = if (destination.type in THREAD_TYPES) {
+                Permission.SEND_MESSAGES_IN_THREADS
+            } else {
+                Permission.SEND_MESSAGES
+            }
+            if (!PermissionUtils.can(Permission.VIEW_CHANNEL or send, destinationPermissions)) {
+                return DestinationIssue.SEND_MESSAGES
+            }
         }
-        if (destination == null || destination.guildId == 0L) return null
-
-        val snapshots = message.messageSnapshots.orEmpty().map(MessageSnapshot::message)
-        val hasAttachments = message.hasAttachments() || snapshots.any { !it.attachments.isNullOrEmpty() }
-        if (hasAttachments && !PermissionUtils.can(Permission.ATTACH_FILES, destinationPermissions)) {
-            return R.string.message_channel_attachments_disabled
+        if (message.hasAttachments() && !can(destination, destinationPermissions, Permission.ATTACH_FILES)) {
+            return DestinationIssue.ATTACHMENTS
         }
-
-        val hasEmbeds = message.hasEmbeds() || snapshots.any { !it.embeds.isNullOrEmpty() }
-        if (hasEmbeds && !PermissionUtils.can(Permission.EMBED_LINKS, destinationPermissions) &&
-            !stripsEmbeds(message, snapshots)
+        if (message.hasEmbeds() && !can(destination, destinationPermissions, Permission.EMBED_LINKS)) {
+            return DestinationIssue.EMBEDS
+        }
+        if (message.hasStickers() && source.guildId != destination.guildId &&
+            !can(destination, destinationPermissions, Permission.USE_EXTERNAL_STICKERS)
         ) {
-            return R.string.message_channel_embeds_disabled
+            return DestinationIssue.STICKERS
         }
-
-        if (!PermissionUtils.can(Permission.USE_EXTERNAL_STICKERS, destinationPermissions) &&
-            stickerGuildIds(message, snapshots, guildStickers).any { it != destination.guildId }
-        ) {
-            return R.string.message_channel_external_stickers_disabled
-        }
-
-        val hasVoiceMessage = message.isVoiceMessage() ||
-            snapshots.any { (it.flags ?: 0L) and MessageFlags.IS_VOICE_MESSAGE != 0L }
-        if (hasVoiceMessage && !PermissionUtils.can(Permission.SEND_VOICE_MESSAGES, destinationPermissions)) {
-            return R.string.message_channel_voice_messages_disabled
+        if (message.isVoiceMessage() && !can(destination, destinationPermissions, SEND_VOICE_MESSAGES)) {
+            return DestinationIssue.VOICE
         }
         return null
     }
 
-    /** Reference `shouldStripEmbeds`: the backend drops embeds rather than rejecting the send. */
-    private fun stripsEmbeds(message: Message, snapshots: List<ApiMessage>) =
-        !message.content.isNullOrEmpty() ||
-            snapshots.any { !it.content.isNullOrEmpty() || !it.attachments.isNullOrEmpty() }
-
-    /**
-     * The owning guild of every guild sticker on the message. A sticker missing from the store fails
-     * open, matching the reference — the send guard rejects it server-side if it really was external.
-     */
-    private fun stickerGuildIds(
-        message: Message,
-        snapshots: List<ApiMessage>,
-        guildStickers: Map<Long, Sticker>,
-    ): List<Long> {
-        val ids = message.stickerItems.orEmpty().map(StickerPartial::id) +
-            message.stickers.orEmpty().map(Sticker::id) +
-            snapshots.flatMap { snapshot ->
-                snapshot.stickerItems.orEmpty().map(StickerPartial::id) +
-                    snapshot.stickers.orEmpty().map(Sticker::id)
-            }
-        return ids.distinct().mapNotNull { guildStickers[it]?.guildId }
-    }
+    private fun can(channel: Channel, permissions: Long?, permission: Long) =
+        channel.guildId == 0L || PermissionUtils.can(permission, permissions)
 
     private fun Long?.orZero() = this ?: 0L
 

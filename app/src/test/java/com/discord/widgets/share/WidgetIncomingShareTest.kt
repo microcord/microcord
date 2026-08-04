@@ -13,6 +13,7 @@ class WidgetIncomingShareTest {
         assertFalse(WidgetIncomingShare.canSend(true, "  ", 0))
         assertTrue(WidgetIncomingShare.canSend(true, "hello", 0))
         assertTrue(WidgetIncomingShare.canSend(true, "", 1))
+        assertTrue(WidgetIncomingShare.canSend(true, "", 0, forwarding = true))
     }
 
     @Test

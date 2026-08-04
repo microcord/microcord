@@ -61,8 +61,6 @@ object Permission {
     const val SEND_MESSAGES_IN_THREADS: PermissionBit = 274877906944L
     const val USE_EMBEDDED_ACTIVITIES: PermissionBit = 549755813888L
     const val MODERATE_MEMBERS: PermissionBit = 1099511627776L
-    const val SEND_VOICE_MESSAGES: PermissionBit = 70368744177664L
-    const val BYPASS_SLOWMODE: PermissionBit = 4503599627370496L
 
     /**
      * The permissions granted to a freshly created @everyone role.

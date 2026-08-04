@@ -44,7 +44,7 @@ import com.discord.widgets.mobile_reports.WidgetMobileReports
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.widgets.share.ForwardingPolicy
-import com.discord.widgets.share.WidgetForwardMessage
+import com.discord.widgets.share.WidgetIncomingShare
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
 import com.discord.utilities.user.UserUtils.getDisplayName
@@ -247,7 +247,7 @@ class WidgetChatListActions : AppBottomSheet() {
         val target = parentFragment ?: return
         dismiss()
         target.parentFragmentManager.commit {
-            replace(target.id, WidgetForwardMessage.newInstance(message))
+            replace(target.id, WidgetIncomingShare.newForwardInstance(message))
             addToBackStack("forward_message")
         }
     }
