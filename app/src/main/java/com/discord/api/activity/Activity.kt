@@ -19,4 +19,11 @@ data class Activity(
     val platform: ActivityPlatform?,
     val supportedPlatforms: List<ActivityPlatform>?,
     val buttons: List<String>?,
+    val id: String? = null,
+    val parentApplicationId: Long? = null,
+    /** Which of [name], [state] or [details] the status line shows. */
+    val statusDisplayType: StatusDisplayType? = null,
+    val detailsUrl: String? = null,
+    val stateUrl: String? = null,
+    val secrets: ActivitySecrets? = null,
 )

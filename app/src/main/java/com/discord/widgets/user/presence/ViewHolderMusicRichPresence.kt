@@ -10,7 +10,6 @@ import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.api.activity.Activity
 import com.discord.api.activity.ActivityPlatform
-import com.discord.api.activity.ActivityTimestamps
 import com.discord.i18n.i18nFormat
 import com.discord.models.user.User
 import com.discord.utilities.integrations.SpotifyHelper
@@ -136,8 +135,8 @@ class ViewHolderMusicRichPresence(
      * Drives the scrub bar and its two clocks. Once the track's declared end has passed the bar
      * pins at full rather than overshooting — a paused client keeps broadcasting stale timestamps.
      */
-    override fun setTimeTextViews(timestamps: ActivityTimestamps?) {
-        if (timestamps == null) return
+    override fun setTimeTextViews(activity: Activity?) {
+        val timestamps = activity?.timestamps ?: return
         val trackLengthMs = timestamps.endMs - timestamps.startMs
         val now = clock.currentTimeMillis()
         val elapsedMs = if (now >= timestamps.endMs) trackLengthMs else now - timestamps.startMs

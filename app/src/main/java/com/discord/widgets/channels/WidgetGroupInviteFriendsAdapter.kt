@@ -53,7 +53,7 @@ class WidgetGroupInviteFriendsAdapter(
                 data.user?.let { adapter.listener?.invoke(it, !data.isSelected) }
             }
             binding.friendContainer.contentDescription = friendName
-            PresenceUtils.setPresenceText(
+            PresenceUtils.setStatusLineWithLeadingIcon(
                 data.presence,
                 data.isApplicationStreaming,
                 binding.friendsListItemGame,

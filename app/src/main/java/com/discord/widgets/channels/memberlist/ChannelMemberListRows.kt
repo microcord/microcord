@@ -111,6 +111,9 @@ object ChannelMemberListRows {
     ): List<ChannelMemberListRow> {
         val lazyUsers = users.toMutableMap()
         val lazyMembers = members.toMutableMap()
+        // The authoritative counts are the ones the update declared for the list as a whole; the
+        // group echoed on each row carries none.
+        val groupCounts = list.groups.associate { it.id to it.count }
         val rows = list.rows.mapIndexed { index, row ->
             when (row) {
                 is MemberListRow.GroupHeader -> LazyMemberListRow.Header(
@@ -120,7 +123,7 @@ object ChannelMemberListRows {
                         Group.Type.OFFLINE -> ChannelMemberListRow.Header.Kind.OFFLINE
                         Group.Type.ROLE -> ChannelMemberListRow.Header.Kind.ONLINE
                     },
-                    row.group.count,
+                    groupCounts[row.group.id] ?: row.group.count,
                     row.group.id.toLongOrNull()?.let(roles::get),
                 )
                 is MemberListRow.Member -> {

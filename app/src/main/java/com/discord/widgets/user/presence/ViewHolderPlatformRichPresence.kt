@@ -86,7 +86,7 @@ class ViewHolderPlatformRichPresence(
 
         richPresenceHeader.text = PresenceUtils.getActivityHeader(richPresenceHeader.context, activity)
         richPresenceTitle.text = activity.name
-        richPresenceTime.setTextAndVisibilityBy(activity.timestamps?.friendlyTime())
+        richPresenceTime.setTextAndVisibilityBy(activity.friendlyTime())
         richPresenceTextContainer.isSelected = true
 
         val offersLink = platform.enabled &&

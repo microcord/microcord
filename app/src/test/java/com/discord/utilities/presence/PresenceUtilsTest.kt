@@ -5,6 +5,7 @@ import com.discord.api.activity.ActivityAssets
 import com.discord.api.activity.ActivityParty
 import com.discord.api.activity.ActivityPlatform
 import com.discord.api.activity.ActivityType
+import com.discord.api.activity.StatusDisplayType
 import com.discord.api.presence.ClientStatus
 import com.discord.api.presence.ClientStatuses
 import com.discord.models.presence.Presence
@@ -29,7 +30,7 @@ class PresenceUtilsTest {
 
     @Test fun `activity lookups by kind`() = with(PresenceUtils) {
         val streaming = activity(ActivityType.STREAMING, name = "Twitch")
-        val spotify = activity(ActivityType.LISTENING, name = "Spotify")
+        val spotify = spotifyActivity()
         val stage = activity(
             ActivityType.LISTENING, name = "Stage", applicationId = STAGE_PRESENCE_APPLICATION_ID,
         )
@@ -103,10 +104,28 @@ class PresenceUtilsTest {
         assertFalse(activity(ActivityType.PLAYING, platform = ActivityPlatform.IOS).isCurrentPlatform())
     }
 
-    @Test fun `spotify is matched by activity name`() {
-        assertTrue(activity(ActivityType.LISTENING, name = "Spotify").isSpotifyActivity())
-        assertTrue(activity(ActivityType.LISTENING, name = "spotify").isSpotifyActivity())
+    @Test fun `spotify needs a listening session, not just the name`() {
+        assertTrue(spotifyActivity().isSpotifyActivity())
+        assertFalse(activity(ActivityType.LISTENING, name = "Spotify").isSpotifyActivity())
+        assertFalse(spotifyActivity(partyId = "not-spotify").isSpotifyActivity())
+        assertFalse(spotifyActivity(type = ActivityType.PLAYING).isSpotifyActivity())
         assertFalse(activity(ActivityType.LISTENING, name = "Apple Music").isSpotifyActivity())
+    }
+
+    @Test fun `spotify artists come from the semicolon separated state`() {
+        assertEquals("A, B", spotifyActivity(state = "A; B").spotifyArtists())
+        assertNull(spotifyActivity(state = "  ").spotifyArtists())
+    }
+
+    @Test fun `status display type picks the field it names`() {
+        val a = activity(ActivityType.PLAYING, name = "Game", details = "Level 3", state = "In a match")
+        assertEquals("Game", a.statusDisplayText())
+        assertEquals("In a match", a.copy(statusDisplayType = StatusDisplayType.STATE).statusDisplayText())
+        assertEquals("Level 3", a.copy(statusDisplayType = StatusDisplayType.DETAILS).statusDisplayText())
+        // Only streaming prefers details when nothing is declared.
+        assertEquals("Level 3", a.copy(type = ActivityType.STREAMING).statusDisplayText())
+        // A named field that is absent falls back rather than blanking the line.
+        assertEquals("Game", a.copy(state = null, statusDisplayType = StatusDisplayType.STATE).statusDisplayText())
     }
 
     private fun presence(vararg activities: Activity) =
@@ -117,6 +136,12 @@ class PresenceUtilsTest {
         web: ClientStatus? = null,
         mobile: ClientStatus? = null,
     ) = ClientStatuses(desktop, web, mobile)
+
+    private fun spotifyActivity(
+        type: ActivityType = ActivityType.LISTENING,
+        state: String? = null,
+        partyId: String? = "spotify:abc",
+    ) = activity(type, name = "Spotify", state = state).copy(party = ActivityParty(partyId, null))
 
     private fun activity(
         type: ActivityType,

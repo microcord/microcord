@@ -85,7 +85,7 @@ class ViewHolderStageChannelRichPresence(
     override fun configureTextUi(model: Activity?, streamContext: StreamContext?) {
         require(model != null) { "model must not be null" }
         richPresenceTitle.text = model.name
-        richPresenceTime.setTextAndVisibilityBy(model.timestamps?.friendlyTime())
+        richPresenceTime.setTextAndVisibilityBy(model.friendlyTime())
 
         val guildName = model.assets?.smallText
         richPresenceDetails?.visibility = if (guildName != null) View.VISIBLE else View.GONE

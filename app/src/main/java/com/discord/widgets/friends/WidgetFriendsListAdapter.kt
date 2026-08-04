@@ -94,7 +94,7 @@ class WidgetFriendsListAdapter(recycler: RecyclerView) :
                 StoreStream.getUserRelationships().getNickname(item.user.id),
             )
             status.setPresence(item.presence)
-            PresenceUtils.setPresenceText(
+            PresenceUtils.setStatusLineWithLeadingIcon(
                 item.presence,
                 item.isApplicationStreaming,
                 activity,

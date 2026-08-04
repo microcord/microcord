@@ -55,7 +55,7 @@ class ViewHolderGameRichPresence(
         richPresenceTitle.text = model.name
         richPresenceDetails?.setTextAndVisibilityBy(model.details)
         richPresenceState?.setTextAndVisibilityBy(stateWithPartySize(model))
-        richPresenceTime.setTextAndVisibilityBy(model.timestamps?.friendlyTime())
+        richPresenceTime.setTextAndVisibilityBy(model.friendlyTime())
     }
 
     @MainThread

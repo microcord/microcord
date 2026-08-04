@@ -5,4 +5,7 @@ data class ActivityAssets(
     val largeText: String?,
     val smallImage: String?,
     val smallText: String?,
+    val largeUrl: String? = null,
+    val smallUrl: String? = null,
+    val inviteCoverImage: String? = null,
 )

@@ -108,13 +108,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         aka.visibility = if (state.showAkas) View.VISIBLE else View.GONE
         aka.configure(state.guildMembersForAka)
         badgeAdapter.items = badgesFor(state)
-        // Renders the custom-status emoji as an image span rather than its `:name:` shorthand,
-        // and hides the row when the user has no status at all.
-        PresenceUtils.setPresenceText(
-            presence = state.presence,
-            isStreamingApplication = state.streamContext != null,
-            textView = customStatus,
-        )
+        PresenceUtils.setCustomStatusText(state.presence, customStatus)
         avatarEdit.visibility = if (state.editable) View.VISIBLE else View.GONE
         bannerEdit.visibility = if (state.editable) View.VISIBLE else View.GONE
     }

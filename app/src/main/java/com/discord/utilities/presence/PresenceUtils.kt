@@ -7,6 +7,7 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.StyleSpan
 import android.view.View
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.discord.R
 import com.discord.api.activity.Activity
@@ -17,6 +18,7 @@ import com.discord.api.activity.ActivityType
 import com.discord.api.presence.ClientStatus
 import com.discord.api.presence.ClientStatuses
 import com.discord.models.presence.Presence
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.facebook.drawee.backends.pipeline.Fresco
 import com.facebook.drawee.generic.GenericDraweeHierarchyBuilder
@@ -44,6 +46,9 @@ object PresenceUtils {
     val ACTIVITY_COMPARATOR: Comparator<Activity> =
         compareBy({ it.type }, { it.isRichPresence() }, { it.createdAt })
 
+    private const val STATUS_ICON_SIZE_DP = 12
+    private const val STATUS_ICON_GAP_DP = 4
+
     /** EN SPACE; wider than a normal space so the emoji does not crowd the text. */
     private const val EMOJI_TEXT_SEPARATOR = ' '
 
@@ -58,9 +63,9 @@ object PresenceUtils {
     fun List<Activity>.getActivityByType(type: ActivityType): Activity? =
         firstOrNull { it.type == type }
 
-    /** The first activity that is not the custom status, i.e. the one worth describing. */
+    /** The first activity that is not a custom or hang status, i.e. the one worth describing. */
     val List<Activity>.primaryActivity: Activity?
-        get() = firstOrNull { it.type != ActivityType.CUSTOM_STATUS }
+        get() = firstOrNull { it.type != ActivityType.CUSTOM_STATUS && it.type != ActivityType.HANG }
 
     val List<Activity>.spotifyListeningActivity: Activity?
         get() = firstOrNull { it.isSpotifyActivity() }
@@ -83,6 +88,10 @@ object PresenceUtils {
         get() = activities?.spotifyListeningActivity
 
     val Presence.stageChannelActivity: Activity? get() = activities?.stageChannelActivity
+
+    /** The status text with no "Playing …" wrapper, for rows that pair it with [Activity.statusIcon]. */
+    fun Activity.statusText(context: Context): String? =
+        statusText(context.getString(R.string.embedded_activities_in_activity))
 
     /** Whether any activity should show the rich-presence icon next to the status text. */
     fun shouldShowRichPresenceIcon(presence: Presence?): Boolean =
@@ -206,50 +215,117 @@ object PresenceUtils {
     }
 
     /**
-     * Renders the presence into [textView], hiding the view entirely when there is
-     * nothing to show so it does not reserve blank space in a list row.
+     * Renders the one-line status a row shows under a name, and returns the glyph that belongs
+     * beside it — surfaces differ in whether they have an icon slot or use a compound drawable.
+     *
+     * A custom status owns the text while the activity still owns the icon, so someone playing a
+     * game with a status set reads as "<controller> feeling cute". Goes through a
+     * [DraweeSpanStringBuilder] because a custom-status emoji is an image, not text.
      */
     @JvmStatic
     @JvmOverloads
-    fun setPresenceText(
+    @DrawableRes
+    fun setStatusLine(
         presence: Presence?,
-        isStreamingApplication: Boolean,
+        isApplicationStreaming: Boolean,
         textView: SimpleDraweeSpanTextView,
         showFallbackStatusText: Boolean = false,
-        hideEmoji: Boolean = false,
+    ): Int? {
+        val activity = presence?.primaryActivity
+        val custom = presence?.customStatusActivity
+        val builder = DraweeSpanStringBuilder()
+        val customText = custom?.state?.takeIf { it.isNotEmpty() }
+        if (custom != null && (customText != null || custom.emoji != null)) {
+            val renderedEmoji = custom.emoji?.let {
+                builder.appendCustomStatusEmoji(textView.context, it, false)
+            } == true
+            customText?.let {
+                if (renderedEmoji) builder.append(EMOJI_TEXT_SEPARATOR)
+                builder.append(it)
+            }
+        } else if (isApplicationStreaming) {
+            builder.append(presence?.playingActivity?.name.orEmpty())
+        } else {
+            activity?.statusText(textView.context)?.let(builder::append)
+        }
+        val describedActivity = builder.isNotEmpty()
+        if (!describedActivity && showFallbackStatusText) {
+            builder.append(textView.context.getString(getStatusStringResForPresence(presence)))
+        }
+        textView.setDraweeSpanStringBuilder(builder)
+        textView.visibility = if (builder.isNotEmpty()) View.VISIBLE else View.GONE
+        if (!describedActivity) return null
+        return if (isApplicationStreaming) R.drawable.ic_status_streaming_16dp else activity?.statusIcon()
+    }
+
+    /** [setStatusLine] for rows with no icon slot of their own. */
+    @JvmStatic
+    @JvmOverloads
+    fun setStatusLineWithLeadingIcon(
+        presence: Presence?,
+        isApplicationStreaming: Boolean,
+        textView: SimpleDraweeSpanTextView,
+        showFallbackStatusText: Boolean = false,
     ) {
-        val builder = getStatusDraweeSpanStringBuilder(
-            context = textView.context,
-            presence = presence,
-            isStreamingApplication = isStreamingApplication,
-            hideEmoji = hideEmoji,
-            showFallbackStatusText = showFallbackStatusText,
-        )
+        val icon = setStatusLine(presence, isApplicationStreaming, textView, showFallbackStatusText)
+        val context = textView.context
+        val drawable = icon?.let(context::getDrawable)?.mutate()?.apply {
+            val size = (context.resources.displayMetrics.density * STATUS_ICON_SIZE_DP).toInt()
+            setBounds(0, 0, size, size)
+            if (icon != R.drawable.ic_status_streaming_16dp) {
+                setTint(ColorCompat.getThemedColor(context, R.attr.colorTextPositive))
+            }
+        }
+        textView.setCompoundDrawablesRelative(drawable, null, null, null)
+        textView.compoundDrawablePadding =
+            (context.resources.displayMetrics.density * STATUS_ICON_GAP_DP).toInt()
+    }
+
+    /**
+     * The custom status alone, for surfaces that render the activity separately — a profile shows
+     * what the user is doing in the card below, so repeating it above reads as a duplicate.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun setCustomStatusText(
+        presence: Presence?,
+        textView: SimpleDraweeSpanTextView,
+        animateCustomStatusEmoji: Boolean = false,
+    ) {
+        val builder = DraweeSpanStringBuilder()
+        val custom = presence?.customStatusActivity
+        val renderedEmoji = custom?.emoji?.let {
+            builder.appendCustomStatusEmoji(textView.context, it, animateCustomStatusEmoji)
+        } == true
+        custom?.state?.takeIf { it.isNotEmpty() }?.let {
+            if (renderedEmoji) builder.append(EMOJI_TEXT_SEPARATOR)
+            builder.append(it)
+        }
         textView.setDraweeSpanStringBuilder(builder)
         textView.visibility = if (builder.isNotEmpty()) View.VISIBLE else View.GONE
     }
 
     // region internals
 
-    /** One line describing what the user is doing, without any custom status. */
-    private fun getActivityString(context: Context, activity: Activity?): CharSequence? =
-        when (activity?.type) {
-            ActivityType.PLAYING ->
-                context.renderString(R.string.playing_game, "game" to activity.name)
-            ActivityType.STREAMING -> context.renderString(
-                R.string.streaming,
-                "name" to (activity.details ?: activity.name),
-            )
-            ActivityType.LISTENING ->
-                context.renderString(R.string.listening_to, "name" to activity.name)
-            ActivityType.WATCHING -> context.renderString(
-                R.string.watching,
-                "name" to (activity.details ?: activity.name),
-            )
-            ActivityType.COMPETING ->
-                context.renderString(R.string.competing, "name" to activity.name)
+    /**
+     * One line describing what the user is doing, without any custom status.
+     *
+     * A stage listening session reads as "Watching", and Spotify and Crunchyroll name the track
+     * and episode rather than the service.
+     */
+    private fun getActivityString(context: Context, activity: Activity?): CharSequence? {
+        if (activity == null) return null
+        val text = activity.statusText(context) ?: return null
+        if (activity.isEmbeddedActivity()) return text
+        return when (activity.statusPhrasing()) {
+            ActivityType.PLAYING -> context.renderString(R.string.playing_game, "game" to text)
+            ActivityType.STREAMING -> context.renderString(R.string.streaming, "name" to text)
+            ActivityType.LISTENING -> context.renderString(R.string.listening_to, "name" to text)
+            ActivityType.WATCHING -> context.renderString(R.string.watching, "name" to text)
+            ActivityType.COMPETING -> context.renderString(R.string.competing, "name" to text)
             else -> null
         }
+    }
 
     private fun getApplicationStreamingString(context: Context, presence: Presence?): CharSequence {
         val game = presence?.playingActivity
@@ -264,8 +340,9 @@ object PresenceUtils {
         ActivityPlatform.XBOX -> "Xbox"
         ActivityPlatform.SAMSUNG -> "Samsung"
         ActivityPlatform.SPOTIFY -> "Spotify"
+        ActivityPlatform.META_QUEST -> "Meta Quest"
         ActivityPlatform.DESKTOP, ActivityPlatform.ANDROID, ActivityPlatform.IOS,
-        ActivityPlatform.UNKNOWN,
+        ActivityPlatform.EMBEDDED, ActivityPlatform.UNKNOWN,
         -> null
     }
 

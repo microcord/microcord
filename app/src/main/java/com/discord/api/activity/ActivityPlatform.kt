@@ -9,5 +9,7 @@ enum class ActivityPlatform {
     SPOTIFY,
     PS4,
     PS5,
+    EMBEDDED,
+    META_QUEST,
     UNKNOWN,
 }

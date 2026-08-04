@@ -8,8 +8,6 @@ import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.PixelFormat
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
@@ -45,7 +43,7 @@ class NameplateView @JvmOverloads constructor(
 
     internal data class AnimationRequest(val key: String, val generation: Int)
 
-    private val image = MaskedDraweeView(context)
+    private val image = SimpleDraweeView(context)
     private val animatedImage = ImageView(context).apply {
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         scaleType = ImageView.ScaleType.MATRIX
@@ -55,7 +53,6 @@ class NameplateView @JvmOverloads constructor(
     private var nameplate: Nameplate? = null
     private var placement = Placement.MEMBER_LIST
     private var hovered = false
-    private var contentView: View? = null
     private val animationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var animationJob: Job? = null
     @Volatile
@@ -64,7 +61,6 @@ class NameplateView @JvmOverloads constructor(
     private var animationRequest: AnimationRequest? = null
     private var animationAttempted = false
     private var animationGeneration = 0
-    private val contentLayoutListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> image.invalidate() }
     private val parentLayoutListener = View.OnLayoutChangeListener { parent, _, _, _, _, _, _, _, _ ->
         layoutToParent(parent)
     }
@@ -92,13 +88,10 @@ class NameplateView @JvmOverloads constructor(
         addView(animatedImage, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addOnLayoutChangeListener(channelLayoutListener)
         MGImages.setScaleType(image, ArtworkScaleType)
-        image.maskEdge = ::maskEdge
     }
 
-    fun bind(nameplate: Nameplate?, placement: Placement, selected: Boolean, contentView: View) {
+    fun bind(nameplate: Nameplate?, placement: Placement, selected: Boolean) {
         clearChannelAnimation()
-        this.contentView?.removeOnLayoutChangeListener(contentLayoutListener)
-        this.contentView = contentView.also { it.addOnLayoutChangeListener(contentLayoutListener) }
         this.nameplate = nameplate?.takeIf { it.isActive() && it.staticImageUrl() != null }
         this.placement = placement
         hovered = false
@@ -115,7 +108,6 @@ class NameplateView @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         clearChannelAnimation()
-        contentView?.removeOnLayoutChangeListener(contentLayoutListener)
         (parent as? View)?.removeOnLayoutChangeListener(parentLayoutListener)
         super.onDetachedFromWindow()
     }
@@ -143,8 +135,9 @@ class NameplateView @JvmOverloads constructor(
 
     private fun layoutToParent(parent: View) {
         if (placement != Placement.CHANNEL) return
-        // Channel nameplates are 0dp during measurement and overlay the full final row.
-        layout(0, 0, parent.width, parent.height)
+        // 0dp during measurement, then laid out over the row's selection pill, which the row's
+        // horizontal padding matches.
+        layout(parent.paddingLeft, 0, parent.width - parent.paddingRight, parent.height)
     }
 
     private fun updateVisuals() {
@@ -167,11 +160,7 @@ class NameplateView @JvmOverloads constructor(
             changeDetector = changeDetector,
             autoPlayAnimations = animateMemberList,
         )
-        image.alpha = when {
-            isSelected -> 0.9f
-            placement == Placement.CHANNEL && hovered -> 0.4f
-            else -> 0.6f
-        }
+        image.alpha = imageAlpha()
         animatedImage.alpha = image.alpha
         updateChannelAnimation(plate, reducedMotion)
 
@@ -179,17 +168,30 @@ class NameplateView @JvmOverloads constructor(
             Configuration.UI_MODE_NIGHT_YES
         background = plate.backgroundColorHex(dark)?.let { hex ->
             runCatching { Color.parseColor(hex) }.getOrNull()?.let { color ->
-                NameplateGradientDrawable(
-                    color,
-                    when {
-                        isSelected -> 0x80
-                        hovered && placement == Placement.MEMBER_LIST -> 0x4D
-                        else -> 0x33
-                    },
-                )
+                NameplateGradientDrawable(color).apply {
+                    alpha = (gradientAlpha() * 255f).toInt()
+                }
             }
         }
         image.invalidate()
+    }
+
+    /**
+     * Pressing brightens a channel plate and dims a member-list one; the reference calls the latter
+     * `invertPressOpacity`.
+     */
+    private fun invertPressOpacity() = placement == Placement.MEMBER_LIST
+
+    private fun gradientAlpha(): Float = when {
+        isSelected -> 0.8f
+        hovered -> if (invertPressOpacity()) 0.3f else 0.6f
+        else -> 0.4f
+    }
+
+    private fun imageAlpha(): Float = when {
+        isSelected -> 0.8f
+        hovered -> if (invertPressOpacity()) 0.4f else 0.5f
+        else -> 0.6f
     }
 
     internal fun currentAnimationRequest(): AnimationRequest? = animationRequest
@@ -285,15 +287,6 @@ class NameplateView @JvmOverloads constructor(
         }
     }
 
-    internal fun maskEdge(): Float? {
-        if (placement == Placement.CHANNEL) return null
-        val content = contentView ?: return null
-        if (!content.isLaidOut || !isLaidOut) return null
-        val contentLocation = IntArray(2).also(content::getLocationInWindow)
-        val ownLocation = IntArray(2).also(::getLocationInWindow)
-        return contentLocation[0] + content.width - ownLocation[0] + 10f * resources.displayMetrics.density
-    }
-
     private object ArtworkScaleType : ScalingUtils.ScaleType {
         override fun getTransform(
             outTransform: Matrix,
@@ -313,35 +306,8 @@ class NameplateView @JvmOverloads constructor(
         }
     }
 
-    private class MaskedDraweeView(context: Context) : SimpleDraweeView(context) {
-        var maskEdge: () -> Float? = { null }
-        private val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
-        }
-
-        override fun onDraw(canvas: Canvas) {
-            val edge = maskEdge() ?: return super.onDraw(canvas)
-            val fadeEnd = edge + 50f * resources.displayMetrics.density
-            val layer = canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), null)
-            super.onDraw(canvas)
-            maskPaint.shader = LinearGradient(
-                0f,
-                0f,
-                width.toFloat(),
-                0f,
-                intArrayOf(0x4DFFFFFF, 0x4DFFFFFF, Color.WHITE),
-                floatArrayOf(0f, (edge / width).coerceIn(0f, 1f), (fadeEnd / width).coerceIn(0f, 1f)),
-                Shader.TileMode.CLAMP,
-            )
-            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), maskPaint)
-            canvas.restoreToCount(layer)
-        }
-    }
-
-    private class NameplateGradientDrawable(
-        private val color: Int,
-        private val endAlpha: Int,
-    ) : Drawable() {
+    /** Reference: a plain horizontal ramp from fully transparent to 30% of the palette colour. */
+    private class NameplateGradientDrawable(private val color: Int) : Drawable() {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
         override fun onBoundsChange(bounds: android.graphics.Rect) {
@@ -350,8 +316,8 @@ class NameplateView @JvmOverloads constructor(
                 0f,
                 bounds.right.toFloat(),
                 0f,
-                intArrayOf(Color.TRANSPARENT, color.withAlpha(0x14), color.withAlpha(0x14), color.withAlpha(endAlpha)),
-                floatArrayOf(0f, 0.2f, 0.5f, 1f),
+                color.withAlpha(0x00),
+                color.withAlpha(0x4D),
                 Shader.TileMode.CLAMP,
             )
         }
@@ -365,7 +331,10 @@ class NameplateView @JvmOverloads constructor(
         private fun Int.withAlpha(alpha: Int) = Color.argb(alpha, Color.red(this), Color.green(this), Color.blue(this))
     }
 
-    private companion object {
-        val client = OkHttpClient()
+    companion object {
+        private val client = OkHttpClient()
+
+        /** Trailing space a row reserves for the artwork. */
+        const val ART_GUTTER_DP = 40
     }
 }

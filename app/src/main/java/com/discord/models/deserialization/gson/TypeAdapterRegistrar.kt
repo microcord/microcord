@@ -3,6 +3,8 @@ package com.discord.models.deserialization.gson
 import com.discord.api.activity.ActivityPlatform
 import com.discord.api.activity.ActivityPlatformTypeAdapter
 import com.discord.api.activity.ActivityType
+import com.discord.api.activity.StatusDisplayType
+import com.discord.api.activity.StatusDisplayTypeTypeAdapter
 import com.discord.api.activity.ActivityTypeTypeAdapter
 import com.discord.api.application.ApplicationDisclosureType
 import com.discord.api.application.ApplicationDisclosureTypeAdapter
@@ -91,6 +93,7 @@ fun GsonBuilder.registerDiscordApiTypeAdapters(): GsonBuilder =
         .registerTypeAdapterFactory(UserExperimentDto.TypeAdapterFactory)
         .registerTypeAdapter(ActivityPlatform::class.java, ActivityPlatformTypeAdapter())
         .registerTypeAdapter(ActivityType::class.java, ActivityTypeTypeAdapter())
+        .registerTypeAdapter(StatusDisplayType::class.java, StatusDisplayTypeTypeAdapter())
         .registerTypeAdapter(RequiredAction::class.java, RequiredActionTypeAdapter())
         .registerTypeAdapter(FriendSuggestionReasonType::class.java, FriendSuggestionReasonTypeAdapter())
         .registerTypeAdapter(PremiumTier::class.java, PremiumTierTypeAdapter())

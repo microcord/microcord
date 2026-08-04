@@ -97,7 +97,7 @@ class ViewHolderStreamRichPresence(
         richPresenceTitle.text = model.name
         richPresenceDetails?.setTextAndVisibilityBy(model.details)
         richPresenceState?.setTextAndVisibilityBy(stateWithPartySize(model))
-        richPresenceTime.setTextAndVisibilityBy(model.timestamps?.friendlyTime())
+        richPresenceTime.setTextAndVisibilityBy(model.friendlyTime())
     }
 
     /** The stream thumbnail replaces the game's large artwork. */

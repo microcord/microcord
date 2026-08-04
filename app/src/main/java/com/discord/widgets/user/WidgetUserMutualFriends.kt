@@ -20,6 +20,7 @@ import com.discord.models.presence.Presence
 import com.discord.models.user.User
 import com.discord.stores.StoreStream
 import com.discord.utilities.user.UserUtils.getDisplayName
+import com.discord.i18n.I18nHooks
 import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.StatusView
@@ -67,7 +68,9 @@ class WidgetUserMutualFriends : AppFragment(R.layout.widget_user_mutual_friends)
             State.Loading -> { setActionBarTitle(R.string.mutual_friends); adapter.rows = emptyList() }
             is State.Error -> adapter.rows = listOf(Row.Empty(state.message ?: getString(R.string.no_mutual_friends)))
             is State.Loaded -> {
-                setActionBarTitle(resources.getQuantityString(R.plurals.user_profile_mutual_friends_count, state.friends.size, state.friends.size))
+                setActionBarTitle(
+                    I18nHooks.plural(requireContext(), R.plurals.user_profile_mutual_friends_count, state.friends.size),
+                )
                 setActionBarSubtitle(state.username)
                 adapter.rows = state.friends.map(Row::FriendRow).ifEmpty { listOf(Row.Empty(getString(R.string.no_mutual_friends))) }
             }
@@ -105,7 +108,7 @@ class WidgetUserMutualFriends : AppFragment(R.layout.widget_user_mutual_friends)
                 )
             itemView.findViewById<StatusView>(R.id.user_profile_adapter_item_friend_status).setPresence(friend.presence)
             itemView.findViewById<SimpleDraweeSpanTextView>(R.id.user_profile_adapter_item_friend_user_game).apply {
-                PresenceUtils.setPresenceText(friend.presence, friend.isApplicationStreaming == true, this, true)
+                PresenceUtils.setStatusLineWithLeadingIcon(friend.presence, friend.isApplicationStreaming == true, this, true)
                 visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
             }
             itemView.findViewById<SimpleDraweeView>(R.id.user_profile_adapter_item_friend_avatar).setImageURI(avatarUrl(friend.user))

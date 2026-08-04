@@ -7,5 +7,6 @@ enum class ActivityType(val apiInt: Int) {
     WATCHING(3),
     CUSTOM_STATUS(4),
     COMPETING(5),
+    HANG(6),
     UNKNOWN(-1),
 }

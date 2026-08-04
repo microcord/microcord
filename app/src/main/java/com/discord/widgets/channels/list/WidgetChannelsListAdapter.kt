@@ -911,7 +911,6 @@ class WidgetChannelsListAdapter(
                 item.nameplate ?: channel.getDMRecipient()?.collectibles?.nameplate,
                 NameplateView.Placement.CHANNEL,
                 item.selected,
-                content,
             )
 
             name.text = channelName
@@ -930,7 +929,7 @@ class WidgetChannelsListAdapter(
                     desc.setTextAndVisibilityBy(desc.context.getString(R.string.system_dm_activity_text))
                 channel.isMultiUserDM() ->
                     desc.setTextAndVisibilityBy(memberCount(channel, desc.context))
-                else -> PresenceUtils.setPresenceText(
+                else -> PresenceUtils.setStatusLineWithLeadingIcon(
                     item.presence,
                     item.isApplicationStreaming,
                     desc,

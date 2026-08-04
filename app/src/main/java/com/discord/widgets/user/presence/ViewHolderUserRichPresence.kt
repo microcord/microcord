@@ -15,17 +15,23 @@ import androidx.core.widget.TextViewCompat
 import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.api.activity.Activity
-import com.discord.api.activity.ActivityTimestamps
+import com.discord.api.activity.ActivityType
 import com.discord.app.AppComponent
 import com.discord.i18n.i18nFormat
 import com.discord.models.user.User
 import com.discord.stores.StoreUserConnections
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
+import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.presence.ActivityBadge
+import com.discord.utilities.presence.ActivityBadges
 import com.discord.utilities.presence.PresenceUtils
+import com.discord.utilities.presence.isCrunchyrollActivity
 import com.discord.utilities.presence.isGameActivity
 import com.discord.utilities.presence.isGamePlatform
 import com.discord.utilities.presence.isSpotifyActivity
+import com.discord.utilities.presence.spotifyArtists
+import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.presence.isStageChannelActivity
 import com.discord.utilities.streams.StreamContext
 import com.discord.utilities.time.ClockFactory
@@ -78,6 +84,9 @@ open class ViewHolderUserRichPresence(
 
     /** Ticks the elapsed/remaining label once a second while the card is visible. */
     private var perSecondTimerSubscription: Subscription? = null
+
+    /** Only the full profile card has room for badges. */
+    private val badgeRow: ViewGroup? = root.findViewById(R.id.rich_presence_badges)
 
     private val profileCards = root.allViews().filterIsInstance<MaterialCardView>().toList()
     private val defaultCardColors = profileCards.associateWith(MaterialCardView::getCardBackgroundColor)
@@ -196,7 +205,7 @@ open class ViewHolderUserRichPresence(
     open fun configureUiTimestamp(model: Activity?, appComponent: AppComponent) {
         val hasTimeToShow = model != null &&
             root.visibility == View.VISIBLE &&
-            model.timestamps?.friendlyTime() != null
+            model.friendlyTime() != null
         if (!hasTimeToShow) {
             disposeTimer()
             return
@@ -207,7 +216,7 @@ open class ViewHolderUserRichPresence(
             .appSubscribe(
                 errorClass = javaClass,
                 subscriptionHandler = { perSecondTimerSubscription = it },
-            ) { setTimeTextViews(model?.timestamps) }
+            ) { setTimeTextViews(model) }
     }
 
     open fun disposeSubscriptions() = disposeTimer()
@@ -223,10 +232,78 @@ open class ViewHolderUserRichPresence(
         if (model == null) return
         richPresenceHeader.text =
             PresenceUtils.getActivityHeader(richPresenceHeader.context, model)
-        richPresenceTitle.text = model.details
-        richPresenceDetails?.setTextAndVisibilityBy(stateWithPartySize(model))
-        richPresenceState?.setTextAndVisibilityBy(model.assets?.largeText)
-        richPresenceTime.setTextAndVisibilityBy(model.timestamps?.friendlyTime())
+        richPresenceTitle.text = model.details ?: model.name
+        richPresenceTitle.linkTo(model.detailsUrl)
+        richPresenceDetails?.setTextAndVisibilityBy(activityDescription(model))
+        richPresenceDetails?.linkTo(model.stateUrl)
+        richPresenceState?.setTextAndVisibilityBy(activityStateLine(model))
+        richPresenceState?.linkTo(model.assets?.largeUrl)
+        bindBadges(model)
+    }
+
+    /**
+     * The chips under the card body: party size, elapsed time and episode number.
+     *
+     * The elapsed time moves into a badge when there is one, so the plain time line only shows for
+     * the activity kinds that have no badges at all.
+     */
+    @MainThread
+    protected fun bindBadges(model: Activity) {
+        val elapsed = model.friendlyTime()
+        val badges = badgeRow?.let {
+            ActivityBadges.forActivity(it.context, model, elapsed)
+        }.orEmpty()
+        richPresenceTime.setTextAndVisibilityBy(elapsed.takeIf { badges.isEmpty() })
+        val row = badgeRow ?: return
+        row.removeAllViews()
+        row.visibility = if (badges.isEmpty()) View.GONE else View.VISIBLE
+        badges.forEach { badge ->
+            val view = LayoutInflater.from(row.context)
+                .inflate(R.layout.activity_badge_item, row, false) as TextView
+            view.text = badge.text
+            val color = ColorCompat.getThemedColor(
+                row.context,
+                when (badge.style) {
+                    ActivityBadge.Style.POSITIVE -> R.attr.colorTextPositive
+                    ActivityBadge.Style.MUTED -> R.attr.colorTextMuted
+                },
+            )
+            view.setTextColor(color)
+            val icon = androidx.core.content.ContextCompat.getDrawable(row.context, badge.icon)
+                ?.mutate()
+                ?.apply {
+                    setTint(color)
+                    setBounds(0, 0, badgeIconSizePx(row.context), badgeIconSizePx(row.context))
+                }
+            view.setCompoundDrawablesRelative(icon, null, null, null)
+            row.addView(view)
+        }
+    }
+
+    private fun badgeIconSizePx(context: Context): Int =
+        (context.resources.displayMetrics.density * BADGE_ICON_SIZE_DP).toInt()
+
+    /** Spotify names its artists; everything else prefers the party status over the details. */
+    protected fun activityDescription(model: Activity): CharSequence? = when {
+        model.isSpotifyActivity() -> model.spotifyArtists()
+        !model.isGameActivity() && model.state != null -> model.state
+        else -> model.details
+    }
+
+    protected fun activityStateLine(model: Activity): CharSequence? = when {
+        model.isSpotifyActivity() || model.type == ActivityType.WATCHING -> null
+        model.isGameActivity() -> stateWithPartySize(model)
+        else -> model.assets?.largeText
+    }
+
+    /** Opens [url] when the view is tapped, or clears any handler the recycled view carried. */
+    protected fun View.linkTo(url: String?) {
+        if (url.isNullOrEmpty()) {
+            setOnClickListener(null)
+            isClickable = false
+            return
+        }
+        setOnClickListener { UriHandler.handle(it.context, url) }
     }
 
     /**
@@ -236,12 +313,15 @@ open class ViewHolderUserRichPresence(
     protected fun stateWithPartySize(model: Activity): String? {
         val state = model.state ?: return null
         val party = model.party
-        val partySize = if (party == null) {
+        val partySize = if (party?.size == null || party.size.size < 2) {
             ""
         } else {
             with(PresenceUtils) {
                 if (party.maxSize == 0L) {
-                    ""
+                    root.context?.i18nFormat(
+                        R.string.user_activity_state_size_no_max,
+                        "count" to party.currentSize.toString(),
+                    ).orEmpty()
                 } else {
                     root.context?.i18nFormat(
                         R.string.user_activity_state_size,
@@ -263,16 +343,11 @@ open class ViewHolderUserRichPresence(
     @MainThread
     protected open fun configureAssetUi(model: Activity?, streamContext: StreamContext?) {
         val assets = model?.assets
-        if (assets == null) {
-            richPresenceImageLarge.visibility = View.GONE
-            richPresenceImageSmall?.visibility = View.GONE
-            return
-        }
-        val applicationId = model.applicationId
-        var largeUri = assets.largeImage?.let { IconUtils.getAssetImage(applicationId, it) }
-        var largeText = assets.largeText
-        var smallUri = assets.smallImage?.let { IconUtils.getAssetImage(applicationId, it) }
-        var smallText = assets.smallText
+        val applicationId = model?.applicationId
+        var largeUri = assets?.largeImage?.let { IconUtils.getAssetImage(applicationId, it) }
+        var largeText = assets?.largeText
+        var smallUri = assets?.smallImage?.let { IconUtils.getAssetImage(applicationId, it) }
+        var smallText = assets?.smallText
 
         if (smallUri != null && largeUri == null) {
             largeUri = smallUri
@@ -281,10 +356,22 @@ open class ViewHolderUserRichPresence(
             smallText = null
         }
 
+        if (largeUri == null) {
+            // An activity with no artwork still gets a tile, so the card does not collapse.
+            richPresenceImageLarge.visibility = View.VISIBLE
+            richPresenceImageLarge.setActualImageResource(R.drawable.ic_games_24dp)
+            richPresenceImageLarge.contentDescription = null
+            richPresenceImageSmall?.visibility = View.GONE
+            richPresenceImageLarge.linkTo(null)
+            return
+        }
+
         richPresenceImageLarge.setImageAndVisibilityBy(largeUri)
         richPresenceImageLarge.contentDescription = largeText
+        richPresenceImageLarge.linkTo(assets?.largeUrl)
         richPresenceImageSmall?.setImageAndVisibilityBy(smallUri, useSmallCache = true)
         richPresenceImageSmall?.contentDescription = smallText
+        richPresenceImageSmall?.linkTo(assets?.smallUrl)
     }
 
     /**
@@ -306,7 +393,11 @@ open class ViewHolderUserRichPresence(
                     button.visibility = View.GONE
                     return@forEachIndexed
                 }
-                button.text = label
+                button.text = if (activity?.isCrunchyrollActivity() == true) {
+                    button.context.getString(R.string.watch)
+                } else {
+                    label
+                }
                 button.visibility = View.VISIBLE
                 button.setOnClickListener {
                     handleActivityCustomButtonClick(applicationContext, user, activity, index)
@@ -337,28 +428,33 @@ open class ViewHolderUserRichPresence(
     }
 
     /** Called once a second by [configureUiTimestamp]. */
-    protected open fun setTimeTextViews(timestamps: ActivityTimestamps?) {
-        richPresenceTime.setTextAndVisibilityBy(timestamps?.friendlyTime())
+    protected open fun setTimeTextViews(activity: Activity?) {
+        activity?.let { bindBadges(it) } ?: richPresenceTime.setTextAndVisibilityBy(null)
     }
 
     /**
      * `"12:30 left"` when the activity declares an end, `"12:30 elapsed"` when it declares a start,
      * `null` when it declares neither.
      */
-    protected fun ActivityTimestamps.friendlyTime(): CharSequence? = when {
-        endMs > 0L -> TimeUtils.toFriendlyString(
-            startTimeMs = ClockFactory.get().currentTimeMillis(),
-            targetTimestampMs = endMs,
-            formatString = getString(R.string.user_activity_timestamp_end_simple),
-            argName = TIME_DELTA_ARG,
-        )
-        startMs > 0L -> TimeUtils.toFriendlyString(
+    /** An activity with no declared start has still been running since it was published. */
+    protected fun Activity.friendlyTime(): CharSequence? {
+        val endMs = timestamps?.endMs ?: 0L
+        if (endMs > 0L) {
+            return TimeUtils.toFriendlyString(
+                startTimeMs = ClockFactory.get().currentTimeMillis(),
+                targetTimestampMs = endMs,
+                formatString = getString(R.string.user_activity_timestamp_end_simple),
+                argName = TIME_DELTA_ARG,
+            )
+        }
+        val startMs = timestamps?.startMs?.takeIf { it > 0L } ?: createdAt
+        if (startMs <= 0L) return null
+        return TimeUtils.toFriendlyString(
             startTimeMs = startMs,
             targetTimestampMs = ClockFactory.get().currentTimeMillis(),
             formatString = getString(R.string.user_activity_timestamp_start_simple),
             argName = TIME_DELTA_ARG,
         )
-        else -> null
     }
 
     protected fun getString(stringId: Int): String? = root.context?.getString(stringId)
@@ -378,6 +474,7 @@ open class ViewHolderUserRichPresence(
         const val STAGE_CHANNEL_RICH_PRESENCE_TYPE = 5
 
         private const val TIME_DELTA_ARG = "timeDelta"
+        private const val BADGE_ICON_SIZE_DP = 12
 
         /**
          * Returns a holder bound to [parent] appropriate for this activity, reusing [oldViewHolder]

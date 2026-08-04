@@ -35,6 +35,6 @@ fun generateThreadMemberListItems(
         roles,
         joined = joinedThread != null,
         streamingUserIds = streams.keys,
-    ).map(ChannelMemberListRow::toAdapterItem).toMutableList()
+    ).map { it.toAdapterItem(channel.guildId) }.toMutableList()
     return ThreadMemberListItems(channel.id.toString(), items)
 }

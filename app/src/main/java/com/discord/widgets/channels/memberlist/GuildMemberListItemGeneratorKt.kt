@@ -12,7 +12,6 @@ import com.discord.stores.StoreGuilds
 import com.discord.utilities.collections.SparseMutableList
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.lazy.memberlist.ChannelMemberList
-import com.discord.utilities.lazy.memberlist.MemberListRow
 import com.discord.widgets.channels.memberlist.adapter.ChannelMembersListAdapter
 import java.util.TreeMap
 
@@ -59,23 +58,12 @@ fun generateGuildMemberListItems(
     leadingItem?.let { sparse[0] = it }
     rows.forEachIndexed { index, row ->
         if (row is ChannelMemberListRow.PlaceholderMember) return@forEachIndexed
-        val source = channelMemberList.rows.getOrNull(index)
-        sparse[index + offset] = if (source is MemberListRow.GroupHeader && source.group.type == com.discord.models.domain.ModelGuildMemberListUpdate.Group.Type.ROLE) {
-            val roleId = source.group.id.toLongOrNull() ?: 0L
-            ChannelMembersListAdapter.Item.RoleHeader(
-                roleId,
-                guildRoles[roleId]?.name.orEmpty(),
-                source.group.count,
-                channel.guildId,
-            )
-        } else {
-            row.toAdapterItem()
-        }
+        sparse[index + offset] = row.toAdapterItem(channel.guildId)
     }
     return GuildMemberListItems(channelMemberList.listId, rows.size + offset, sparse, groupIndices)
 }
 
-internal fun ChannelMemberListRow.toAdapterItem(): ChannelMembersListAdapter.Item = when (this) {
+internal fun ChannelMemberListRow.toAdapterItem(guildId: Long? = null): ChannelMembersListAdapter.Item = when (this) {
     is ChannelMemberListRow.Header -> ChannelMembersListAdapter.Item.Header(
         key,
         when (kind) {
@@ -85,7 +73,7 @@ internal fun ChannelMemberListRow.toAdapterItem(): ChannelMembersListAdapter.Ite
         },
         count,
     )
-    is ChannelMemberListRow.RoleHeader -> ChannelMembersListAdapter.Item.RoleHeader(role.id, role.name, count, null)
+    is ChannelMemberListRow.RoleHeader -> ChannelMembersListAdapter.Item.RoleHeader(role.id, role.name, count, guildId)
     is ChannelMemberListRow.Member -> ChannelMembersListAdapter.Item.Member(
         user.id,
         guildMember?.guildId,

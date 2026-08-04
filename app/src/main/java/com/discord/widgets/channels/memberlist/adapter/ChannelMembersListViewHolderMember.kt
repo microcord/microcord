@@ -1,13 +1,16 @@
 package com.discord.widgets.channels.memberlist.adapter
 
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ImageView
-import android.widget.TextView
+import androidx.core.widget.ImageViewCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
-import com.discord.api.activity.ActivityType
+import com.discord.utilities.presence.PresenceUtils
+import com.discord.utilities.presence.statusIcon
 import com.discord.databinding.WidgetChannelMembersListItemUserBinding
 import com.discord.utilities.color.ColorCompat
 import com.discord.views.StatusView
@@ -15,20 +18,43 @@ import com.discord.views.NameplateView
 import com.discord.views.UsernameView
 import com.facebook.drawee.view.SimpleDraweeView
 
+private const val ROW_EDGE_PADDING_DP = 16
+private const val NAME_END_MARGIN_DP = 4
+
 class ChannelMembersListViewHolderMember(private val binding: WidgetChannelMembersListItemUserBinding) :
     RecyclerView.ViewHolder(binding.root) {
+
+    /**
+     * Keeps the name and status clear of the artwork. Only the text moves: the crown and boost
+     * badge stay pinned to the row edge so they line up across every row.
+     */
+    private fun reserveArtGutter(hasNameplate: Boolean) {
+        val density = binding.root.resources.displayMetrics.density
+        val extra = if (hasNameplate) {
+            ((NameplateView.ART_GUTTER_DP - ROW_EDGE_PADDING_DP) * density).toInt()
+        } else {
+            0
+        }
+        setEndMargin(R.id.channel_members_list_item_name, (NAME_END_MARGIN_DP * density).toInt() + extra)
+        setEndMargin(R.id.channel_members_list_item_game, extra)
+    }
+
+    private fun setEndMargin(viewId: Int, margin: Int) {
+        val view = binding.root.findViewById<View>(viewId)
+        val params = view.layoutParams as ViewGroup.MarginLayoutParams
+        if (params.marginEnd != margin) {
+            params.marginEnd = margin
+            view.layoutParams = params
+        }
+    }
+
     fun bind(data: ChannelMembersListAdapter.Item.Member, onClicked: () -> Unit, onLongClicked: (() -> Unit)?) {
         binding.root.setOnClickListener { onClicked() }
         binding.root.setOnLongClickListener(onLongClicked?.let { callback ->
             View.OnLongClickListener { callback(); true }
         })
         binding.root.findViewById<NameplateView>(R.id.channel_members_list_item_nameplate).apply {
-            bind(
-                data.nameplate,
-                NameplateView.Placement.MEMBER_LIST,
-                selected = false,
-                binding.root.findViewById(R.id.channel_members_list_item_content_end),
-            )
+            bind(data.nameplate, NameplateView.Placement.MEMBER_LIST, selected = false)
             binding.root.setOnHoverListener { _, event ->
                 setNameplateHovered(
                     event.action == MotionEvent.ACTION_HOVER_ENTER || event.action == MotionEvent.ACTION_HOVER_MOVE,
@@ -36,6 +62,7 @@ class ChannelMembersListViewHolderMember(private val binding: WidgetChannelMembe
                 false
             }
         }
+        reserveArtGutter(data.nameplate != null)
         binding.root.findViewById<SimpleDraweeView>(R.id.channel_members_list_item_avatar).setImageURI(data.avatarUrl)
         binding.root.findViewById<UsernameView>(R.id.channel_members_list_item_name).apply {
             configureUsername(data.name)
@@ -47,15 +74,29 @@ class ChannelMembersListViewHolderMember(private val binding: WidgetChannelMembe
             setPresence(data.presence)
             visibility = if (data.presence == null) View.GONE else View.VISIBLE
         }
-        val activity = data.presence?.activities?.firstOrNull { it.type != ActivityType.CUSTOM_STATUS }
-            ?: data.presence?.activities?.firstOrNull()
-        binding.root.findViewById<TextView>(R.id.channel_members_list_item_game).apply {
-            text = activity?.details ?: activity?.state ?: activity?.name
-            visibility = if (text.isNullOrBlank()) View.GONE else View.VISIBLE
-        }
+        val statusIcon = PresenceUtils.setStatusLine(
+            data.presence,
+            data.isApplicationStreaming,
+            binding.root.findViewById(R.id.channel_members_list_item_game),
+        )
         binding.root.findViewById<ImageView>(R.id.channel_members_list_item_rich_presence_iv).apply {
-            setImageResource(if (data.isApplicationStreaming) R.drawable.ic_status_streaming_16dp else R.drawable.ic_rich_presence_grey_16dp)
-            visibility = if (data.isApplicationStreaming || activity != null) View.VISIBLE else View.GONE
+            val icon = statusIcon
+            if (icon == null) {
+                visibility = View.GONE
+            } else {
+                setImageResource(icon)
+                ImageViewCompat.setImageTintList(
+                    this,
+                    if (data.isApplicationStreaming) {
+                        null
+                    } else {
+                        ColorStateList.valueOf(
+                            ColorCompat.getThemedColor(context, R.attr.colorTextPositive),
+                        )
+                    },
+                )
+                visibility = View.VISIBLE
+            }
         }
         binding.root.findViewById<ImageView>(R.id.channel_members_list_item_group_owner_indicator).visibility =
             if (data.showOwnerIndicator) View.VISIBLE else View.GONE

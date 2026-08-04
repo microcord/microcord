@@ -12,9 +12,7 @@ class ChannelMembersListViewHolderRoleHeader(private val binding: WidgetChannelM
         val text = binding.root.findViewById<android.widget.TextView>(R.id.channel_members_list_item_header_text)
         text.text = binding.root.context.getString(R.string.manticord_member_group_count, data.roleName, data.memberCount)
         ViewCompat.setAccessibilityHeading(text, true)
-        binding.root.findViewById<RoleIconView>(R.id.channel_members_list_item_header_role_icon).apply {
-            setRole(data.roleId, data.guildId)
-            visibility = android.view.View.VISIBLE
-        }
+        binding.root.findViewById<RoleIconView>(R.id.channel_members_list_item_header_role_icon)
+            .setRole(data.roleId, data.guildId)
     }
 }
