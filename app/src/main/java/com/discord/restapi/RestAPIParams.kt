@@ -546,6 +546,7 @@ object RestAPIParams {
         val stickerIds: List<Long>? = null,
         val messageReference: MessageReference? = null,
         val allowedMentions: AllowedMentions? = null,
+        val attachments: List<Attachment>? = null,
         // ponytail: remove with StoreStream's legacy upload call site; 126.21 never sends this field.
         @Transient
         val enforceNonce: Boolean? = null,
@@ -553,6 +554,12 @@ object RestAPIParams {
         override fun toString(): String =
             "Message(nonce=$nonce, applicationId=$applicationId, stickerIds=$stickerIds, " +
                 "content=<redacted>)"
+
+        data class Attachment(
+            val id: Int,
+            val filename: String,
+            @SerializedName("is_spoiler") val isSpoiler: Boolean,
+        )
 
         class Activity(
             type: MessageActivityType,

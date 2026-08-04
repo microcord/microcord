@@ -1,7 +1,13 @@
 package com.discord.utilities.attachments
 
+import com.discord.api.message.attachment.MessageAttachment
+import com.discord.restapi.RestAPIParams
+import com.google.gson.FieldNamingPolicy
+import com.google.gson.GsonBuilder
 import java.io.FileNotFoundException
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
@@ -19,5 +25,28 @@ class UploadAttachmentTest {
         assertThrows(FileNotFoundException::class.java) { validateAttachmentMetadata(false, null, null) }
         assertEquals("application/octet-stream" to -1L, validateAttachmentMetadata(true, null, null))
         assertEquals("image/png" to 12L, validateAttachmentMetadata(true, "image/png", 12L))
+    }
+
+    @Test fun modernSpoilerMetadataSerializesAndIncomingFlagsRender() {
+        val body = RestAPIParams.Message(
+            attachments = listOf(RestAPIParams.Message.Attachment(0, "image.png", true)),
+        )
+        val json = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .create().toJsonTree(body).asJsonObject
+        assertTrue(json["attachments"].asJsonArray[0].asJsonObject["is_spoiler"].asBoolean)
+
+        fun attachment(filename: String, flags: Int?) = MessageAttachment(
+            url = "https://cdn.test/$filename",
+            size = 1,
+            id = 1,
+            proxyUrl = "https://proxy.test/$filename",
+            filename = filename,
+            width = 1,
+            height = 1,
+            flags = flags,
+        )
+        assertTrue(attachment("image.png", MessageAttachment.FLAG_IS_SPOILER).isSpoiler)
+        assertTrue(attachment("SPOILER_image.png", null).isSpoiler)
+        assertFalse(attachment("image.png", null).isSpoiler)
     }
 }

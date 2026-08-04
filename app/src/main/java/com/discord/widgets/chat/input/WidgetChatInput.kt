@@ -430,7 +430,13 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
 
         val coordinator = coordinatorProvider() ?: return false
         val uploads = runCatching {
-            attachments.map { UploadAttachment.from(requireContext().contentResolver, it) }
+            attachments.map { attachment ->
+                UploadAttachment.from(
+                    requireContext().contentResolver,
+                    attachment,
+                    spoiler = (attachment as? SourcedAttachment<*>)?.spoiler == true,
+                )
+            }
         }.getOrElse {
             Toast.makeText(requireContext(), R.string.invalid_attachments_failure, Toast.LENGTH_SHORT).show()
             return false

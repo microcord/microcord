@@ -3,6 +3,10 @@ package com.discord.widgets.chat.input
 import android.content.Context
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
@@ -153,6 +157,7 @@ class WidgetChatInputAttachments(
         val previewList = flexInputFragment.view
             ?.findViewById<RecyclerView>(com.lytefast.flexinput.R.id.attachment_preview_list)
             ?: return
+        previewList.addItemDecoration(SpoilerPreviewDecoration(adapter))
         installLongPressToOpenSheet(fragment, previewList, adapter)
     }
 
@@ -186,8 +191,15 @@ class WidgetChatInputAttachments(
                 spoiler = (attachment as? SourcedAttachment<*>)?.spoiler == true,
                 onFileRemoved = { aggregator.unselectItem(attachment) },
                 onMarkSpoiler = { spoiler ->
-                    (attachment as? SourcedAttachment<*>)?.spoiler = spoiler
-                    adapter.notifyDataSetChanged()
+                    val sourced = (attachment as? SourcedAttachment<Any>)
+                        ?: SourcedAttachment(attachment, SOURCE_MEDIA_PICKER)
+                    sourced.spoiler = spoiler
+                    val index = aggregator.attachments.indexOf(attachment)
+                    if (index >= 0) {
+                        aggregator.attachments[index] = sourced
+                        adapter.notifyItemChanged(index)
+                    }
+                    previewList.invalidateItemDecorations()
                 },
             )
             return true
@@ -510,6 +522,33 @@ class WidgetChatInputAttachments(
                 it.itemView.findViewById<TextView>(R.id.perm_req_text)
                     .setI18nText(R.string.system_permission_request_files)
             }
+    }
+
+    private class SpoilerPreviewDecoration(
+        private val adapter: AttachmentPreviewAdapter<Attachment<Any>>,
+    ) : RecyclerView.ItemDecoration() {
+        private val coverPaint = Paint().apply { color = Color.argb(210, 32, 34, 37) }
+        private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+        }
+
+        override fun onDrawOver(canvas: Canvas, parent: RecyclerView, state: RecyclerView.State) {
+            textPaint.textSize = 10f * parent.resources.displayMetrics.scaledDensity
+            repeat(parent.childCount) { index ->
+                val child = parent.getChildAt(index)
+                val position = parent.getChildAdapterPosition(child)
+                if (position == RecyclerView.NO_POSITION || position >= adapter.selectionAggregator.size) return@repeat
+                if ((adapter.selectionAggregator[position] as? SourcedAttachment<*>)?.spoiler != true) return@repeat
+                canvas.drawRect(child.left.toFloat(), child.top.toFloat(), child.right.toFloat(), child.bottom.toFloat(), coverPaint)
+                val baseline = child.exactCenterY() - (textPaint.ascent() + textPaint.descent()) / 2f
+                canvas.drawText(parent.context.getString(R.string.spoiler).uppercase(), child.exactCenterX(), baseline, textPaint)
+            }
+        }
+
+        private fun View.exactCenterX() = (left + right) / 2f
+        private fun View.exactCenterY() = (top + bottom) / 2f
     }
 
     private companion object {

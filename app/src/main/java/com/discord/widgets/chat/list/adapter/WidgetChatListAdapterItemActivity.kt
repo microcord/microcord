@@ -79,7 +79,6 @@ class WidgetChatListAdapterItemActivity private constructor(
             model.permissions,
         )
 
-        binding.activityName.text = application?.name ?: context.getString(R.string.activity_message_unavailable)
         binding.activityIcon.setImageURI(application?.icon?.let { IconUtils.getApplicationIcon(application.id, it, 128) })
         binding.activityArt.visibility = if (application?.coverImage == null) View.GONE else View.VISIBLE
         binding.activityArt.setImageURI(application?.coverImage?.let { IconUtils.getApplicationIcon(application.id, it, 1024) })
@@ -102,12 +101,13 @@ class WidgetChatListAdapterItemActivity private constructor(
         }
         binding.activityAvatars.visibility = if (participantAvatarUrls.isEmpty()) View.GONE else View.VISIBLE
 
-        binding.activityStatus.text = when {
+        binding.activityName.text = when {
             state.reason != null -> reasonText(state.reason)
             state.isEnded -> context.getString(R.string.activity_message_ended_restart)
             participantIds.isEmpty() -> context.getString(R.string.activity_message_no_participants)
             else -> context.getString(R.string.activity_message_participant_count, participantIds.size)
         }
+        binding.activityStatus.visibility = View.GONE
         binding.activityAction.setText(
             context.getString(
                 when (state.action) {
@@ -129,7 +129,7 @@ class WidgetChatListAdapterItemActivity private constructor(
                 EmbeddedActivityLauncher.launch(context, app.id, entry.channelId, instanceId)
             }.onFailure {
                 binding.activityAction.isEnabled = false
-                binding.activityStatus.setText(R.string.embedded_activities_launch_fail_generic)
+                binding.activityName.setText(R.string.embedded_activities_launch_fail_generic)
             }
         }
         binding.root.contentDescription = listOfNotNull(

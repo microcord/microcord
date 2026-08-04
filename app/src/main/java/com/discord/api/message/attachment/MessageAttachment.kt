@@ -16,6 +16,7 @@ data class MessageAttachment(
     val filename: String,
     val width: Int?,
     val height: Int?,
+    val flags: Int? = null,
 ) {
     val type: MessageAttachmentType
         get() {
@@ -28,10 +29,11 @@ data class MessageAttachment(
         }
 
     val isSpoiler: Boolean
-        get() = filename.startsWith(SPOILER_PREFIX)
+        get() = filename.startsWith(SPOILER_PREFIX) || flags?.and(FLAG_IS_SPOILER) == FLAG_IS_SPOILER
 
     companion object {
         const val SPOILER_PREFIX = "SPOILER_"
+        const val FLAG_IS_SPOILER = 1 shl 3
     }
 }
 

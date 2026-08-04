@@ -27,7 +27,7 @@ data class UploadAttachment(
     val size: Long,
     val permissionPersisted: Boolean,
 ) {
-    val fileName: String = sanitizeUploadFileName(displayName, spoiler)
+    val fileName: String = sanitizeUploadFileName(displayName)
 
     fun toLocalAttachment() = LocalAttachment(id, uri.toString(), fileName)
 

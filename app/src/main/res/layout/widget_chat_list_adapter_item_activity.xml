@@ -79,8 +79,9 @@
 
             <FrameLayout
                 android:id="@+id/activity_avatars"
-                android:layout_width="96dp"
+                android:layout_width="0dp"
                 android:layout_height="32dp"
+                android:layout_weight="1"
                 android:contentDescription="@string/embedded_activity_participants">
 
                 <com.facebook.drawee.view.SimpleDraweeView
@@ -106,9 +107,11 @@
 
             <com.discord.views.LoadingButton
                 android:id="@+id/activity_action"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
+                android:layout_width="96dp"
+                android:layout_height="44dp"
+                app:lb_padding_top="6dp"
+                app:lb_padding_bottom="6dp"
+                app:lb_text_size="@dimen/uikit_textsize_medium"
                 app:lb_disable_elevation="true"
                 app:lb_progress_color="@color/white"
                 app:lb_text="@string/embedded_activities_join"

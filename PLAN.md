@@ -2569,6 +2569,19 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   shutter asset with outer ring, lifecycle-bound Camera2, direct `PictureResult.toFile`, permission UI,
   flash/facing controls, and system-camera fallback. `assembleDebug` passes; the APK was installed on
   WSA and A65.
+- Marking a selected attachment as spoiler now survives conversion into `UploadAttachment`. Current
+  Discord sends `attachments[].is_spoiler` and receives attachment flag `IS_SPOILER = 1 << 3`; new
+  uploads therefore keep their normal filename while multipart payload metadata carries the boolean.
+  Incoming rendering reads the flag with `SPOILER_` filename support retained for legacy messages. Because
+  public FlexInput selections are plain `Attachment` instances, the action-sheet callback now replaces
+  the selected aggregator item with a `SourcedAttachment` carrying the mutated flag, matching the original
+  fork's attachment-owned state transfer. Its selection RecyclerView draws the missing dark cover and
+  SPOILER label from that transferred state as soon as the sheet closes. Activity
+  cards no longer repeat the application name already shown by the bot/message header: their primary
+  header now carries the current status (`Activity ended`, participant state, or launch failure), the
+  redundant subtext is hidden, and the action button uses a balanced 96x44dp size with medium text at the
+  row end instead of an oversized or clipped scaled drawing. Focused activity/attachment tests and `assembleDebug` pass; installed
+  on WSA and A65.
 
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/applauncher/**` | Android 340.12
 Hermes `out.js` Apps launcher modules | log in on WSA and verify HOME/search/application/command/list

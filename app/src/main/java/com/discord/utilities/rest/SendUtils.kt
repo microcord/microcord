@@ -79,7 +79,19 @@ object SendUtils {
         requireNotNull(contentResolver) { "A ContentResolver is required to upload attachments" }
         val preprocessing = Observable.just<SendPayload>(preprocessingFor(attachments))
         val readyToSend = Observable.fromCallable {
-            SendPayload.ReadyToSend(message, buildUploads(contentResolver, attachments)) as SendPayload
+            val prepared = uniqueUploadFileNames(attachments).mapIndexed { index, name ->
+                attachments[index].copy(displayName = name)
+            }
+            val messageWithAttachments = message.copy(
+                attachments = prepared.mapIndexed { index, attachment ->
+                    RestAPIParams.Message.Attachment(
+                        id = index,
+                        filename = attachment.fileName,
+                        isSpoiler = attachment.spoiler,
+                    )
+                },
+            )
+            SendPayload.ReadyToSend(messageWithAttachments, buildUploads(contentResolver, prepared)) as SendPayload
         }
         return Observable.concat(preprocessing, readyToSend)
     }
