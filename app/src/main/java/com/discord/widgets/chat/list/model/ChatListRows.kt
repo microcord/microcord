@@ -10,11 +10,9 @@ import com.discord.api.permission.Permission
 import com.discord.api.role.GuildRole
 import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
-import com.discord.api.message.MessageFlags
 import com.discord.models.message.Message
 import com.discord.stores.StoreMessageState
 import com.discord.stores.StoreMessagesLoader
-import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.icon.IconUtils
@@ -34,7 +32,6 @@ import com.discord.widgets.chat.list.entries.StartOfChatEntry
 import com.discord.widgets.chat.list.entries.StartOfPrivateChatEntry
 import com.discord.widgets.chat.list.entries.TimestampEntry
 import com.discord.widgets.chat.list.entries.UploadProgressEntry
-import java.util.Calendar
 import kotlin.math.abs
 
 /**
@@ -54,7 +51,6 @@ import kotlin.math.abs
  * [build] returns rows newest-first, matching the reversed layout manager the chat list uses.
  */
 object ChatListRows {
-    private const val MESSAGE_GROUP_INTERVAL_MS = 7 * 60 * 1000L
 
     /**
      * Everything a row needs beyond the message itself.
@@ -100,8 +96,8 @@ object ChatListRows {
         var groupStart: Message? = null
         var unreadAdded = false
         messages.forEach { message ->
-            val timestamp = timestamp(message)
-            if (previous == null || !sameDay(timestamp, timestamp(previous!!))) {
+            val timestamp = MessageGrouping.timestamp(message)
+            if (previous == null || !MessageGrouping.sameDay(timestamp, MessageGrouping.timestamp(previous!!))) {
                 rows += TimestampEntry(message.id, timestamp)
             }
             // Reference short-circuits grouping here, so the oldest unread always keeps its header.
@@ -112,7 +108,8 @@ object ChatListRows {
                 startsGroup = true
             }
 
-            startsGroup = startsGroup || isNewMessageGroup(state, groupStart, message)
+            startsGroup = startsGroup ||
+                MessageGrouping.isNewMessageGroup(state.channel, state.parentChannel, groupStart, message)
             rows += messageRows(state, message, isMinimal = !startsGroup)
             if (startsGroup) groupStart = message
             previous = message
@@ -299,73 +296,4 @@ object ChatListRows {
         )
     }
 
-    /**
-     * Reference `isNewMessageGroup`, ported condition for condition and in the same order.
-     *
-     * Everything is compared against [groupStart], not the preceding message, so a group can never
-     * span more than [MESSAGE_GROUP_INTERVAL_MS] end to end.
-     */
-    private fun isNewMessageGroup(state: State, groupStart: Message?, message: Message): Boolean {
-        if (groupStart == null) return true
-
-        // A spine that does not reach the author's avatar reads as a rendering fault.
-        if (message.hasFlag(MessageFlags.HAS_THREAD) || isCommandType(message)) return true
-
-        val type = message.type ?: TYPE_DEFAULT
-        if (type > TYPE_DEFAULT) {
-            if (!isSystem(groupStart)) return true
-            return type == REPLY_MESSAGE_TYPE
-        }
-        if (isSystem(groupStart)) return true
-
-        val authorId = groupStart.author?.id
-        if (authorId == null || authorId != message.author?.id) return true
-        if (groupStart.hasFlag(MessageFlags.EPHEMERAL) != message.hasFlag(MessageFlags.EPHEMERAL)) return true
-        // Only the username override, and only when the incoming message is the webhook's.
-        if (message.webhookId != null && groupStart.author?.username != message.author?.username) return true
-        if (state.channel.isGuildForumPost(state.parentChannel) && groupStart.id == state.channel.id) return true
-        if (!sameDay(timestamp(groupStart), timestamp(message))) return true
-        if (abs(timestamp(message) - timestamp(groupStart)) >= MESSAGE_GROUP_INTERVAL_MS) return true
-
-        val groupStartSilent = groupStart.hasFlag(MessageFlags.SUPPRESS_NOTIFICATIONS)
-        val messageSilent = message.hasFlag(MessageFlags.SUPPRESS_NOTIFICATIONS)
-        if (messageSilent && !groupStartSilent) return true
-        // A silent group only breaks for something that would have notified.
-        if (groupStartSilent && !messageSilent && mentionsAnyone(message)) return true
-
-        return message.applicationId != groupStart.applicationId
-    }
-
-    private fun mentionsAnyone(message: Message) = !message.mentions.isNullOrEmpty() ||
-        !message.mentionRoles.isNullOrEmpty() ||
-        message.mentionEveryone == true
-
-    private fun isCommandType(message: Message) =
-        message.type == TYPE_CHAT_INPUT_COMMAND || message.type == TYPE_CONTEXT_MENU_COMMAND
-
-    /** Reference `isSystemMessage`; a pending or rejected send is still the user's own message. */
-    private fun isSystem(message: Message) =
-        message.type !in USER_MESSAGE_TYPES && !message.isLocal() && !message.isFailed()
-
-    private fun timestamp(message: Message) =
-        message.timestamp?.dateTimeMillis ?: snowflakeTimestamp(message.id)
-
-    private fun snowflakeTimestamp(id: Long) =
-        if (id > 4_194_304L) SnowflakeUtils.toTimestamp(id) else 0L
-
-    private fun sameDay(first: Long, second: Long): Boolean {
-        val a = Calendar.getInstance().apply { timeInMillis = first }
-        val b = Calendar.getInstance().apply { timeInMillis = second }
-        return a.get(Calendar.ERA) == b.get(Calendar.ERA) &&
-            a.get(Calendar.YEAR) == b.get(Calendar.YEAR) &&
-            a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
-    }
-
-    private const val TYPE_DEFAULT = 0
-    private const val REPLY_MESSAGE_TYPE = 19
-    private const val TYPE_CHAT_INPUT_COMMAND = 20
-    private const val TYPE_CONTEXT_MENU_COMMAND = 23
-
-    /** `MessageTypesSets.USER_MESSAGE`; everything else counts as a system message here. */
-    private val USER_MESSAGE_TYPES = setOf(0, 19, 20, 23, 26, 41, 45, 47, 68)
 }

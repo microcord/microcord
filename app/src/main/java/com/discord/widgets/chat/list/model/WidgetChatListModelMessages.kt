@@ -104,8 +104,6 @@ data class WidgetChatListModelMessages(
     }
 
     companion object {
-        private const val MAX_CONCAT_COUNT = 5
-        private const val CONCAT_WINDOW_MS = 420_000L
 
         @JvmStatic
         fun get(channel: Channel): Observable<WidgetChatListModelMessages> {
@@ -213,7 +211,8 @@ data class WidgetChatListModelMessages(
             var blockedCount = 0
             var blockedMessage: Message? = null
             var blockedChunkExpanded = false
-            var previousMessage: Message? = null
+            var groupStart: Message? = null
+            var groupStartBlocked = false
             var separatorAdded = false
 
             metadata.messages.forEachIndexed { index, message ->
@@ -240,8 +239,13 @@ data class WidgetChatListModelMessages(
                 if (!isBlocked && blockedChunkExpanded) blockedChunkExpanded = false
 
                 if (!isBlocked || blockedChunkExpanded) {
-                    val concatenate = shouldConcatMessage(items, message, previousMessage)
-                    items.concatCount = if (concatenate) items.concatCount + 1 else 0
+                    val concatenate = shouldConcatMessage(
+                        channel, parentChannel, groupStart, message, groupStartBlocked, isBlocked,
+                    )
+                    if (!concatenate) {
+                        groupStart = message
+                        groupStartBlocked = isBlocked
+                    }
                     if (message.type == 21) {
                         items.addItems(
                             getThreadStarterMessageItems(
@@ -269,7 +273,6 @@ data class WidgetChatListModelMessages(
                         items, newMessagesMarkerMessageId, isMostRecent, message.id, channel,
                     )
                 }
-                previousMessage = message
             }
 
             items.items.reverse()
@@ -412,17 +415,16 @@ data class WidgetChatListModelMessages(
             return rows
         }
 
-        internal fun shouldConcatMessage(items: Items, message: Message, previous: Message?): Boolean {
-            if (previous == null || previous.isSystemMessage() || message.hasThread() || previous.hasThread()) return false
-            if (message.type != 0 && message.type != -1) return false
-            if (items.listItemMostRecentlyAdded?.type !in setOf(0, 1, 21, 4)) return false
-            if (previous.author?.id != message.author?.id) return false
-            val delta = (message.timestamp?.dateTimeMillis ?: 0L) - (previous.timestamp?.dateTimeMillis ?: 0L)
-            if (delta >= CONCAT_WINDOW_MS || previous.hasAttachments() || previous.hasEmbeds()) return false
-            if (!previous.mentions.isNullOrEmpty() || message.hasAttachments() || message.hasEmbeds()) return false
-            if (!message.mentions.isNullOrEmpty() || items.concatCount >= MAX_CONCAT_COUNT) return false
-            return !message.isWebhook() || previous.author?.username == message.author?.username
-        }
+        internal fun shouldConcatMessage(
+            channel: Channel?,
+            parentChannel: Channel?,
+            groupStart: Message?,
+            message: Message,
+            groupStartBlocked: Boolean = false,
+            messageBlocked: Boolean = false,
+        ): Boolean = !MessageGrouping.isNewMessageGroup(
+            channel, parentChannel, groupStart, message, groupStartBlocked, messageBlocked,
+        )
 
         internal fun tryAddNewMessagesSeparator(
             items: Items,
@@ -561,7 +563,6 @@ data class WidgetChatListModelMessages(
         }
 
         internal class Items(size: Int) {
-            var concatCount: Int = 0
             val items: MutableList<ChatListEntry> = ArrayList(size + 10)
             var listItemMostRecentlyAdded: ChatListEntry? = null
 

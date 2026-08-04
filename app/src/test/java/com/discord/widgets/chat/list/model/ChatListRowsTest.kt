@@ -62,6 +62,21 @@ class ChatListRowsTest {
         assertEquals(7, bodies.map { it.message.id }.distinct().size)
     }
 
+    @Test fun attachmentsDoNotBreakTheGroup() {
+        val image = MessageAttachment("https://cdn/x.png", 1, 9, "https://p/x.png", "x.png", 10, 10)
+        val bodies = rows(
+            listOf(
+                message(1, 1_000),
+                message(2, 2_000).copy(content = null, attachments = listOf(image)),
+                message(3, 3_000),
+            ),
+        ).filterIsInstance<MessageEntry>().associateBy { it.message.id }
+
+        assertEquals(ChatListEntry.MESSAGE, bodies.getValue(1L).type)
+        assertEquals(ChatListEntry.MESSAGE_MINIMAL, bodies.getValue(2L).type)
+        assertEquals(ChatListEntry.MESSAGE_MINIMAL, bodies.getValue(3L).type)
+    }
+
     @Test fun addsStableUnreadAndDayDividers() {
         val day = 86_400_000L
         val first = rows(listOf(message(1, day), message(2, day * 2)), unreadMessageId = 1)
