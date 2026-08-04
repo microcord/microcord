@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.CoordinatorLayout.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout">
+        <androidx.appcompat.widget.Toolbar app:navigationContentDescription="@string/back" app:navigationIcon="?attr/ic_action_bar_back" app:title="@string/permissions" style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout style="@style/UiKit.ViewGroup.LinearLayout">
+            <TextView android:id="@+id/authorized_app_permissions_app_name" android:layout_marginLeft="16dp" android:layout_marginTop="24dp" android:layout_marginRight="16dp" style="@style/UiKit.TextView.H1.Bold"/>
+            <TextView android:text="@string/permissions" style="@style/UiKit.Settings.Item.Header"/>
+            <androidx.recyclerview.widget.RecyclerView android:id="@+id/authorized_app_permissions_list" android:paddingLeft="16dp" android:paddingRight="16dp" style="@style/UiKit.ViewGroup.RecyclerView"/>
+            <androidx.recyclerview.widget.RecyclerView android:id="@+id/authorized_app_disclosures_list" android:paddingLeft="16dp" android:paddingTop="8dp" android:paddingRight="16dp" android:paddingBottom="16dp" style="@style/UiKit.ViewGroup.RecyclerView"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

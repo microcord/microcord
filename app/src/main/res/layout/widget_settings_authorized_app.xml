@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.CoordinatorLayout.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout">
+        <androidx.appcompat.widget.Toolbar app:navigationContentDescription="@string/back" app:navigationIcon="?attr/ic_action_bar_back" style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout style="@style/UiKit.ViewGroup.LinearLayout">
+
+            <LinearLayout android:orientation="vertical" android:gravity="center_horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingLeft="16dp" android:paddingTop="24dp" android:paddingRight="16dp" android:paddingBottom="8dp">
+                <com.facebook.drawee.view.SimpleDraweeView android:id="@+id/authorized_app_icon" android:layout_width="64dp" android:layout_height="64dp" android:importantForAccessibility="no" app:placeholderImage="?attr/ic_game_icon_placeholder" app:roundedCornerRadius="12dp"/>
+                <TextView android:textColor="?attr/colorTextMuted" android:id="@+id/authorized_app_authorized_on" android:gravity="center" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" style="@style/UiKit.TextView.Subtext"/>
+                <TextView android:textColor="?attr/colorHeaderSecondary" android:id="@+id/authorized_app_description" android:gravity="center" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:visibility="gone" style="@style/UiKit.TextView.Medium"/>
+            </LinearLayout>
+
+            <TextView android:text="@string/authorized_apps_permissions_and_policies" style="@style/UiKit.Settings.Item.Header"/>
+            <TextView android:id="@+id/authorized_app_permissions" android:text="@string/permissions" app:drawableEndCompat="@drawable/ic_chevron_right_primary_300_12dp" style="@style/UiKit.Settings.Item.Chevron"/>
+            <TextView android:id="@+id/authorized_app_terms" android:text="@string/authorized_apps_terms_of_service" android:visibility="gone" app:drawableEndCompat="@drawable/ic_chevron_right_primary_300_12dp" style="@style/UiKit.Settings.Item.Chevron"/>
+            <TextView android:id="@+id/authorized_app_privacy" android:text="@string/authorized_apps_privacy_policy" android:visibility="gone" app:drawableEndCompat="@drawable/ic_chevron_right_primary_300_12dp" style="@style/UiKit.Settings.Item.Chevron"/>
+
+            <TextView android:text="@string/deauthorize_app_header" style="@style/UiKit.Settings.Item.Header"/>
+            <TextView android:textColor="?attr/colorButtonDangerBackground" android:id="@+id/authorized_app_deauthorize" android:text="@string/deauthorize" style="@style/UiKit.Settings.Item"/>
+
+            <View android:layout_width="match_parent" android:layout_height="16dp"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

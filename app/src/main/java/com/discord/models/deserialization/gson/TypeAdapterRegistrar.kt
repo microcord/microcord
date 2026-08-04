@@ -4,6 +4,8 @@ import com.discord.api.activity.ActivityPlatform
 import com.discord.api.activity.ActivityPlatformTypeAdapter
 import com.discord.api.activity.ActivityType
 import com.discord.api.activity.ActivityTypeTypeAdapter
+import com.discord.api.application.ApplicationDisclosureType
+import com.discord.api.application.ApplicationDisclosureTypeAdapter
 import com.discord.api.application.ApplicationType
 import com.discord.api.application.ApplicationTypeAdapter
 import com.discord.api.auth.OAuthScope
@@ -109,6 +111,7 @@ fun GsonBuilder.registerDiscordApiTypeAdapters(): GsonBuilder =
         .registerTypeAdapter(ApplicationCommandType::class.java, CommandTypeAdapter())
         .registerTypeAdapter(ApplicationStatus::class.java, ApplicationStatusTypeAdapter())
         .registerTypeAdapter(ApplicationType::class.java, ApplicationTypeAdapter())
+        .registerTypeAdapter(ApplicationDisclosureType::class.java, ApplicationDisclosureTypeAdapter())
         .registerTypeAdapter(ButtonStyle::class.java, ButtonStyleTypeAdapter())
         .registerTypeAdapter(ComponentType::class.java, ComponentTypeTypeAdapter())
         .registerTypeAdapter(TextStyle::class.java, TextStyleTypeAdapter())

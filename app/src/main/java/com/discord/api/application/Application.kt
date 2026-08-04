@@ -17,6 +17,11 @@ data class Application(
     val type: ApplicationType?,
     val guildId: Long?,
     val team: Team?,
+    val termsOfServiceUrl: String? = null,
+    val privacyPolicyUrl: String? = null,
+    val bot: com.discord.api.user.User? = null,
+    /** Set on a social-layer child application, which the authorized list folds into its parent. */
+    val parentId: Long? = null,
     val maxParticipants: Int? = null,
     val embeddedActivityConfig: EmbeddedActivityConfig? = null,
 ) {

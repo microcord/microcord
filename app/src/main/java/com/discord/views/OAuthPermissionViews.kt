@@ -1,5 +1,6 @@
 package com.discord.views
 
+import android.content.Context
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.widget.TextView
@@ -12,46 +13,38 @@ import com.discord.utilities.views.SimpleRecyclerAdapter
  * Rendering for the OAuth2 scope rows shown on the authorization screen and on the authorized
  * applications settings screen.
  *
- * Each scope maps to a human-readable permission sentence. An unrecognized scope is a hard error
- * rather than a silently skipped row: the authorization screen catches [InvalidScopeException] and
- * refuses to authorize an application whose permissions it cannot describe.
- *
- * Scopes are addressed by their wire name (`identify`, `guilds.join`, ...); the [OAuthScope]
- * overloads below are the type-safe entry point and simply unwrap `scopeName`, matching the
- * reference's own signature. [OAuthScope.Invalid] is rejected using the raw value it carries, not
- * the literal `"invalid"` its `scopeName` reports, so the error names the scope the server sent.
+ * Each scope maps to a human-readable permission sentence. A scope newer than this build has none,
+ * and the two screens want opposite things: the settings list shows the raw wire name rather than
+ * hiding a permission the user has already granted, while the authorization screen throws
+ * [InvalidScopeException] and refuses to grant what it cannot describe.
  */
 object OAuthPermissionViews {
 
     /** Thrown when a scope has no user-facing description, i.e. the client does not understand it. */
     class InvalidScopeException(val scope: String) : IllegalArgumentException("invalid scope: $scope")
 
-    /**
-     * Sets [textView] to the permission sentence for [scopeName].
-     *
-     * @throws InvalidScopeException when the scope is not one this client version knows about.
-     */
+    /** Falls back to the raw wire name, so a scope newer than this build still lists something. */
     fun setScopePermissionText(textView: TextView, scopeName: String) {
-        textView.setText(scopePermissionStringRes(scopeName))
+        val description = scopePermissionStringResOrNull(scopeName)
+        if (description != null) textView.setText(description) else textView.text = scopeName
     }
 
-    /** @throws InvalidScopeException when the scope is not one this client version knows about. */
-    fun setScopePermissionText(textView: TextView, scope: OAuthScope) {
-        textView.setText(scopePermissionStringRes(scope))
-    }
+    fun setScopePermissionText(textView: TextView, scope: OAuthScope) =
+        setScopePermissionText(textView, scope.wireName)
 
     /** @throws InvalidScopeException when the scope is not one this client version knows about. */
     @StringRes
-    fun scopePermissionStringRes(scope: OAuthScope): Int = when (scope) {
-        is OAuthScope.Invalid -> throw InvalidScopeException(scope.rawValue)
-        else -> scopePermissionStringRes(scope.scopeName)
-    }
+    fun scopePermissionStringRes(scope: OAuthScope): Int =
+        scopePermissionStringRes(scope.wireName)
 
-    /**
-     * @throws InvalidScopeException when the scope is not one this client version knows about.
-     */
+    /** @throws InvalidScopeException when the scope is not one this client version knows about. */
     @StringRes
-    fun scopePermissionStringRes(scopeName: String): Int = when (scopeName) {
+    fun scopePermissionStringRes(scopeName: String): Int =
+        scopePermissionStringResOrNull(scopeName) ?: throw InvalidScopeException(scopeName)
+
+    /** Null when this build has no sentence for [scopeName]. */
+    @StringRes
+    fun scopePermissionStringResOrNull(scopeName: String): Int? = when (scopeName) {
         "identify" -> R.string.scope_identify
         "email" -> R.string.scope_email
         "connections" -> R.string.scope_connections
@@ -78,21 +71,106 @@ object OAuthPermissionViews {
         "relationships.read" -> R.string.scope_relationships_read
         "voice" -> R.string.scope_voice
         "dm_channels.read" -> R.string.scope_dm_channels_read
-        else -> throw InvalidScopeException(scopeName)
+        "identify.premium" -> R.string.scope_identify_premium
+        "guilds.channels.read" -> R.string.scope_guilds_channels_read
+        "rpc.video.read" -> R.string.scope_rpc_video_read
+        "rpc.video.write" -> R.string.scope_rpc_video_write
+        "rpc.screenshare.read" -> R.string.scope_rpc_screenshare_read
+        "rpc.screenshare.write" -> R.string.scope_rpc_screenshare_write
+        "applications.commands.permissions.update" -> R.string.scope_applications_commands_permissions_update
+        "application_identities.write" -> R.string.scope_application_identities_write
+        "managed_platform.application_identities.write" ->
+            R.string.scope_managed_platform_application_identities_write
+        "activities.invites.write" -> R.string.scope_activities_invites_write
+        "relationships.write" -> R.string.scope_relationships_write
+        "presences.read" -> R.string.scope_presences_read
+        "presences.write" -> R.string.scope_presences_write
+        "dm_channels.messages.read" -> R.string.scope_dm_channels_messages_read
+        "dm_channels.messages.write" -> R.string.scope_dm_channels_messages_write
+        "role_connections.write" -> R.string.scope_role_connections_write
+        "gateway.connect" -> R.string.scope_gateway_connect
+        "openid" -> R.string.scope_openid
+        "payment_sources.country_code" -> R.string.scope_payment_sources_country_code
+        // `account.global_name.update`, `lobbies.write` and the umbrella scopes have no single
+        // sentence; the first two fall through to their wire name, the umbrellas expand below.
+        else -> null
     }
+
+    /**
+     * The permission lines to show for a granted set, in the order the server returned them.
+     *
+     * Not one line per scope: the umbrella `sdk.social_layer*` scopes expand to several,
+     * `applications.commands` implies being DMed, and `guilds.members.read` reads differently once
+     * `voice` is also granted.
+     */
+    fun scopeDescriptions(context: Context, scopes: List<OAuthScope>): List<CharSequence> {
+        val granted = scopes.map { it.wireName }
+        return scopes.flatMap { scope ->
+            describe(context, scope.wireName, granted) +
+                if (scope.wireName == OAuthScope.ApplicationsCommands.scopeName) {
+                    listOf(context.getString(R.string.scope_dm_you))
+                } else {
+                    emptyList()
+                }
+        }
+    }
+
+    private fun describe(
+        context: Context,
+        scopeName: String,
+        granted: List<String>,
+    ): List<CharSequence> = when (scopeName) {
+        OAuthScope.GuildsMembersRead.scopeName -> listOf(
+            context.getString(
+                if (OAuthScope.Voice.scopeName in granted) {
+                    R.string.scope_guilds_members_read_voice
+                } else {
+                    R.string.scope_guilds_members_read
+                },
+            ),
+        )
+        OAuthScope.SdkSocialLayerPresence.scopeName -> socialLayer(
+            context,
+            granted,
+            R.string.scope_sdk_social_layer_1,
+            R.string.scope_sdk_social_layer_3,
+            R.string.scope_sdk_social_layer_4,
+            R.string.scope_sdk_social_layer_game_invites,
+        )
+        OAuthScope.SdkSocialLayer.scopeName -> socialLayer(
+            context,
+            granted,
+            R.string.scope_sdk_social_layer_1,
+            R.string.scope_sdk_social_layer_2,
+            R.string.scope_sdk_social_layer_3,
+            R.string.scope_sdk_social_layer_4,
+            R.string.scope_sdk_social_layer_5,
+        )
+        else -> listOf(scopePermissionStringResOrNull(scopeName)?.let(context::getString) ?: scopeName)
+    }
+
+    /** The umbrella covers `application_identities.write`; listing it twice would be noise. */
+    private fun socialLayer(
+        context: Context,
+        granted: List<String>,
+        @StringRes vararg lines: Int,
+    ): List<CharSequence> = lines.map(context::getString) +
+        if (OAuthScope.ApplicationIdentitiesWrite.scopeName in granted) {
+            emptyList()
+        } else {
+            listOf(context.getString(R.string.scope_application_identities_write))
+        }
 
     /**
      * Compact scope row (`oauth_token_permission_list_item`), a single check-marked line of text.
      * Used by the authorized applications list.
      */
     class ScopeViewHolder(private val scopeText: TextView) :
-        SimpleRecyclerAdapter.ViewHolder<OAuthScope>(scopeText) {
+        SimpleRecyclerAdapter.ViewHolder<CharSequence>(scopeText) {
 
-        fun bind(scopeName: String) =
-            OAuthPermissionViews.setScopePermissionText(scopeText, scopeName)
-
-        override fun bind(scope: OAuthScope) =
-            OAuthPermissionViews.setScopePermissionText(scopeText, scope)
+        override fun bind(data: CharSequence) {
+            scopeText.text = data
+        }
 
         companion object {
             fun create(inflater: LayoutInflater, parent: ViewGroup): ScopeViewHolder =

@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:textColor="?attr/colorHeaderSecondary" android:gravity="center_vertical" android:id="@+id/oauth_token_disclosure_text" android:paddingTop="4dp" android:paddingBottom="4dp" android:drawablePadding="8dp" app:drawableTint="?attr/colorTextMuted" style="@style/UiKit.TextView"/>
