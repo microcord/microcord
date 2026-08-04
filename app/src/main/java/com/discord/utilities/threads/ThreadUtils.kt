@@ -3,7 +3,10 @@ package com.discord.utilities.threads
 import com.discord.api.channel.Channel
 import com.discord.api.permission.Permission
 import com.discord.models.user.User
+import com.discord.restapi.RestAPIParams
 import com.discord.utilities.permissions.PermissionUtils
+import com.discord.utilities.rest.RestAPI
+import rx.Observable
 
 /**
  * Permission predicates for threads.
@@ -13,6 +16,23 @@ import com.discord.utilities.permissions.PermissionUtils
  * auto-archive helpers.
  */
 object ThreadUtils {
+
+    @JvmStatic
+    fun createThread(
+        parentChannelId: Long,
+        parentMessageId: Long?,
+        type: Int,
+        name: String,
+        autoArchiveDuration: Int?,
+        location: String?,
+    ): Observable<Channel> {
+        val settings = RestAPIParams.ThreadCreationSettings(name, type, autoArchiveDuration)
+        return if (parentMessageId == null) {
+            RestAPI.api.createThread(parentChannelId, location, settings)
+        } else {
+            RestAPI.api.createThreadFromMessage(parentChannelId, parentMessageId, location, settings)
+        }
+    }
 
     /**
      * Whether [user] may rename, archive, lock or delete [channel].

@@ -147,7 +147,7 @@ class WidgetThreadStatusViewModel(
             storeChannelsSelected: StoreChannelsSelected = StoreStream.getChannelsSelected(),
             storeChannels: StoreChannels = StoreStream.getChannels(),
             storePermissions: StorePermissions = StoreStream.getPermissions(),
-            storeThreadsActiveJoined: StoreThreadsActiveJoined? = null,
+            storeThreadsActiveJoined: StoreThreadsActiveJoined? = StoreStream.getThreadsActiveJoined(),
         ): Observable<StoreState> =
             storeChannelsSelected.observeSelectedChannel()
                 .filterNull()

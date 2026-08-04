@@ -22,6 +22,7 @@ import com.discord.R
 import com.discord.activities.EmbeddedActivityLauncher
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayNameOrDefault
+import com.discord.api.channel.isAnnouncementChannel
 import com.discord.api.channel.isGuildForumChannel
 import com.discord.api.guild.GuildVerificationLevel
 import com.discord.api.permission.Permission
@@ -33,14 +34,21 @@ import com.discord.models.domain.emoji.Emoji
 import com.discord.models.member.GuildMember
 import com.discord.stores.StoreChatInputEditing
 import com.discord.stores.StorePendingReplies
+import com.discord.stores.StoreSlowMode
 import com.discord.stores.StoreStream
 import com.discord.utilities.attachments.UploadAttachment
+import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.duration.humanizeCountdownDuration
 import com.discord.utilities.messagesend.MessageResult
 import com.discord.utilities.messagesend.MessageSendCoordinator
 import com.discord.utilities.permissions.PermissionUtils
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.filterNull
+import com.discord.utilities.rx.restSubscribeOn
+import com.discord.utilities.rx.takeSingleUntilTimeout
 import com.discord.utilities.rx.ui
+import com.discord.utilities.threads.ThreadUtils
 import com.discord.utilities.user.UserUtils.synthesizeApiUser
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
@@ -109,6 +117,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
 
     private var state: ChatInputViewModel.ViewState.Loaded? = null
     private var hasAttachments = false
+    private var threadCreateInProgress = false
 
     /** `true` while [restoreInput] rewrites the composer, so the draft watcher ignores the edit. */
     private var restoringText = false
@@ -480,6 +489,77 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             if (accepted) drafts.setTextChannelInput(loaded.channelId, null)
             return accepted
         }
+        val threadDraft = loaded.selectedThreadDraft
+        if (threadDraft != null) {
+            if (threadCreateInProgress) return false
+            val threadName = loaded.threadDraftState.threadName
+            if (threadName.isNullOrEmpty()) {
+                StoreStream.getThreadDraft().setDraftState(
+                    loaded.threadDraftState.copy(shouldDisplayNameError = true),
+                )
+                return false
+            }
+            threadCreateInProgress = true
+            StoreStream.getThreadDraft().setDraftSending()
+            val threadType = when {
+                loaded.channel.isAnnouncementChannel() -> Channel.ANNOUNCEMENT_THREAD
+                loaded.threadDraftState.isPrivate -> Channel.PRIVATE_THREAD
+                else -> Channel.PUBLIC_THREAD
+            }
+            ThreadUtils.createThread(
+                parentChannelId = loaded.channel.id,
+                parentMessageId = threadDraft.starterMessageId,
+                type = threadType,
+                name = threadName,
+                autoArchiveDuration = loaded.threadDraftState.autoArchiveDuration
+                    ?: loaded.channel.defaultAutoArchiveDuration
+                    ?: DEFAULT_THREAD_ARCHIVE_DURATION,
+                location = threadDraft.threadStartLocation,
+            ).restSubscribeOn()
+                .flatMap { channel ->
+                    StoreStream.handleThreadCreateOrUpdate(channel)
+                    StoreStream.getChannels().observeChannel(channel.id).filterNull().takeSingleUntilTimeout()
+                }
+                .ui(this)
+                .appSubscribe(
+                    errorClass = WidgetChatInput::class.java,
+                    context = requireContext(),
+                    errorHandler = { error ->
+                        state?.threadDraftState?.copy(isSending = false)
+                            ?.let(StoreStream.getThreadDraft()::setDraftState)
+                        if (error.code == THREAD_CREATE_RATE_LIMIT_CODE) {
+                            StoreStream.getSlowMode().onCooldown(
+                                loaded.channelId,
+                                error.retryAfterMs ?: 0,
+                                StoreSlowMode.Type.ThreadCreate,
+                            )
+                        }
+                    },
+                    onTerminated = { threadCreateInProgress = false },
+                ) { channel ->
+                    val submission = coordinator.send(
+                        MessageSendCoordinator.Send(
+                            channelId = channel.id,
+                            guildId = channel.guildId,
+                            content = content,
+                            author = loaded.me.synthesizeApiUser(),
+                            canSend = loaded.ableToSendMessage,
+                            communicationDisabled = loaded.isCommunicationDisabled,
+                            systemDm = false,
+                            attachments = uploads,
+                        ),
+                    )
+                    if (submission is MessageSendCoordinator.Submission.Accepted) {
+                        drafts.setTextChannelInput(loaded.channelId, null)
+                    } else {
+                        val result = (submission as MessageSendCoordinator.Submission.Rejected).result
+                        Toast.makeText(requireContext(), validationMessage(result), Toast.LENGTH_SHORT).show()
+                    }
+                    StoreStream.getSlowMode().onThreadCreated(loaded.channelId)
+                    ChannelSelector.getInstance().selectChannel(channel)
+                }
+            return true
+        }
         val editing = loaded.editingMessage.takeIf { loaded.isEditing }
         val submission = editing?.let { coordinator.edit(it, content) } ?: coordinator.send(
             MessageSendCoordinator.Send(
@@ -810,6 +890,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             "https://support.discord.com/hc/articles/360045138571"
         private const val BYTES_PER_MEGABYTE = 1024f * 1024f
         private const val DEFAULT_THREAD_ARCHIVE_DURATION = 1_440
+        private const val THREAD_CREATE_RATE_LIMIT_CODE = 20016
 
         private val mentionRequests = PublishSubject.create<Long>().toSerialized()
 

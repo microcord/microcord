@@ -38,6 +38,7 @@ import com.discord.api.channel.isGuildTextChannel
 import com.discord.api.channel.isGuildForumPost
 import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isSystemDM
+import com.discord.api.channel.isThread
 import com.discord.app.appViewModels
 import com.discord.app.appActivityViewModels
 import com.discord.utilities.rx.appSubscribe
@@ -62,6 +63,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private lateinit var panels: HomePanelsLayout
     private var navigationSubscription: Subscription? = null
     private var selectedChannelSubscription: Subscription? = null
+    private var activeThreadsSubscription: Subscription? = null
     private var voiceChannelSubscription: Subscription? = null
     private var mentionSubscription: Subscription? = null
     private var friendNicknameSubscription: Subscription? = null
@@ -168,16 +170,15 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                 }
             }
         }
+        activeThreadsSubscription = StoreStream.getThreadsActive().observeAllActiveThreadsById().subscribe {
+            activity?.runOnUiThread(::refreshChatToolbar)
+        }
         voiceChannelSubscription = StoreStream.getVoiceChannelSelected().observeSelectedVoiceChannelId().subscribe {
-            activity?.runOnUiThread {
-                StoreStream.getChannelsSelected().getSelectedChannel()?.let(::configureToolbar)
-            }
+            activity?.runOnUiThread(::refreshChatToolbar)
         }
         // A DM's title is built from its recipients, so renaming one has to redraw the toolbar.
         friendNicknameSubscription = StoreStream.getUserRelationships().observeNicknames().subscribe {
-            activity?.runOnUiThread {
-                StoreStream.getChannelsSelected().getSelectedChannel()?.let(::configureToolbar)
-            }
+            activity?.runOnUiThread(::refreshChatToolbar)
         }
         mentionSubscription = StoreStream.getMentions().observeTotalMentions().subscribe { count ->
             activity?.runOnUiThread {
@@ -192,6 +193,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         navigationSubscription = null
         selectedChannelSubscription?.unsubscribe()
         selectedChannelSubscription = null
+        activeThreadsSubscription?.unsubscribe()
+        activeThreadsSubscription = null
         voiceChannelSubscription?.unsubscribe()
         voiceChannelSubscription = null
         mentionSubscription?.unsubscribe()
@@ -280,6 +283,11 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         view?.findViewById<ViewStub>(R.id.widget_home_panel_center_chat_stub)?.inflate()
     }
 
+    private fun refreshChatToolbar() {
+        val selected = StoreStream.getChannelsSelected().getResolvedSelectedChannel()
+        if (centerSurface(selected) == CenterSurface.CHAT) selected.channelOrParent?.let(::configureToolbar)
+    }
+
     private fun configureToolbar(channel: Channel) {
         val toolbar = view?.findViewById<View>(R.id.widget_home_panel_center_chat)?.findDescendant(Toolbar::class.java)
             ?: return
@@ -316,8 +324,12 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         }
         val callableDm = channel.isPrivate() && !channel.isSystemDM()
         val selectedVoiceChannelId = StoreStream.getVoiceChannelSelected().getSelectedVoiceChannelId()
+        val threadParentId = if (channel.isThread()) channel.parentId else channel.id
+        val threadCount = StoreStream.getThreadsActive().getAllActiveThreadsById().values
+            .count { it.guildId == channel.guildId && it.parentId == threadParentId }
         val pinState = WidgetHomeHeaderManager.menuState(
             channelType = channel.type,
+            threadCount = threadCount,
             isCallConnected = callableDm && selectedVoiceChannelId == channel.id,
             isChannelNsfw = channel.nsfw,
             isNsfwUnconsented = channel.nsfw &&
@@ -331,7 +343,9 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         toolbar.menu.findItem(R.id.menu_chat_start_call)?.isVisible = callableDm && selectedVoiceChannelId == 0L
         toolbar.menu.findItem(R.id.menu_chat_start_video_call)?.isVisible = callableDm && selectedVoiceChannelId == 0L
         toolbar.menu.findItem(R.id.menu_chat_stop_call)?.isVisible = callableDm && selectedVoiceChannelId == channel.id
+        toolbar.menu.findItem(R.id.menu_chat_thread_browser)?.isVisible = pinState.threadBrowser
         toolbar.menu.findItem(R.id.menu_chat_side_panel)?.isVisible = true
+        WidgetHomeHeaderManager.configureThreadBrowserIconBehavior(toolbar, channel, threadCount, context)
         toolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 R.id.menu_chat_start_call -> true.also { privateCallLauncher().launchVoiceCall(channel.id) }

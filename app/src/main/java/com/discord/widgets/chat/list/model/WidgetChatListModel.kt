@@ -9,7 +9,6 @@ import com.discord.api.channel.isDM
 import com.discord.api.channel.isSystemDM
 import com.discord.api.channel.isThread
 import com.discord.api.channel.isVoiceChannel
-import com.discord.api.guild.GuildFeature
 import com.discord.api.permission.Permission
 import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
@@ -241,8 +240,8 @@ data class WidgetChatListModel(
                 inputs.guild,
                 parentChannel.defaultAutoArchiveDuration,
                 inputs.threadDraft,
-                canCreatePrivateThread(permissions, parentChannel, inputs.guild, true),
-                canCreatePrivateThread(permissions, parentChannel, inputs.guild, false),
+                canCreatePrivateThread(permissions, parentChannel, inputs.guild),
+                canCreatePrivateThread(permissions, parentChannel, inputs.guild),
                 canCreatePublicThread(permissions, parentChannel, messagePair.first, inputs.guild),
             )
             return WidgetChatListModel(
@@ -261,13 +260,11 @@ data class WidgetChatListModel(
             permissions: Long?,
             channel: Channel,
             guild: Guild?,
-            checkGuildFeature: Boolean,
         ): Boolean {
             guild ?: return false
             val permissionAllowed = PermissionUtils.can(Permission.CREATE_PRIVATE_THREADS, permissions)
             val channelAllowed = !channel.isThread() && !channel.isVoiceChannel() && !channel.isAnnouncementChannel()
-            val featureAllowed = !checkGuildFeature || guild.hasFeature(GuildFeature.PRIVATE_THREADS)
-            return permissionAllowed && channelAllowed && featureAllowed
+            return permissionAllowed && channelAllowed
         }
 
         private fun canCreatePublicThread(

@@ -2465,8 +2465,8 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   the RN POST/DELETE and rolled back on request failure. This immediately updates the button and
   channel list while server/gateway membership remains authoritative. Focused forum/thread tests,
   `assembleDebug`, and `installDebug` pass.
-- Forum owner avatars use `IconUtils.setIcon`/`MGImages` with the guild-member override and existing
-  circular hierarchy. Channel-list thread connectors now
+- Forum owner avatars use `IconUtils.setIcon`/`MGImages` with the guild-member override and explicitly
+  restore circular rounding on every recycled-view bind. Channel-list thread connectors now
   use the exact 126.21 drawable mapping (`Start=long_cap`, `End=short_no_cap`), fixing cut spine lines.
   The forum toolbar matches chat's navigation inset. Focused forum/thread tests pass; one unrelated
   pre-existing MFA/invite channel-list ordering assertion remains red, while `assembleDebug` and
@@ -2475,8 +2475,8 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   `READY.guilds[].threads[].member` contains the four followed forum posts. Removing incorrect JVM
   `transient` markers from `Channel.member`, `memberCount`, and `memberIdsPreview` restores those server
   memberships after storage clearing without a local cache or REST fallback. The attempted guild active
-  threads REST fallback returned 403 and was removed. The Create Post button is pill-rounded; forum
-  parents use the filled forum icon and entered posts use the outlined forum-post toolbar icon.
+  threads REST fallback returned 403 and was removed. Forum parents and entered posts use their filled
+  forum/chat toolbar icons.
 - Fixed the live thread-embed inflation crash by restoring the recovered `vertical=1` enum for the
   shared `ViewReplySpline.orientation` attribute. The final APK was installed and survived the same
   screen with no `InflateException`; focused forum/thread/home/subscription tests pass.
@@ -2485,6 +2485,53 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   double bubble and circular `+` FAB, posts use Back plus one filled bubble, and forum drafts use Back,
   one filled bubble, a post title, and the parent subtitle. `WidgetForumBrowser` now uses generated
   binding without cached view aliases. WSA screenshots and focused forum/home tests verify the result.
+- Fixed three forum regressions reported after that pass: toolbar title/icon lookup now finds the custom
+  title view regardless of Toolbar child order, successful create responses are immediately dispatched
+  into the thread stores instead of waiting up to five seconds for Gateway, and recycled forum owner
+  avatars reapply circular rounding. Focused forum/home tests and `assembleDebug` pass; the APK was
+  installed successfully on WSA.
+- Reconnected the ordinary-channel thread-browser action/count to `WidgetHome`'s active toolbar path,
+  close the message-actions dialog window before opening a thread draft, and matched the straight thread
+  spine's `2dp` width to its curved segment. Focused home/forum tests and `assembleDebug` pass; the APK
+  was installed successfully on WSA.
+- The thread browser's own `+` action now finishes its dedicated screen after selecting the thread
+  draft. `ThreadBrowserThreadView` uses generated binding plus `IconUtils`/`MGImages` and reapplies
+  circular rounding instead of raw `setImageURI`, fixing recycled square avatars. Focused thread-browser
+  tests and `assembleDebug` pass; the APK was installed successfully on WSA.
+- Fixed the ordinary thread draft submit path: it no longer falls through to a parent-channel message.
+  Restored reference `ThreadUtils.createThread` endpoint selection, indexes the returned thread, sends
+  the composed message to that thread, and then selects it. Circle rounding now uses Fresco's bitmap
+  method when no overlay color is supplied instead of a transparent overlay. Focused thread/chat tests
+  and `assembleDebug` pass; the APK was installed successfully on WSA.
+- Removed the obsolete 126.21 `PRIVATE_THREADS` guild-boost feature gate from the draft toggle while
+  retaining the live `CREATE_PRIVATE_THREADS` permission and channel-type checks. The old gate rendered
+  a visible dead control against the current backend. Focused chat-list/input tests and `assembleDebug`
+  pass; the APK was installed successfully on WSA.
+- Disabled the thread-status `LoadingButton` state-list elevation through its existing
+  `lb_disable_elevation` attribute, removing the raised shadow from Join/Unarchive without changing
+  button geometry. `assembleDebug` passes and the APK was installed successfully on WSA.
+- Fixed joined threads incorrectly showing the Join banner: `WidgetThreadStatusViewModel` production
+  wiring now observes the authoritative `StoreThreadsActiveJoined` projection instead of defaulting to
+  a `channel.member`-only fallback. Focused thread-store tests and `assembleDebug` pass; the APK was
+  installed successfully on WSA.
+- Device logs proved thread-settings PATCH requests failed with `NetworkOnMainThreadException`.
+  `WidgetThreadSettingsViewModel.saveThread` now uses the shared `restSubscribeOn` scheduler like its
+  delete path. `assembleDebug` passes and the APK was installed successfully on WSA.
+- A successful thread-settings PATCH now applies the returned channel as the draft baseline, clears
+  `hasUnsavedChanges`, and dispatches the channel into the thread stores. This hides the Save button
+  immediately instead of waiting on a Gateway echo that preserved the stale dirty flag. `assembleDebug`
+  passes and the APK was installed successfully on WSA.
+- Final thread-flow review added duplicate-create suppression/loading state, preserved edits made while
+  a settings PATCH is in flight, selected a successfully created thread even when its first message is
+  rejected locally, refreshed header counts from active-thread updates without stealing the forum
+  toolbar, and fixed no-message thread rows retaining recycled avatars. The focused thread/forum/chat/
+  home suite and `assembleDebug` pass; the reviewed APK was installed successfully on WSA.
+- Aligned the thread browser's empty-state Add Thread buttons with its toolbar `+`: both now select the
+  draft and finish the dedicated browser activity. Opening Threads from the right sidebar closes the
+  home panels first, so returning does not reveal a stale open sidebar. Focused thread/home tests and
+  `assembleDebug` pass. Successful thread deletion now emits a close event after its confirmation toast,
+  finishing the settings activity instead of leaving a deleted thread's menu open. The APK was installed
+  successfully on WSA pending final live confirmation.
 
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/applauncher/**` | Android 340.12
 Hermes `out.js` Apps launcher modules | log in on WSA and verify HOME/search/application/command/list

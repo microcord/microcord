@@ -72,6 +72,7 @@ object ForumPostCreateManager {
             autoArchiveDuration,
         ).restSubscribeOn()
             .flatMap { channel ->
+                StoreStream.handleThreadCreateOrUpdate(channel)
                 StoreStream.getChannels().observeChannel(channel.id).filterNull().takeSingleUntilTimeout()
             }
             .ui()

@@ -28,6 +28,7 @@ import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
 import com.facebook.drawee.backends.pipeline.Fresco
 import com.facebook.drawee.span.DraweeSpanStringBuilder
 import com.facebook.imagepipeline.request.ImageRequest
@@ -123,6 +124,7 @@ class ForumBrowserPostView @JvmOverloads constructor(
         val member = post.guildMembers[owner.id]
         binding.forumPostOwnerName.text = member?.nick ?: owner.username
         binding.forumPostOwnerName.setTextColor(GuildMember.getColor(member, ColorCompat.getThemedColor(context, R.attr.colorInteractiveNormal)))
+        MGImages.setRoundingParams(binding.forumPostOwnerAvatar, cornerRadius = 0f, circle = true)
         IconUtils.setIcon(
             binding.forumPostOwnerAvatar,
             owner,

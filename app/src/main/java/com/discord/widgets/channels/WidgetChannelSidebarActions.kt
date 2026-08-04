@@ -15,6 +15,7 @@ import com.discord.widgets.channels.settings.WidgetTextChannelSettings
 import com.discord.widgets.channels.settings.WidgetThreadSettings
 import com.discord.widgets.channels.threads.browser.WidgetThreadBrowser
 import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
+import com.discord.widgets.home.WidgetHome
 import com.discord.widgets.search.WidgetSearch
 import com.discord.widgets.settings.WidgetMuteSettingsSheet
 import com.discord.widgets.user.calls.PrivateCallLauncher
@@ -81,6 +82,7 @@ class WidgetChannelSidebarActions : AppFragment(R.layout.widget_channel_sidebar_
                 guildView.configure(
                     onSearchClicked = { WidgetSearch.launchForGuild(viewState.guildId, requireContext()) },
                     onThreadBrowserClicked = {
+                        (parentFragment as? WidgetHome)?.getPanelLayout()?.closePanels()
                         WidgetThreadBrowser.show(
                             requireContext(),
                             viewState.guildId,

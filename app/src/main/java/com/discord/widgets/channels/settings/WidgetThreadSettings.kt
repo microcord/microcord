@@ -128,7 +128,10 @@ class WidgetThreadSettings : AppFragment(R.layout.widget_thread_settings) {
     }
 
     private fun handleEvent(event: WidgetThreadSettingsViewModel.Event) {
-        if (event is WidgetThreadSettingsViewModel.Event.ShowToast) AppToast.show(this, event.messageStringRes)
+        when (event) {
+            is WidgetThreadSettingsViewModel.Event.ShowToast -> AppToast.show(this, event.messageStringRes)
+            WidgetThreadSettingsViewModel.Event.Close -> requireActivity().finish()
+        }
     }
 
     companion object {

@@ -50,6 +50,7 @@ class WidgetThreadSettingsViewModel(
 
     sealed class Event {
         data class ShowToast(@StringRes val messageStringRes: Int) : Event()
+        object Close : Event()
     }
 
     data class StoreState(val channel: Channel?, val canManageThread: Boolean)
@@ -120,6 +121,7 @@ class WidgetThreadSettingsViewModel(
                 onNext = { channel ->
                     // The confirmation string depends on what kind of channel was deleted.
                     channel.getDeletedMessage()?.let { eventSubject.onNext(Event.ShowToast(it)) }
+                    eventSubject.onNext(Event.Close)
                 },
             )
     }
@@ -139,13 +141,32 @@ class WidgetThreadSettingsViewModel(
                 defaultAutoArchiveDuration = null,
             ),
         )
+            .restSubscribeOn()
             .ui(this)
             .appSubscribe(
                 errorClass = WidgetThreadSettingsViewModel::class.java,
                 errorHandler = {
                     eventSubject.onNext(Event.ShowToast(R.string.default_failure_to_perform_action_message))
                 },
-                onNext = { eventSubject.onNext(Event.ShowToast(R.string.thread_settings_updated)) },
+                onNext = { channel ->
+                    StoreStream.handleThreadCreateOrUpdate(channel)
+                    val latest = viewState as? ViewState.Valid ?: return@appSubscribe
+                    val unchangedSinceSubmit = latest.channelNameDraft == current.channelNameDraft &&
+                        latest.slowModeCooldownDraft == current.slowModeCooldownDraft
+                    updateViewState(
+                        latest.copy(
+                            channel = channel,
+                            channelNameDraft = if (unchangedSinceSubmit) channel.name else latest.channelNameDraft,
+                            slowModeCooldownDraft = if (unchangedSinceSubmit) {
+                                channel.rateLimitPerUser
+                            } else {
+                                latest.slowModeCooldownDraft
+                            },
+                            hasUnsavedChanges = !unchangedSinceSubmit,
+                        ),
+                    )
+                    eventSubject.onNext(Event.ShowToast(R.string.thread_settings_updated))
+                },
             )
     }
 

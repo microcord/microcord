@@ -132,7 +132,13 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
         private set
 
     val toolbarTitleLayout: ToolbarTitleLayout?
-        get() = toolbar?.getChildAt(0) as? ToolbarTitleLayout
+        get() = toolbar?.let { toolbar ->
+            (0 until toolbar.childCount)
+                .asSequence()
+                .map(toolbar::getChildAt)
+                .filterIsInstance<ToolbarTitleLayout>()
+                .firstOrNull()
+        }
 
     /** The most recent intent delivered to this activity, never `null`. */
     var mostRecentIntent: Intent = Intent()

@@ -47,6 +47,7 @@ class WidgetThreadBrowserActive : AppFragment(R.layout.widget_thread_browser_act
                 channelId,
                 startThreadLocation = "Thread Browser Empty State",
             )
+            requireActivity().finish()
         }
     }
 

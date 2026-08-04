@@ -58,6 +58,7 @@ class WidgetThreadBrowserArchived : AppFragment(R.layout.widget_thread_browser_a
                 channelId,
                 startThreadLocation = "Thread Browser Empty State",
             )
+            requireActivity().finish()
         }
         view.findViewById<View>(R.id.thread_browser_try_again).setOnClickListener {
             viewModel.maybeLoadMore(reload = true)

@@ -104,7 +104,7 @@ object WidgetHomeHeaderManager {
             unread.setTextAndVisibilityBy(unreadCountText(model.unreadCount))
             toolbar?.positionUnreadCountView(unread)
         }
-        configureThreadBrowserIconBehavior(toolbar, model, channel, context)
+        configureThreadBrowserIconBehavior(toolbar, channel, model.threadCount, context)
     }
 
     private fun WidgetHomeModel.getHeaderData(context: Context): HeaderData = when (val selected = selectedChannel) {
@@ -260,18 +260,18 @@ object WidgetHomeHeaderManager {
         }
     }
 
-    private fun configureThreadBrowserIconBehavior(
+    internal fun configureThreadBrowserIconBehavior(
         toolbar: Toolbar?,
-        model: WidgetHomeModel,
         channel: Channel?,
+        threadCount: Int,
         context: Context?,
     ) {
         channel ?: return
         val visible = !channel.isGuildForumChannel()
         val item = toolbar?.menu?.findItem(R.id.menu_chat_thread_browser)
         item?.actionView?.findViewById<TextView>(R.id.thread_browser_count)?.apply {
-            text = minOf(99, model.threadCount).toString()
-            isVisible = model.threadCount != 0 && visible
+            text = minOf(99, threadCount).toString()
+            isVisible = threadCount != 0 && visible
         }
         item?.actionView?.findViewById<View>(R.id.thread_browser_root)?.apply {
             isVisible = visible

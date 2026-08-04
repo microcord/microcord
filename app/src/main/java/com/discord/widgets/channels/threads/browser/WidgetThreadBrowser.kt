@@ -82,8 +82,11 @@ class WidgetThreadBrowser : AppFragment(R.layout.widget_thread_browser) {
             R.menu.menu_thread_browser,
             onSelected = { item ->
                 when (item.itemId) {
-                    R.id.menu_thread_browser_create_thread -> ChannelSelector.getInstance()
-                        .openCreateThread(guildId, channelId, startThreadLocation = "Thread Browser Toolbar")
+                    R.id.menu_thread_browser_create_thread -> {
+                        ChannelSelector.getInstance()
+                            .openCreateThread(guildId, channelId, startThreadLocation = "Thread Browser Toolbar")
+                        requireActivity().finish()
+                    }
                     R.id.menu_thread_browser_filters -> WidgetThreadBrowserFilterSheet.show(
                         parentFragmentManager,
                         guildId,

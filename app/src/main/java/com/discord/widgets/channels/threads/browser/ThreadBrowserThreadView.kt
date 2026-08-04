@@ -13,22 +13,20 @@ import android.text.style.TypefaceSpan
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
-import android.widget.ImageView
-import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.role.GuildRole
+import com.discord.databinding.ThreadBrowserThreadViewBinding
 import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
 import com.discord.models.user.CoreUser
 import com.discord.models.user.User
 import com.discord.utilities.SnowflakeUtils
-import com.discord.utilities.view.text.SimpleDraweeSpanTextView
+import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
 import com.discord.views.ThemedColor
-import com.discord.views.user.avatarUrl
 import com.facebook.drawee.span.DraweeSpanStringBuilder
-import com.facebook.drawee.view.SimpleDraweeView
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -38,31 +36,16 @@ class ThreadBrowserThreadView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
 ) : ConstraintLayout(context, attrs, defStyleAttr) {
-    private val avatar: SimpleDraweeView
-    private val icon: ImageView
-    private val message: SimpleDraweeSpanTextView
-    private val name: TextView
-    private val timestamp: TextView
-    private val timestampSeparator: TextView
-
-    init {
-        LayoutInflater.from(context).inflate(R.layout.thread_browser_thread_view, this)
-        avatar = requireNotNull(findViewById(R.id.thread_avatar))
-        icon = requireNotNull(findViewById(R.id.thread_icon))
-        message = requireNotNull(findViewById(R.id.thread_message))
-        name = requireNotNull(findViewById(R.id.thread_name))
-        timestamp = requireNotNull(findViewById(R.id.thread_timestamp))
-        timestampSeparator = requireNotNull(findViewById(R.id.thread_timestamp_separator))
-    }
+    private val binding = ThreadBrowserThreadViewBinding.inflate(LayoutInflater.from(context), this)
 
     fun setThreadData(threadData: ThreadData) {
-        name.text = threadData.channel.name.orEmpty()
+        binding.threadName.text = threadData.channel.name.orEmpty()
         val owner = threadData.owner ?: CoreUser(threadData.channel.ownerId)
         val ownerMember = threadData.guildMembers[owner.id]
-        message.text = startedBy(GuildMember.getNickOrUsername(ownerMember, owner), ownerMember)
-        timestamp.text = null
-        timestamp.visibility = View.GONE
-        timestampSeparator.visibility = View.GONE
+        binding.threadMessage.text = startedBy(GuildMember.getNickOrUsername(ownerMember, owner), ownerMember)
+        binding.threadTimestamp.text = null
+        binding.threadTimestamp.visibility = View.GONE
+        binding.threadTimestampSeparator.visibility = View.GONE
 
         when (threadData) {
             is ThreadData.ActiveThread -> configureActiveThreadUI(threadData)
@@ -74,11 +57,13 @@ class ThreadBrowserThreadView @JvmOverloads constructor(
         val recentMessage = data.message
         val content = recentMessage?.content
         if (recentMessage == null || content == null) {
-            timestampSeparator.visibility = View.GONE
-            timestamp.visibility = View.GONE
+            binding.threadTimestampSeparator.visibility = View.GONE
+            binding.threadTimestamp.visibility = View.GONE
             if (data.owner == null) {
-                message.setText(R.string.thread_browser_no_recent_messages)
+                binding.threadMessage.setText(R.string.thread_browser_no_recent_messages)
                 configureAvatar(null)
+            } else {
+                configureAvatar(data.owner, data.guildMembers[data.owner.id])
             }
             return
         }
@@ -98,13 +83,13 @@ class ThreadBrowserThreadView @JvmOverloads constructor(
             val authorName = GuildMember.getNickOrUsername(authorMember, author)
             it.insert(0, "$authorName: ")
             applyMemberStyle(it, authorName.length, authorMember)
-            message.setDraweeSpanStringBuilder(it)
+            binding.threadMessage.setDraweeSpanStringBuilder(it)
         }
 
-        timestampSeparator.visibility = View.VISIBLE
-        timestamp.visibility = View.VISIBLE
+        binding.threadTimestampSeparator.visibility = View.VISIBLE
+        binding.threadTimestamp.visibility = View.VISIBLE
         configureAvatar(author, authorMember)
-        timestamp.text = formatActivityTimestamp(snowflakeTimestamp(recentMessage.id))
+        binding.threadTimestamp.text = formatActivityTimestamp(snowflakeTimestamp(recentMessage.id))
     }
 
     private fun configureArchivedThreadUI(data: ThreadData.ArchivedThread) {
@@ -120,15 +105,18 @@ class ThreadBrowserThreadView @JvmOverloads constructor(
                 R.string.thread_browser_creation_time
             },
         )
-        timestamp.text = template.replace("{time}", formatDateTimestamp(time).toString())
-        timestamp.visibility = View.VISIBLE
+        binding.threadTimestamp.text = template.replace("{time}", formatDateTimestamp(time).toString())
+        binding.threadTimestamp.visibility = View.VISIBLE
         configureAvatar(data.owner, data.owner?.let { data.guildMembers[it.id] })
     }
 
     private fun configureAvatar(user: User?, member: GuildMember? = null) {
-        icon.visibility = if (user == null) View.VISIBLE else View.GONE
-        avatar.visibility = if (user == null) View.GONE else View.VISIBLE
-        if (user != null) avatar.setImageURI(avatarUrl(user, member, resources.getDimensionPixelSize(R.dimen.avatar_size_reply)))
+        binding.threadIcon.visibility = if (user == null) View.VISIBLE else View.GONE
+        binding.threadAvatar.visibility = if (user == null) View.GONE else View.VISIBLE
+        if (user != null) {
+            MGImages.setRoundingParams(binding.threadAvatar, cornerRadius = 0f, circle = true)
+            IconUtils.setIcon(binding.threadAvatar, user, R.dimen.avatar_size_reply, guildMember = member)
+        }
     }
 
     private fun startedBy(username: String, member: GuildMember?): SpannableStringBuilder {

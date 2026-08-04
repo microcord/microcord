@@ -253,8 +253,9 @@ object MGImages {
         borderWidth: Float? = null,
     ) {
         val roundingParams = if (circle) {
-            RoundingParams.asCircle()
-                .setRoundingMethod(RoundingParams.RoundingMethod.OVERLAY_COLOR)
+            RoundingParams.asCircle().apply {
+                if (overlayColor != null) setRoundingMethod(RoundingParams.RoundingMethod.OVERLAY_COLOR)
+            }
         } else {
             RoundingParams.fromCornersRadius(cornerRadius)
         }

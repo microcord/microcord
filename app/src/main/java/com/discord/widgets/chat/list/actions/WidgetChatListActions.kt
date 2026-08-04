@@ -179,6 +179,7 @@ class WidgetChatListActions : AppBottomSheet() {
             model.channel?.let { host().messageActionCoordinator().reply(it, message, model.me.id) }
         }
         bind(root, R.id.dialog_chat_actions_start_thread, canCreatePublicThread(model)) {
+            dialog?.dismiss()
             dismiss()
             ChannelSelector.getInstance().openCreateThread(
                 model.guild?.id ?: 0L,
