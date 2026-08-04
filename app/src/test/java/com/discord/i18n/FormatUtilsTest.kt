@@ -66,6 +66,27 @@ class FormatUtilsTest {
     }
 
     @Test
+    fun `unwraps a hook component to its label`() {
+        assertEquals(
+            "by Eminem",
+            FormatUtils.format("by $[!!{artists}!!](artistsHook)", "artists" to "Eminem"),
+        )
+    }
+
+    @Test
+    fun `drops a hook component that renders no label`() {
+        assertEquals("Jump", FormatUtils.format("$[](userHook)Jump", emptyMap()))
+    }
+
+    @Test
+    fun `leaves an ordinary masked link alone`() {
+        assertEquals(
+            "see [our status page](https://status.discord.com)",
+            FormatUtils.format("see [our status page](https://status.discord.com)", emptyMap()),
+        )
+    }
+
+    @Test
     fun `supports reference ordered arguments when named arguments are absent`() {
         assertEquals("3 of 5", FormatUtils.formatOrdered("{count} of {total}", arrayOf(3, 5)))
     }

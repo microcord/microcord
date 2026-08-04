@@ -444,9 +444,9 @@ object AuthRequests {
     /**
      * Splits a failure into per-input errors and one screen-level message.
      *
-     * Reference shows the response message only when no input owns the failure, so `Invalid Form
-     * Body` never appears next to the field errors it summarises. A form-level `_errors` array is
-     * nobody's field, and the reference drops it; it goes to the screen instead of being lost.
+     * Reference shows the message only when no input owns the failure, so `Invalid Form Body` never
+     * appears beside the field errors it summarises. A form-level `_errors` is nobody's field, and
+     * the reference drops it; it goes to the screen rather than being lost.
      */
     private fun defaultFailure(error: RestApiError): AuthResult {
         val fieldErrors = error.messages

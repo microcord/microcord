@@ -358,9 +358,7 @@ class StoreAuthentication(
      */
     private fun Observable<Response<ModelLoginResult>>.loginBody(): Observable<ModelLoginResult> =
         flatMap { response ->
-            // Emit the response already in hand. Deferring to `body()` here would re-subscribe to
-            // the cold Retrofit observable and post the whole request a second time, spending a
-            // single-use MFA ticket that the first attempt had already consumed.
+            // Emit the response in hand; `body()` here would re-subscribe and re-send the POST.
             val result = response.body()
             if (response.isSuccessful && result != null) return@flatMap Observable.just(result)
             if (response.isSuccessful) return@flatMap Observable.error(HttpException(response))

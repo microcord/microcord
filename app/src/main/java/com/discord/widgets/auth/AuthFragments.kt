@@ -51,12 +51,7 @@ abstract class AuthFragment(
         }
     }
 
-    /**
-     * Shows [AuthUiState.error] in the layout's `auth_error` label, if it has one.
-     *
-     * A failure that no input owns — a rate limit, a disabled account, a dead connection — would
-     * otherwise be silent, because [AuthRequests] suppresses the toast in favour of inline text.
-     */
+    /** Shows [AuthUiState.error] — the failures no input owns — if the layout has a slot for it. */
     private fun renderScreenError(state: AuthUiState) {
         val label = view?.findViewById<TextView>(R.id.auth_error) ?: return
         label.text = state.error
@@ -71,8 +66,7 @@ abstract class AuthFragment(
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        // A request whose callback could not be delivered — the view went away mid-flight, or a
-        // configuration change swapped it — must not leave the new view dimmed and refusing input.
+        // An undeliverable callback would otherwise leave the new view dimmed and inert.
         if (model.state.loading) model.update { it.copy(loading = false) }
     }
 
@@ -87,8 +81,7 @@ abstract class AuthFragment(
     protected open fun render(state: AuthUiState) = Unit
 
     protected fun submit(action: AuthAction) {
-        // Two triggers can land on one code — an autopaste on resume and a manual paste, say. The
-        // second must not spend a ticket the first has already consumed.
+        // Two triggers can land on one code; the second must not spend a spent ticket.
         if (model.state.loading) return
         cancelPendingVerify()
         model.update { it.copy(loading = true, fieldErrors = emptyMap(), error = null, message = null) }
@@ -133,13 +126,7 @@ abstract class AuthFragment(
     private var pendingVerify: Runnable? = null
     private var pendingVerifyView: View? = null
 
-    /**
-     * Queues [verify], replacing any verify an earlier paste left pending.
-     *
-     * The delay lets the pasted digits land on screen before the dimmer covers them. Without the
-     * replacement an autopaste on resume and a manual paste each queue their own, and one code gets
-     * spent twice.
-     */
+    /** Queues [verify] after [delayMs], replacing any verify an earlier paste left pending. */
     protected fun postVerify(view: View, delayMs: Long, verify: () -> Unit) {
         cancelPendingVerify()
         pendingVerify = Runnable(verify).also { view.postDelayed(it, delayMs) }

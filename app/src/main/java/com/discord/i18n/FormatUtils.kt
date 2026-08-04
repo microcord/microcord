@@ -29,6 +29,9 @@ object FormatUtils {
 
     private const val HOOK_MARKER = "!!"
 
+    /** `$[label](hookName)`; there is no span to hang here, so only the label survives. */
+    private val HOOK_LINK = Regex("""\$\[([^\[\]]*)\]\(([^()\s]+)\)""")
+
     @JvmStatic
     fun format(template: CharSequence, args: Map<String, Any?>): String {
         val substituted = if (args.isEmpty()) {
@@ -52,8 +55,15 @@ object FormatUtils {
         return stripHookMarkers(String.format(Locale.getDefault(), positional, *args))
     }
 
-    private fun stripHookMarkers(text: String): String =
-        if (text.contains(HOOK_MARKER)) text.replace(HOOK_MARKER, "") else text
+    private fun stripHookMarkers(text: String): String {
+        // Unwrap before stripping: the label itself is usually `!!{token}!!`.
+        val unwrapped = if (text.contains("\$[")) {
+            HOOK_LINK.replace(text) { it.groupValues[1] }
+        } else {
+            text
+        }
+        return if (unwrapped.contains(HOOK_MARKER)) unwrapped.replace(HOOK_MARKER, "") else unwrapped
+    }
 }
 
 fun Context.i18nFormat(@StringRes stringRes: Int, vararg args: Pair<String, Any?>): String =
