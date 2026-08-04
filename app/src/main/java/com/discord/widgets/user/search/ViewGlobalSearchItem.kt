@@ -25,6 +25,7 @@ import com.discord.utilities.images.MGImages
 import com.discord.views.GuildView
 import com.discord.views.StatusView
 import com.facebook.drawee.view.SimpleDraweeView
+import com.google.android.material.checkbox.MaterialCheckBox
 
 class ViewGlobalSearchItem @JvmOverloads constructor(
     context: Context,
@@ -39,6 +40,10 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
     private val name: TextView
     private val unread: ImageView
     private val status: StatusView
+    private val toggle: MaterialCheckBox
+
+    /** Reference `UserRowModes`; [TOGGLE] is what the forward and share destination pickers use. */
+    enum class RowMode { NONE, TOGGLE }
 
     init {
         LayoutInflater.from(context).inflate(R.layout.view_global_search_item, this)
@@ -51,6 +56,7 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
         name = requireNotNull(findViewById(R.id.item_name_tv))
         unread = requireNotNull(findViewById(R.id.item_unread))
         status = requireNotNull(findViewById(R.id.item_status))
+        toggle = requireNotNull(findViewById(R.id.item_toggle))
         MGImages.setRoundingParams(
             icon,
             0f,
@@ -64,6 +70,35 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
         icon.visibility = View.VISIBLE
         mentions.setTextAndVisibility(data.mentions.takeIf { it > 0 }?.toString())
         unread.visibility = if (data.unread) View.VISIBLE else View.GONE
+        setDestinationState(RowMode.NONE)
+    }
+
+    /**
+     * Reference `SearchableDestinationList`: a destination that cannot receive the message states why
+     * in place of its subtitle instead of disappearing, and drops its checkbox so there is nothing
+     * to tick.
+     */
+    fun setDestinationState(
+        mode: RowMode,
+        selected: Boolean = false,
+        enabled: Boolean = true,
+        unavailableReason: CharSequence? = null,
+    ) {
+        toggle.visibility = if (mode == RowMode.TOGGLE && unavailableReason == null) View.VISIBLE else View.GONE
+        toggle.isChecked = selected
+        if (unavailableReason != null) {
+            group.visibility = View.GONE
+            mentions.visibility = View.GONE
+            description.isAllCaps = false
+            description.setSingleLine(false)
+            description.maxLines = 2
+            description.setTextAndVisibility(unavailableReason)
+        } else {
+            description.setSingleLine(true)
+            description.maxLines = 1
+        }
+        isEnabled = enabled
+        alpha = if (enabled) 1f else DISABLED_ALPHA
     }
 
     fun onConfigure(data: WidgetGlobalSearchModel.ItemChannel) {
@@ -173,6 +208,8 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
     }
 
     companion object {
+        private const val DISABLED_ALPHA = 0.5f
+
         internal fun styledText(
             result: WidgetGlobalSearchModel.MatchedResult,
             defaultValue: String,

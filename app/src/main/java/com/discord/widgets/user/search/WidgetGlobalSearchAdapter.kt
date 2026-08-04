@@ -21,6 +21,15 @@ class WidgetGlobalSearchAdapter(
     var onSelectedListener: (view: View, isLongPress: Boolean, data: WidgetGlobalSearchModel.ItemDataPayload) -> Unit =
         { _, _, _ -> }
 
+    /** Set by the destination pickers; rows it answers for become checkboxes. */
+    var destinationState: ((WidgetGlobalSearchModel.ItemDataPayload) -> DestinationState)? = null
+
+    data class DestinationState(
+        val selected: Boolean,
+        val enabled: Boolean,
+        val unavailableReason: CharSequence?,
+    )
+
     override fun onCreateViewHolder(
         parent: ViewGroup,
         viewType: Int,
@@ -62,6 +71,14 @@ class WidgetGlobalSearchAdapter(
                 is WidgetGlobalSearchModel.ItemGuild -> itemViewGlobalSearch.onConfigure(data)
                 is WidgetGlobalSearchModel.ItemUser -> itemViewGlobalSearch.onConfigure(data)
                 else -> Unit
+            }
+            adapter.destinationState?.invoke(data)?.let {
+                itemViewGlobalSearch.setDestinationState(
+                    ViewGlobalSearchItem.RowMode.TOGGLE,
+                    it.selected,
+                    it.enabled,
+                    it.unavailableReason,
+                )
             }
             itemView.setOnClickListener { view -> adapter.onSelectedListener(view, false, data) }
             itemView.setOnLongClickListener { view ->

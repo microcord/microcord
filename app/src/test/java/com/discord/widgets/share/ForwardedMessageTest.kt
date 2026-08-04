@@ -1,5 +1,6 @@
 package com.discord.widgets.share
 
+import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.message.Message as ApiMessage
 import com.discord.api.message.MessageFlags
@@ -89,21 +90,37 @@ class ForwardedMessageTest {
         assertFalse(ForwardingPolicy.canForward(message.copy(flags = MessageFlags.HAS_SNAPSHOT), source, Permission.ALL))
         assertTrue(ForwardingPolicy.canForward(message, source.copy(guildId = 0, type = Channel.DM), null))
 
+        assertTrue(ForwardingPolicy.canSendTo(destination, Permission.VIEW_CHANNEL or Permission.SEND_MESSAGES))
+        assertFalse(ForwardingPolicy.canSendTo(destination, Permission.VIEW_CHANNEL))
+        assertFalse(ForwardingPolicy.canSendTo(source.copy(type = Channel.CATEGORY), Permission.ALL))
+
         assertEquals(
-            ForwardingPolicy.DestinationIssue.ATTACHMENTS,
-            ForwardingPolicy.destinationIssue(
-                message.copy(attachments = listOf(requireNotNull(message.attachments).single())),
-                source,
-                destination,
-                Permission.VIEW_CHANNEL or Permission.SEND_MESSAGES,
+            R.string.message_channel_attachments_disabled,
+            ForwardingPolicy.destinationUnavailable(
+                message = message,
+                sourceIsAgeRestricted = false,
+                destination = destination,
+                destinationIsAgeRestricted = false,
+                destinationPermissions = Permission.VIEW_CHANNEL or Permission.SEND_MESSAGES,
             ),
         )
         assertNull(
-            ForwardingPolicy.destinationIssue(
-                message,
-                source,
-                destination,
-                Permission.VIEW_CHANNEL or Permission.SEND_MESSAGES or Permission.ATTACH_FILES,
+            ForwardingPolicy.destinationUnavailable(
+                message = message,
+                sourceIsAgeRestricted = false,
+                destination = destination,
+                destinationIsAgeRestricted = false,
+                destinationPermissions = Permission.VIEW_CHANNEL or Permission.SEND_MESSAGES or Permission.ATTACH_FILES,
+            ),
+        )
+        assertEquals(
+            R.string.message_forwarding_nsfw_not_allowed,
+            ForwardingPolicy.destinationUnavailable(
+                message = message,
+                sourceIsAgeRestricted = true,
+                destination = destination,
+                destinationIsAgeRestricted = false,
+                destinationPermissions = Permission.ALL,
             ),
         )
     }
