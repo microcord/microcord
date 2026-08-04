@@ -931,9 +931,10 @@ object RestAPIParams {
     ) {
         override fun toString() = "UserRelationship(type=$type, credentials=<redacted>)"
 
+        /** [discriminator] is null for a unique username; the field is sent as an explicit null. */
         data class Add(
             val username: String,
-            val discriminator: Int,
+            val discriminator: Int?,
         )
     }
 

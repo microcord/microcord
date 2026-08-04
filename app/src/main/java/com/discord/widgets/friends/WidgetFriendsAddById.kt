@@ -32,14 +32,10 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputLayout
 
 /**
- * "Add by username#tag" — the first tab of [WidgetFriendsAdd].
+ * "Add by username" — the first tab of [WidgetFriendsAdd].
  *
- * The screen owns its REST call rather than delegating it, because the two failure paths it has to
- * distinguish are both specific to this form:
- *
- * - the typed text has no four-digit tag, which is a *local* validation failure and never reaches
- *   the API;
- * - the API rejects the request, which becomes a specific inline error under the text field.
+ * Accepts a unique username on its own and a legacy `name#1234` tag, and owns its REST call so the
+ * API's abort code can become an inline error under the field rather than a toast.
  */
 class WidgetFriendsAddById : AppFragment(R.layout.widget_friends_add_by_id) {
 
@@ -89,31 +85,24 @@ class WidgetFriendsAddById : AppFragment(R.layout.widget_friends_add_by_id) {
         if (::inputWrap.isInitialized) inputWrap.clearFocus()
     }
 
-    /**
-     * Splits the typed text into name and tag. Without a tag the request is not attempted at all —
-     * the API cannot resolve a bare username, so sending it would only produce a confusing 400.
-     */
     private fun extractTargetAndSendFriendRequest() {
-        val source = inputWrap.getTextOrEmpty()
-        val target = extractUsernameAndDiscriminator(source)
-        val discriminator = target.discriminator
-        if (discriminator != null) {
-            sendFriendRequest(target.username, discriminator)
-        } else {
-            setInputEditError(
-                context?.let {
-                    FormatUtils.format(
-                        it.getString(R.string.add_friend_error_username_only),
-                        "username" to target.username,
-                    )
-                },
-            )
+        val source = inputWrap.getTextOrEmpty().trim()
+        if (source.isEmpty()) return
+        // A unique username is shown as @name throughout the app, but only that form is a handle.
+        val discordTag = if (!source.contains('#') && source.startsWith("@")) source.substring(1) else source
+
+        if (!isValidDiscordTag(discordTag)) {
+            setInputEditError(context?.getString(R.string.pomelo_add_friend_error))
             AnalyticsTracker.friendRequestFailed(source, "Invalid Username")
+            return
         }
+        val target = extractUsernameAndDiscriminator(discordTag)
+        sendFriendRequest(target.username, target.discriminator)
     }
 
-    private fun sendFriendRequest(username: String, discriminator: Int) {
-        val api = RestAPI.apiOrNull ?: return
+    private fun sendFriendRequest(username: String, discriminator: Int?) {
+        // `discriminator` must reach the server as an explicit null for a unique username.
+        val api = RestAPI.apiSerializeNulls
         api.sendRelationshipRequest(
             RestAPIParams.UserRelationship.Add(
                 username = username,
@@ -128,28 +117,21 @@ class WidgetFriendsAddById : AppFragment(R.layout.widget_friends_add_by_id) {
                 errorHandler = { error -> handleSendFailure(error, username, discriminator) },
             ) {
                 context?.let {
-                    Toast.makeText(
-                        it,
-                        FormatUtils.format(
-                            it.getString(R.string.add_friend_confirmation),
-                            "name" to username,
-                        ),
-                        Toast.LENGTH_SHORT,
-                    ).show()
+                    Toast.makeText(it, R.string.toast_add_friend, Toast.LENGTH_SHORT).show()
                 }
                 inputWrap.clear()
                 dismissKeyboard()
             }
     }
 
-    private fun handleSendFailure(error: RestApiError, username: String, discriminator: Int) {
+    private fun handleSendFailure(error: RestApiError, username: String, discriminator: Int?) {
         RestAPIAbortMessages.handleAbortCodeOrDefault(error, onHandle = {
             inputWrap.setErrorTextAppearance(R.style.TextAppearance_Error)
             setInputEditError(
                 RestAPIAbortMessages.ResponseResolver.getRelationshipResponse(
                     context,
                     error.code,
-                    username + UserUtils.discriminatorSuffix(discriminator),
+                    username + UserUtils.discriminatorSuffix(discriminator ?: 0),
                 ),
             )
         })
@@ -194,6 +176,16 @@ class WidgetFriendsAddById : AppFragment(R.layout.widget_friends_add_by_id) {
 
         /** Name plus a literal four-digit tag; anything else is a name with no tag. */
         private val PATTERN_USERNAME = Regex("""^(.*)#(\d{4})$""")
+
+        /**
+         * Reference `validateDiscordTag`. The `@`/`.`-shaped first alternative is only reachable
+         * once the value contains a `#`, so a bare email is still rejected.
+         */
+        private val UNIQUE_USERNAME = Regex("""^[a-zA-Z0-9_.]+$""")
+        private val LEGACY_TAG = Regex("""^(.+?@.+?\..+?|.+?#\d{4})$""")
+
+        internal fun isValidDiscordTag(value: String): Boolean =
+            UNIQUE_USERNAME.matches(value) || (value.contains('#') && LEGACY_TAG.matches(value))
 
         internal fun extractUsernameAndDiscriminator(source: CharSequence): UserNameDiscriminator {
             val match = PATTERN_USERNAME.matchEntire(source)
