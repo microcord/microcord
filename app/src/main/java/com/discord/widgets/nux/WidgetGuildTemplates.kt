@@ -126,7 +126,7 @@ open class WidgetGuildTemplates : AppFragment(R.layout.widget_nux_guild_template
                     guildTemplate = GuildTemplateArgs(
                         title = context.getString(R.string.guild_template_selector_title),
                         subtitle = context.getString(R.string.guild_template_selector_description),
-                        showInvitePrompt = false,
+                        showInvitePrompt = true,
                         skipCreationIntent = false,
                     ),
                 ),

@@ -75,7 +75,7 @@ class UserProfileConnectionsView(context: Context, attrs: AttributeSet) : Linear
         override fun onBindViewHolder(holder: AccountViewHolder, position: Int) {
             val account = items[position].connectedAccount
             val (iconAttr, profileUrl) = platformInfo(account)
-            val icon = Platform.from(account).resolvePlatformImage(context)
+            val icon = Platform.from(account).resolvePlatformImage(context, theme?.isDark)
             holder.text.setCompoundDrawablesWithIntrinsicBounds(icon, 0, 0, 0)
             holder.text.text = account.name
             holder.text.contentDescription = String.format("%s, %s", account.type, account.name)

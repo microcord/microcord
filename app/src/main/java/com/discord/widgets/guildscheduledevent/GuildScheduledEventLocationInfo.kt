@@ -16,17 +16,22 @@ sealed class GuildScheduledEventLocationInfo {
             is ExternalLocation -> location
         }
 
+    private val isStage: Boolean
+        get() = this is ChannelLocation && channel?.type == Channel.GUILD_STAGE_VOICE
+
+    /** 24dp throughout: the hosts are fixed-size views, so a mixed set would vary the stroke weight. */
     @get:DrawableRes
     val locationIcon: Int
         get() = when (this) {
-            is ChannelLocation -> if (channel?.type == Channel.GUILD_STAGE_VOICE) R.drawable.ic_stage_20dp else R.drawable.ic_channel_voice_16dp
+            is ChannelLocation -> if (isStage) R.drawable.ic_channel_stage_24dp else R.drawable.ic_channel_voice
             is ExternalLocation -> R.drawable.ic_location_24dp
         }
 
+    /** Drawn at its intrinsic size beside a label, so every variant has to be 16dp. */
     @get:DrawableRes
     val locationIconSmall: Int
         get() = when (this) {
-            is ChannelLocation -> if (channel?.type == Channel.GUILD_STAGE_VOICE) R.drawable.ic_stage_20dp else R.drawable.ic_channel_voice_16dp
+            is ChannelLocation -> if (isStage) R.drawable.ic_channel_stage_16dp else R.drawable.ic_channel_voice_16dp
             is ExternalLocation -> R.drawable.ic_location_16dp
         }
 

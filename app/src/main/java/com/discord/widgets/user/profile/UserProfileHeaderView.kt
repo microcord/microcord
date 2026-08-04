@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Color
 import android.util.AttributeSet
+import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -41,11 +42,10 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
     private val avatarDecoration: SimpleDraweeView
     private val avatarEdit: CardView
     private val aka: UserAkaView
-    private val badges: RecyclerView
+    private val badges: LinearLayout
     private val customStatus: SimpleDraweeSpanTextView
     private val primaryName: UsernameView
     private val secondaryName: SimpleDraweeSpanTextView
-    private val badgeAdapter = BadgeAdapter()
     private val bannerChangeDetector = MGImages.DistinctChangeDetector()
     private var backgroundColor: Int
     private var onAvatarEdit: () -> Unit = {}
@@ -70,7 +70,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         )
         avatarEdit = requireNotNull(findViewById(R.id.avatar_edit))
         aka = requireNotNull(findViewById(R.id.user_aka))
-        badges = requireNotNull(findViewById(R.id.user_profile_header_badges_recycler))
+        badges = requireNotNull(findViewById(R.id.user_profile_header_badges))
         customStatus = requireNotNull(findViewById(R.id.user_profile_header_custom_status))
         primaryName = requireNotNull(findViewById(R.id.user_profile_header_primary_name))
         secondaryName = requireNotNull(findViewById(R.id.user_profile_header_secondary_name))
@@ -81,8 +81,6 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
                 recycle()
             }
         }
-        badges.layoutManager = GridLayoutManager(context, 3, RecyclerView.VERTICAL, true)
-        badges.adapter = badgeAdapter
         setBackgroundColor(backgroundColor)
         avatar.setAvatarBackgroundColor(backgroundColor)
         banner.setBackgroundColor(backgroundColor)
@@ -107,7 +105,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         configureNames(state.user, state.guildMember, state)
         aka.visibility = if (state.showAkas) View.VISIBLE else View.GONE
         aka.configure(state.guildMembersForAka)
-        badgeAdapter.items = badgesFor(state)
+        setBadges(badgesFor(state))
         PresenceUtils.setCustomStatusText(state.presence, customStatus)
         avatarEdit.visibility = if (state.editable) View.VISIBLE else View.GONE
         bannerEdit.visibility = if (state.editable) View.VISIBLE else View.GONE
@@ -224,30 +222,73 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
             context = context,
         )
 
-    private inner class BadgeAdapter : RecyclerView.Adapter<BadgeHolder>() {
-        var items = emptyList<Badge>()
-            set(value) { field = value; notifyDataSetChanged() }
-        override fun getItemCount() = items.size
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = BadgeHolder(
-            LayoutInflater.from(parent.context).inflate(R.layout.user_profile_header_badge, parent, false) as SimpleDraweeView,
-        )
-        override fun onBindViewHolder(holder: BadgeHolder, position: Int) {
-            val badge = items[position]
-            if (badge.iconUrl != null) {
-                MGImages.setImage(holder.image, badge.iconUrl, useSmallCache = true)
-            } else {
-                MGImages.cancelImageRequests(holder.image)
-                holder.image.setActualImageResource(badge.icon)
-            }
-            holder.image.contentDescription = badge.text
-            holder.image.setOnClickListener { onBadgeClick(badge) }
+    /**
+     * Badges wrap into pill rows rather than a plain strip: each row carries its own rounded
+     * surface, so a short final row does not leave an empty tail behind it.
+     */
+    private fun setBadges(items: List<Badge>) {
+        badges.removeAllViews()
+        if (items.isEmpty()) return
+        val perRow = badgesPerRow()
+        items.chunked(perRow).forEach { row ->
+            badges.addView(badgeRow(row))
         }
     }
 
-    private class BadgeHolder(val image: SimpleDraweeView) : RecyclerView.ViewHolder(image)
+    private fun badgesPerRow(): Int {
+        val available = (badges.parent as? View)?.width?.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+        val usable = available / 2 - dp(BADGE_ROW_PADDING_H_DP) * 2
+        val step = dp(BADGE_SIZE_DP) + dp(BADGE_GAP_DP)
+        return ((usable + dp(BADGE_GAP_DP)) / step).coerceAtLeast(1)
+    }
+
+    private fun badgeRow(items: List<Badge>): View = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(BADGE_ROW_PADDING_H_DP), dp(BADGE_ROW_PADDING_V_DP), dp(BADGE_ROW_PADDING_H_DP), dp(BADGE_ROW_PADDING_V_DP))
+        background = GradientDrawable().apply {
+            cornerRadius = dp(BADGE_ROW_RADIUS_DP).toFloat()
+            setColor(badgeRowColor)
+        }
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = if (badges.childCount == 0) 0 else dp(BADGE_ROW_GAP_DP) }
+        items.forEachIndexed { index, badge ->
+            addView(badgeView(badge), LinearLayout.LayoutParams(dp(BADGE_SIZE_DP), dp(BADGE_SIZE_DP)).apply {
+                if (index > 0) marginStart = dp(BADGE_GAP_DP)
+            })
+        }
+    }
+
+    private fun badgeView(badge: Badge): SimpleDraweeView = SimpleDraweeView(context).apply {
+        if (badge.iconUrl != null) {
+            MGImages.setImage(this, badge.iconUrl, useSmallCache = true)
+        } else {
+            setActualImageResource(badge.icon)
+        }
+        contentDescription = badge.text
+        setOnClickListener { onBadgeClick(badge) }
+    }
+
+    /** Matches the content cards, which is where the reference takes this pill's colour from. */
+    var badgeRowColor: Int = ColorCompat.getThemedColor(context, R.attr.colorBackgroundPrimary)
+        set(value) {
+            if (field == value) return
+            field = value
+            for (i in 0 until badges.childCount) {
+                (badges.getChildAt(i).background as? GradientDrawable)?.setColor(value)
+            }
+        }
 
     companion object {
         internal const val DECORATION_SIZE_DP = 96
+        private const val BADGE_SIZE_DP = 20
+        private const val BADGE_GAP_DP = 4
+        private const val BADGE_ROW_GAP_DP = 8
+        private const val BADGE_ROW_RADIUS_DP = 8
+        private const val BADGE_ROW_PADDING_H_DP = 7
+        private const val BADGE_ROW_PADDING_V_DP = 2
         private const val DECORATION_ASSET_SIZE_PX = 256
         private const val BANNER_ASPECT_RATIO = 300f / 105f
     }

@@ -271,8 +271,9 @@ class WidgetUserSheet : AppBottomSheet() {
         profileThemeColors = colors
         val body = colors?.bodySurface
             ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundSecondary)
-        val header = colors?.headerSurface
-            ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundTertiary)
+        // Reference paints one continuous fill behind the whole sheet; the name block sits on it
+        // rather than on a surface of its own.
+        val header = colors?.headerSurface ?: body
         val card = colors?.sectionOverlay
             ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundPrimary)
 
@@ -283,6 +284,7 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetProfileEditContainer.setBackgroundColor(header)
         binding.userSheetProfileActionsContainer.setBackgroundColor(header)
         profileCards().forEach { it.setCardBackgroundColor(card) }
+        binding.userSheetProfileHeaderView.badgeRowColor = card
         profileTextViews().forEach { text ->
             text.setTextColor(
                 if (colors != null && text !is Button) ColorStateList.valueOf(colors.textDefault)

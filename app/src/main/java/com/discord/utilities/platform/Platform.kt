@@ -2,6 +2,7 @@ package com.discord.utilities.platform
 
 import android.content.Context
 import android.util.TypedValue
+import android.view.ContextThemeWrapper
 import androidx.annotation.AttrRes
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
@@ -286,12 +287,26 @@ enum class Platform(
     }
 }
 
-/** The service glyph resolved against [context]'s theme, or a neutral one where there is none. */
+/**
+ * The service glyph resolved against [context]'s theme, or a neutral one where there is none.
+ *
+ * [isDark] overrides that theme for surfaces that carry their own light/dark decision — a custom
+ * profile theme can be light inside a dark app, and the monochrome brand marks would otherwise
+ * render white on white.
+ */
+@JvmOverloads
 @DrawableRes
-fun Platform.resolvePlatformImage(context: Context): Int {
+fun Platform.resolvePlatformImage(context: Context, isDark: Boolean? = null): Int {
     val attribute = themedPlatformImage ?: return R.drawable.ic_account_circle_grey_24dp
+    val theme = when (isDark) {
+        null -> context.theme
+        else -> ContextThemeWrapper(
+            context,
+            if (isDark) R.style.AppTheme_Dark else R.style.AppTheme_Light,
+        ).theme
+    }
     val value = TypedValue()
-    return if (context.theme.resolveAttribute(attribute, value, true)) {
+    return if (theme.resolveAttribute(attribute, value, true)) {
         value.resourceId
     } else {
         R.drawable.ic_account_circle_grey_24dp

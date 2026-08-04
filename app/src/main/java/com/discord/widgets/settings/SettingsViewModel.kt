@@ -145,6 +145,9 @@ class SettingsViewModel(
             val users = StoreStream.getUsers()
             val settings = StoreStream.getUserSettings()
             return users.observeMe().switchMap { meUser ->
+                // Badges live on the profile, not the user, so the header renders empty until it
+                // is fetched. Cached afterwards, so re-opening settings does not re-request.
+                StoreStream.getUserProfiles().fetchProfileIfMissing(meUser.id)
                 Observable.combineLatest(
                     StoreStream.getUserProfiles().observeUserProfile(meUser.id),
                     StoreStream.getPresences().observeAllPresences().map { it[meUser.id] },

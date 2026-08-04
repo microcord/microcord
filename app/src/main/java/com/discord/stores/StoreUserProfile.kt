@@ -52,8 +52,35 @@ class StoreUserProfile(
         guildId: Long? = null,
         withMutualGuilds: Boolean = false,
         onFetchSuccess: ((UserProfile) -> Unit)? = null,
+    ) = dispatcher.schedule { startFetch(userId, guildId, withMutualGuilds, onFetchSuccess) }
+
+    /**
+     * Fetches only when nothing is cached. A screen that merely reads a profile calls this, so
+     * re-opening it does not re-request; [invalidateProfile] is what forces the next read to refetch.
+     */
+    fun fetchProfileIfMissing(
+        userId: Long,
+        guildId: Long? = null,
+        withMutualGuilds: Boolean = false,
     ) = dispatcher.schedule {
-        if (!profilesLoading.add(userId)) return@schedule
+        if (profiles.containsKey(userId) || userId in profilesLoading) return@schedule
+        startFetch(userId, guildId, withMutualGuilds, null)
+    }
+
+    fun invalidateProfile(userId: Long) = dispatcher.schedule {
+        if (profiles.remove(userId) == null) return@schedule
+        markChanged()
+    }
+
+    @StoreThread
+    private fun startFetch(
+        userId: Long,
+        guildId: Long?,
+        withMutualGuilds: Boolean,
+        onFetchSuccess: ((UserProfile) -> Unit)?,
+    ) {
+        StoreThreadScheduler.assertCurrentThread()
+        if (!profilesLoading.add(userId)) return
         profileErrors.remove(userId)
         markChanged()
         fetchProfile(

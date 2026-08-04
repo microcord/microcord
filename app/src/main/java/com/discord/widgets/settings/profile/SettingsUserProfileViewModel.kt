@@ -142,7 +142,7 @@ class SettingsUserProfileViewModel(
     init {
         StoreStream.getUsers().observeMe().take(1).computationLatest().ui(this)
             .appSubscribe(SettingsUserProfileViewModel::class.java) { user ->
-                storeUserProfile.fetchProfile(user.id, guildId)
+                storeUserProfile.fetchProfileIfMissing(user.id, guildId)
             }
         storeStateObservable.distinctUntilChanged().computationLatest().ui(this)
             .appSubscribe(SettingsUserProfileViewModel::class.java, onNext = ::handleStoreState)
@@ -310,6 +310,8 @@ class SettingsUserProfileViewModel(
         val request = if (id != null) api.patchGuildProfile(id, body) else api.patchUserProfile(body)
         return request.map { metadata ->
             storeUserProfile.updateProfileMetadata(state.user.id, metadata)
+            // The saved metadata is a subset of the profile; drop the cache so the next read is fresh.
+            storeUserProfile.invalidateProfile(state.user.id)
             val edit: SavedEdit = { it.withSavedProfile(metadata) }
             edit
         }
