@@ -94,6 +94,9 @@ class ForwardedMessageBindTest {
             assertNotNull(findText(root, "Sanitized embed"))
             assertFalse(descendants(root).any { it is RecyclerView })
             assertEquals(1, descendants(root).count { it is MaterialCardView })
+            assertNotNull(root.findViewById<View>(R.id.forwarded_message_icon))
+            assertNotNull(root.findViewById<View>(R.id.forwarded_message_source_guild_icon))
+            assertEquals(null, findText(root, "must-not-render"))
             assertEquals(null, root.findViewById<View>(R.id.chat_list_adapter_item_text_avatar))
             assertEquals(null, root.findViewById<View>(R.id.chat_list_adapter_item_text_name))
         }

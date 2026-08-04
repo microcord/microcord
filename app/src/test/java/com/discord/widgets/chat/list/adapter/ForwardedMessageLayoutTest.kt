@@ -23,14 +23,23 @@ class ForwardedMessageLayoutTest {
         assertEquals(1, elements.count { it.tagName.endsWith("MaterialCardView") })
         assertFalse(elements.any { it.tagName.endsWith("RecyclerView") })
         assertTrue(elements.any { it.tagName.endsWith("LinkifiedTextView") })
+        assertTrue(ids.indexOf("@+id/forwarded_message_icon") < ids.indexOf("@+id/forwarded_message_label"))
         assertTrue(ids.indexOf("@+id/forwarded_message_label") < ids.indexOf("@+id/forwarded_message_content"))
+        assertFalse(ids.contains("@+id/forwarded_message_guild_name"))
         assertTrue(ids.indexOf("@+id/forwarded_message_content") < ids.indexOf("@+id/forwarded_message_rows"))
         assertTrue(ids.indexOf("@+id/forwarded_message_rows") < ids.indexOf("@+id/forwarded_message_poll"))
         assertEquals("@+id/forwarded_message_source", ids.last())
 
         val loading = elements.single { it.getAttributeNS(ANDROID_NS, "id") == "@+id/forwarded_message_loading" }
+        val icon = elements.single { it.getAttributeNS(ANDROID_NS, "id") == "@+id/forwarded_message_icon" }
+        val guildIcon = elements.single {
+            it.getAttributeNS(ANDROID_NS, "id") == "@+id/forwarded_message_source_guild_icon"
+        }
         val source = elements.single { it.getAttributeNS(ANDROID_NS, "id") == "@+id/forwarded_message_source" }
         assertEquals("@string/loading", loading.getAttributeNS(ANDROID_NS, "contentDescription"))
+        assertEquals("@drawable/ic_forward_16dp", icon.getAttributeNS(ANDROID_NS, "src"))
+        assertTrue(ids.indexOf("@+id/forwarded_message_source_guild_icon") < ids.indexOf("@+id/forwarded_message_source"))
+        assertEquals("14dp", guildIcon.getAttributeNS(ANDROID_NS, "layout_width"))
         assertFalse(source.hasAttributeNS(ANDROID_NS, "clickable"))
         assertFalse(source.hasAttributeNS(ANDROID_NS, "focusable"))
 

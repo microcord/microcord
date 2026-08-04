@@ -13,6 +13,7 @@ import com.discord.stores.StoreMessagesLoader.LoadRequest
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.persister.Persister
 import java.nio.file.Files
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -111,6 +112,47 @@ class MessageHistoryStoreTest {
         assertTrue(chunks.last().isJump)
         // The initial load scrolls to the unread divider; the jump then targets its own message.
         assertEquals(listOf(StoreMessagesLoader.SCROLL_TO_LAST_UNREAD, 500L), scrolls)
+    }
+
+    @Test
+    fun channelSelectionCannotCancelPendingJump() {
+        val requests = mutableListOf<LoadRequest>()
+        val jumped = CountDownLatch(1)
+        val loader = StoreMessagesLoader(
+            loader = { request, callback ->
+                requests += request
+                if (request.direction == Direction.AROUND) jumped.countDown()
+                callback(Result.success(emptyList()))
+            },
+            scheduler = TestScheduler(),
+            retryJitter = { 0 },
+        )
+        val scheduler = TestScheduler()
+        val dispatcher = Dispatcher(scheduler)
+        val deck = ObservationDeck()
+        loader.init(
+            StoreChat(dispatcher, deck),
+            StoreMessages(deck),
+            StoreMessagesLoader.Dependencies(
+                observeChannelMessages = { Observable.just(emptyList()) },
+                observeMessage = { _, _ -> Observable.just(null) },
+                observeChannel = { Observable.just(channel(2, Channel.GUILD_TEXT)) },
+                getChannel = { channel(2, Channel.GUILD_TEXT) },
+                observeConnectionOpen = { Observable.never() },
+                selectChannel = {
+                    loader.handleChannelSelected(it.id)
+                },
+                meUserId = { 1L },
+            ),
+        )
+        loader.handleAuthToken("token")
+        loader.handleChannelSelected(1)
+        requests.clear()
+
+        loader.jumpToMessage(2, 500)
+
+        assertTrue(jumped.await(2, TimeUnit.SECONDS))
+        assertEquals(listOf(Direction.AROUND), requests.filter { it.channelId == 2L }.map { it.direction })
     }
 
     /** A short page means there is nothing older; a full one leaves the door open. */

@@ -16,6 +16,17 @@ data class ForwardedMessageEntry(
 
     override val type = FORWARDED_MESSAGE
     override val key = "$type ${parentMessage.id} $snapshotIndex"
+    private val sourceSnapshot
+        get() = parentMessage.messageSnapshots?.getOrNull(snapshotIndex)?.message
+    val sourceGuildId: Long?
+        get() = parentMessage.messageReference?.guildId?.takeIf { it > 0L }
+            ?: sourceSnapshot?.guildId?.takeIf { it > 0L }
+    val sourceChannelId: Long?
+        get() = parentMessage.messageReference?.channelId?.takeIf { it > 0L }
+            ?: sourceSnapshot?.channelId?.takeIf { it > 0L }
+    val sourceMessageId: Long?
+        get() = parentMessage.messageReference?.messageId?.takeIf { it > 0L }
+            ?: sourceSnapshot?.id?.takeIf { it > 0L }
 
     companion object {
         const val MAX_RENDER_DEPTH = 1
@@ -144,7 +155,7 @@ object ForwardedSourcePrivacy {
         channelAccessible: Boolean,
         guildKnown: Boolean,
     ): Visibility = when {
-        destinationGuildId == sourceGuildId && channelKnown && channelAccessible -> Visibility.CHANNEL
+        channelKnown && channelAccessible -> Visibility.CHANNEL
         destinationGuildId == sourceGuildId && channelKnown -> Visibility.HIDDEN
         destinationGuildId == sourceGuildId && guildKnown -> Visibility.GUILD
         sourceGuildId != null && guildKnown -> Visibility.GUILD
@@ -158,7 +169,7 @@ object ForwardedSourcePrivacy {
     ): Boolean = visibility == Visibility.CHANNEL && messageKnown && !sourceDeleted
 
     fun label(visibility: Visibility, channelName: String?, guildName: String?): String? = when (visibility) {
-        Visibility.CHANNEL -> channelName
+        Visibility.CHANNEL -> guildName ?: channelName
         Visibility.GUILD -> guildName
         Visibility.HIDDEN -> null
     }

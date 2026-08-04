@@ -98,12 +98,14 @@ class StoreMessagesLoader @JvmOverloads constructor(
     class Dependencies(
         val observeChannelMessages: (channelId: Long) -> Observable<List<Message>>,
         val observeMessage: (channelId: Long, messageId: Long) -> Observable<Message?>,
-        val observeSelectedChannelId: () -> Observable<Long>,
         val observeChannel: (channelId: Long) -> Observable<Channel?>,
+        val getChannel: (channelId: Long) -> Channel?,
         val observeConnectionOpen: () -> Observable<Boolean>,
         val selectChannel: (Channel) -> Unit,
         val meUserId: () -> Long,
     )
+
+    private data class PendingJump(val channelId: Long, val messageId: Long)
 
     private val channelLoadedStates = HashMap<Long, ChannelLoadedState>()
     private val channelLoadedStateSubject =
@@ -147,6 +149,8 @@ class StoreMessagesLoader @JvmOverloads constructor(
     private var loadingMessagesRetryDelayMillis = RETRY_DELAY_DEFAULT
     private var loadingMessagesSubscription: Subscription? = null
     private var delayLoadingMessagesSubscription: Subscription? = null
+    private var jumpChannelSubscription: Subscription? = null
+    private var pendingJump: PendingJump? = null
     private var lastRequest: LoadRequest? = null
 
     /**
@@ -165,6 +169,11 @@ class StoreMessagesLoader @JvmOverloads constructor(
     @Synchronized
     fun handleAuthToken(token: String?) {
         authed = token != null
+        if (!authed) {
+            jumpChannelSubscription?.unsubscribe()
+            jumpChannelSubscription = null
+            pendingJump = null
+        }
         tryLoadMessages(resetRetry = true)
     }
 
@@ -203,7 +212,13 @@ class StoreMessagesLoader @JvmOverloads constructor(
     fun handleChannelSelected(channelId: Long) {
         channelLoadedStateUpdate(selectedChannelId) { it.copy(isTouchedSinceLastJump = false) }
         selectedChannelId = channelId
-        tryLoadMessages(force = true, resetRetry = true)
+        val jump = takePendingJump(channelId)
+        if (jump != null) {
+            log("Selected jump channel [$channelId], loading target [${jump.messageId}]")
+            loadJumpTarget(jump.channelId, jump.messageId)
+        } else {
+            tryLoadMessages(force = true, resetRetry = true)
+        }
     }
 
     /**
@@ -255,45 +270,70 @@ class StoreMessagesLoader @JvmOverloads constructor(
     /**
      * Scrolls to [messageId], loading the surrounding window and switching channels if needed.
      *
-     * Two arms run concurrently because a jump can arrive in either of two situations and neither
-     * can be detected up front:
-     *
-     * * the target channel is already (or is about to become) selected — wait for that, and if
-     *   the message is already loaded just scroll, otherwise fetch a window around it;
-     * * the jump came from somewhere else entirely (a search result, a notification) — resolve the
-     *   channel and select it, with a short timeout so a channel that never resolves is dropped
-     *   with a log line rather than hanging the jump forever.
+     * A cross-channel jump stays pending until [handleChannelSelected] receives the target channel.
+     * This ordering matters: starting the around-target request from a parallel selection observer
+     * lets the ordinary initial load race it and cancel whichever request subscribed first.
      *
      * With no [Dependencies] installed this degrades to the second half of the first arm: fetch
      * the window and scroll.
      */
     @Synchronized
     fun jumpToMessage(channelId: Long, messageId: Long) {
-        if (messageId <= 0L) return
+        if (channelId <= 0L || messageId <= 0L) return
+        log("Jump requested for channel [$channelId], message [$messageId]")
         val deps = dependencies
         if (deps == null) {
             handleTargetChannelSelected(channelId, messageId, null)
             return
         }
 
-        deps.observeSelectedChannelId()
-            .filter { it == channelId }
-            .switchMap { deps.observeMessage(channelId, messageId) }
-            .takeSingleUntilTimeout(CHANNEL_SELECTION_TIMEOUT_MS, emitError = false)
-            .subscribe({ message -> handleTargetChannelSelected(channelId, messageId, message) }, { })
+        val jump = PendingJump(channelId, messageId)
+        pendingJump = jump
+        jumpChannelSubscription?.unsubscribe()
+        if (selectedChannelId == channelId) {
+            pendingJump = null
+            loadJumpTarget(channelId, messageId)
+            return
+        }
+        deps.getChannel(channelId)?.let { channel ->
+            log("Resolved jump channel [$channelId] from local store")
+            handleTargetChannelResolved(deps, channelId, channel)
+            return
+        }
 
-        deps.observeConnectionOpen()
+        jumpChannelSubscription = deps.observeConnectionOpen()
             .take(1)
             .switchMap { isConnected ->
                 val timeout =
                     if (isConnected) CHANNEL_RESOLVE_TIMEOUT_MS else CHANNEL_RESOLVE_TIMEOUT_MS * 3
-                deps.observeChannel(channelId).filterNull().takeSingleUntilTimeout(timeout, emitError = false)
+                deps.observeChannel(channelId).filterNull().takeSingleUntilTimeout(timeout)
             }
             .subscribe(
                 { channel -> handleTargetChannelResolved(deps, channelId, channel) },
-                { Log.w(javaClass.name, "Dropped message jump action") },
+                {
+                    synchronized(this) {
+                        if (pendingJump == jump) pendingJump = null
+                    }
+                    Log.w(LOG_TAG, "[MessageLoader] Dropped jump for channel [$channelId], message [$messageId]")
+                },
             )
     }
+
+    private fun loadJumpTarget(channelId: Long, messageId: Long) {
+        val deps = dependencies
+        if (deps == null) {
+            handleTargetChannelSelected(channelId, messageId, null)
+            return
+        }
+        deps.observeMessage(channelId, messageId).take(1).subscribe(
+            { message -> handleTargetChannelSelected(channelId, messageId, message) },
+            { handleTargetChannelSelected(channelId, messageId, null) },
+        )
+    }
+
+    @Synchronized
+    private fun takePendingJump(channelId: Long): PendingJump? =
+        pendingJump?.takeIf { it.channelId == channelId }?.also { pendingJump = null }
 
     /**
      * Jumps to the newest message.
@@ -553,8 +593,10 @@ class StoreMessagesLoader @JvmOverloads constructor(
     private fun handleTargetChannelSelected(channelId: Long, messageId: Long, message: Message?) {
         synchronized(this) {
             if (message != null) {
+                log("Jump target [$messageId] is already loaded in channel [$channelId]")
                 scrollToSubject.onNext(message.id)
             } else {
+                log("Fetching jump target [$messageId] in channel [$channelId]")
                 channelLoadedStateUpdate(channelId) { it.copy(isOldestMessagesLoaded = false) }
                 tryLoadMessages(force = true, targetChannelId = channelId, targetMessageId = messageId)
             }
@@ -562,11 +604,15 @@ class StoreMessagesLoader @JvmOverloads constructor(
     }
 
     private fun handleTargetChannelResolved(deps: Dependencies, channelId: Long, channel: Channel) {
-        synchronized(this) {
-            if (channel.id == selectedChannelId) return
+        val alreadySelected = synchronized(this) {
             channelLoadedStateUpdate(channelId) { it.copy(isInitialMessagesLoaded = true) }
+            channel.id == selectedChannelId
         }
-        deps.selectChannel(channel)
+        if (alreadySelected) {
+            takePendingJump(channelId)?.let { loadJumpTarget(it.channelId, it.messageId) }
+        } else {
+            deps.selectChannel(channel)
+        }
     }
 
     /** A jump whose target is not in the fetched window: give up and clear the unread marker. */
@@ -601,7 +647,6 @@ class StoreMessagesLoader @JvmOverloads constructor(
         private const val RETRY_DELAY_DEFAULT = 1_500L
         private const val RETRY_DELAY_MAX = 30_000L
         private const val RETRY_JITTER_MS = 2_000
-        private const val CHANNEL_SELECTION_TIMEOUT_MS = 1_000L
         private const val CHANNEL_RESOLVE_TIMEOUT_MS = 1_000L
         private const val LOG_TAG = "StoreMessagesLoader"
 

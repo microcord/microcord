@@ -1342,8 +1342,8 @@ class StoreStream private constructor(
             StoreMessagesLoader.Dependencies(
                 observeChannelMessages = { channelId -> messages.observeMessagesForChannel(channelId) },
                 observeMessage = { channelId, messageId -> messages.observeMessage(channelId, messageId) },
-                observeSelectedChannelId = { channelsSelected.observeId() },
                 observeChannel = { channelId -> channels.observeChannel(channelId) },
+                getChannel = channels::getChannel,
                 observeConnectionOpen = { connectionOpen.observeConnectionOpen() },
                 selectChannel = { channel -> selectChannelInternal(channel.guildId, channel.id) },
                 meUserId = { users.getMe().id },
@@ -2417,12 +2417,16 @@ class StoreStream private constructor(
     private fun selectChannelInternal(guildId: Long, channelId: Long) = dispatcher.schedule {
         if (guildSelected.getSelectedGuildIdInternal() != guildId) {
             guildSelected.handleGuildSelected(guildId)
+            channelsSelected.handleGuildSelected()
+            calls.handleGuildSelect(guildId)
             lurking.handleGuildSelected(guildId)
             nux.handleGuildSelected(guildId)
             inviteSettings.handleGuildSelected(guildId)
         }
-        channelsSelected.handleChannelSelected(guildId, channelId)
-        navigation.setNavigationPanelAction(StoreNavigation.PanelAction.CLOSE)
+        dispatcher.schedule {
+            channelsSelected.handleChannelSelected(guildId, channelId)
+            navigation.setNavigationPanelAction(StoreNavigation.PanelAction.CLOSE)
+        }
     }
 
     @StoreThread

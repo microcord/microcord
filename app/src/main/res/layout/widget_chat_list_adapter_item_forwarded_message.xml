@@ -18,16 +18,32 @@
         android:paddingTop="8dp"
         android:paddingBottom="8dp">
 
-        <TextView
-            android:id="@+id/forwarded_message_label"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
             android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:text="@string/forwarded_message"
-            android:textColor="?attr/colorTextMuted"
-            android:textSize="12sp"
-            style="@style/UiKit.TextView.Bold" />
+            android:paddingEnd="12dp">
+
+            <ImageView
+                android:id="@+id/forwarded_message_icon"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginEnd="4dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_forward_16dp"
+                app:tint="?attr/colorTextMuted" />
+
+            <TextView
+                android:id="@+id/forwarded_message_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/forwarded_message"
+                android:textColor="?attr/colorTextMuted"
+                android:textSize="12sp"
+                style="@style/UiKit.TextView.Bold" />
+        </LinearLayout>
 
         <ProgressBar
             android:id="@+id/forwarded_message_loading"
@@ -74,18 +90,34 @@
             android:visibility="gone"
             style="@style/UiKit.TextView" />
 
-        <TextView
-            android:id="@+id/forwarded_message_source"
+        <LinearLayout
+            android:id="@+id/forwarded_message_source_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="?attr/selectableItemBackground"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
             android:paddingStart="12dp"
             android:paddingTop="8dp"
             android:paddingEnd="12dp"
             android:paddingBottom="4dp"
-            android:textColor="?attr/colorTextMuted"
-            android:textSize="12sp"
-            android:visibility="gone"
-            style="@style/UiKit.TextView" />
+            android:visibility="gone">
+
+            <com.facebook.drawee.view.SimpleDraweeView
+                android:id="@+id/forwarded_message_source_guild_icon"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:layout_marginEnd="4dp"
+                android:contentDescription="@null"
+                app:roundAsCircle="true" />
+
+            <TextView
+                android:id="@+id/forwarded_message_source"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="?attr/colorTextMuted"
+                android:textSize="12sp"
+                style="@style/UiKit.TextView" />
+        </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

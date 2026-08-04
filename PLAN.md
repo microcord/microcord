@@ -1798,8 +1798,33 @@ nested localized command submission with attachments.
 - A dedicated forwarded container renders text, attachments, embeds, stickers, components, polls,
   source privacy, loading/deleted/error/depth states, and accessibility. Partial snapshot users are
   normalized without Kotlin `copy`, because Gson may leave omitted discriminator fields JVM-null.
+- Forwarded source navigation resolves the original message ID from either `message_reference` or
+  the typed snapshot, so accessible source channels still jump when the reference omits `message_id`.
+  Both the card and its source footer trigger the shared loader jump.
+- Source-channel visibility now follows the user's actual channel access rather than requiring the
+  forwarded message's destination to be in the same guild. Accessible cross-guild sources expose and
+  navigate to their channel; inaccessible sources still fail closed to guild-only or hidden labels.
+- Source guild, channel, and message IDs are normalized from the reference first and typed snapshot
+  second, treating zero IDs as absent. This removes payload-dependent jumps when Discord omits one or
+  more source IDs from `message_reference`; focused omitted/zero-ID regressions pass.
+- Cross-channel jumps now remain pending until `StoreMessagesLoader.handleChannelSelected()` consumes
+  them. This removes the observer-order race where ordinary initial loading randomly cancelled the
+  around-target request; a focused regression proves the selected target starts only `AROUND`.
+  Redacted loader diagnostics now identify jump request, channel selection, cached-target, fetch, and
+  resolution-drop stages without logging message content.
+- Known jump channels are now read synchronously from `StoreChannels` and selected immediately;
+  gateway connection state is consulted only when the channel is genuinely absent locally. The
+  regression keeps connection observation silent and still reaches the local channel target.
+- Shared channel selection now publishes a changed guild in one dispatcher transaction before
+  validating the requested channel in the next, matching ordinary `ChannelSelector` taps. This
+  prevents cross-guild jumps from validating against the previous guild snapshot and stalling.
+- Forwarded cards use an explicit leading forward icon. Guild forwards show a 14dp source-guild icon
+  and guild name in the bottom attribution instead of the channel name; no guild identity is repeated
+  at the top, and original author avatars/usernames are deliberately omitted.
+  The focused unit suite, connected forwarded binding test, `assembleDebug`, and `installDebug` pass.
 - Focused wire/policy/store/share/render/privacy/logout tests and `assembleDebug` pass. No live forward
-  was sent; guild-level forwarding-disable/gated-channel state remains server-enforced.
+  was sent; the navigation/layout regressions, `assembleDebug`, and `installDebug` pass. Guild-level
+  forwarding-disable/gated-channel state remains server-enforced.
 
 Resumable task: `app/src/main/java/com/discord/widgets/share/ForwardedMessage.kt` | Userdoccers message
 forwarding and desktop module `885918` | live-test cross-guild privacy, permission rejection, optional

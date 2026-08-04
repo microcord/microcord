@@ -27,6 +27,7 @@ import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.embed.EmbedResourceUtils
+import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.textprocessing.DiscordParser
 import com.discord.utilities.textprocessing.MessagePreprocessor
@@ -87,6 +88,11 @@ class WidgetChatListAdapterItemForwardedMessage(
             ForwardedMessageEntry.State.DELETED -> itemView.context.getString(R.string.forwarded_message_deleted)
             ForwardedMessageEntry.State.UNAVAILABLE -> itemView.context.getString(R.string.forwarded_message_unavailable)
             ForwardedMessageEntry.State.DEPTH_LIMIT -> itemView.context.getString(R.string.forwarded_message_nested_unavailable)
+        }
+        binding.root.importantForAccessibility = if (content) {
+            View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        } else {
+            View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
         }
     }
 
@@ -309,9 +315,8 @@ class WidgetChatListAdapterItemForwardedMessage(
     private fun dp(value: Int) = (value * itemView.resources.displayMetrics.density).toInt()
 
     private fun bindSource(entry: ForwardedMessageEntry) {
-        val reference = entry.parentMessage.messageReference
-        val channelId = reference?.channelId
-        val messageId = reference?.messageId
+        val channelId = entry.sourceChannelId
+        val messageId = entry.sourceMessageId
         val channel = channelId?.let(StoreStream.getChannels()::getChannel)
         val permissions = channelId?.let { StoreStream.getPermissions().getPermissionsByChannel()[it] }
         val accessible = channel != null && (channel.isPrivate() || PermissionUtils.hasAccess(channel, permissions))
@@ -319,10 +324,10 @@ class WidgetChatListAdapterItemForwardedMessage(
             ?: messageId?.let(SnowflakeUtils::toTimestamp)
             ?: 0L
         val time = TimeUtils.toReadableTimeString(itemView.context, timestamp)
-        val guild = reference?.guildId?.let(StoreStream.getGuilds()::getGuild)
+        val guild = entry.sourceGuildId?.let(StoreStream.getGuilds()::getGuild)
         val sourceVisibility = ForwardedSourcePrivacy.visibility(
             destinationGuildId = parentAdapter.data.guildId.takeUnless { it == 0L },
-            sourceGuildId = reference?.guildId,
+            sourceGuildId = entry.sourceGuildId,
             channelKnown = channel != null,
             channelAccessible = accessible,
             guildKnown = guild != null,
@@ -337,19 +342,27 @@ class WidgetChatListAdapterItemForwardedMessage(
             messageKnown = channelId != null && messageId != null && messageId > 0L,
             sourceDeleted = entry.parentMessage.hasFlag(MessageFlags.SOURCE_MESSAGE_DELETED),
         )
-        binding.forwardedMessageSource.apply {
+        val navigate = if (navigable) {
+            View.OnClickListener { StoreStream.getMessagesLoader().jumpToMessage(channelId!!, messageId!!) }
+        } else {
+            null
+        }
+        binding.root.isClickable = navigable
+        binding.root.isFocusable = false
+        binding.root.setOnClickListener(navigate)
+        binding.forwardedMessageSourceRow.apply {
             visibility = if (source == null) View.GONE else View.VISIBLE
-            text = source?.let { itemView.context.getString(R.string.forwarded_message_source, it, time) }
-            contentDescription = text
             isClickable = navigable
             isFocusable = navigable
-            setOnClickListener(
-                if (navigable) View.OnClickListener {
-                    StoreStream.getMessagesLoader().jumpToMessage(channelId!!, messageId!!)
-                } else {
-                    null
-                },
-            )
+            setOnClickListener(navigate)
+        }
+        binding.forwardedMessageSourceGuildIcon.apply {
+            visibility = if (guild == null) View.GONE else View.VISIBLE
+            if (guild == null) setImageURI(null as String?) else IconUtils.setIcon(this, guild, R.dimen.avatar_size_small)
+        }
+        binding.forwardedMessageSource.apply {
+            text = source?.let { itemView.context.getString(R.string.forwarded_message_source, it, time) }
+            contentDescription = text
         }
     }
 

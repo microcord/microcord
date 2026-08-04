@@ -56,6 +56,10 @@ class ForwardedMessageEntryTest {
             ForwardedSourcePrivacy.visibility(1, 1, channelKnown = true, channelAccessible = true, guildKnown = true),
         )
         assertEquals(
+            ForwardedSourcePrivacy.Visibility.CHANNEL,
+            ForwardedSourcePrivacy.visibility(2, 1, channelKnown = true, channelAccessible = true, guildKnown = true),
+        )
+        assertEquals(
             ForwardedSourcePrivacy.Visibility.HIDDEN,
             ForwardedSourcePrivacy.visibility(1, 1, channelKnown = true, channelAccessible = false, guildKnown = true),
         )
@@ -67,6 +71,14 @@ class ForwardedMessageEntryTest {
             "Sanitized Guild",
             ForwardedSourcePrivacy.label(
                 ForwardedSourcePrivacy.Visibility.GUILD,
+                channelName = "private-channel",
+                guildName = "Sanitized Guild",
+            ),
+        )
+        assertEquals(
+            "Sanitized Guild",
+            ForwardedSourcePrivacy.label(
+                ForwardedSourcePrivacy.Visibility.CHANNEL,
                 channelName = "private-channel",
                 guildName = "Sanitized Guild",
             ),

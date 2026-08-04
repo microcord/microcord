@@ -42,7 +42,27 @@ class ForwardedMessageTest {
         assertEquals("question", snapshot.poll!!.question.text)
         assertEquals(9L, snapshot.resolved!!.users!!.getValue(9).id)
         assertTrue(snapshot.messageSnapshots!!.single().message.content == "nested-sanitized")
-        assertEquals("Resolved Nick", ForwardedMessageEntry.resolve(Message(api)).single().message!!.mentions!!.single().member!!.nick)
+        val entry = ForwardedMessageEntry.resolve(Message(api)).single()
+        assertEquals("Resolved Nick", entry.message!!.mentions!!.single().member!!.nick)
+        assertEquals(3L, entry.sourceGuildId)
+        assertEquals(2L, entry.sourceChannelId)
+        assertEquals(1L, entry.sourceMessageId)
+        listOf(null, 0L).forEach { missingId ->
+            val fallback = ForwardedMessageEntry.resolve(
+                Message(
+                    api.copy(
+                        messageReference = api.messageReference!!.copy(
+                            guildId = missingId,
+                            channelId = missingId,
+                            messageId = missingId,
+                        ),
+                    ),
+                ),
+            ).single()
+            assertEquals(3L, fallback.sourceGuildId)
+            assertEquals(2L, fallback.sourceChannelId)
+            assertEquals(1L, fallback.sourceMessageId)
+        }
 
         val body = ForwardMessageSender.body(Message(api), channel(2, 3, Channel.GUILD_TEXT))
         val json = JsonParser.parseString(gson.toJson(body)).asJsonObject
@@ -126,7 +146,7 @@ class ForwardedMessageTest {
         const val FORWARD_FIXTURE = """
             {"id":"10","channel_id":"20","guild_id":"30","type":0,"flags":16384,
              "message_reference":{"type":1,"guild_id":"3","channel_id":"2","message_id":"1"},
-             "message_snapshots":[{"message":{"id":"1","channel_id":"2","type":0,"flags":16384,
+             "message_snapshots":[{"message":{"id":"1","channel_id":"2","guild_id":"3","type":0,"flags":16384,
                "content":"sanitized","timestamp":"2026-01-01T00:00:00Z",
                "attachments":[{"url":"https://cdn.invalid/asset","size":1,"id":"4","proxy_url":"https://proxy.invalid/asset","filename":"asset.bin"}],
                "embeds":[{"title":"embed","type":"rich"}],
