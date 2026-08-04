@@ -113,6 +113,23 @@ class StoreThreadsJoined(
     }
 
     @StoreThread
+    fun handleLocalFollow(threadId: Long, guildId: Long, followed: Boolean) {
+        if (followed) {
+            joinedThreads[threadId] = JoinedThread(
+                threadId = threadId,
+                guildId = guildId,
+                flags = HAS_INTERACTED,
+                muted = false,
+                muteConfig = ModelMuteConfig(null as Long?),
+                joinTimestamp = UtcDateTime(System.currentTimeMillis()),
+            )
+        } else {
+            joinedThreads.remove(threadId)
+        }
+        markChanged()
+    }
+
+    @StoreThread
     fun handleThreadListSync(payload: ModelThreadListSync) {
         payload.members.orEmpty().forEach { member ->
             joinedThreads[member.id] = member.toJoinedThread(payload.guildId)
@@ -206,5 +223,6 @@ class StoreThreadsJoined(
 
         /** The three mutually exclusive notification bits, without `HAS_INTERACTED`. */
         const val NOTIFICATION_FLAGS = 14
+        private const val HAS_INTERACTED = 1
     }
 }

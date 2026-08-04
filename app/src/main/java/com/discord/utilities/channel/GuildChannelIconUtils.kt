@@ -108,7 +108,7 @@ fun mapGuildChannelTypeToIcon(guildChannelIconType: GuildChannelIconType): Int =
         GuildChannelIconType.Text -> R.drawable.ic_channel_text
         GuildChannelIconType.Thread -> R.drawable.ic_thread
         GuildChannelIconType.Announcements -> R.drawable.ic_channel_announcements
-        GuildChannelIconType.Forum -> R.drawable.ic_channel_forum
+        GuildChannelIconType.Forum -> R.drawable.ic_discord_forum_filled
         GuildChannelIconType.ForumPost -> R.drawable.ic_channel_forum_post
 
         GuildChannelIconType.NSFW.Text -> R.drawable.ic_channel_text_nsfw

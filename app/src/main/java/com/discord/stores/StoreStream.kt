@@ -25,6 +25,7 @@ import com.discord.api.role.GuildRoleCreate
 import com.discord.api.role.GuildRoleDelete
 import com.discord.api.role.GuildRoleUpdate
 import com.discord.api.stageinstance.StageInstance
+import com.discord.api.thread.ThreadListing
 import com.discord.api.user.User
 import com.discord.api.user.TypingUser
 import com.discord.api.message.reaction.MessageReactionUpdate
@@ -46,7 +47,6 @@ import com.discord.gateway.RealGatewayScheduler
 import com.discord.models.domain.ModelUserRelationship
 import com.discord.models.domain.ModelUserSettings
 import com.discord.models.domain.auth.ModelLoginResult
-import com.discord.models.thread.dto.ModelThreadListSync
 import com.discord.restapi.RequiredHeadersInterceptor
 import com.discord.restapi.RestAPIBuilder
 import com.discord.restapi.RestAPIInterface
@@ -243,7 +243,11 @@ class StoreStream private constructor(
     private val channelMembers = StoreChannelMembers(observationDeck) { guildId, roleId ->
         guilds.getGuildRolesInternal()[guildId]?.get(roleId)
     }
-    private val guildSubscriptions = StoreGuildSubscriptions(observationDeck, dispatcher)
+    private val guildSubscriptions = StoreGuildSubscriptions(
+        observationDeck,
+        dispatcher,
+        getSelectedGuildId = guildSelected::getSelectedGuildIdInternal,
+    )
     private val guildsSorted = StoreGuildsSorted(observationDeck, dispatcher)
     private val expandedGuildFolders = StoreExpandedGuildFolders(dispatcher, observationDeck)
     private val collapsedChannelCategories = StoreCollapsedChannelCategories(dispatcher, observationDeck)
@@ -392,6 +396,7 @@ class StoreStream private constructor(
         observationDeck,
         restApi = { if (::restApi.isInitialized) restApi else null },
         handleThreadCreateOrUpdate = { thread -> handleThreadCreateOrUpdateInternal(thread) },
+        forumApi = RestAPI::reactNativeApiOrNull,
     )
     /** Mention counting and automatic acknowledgement feed the authoritative read-state ledger. */
     private val messageAck: StoreMessageAck = StoreMessageAck(
@@ -1332,6 +1337,9 @@ class StoreStream private constructor(
      * Also installs the two seams that widgets left open for stores `StoreStream` did not publish.
      */
     private fun installChatStoreWiring() {
+        guildSelected.observeSelectedGuildId().distinctUntilChanged().subscribe { guildId ->
+            dispatcher.schedule { guildSubscriptions.handleGuildSelect(guildId) }
+        }
         channelsSelected.observeResolvedSelectedChannel().distinctUntilChanged().subscribe(
             { selected -> dispatcher.schedule { handleChannelSelected(selected) } },
             {},
@@ -1635,7 +1643,6 @@ class StoreStream private constructor(
         dispatchSubscribe(events.threadDelete, "streamThreadDelete", ::handleThreadDeleteInternal)
         dispatchSubscribe(events.threadListSync, "streamThreadListSync") { sync ->
             channels.handleThreadListSync(sync.guildId, sync.threads)
-            // These four take the whole ModelThreadListSync, not (guildId, threads).
             threadsJoined.handleThreadListSync(sync)
             threadsActive.handleThreadListSync(sync)
             threadsActiveJoined.handleThreadListSync(sync)
@@ -2409,6 +2416,7 @@ class StoreStream private constructor(
         guildSelected.handleGuildSelected(guildId)
         channelsSelected.handleGuildSelected()
         calls.handleGuildSelect(guildId)
+        guildSubscriptions.handleGuildSelect(guildId)
         lurking.handleGuildSelected(guildId)
         nux.handleGuildSelected(guildId)
         inviteSettings.handleGuildSelected(guildId)
@@ -2419,6 +2427,7 @@ class StoreStream private constructor(
             guildSelected.handleGuildSelected(guildId)
             channelsSelected.handleGuildSelected()
             calls.handleGuildSelect(guildId)
+            guildSubscriptions.handleGuildSelect(guildId)
             lurking.handleGuildSelected(guildId)
             nux.handleGuildSelected(guildId)
             inviteSettings.handleGuildSelected(guildId)
@@ -3175,5 +3184,23 @@ class StoreStream private constructor(
         @JvmStatic fun handleThreadCreateOrUpdate(thread: Channel) = requireInstance().let { stream ->
             stream.dispatcher.schedule { stream.handleThreadCreateOrUpdateInternal(thread) }
         }
+
+        @JvmStatic fun handleThreadSearchResult(listing: ThreadListing) = requireInstance().let { stream ->
+            stream.dispatcher.schedule {
+                listing.threads.forEach(stream::handleThreadCreateOrUpdateInternal)
+                stream.threadsJoined.handleSearchFinish(listing.threads, listing.members)
+                listing.threads.forEach(stream.threadsActiveJoined::handleThreadCreateOrUpdateOrDelete)
+                listing.firstMessages?.let(stream.forumPostMessages::bulkCreateFirstMessage)
+            }
+        }
+
+        @JvmStatic fun setForumPostFollowed(threadId: Long, guildId: Long, followed: Boolean) =
+            requireInstance().let { stream ->
+                stream.dispatcher.schedule {
+                    stream.threadsJoined.handleLocalFollow(threadId, guildId, followed)
+                    stream.channels.getChannelInternal(guildId, threadId)
+                        ?.let(stream.threadsActiveJoined::handleThreadCreateOrUpdateOrDelete)
+                }
+            }
     }
 }

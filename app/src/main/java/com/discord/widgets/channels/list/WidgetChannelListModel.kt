@@ -785,6 +785,7 @@ data class WidgetChannelListModel(
 
                     fun toThreadItem(thread: Channel, joined: JoinedThread?): ChannelListItemThread? {
                         val threadPermissions = guild.channelPermissions[thread.id]
+                            ?: guild.channelPermissions[thread.parentId]
                         val isParentMuted = guild.notificationSettings
                             .getChannelOverride(thread.parentId)?.isMuted == true
                         val threadMuted = joined?.muted == true

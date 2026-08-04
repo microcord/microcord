@@ -204,16 +204,12 @@ StoreStream supplies no analytics callbacks (`StoreStream.kt:227-229`), leaving
 both no-op defaults (`StoreChannelsSelected.kt:55-60`). Channel frecency and its
 `CHANNEL_HISTORY_V3` persistence are not implemented at all.
 
-### 8. Guild subscriptions do not follow guild/voice selection
+### 8. Guild subscriptions partially follow selection
 
-StoreStream constructs with deck/dispatcher only (`StoreStream.kt:246`), leaving
-selected/voice guild providers at `0L` (`StoreGuildSubscriptions.kt:80-89`). It
-also never calls `handleGuildSelect` from the guild-selection path
-(`StoreStream.kt:2400-2424`). Consequences:
-
-- selecting a guild does not subscribe typing/activity/thread streams;
-- disconnect retain drops all guilds;
-- reconnect cannot restore selected-guild subscriptions.
+Resolved 2026-08-04: StoreStream supplies the selected-guild provider and both
+guild/channel navigation paths call `handleGuildSelect`, restoring the reference
+typing/activity/thread subscription and reconnect replay. The connected-voice
+guild provider remains unwired, so disconnect retention is still incomplete.
 
 ### 9. Message-loader background state
 

@@ -726,6 +726,13 @@ object RestAPIParams {
         val autoArchiveDuration: Int? = null,
     )
 
+    data class ForumThreadCreation(
+        val name: String,
+        val autoArchiveDuration: Int,
+        val appliedTags: List<Long> = emptyList(),
+        val message: Message,
+    )
+
     data class ThreadMemberSettings(
         val flags: Int? = null,
         val muted: Boolean? = null,

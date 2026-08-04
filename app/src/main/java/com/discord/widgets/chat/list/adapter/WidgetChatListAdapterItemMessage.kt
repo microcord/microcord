@@ -200,7 +200,7 @@ class WidgetChatListAdapterItemMessage(
         val author = message.author ?: return
         val user = CoreUser(author)
         val isPublicGuildSystemMessage = isPublicGuildSystemMessage(message)
-        val isFollowedChannelPost = message.type == TYPE_DEFAULT && message.messageReference != null
+        val isFollowedChannelPost = message.isFollowedChannelPost()
 
         val showTag = user.isBot || user.isSystemUser || isPublicGuildSystemMessage ||
             isFollowedChannelPost || isGuildForumPostAuthor
@@ -921,3 +921,8 @@ class WidgetChatListAdapterItemMessage(
  */
 internal fun MessageEntry.authorDisplayName(): String? =
     message.author?.id?.let(nickOrUsernames::get)
+
+internal fun Message.isFollowedChannelPost(): Boolean =
+    type == 0 && messageReference != null && messageReference.type != FORWARD_REFERENCE_TYPE
+
+private const val FORWARD_REFERENCE_TYPE = 1

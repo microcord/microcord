@@ -2,50 +2,36 @@ package com.discord.widgets.forums
 
 import android.content.Context
 import android.view.View
-import android.view.ViewStub
-import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.app.appViewModels
 import com.discord.api.channel.Channel
+import com.discord.databinding.WidgetForumBrowserBinding
 import com.discord.stores.SelectedChannelAnalyticsLocation
 import com.discord.stores.StoreStream
 import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.takeSingleUntilTimeout
 import com.discord.utilities.rx.ui
-import com.discord.widgets.channels.list.WidgetChannelsListItemThreadActions
 import com.discord.widgets.home.WidgetHomePanelNsfw
-import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.discord.widgets.home.WidgetHome
 
 class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
     private val viewModel: WidgetForumBrowserViewModel by appViewModels { WidgetForumBrowserViewModel() }
+    private var _binding: WidgetForumBrowserBinding? = null
+    private val binding get() = requireNotNull(_binding)
     private val adapterItems = ArrayList<ForumBrowserItem>()
-    private lateinit var recycler: RecyclerView
     private lateinit var adapter: WidgetForumBrowserAdapter
     private lateinit var layoutManager: ForumBrowserLayoutManager
     private lateinit var scrollListener: ForumBrowserScrollListener
-    private lateinit var loading: View
-    private lateinit var empty: View
-    private lateinit var emptyDescription: TextView
-    private lateinit var createPost: ExtendedFloatingActionButton
-    private lateinit var viewGuidelines: FloatingActionButton
-    private lateinit var nsfwStub: ViewStub
     private lateinit var nsfwPanel: WidgetHomePanelNsfw
     private var panelNsfwHidden = true
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        recycler = view.findViewById(R.id.recycler_view)
-        loading = view.findViewById(R.id.loading_view)
-        empty = view.findViewById(R.id.empty_view)
-        emptyDescription = view.findViewById(R.id.forum_browser_empty_subheading)
-        createPost = view.findViewById(R.id.create_post)
-        viewGuidelines = view.findViewById(R.id.view_guidelines)
-        nsfwStub = view.findViewById(R.id.nsfw_view)
+        _binding = WidgetForumBrowserBinding.bind(view)
         nsfwPanel = WidgetHomePanelNsfw(this)
         WidgetHomePanelNsfw.onGuildNsfwGateAllowed = ForumUtils::allowGuildNsfw
         WidgetHomePanelNsfw.onGuildNsfwGateDenied = { guildId ->
@@ -59,36 +45,48 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
                 }
         }
 
-        adapter = WidgetForumBrowserAdapter(::openForumPost, ::openForumPostOptions)
-        layoutManager = ForumBrowserLayoutManager(recycler)
+        adapter = WidgetForumBrowserAdapter(::openForumPost)
+        layoutManager = ForumBrowserLayoutManager(binding.recyclerView)
         scrollListener = ForumBrowserScrollListener()
-        recycler.layoutManager = layoutManager
-        recycler.adapter = adapter
-        recycler.addItemDecoration(adapter.itemDecoration)
-        recycler.addOnScrollListener(scrollListener)
+        binding.recyclerView.layoutManager = layoutManager
+        binding.recyclerView.adapter = adapter
+        binding.recyclerView.addItemDecoration(adapter.itemDecoration)
+        binding.recyclerView.addOnScrollListener(scrollListener)
 
         WidgetForumGuidelinesBottomSheet.registerForResult(this, CLOSE_GUIDELINES_CREATE) { guildId, channelId ->
             openCreatePostScreen(guildId, channelId)
         }
-        setActionBarDisplayHomeAsUpEnabled()
-        appActivity?.toolbar?.setNavigationOnClickListener { requireActivity().onBackPressedDispatcher.onBackPressed() }
+        val home = parentFragment as? WidgetHome
+        val toolbar = if (home == null) {
+            setActionBarDisplayHomeAsUpEnabled()
+        } else {
+            setActionBarDisplayHomeAsUpEnabled(
+                iconRes = R.drawable.ic_menu_24dp,
+                iconAccessibilityLabel = R.string.toggle_drawer,
+            )
+        }
+        toolbar?.setNavigationOnClickListener {
+            if (home == null) requireActivity().onBackPressedDispatcher.onBackPressed()
+            else home.handleCenterPanelBack()
+        }
     }
 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
         viewModel.observeEvents().ui(this).appSubscribe(javaClass) { event ->
-            if (event is WidgetForumBrowserViewModel.Event.ScrollToTop) recycler.scrollToPosition(0)
+            if (event is WidgetForumBrowserViewModel.Event.ScrollToTop) binding.recyclerView.scrollToPosition(0)
         }
         viewModel.observeViewState().ui(this).appSubscribe(javaClass, onNext = ::configure)
     }
 
     private fun configure(state: WidgetForumBrowserViewModel.ViewState) {
+        bindToolbar()
         nsfwPanel.configureUI(
             state.nsfwPanelState.guildId,
             state.nsfwPanelState.isChannelNsfw,
             state.nsfwPanelState.isNsfwUnconsented,
             state.nsfwPanelState.nsfwAllowed,
-            nsfwStub,
+            binding.nsfwView,
             onToggleNsfw = { shown ->
             panelNsfwHidden = !shown
             (viewModel.viewState as? WidgetForumBrowserViewModel.ViewState.Loaded)?.let(::configureButtons)
@@ -96,27 +94,27 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
         )
         when (state) {
             is WidgetForumBrowserViewModel.ViewState.Loading -> {
-                loading.visibility = View.VISIBLE
-                empty.visibility = View.GONE
-                recycler.visibility = View.GONE
-                createPost.visibility = View.GONE
-                viewGuidelines.visibility = View.GONE
+                binding.loadingView.root.visibility = View.VISIBLE
+                binding.emptyView.root.visibility = View.GONE
+                binding.recyclerView.visibility = View.GONE
+                binding.createPost.visibility = View.GONE
+                binding.viewGuidelines.visibility = View.GONE
                 adapterItems.clear()
                 adapter.setData(emptyList())
             }
             is WidgetForumBrowserViewModel.ViewState.Loaded -> {
-                loading.visibility = View.GONE
-                setActionBarTitle(state.channelName)
+                binding.loadingView.root.visibility = View.GONE
+                setActionBarTitle(state.channelName, leadingDrawableRes = R.drawable.ic_discord_forum_filled_tinted)
                 configureButtons(state)
                 if (state.listItems.isEmpty()) {
-                    empty.visibility = View.VISIBLE
-                    recycler.visibility = View.GONE
-                    emptyDescription.text = getString(R.string.forum_empty_state_description)
+                    binding.emptyView.root.visibility = View.VISIBLE
+                    binding.recyclerView.visibility = View.GONE
+                    binding.emptyView.forumBrowserEmptySubheading.text = getString(R.string.forum_empty_state_description)
                         .replace("{channelName}", state.channelName)
                     adapterItems.clear()
                 } else {
-                    empty.visibility = View.GONE
-                    recycler.visibility = View.VISIBLE
+                    binding.emptyView.root.visibility = View.GONE
+                    binding.recyclerView.visibility = View.VISIBLE
                     adapterItems.clear()
                     adapterItems.addAll(state.listItems)
                     adapter.setData(state.listItems)
@@ -127,9 +125,9 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
     }
 
     private fun configureButtons(state: WidgetForumBrowserViewModel.ViewState.Loaded) {
-        createPost.visibility = if (state.canCreateForumChannelPosts && panelNsfwHidden) View.VISIBLE else View.GONE
-        viewGuidelines.visibility = if (state.channelTopic.isNotBlank() && panelNsfwHidden) View.VISIBLE else View.GONE
-        createPost.setOnClickListener {
+        binding.createPost.visibility = if (state.canCreateForumChannelPosts && panelNsfwHidden) View.VISIBLE else View.GONE
+        binding.viewGuidelines.visibility = if (state.channelTopic.isNotBlank() && panelNsfwHidden) View.VISIBLE else View.GONE
+        binding.createPost.setOnClickListener {
             if (state.channelTopic.isNotBlank() && !ForumGuidelinesManager.hasSeenGuidelines(state.channelId)) {
                 WidgetForumGuidelinesBottomSheet.show(
                     parentFragmentManager,
@@ -141,7 +139,7 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
                 openCreatePostScreen(state.guildId, state.channelId)
             }
         }
-        viewGuidelines.setOnClickListener {
+        binding.viewGuidelines.setOnClickListener {
             WidgetForumGuidelinesBottomSheet.show(
                 parentFragmentManager,
                 state.guildId,
@@ -195,11 +193,12 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
             peekParent = channel.parentId,
             analyticsLocation = SelectedChannelAnalyticsLocation.THREAD_BROWSER,
         )
-        requireActivity().onBackPressedDispatcher.onBackPressed()
+        if (parentFragment !is WidgetHome) requireActivity().onBackPressedDispatcher.onBackPressed()
     }
 
-    private fun openForumPostOptions(channel: Channel) {
-        WidgetChannelsListItemThreadActions.show(parentFragmentManager, channel.id)
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     companion object {

@@ -141,6 +141,7 @@ class RestTransportTest {
         server.enqueue(MockResponse().setBody("{\"activities\":[],\"applications\":[],\"assets\":{}}"))
         server.enqueue(MockResponse().setBody("{\"applications\":[],\"application_commands\":[]}"))
         server.enqueue(MockResponse().setBody("{\"applications\":[],\"application_commands\":[]}"))
+        server.enqueue(MockResponse().setBody("{\"threads\":[],\"members\":[],\"has_more\":false}"))
         server.enqueue(MockResponse().setResponseCode(204))
         RestAPI.install(RestAPIBuilder(server.url("/api/").toString(), MemoryCookieJar()), emptyList())
 
@@ -148,6 +149,7 @@ class RestTransportTest {
         RestAPI.embeddedActivitiesApiOrNull!!.shelf().toBlocking().single()
         RestAPI.reactNativeApiOrNull!!.getUserApplicationCommandIndex().toBlocking().single()
         RestAPI.applicationDirectoryApiOrNull!!.applicationCommandIndex(10L).toBlocking().single()
+        RestAPI.reactNativeApiOrNull!!.searchForumThreads(20L).toBlocking().single()
         RestAPI.reactNativeApiOrNull!!.sendApplicationCommand(
             RestAPIParams.ApplicationCommand(
                 type = 4L,
@@ -175,7 +177,7 @@ class RestTransportTest {
             ),
         ).toBlocking().subscribe()
 
-        val requests = List(5) {
+        val requests = List(6) {
             val request = server.takeRequest()
             assertEquals(ReactNativeRequestMetadata.USER_AGENT, request.getHeader("User-Agent"))
             assertFalse(request.getHeader("X-Super-Properties").isNullOrBlank())
@@ -183,6 +185,7 @@ class RestTransportTest {
             request
         }
         assertEquals("/api/v9/applications/10/application-command-index", requests[3].path)
+        assertEquals("/api/v9/channels/20/threads/search", requests[4].path)
         assertEquals("/api/v9/interactions", requests.last().path)
         assertTrue(requests.last().body.readUtf8().contains("\"type\":4"))
     }

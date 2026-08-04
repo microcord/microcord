@@ -13,11 +13,11 @@ This supersedes the 2026-07-26 report. No production code was modified.
 | `StoreGuildsSorted` | PARTIAL | 1 MAJOR, 3 MINOR |
 | `StoreGuildSelected` | PARTIAL | 2 MAJOR, 3 MINOR |
 | expanded folders | PARTIAL | 3 MINOR |
-| guild subscriptions | PARTIAL | 2 BLOCKER, 2 MAJOR, 2 MINOR |
+| guild subscriptions | PARTIAL | 1 BLOCKER, 2 MAJOR, 2 MINOR |
 | permissions | PARTIAL | 1 MAJOR, 3 MINOR |
 | stage instances | PARTIAL | 3 MINOR |
 | adjacent guild stores | PARTIAL | 1 MAJOR |
-| **Total** | **PARTIAL** | **4 BLOCKER, 9 MAJOR, 18 MINOR** |
+| **Total** | **PARTIAL** | **3 BLOCKER, 9 MAJOR, 18 MINOR** |
 
 ## 1. StoreGuilds
 
@@ -137,16 +137,9 @@ Current source: `stores/StoreExpandedGuildFolders.kt`.
 
 ### Open blockers
 
-- **BLOCKER:** StoreStream constructs the store with only deck and dispatcher
-  (`StoreStream.kt:246`). `getSelectedGuildId` and
-  `getConnectedVoiceGuildId` retain `0L` defaults
-  (`StoreGuildSubscriptions.kt:80-89`). Disconnect drops every subscription, and
-  reconnect cannot restore selection-driven subscriptions.
-- **BLOCKER:** StoreStream never calls
-  `guildSubscriptions.handleGuildSelect(guildId)` on guild selection. Current
-  select flow calls guild/channel/call stores only (`StoreStream.kt:2400-2424`).
-  Typing, activities and thread streams are therefore not automatically requested
-  for a newly selected guild.
+- **BLOCKER:** the selected-guild provider and navigation calls are now wired, but
+  `getConnectedVoiceGuildId` retains its `0L` default. Disconnect retention can
+  still drop the guild of an active voice session.
 
 ### Other open findings
 

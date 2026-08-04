@@ -906,6 +906,14 @@ interface RestAPIInterface {
         @Part files: Array<MultipartBody.Part>,
     ): Observable<Channel>
 
+    @Multipart
+    @POST("channels/{channelId}/threads?use_nested_fields=true")
+    fun createForumPost(
+        @Path("channelId") channelId: Long,
+        @Part("payload_json") payloadJson: PayloadJSON<RestAPIParams.ForumThreadCreation>,
+        @Part files: Array<MultipartBody.Part>,
+    ): Observable<Channel>
+
     @POST("channels/{channelId}/messages/{messageId}/threads")
     fun createThreadFromMessage(
         @Path("channelId") channelId: Long,
@@ -949,6 +957,18 @@ interface RestAPIInterface {
     fun getAllPrivateArchivedThreads(
         @Path("channelId") channelId: Long,
         @Query("before") before: String?,
+    ): Observable<ThreadListing>
+
+    @GET("channels/{channelId}/threads/search")
+    fun searchForumThreads(
+        @Path("channelId") channelId: Long,
+        @Query("name") name: String? = null,
+        @Query("tag_setting") tagSetting: String? = null,
+        @Query("archived") archived: Boolean? = null,
+        @Query("sort_by") sortBy: String? = null,
+        @Query("sort_order") sortOrder: String? = null,
+        @Query("limit") limit: Int? = null,
+        @Query("offset") offset: Int? = null,
     ): Observable<ThreadListing>
 
     @POST("channels/{channelId}/post-data")

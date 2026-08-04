@@ -2415,6 +2415,76 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   rollups are 184/187 stores represented, 1,132/1,155 exact widget paths, 83/83 typed gateway events,
   and 264/264 effective historical REST routes. The completed `missing_endpoints.txt` inventory was
   deleted because the sole template difference is the intentional generalized modern MFA route.
+- Selecting a guild forum parent now mounts and shows `WidgetForumBrowser` in Home's center panel
+  instead of inflating ordinary chat/history. Forum posts and create-post drafts transition to chat;
+  closing a draft returns to the browser, and embedded post selection no longer performs the
+  standalone-screen Back action. Focused Home/forum tests, `assembleDebug`, and `installDebug` pass.
+- Forum browser startup now uses the existing Discord-styled `MaterialButton` for New Post instead of
+  the recovered Extended FAB whose overwritten Material background crashed during inflation. A clean
+  WSA cold start produced no fatal exception. Forwarding's optional-comment hint is now owned only by
+  `TextInputLayout`, removing the duplicate overlapping EditText hint.
+- Forum loading no longer waits forever for an optional gateway `THREAD_LIST_SYNC`; active posts and
+  the archived-listing request are authoritative, and completed empty/error listings render the empty
+  state. Forward message references (`type=1`) are excluded from followed-channel detection, so their
+  ordinary author row no longer receives the `SERVER` tag. Focused forum/forwarding tests,
+  `assembleDebug`, and `installDebug` pass.
+- Forum post submission now routes thread-draft chat input through `ForumPostCreateManager` instead of
+  POSTing an ordinary message to the forum parent. Active posts missing from READY are loaded through
+  the current RN `GET /channels/{channelId}/threads/search` contract and merged with gateway updates;
+  the forbidden guild-wide active-thread fallback was removed. RN transport, payload routing, forum,
+  and forwarding regressions plus `assembleDebug` and `installDebug` pass.
+- Thread-search results are normalized and ingested through `StoreStream` before rendering, so post
+  clicks resolve and newly created posts no longer replace older search-only rows. Forum creation now
+  uses the current nested `message` payload at `threads?use_nested_fields=true` rather than legacy flat
+  multipart fields. Forum owner avatars explicitly use circular Fresco rounding. Focused forum/RN
+  transport tests, `assembleDebug`, and `installDebug` pass.
+- Archived forum pagination now uses the RN thread-search endpoint with `archived=true` and offsets.
+  Search responses batch-ingest threads, memberships, and first messages before rendering. The forum
+  post status bar is bound directly to `WidgetForumPostStatusViewModel`, enabling Follow/reactions and
+  authoritative message counts; simultaneous `message_count`/`last_message_id` updates no longer lose
+  the count. Touched forum views now use generated bindings directly. Focused forum/thread/status/RN
+  tests, `assembleDebug`, and `installDebug` pass.
+- Active forum posts now come from the reference gateway thread subscription, while archived search
+  keeps offset pagination. Successful Follow/Unfollow requests update `StoreThreadsJoined` immediately
+  instead of waiting for an optional gateway membership event. The forum toolbar displays the forum channel icon, and forum
+  post/status views use binding fields directly without redundant aliases. Focused forum/thread/status
+  tests, `assembleDebug`, and `installDebug` pass.
+- Forum membership updates rebuild `StoreThreadsActiveJoined` after membership ingestion, so
+  followed posts appear under their forum parent in the channel list; thread rows inherit parent
+  permissions when a search response has no dedicated permission entry. The forum toolbar uses chat's
+  zero navigation-content inset so its icon sits next to the
+  drawer button. Focused channel-list/forum/thread tests, `assembleDebug`, and `installDebug` pass.
+- Restored the 126.21 authoritative active-forum flow: guild selection now sends the gateway guild
+  subscription with `threads=true`, and reconnect restores the selected-guild subscription. Local
+  Follow rebuilds active-joined state immediately. Forum-card long press no longer opens Edit Thread.
+  Focused subscription/forum tests, `assembleDebug`, and `installDebug` pass.
+- RN evidence confirms Follow state is `ThreadMemberStore.hasJoined(threadId)`: join/leave performs an
+  immediate local membership update around the thread-member request, then gateway membership remains
+  authoritative.
+- Follow/Unfollow now mirrors RN ordering exactly: optimistic local thread membership is applied before
+  the RN POST/DELETE and rolled back on request failure. This immediately updates the button and
+  channel list while server/gateway membership remains authoritative. Focused forum/thread tests,
+  `assembleDebug`, and `installDebug` pass.
+- Forum owner avatars use `IconUtils.setIcon`/`MGImages` with the guild-member override and existing
+  circular hierarchy. Channel-list thread connectors now
+  use the exact 126.21 drawable mapping (`Start=long_cap`, `End=short_no_cap`), fixing cut spine lines.
+  The forum toolbar matches chat's navigation inset. Focused forum/thread tests pass; one unrelated
+  pre-existing MFA/invite channel-list ordering assertion remains red, while `assembleDebug` and
+  `installDebug` pass.
+- Live sanitized Gateway logging proved `THREAD_LIST_SYNC.members` is empty for this account, while
+  `READY.guilds[].threads[].member` contains the four followed forum posts. Removing incorrect JVM
+  `transient` markers from `Channel.member`, `memberCount`, and `memberIdsPreview` restores those server
+  memberships after storage clearing without a local cache or REST fallback. The attempted guild active
+  threads REST fallback returned 403 and was removed. The Create Post button is pill-rounded; forum
+  parents use the filled forum icon and entered posts use the outlined forum-post toolbar icon.
+- Fixed the live thread-embed inflation crash by restoring the recovered `vertical=1` enum for the
+  shared `ViewReplySpline.orientation` attribute. The final APK was installed and survived the same
+  screen with no `InflateException`; focused forum/thread/home/subscription tests pass.
+- Compared forum list, post, and composer states directly against the connected A65 official client.
+  Imported its exact filled `ForumIcon` and `ChatIcon` density assets: the forum list uses the filled
+  double bubble and circular `+` FAB, posts use Back plus one filled bubble, and forum drafts use Back,
+  one filled bubble, a post title, and the parent subtitle. `WidgetForumBrowser` now uses generated
+  binding without cached view aliases. WSA screenshots and focused forum/home tests verify the result.
 
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/applauncher/**` | Android 340.12
 Hermes `out.js` Apps launcher modules | log in on WSA and verify HOME/search/application/command/list

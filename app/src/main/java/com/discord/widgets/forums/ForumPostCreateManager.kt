@@ -4,6 +4,7 @@ import android.content.Context
 import com.discord.api.channel.Channel
 import com.discord.models.domain.NonceGenerator
 import com.discord.restapi.RestAPIParams
+import com.discord.restapi.PayloadJSON
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreSlowMode
 import com.discord.stores.StoreThreadDraft.ThreadDraftState
@@ -42,12 +43,12 @@ object ForumPostCreateManager {
         attachmentsRequest: AttachmentsRequest? = null,
         onMessageTooLong: ((Int, Int) -> Unit)? = null,
         onFilesTooLarge: ((Int, Boolean) -> Unit)? = null,
-    ) {
-        if (isCreateInProgress.value == true) return
+    ): Boolean {
+        if (isCreateInProgress.value == true) return false
         val threadName = threadDraftState.threadName
         if (threadName.isNullOrEmpty()) {
             StoreStream.getThreadDraft().setDraftState(threadDraftState.copy(shouldDisplayNameError = true))
-            return
+            return false
         }
 
         val me = StoreStream.getUsers().getMe()
@@ -59,7 +60,7 @@ object ForumPostCreateManager {
                 onMessageTooLong,
                 onFilesTooLarge,
             )
-        ) return
+        ) return false
 
         isCreateInProgress.onNext(true)
         sendCreateForumPostWithMessageRequest(
@@ -91,6 +92,7 @@ object ForumPostCreateManager {
                 StoreStream.getSlowMode().onThreadCreated(forumChannelId)
                 ChannelSelector.getInstance().selectChannel(channel)
             }
+        return true
     }
 
     internal fun isValidFirstMessage(
@@ -137,18 +139,25 @@ object ForumPostCreateManager {
             .filterIs<SendUtils.SendPayload.ReadyToSend>()
             .take(1)
             .flatMap { payload ->
-                RestAPI.api.createThreadWithMessage(
+                val api = RestAPI.reactNativeApiOrNull
+                    ?: return@flatMap Observable.error<Channel>(IllegalStateException("RN API unavailable"))
+                api.createForumPost(
                     channelId,
-                    name,
-                    payload.message.content.orEmpty(),
-                    emptyList(),
-                    emptyList(),
-                    Channel.PUBLIC_THREAD,
-                    autoArchiveDuration,
+                    PayloadJSON(forumPostBody(name, autoArchiveDuration, payload.message)),
                     payload.uploads.map { it.part }.toTypedArray(),
                 )
             }
     }
+
+    internal fun forumPostBody(
+        name: String,
+        autoArchiveDuration: Int,
+        message: RestAPIParams.Message,
+    ) = RestAPIParams.ForumThreadCreation(
+        name = name,
+        autoArchiveDuration = autoArchiveDuration,
+        message = message,
+    )
 
     private const val THREAD_CREATE_RATE_LIMIT_CODE = 20016
 }

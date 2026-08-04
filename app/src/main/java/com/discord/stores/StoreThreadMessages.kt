@@ -189,23 +189,16 @@ class StoreThreadMessages(
     @StoreThread
     private fun updateFromGuild(guild: Guild) = guild.threads.orEmpty().forEach(::updateFromThread)
 
-    /**
-     * Reference bug reproduced deliberately: both writes copy from the *same* pre-update [state], so
-     * when a payload carries both a `message_count` and an unseen `last_message_id`, the second write
-     * discards the count the first one applied. Fixing it here would silently diverge from the
-     * client this is a reconstruction of; it is recorded as a defect instead.
-     */
     @StoreThread
     private fun updateFromThread(thread: Channel) {
-        val state = getOrAddState(thread)
+        var state = getOrAddState(thread)
         thread.messageCount?.let { messageCount ->
-            threads[thread.id] = state.copy(count = messageCount)
-            markChanged()
+            state = state.copy(count = messageCount)
         }
-        if (thread.lastMessageId == 0L) return
-        val mostRecent = state.mostRecentMessage
-        if (mostRecent != null && mostRecent.id == thread.lastMessageId) return
-        threads[thread.id] = state.copy(mostRecentMessage = null)
+        if (thread.lastMessageId != 0L && state.mostRecentMessage?.id != thread.lastMessageId) {
+            state = state.copy(mostRecentMessage = null)
+        }
+        threads[thread.id] = state
         markChanged()
     }
 

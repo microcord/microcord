@@ -7,6 +7,7 @@ import com.discord.api.permission.Permission
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.models.message.Message
 import com.discord.widgets.chat.list.entries.ForwardedMessageEntry
+import com.discord.widgets.chat.list.adapter.isFollowedChannelPost
 import com.discord.restapi.RestAPIBuilder
 import com.discord.restapi.RestAPIInterface
 import com.google.gson.FieldNamingPolicy
@@ -43,6 +44,10 @@ class ForwardedMessageTest {
         assertEquals(9L, snapshot.resolved!!.users!!.getValue(9).id)
         assertTrue(snapshot.messageSnapshots!!.single().message.content == "nested-sanitized")
         val entry = ForwardedMessageEntry.resolve(Message(api)).single()
+        assertFalse(Message(api).isFollowedChannelPost())
+        assertTrue(
+            Message(api.copy(messageReference = api.messageReference!!.copy(type = null))).isFollowedChannelPost(),
+        )
         assertEquals("Resolved Nick", entry.message!!.mentions!!.single().member!!.nick)
         assertEquals(3L, entry.sourceGuildId)
         assertEquals(2L, entry.sourceChannelId)

@@ -33,7 +33,9 @@ import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isAnnouncementChannel
 import com.discord.api.channel.isDM
+import com.discord.api.channel.isGuildForumChannel
 import com.discord.api.channel.isGuildTextChannel
+import com.discord.api.channel.isGuildForumPost
 import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isSystemDM
 import com.discord.app.appViewModels
@@ -41,6 +43,7 @@ import com.discord.app.appActivityViewModels
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.rx.ui
+import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.toolbar.positionUnreadCountView
 import com.discord.utilities.user.UserUtils.hasUnreadUrgentMessages
 import com.discord.widgets.chat.input.AppFlexInputViewModel
@@ -48,6 +51,7 @@ import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventUpsellBo
 import com.discord.widgets.playstation.WidgetPlaystationIntegrationUpsellBottomSheet
 import com.discord.widgets.settings.WidgetMuteSettingsSheet
 import com.discord.widgets.user.calls.PrivateCallLauncher
+import com.discord.widgets.forums.WidgetForumBrowser
 import com.discord.widgets.accessibility.AccessibilityDetectionNavigator
 import rx.Subscription
 
@@ -97,6 +101,11 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         if (childFragmentManager.findFragmentByTag(CHANNELS_TAG) == null) {
             childFragmentManager.commitNow { replace(R.id.widget_channels, WidgetChannelsList(), CHANNELS_TAG) }
         }
+        if (childFragmentManager.findFragmentByTag(FORUM_TAG) == null) {
+            childFragmentManager.commitNow {
+                replace(R.id.widget_forum_channel_list, WidgetForumBrowser(), FORUM_TAG)
+            }
+        }
         if (childFragmentManager.findFragmentByTag(MEMBERS_TAG) == null) {
             childFragmentManager.commitNow { replace(R.id.widget_connected_list, WidgetChannelMembersList(), MEMBERS_TAG) }
         }
@@ -131,19 +140,27 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         navigationSubscription = navigation.getNavigationPanelAction().subscribe { action ->
             activity?.runOnUiThread { navigation.setNavigationPanelAction(action, panels) }
         }
-        selectedChannelSubscription = StoreStream.getChannelsSelected().observeSelectedChannel().subscribe { channel ->
+        selectedChannelSubscription = StoreStream.getChannelsSelected().observeResolvedSelectedChannel().subscribe { selected ->
             activity?.runOnUiThread {
-                lockCloseRightPanel(channel == null)
-                panels.setStartPanelUseFullPortraitWidth(channel == null)
+                val channel = selected.channelOrParent
+                val surface = centerSurface(selected)
+                lockCloseRightPanel(surface != CenterSurface.CHAT)
+                panels.setStartPanelUseFullPortraitWidth(surface == CenterSurface.NONE)
                 panels.setStartPanelLockState(
-                    if (channel == null) OverlappingPanelsLayout.LockState.OPEN
+                    if (surface == CenterSurface.NONE) OverlappingPanelsLayout.LockState.OPEN
                     else OverlappingPanelsLayout.LockState.UNLOCKED,
                 )
-                if (channel != null) ensureChatInflated()
+                if (surface == CenterSurface.CHAT) ensureChatInflated()
                 view?.findViewById<View>(R.id.widget_home_panel_center_chat)?.visibility =
-                    if (channel == null) View.GONE else View.VISIBLE
+                    if (surface == CenterSurface.CHAT) View.VISIBLE else View.GONE
+                view?.findViewById<View>(R.id.widget_forum_channel_list)?.visibility =
+                    if (surface == CenterSurface.FORUM) View.VISIBLE else View.GONE
                 if (channel != null) {
-                    configureToolbar(channel)
+                    if (surface == CenterSurface.FORUM) {
+                        (childFragmentManager.findFragmentByTag(FORUM_TAG) as? WidgetForumBrowser)?.bindToolbar()
+                    } else {
+                        configureToolbar(channel)
+                    }
                     if (!initialChannelShown) {
                         initialChannelShown = true
                         panels.closePanels()
@@ -225,18 +242,25 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
      * Back from the chat panel. A peeked channel steps back to the channel it was peeked from;
      * anything else opens the left panel.
      *
-     * Two reference branches are not reachable yet and are deliberately absent rather than
-     * approximated: dismissing an open thread-creation composer (`StoreChannelsSelected`'s
-     * `dismissCreateThread` is `@StoreThread` and has no UI-callable wrapper), and re-entering the
-     * fullscreen call surface when the selected channel is the vocal channel currently connected
-     * (`WidgetCallFullscreen` / `WidgetCallPreviewFullscreen` do not exist in this project).
+     * Re-entering the fullscreen call surface when the selected channel is the vocal channel currently
+     * connected remains owned by the call UI. Thread creation is dismissed through [ChannelSelector].
      */
     internal fun handleCenterPanelBack() {
-        val selected = StoreStream.getChannelsSelected().getResolvedSelectedChannel()
-            as? StoreChannelsSelected.ResolvedSelectedChannel.Channel
+        val resolved = StoreStream.getChannelsSelected().getResolvedSelectedChannel()
+        if (resolved is StoreChannelsSelected.ResolvedSelectedChannel.ThreadDraft) {
+            ChannelSelector.getInstance().dismissCreateThread()
+            return
+        }
+        val selected = resolved as? StoreChannelsSelected.ResolvedSelectedChannel.Channel
         val peekParent = selected?.peekParent
         if (selected != null && peekParent != null) {
             StoreStream.selectChannel(selected.channel.guildId, peekParent)
+            return
+        }
+        val selectedChannel = selected?.channel
+        val parentChannel = selectedChannel?.let { StoreStream.getChannels().findChannelById(it.parentId) }
+        if (selectedChannel?.isGuildForumPost(parentChannel) == true) {
+            StoreStream.selectChannel(selectedChannel.guildId, selectedChannel.parentId)
             return
         }
         panels.openStartPanel()
@@ -259,13 +283,33 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private fun configureToolbar(channel: Channel) {
         val toolbar = view?.findViewById<View>(R.id.widget_home_panel_center_chat)?.findDescendant(Toolbar::class.java)
             ?: return
-        toolbar.title = when {
+        appActivity?.setToolbar(toolbar)
+        val resolvedSelection = StoreStream.getChannelsSelected().getResolvedSelectedChannel()
+        val threadDraft = resolvedSelection as? StoreChannelsSelected.ResolvedSelectedChannel.ThreadDraft
+        val isForumDraft = threadDraft?.parentChannel?.isGuildForumChannel() == true
+        val parentChannel = StoreStream.getChannels().findChannelById(channel.parentId)
+        val isForumPost = channel.isGuildForumPost(parentChannel) ||
+            StoreStream.getThreadsActive().getAllForumThreadsById().containsKey(channel.id)
+        val title = when {
+            isForumDraft -> getString(R.string.new_forum_post_new)
+            threadDraft != null -> getString(R.string.create_thread)
             channel.isDM() -> "@ ${channel.getDisplayName()}"
             channel.isGuildTextChannel() || channel.isAnnouncementChannel() -> "# ${channel.getDisplayName()}"
             else -> channel.getDisplayNameOrDefault(requireContext(), includePrefix = false)
         }
-        toolbar.setNavigationIcon(R.drawable.ic_menu_24dp)
-        toolbar.setNavigationContentDescription(R.string.toggle_drawer)
+        toolbar.title = null
+        setActionBarTitle(title, if (isForumPost || isForumDraft) R.drawable.ic_discord_chat_filled_tinted else null)
+        setActionBarSubtitle(
+            when {
+                threadDraft != null -> threadDraft.parentChannel.getDisplayNameOrDefault(requireContext(), false)
+                isForumPost -> parentChannel?.getDisplayNameOrDefault(requireContext(), false)
+                else -> null
+            },
+        )
+        setActionBarDisplayHomeAsUpEnabled(
+            iconRes = if (isForumPost || threadDraft != null) null else R.drawable.ic_menu_24dp,
+            iconAccessibilityLabel = if (isForumPost || threadDraft != null) R.string.back else R.string.toggle_drawer,
+        )
         toolbar.setNavigationOnClickListener { handleCenterPanelBack() }
         if (toolbar.menu.size() == 0) {
             toolbar.inflateMenu(R.menu.menu_chat_toolbar)
@@ -393,11 +437,21 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         return null
     }
 
-    private companion object {
-        const val GUILDS_TAG = "WidgetGuildsList"
-        const val CHANNELS_TAG = "WidgetChannelsList"
-        const val MEMBERS_TAG = "WidgetChannelMembersList"
-        const val TOPIC_TAG = "WidgetChannelTopic"
-        const val ACTIONS_TAG = "WidgetChannelSidebarActions"
+    companion object {
+        internal enum class CenterSurface { NONE, CHAT, FORUM }
+
+        internal fun centerSurface(selected: StoreChannelsSelected.ResolvedSelectedChannel): CenterSurface = when {
+            selected is StoreChannelsSelected.ResolvedSelectedChannel.Channel &&
+                selected.channel.isGuildForumChannel() -> CenterSurface.FORUM
+            selected.channelOrParent != null -> CenterSurface.CHAT
+            else -> CenterSurface.NONE
+        }
+
+        private const val GUILDS_TAG = "WidgetGuildsList"
+        private const val CHANNELS_TAG = "WidgetChannelsList"
+        private const val FORUM_TAG = "WidgetForumBrowser"
+        private const val MEMBERS_TAG = "WidgetChannelMembersList"
+        private const val TOPIC_TAG = "WidgetChannelTopic"
+        private const val ACTIONS_TAG = "WidgetChannelSidebarActions"
     }
 }

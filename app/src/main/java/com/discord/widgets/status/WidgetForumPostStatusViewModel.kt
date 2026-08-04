@@ -32,7 +32,7 @@ import rx.Observable
 
 class WidgetForumPostStatusViewModel(
     storeStateObservable: Observable<StoreState> = observeStoreState(),
-    private val restAPI: () -> RestAPIInterface = { RestAPI.api },
+    private val restAPI: () -> RestAPIInterface = { RestAPI.reactNativeApiOrNull ?: RestAPI.api },
 ) : AppViewModel<WidgetForumPostStatusViewModel.ViewState>() {
 
     sealed class StoreState {
@@ -109,7 +109,7 @@ class WidgetForumPostStatusViewModel(
         isArchivedThread: Boolean,
         isFollowedThread: Boolean,
     ) = doPress(context, fragmentManager, guildId, isArchivedThread) {
-        toggleFollowPost(context, channelId, isFollowedThread)
+        toggleFollowPost(context, channelId, guildId, isFollowedThread)
     }
 
     fun onReactionPress(
@@ -160,9 +160,11 @@ class WidgetForumPostStatusViewModel(
         }
     }
 
-    internal fun toggleFollowPost(context: Context?, channelId: Long, isFollowedThread: Boolean) {
+    internal fun toggleFollowPost(context: Context?, channelId: Long, guildId: Long, isFollowedThread: Boolean) {
         if (followRequestInProgress) return
+        val followed = !isFollowedThread
         followRequestInProgress = true
+        StoreStream.setForumPostFollowed(channelId, guildId, followed)
         publishFollowProgress()
         val request = if (isFollowedThread) {
             restAPI().leaveThread(channelId, FOLLOW_LOCATION)
@@ -172,6 +174,7 @@ class WidgetForumPostStatusViewModel(
         request.restSubscribeOn().ui(this).appSubscribe(
             errorClass = WidgetForumPostStatusViewModel::class.java,
             context = context,
+            errorHandler = { StoreStream.setForumPostFollowed(channelId, guildId, isFollowedThread) },
             onTerminated = {
                 followRequestInProgress = false
                 publishFollowProgress()

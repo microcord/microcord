@@ -45,7 +45,7 @@ provider, DEX, device, or live-backend verification gaps.
 | [audit-stores-core.md](audit-stores-core.md) | PARTIAL: 5 blocker, 14 major, 19 minor findings |
 | [audit-stores-gap-inventory.md](audit-stores-gap-inventory.md) | OPEN: 184/187 structurally represented; 1 behavior entirely missing |
 | [audit-stores-auth-nav.md](audit-stores-auth-nav.md) | PARTIAL: 4 blocker, 13 major, 17 minor findings |
-| [audit-stores-guilds.md](audit-stores-guilds.md) | PARTIAL: 4 blocker, 9 major, 18 minor findings |
+| [audit-stores-guilds.md](audit-stores-guilds.md) | PARTIAL: 3 blocker, 9 major, 18 minor findings |
 | [audit-stores-channels.md](audit-stores-channels.md) | PARTIAL: 4 blocker, 17 major, 18 minor findings |
 | [audit-stores-messages.md](audit-stores-messages.md) | PARTIAL: 3 blocker, 17 major, 21 minor findings |
 | [audit-stores-users.md](audit-stores-users.md) | PARTIAL: 1 blocker, 19 major, 29 minor findings |

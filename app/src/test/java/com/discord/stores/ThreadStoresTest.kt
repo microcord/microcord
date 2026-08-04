@@ -131,6 +131,20 @@ class ThreadStoresTest {
     }
 
     @Test
+    fun `local forum follow updates membership without waiting for gateway`() {
+        val fixture = fixture()
+        fixture.dispatch {
+            users.handleConnectionOpen(readyPayload())
+            threadsJoined.handleConnectionOpen(readyPayload())
+            threadsJoined.handleLocalFollow(31, 1, true)
+        }
+        assertTrue(fixture.threadsJoined.hasJoined(31))
+
+        fixture.dispatch { threadsJoined.handleLocalFollow(31, 1, false) }
+        assertFalse(fixture.threadsJoined.hasJoined(31))
+    }
+
+    @Test
     fun `thread member rosters only exist once the thread has been subscribed to`() {
         val fixture = fixture()
         fixture.dispatch { channels.handleConnectionOpen(readyPayload()) }
@@ -322,7 +336,7 @@ class ThreadStoresTest {
             {"id":30,"type":15,"guild_id":1,"name":"forum"}
           ],
           "threads": [
-            {"id":11,"type":11,"guild_id":1,"name":"live","parent_id":10,"message_count":3,
+            {"id":11,"type":11,"guild_id":1,"name":"live","parent_id":10,"message_count":3,"last_message_id":99,
              "thread_metadata":{"archived":false,"auto_archive_duration":1440,"locked":false},
              "member":{"id":11,"user_id":7,"flags":1,"join_timestamp":"2022-01-01T00:00:00","muted":false}},
             {"id":12,"type":11,"guild_id":1,"name":"archived","parent_id":10,

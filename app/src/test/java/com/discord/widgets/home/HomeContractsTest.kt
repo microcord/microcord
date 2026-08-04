@@ -3,6 +3,9 @@ package com.discord.widgets.home
 import com.discord.panels.OverlappingPanelsLayout.LockState
 import com.discord.panels.PanelState
 import com.discord.stores.StoreChannelsSelected
+import com.discord.api.channel.Channel
+import com.google.gson.FieldNamingPolicy
+import com.google.gson.GsonBuilder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -52,4 +55,32 @@ class HomeContractsTest {
             ),
         )
     }
+
+    @Test
+    fun `forum parents use browser while posts and drafts use chat`() {
+        val forum = channel(Channel.GUILD_FORUM)
+        val post = channel(Channel.PUBLIC_THREAD)
+
+        assertEquals(
+            WidgetHome.Companion.CenterSurface.FORUM,
+            WidgetHome.centerSurface(StoreChannelsSelected.ResolvedSelectedChannel.Channel(forum)),
+        )
+        assertEquals(
+            WidgetHome.Companion.CenterSurface.CHAT,
+            WidgetHome.centerSurface(StoreChannelsSelected.ResolvedSelectedChannel.Channel(post)),
+        )
+        assertEquals(
+            WidgetHome.Companion.CenterSurface.CHAT,
+            WidgetHome.centerSurface(StoreChannelsSelected.ResolvedSelectedChannel.ThreadDraft(forum)),
+        )
+        assertEquals(
+            WidgetHome.Companion.CenterSurface.NONE,
+            WidgetHome.centerSurface(StoreChannelsSelected.ResolvedSelectedChannel.Unselected),
+        )
+    }
+
+    private fun channel(type: Int): Channel = GsonBuilder()
+        .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+        .create()
+        .fromJson("""{"id":1,"guild_id":2,"type":$type,"name":"channel"}""", Channel::class.java)
 }

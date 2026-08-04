@@ -3,6 +3,9 @@ package com.discord.widgets.forums
 import com.discord.api.channel.Channel
 import com.discord.api.channel.ForumTag
 import com.discord.api.thread.ThreadMetadata
+import com.discord.stores.ArchivedThreadsStore
+import com.discord.restapi.RestAPIInterface
+import retrofit2.http.GET
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -31,6 +34,25 @@ class ForumExactPathContractsTest {
         assertEquals(ForumPostReadState(9, hasSeenBefore = true, hasUnread = false), ForumPostReadState.createDefault(9))
     }
 
+    @Test
+    fun emptyForumStopsLoadingAfterListingCompletesOrFails() {
+        val loading = ArchivedThreadsStore.ThreadListingState.Listing(emptyList(), true, true)
+        val loaded = loading.copy(hasMore = false, isLoadingMore = false)
+
+        assertTrue(shouldShowLoading(true, ArchivedThreadsStore.ThreadListingState.Uninitialized))
+        assertTrue(shouldShowLoading(true, loading))
+        assertFalse(shouldShowLoading(true, loaded))
+        assertFalse(shouldShowLoading(true, ArchivedThreadsStore.ThreadListingState.Error))
+        assertFalse(shouldShowLoading(false, ArchivedThreadsStore.ThreadListingState.Uninitialized))
+    }
+
+    @Test
+    fun archivedForumSearchUsesCurrentEndpoint() {
+        val endpoint = RestAPIInterface::class.java.methods.single { it.name == "searchForumThreads" }
+            .getAnnotation(GET::class.java)
+        assertEquals("channels/{channelId}/threads/search", endpoint.value)
+    }
+
     private fun post(channel: Channel, ownerId: Long, myUserId: Long) = PostData(
         channel = channel,
         owner = com.discord.models.user.CoreUser(id = ownerId, username = "owner", discriminator = 1),
@@ -50,7 +72,7 @@ class ForumExactPathContractsTest {
         typingUsers = emptyList(),
     )
 
-    private fun channel(flags: Long? = null, archived: Boolean = false) = Channel(
+    private fun channel(flags: Long? = null, archived: Boolean = false, parentId: Long = 0) = Channel(
         topic = null,
         type = Channel.PUBLIC_THREAD,
         guildId = 1L,
@@ -69,7 +91,7 @@ class ForumExactPathContractsTest {
         applicationId = 0L,
         nicks = null,
         nsfw = false,
-        parentId = 0L,
+        parentId = parentId,
         memberListId = null,
         rateLimitPerUser = 0,
         defaultAutoArchiveDuration = null,

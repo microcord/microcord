@@ -33,6 +33,19 @@ import org.junit.Test
  */
 class StoreStreamWiringTest {
 
+    @Test
+    fun guildSelectionRequestsGatewayThreadStream() {
+        val guildId = 9_999L
+        val payloads = mutableListOf<GuildSubscriptionPayload>()
+        val subscription = StoreStream.getGuildSubscriptions().observeSubscriptions().subscribe(payloads::add)
+        try {
+            StoreStream.selectGuild(guildId)
+            assertTrue(payloads.any { it.guildId == guildId && it.subscriptions.threads == true })
+        } finally {
+            subscription.unsubscribe()
+        }
+    }
+
     /** Thread and forum inputs reach the reactive read-state projection through their stores. */
     @Test
     fun threadUnreadReachesReadStates() {

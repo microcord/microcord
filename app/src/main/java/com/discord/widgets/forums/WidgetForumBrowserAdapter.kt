@@ -12,7 +12,6 @@ import com.discord.utilities.dimen.dpToPixels
 
 class WidgetForumBrowserAdapter(
     private val onPostClick: (Channel) -> Unit,
-    private val onPostLongClick: (Channel) -> Unit,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private var items: List<ForumBrowserItem> = emptyList()
 
@@ -73,10 +72,7 @@ class WidgetForumBrowserAdapter(
         fun bind(post: PostData) {
             postView.configurePost(post)
             postView.setOnClickListener { onPostClick(post.channel) }
-            postView.setOnLongClickListener {
-                onPostLongClick(post.channel)
-                true
-            }
+            postView.setOnLongClickListener(null)
         }
     }
 

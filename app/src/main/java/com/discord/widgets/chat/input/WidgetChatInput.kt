@@ -51,6 +51,7 @@ import com.discord.widgets.chat.input.applauncher.WidgetAppLauncher
 import com.discord.widgets.chat.input.emoji.EmojiPickerContextType
 import com.discord.widgets.chat.input.emoji.WidgetEmojiPicker
 import com.discord.widgets.chat.input.expression.WidgetExpressionTray
+import com.discord.widgets.forums.ForumPostCreateManager
 import com.google.android.material.button.MaterialButton
 import com.lytefast.flexinput.InputListener
 import com.lytefast.flexinput.fragment.FlexInputFragment
@@ -458,6 +459,27 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 return true
             }
         }
+        if (loaded.selectedThreadDraft != null && loaded.channel.isGuildForumChannel()) {
+            val attachmentsRequest = uploads.takeIf { it.isNotEmpty() }?.let {
+                ForumPostCreateManager.AttachmentsRequest(
+                    currentFileSizeMB = it.sumOf(UploadAttachment::size).toFloat() / BYTES_PER_MEGABYTE,
+                    maxFileSizeMB = loaded.maxFileSizeMB,
+                    attachments = it,
+                )
+            }
+            val accepted = ForumPostCreateManager.createForumPostWithMessage(
+                context = requireContext(),
+                forumChannelId = loaded.channel.id,
+                autoArchiveDuration = loaded.threadDraftState.autoArchiveDuration
+                    ?: loaded.channel.defaultAutoArchiveDuration
+                    ?: DEFAULT_THREAD_ARCHIVE_DURATION,
+                content = content,
+                threadDraftState = loaded.threadDraftState,
+                attachmentsRequest = attachmentsRequest,
+            )
+            if (accepted) drafts.setTextChannelInput(loaded.channelId, null)
+            return accepted
+        }
         val editing = loaded.editingMessage.takeIf { loaded.isEditing }
         val submission = editing?.let { coordinator.edit(it, content) } ?: coordinator.send(
             MessageSendCoordinator.Send(
@@ -786,6 +808,8 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         /** Discord's own help-centre article on timeouts; the reference hardcodes the same id. */
         private const val TIMEOUT_HELP_ARTICLE_URL =
             "https://support.discord.com/hc/articles/360045138571"
+        private const val BYTES_PER_MEGABYTE = 1024f * 1024f
+        private const val DEFAULT_THREAD_ARCHIVE_DURATION = 1_440
 
         private val mentionRequests = PublishSubject.create<Long>().toSerialized()
 

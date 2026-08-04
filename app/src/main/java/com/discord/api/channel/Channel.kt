@@ -37,9 +37,9 @@ data class Channel(
     val appliedTags: List<ForumTagId>?,
     val threadMetadata: ThreadMetadata?,
     var messageCount: Int?,
-    @Transient val memberCount: Int?,
-    @Transient val memberIdsPreview: List<Long>?,
-    @Transient val member: ThreadMember?,
+    val memberCount: Int?,
+    val memberIdsPreview: List<Long>?,
+    val member: ThreadMember?,
 ) {
     companion object {
         const val GUILD_TEXT = 0

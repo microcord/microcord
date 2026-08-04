@@ -47,6 +47,7 @@ The following 2026-07-26 blockers are no longer open:
 | Static chat-input collaborators made submit inert | `StoreStream.kt:1137-1145` installs the message coordinator, replies/editing stores and upload handler during initialization. |
 | 126.21 developer-only external Share differs | Modern forwarding is the approved current-client replacement and is excluded from open legacy-parity findings. |
 | Modern Activity cards treated empty stale instances as joinable | `ActivityCardState.evaluate` now marks an instance with zero participants ended/restartable; the row renders `Activity ended. Start a new one?` with Start while populated instances retain Join/Open. `ActivityMessageEntryTest` covers all branches. |
+| Forwarded messages received the followed-channel `SERVER` badge | `WidgetChatListAdapterItemMessage.isFollowedChannelPost` excludes forward references (`type=1`); `ForwardedMessageTest` covers forward and legacy followed references. |
 
 ## Open findings
 

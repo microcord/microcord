@@ -15,6 +15,7 @@ import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isArchivedThread
 import com.discord.api.channel.isDMStatusVisible
 import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isGuildForumPost
 import com.discord.api.channel.isGuildTextyChannel
 import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isSystemDM
@@ -123,11 +124,19 @@ object WidgetHomeHeaderManager {
                     drawableRes = R.drawable.ic_hub_24dp,
                 )
                 else -> if (selectedChannel.id > 0L) {
+                    val resolvedParent = parentChannel
+                        ?: StoreStream.getChannels().findChannelById(selectedChannel.parentId)
+                    val isForumPost = selectedChannel.isGuildForumPost(resolvedParent) ||
+                        StoreStream.getThreadsActive().getAllForumThreadsById().containsKey(selectedChannel.id)
                     HeaderData(
                         title = selectedChannel.getDisplayNameOrDefault(context, includePrefix = false),
-                        subtitle = parentChannel?.getDisplayNameOrDefault(context, includePrefix = false),
-                        drawableRes = guildChannelIcon(selectedChannel),
-                        leftButtonIsBack = selected.peekParent != null || selectedChannel.isVoiceChannel(),
+                        subtitle = resolvedParent?.getDisplayNameOrDefault(context, includePrefix = false),
+                        drawableRes = if (isForumPost) {
+                            R.drawable.ic_discord_chat_filled_tinted
+                        } else {
+                            guildChannelIcon(selectedChannel)
+                        },
+                        leftButtonIsBack = isForumPost || selected.peekParent != null || selectedChannel.isVoiceChannel(),
                     )
                 } else {
                     HeaderData(null)

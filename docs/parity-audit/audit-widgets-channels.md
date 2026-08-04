@@ -31,7 +31,8 @@ Every large cluster reported missing on 2026-07-26 is now represented:
 | Historical cluster | Current evidence |
 | --- | --- |
 | Channel model and all list row types | `list/WidgetChannelListModel.kt`, `WidgetChannelsListAdapter.kt` and `list/items/**`; voice users, stage events, directories, scheduled events, role subscriptions, join requests, headers, invites and nav spacing all have owners. |
-| Channel/thread long-press sheets | `WidgetChannelsListItemChannelActions`, `WidgetChannelsListItemThreadActions` and `WidgetThreadArchiveActions` exist and are called from channel/chat/forum/thread surfaces. |
+| Channel/thread long-press sheets | `WidgetChannelsListItemChannelActions`, `WidgetChannelsListItemThreadActions` and `WidgetThreadArchiveActions` exist for channel/chat/thread surfaces; forum cards deliberately have no Edit Thread long press. |
+| Followed forum rows and connectors | Confirmed follows restore membership and active-joined projections, searched threads inherit parent permissions, and Start/End spine drawables match the 126.21 adapter mapping. |
 | Unread/mention jump bars | `list/WidgetChannelListUnreads.kt`; `WidgetChannelsList.kt:148-150` inflates the recovered stub on demand. |
 | Member-list model, adapter and sticky headers | `memberlist/**` contains the generators, ViewModel, service and all adapter holders; `WidgetChannelMembersList.kt:63-90` installs `StickyHeaderItemDecoration` and the real ViewModel fallback. |
 | Channel permissions | All 21 reference owners are represented under `permissions/**`, including overview/advanced/edit/add owner/stage moderator flows. |

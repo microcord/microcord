@@ -80,7 +80,6 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
         }
         binding.externalShareComment.editText?.apply {
             setText(content.message)
-            if (forwardSource != null) hint = getString(R.string.forward_message_optional_comment)
             addTextChangedListener(SimpleTextWatcher { updateSendMenu() })
             setOnEditorActionListener { _, actionId, _ ->
                 if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND && selected != null) {

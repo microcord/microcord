@@ -59,6 +59,11 @@ runtime evidence makes one impossible. Record any approved change in the
 7. Update phase status, parity evidence, risks, decisions, and progress journal.
 8. Return a handoff using the template in `PLAN.md`.
 
+For unresolved Gateway or HTTP behavior, enable the existing sanitized traffic
+logging and inspect live inbound/outbound Gateway payloads or HTTP requests and
+responses before changing code. Never guess at wire behavior when runtime logs
+can prove it, and never print tokens, message content, cookies, or credentials.
+
 Keep only one phase or narrowly related vertical slice in progress per agent.
 Do not mix resource migration, build-system conversion, networking, and feature
 work in one change unless the dependency is unavoidable.
@@ -174,6 +179,8 @@ invalid decompiler constructs into the target.
 - Do not copy decompiled `R`, `BuildConfig`, or binding classes.
 - Use generated view bindings whenever a layout provides one. Use `findViewById`
   only when binding is genuinely unavailable or cannot represent the dynamic view.
+- When touching a first-party view that still uses manual view lookup, migrate it
+  to its generated binding and remove redundant cached view variables and aliases.
 - Avoid numeric resource IDs in code.
 - Preserve qualifiers, accessibility text, RTL behavior, and large-font layouts.
 - Record material XML changes made solely for modern AAPT compatibility.

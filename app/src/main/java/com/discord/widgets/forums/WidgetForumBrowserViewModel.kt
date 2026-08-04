@@ -73,10 +73,7 @@ class WidgetForumBrowserViewModel(
         val archived = loaded.archivedThreadsState
         val activeEmpty = loaded.activeThreads.isEmpty()
         when {
-            !loaded.isThreadSyncedGuild -> updateViewState(ViewState.Loading(nsfw))
-            activeEmpty && (archived is ArchivedThreadsStore.ThreadListingState.Uninitialized ||
-                archived is ArchivedThreadsStore.ThreadListingState.Listing && archived.threads.isEmpty() && archived.isLoadingMore) ->
-                updateViewState(ViewState.Loading(nsfw))
+            shouldShowLoading(activeEmpty, archived) -> updateViewState(ViewState.Loading(nsfw))
             activeEmpty && archived is ArchivedThreadsStore.ThreadListingState.Listing &&
                 archived.threads.isEmpty() && !archived.isLoadingMore -> publishLoaded(loaded, nsfw, emptyList())
             else -> publishLoaded(loaded, nsfw, buildItems(loaded))
@@ -202,7 +199,6 @@ class WidgetForumBrowserViewModel(
             val guildEmojis: Map<String, Emoji>,
             val forumPostReadStates: Map<Long, ForumPostReadState>,
             val forumPostUnreadCounts: Map<Long, Int>,
-            val isThreadSyncedGuild: Boolean,
             val typingUsers: Map<Long, Set<Long>>,
         ) : StoreState()
     }
@@ -228,7 +224,6 @@ class WidgetForumBrowserViewModel(
     private data class ReadState(
         val readStates: Map<Long, ForumPostReadState>,
         val unreadCounts: Map<Long, Int>,
-        val synced: Boolean,
         val typing: Map<Long, Set<Long>>,
     )
 
@@ -280,19 +275,28 @@ class WidgetForumBrowserViewModel(
             val reads = Observable.combineLatest(
                 ForumPostReadStateManager.observeForumPostReadStates(channel.guildId, channel.id),
                 StoreStream.getForumPostReadStates().observeThreadUnreadCounts(),
-                StoreStream.getThreadsActive().observeIsThreadSyncedGuild(channel.guildId),
                 StoreStream.getUsersTyping().observeTypingUsersForChannels(active.keys),
-            ) { readStates, unreadCounts, synced, typing ->
-                ReadState(readStates, unreadCounts, synced, typing)
+            ) { readStates, unreadCounts, typing ->
+                ReadState(readStates, unreadCounts, typing)
             }
             return Observable.combineLatest(base, guild, messages, reads) { b, g, m, r ->
                 StoreState.Loaded(
                     b.me, b.users, b.archived, active, g.members, g.roles, b.names, channel,
                     g.firstMessages, g.counts, m.blocked, m.canCreate, m.recentIds,
-                    m.emojis.emojiIndex, r.readStates, r.unreadCounts, r.synced,
+                    m.emojis.emojiIndex, r.readStates, r.unreadCounts,
                     r.typing.filterKeys(active::containsKey),
                 ) as StoreState
             }
         }
+
     }
 }
+
+internal fun shouldShowLoading(
+    activeThreadsEmpty: Boolean,
+    archived: ArchivedThreadsStore.ThreadListingState,
+): Boolean = activeThreadsEmpty && (
+    archived is ArchivedThreadsStore.ThreadListingState.Uninitialized ||
+        archived is ArchivedThreadsStore.ThreadListingState.Listing &&
+        archived.threads.isEmpty() && archived.isLoadingMore
+    )

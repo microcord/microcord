@@ -53,7 +53,22 @@ The report flow itself is present through `MobileReportArgs`,
   pages, audit log, community, monetization, guild role subscriptions, boosts,
   member verification, role members, invites, and members.
 - All 16 forum classes are represented; `ForumUtils` and the browser/ViewModel
-  are no longer two-member or missing shells.
+  are no longer two-member or missing shells. `WidgetHome` now routes forum
+  parents to the embedded browser while forum posts and post drafts use chat.
+  Empty forums stop loading when archive listing completes or fails instead of
+  requiring an optional `THREAD_LIST_SYNC` gateway event. Missing active posts
+  are loaded through the current channel-scoped thread-search route, and forum
+  draft submission uses the current nested create-thread-with-message flow rather
+  than a parent channel message POST. Search results are ingested into channel/thread
+  stores so post selection and post-list preservation remain stable. Archived search
+  is offset-paged, and the post status bar now uses its real ViewModel for Follow,
+  reactions, and message counts. Active posts use the original gateway thread
+  subscription, while successful Follow writes update local membership immediately. Search memberships
+  rebuild active-joined state so followed posts appear beneath the forum in the
+  channel list, with parent permissions used when thread-specific entries are absent.
+  The original gateway `threads=true` guild subscription is restored, confirmed follows
+  survive restart as a server-confirmed cache fallback, and forum cards have no edit-thread
+  long-press action.
 - `MobileReportsViewModel` is now a substantive implementation rather than the
   old nine-line `SubmitState` shell.
 

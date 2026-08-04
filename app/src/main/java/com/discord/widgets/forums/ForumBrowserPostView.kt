@@ -15,27 +15,21 @@ import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.TextView
+import android.view.LayoutInflater
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import com.discord.R
+import com.discord.databinding.ForumBrowserPostViewBinding
 import com.discord.api.message.attachment.MessageAttachmentType
 import com.discord.api.message.reaction.MessageReaction
 import com.discord.models.member.GuildMember
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.drawable.getThemedDrawableRes
-import com.discord.utilities.view.text.SimpleDraweeSpanTextView
-import com.discord.views.ReactionView
-import com.discord.views.typing.TypingDots
-import com.discord.views.user.UserSummaryView
-import com.discord.views.user.avatarUrl
+import com.discord.utilities.icon.IconUtils
 import com.facebook.drawee.backends.pipeline.Fresco
 import com.facebook.drawee.span.DraweeSpanStringBuilder
-import com.facebook.drawee.view.SimpleDraweeView
 import com.facebook.imagepipeline.request.ImageRequest
 import kotlin.math.max
 import com.discord.utilities.user.UserUtils.getDisplayName
@@ -45,71 +39,38 @@ class ForumBrowserPostView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
 ) : ConstraintLayout(context, attrs, defStyleAttr) {
-    private val title: TextView
-    private val description: SimpleDraweeSpanTextView
-    private val ownerAvatar: SimpleDraweeView
-    private val ownerName: TextView
-    private val tag: ForumPostTagView
-    private val imagePreview: SimpleDraweeView
-    private val messageCount: TextView
-    private val messageCountContainer: LinearLayout
-    private val neverSeen: ImageView
-    private val pinned: ImageView
-    private val reaction: ReactionView
-    private val timestamp: TextView
-    private val typingDots: TypingDots
-    private val typingUsers: UserSummaryView
-    private val unreadCount: TextView
+    private val binding = ForumBrowserPostViewBinding.inflate(LayoutInflater.from(context), this)
     private val avatarSizePx = dpToPixels(16)
     private val overlapAmountPx = dpToPixels(4)
 
-    init {
-        inflate(context, R.layout.forum_browser_post_view, this)
-        title = requireNotNull(findViewById(R.id.form_post_title))
-        description = requireNotNull(findViewById(R.id.forum_post_desc_text))
-        ownerAvatar = requireNotNull(findViewById(R.id.forum_post_owner_avatar))
-        ownerName = requireNotNull(findViewById(R.id.forum_post_owner_name))
-        tag = requireNotNull(findViewById(R.id.forum_post_tag))
-        imagePreview = requireNotNull(findViewById(R.id.inline_media_image_preview))
-        messageCount = requireNotNull(findViewById(R.id.message_count))
-        messageCountContainer = requireNotNull(findViewById(R.id.message_count_container))
-        neverSeen = requireNotNull(findViewById(R.id.never_seen_before))
-        pinned = requireNotNull(findViewById(R.id.pinned_icon))
-        reaction = requireNotNull(findViewById(R.id.reaction))
-        timestamp = requireNotNull(findViewById(R.id.timestamp))
-        typingDots = requireNotNull(findViewById(R.id.typing_indicator))
-        typingUsers = requireNotNull(findViewById(R.id.typing_user_summary))
-        unreadCount = requireNotNull(findViewById(R.id.unread_message_count))
-    }
-
     fun configurePost(post: PostData) {
-        title.text = post.channel.name
+        binding.formPostTitle.text = post.channel.name
         configureFirstMessage(post)
         configureOwner(post)
         configureAttachment(post)
         configureReaction(post.mostCommonReaction, post.isDefaultReaction, post.firstMessage?.id)
         configureMessageCount(post)
-        tag.visibility = if (post.tag == null) View.GONE else View.VISIBLE
-        post.tag?.let(tag::configureTag)
+        binding.forumPostTag.visibility = if (post.tag == null) View.GONE else View.VISIBLE
+        post.tag?.let(binding.forumPostTag::configureTag)
         configureReadState(post)
         val isTyping = post.typingUsers.isNotEmpty()
         if (isTyping) configureTyping(post)
-        timestamp.text = ForumUtils.getActiveAgoTimestamp(context, post.mostRecentMessageTimestamp)
-        timestamp.visibility = if (isTyping || timestamp.text == null) View.GONE else View.VISIBLE
-        typingUsers.visibility = if (isTyping) View.VISIBLE else View.GONE
-        typingDots.visibility = if (isTyping) View.VISIBLE else View.GONE
-        if (!isTyping) typingDots.stop()
-        pinned.visibility = if (post.isPinned) View.VISIBLE else View.GONE
+        binding.timestamp.text = ForumUtils.getActiveAgoTimestamp(context, post.mostRecentMessageTimestamp)
+        binding.timestamp.visibility = if (isTyping || binding.timestamp.text == null) View.GONE else View.VISIBLE
+        binding.typingUserSummary.visibility = if (isTyping) View.VISIBLE else View.GONE
+        binding.typingIndicator.visibility = if (isTyping) View.VISIBLE else View.GONE
+        if (!isTyping) binding.typingIndicator.stop()
+        binding.pinnedIcon.visibility = if (post.isPinned) View.VISIBLE else View.GONE
         if (Build.VERSION.SDK_INT >= 23) foreground = themedDrawable(R.attr.bg_pressed_highlight)
     }
 
     private fun configureFirstMessage(post: PostData) {
         val message = post.firstMessage
         if (message == null || message.content == null) {
-            description.visibility = View.GONE
+            binding.forumPostDescText.visibility = View.GONE
             return
         }
-        description.visibility = View.VISIBLE
+        binding.forumPostDescText.visibility = View.VISIBLE
         val label = when {
             post.isFirstMessageBlocked -> context.getString(R.string.reply_quote_message_blocked)
             message.hasStickers() -> context.getString(R.string.sticker)
@@ -117,9 +78,9 @@ class ForumBrowserPostView @JvmOverloads constructor(
             else -> null
         }
         if (label == null) {
-            description.setDraweeSpanStringBuilder(renderMessage(message.content, post))
+            binding.forumPostDescText.setDraweeSpanStringBuilder(renderMessage(message.content, post))
         } else {
-            description.text = SpannableString("$label\u00a0").apply {
+            binding.forumPostDescText.text = SpannableString("$label\u00a0").apply {
                 setSpan(StyleSpan(Typeface.ITALIC), 0, label.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
         }
@@ -156,24 +117,29 @@ class ForumBrowserPostView @JvmOverloads constructor(
 
     private fun configureOwner(post: PostData) {
         val owner = post.owner
-        ownerAvatar.visibility = if (owner == null) View.GONE else View.VISIBLE
-        ownerName.visibility = ownerAvatar.visibility
+        binding.forumPostOwnerAvatar.visibility = if (owner == null) View.GONE else View.VISIBLE
+        binding.forumPostOwnerName.visibility = binding.forumPostOwnerAvatar.visibility
         if (owner == null) return
         val member = post.guildMembers[owner.id]
-        ownerName.text = member?.nick ?: owner.username
-        ownerName.setTextColor(GuildMember.getColor(member, ColorCompat.getThemedColor(context, R.attr.colorInteractiveNormal)))
-        ownerAvatar.setImageURI(avatarUrl(owner, member))
+        binding.forumPostOwnerName.text = member?.nick ?: owner.username
+        binding.forumPostOwnerName.setTextColor(GuildMember.getColor(member, ColorCompat.getThemedColor(context, R.attr.colorInteractiveNormal)))
+        IconUtils.setIcon(
+            binding.forumPostOwnerAvatar,
+            owner,
+            R.dimen.avatar_size_profile_small,
+            guildMember = member,
+        )
     }
 
     private fun configureAttachment(post: PostData) {
         val attachment = post.firstMessage?.attachments?.firstOrNull { !it.isSpoiler }
         if (attachment == null) {
-            imagePreview.visibility = View.GONE
+            binding.inlineMediaImagePreview.visibility = View.GONE
             return
         }
-        imagePreview.visibility = View.VISIBLE
+        binding.inlineMediaImagePreview.visibility = View.VISIBLE
         if (attachment.type == MessageAttachmentType.FILE) {
-            imagePreview.setImageResource(fileDrawable(attachment.filename))
+            binding.inlineMediaImagePreview.setImageResource(fileDrawable(attachment.filename))
             return
         }
         val size = dpToPixels(64)
@@ -183,8 +149,8 @@ class ForumBrowserPostView @JvmOverloads constructor(
             ImageRequest.fromUri("$resized&format=$extension"),
             ImageRequest.fromUri(resized),
         )
-        imagePreview.controller = Fresco.newDraweeControllerBuilder()
-            .setOldController(imagePreview.controller)
+        binding.inlineMediaImagePreview.controller = Fresco.newDraweeControllerBuilder()
+            .setOldController(binding.inlineMediaImagePreview.controller)
             .setFirstAvailableImageRequests(requests)
             .build()
     }
@@ -208,48 +174,48 @@ class ForumBrowserPostView @JvmOverloads constructor(
     }
 
     private fun configureReaction(value: MessageReaction?, isDefault: Boolean, messageId: Long?) {
-        reaction.setMeTextColor(
+        binding.reaction.setMeTextColor(
             if (isDefault) {
                 requireNotNull(ContextCompat.getColorStateList(context, R.color.status_red_500))
             } else {
                 ColorStateList.valueOf(ColorCompat.getThemedColor(context, R.attr.colorHeaderPrimary))
             },
         )
-        reaction.visibility = if (value != null && messageId != null) View.VISIBLE else View.GONE
-        if (value != null && messageId != null) reaction.configure(value, messageId, true)
+        binding.reaction.visibility = if (value != null && messageId != null) View.VISIBLE else View.GONE
+        if (value != null && messageId != null) binding.reaction.configure(value, messageId, true)
     }
 
     private fun configureMessageCount(post: PostData) {
         val count = messageCountText(post.messageCount)
-        messageCountContainer.visibility = if (count == null) View.GONE else View.VISIBLE
-        messageCount.text = count
+        binding.messageCountContainer.visibility = if (count == null) View.GONE else View.VISIBLE
+        binding.messageCount.text = count
         val unread = unreadCountText(post.unreadCount)?.let {
             context.getString(R.string.forum_post_message_count_short_parenthetical).replace("{count}", it)
         }
-        unreadCount.text = unread
-        unreadCount.visibility = if (post.readState.hasSeenBefore && unread != null) View.VISIBLE else View.GONE
+        binding.unreadMessageCount.text = unread
+        binding.unreadMessageCount.visibility = if (post.readState.hasSeenBefore && unread != null) View.VISIBLE else View.GONE
     }
 
     private fun configureReadState(post: PostData) {
-        neverSeen.visibility = if (!post.readState.hasSeenBefore && !post.isMe) View.VISIBLE else View.GONE
+        binding.neverSeenBefore.visibility = if (!post.readState.hasSeenBefore && !post.isMe) View.VISIBLE else View.GONE
         val alpha = if (post.readState.hasUnread) 1f else 0.8f
-        ownerAvatar.alpha = alpha
-        ownerName.alpha = alpha
-        title.setTextColor(
+        binding.forumPostOwnerAvatar.alpha = alpha
+        binding.forumPostOwnerName.alpha = alpha
+        binding.formPostTitle.setTextColor(
             ColorCompat.getThemedColor(context, if (post.readState.hasUnread) R.attr.colorHeaderPrimary else R.attr.primary_300),
         )
-        description.setTextColor(
+        binding.forumPostDescText.setTextColor(
             ColorCompat.getThemedColor(context, if (post.readState.hasUnread) R.attr.colorHeaderSecondary else R.attr.primary_300),
         )
     }
 
     private fun configureTyping(post: PostData) {
-        typingUsers.configure(post.typingUsers, false)
-        typingDots.start()
+        binding.typingUserSummary.configure(post.typingUsers, false)
+        binding.typingIndicator.start()
         val shown = minOf(post.typingUsers.size, 3)
-        val params = typingDots.layoutParams as ViewGroup.MarginLayoutParams
+        val params = binding.typingIndicator.layoutParams as ViewGroup.MarginLayoutParams
         params.marginStart = max(0, (avatarSizePx - overlapAmountPx) * shown - dpToPixels(8))
-        typingDots.layoutParams = params
+        binding.typingIndicator.layoutParams = params
     }
 
     private fun themedDrawable(attribute: Int): Drawable? =

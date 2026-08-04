@@ -443,7 +443,7 @@ class WidgetChannelsListAdapter(
         private fun forumIcon(item: ChannelListItemTextChannel): Int = when {
             item.channel.nsfw -> R.drawable.ic_channel_forum_nsfw
             item.isLocked -> R.drawable.ic_channel_forum_locked
-            else -> R.drawable.ic_channel_forum
+            else -> R.drawable.ic_discord_forum_filled
         }
 
         @DrawableRes
@@ -545,8 +545,8 @@ class WidgetChannelsListAdapter(
             spineType: WidgetChannelListModel.ThreadSpineType,
         ): Int = when (spineType) {
             WidgetChannelListModel.ThreadSpineType.Single -> R.drawable.ic_spine_short_cap
-            WidgetChannelListModel.ThreadSpineType.Start -> R.drawable.ic_spine_short_no_cap
-            WidgetChannelListModel.ThreadSpineType.End -> R.drawable.ic_spine_long_cap
+            WidgetChannelListModel.ThreadSpineType.Start -> R.drawable.ic_spine_long_cap
+            WidgetChannelListModel.ThreadSpineType.End -> R.drawable.ic_spine_short_no_cap
             WidgetChannelListModel.ThreadSpineType.Middle -> R.drawable.ic_spine_long_no_cap
         }
 

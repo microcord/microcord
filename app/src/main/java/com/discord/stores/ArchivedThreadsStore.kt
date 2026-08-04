@@ -26,6 +26,7 @@ class ArchivedThreadsStore(
     private val observationDeck: ObservationDeck,
     private val restApi: () -> RestAPIInterface?,
     private val handleThreadCreateOrUpdate: (Channel) -> Unit,
+    private val forumApi: () -> RestAPIInterface? = restApi,
 ) : StoreV2() {
 
     sealed class ThreadListingState {
@@ -83,6 +84,20 @@ class ArchivedThreadsStore(
             } catch (failure: IllegalStateException) {
                 Observable.error(failure)
             }
+        },
+        GUILD_FORUM_THREADS {
+            override fun fetchNext(
+                api: RestAPIInterface,
+                channelId: Long,
+                threads: List<Channel>,
+            ): Observable<ThreadListing> = api.searchForumThreads(
+                channelId = channelId,
+                archived = true,
+                sortBy = "last_message_time",
+                sortOrder = "desc",
+                limit = FORUM_PAGE_SIZE,
+                offset = threads.size,
+            )
         };
 
         abstract fun fetchNext(
@@ -92,6 +107,7 @@ class ArchivedThreadsStore(
         ): Observable<ThreadListing>
 
         companion object {
+            private const val FORUM_PAGE_SIZE = 25
             /**
              * The paging cursor: the archive timestamp of the oldest thread held so far, or `null`
              * for the first page.
@@ -119,6 +135,7 @@ class ArchivedThreadsStore(
         channelId: Long,
         threadListingType: ThreadListingType,
         reload: Boolean = false,
+        apiOverride: RestAPIInterface? = null,
         onTerminated: (() -> Unit)? = null,
     ) = dispatcher.schedule {
         val key = channelId to threadListingType
@@ -129,7 +146,7 @@ class ArchivedThreadsStore(
         markChanged()
 
         fetchSubscriptions[key]?.unsubscribe()
-        val api = restApi()
+        val api = apiOverride ?: restApi()
         if (api == null) {
             listings[key] = ThreadListingState.Error
             markChanged()
@@ -167,7 +184,13 @@ class ArchivedThreadsStore(
         channelId: Long,
         reload: Boolean = false,
         onTerminated: (() -> Unit)? = null,
-    ) = fetchListing(channelId, ThreadListingType.ALL_ARCHIVED_PUBLIC_THREADS, reload, onTerminated)
+    ) = fetchListing(
+        channelId,
+        ThreadListingType.GUILD_FORUM_THREADS,
+        reload,
+        forumApi(),
+        onTerminated,
+    )
 
     // -- Reads ----------------------------------------------------------------------------------
 
@@ -187,7 +210,7 @@ class ArchivedThreadsStore(
     }
 
     fun observeGuildForumThreadListing(channelId: Long): Observable<ThreadListingState> =
-        observeListing(channelId, ThreadListingType.ALL_ARCHIVED_PUBLIC_THREADS)
+        observeListing(channelId, ThreadListingType.GUILD_FORUM_THREADS)
 
     private fun observeListing(
         channelId: Long,

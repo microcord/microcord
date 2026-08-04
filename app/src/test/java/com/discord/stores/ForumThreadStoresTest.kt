@@ -26,6 +26,17 @@ import rx.schedulers.TestScheduler
 class ForumThreadStoresTest {
 
     @Test
+    fun `ready embedded thread membership restores followed posts`() {
+        val fixture = fixture()
+        fixture.dispatch {
+            users.handleConnectionOpen(readyPayload())
+            threadsJoined.handleConnectionOpen(readyPayload())
+        }
+
+        assertEquals(setOf(31L), fixture.threadsJoined.getAllJoinedThreads().keys)
+    }
+
+    @Test
     fun `only a post's opening message is retained and reactions are folded into it`() {
         val fixture = fixture()
         fixture.dispatch { users.handleConnectionOpen(readyPayload()) }
@@ -299,6 +310,7 @@ class ForumThreadStoresTest {
             {"id":11,"type":11,"guild_id":1,"name":"live","parent_id":10,
              "thread_metadata":{"archived":false,"auto_archive_duration":1440,"locked":false}},
             {"id":31,"type":11,"guild_id":1,"name":"post","parent_id":30,
+             "member":{"muted":false,"mute_config":null,"join_timestamp":"2026-08-04T14:00:46.749111+00:00","flags":1},
              "thread_metadata":{"archived":false,"auto_archive_duration":1440,"locked":false}}
           ]
         }

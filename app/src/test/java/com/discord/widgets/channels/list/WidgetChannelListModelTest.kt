@@ -271,6 +271,19 @@ class WidgetChannelListModelTest {
         assertTrue(items.none { it is ChannelListItemThread })
     }
 
+    @Test
+    fun `followed forum post uses parent permission and appears under forum`() {
+        val forum = channel(30, Channel.GUILD_FORUM)
+        val post = channel(31, Channel.PUBLIC_THREAD, parentId = forum.id)
+        val items = build(
+            listOf(forum),
+            permissions = mapOf(forum.id to Permission.VIEW_CHANNEL),
+            activeJoinedThreads = mapOf(forum.id to mapOf(post.id to post)),
+        )
+
+        assertTrue(items.filterIsInstance<ChannelListItemThread>().any { it.channel.id == post.id })
+    }
+
     // ---- helpers -------------------------------------------------------------------------
 
     private fun List<ChannelListItem>.channelIds(): List<Long> = mapNotNull { item ->

@@ -41,14 +41,14 @@ class ReadyGuildChannelDtosTest {
         assertEquals(9L, guild.embeddedActivities!!.single().embeddedActivity.applicationId)
 
         assertNull(channel.guildHashes)
-        assertNull(channel.memberCount)
-        assertNull(channel.memberIdsPreview)
-        assertNull(channel.member)
+        assertEquals(7, channel.memberCount)
+        assertEquals(listOf(2L), channel.memberIdsPreview)
+        assertEquals(3, channel.member!!.flags)
         val serialized = gson.toJson(channel)
         assertFalse(serialized.contains("guild_hashes"))
-        assertFalse(serialized.contains("member_ids_preview"))
-        assertFalse(serialized.contains("member_count"))
-        assertFalse(serialized.contains("\"member\""))
+        assertTrue(serialized.contains("member_ids_preview"))
+        assertTrue(serialized.contains("member_count"))
+        assertTrue(serialized.contains("\"member\""))
     }
 
     @Test
