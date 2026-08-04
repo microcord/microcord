@@ -2406,6 +2406,15 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
 - Focused persistence tests pass. Live WSA verification after a clean restart and eight-second wait
   produced zero `/users/@me` or guild/channel application-command-index requests; the user confirmed
   the repeated-request fix works.
+- Activity cards with a stale instance ID and no participants now render `Activity ended. Start a new
+  one?` with a Start action. Active instances with other participants still render Join, and sessions
+  containing the current user still render Open. The focused state test, `assembleDebug`, and
+  `installDebug` pass.
+- Re-audited every `docs/parity-audit/audit-*.md` report against the current target and stronger
+  Vineflower/DEX evidence. No report is behaviorally 100% complete, so none were deleted. Current
+  rollups are 184/187 stores represented, 1,132/1,155 exact widget paths, 83/83 typed gateway events,
+  and 264/264 effective historical REST routes. The completed `missing_endpoints.txt` inventory was
+  deleted because the sole template difference is the intentional generalized modern MFA route.
 
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/applauncher/**` | Android 340.12
 Hermes `out.js` Apps launcher modules | log in on WSA and verify HOME/search/application/command/list

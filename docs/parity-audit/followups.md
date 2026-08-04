@@ -1,5 +1,45 @@
 # Cross-wave follow-ups
 
+## Current authoritative rollup - 2026-08-04
+
+This section supersedes every historical status/count below. The retained lower
+sections are the campaign handoff archive: they contain useful bytecode evidence,
+but statements such as "missing", "not constructed", build counts, owners, and
+coverage figures describe their dated snapshot and are not current unless the
+2026-08-04 reports repeat them.
+
+No item whose reference body is JADX-broken may be closed by inference. Check
+Vineflower, `javap`/DEX, call sites, fixtures, device, or runtime evidence first.
+
+### Current cross-cutting follow-ups
+
+| Area | Current follow-up | Evidence |
+| --- | --- | --- |
+| Store graph | Reconcile 10 absent graph instances/responsibilities and construct the five present-but-dead files; do not duplicate current substitutes | `storestream-wiring.md:245-270`; core/gap reports |
+| Initialization | Replace unconditional readiness only after the exact four-input predicate is recovered from DEX; keep it unverified meanwhile | `storestream-wiring.md:238-243,286-293` |
+| Logout | Reconcile pre-logout with the target full reset/account-isolation path and verify observer ordering | `audit-stores-core.md:159-168` |
+| Authentication/navigation | Inject age-gate sources, route age-gate state, provide push token, and initialize `StorePhone` | `storestream-wiring.md:139-161` |
+| Guild/channel wiring | Start guild timeout init, bind its permission callback, bind guild-settings REST, provide channel permissions/member inputs, and follow guild/voice selection in subscriptions | `storestream-wiring.md:163-217` |
+| Messages/users | Forward loader background state; migrate editing to `StoreChat`; inject typing API/slow-mode callbacks | `storestream-wiring.md:218-230`; message/user reports |
+| Voice | Call `StoreVoiceParticipants.init`; reconcile stale widget bridge claims with current VoiceTransport construction; run ARM64/live lifecycle matrix | `storestream-wiring.md:232-236`; voice reports |
+| READY/model | Source cached emoji/stickers from dedicated stores; avoid tree-materializing READY; include `authSessionIdHash` in copy/equality/hash | core and models/API reports |
+| Read state | DEX-check ACK comparator direction and mark-unread snowflake fallback before editing | `audit-stores-channels.md:201-219` |
+| Widgets | Wire membership screening, overlay sticker suggestions, directory unread state, guild/user/settings/stage inert actions, and decide Nearby/SMS/experiment-gate handling | widget reports |
+| Utilities/views | Classify 156 unmatched FQCNs; reconcile video-grid/reduced-motion/tooltip behavior; run Android-only ICU/span/image/URI/drag/accessibility tests | utilities/views reports |
+| Security | Device-test hCaptcha in-place navigation/origin behavior; centralize Gateway logs; run exported-intent/PendingIntent and repository secret scans | `security-review.md:49-66,171-184` |
+
+### Current resolved rollup
+
+- The historical 24 zero-coverage widget packages, 222 missing endpoint list, 39 untyped Gateway events, 32 inert-view headline, and 36-store graph figures are retired.
+- Current figures are 1,132/1,155 exact widget paths, one exact endpoint-template mismatch, 83/83 typed Gateway events, 76/76 custom views, and 135/145 StoreStream instances.
+- TOS, Search, directory navigation, dropped deep links, blocked users, shortcut/App Action metadata, attrs, embed typing, mark-unread, read-state inputs, MFA handling, logout clearing, notification construction, and StoreV2 off-thread behavior are resolved by the refreshed reports.
+- The prior security High and all three prior Medium findings are fixed; three Low findings and one unverified Medium remain.
+
+### Historical campaign ledger
+
+Everything below is retained for provenance and bytecode notes. It is not a
+current task list without confirmation in the refreshed reports above.
+
 Items an agent could not complete because another agent owned the file, or
 because a dependency did not exist yet. Each is assigned to the wave that owns
 the destination. Append to this file; do not delete an item until it is done.

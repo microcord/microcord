@@ -1,199 +1,91 @@
 # Reconstruction Status
 
-Last updated: 2026-07-26, mid-Wave-4.
+Last updated: **2026-08-04 parity re-audit**.
 
-Live working report: what is done, what is in flight, what is known broken, and
-**what is still missing**. `PLAN.md` remains the roadmap; this is the running
-account. Supporting evidence is in the other files in this directory.
+This is the current audit rollup. `PLAN.md` remains the roadmap and decision log.
+The 19 detailed `audit-*.md` reports are authoritative for findings and citations.
 
----
+## Build and verification state
 
-## 1. Build state
-
-| Check | State |
+| Evidence | State |
 | --- | --- |
-| `compileDebugKotlin` | **RED — 100 errors**, all in files 12 agents are actively writing |
-| Last green | Wave 2 boundary (before Wave 3/4 started) |
-| `testDebugUnitTest` | **NEVER RUN this session** |
-| `lintDebug` | **NEVER RUN this session** |
-| `connectedDebugAndroidTest` | **NEVER RUN this session** |
-| Device check | **NONE this session** |
+| Documentation re-audit | Completed 2026-08-04; no production code changed |
+| Checks run by this re-audit | None |
+| Latest recorded unit evidence | 1,678 tests |
+| Latest recorded build/lint evidence | Debug/release assembly, debug lint, release lint-vital, Android-test compilation |
+| Latest recorded connected evidence | 59/59 on Android 16 |
+| Live-backend evidence for this re-audit | None |
 
-**Every parity number below is structural — fields, endpoints, events, classes
-that exist and type-check. None of it is verified behavior.** Hundreds of unit
-tests were written this session and not one has been executed.
+The old 2026-07-26 `compileDebugKotlin` RED/in-flight-agent snapshot is retired.
+Prior green evidence is not proof of the open device, provider, live-backend, or
+DEX-sensitive behaviors.
 
-### Current error distribution (all in-flight, none in settled code)
+## Current metrics
 
-| Package | Errors | Owner |
-| --- | --- | --- |
-| `widgets/chat/list/**` | 79 | chat-list agent |
-| `widgets/chat/input/autocomplete/**` | 13 | chat-input agent |
-| `stores/**` | 5 | messages / users / voice agents |
-| `widgets/channels/list/items` | 3 | channels agent |
+| Surface | Current rollup |
+| --- | --- |
+| Stores | 184/187 structurally represented (98.4%); 186 partial/not fully audited, 1 missing, 0 verified complete |
+| Store graph | 135/145 instances (93.1%); `storesV2` 103/106 (97.2%) |
+| Gateway | 83/83 reference dispatches typed and structurally routed; destination parity incomplete |
+| Widgets | 1,132/1,155 exact paths (98.0%); 1,247 target files; all 45 packages represented |
+| Custom views | 76/76 exact classes; 0 layout-referenced classes missing |
+| Models/API/REST/Gateway | 441/460 exact FQCNs (95.9% structural lower bound) |
+| REST | 264/264 effective historical routes (263 exact templates, one generalized MFA route); 107/107 `RestAPIParams` names |
+| Utilities | 260/416 exact FQCNs (62.5% structural lower bound); 156 unmatched |
+| Security | 0 High, 0 confirmed Medium, 3 Low, 1 unverified Medium |
 
-Cause is uniform: adapters referencing ViewHolder classes their agent has not
-created yet, plus three RxJava-1 `Subject`-vs-`Observable` mistakes. Each agent
-has been sent its own list.
+Structural counts are inventories, not behavioral completion percentages.
 
----
+## Report status
 
-## 2. Coverage
+All 19 detailed audit reports remain open or partial. No report is eligible for
+deletion because each retains at least one blocker, behavioral caveat,
+broken-decompiler boundary, provider dependency, or runtime/test gap.
 
-| Surface | Session start | Now | Remaining |
-| --- | --- | --- | --- |
-| REST endpoints | 42/264 (16%) | **264/264 (100%)** | — |
-| `RestAPIParams` bodies | 17/107 | **108/108** | — |
-| Gateway dispatch events | 44/83 (53%) | **83/83 (100%)** | 37 route to a subject with a named TODO pending their store |
-| `api/**` | 158/286 (55%) | **281/286 (98%)** | 5 are R8-emptied in the reference — nothing to recover |
-| `models/**` | 59/149 (40%) | **143/149 (96%)** | 6 blocked on widget/store types |
-| Gson type adapters | 20/39 | **39 + 3 factories** | — |
-| `textprocessing` | 1 regex | **22/22 rules, 15/15 nodes** | — |
-| App base classes | 0 | **4 + router + back registry** | — |
-| `attrs.xml` enums / flags | 34 / 0 | **180 / 16** | — |
-| First-party custom views | 69/76 | **76/76**, 13 defects fixed | 32 still inert (no Kotlin drives them) |
-| `utilities/**` | 57 files vs 416 classes | ~10 subpackages rebuilt | **~50 subpackages still 0%** |
-| Stores | 51/187 (27%) | 9 thread stores added; 5 agents in flight | see §4 |
-| Widgets | 132 files vs 1,155 classes (11%) | 7 agents in flight | see §4 |
-| Fragments / sheets / dialogs | 31 / 4 / **0** | in flight | reference: 203 / 70 / 34 |
-| ViewModels | **2** | in flight | reference: **139** |
+Store report-local findings:
 
----
+| Report | Blocker | Major | Minor |
+| --- | ---: | ---: | ---: |
+| Core | 5 | 14 | 19 |
+| Auth/navigation | 4 | 14 | 17 |
+| Guilds | 4 | 9 | 18 |
+| Channels/read state | 4 | 17 | 18 |
+| Messages | 3 | 17 | 21 |
+| Users/social | 1 | 19 | 29 |
+| Voice/gateway | 0 | 10 | 13 |
 
-## 3. Completed this session
+These counts overlap across reports and are not project totals.
 
-**Wave 1 — foundation.** App framework (`AppFragment`, `AppBottomSheet`,
-`AppDialog`, `AppLog`/`AppLogger` with mandatory secret redaction,
-`AppScreenRouter`, `BackPressHandlerRegistry`, permissions, media-picker demux);
-31 fragments + 4 sheets migrated. Store utilities (`RestCallState`,
-`Batched`/`BatchManager`, `LeadingEdgeThrottle`). Gateway: all 83 events typed,
-`StoreGatewayConnection` with 79 subjects and voice-state batching, plus
-`StoreConnectivity`, `StoreConnectionOpen`, `StoreClientDataState`,
-`NetworkMonitor`.
+Widget/view/data reports remain OPEN despite high physical coverage:
 
-**Wave 2 — utilities and data.** `textprocessing` (22 rules, 15 nodes, span
-corruption structurally eliminated); `IconUtils` + `MGImages` + real Fresco
-config; `PermissionUtils` (4 → 20 functions, every bit verified) + `RoleUtils`,
-`UserUtils`, `PresenceUtils`, `ChannelUtils`; send pipeline (`MessageQueue`,
-`Backoff`, `MessageResult` with payloads, `appSubscribe` error funnel);
-`mg_recycler` + `DiffCreator` + validators + `UriHandler` + NTP clock;
-`attrs.xml` restoration; 7 missing view classes; 13 view defects; REST 264/264;
-`api/**` 98%; `models/**` 96%.
+- Widgets: 23 classified path mismatches, nine missing experiment gates, inert cross-package actions, provider gaps, and incomplete device/live matrices.
+- Views: 76/76 present, but video-grid contracts, reduced motion, tooltip/overlay behavior, accessibility, RTL, and animation remain open.
+- Utilities: 156 unmatched FQCNs require classification; Android-only regex/span/image/URI/drag behavior remains unverified.
+- Models/API: 19 unmatched FQCNs, READY tree parsing, `authSessionIdHash` value semantics, and exact legacy MFA transport remain open.
 
-**Wave 3 (partial).** 9 thread/forum stores with full wiring instructions.
+## Resolved since the July audit
 
-**Wave 4 (partial).** Back navigation fixed.
+- REST grew from 42 endpoints to all but one exact historical contract template.
+- Gateway grew from 44/83 routed events to 83/83 typed structural routes.
+- Widget zero-coverage packages fell from 24 to 0; exact path coverage is now 98.0%.
+- Store structural representation is now 184/187, and the graph maps 135/145 instances.
+- All 76 first-party custom-view classes are present and first-party enum/flag attrs are restored.
+- TOS, sidebar Search, directory navigation, formerly dropped deep links, blocked users, shortcuts, and App Actions are structurally reachable.
+- MFA challenge handling, logout clearing, mark-unread boundary, read-state inputs, notification construction, guild profile preservation, permission fallback, reduced-motion mapping, and StoreV2 off-thread behavior are corrected.
+- Former JADX blockers for notification policy, message queue ordering, chat action visibility, client status order, READY hydration branches, and multiple store handlers were resolved with Vineflower/bytecode evidence.
 
----
+## Highest-priority blockers
 
-## 4. STILL MISSING — the honest list
+1. Complete the production StoreStream wiring ledger: readiness, age gate, push token, phone init, guild timeout/callback, guild settings API, channel/member inputs, guild subscriptions, loader backgrounding, typing API/cooldown, and voice participants.
+2. Construct or reconcile the 10 absent graph responsibilities and the five present-but-dead store files without duplicating existing substitutes.
+3. Fix READY custom emoji/sticker carry-over, streaming allocation, and `ModelPayload.authSessionIdHash` value semantics.
+4. Close user-reachable widget gaps: membership screening, overlay sticker suggestions, directory unread state, Nearby transport decision, remaining guild/user/settings/stage actions, experiment gates, and SMS auto-fill decision.
+5. Run the missing ARM64 voice/video/screen-share/overlay and broad route, lifecycle, accessibility, RTL, large-font, malformed-input, provider, and live-backend matrices.
+6. Device-test the hCaptcha WebView origin/navigation behavior; keep it unverified until observed or fail-closed.
 
-### Stores (5 agents in flight, outcome unknown)
-Messages send pipeline, `StoreChat`, reactions, replies, slow mode, mentions;
-guild stores (`StoreLurking`, member requester, permissions algorithm); channel
-stores (`markUnread`, read-state inputs, `StoreChannelsSelected` rewrite);
-user/social (settings writes, typing-send, MFA, required actions, experiments);
-12 voice stores.
+## Evidence rule
 
-**Not assigned to anyone yet:** `StoreAnalytics` (and the whole analytics layer —
-absent by design decision, not yet ratified), `StoreNotices`, `StoreBans`,
-`StoreGuildIntegrations`, `StoreApplicationCommands`, `StoreApplicationInteractions`,
-`StoreGuildJoinRequests`, `StoreGuildScheduledEvents`, `StoreEmbeddedActivities`,
-`StoreSubscriptions`, `StorePaymentSources`, `StoreEmoji`, `StoreGuildStickers`,
-`StoreSearch*`, `StoreAutocomplete`, `StoreLibrary`, `StoreGifting`,
-`StoreEntitlements`, `StoreNux`, `StoreChangeLog`, `StoreAuditLog`,
-`StoreDirectories`, `StoreHubs`. **37 gateway events currently route to a subject
-with nothing listening**, one per missing store above.
-
-### Widgets — 24 packages still at 0%
-`hubs` (54 classes), `directories` (16), `nux` (14), `contact_sync` (9),
-`stickers` (9), `guildcommunicationdisabled` (7), `bugreports` (6), `notice` (5),
-`tos` (5), `search` (4), `phone` (4), `media` (3), `playstation` (3),
-`announcements` (3), `changelog` (3), `guild_automod` (3),
-`guild_delete_feedback` (3), `emoji` (2), `feedback` (2), `debugging` (2),
-`accessibility` (1), `client` (1), `donut` (1), `quickmentions` (1).
-Wave 4 covers `tos`, `notice`, `changelog`, `nux` only.
-
-### Whole modules absent
-`com.discord.floating_view_manager`, `com.discord.overlay`,
-`com.discord.media_picker`, `com.discord.dialogs`, `com.discord.primitives`,
-`com.discord.i18n` (partially created), analytics/science generated traits.
-
-### Platform / manifest
-- **No runtime permissions declared** — `RECORD_AUDIO`, `CAMERA`,
-  `READ`/`WRITE_EXTERNAL_STORAGE`, `READ_CONTACTS`. Every permission request is
-  auto-denied. 20 of 21 `uses-permission`, all `uses-feature`, and the whole
-  `<queries>` block are missing (breaks package visibility on API 30+).
-- 11 first-party manifest components missing: `AppActivity$Call`,
-  `AppActivity$IncomingCall`, `VoiceEngineForegroundService`,
-  `DiscordOverlayService`, `SamsungConnectActivity`, `UCropActivity`,
-  `DiscordConnectService`, FCM messaging service, `NotificationActions` receiver,
-  `NetworkDownloadReceiver`.
-- `res/xml/shortcuts.xml` and `res/xml/actions.xml` exist but are never
-  referenced — Direct Share and all Google App Actions are dead.
-
-### Phases not started at all
-Phase 9 notifications/FCM, Phase 10 settings/account, Phase 11 voice/calls/video
-(store layer only, in flight), Phase 12 extended parity (threads/forums partly),
-Phase 13 billing/integrations, Phase 14 release hardening.
-
----
-
-## 5. Known broken, user-visible
-
-| Symptom | Cause | Status |
-| --- | --- | --- |
-| Back closed the app | Activity's `OnBackPressedCallback` registered with the activity as `LifecycleOwner`; from **API 29** the activity's `ON_START` arrives *after* every fragment's, and the dispatcher iterates last-added-first, so the activity swallowed every press. Works on API < 28, which is why it looked correct | **FIXED** |
-| Crash for accounts with a pending TOS action | `AppActivity.kt:152` routes to `"com.discord.widgets.tos.WidgetTos"`, which does not exist | Wave 4, in flight |
-| Sidebar Search does nothing | `onSearch` never assigned | Wave 4, in flight |
-| Blocked-users row invisible and dead | Force-hidden; callback never invoked. Feature is fully store-wired | Wave 4, in flight |
-| Directory channels open an empty chat screen | `Channel.DIRECTORY` rows clickable, no directory UI | Wave 5 |
-| `/template/`, `discord.new`, `/discovery`, `/query/` consumed then dropped | Owning packages at 0% | Wave 4/5 |
-| Settings radios/switches rendered as checkboxes | `attrs.xml` enums stripped | **FIXED** |
-| Embeds never rendered | `EmbedType` unregistered with Gson | **FIXED** |
-| Voice/threads/calls/interactions had no state | 39 gateway events discarded as raw JSON | **FIXED** (parsing; stores in flight) |
-| Typing indicators never sent | `setUserTyping` missing from the store | Wave 3, in flight |
-| Settings changes never reach Discord | `StoreUserSettings` had no server-write half | Wave 3, in flight |
-
----
-
-## 6. Decisions still owed by the user
-
-1. **Reference bugs: reproduce or fix?** Several were faithfully reproduced and
-   flagged. The consequential one is `SparseMutableList`'s iterator, which never
-   visits the final element, making `contains`/`remove` unreliable for the last
-   slot. Also: `StoreThreadMessages.updateFromThread` loses the message count;
-   `StoreThreadsJoined.handleSearchFinish` never calls `markChanged()`;
-   `StoreForumPostMessages.handleReactionAdd` has no me-guard;
-   `Histogram.getReport` uses integer division. Current stance: keep, documented.
-2. **`canAccessForumChannels`** is hardcoded `{ false }` pending `StoreExperiments`
-   — forum channels are invisible until that lands.
-3. **Analytics layer** is entirely absent (`StoreAnalytics` + generated traits).
-   Deliberate so far; reference call sites on state transitions simply do not
-   exist.
-4. **The stray commit.** An agent committed 286 files / 30,766 insertions early
-   on, mixing its work, twelve other agents' in-flight code, and documentation
-   into one snapshot. Left untouched.
-
----
-
-## 7. Process notes
-
-Two rules learned the hard way, now in the `PLAN.md` concurrency protocol:
-
-- **Only the coordinator runs Gradle.** The Gradle lock serializes task execution
-  but does not protect `app/build` from concurrent writers; 13 agents produced 22
-  daemons and repeated `DirectoryNotEmptyException` failures.
-- **Only the coordinator runs git.**
-
-File-ownership partitioning worked: ~20,000 lines across 14 parallel Wave-2
-slices compiled with two type-inference errors between them and no cross-agent
-collisions.
-
-**The most valuable discovery:** `C:\Users\manti\Desktop\projeler\discorddecompile\out\**`
-holds 4,853 Vineflower-decompiled Kotlin files, and `discord126.21-dex2jar.jar`
-supports `javap`. These recover constructors, `equals`/`toString`, declaration
-order, nullability, and annotations that JADX silently drops. Now the #2 trust
-rank in `AGENTS.md`. It resolved `MessageQueue.doSend`, the Retrofit verb
-mapping, `ClientStatuses` ordering, and several others outright — and produced
-**six corrections to the original audit**, listed in `followups.md`.
+JADX-broken output is not a basis for closure. Check Vineflower first, then
+`javap`/DEX, call sites, fixtures, or runtime evidence. Items still named as
+DEX-unverified in the refreshed reports remain blockers; do not replace them with
+an inferred implementation or mark them resolved from target similarity.
