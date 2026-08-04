@@ -26,6 +26,7 @@ data class ActivityMessageEntry(
 data class ActivityCardState(
     val action: Action,
     val reason: UnavailableReason? = null,
+    val isEnded: Boolean = false,
 ) {
     enum class Action { START, JOIN, OPEN, UNAVAILABLE }
     enum class UnavailableReason { NO_APPLICATION, ENDED, PLATFORM, AGE, NITRO, PERMISSION }
@@ -59,7 +60,9 @@ data class ActivityCardState(
                 return ActivityCardState(Action.UNAVAILABLE, UnavailableReason.PERMISSION)
             }
             if (me.id in participantIds) return ActivityCardState(Action.OPEN)
-            return ActivityCardState(if (activeInstanceId != null || entry.instanceId != null) Action.JOIN else Action.START)
+            val hasInstance = activeInstanceId != null || entry.instanceId != null
+            if (participantIds.isEmpty()) return ActivityCardState(Action.START, isEnded = hasInstance)
+            return ActivityCardState(Action.JOIN)
         }
     }
 }

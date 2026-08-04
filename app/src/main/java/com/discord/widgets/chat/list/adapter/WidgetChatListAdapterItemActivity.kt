@@ -97,6 +97,7 @@ class WidgetChatListAdapterItemActivity private constructor(
 
         binding.activityStatus.text = when {
             state.reason != null -> reasonText(state.reason)
+            state.isEnded -> context.getString(R.string.activity_message_ended_restart)
             participantIds.isEmpty() -> context.getString(R.string.activity_message_no_participants)
             else -> context.getString(R.string.activity_message_participant_count, participantIds.size)
         }

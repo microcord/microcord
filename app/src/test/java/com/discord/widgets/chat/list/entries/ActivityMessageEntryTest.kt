@@ -60,7 +60,13 @@ class ActivityMessageEntryTest {
         val entry = entry(application = application, instanceId = null)
 
         assertEquals(ActivityCardState.Action.START, state(entry).action)
-        assertEquals(ActivityCardState.Action.JOIN, state(entry.copy(instanceId = "instance")).action)
+        val ended = state(entry.copy(instanceId = "instance"))
+        assertEquals(ActivityCardState.Action.START, ended.action)
+        assertTrue(ended.isEnded)
+        assertEquals(
+            ActivityCardState.Action.JOIN,
+            state(entry.copy(instanceId = "instance"), participantIds = setOf(7L)).action,
+        )
         assertEquals(
             ActivityCardState.Action.OPEN,
             state(entry.copy(instanceId = "instance"), participantIds = setOf(me.id)).action,

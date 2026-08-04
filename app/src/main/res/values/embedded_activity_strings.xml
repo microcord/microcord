@@ -12,6 +12,7 @@
     <string name="embedded_activity_external_blocked">This activity tried to open an untrusted link.</string>
     <string name="activity_message_art">Activity preview</string>
     <string name="activity_message_no_participants">Start playing together</string>
+    <string name="activity_message_ended_restart">Activity ended. Start a new one?</string>
     <string name="activity_message_participant_count">%1$d playing</string>
     <string name="activity_message_unavailable">Activity unavailable</string>
     <string name="activity_message_age_gated">Age-restricted activity</string>
