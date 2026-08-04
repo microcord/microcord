@@ -2549,6 +2549,17 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   automatically when sent or cancelled. Activity/forwarded cards keep their inset geometry inside
   full-width non-measuring row overlays, so the wash covers the entire message block rather than only the
   inner card. Focused model coverage and `assembleDebug` pass; the APK was installed successfully on WSA.
+- Replaced the stale inert `PrivateCallLauncher` implementation with the existing reference-shaped
+  `widgets.voice.call.callAndLaunch` pipeline. DM header, friend/sidebar, and profile voice/video actions
+  now share permission handling, privacy/ring decisions, RTC/selected-channel observation, and
+  `WidgetCallFullscreen` launch. `WidgetHome` installs the User Sheet call destination for its lifetime.
+  Text-in-Voice itself remains available, but its fullscreen onboarding/upsell is removed. Device logs
+  proved the RTP send warnings occur only during UDP setup/teardown around a successful RTC `CONNECTED`
+  transition. The reported disconnect coincided with WSA killing all background processes by signal 9
+  and cycling its Ethernet network, not an app-issued voice disconnect. The actionable adjacent fault
+  was Fresco invoking `VoiceUserView` bitmap listeners off the
+  main thread, now fixed centrally with URL-stale guarding and generated binding. Focused fullscreen/
+  profile/home/voice tests and `assembleDebug` pass; the APK was installed on WSA.
 
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/applauncher/**` | Android 340.12
 Hermes `out.js` Apps launcher modules | log in on WSA and verify HOME/search/application/command/list

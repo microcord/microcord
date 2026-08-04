@@ -51,6 +51,7 @@ import com.discord.widgets.chat.input.AppFlexInputViewModel
 import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventUpsellBottomSheet
 import com.discord.widgets.settings.WidgetMuteSettingsSheet
 import com.discord.widgets.user.calls.PrivateCallLauncher
+import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.widgets.forums.WidgetForumBrowser
 import com.discord.widgets.accessibility.AccessibilityDetectionNavigator
 import rx.Subscription
@@ -120,6 +121,11 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         }
         WidgetChannelSidebarActions.onNotifications = ::openMuteSettings
         WidgetChannelSidebarActions.onSearch = ::openSearch
+        WidgetUserSheet.onCall = { channelId, isVideo ->
+            privateCallLauncher().let { launcher ->
+                if (isVideo) launcher.launchVideoCall(channelId) else launcher.launchVoiceCall(channelId)
+            }
+        }
     }
 
     /**
@@ -206,6 +212,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     override fun onDestroyView() {
         WidgetChannelSidebarActions.onNotifications = null
         WidgetChannelSidebarActions.onSearch = null
+        WidgetUserSheet.onCall = null
         super.onDestroyView()
     }
 
@@ -421,9 +428,6 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         appComponent = this,
         context = requireContext(),
         fragmentManager = childFragmentManager,
-        storeCalls = StoreStream.getCalls(),
-        storeVoiceChannelSelected = StoreStream.getVoiceChannelSelected(),
-        storeMediaEngine = StoreStream.getMediaEngine(),
     )
 
     override fun openCallMessage(

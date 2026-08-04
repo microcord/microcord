@@ -225,9 +225,6 @@ object WidgetHomeHeaderManager {
             widgetHome,
             context,
             widgetHome.parentFragmentManager,
-            StoreStream.getCalls(),
-            StoreStream.getVoiceChannelSelected(),
-            StoreStream.getMediaEngine(),
         )
         when (item.itemId) {
             R.id.menu_chat_add_friend -> WidgetFriendsAdd.show(context, source = ANALYTICS_SOURCE)

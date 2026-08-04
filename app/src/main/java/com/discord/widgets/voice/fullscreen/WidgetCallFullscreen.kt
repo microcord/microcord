@@ -35,7 +35,6 @@ import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.time.TimeUtils
 import com.discord.utilities.voice.DiscordOverlayService
 import com.discord.views.calls.VideoCallParticipantView
-import com.discord.widgets.channels.WidgetTextInVoiceOnboarding
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.settings.WidgetSettingsVoice
 import com.discord.widgets.settings.premium.WidgetSettingsPremium
@@ -542,8 +541,6 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
                 R.string.suppressed,
                 R.string.suppressed_permission_body,
             )
-            WidgetCallFullscreenViewModel.Event.ShowTextInVoiceNux ->
-                WidgetTextInVoiceOnboarding.show(parentFragmentManager, ::openTextInVoice)
             is WidgetCallFullscreenViewModel.Event.ShowUserSheet -> WidgetUserSheet.show(
                 parentFragmentManager,
                 event.userId,

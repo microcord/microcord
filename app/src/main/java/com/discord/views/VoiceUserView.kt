@@ -10,15 +10,14 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.FrameLayout
-import android.widget.TextView
 import androidx.annotation.DimenRes
 import androidx.annotation.MainThread
 import com.discord.R
+import com.discord.databinding.ViewVoiceUserBinding
 import com.discord.stores.StoreVoiceParticipants
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.view.extensions.fadeBy
 import com.discord.views.user.avatarUrl
-import com.facebook.drawee.view.SimpleDraweeView
 import com.facebook.imagepipeline.request.BasePostprocessor
 
 internal enum class VoiceDisplayState { CONNECTED, SPEAKING, MUTED, RINGING, DISCONNECTED }
@@ -36,8 +35,7 @@ class VoiceUserView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
 ) : FrameLayout(context, attrs, defStyleAttr) {
-    private val avatar: SimpleDraweeView
-    private val nameDisplay: TextView
+    private val binding = ViewVoiceUserBinding.inflate(LayoutInflater.from(context), this)
     private var defaultVoiceStateBackground = android.R.color.transparent
     private var state: VoiceDisplayState? = null
     private var voiceUser: StoreVoiceParticipants.VoiceUser? = null
@@ -71,9 +69,6 @@ class VoiceUserView @JvmOverloads constructor(
     }
 
     init {
-        LayoutInflater.from(context).inflate(R.layout.view_voice_user, this)
-        avatar = requireNotNull(findViewById(R.id.voice_user_avatar))
-        nameDisplay = requireNotNull(findViewById(R.id.voice_user_name_display))
         context.obtainStyledAttributes(
             attrs,
             R.styleable.VoiceUserView,
@@ -114,17 +109,20 @@ class VoiceUserView @JvmOverloads constructor(
         val url = avatarUrl(voiceUser.user, voiceUser.guildMember, requestedSize, animate = false)
         if (url != previousAvatarUrl) {
             previousAvatarUrl = url
-            IconUtils.setIcon(avatar, url, sizeDimenRes, transform = { builder ->
+            IconUtils.setIcon(binding.voiceUserAvatar, url, sizeDimenRes, transform = { builder ->
                 // The tile tints its background from the avatar, so the decoded bitmap
                 // is handed back to whoever asked for it.
                 builder.postprocessor = object : BasePostprocessor() {
                     override fun process(bitmap: Bitmap) {
-                        bitmapListener(bitmap.copy(Bitmap.Config.ARGB_8888, false), url)
+                        val copy = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+                        post {
+                            if (url == previousAvatarUrl) bitmapListener(copy, url)
+                        }
                     }
                 }
             })
         }
-        nameDisplay.text = voiceUser.displayName
+        binding.voiceUserNameDisplay.text = voiceUser.displayName
         setVoiceState(voiceDisplayState(voiceUser))
     }
 
@@ -134,8 +132,8 @@ class VoiceUserView @JvmOverloads constructor(
 
     @MainThread
     fun setAvatarSize(avatarSize: Int) {
-        avatar.resize(avatarSize)
-        nameDisplay.resize(avatarSize)
+        binding.voiceUserAvatar.resize(avatarSize)
+        binding.voiceUserNameDisplay.resize(avatarSize)
         requestLayout()
     }
 
@@ -159,7 +157,7 @@ class VoiceUserView @JvmOverloads constructor(
 
     @MainThread
     fun setRingMargin(margin: Int) {
-        avatar.layoutParams = (avatar.layoutParams as LayoutParams).apply {
+        binding.voiceUserAvatar.layoutParams = (binding.voiceUserAvatar.layoutParams as LayoutParams).apply {
             setMargins(margin, margin, margin, margin)
         }
         requestLayout()
@@ -170,7 +168,7 @@ class VoiceUserView @JvmOverloads constructor(
         super.setSelected(selected)
         // Only the name overlay reacts to selection, and it cross-fades rather than
         // popping in and out.
-        if (changed) nameDisplay.fadeBy(isSelected)
+        if (changed) binding.voiceUserNameDisplay.fadeBy(isSelected)
     }
 
     private fun isRinging() = state == VoiceDisplayState.RINGING && animateAvatarWhenRinging
@@ -186,7 +184,7 @@ class VoiceUserView @JvmOverloads constructor(
             },
         )
         val alpha = if (newState == VoiceDisplayState.DISCONNECTED && fadeWhenDisconnected) 0.3f else 1f
-        avatar.alpha = alpha
+        binding.voiceUserAvatar.alpha = alpha
         this.alpha = alpha
         if (isRinging()) {
             if (!ringAnimator.isRunning) ringAnimator.start()

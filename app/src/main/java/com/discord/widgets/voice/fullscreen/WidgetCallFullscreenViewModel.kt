@@ -60,7 +60,6 @@ import com.discord.utilities.user.UserUtils
 import com.discord.utilities.video.VideoPlayerIdleDetector
 import com.discord.utilities.voice.VoiceEngineServiceController
 import com.discord.views.calls.VideoCallParticipantView
-import com.discord.widgets.channels.TextInVoiceOnboardingManager
 import com.discord.widgets.guildscheduledevent.ScheduledEventUi
 import com.discord.widgets.stage.StageRoles
 import com.discord.widgets.stage.model.StageCallModel
@@ -151,14 +150,6 @@ class WidgetCallFullscreenViewModel constructor(
         val state = storeState as StoreState.Valid
         val callModel = state.callModel
         val isStage = callModel.channel.isStageVoiceChannel()
-
-        if (!isStage && TextInVoiceOnboardingManager().shouldShowTextInVoiceOnboarding(
-                callModel.myId,
-                callModel.channel.guildId.takeIf { it > 0L },
-            )
-        ) {
-            eventSubject.onNext(Event.ShowTextInVoiceNux)
-        }
 
         if (startedAsVideo == null) startedAsVideo = callModel.isVideoCall
         val previous = mostRecentStoreState as? StoreState.Valid
@@ -1163,7 +1154,6 @@ class WidgetCallFullscreenViewModel constructor(
         object ShowServerDeafenedDialog : Event()
         object ShowServerMutedDialog : Event()
         object ShowSuppressedDialog : Event()
-        object ShowTextInVoiceNux : Event()
         data class ShowUserSheet(val userId: Long, val channelId: Long) : Event()
     }
 
