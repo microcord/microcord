@@ -224,6 +224,11 @@ when a check was not run or no device was available.
 - With an uncommitted worktree, stash tracked and untracked changes, rebase onto
   the upstream branch, reapply the stash, resolve conflicts, and verify before
   dropping the temporary stash. Never use `git merge` for upstream updates.
+- Commit messages are a single conventional line, lowercase, no body and no
+  trailing period: `fix: adding friends`, `chore: remove dead samsung link stuff`.
+  Never write a paragraph, a bullet list, or a co-author trailer.
+- One concern per commit. Stage only that concern's hunks, even when a file also
+  carries unrelated concurrent work.
 
 ## Scope Discipline
 
