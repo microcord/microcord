@@ -1,8 +1,11 @@
 package com.discord.widgets.chat.input
 
 import android.content.Context
+import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.os.Environment
+import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.GestureDetector
 import android.view.KeyEvent
@@ -20,6 +23,7 @@ import com.discord.R
 import com.discord.api.sticker.Sticker
 import com.discord.app.AppFragment
 import com.discord.app.AppLog
+import com.discord.databinding.FragmentCameraBinding
 import com.discord.i18n.setI18nText
 import com.discord.models.domain.emoji.Emoji
 import com.discord.utilities.analytics.AnalyticsTracker
@@ -34,7 +38,6 @@ import com.lytefast.flexinput.adapters.AttachmentPreviewAdapter
 import com.lytefast.flexinput.adapters.EmptyListAdapter
 import com.lytefast.flexinput.adapters.FileListAdapter
 import com.lytefast.flexinput.adapters.PhotoCursorAdapter
-import com.lytefast.flexinput.fragment.CameraFragment
 import com.lytefast.flexinput.fragment.FilesFragment
 import com.lytefast.flexinput.fragment.FlexInputFragment
 import com.lytefast.flexinput.fragment.PhotosFragment
@@ -43,6 +46,13 @@ import com.lytefast.flexinput.model.Attachment.Companion.toAttachment
 import com.lytefast.flexinput.model.Photo
 import com.lytefast.flexinput.utils.SelectionAggregator
 import com.lytefast.flexinput.utils.SelectionCoordinator
+import com.lytefast.flexinput.utils.FileUtils.toAttachment
+import com.otaliastudios.cameraview.CameraException
+import com.otaliastudios.cameraview.CameraListener
+import com.otaliastudios.cameraview.CameraOptions
+import com.otaliastudios.cameraview.PictureResult
+import com.otaliastudios.cameraview.controls.Facing
+import com.otaliastudios.cameraview.controls.Flash
 import java.io.File
 import kotlinx.coroutines.launch
 
@@ -390,28 +400,105 @@ class WidgetChatInputAttachments(
         }
     }
 
-    open class DiscordCameraFragment : CameraFragment() {
+    class DiscordCameraFragment : Fragment(R.layout.fragment_camera) {
+        private var _binding: FragmentCameraBinding? = null
+        private val binding get() = requireNotNull(_binding)
+        private var pendingCapture: File? = null
+
         override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
             super.onViewCreated(view, savedInstanceState)
-            if (!hasPermissions()) view.post(::requestPermissionClick)
+            _binding = FragmentCameraBinding.bind(view)
+            binding.cameraView.setLifecycleOwner(viewLifecycleOwner)
+            binding.cameraView.addCameraListener(object : CameraListener() {
+                override fun onCameraOpened(options: CameraOptions) {
+                    binding.cameraFacingBtn.visibility =
+                        if (options.supportedFacing.size > 1) View.VISIBLE else View.GONE
+                    binding.cameraFlashBtn.visibility =
+                        if (options.supportedFlash.size > 1) View.VISIBLE else View.GONE
+                }
+
+                override fun onPictureTaken(result: PictureResult) {
+                    val coordinator = flexInputCoordinator() ?: return
+                    val file = coordinator.fileManager.newImageFile()
+                    result.toFile(file) { saved ->
+                        if (saved == null) AppLog.e("Could not save camera attachment")
+                        else coordinator.addExternalAttachment(saved.toAttachment())
+                    }
+                }
+
+                override fun onCameraError(exception: CameraException) {
+                    AppLog.e("Camera capture failed", exception)
+                }
+            })
+            binding.takePhotoBtn.setOnClickListener { binding.cameraView.takePicture() }
+            binding.cameraFacingBtn.setOnClickListener {
+                binding.cameraView.facing =
+                    if (binding.cameraView.facing == Facing.BACK) Facing.FRONT else Facing.BACK
+            }
+            binding.cameraFlashBtn.setOnClickListener {
+                binding.cameraView.flash = when (binding.cameraView.flash) {
+                    Flash.OFF -> Flash.AUTO
+                    Flash.AUTO -> Flash.ON
+                    else -> Flash.OFF
+                }
+            }
+            binding.launchCameraBtn.setOnClickListener { launchSystemCamera() }
+            if (appFragment()?.hasCamera() == true) showCamera() else showPermissions()
         }
 
-        override fun hasPermissions(vararg requiredPermissionList: String): Boolean =
-            appFragment()?.hasCamera() == true
-
-        override fun requestPermissionClick() {
-            requestCameraPermission(::refreshAfterGrant)
+        private fun showPermissions() {
+            binding.cameraContainer.visibility = View.GONE
+            binding.permissionsContainer.visibility = View.VISIBLE
+            if (binding.permissionsContainer.childCount == 0) {
+                LayoutInflater.from(requireContext()).inflate(
+                    com.lytefast.flexinput.R.layout.view_camera_permissions,
+                    binding.permissionsContainer,
+                    true,
+                ).findViewById<View>(com.lytefast.flexinput.R.id.permissions_req_btn)
+                    ?.setOnClickListener { appFragment()?.requestCamera(::showCamera) }
+            }
         }
 
-        protected open fun requestCameraPermission(onGranted: () -> Unit) =
-            appFragment()?.requestCamera(onGranted)
+        private fun showCamera() {
+            val binding = _binding ?: return
+            binding.permissionsContainer.visibility = View.GONE
+            binding.cameraContainer.visibility = View.VISIBLE
+            binding.cameraView.open()
+        }
 
-        internal fun refreshAfterGrant() {
-            if (view == null) return
-            permissionsContainer.visibility = View.GONE
-            cameraContainer.visibility = View.VISIBLE
-            cameraView.onStart()
-            cameraView.onResume()
+        private fun launchSystemCamera() {
+            val coordinator = flexInputCoordinator() ?: return
+            val file = coordinator.fileManager.newImageFile()
+            val uri = coordinator.fileManager.toFileProviderUri(requireContext(), file)
+            val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+                .putExtra(MediaStore.EXTRA_OUTPUT, uri)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            requireContext().packageManager.queryIntentActivities(intent, 0).forEach {
+                requireContext().grantUriPermission(
+                    it.activityInfo.packageName,
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+            pendingCapture = file
+            startActivityForResult(intent, REQUEST_IMAGE_CAPTURE)
+        }
+
+        override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+            super.onActivityResult(requestCode, resultCode, data)
+            if (requestCode != REQUEST_IMAGE_CAPTURE) return
+            val file = pendingCapture.also { pendingCapture = null } ?: return
+            if (resultCode == Activity.RESULT_OK) flexInputCoordinator()?.addExternalAttachment(file.toAttachment())
+            else file.delete()
+        }
+
+        override fun onDestroyView() {
+            _binding = null
+            super.onDestroyView()
+        }
+
+        private companion object {
+            const val REQUEST_IMAGE_CAPTURE = 4567
         }
     }
 

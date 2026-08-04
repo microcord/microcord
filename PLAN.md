@@ -2560,6 +2560,15 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   was Fresco invoking `VoiceUserView` bitmap listeners off the
   main thread, now fixed centrally with URL-stale guarding and generated binding. Focused fullscreen/
   profile/home/voice tests and `assembleDebug` pass; the APK was installed on WSA.
+- Fixed FlexInput attachment navigation by replacing the library's keyboard-offset listeners with
+  direct page/tab synchronization so the
+  keyboard icon remains absent while Photos/Files/Camera map correctly. Public CameraKit capture was
+  unusable because its required `com.jpegkit.Jpeg` artifact is unavailable from approved repositories
+  and its old JitPack build produces no artifact. The camera page now uses the already-installed
+  `cameraview` dependency from the original app: full-height black preview, white controls, reference
+  shutter asset with outer ring, lifecycle-bound Camera2, direct `PictureResult.toFile`, permission UI,
+  flash/facing controls, and system-camera fallback. `assembleDebug` passes; the APK was installed on
+  WSA and A65.
 
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/applauncher/**` | Android 340.12
 Hermes `out.js` Apps launcher modules | log in on WSA and verify HOME/search/application/command/list

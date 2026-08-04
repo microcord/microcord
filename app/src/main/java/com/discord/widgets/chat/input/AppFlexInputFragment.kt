@@ -10,9 +10,14 @@ import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ImageView
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
+import androidx.viewpager.widget.ViewPager
 import com.discord.R
 import com.discord.widgets.chat.input.applauncher.AppLauncherEntrypoint
 import com.discord.widgets.chat.input.applauncher.WidgetAppLauncher
+import com.google.android.material.tabs.TabLayout
+import com.lytefast.flexinput.fragment.AddContentDialogFragment
 import com.lytefast.flexinput.fragment.FlexInputFragment
 import com.lytefast.flexinput.managers.KeyboardManager
 import org.xmlpull.v1.XmlPullParser
@@ -21,6 +26,38 @@ import org.xmlpull.v1.XmlPullParser
 class AppFlexInputFragment : FlexInputFragment() {
     private var inflatedFromXml = false
     var onAttachmentsCleared: () -> Unit = {}
+
+    private val addContentTabCallbacks = object : FragmentManager.FragmentLifecycleCallbacks() {
+        override fun onFragmentViewCreated(
+            fragmentManager: FragmentManager,
+            fragment: Fragment,
+            view: View,
+            savedInstanceState: Bundle?,
+        ) {
+            if (fragment !is AddContentDialogFragment) return
+            view.post {
+                val tabs = view.findViewById<TabLayout>(com.lytefast.flexinput.R.id.content_tabs) ?: return@post
+                val pager = view.findViewById<ViewPager>(com.lytefast.flexinput.R.id.content_pager) ?: return@post
+                tabs.clearOnTabSelectedListeners()
+                pager.clearOnPageChangeListeners()
+                tabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+                    override fun onTabSelected(tab: TabLayout.Tab) { pager.currentItem = tab.position }
+                    override fun onTabUnselected(tab: TabLayout.Tab) = Unit
+                    override fun onTabReselected(tab: TabLayout.Tab) = Unit
+                })
+                pager.addOnPageChangeListener(object : ViewPager.SimpleOnPageChangeListener() {
+                    override fun onPageSelected(position: Int) { tabs.getTabAt(position)?.select() }
+                })
+                pager.currentItem = 0
+                tabs.getTabAt(0)?.select()
+            }
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        childFragmentManager.registerFragmentLifecycleCallbacks(addContentTabCallbacks, false)
+    }
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -46,6 +83,11 @@ class AppFlexInputFragment : FlexInputFragment() {
         inflatedFromXml = false
         onAttachmentsCleared = {}
         super.onDestroyView()
+    }
+
+    override fun onDestroy() {
+        childFragmentManager.unregisterFragmentLifecycleCallbacks(addContentTabCallbacks)
+        super.onDestroy()
     }
 
     override fun clearAttachments() {
