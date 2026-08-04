@@ -33,9 +33,6 @@ import com.facebook.drawee.view.SimpleDraweeView
  * @param storeUserConnections the viewer's linked accounts, used to decide whether to offer the
  *   link. `StoreStream` exposes no accessor for this store yet, so the default is `null` and the
  *   connect button stays hidden.
- * @param canSeePlaystationAccountIntegration the PlayStation integration's experiment gate
- *   (reference: `PlaystationExperimentUtilsKt.canSeePlaystationAccountIntegration`). `widgets/
- *   playstation` has not been reconstructed, so the default reports the integration off.
  */
 class ViewHolderPlatformRichPresence(
     root: View,
@@ -47,7 +44,6 @@ class ViewHolderPlatformRichPresence(
     richPresenceTextContainer: View,
     richPresencePrimaryButton: Button,
     private val storeUserConnections: StoreUserConnections? = null,
-    private val canSeePlaystationAccountIntegration: () -> Boolean = { false },
 ) : ViewHolderUserRichPresence(
     root = root,
     richPresenceImageLarge = richPresenceImageLarge,
@@ -89,9 +85,7 @@ class ViewHolderPlatformRichPresence(
         richPresenceTime.setTextAndVisibilityBy(activity.friendlyTime())
         richPresenceTextContainer.isSelected = true
 
-        val offersLink = platform.enabled &&
-            (platform != Platform.PLAYSTATION || canSeePlaystationAccountIntegration())
-        if (offersLink && storeUserConnections != null) {
+        if (platform.enabled && storeUserConnections != null) {
             val alreadyLinked = storeUserConnections.getConnectedAccounts()
                 .any { it.type == platform.platformId }
             richPresencePrimaryButton?.visibility = if (alreadyLinked) View.GONE else View.VISIBLE

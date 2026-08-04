@@ -493,12 +493,11 @@ open class ViewHolderUserRichPresence(
             streamContext: StreamContext?,
             oldViewHolder: ViewHolderUserRichPresence?,
             storeUserConnections: StoreUserConnections? = null,
-            canSeePlaystationAccountIntegration: () -> Boolean = { false },
         ): ViewHolderUserRichPresence {
             val type = getRPViewHolderType(activity, streamContext)
             if (oldViewHolder != null && type == oldViewHolder.richPresenceType) return oldViewHolder
             parent.removeAllViews()
-            return createRPView(parent, type, storeUserConnections, canSeePlaystationAccountIntegration)
+            return createRPView(parent, type, storeUserConnections)
         }
 
         private fun getRPViewHolderType(activity: Activity?, streamContext: StreamContext?): Int = when {
@@ -515,7 +514,6 @@ open class ViewHolderUserRichPresence(
             parent: ViewGroup,
             type: Int,
             storeUserConnections: StoreUserConnections?,
-            canSeePlaystationAccountIntegration: () -> Boolean,
         ): ViewHolderUserRichPresence {
             val inflater = LayoutInflater.from(parent.context)
             return when (type) {
@@ -566,7 +564,6 @@ open class ViewHolderUserRichPresence(
                         richPresenceTextContainer = root.requireView(R.id.rich_presence_container_data),
                         richPresencePrimaryButton = root.requireView(R.id.rich_presence_primary_button),
                         storeUserConnections = storeUserConnections,
-                        canSeePlaystationAccountIntegration = canSeePlaystationAccountIntegration,
                     )
                 }
 

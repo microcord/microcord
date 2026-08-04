@@ -49,7 +49,6 @@ import com.discord.utilities.toolbar.positionUnreadCountView
 import com.discord.utilities.user.UserUtils.hasUnreadUrgentMessages
 import com.discord.widgets.chat.input.AppFlexInputViewModel
 import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventUpsellBottomSheet
-import com.discord.widgets.playstation.WidgetPlaystationIntegrationUpsellBottomSheet
 import com.discord.widgets.settings.WidgetMuteSettingsSheet
 import com.discord.widgets.user.calls.PrivateCallLauncher
 import com.discord.widgets.forums.WidgetForumBrowser
@@ -403,8 +402,6 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
             WidgetGuildWelcomeSheet.show(parentFragmentManager, event.guildId)
         is WidgetHomeViewModel.Event.ShowGuildEventUpsell ->
             WidgetGuildScheduledEventUpsellBottomSheet.launch(parentFragmentManager, event.guildId)
-        WidgetHomeViewModel.Event.ShowPlaystationUpsell ->
-            WidgetPlaystationIntegrationUpsellBottomSheet.show(parentFragmentManager)
         is WidgetHomeViewModel.Event.ShowGuildRoleSubscriptionUpsell -> Unit
     }
 

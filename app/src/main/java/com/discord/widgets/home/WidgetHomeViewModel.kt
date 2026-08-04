@@ -29,7 +29,6 @@ import com.discord.utilities.time.Clock
 import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.user.UserUtils.isNewUser
 import com.discord.widgets.channels.ChannelOnboardingManager
-import com.discord.widgets.playstation.PlaystationUpsellManager
 import rx.Observable
 import rx.subjects.PublishSubject
 
@@ -70,8 +69,6 @@ class WidgetHomeViewModel(
     private val channelOnboardingManager: ChannelOnboardingManager = ChannelOnboardingManager(),
     private val sharedPreferences: SharedPreferences = SharedPreferencesProvider.get(),
     private val clock: Clock = ClockFactory.get(),
-    private val playstationUpsellManager: PlaystationUpsellManager =
-        PlaystationUpsellManager(sharedPreferences, storeExperiments, clock),
 ) : AppViewModel<WidgetHomeViewModel.ViewState>(
     ViewState(
         leftPanelState = PanelState.Closed,
@@ -119,7 +116,6 @@ class WidgetHomeViewModel(
         object ClosePanels : Event()
         object UnlockLeftPanel : Event()
         object ShowChannelOnboardingSheet : Event()
-        object ShowPlaystationUpsell : Event()
         object AnimatePeekIn : Event()
         object AnimatePeekOut : Event()
         data class ShowGuildWelcomeSheet(val guildId: Long) : Event()
@@ -212,11 +208,6 @@ class WidgetHomeViewModel(
                 eventSubject.onNext(Event.ShowGuildEventUpsell(guildId))
             }
 
-            playstationUpsellManager.canShow(storeState.me, storeState.connectedAccountsState) -> {
-                eventSubject.onNext(Event.ShowPlaystationUpsell)
-                playstationUpsellManager.setHasBeenShown()
-            }
-
             guild != null && guildRoleSubscriptionUpsellCanShow(guild) -> {
                 eventSubject.onNext(Event.ShowGuildRoleSubscriptionUpsell(storeState.guildId))
                 guildRoleSubscriptionUpsellShown()
@@ -244,7 +235,6 @@ class WidgetHomeViewModel(
         const val GUILD_EVENT_UPSELL_CACHE_KEY = "CACHE_KEY_GUILD_EVENT_UPSELL"
 
         private const val EVENTS_UPSELL_EXPERIMENT = "2021-09_events_upsell"
-        private const val PLAYSTATION_EXPERIMENT = "2021-12_connected_accounts_playstation"
 
         internal fun shouldShowChannelOnboardingSheet(
             previousLeftPanelState: PanelState?,
@@ -321,8 +311,7 @@ class WidgetHomeViewModel(
                 storeChannelsSelected.observeResolvedSelectedChannel(),
                 storeExperiments.observeUserExperiment(EVENTS_UPSELL_EXPERIMENT),
                 storeUserConnections.observeConnectedAccounts(),
-                storeExperiments.observeUserExperiment(PLAYSTATION_EXPERIMENT),
-            ) { leftPanelState, rightPanelState, guildInfo, me, selectedChannel, eventsUpsellExperiment, connectedAccounts, _ ->
+            ) { leftPanelState, rightPanelState, guildInfo, me, selectedChannel, eventsUpsellExperiment, connectedAccounts ->
                 val channel = selectedChannel.maybeChannel
                 val isThreadPeek =
                     (selectedChannel as? StoreChannelsSelected.ResolvedSelectedChannel.Channel)?.peekParent != null

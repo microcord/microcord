@@ -23,14 +23,7 @@ class WidgetSettingsUserConnectionsAdd : AppBottomSheet() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         view.findViewById<RecyclerView>(R.id.connections_recycler).adapter = adapter
-        val playstationBucket = StoreStream.getExperiments()
-            .getUserExperiment("2021-12_connected_accounts_playstation", trackExposure = true)
-            ?.bucket
-        adapter.setData(
-            Platform.entries.filter {
-                it.enabled && it != Platform.NONE && (it != Platform.PLAYSTATION || playstationBucket == 1 || playstationBucket == 2)
-            },
-        )
+        adapter.setData(Platform.entries.filter { it.enabled && it != Platform.NONE })
     }
 
     override fun onPause() {
