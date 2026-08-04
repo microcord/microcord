@@ -15,6 +15,7 @@ data class EmbedEntry(
     val allowAnimatedEmojis: Boolean,
     val autoPlayGifs: Boolean,
     val isThreadStarterMessage: Boolean,
+    override val isPendingReply: Boolean = false,
 ) : ChatListEntry() {
     override val type: Int = ChatListEntry.MESSAGE_EMBED
     override val key: String = "${ChatListEntry.MESSAGE_EMBED}${message.id}"

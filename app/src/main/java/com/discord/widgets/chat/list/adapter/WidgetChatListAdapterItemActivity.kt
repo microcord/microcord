@@ -6,6 +6,7 @@ import com.discord.R
 import com.discord.activities.EmbeddedActivityLauncher
 import com.discord.api.embeddedactivities.EmbeddedActivityInstance
 import com.discord.databinding.WidgetChatListAdapterItemActivityBinding
+import com.discord.models.message.Message
 import com.discord.models.user.MeUser
 import com.discord.stores.StoreStream
 import com.discord.utilities.icon.IconUtils
@@ -39,6 +40,12 @@ class WidgetChatListAdapterItemActivity private constructor(
         val entry = data as ActivityMessageEntry
         modelSubscription?.unsubscribe()
         binding.activityAction.setIsLoading(false)
+        configureCellHighlight(
+            Message(id = entry.messageId, channelId = entry.channelId),
+            binding.chatListAdapterItemHighlightedBg,
+            binding.chatListAdapterItemGutterBg,
+            entry.isPendingReply,
+        )
 
         observe(entry).ui().appSubscribe(
             errorClass = WidgetChatListAdapterItemActivity::class.java,

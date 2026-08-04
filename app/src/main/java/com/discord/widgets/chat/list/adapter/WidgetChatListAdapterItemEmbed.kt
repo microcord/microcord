@@ -140,7 +140,7 @@ class WidgetChatListAdapterItemEmbed(
         itemView.setOnClickListener {
             adapter.eventHandler.onMessageClicked(entry.message, entry.isThreadStarterMessage)
         }
-        configureCellHighlight(entry.message, highlightedBackground, gutterBackground)
+        configureCellHighlight(entry.message, highlightedBackground, gutterBackground, entry.isPendingReply)
 
         val model = Model(
             embedEntry = entry,

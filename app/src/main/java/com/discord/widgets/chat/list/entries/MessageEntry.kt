@@ -33,6 +33,7 @@ data class MessageEntry(
     val isGuildForumPostAuthor: Boolean = false,
     val ctaData: CtaData? = null,
     val permissionsForChannel: Long?,
+    override val isPendingReply: Boolean = false,
 ) : ChatListEntry() {
 
     override val type: Int = resolveType(message, isMinimal)

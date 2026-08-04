@@ -34,6 +34,9 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
      */
     var shouldShowThreadSpine: Boolean = false
 
+    /** True while the composer is replying to the message that owns this row. */
+    open val isPendingReply: Boolean = false
+
     /** True when this row belongs to a blocked-message chunk the viewer has expanded. */
     open fun isInExpandedBlockedMessageChunk(): Boolean = false
 

@@ -11,6 +11,7 @@ data class ForwardedMessageEntry(
     val state: State,
     val message: Message? = null,
     val rows: List<ChatListEntry> = emptyList(),
+    override val isPendingReply: Boolean = false,
 ) : ChatListEntry() {
     enum class State { LOADING, CONTENT, DELETED, UNAVAILABLE, DEPTH_LIMIT }
 

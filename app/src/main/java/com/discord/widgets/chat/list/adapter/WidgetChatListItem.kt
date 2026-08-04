@@ -51,23 +51,28 @@ open class WidgetChatListItem(
     /**
      * Paints the left gutter and row wash that mark a message out.
      *
-     * Three states, in priority order: an ephemeral or failed message is washed with the neutral
-     * hover colour and a brand-coloured gutter; a message mentioning the viewer gets the mention
-     * wash and a yellow gutter; anything else hides both views. The check runs on every bind
+     * Three states, in priority order: an ephemeral, failed, or currently replied-to message is washed
+     * with the neutral hover colour and a brand-coloured gutter; a message mentioning the viewer gets
+     * the mention wash and a yellow gutter; anything else hides both views. The check runs on every bind
      * because a recycled row would otherwise keep the previous message's highlight.
      */
-    fun configureCellHighlight(message: Message, highlightView: View, gutterView: View) {
-        val isEphemeralOrFailed = message.isEphemeralMessage() || message.isFailed()
+    fun configureCellHighlight(
+        message: Message,
+        highlightView: View,
+        gutterView: View,
+        isPendingReply: Boolean = false,
+    ) {
+        val isNeutralHighlight = message.isEphemeralMessage() || message.isFailed() || isPendingReply
         val isMentioned = adapter.isUserMentioned(message)
 
-        val highlighted = isEphemeralOrFailed || isMentioned
+        val highlighted = isNeutralHighlight || isMentioned
         highlightView.visibility = if (highlighted) View.VISIBLE else View.GONE
         gutterView.visibility = if (highlighted) View.VISIBLE else View.GONE
         if (!highlighted) return
 
         val backgroundColor: Int
         val gutterColor: Int
-        if (isEphemeralOrFailed) {
+        if (isNeutralHighlight) {
             backgroundColor = ThemedColor.resolve(
                 highlightView.context,
                 R.attr.colorBackgroundModifierHover,

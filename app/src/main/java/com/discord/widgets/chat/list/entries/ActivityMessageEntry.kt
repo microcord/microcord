@@ -18,6 +18,7 @@ data class ActivityMessageEntry(
     val inviteCode: String? = null,
     val inviter: User? = null,
     val invite: ModelInvite? = null,
+    override val isPendingReply: Boolean = false,
 ) : ChatListEntry() {
     override val type = ACTIVITY_MESSAGE
     override val key = "$ACTIVITY_MESSAGE -- $messageId -- ${application?.id ?: 0L} -- ${inviteCode.orEmpty()}"

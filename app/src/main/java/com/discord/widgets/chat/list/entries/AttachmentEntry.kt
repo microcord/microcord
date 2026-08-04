@@ -15,6 +15,7 @@ data class AttachmentEntry(
     val allowAnimatedEmojis: Boolean,
     val autoPlayGifs: Boolean,
     val isThreadStarterMessage: Boolean,
+    override val isPendingReply: Boolean = false,
 ) : ChatListEntry() {
     override val type: Int = ChatListEntry.MESSAGE_ATTACHMENT
     override val key: String = "${ChatListEntry.MESSAGE_ATTACHMENT}${message.id}"

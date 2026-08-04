@@ -41,7 +41,7 @@ class WidgetChatListAdapterItemReactions(
     override fun onConfigure(position: Int, data: ChatListEntry) {
         super.onConfigure(position, data)
         val entry = data as ReactionsEntry
-        configureCellHighlight(entry.message, highlightBackground, gutterBackground)
+        configureCellHighlight(entry.message, highlightBackground, gutterBackground, entry.isPendingReply)
         displayReactions(
             reactions = entry.message.getReactionsMap().values,
             messageId = entry.message.id,

@@ -20,11 +20,19 @@ import com.discord.stores.StoreThreadDraft
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapter
 import com.discord.widgets.chat.list.entries.ChatListEntry
+import com.discord.widgets.chat.list.entries.AttachmentEntry
+import com.discord.widgets.chat.list.entries.ActivityMessageEntry
+import com.discord.widgets.chat.list.entries.BotUiComponentEntry
+import com.discord.widgets.chat.list.entries.EmbedEntry
+import com.discord.widgets.chat.list.entries.ForwardedMessageEntry
 import com.discord.widgets.chat.list.entries.LoadingEntry
+import com.discord.widgets.chat.list.entries.MessageEntry
+import com.discord.widgets.chat.list.entries.ReactionsEntry
 import com.discord.widgets.chat.list.entries.SpacerEntry
 import com.discord.widgets.chat.list.entries.StickerGreetCompactEntry
 import com.discord.widgets.chat.list.entries.StickerGreetEntry
 import com.discord.widgets.chat.list.entries.ThreadDraftFormEntry
+import com.discord.widgets.chat.list.entries.ThreadEmbedEntry
 import rx.Observable
 
 /**
@@ -109,6 +117,7 @@ data class WidgetChatListModel(
                 stores.getGuilds().observeGuild(channel.guildId),
                 stores.getUserRelationships().observe(),
                 ChatListState.get(channel.id),
+                stores.getPendingReplies().observePendingReply(channel.id).map { it?.originalMessage?.id },
                 ::ChannelSecondary,
             )
             return Observable.combineLatest(primary, secondary) { first, second ->
@@ -128,6 +137,7 @@ data class WidgetChatListModel(
             relationships: Map<Long, Int>,
             chatListState: ChatListState,
             greetItem: ChatListEntry? = null,
+            pendingReplyMessageId: Long? = null,
         ): WidgetChatListModel {
             val shouldGreet = shouldShowStickerGreet(loadingState, messages, channel, relationships)
             val items = ArrayList<ChatListEntry>(messages.items.size + 3)
@@ -137,7 +147,27 @@ data class WidgetChatListModel(
                 items += SpacerEntry(channel.id)
                 if (shouldGreet) (greetItem ?: getGreetMessageItem(messages, channel))?.let(items::add)
             }
-            items += messages.items
+            items += messages.items.map { entry ->
+                when {
+                    entry is MessageEntry && entry.message.id == pendingReplyMessageId ->
+                        entry.copy(isPendingReply = true)
+                    entry is AttachmentEntry && entry.message.id == pendingReplyMessageId ->
+                        entry.copy(isPendingReply = true)
+                    entry is EmbedEntry && entry.message.id == pendingReplyMessageId ->
+                        entry.copy(isPendingReply = true)
+                    entry is ReactionsEntry && entry.message.id == pendingReplyMessageId ->
+                        entry.copy(isPendingReply = true)
+                    entry is BotUiComponentEntry && entry.message.id == pendingReplyMessageId ->
+                        entry.copy(isPendingReply = true)
+                    entry is ThreadEmbedEntry && entry.parentMessage.id == pendingReplyMessageId ->
+                        entry.copy(isPendingReply = true)
+                    entry is ActivityMessageEntry && entry.messageId == pendingReplyMessageId ->
+                        entry.copy(isPendingReply = true)
+                    entry is ForwardedMessageEntry && entry.parentMessage.id == pendingReplyMessageId ->
+                        entry.copy(isPendingReply = true)
+                    else -> entry
+                }
+            }
             items += top.item
             return WidgetChatListModel(
                 userId = myId,
@@ -294,6 +324,7 @@ data class WidgetChatListModel(
             val guild: Guild?,
             val relationships: Map<Long, Int>,
             val chatListState: ChatListState,
+            val pendingReplyMessageId: Long?,
         )
 
         private data class ThreadPrimary(
@@ -319,6 +350,7 @@ data class WidgetChatListModel(
             second.guild,
             second.relationships,
             second.chatListState,
+            pendingReplyMessageId = second.pendingReplyMessageId,
         )
     }
 }

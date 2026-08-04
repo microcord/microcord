@@ -2,8 +2,13 @@ package com.discord.widgets.chat.list.model
 
 import com.discord.api.channel.Channel
 import com.discord.api.user.User
+import com.discord.models.message.Message
 import com.discord.stores.StoreMessagesLoader
 import com.discord.widgets.chat.list.entries.LoadingEntry
+import com.discord.widgets.chat.list.entries.ActivityMessageEntry
+import com.discord.widgets.chat.list.entries.ForwardedMessageEntry
+import com.discord.widgets.chat.list.entries.MessageEntry
+import com.discord.widgets.chat.list.entries.ReactionsEntry
 import com.discord.widgets.chat.list.entries.SpacerEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -63,6 +68,50 @@ class WidgetChatListModelTest {
                 emptyMap(),
             ),
         )
+    }
+
+    @Test fun pendingReplyHighlightsItsMessageEntry() {
+        val message = Message(id = 42, channelId = 10)
+        val entry = MessageEntry(
+            message = message,
+            messageState = null,
+            author = null,
+            roles = null,
+            nickOrUsernames = emptyMap(),
+            isExpandedBlocked = false,
+            permissionsForChannel = null,
+        )
+
+        val model = WidgetChatListModel.buildChannelModel(
+            channel = channel(Channel.GUILD_TEXT),
+            top = WidgetChatListModelTop(SpacerEntry(10)),
+            messages = WidgetChatListModelMessages(
+                listOf(
+                    entry,
+                    ReactionsEntry(message, false, false, false),
+                    ActivityMessageEntry(message.id, message.channelId, 1, null, null),
+                    ForwardedMessageEntry(message, 0, ForwardedMessageEntry.State.LOADING),
+                ),
+                42,
+                42,
+                null,
+                0,
+                null,
+            ),
+            loadingState = StoreMessagesLoader.ChannelLoadedState(),
+            channelNames = emptyMap(),
+            myId = 7,
+            computedMembers = emptyMap(),
+            guild = null,
+            relationships = emptyMap(),
+            chatListState = WidgetChatListModel.ChatListState.ATTACHED,
+            pendingReplyMessageId = 42,
+        )
+
+        assertTrue(model.list.filterIsInstance<MessageEntry>().single().isPendingReply)
+        assertTrue(model.list.filterIsInstance<ReactionsEntry>().single().isPendingReply)
+        assertTrue(model.list.filterIsInstance<ActivityMessageEntry>().single().isPendingReply)
+        assertTrue(model.list.filterIsInstance<ForwardedMessageEntry>().single().isPendingReply)
     }
 
     private fun channel(type: Int, recipients: List<User>? = null) = Channel(

@@ -55,6 +55,12 @@ class WidgetChatListAdapterItemForwardedMessage(
     override fun onConfigure(position: Int, data: ChatListEntry) {
         super.onConfigure(position, data)
         val entry = data as ForwardedMessageEntry
+        configureCellHighlight(
+            entry.parentMessage,
+            binding.chatListAdapterItemHighlightedBg,
+            binding.chatListAdapterItemGutterBg,
+            entry.isPendingReply,
+        )
         val content = entry.state == ForwardedMessageEntry.State.CONTENT
         binding.forwardedMessageLoading.visibility = if (entry.state == ForwardedMessageEntry.State.LOADING) {
             View.VISIBLE

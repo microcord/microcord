@@ -2542,6 +2542,13 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   no platform elevation. Custom uses the same material insets and visible size as Select, and the folder
   name's text/hint baseline aligns with the 16dp section content line. The APK was installed successfully
   on WSA.
+- Pending reply state now participates in the live chat-list model. Every diffable row owned by the
+  replied-to message (body, attachments, embeds, reactions, bot components, thread preview, Activity
+  cards, and forwarded-message cards) receives
+  the existing persistent neutral wash and brand gutter while the reply composer is active, then reverts
+  automatically when sent or cancelled. Activity/forwarded cards keep their inset geometry inside
+  full-width non-measuring row overlays, so the wash covers the entire message block rather than only the
+  inner card. Focused model coverage and `assembleDebug` pass; the APK was installed successfully on WSA.
 
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/applauncher/**` | Android 340.12
 Hermes `out.js` Apps launcher modules | log in on WSA and verify HOME/search/application/command/list

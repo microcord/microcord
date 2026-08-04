@@ -62,7 +62,7 @@ class WidgetChatListAdapterItemAttachment(
     override fun onConfigure(position: Int, data: ChatListEntry) {
         super.onConfigure(position, data)
         val entry = data as AttachmentEntry
-        configureCellHighlight(entry.message, highlightedBackground, gutterBackground)
+        configureCellHighlight(entry.message, highlightedBackground, gutterBackground, entry.isPendingReply)
         configureUI(entry)
     }
 

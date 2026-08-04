@@ -16,6 +16,7 @@ data class ThreadEmbedEntry(
     val animateEmojis: Boolean,
     val mostRecentMessageGuildMember: GuildMember?,
     val parentMessage: Message,
+    override val isPendingReply: Boolean = false,
 ) : ChatListEntry() {
     override val type: Int = ChatListEntry.THREAD_EMBED
     override val key: String = "${ChatListEntry.THREAD_EMBED} -- $messageId"

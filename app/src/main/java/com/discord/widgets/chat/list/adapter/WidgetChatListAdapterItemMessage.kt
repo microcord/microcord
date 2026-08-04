@@ -127,7 +127,7 @@ class WidgetChatListAdapterItemMessage(
 
         configureItemTag(message, entry.isGuildForumPostAuthor)
         if (backgroundHighlight != null && gutterHighlight != null) {
-            configureCellHighlight(message, backgroundHighlight, gutterHighlight)
+            configureCellHighlight(message, backgroundHighlight, gutterHighlight, entry.isPendingReply)
         }
         configureAuthorName(entry, message)
 

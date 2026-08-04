@@ -7,6 +7,7 @@ data class ReactionsEntry(
     val canAddReactions: Boolean,
     val canCreateReactions: Boolean,
     val animateEmojis: Boolean,
+    override val isPendingReply: Boolean = false,
 ) : ChatListEntry() {
     override val type: Int = ChatListEntry.REACTIONS
     override val key: String = "${ChatListEntry.REACTIONS}${message.nonce ?: message.id}"

@@ -42,7 +42,7 @@ class WidgetChatListAdapterItemBotComponentRow(
         super.onConfigure(position, data)
         val botEntry = data as BotUiComponentEntry
         entry = botEntry
-        configureCellHighlight(botEntry.message, highlightedBackground, gutterBackground)
+        configureCellHighlight(botEntry.message, highlightedBackground, gutterBackground, botEntry.isPendingReply)
 
         val views = botEntry.messageComponents.mapIndexedNotNull { index, component ->
             adapter.botUiComponentProvider

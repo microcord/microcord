@@ -66,7 +66,7 @@ class WidgetChatListAdapterItemThreadEmbed(
         }
         configureMessageCount(entry.threadMessageCount)
         configureMostRecentMessageText(entry)
-        configureCellHighlight(entry.parentMessage, highlightedBackground, gutterBackground)
+        configureCellHighlight(entry.parentMessage, highlightedBackground, gutterBackground, entry.isPendingReply)
     }
 
     /** A thread past fifty replies stops counting; the exact number stops being informative. */

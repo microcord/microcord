@@ -9,6 +9,7 @@ data class BotUiComponentEntry(
     val applicationId: Long,
     val guildId: Long?,
     val messageComponents: List<MessageComponent>,
+    override val isPendingReply: Boolean = false,
 ) : ChatListEntry() {
     override val type: Int = ChatListEntry.BOT_UI_COMPONENT
     override val key: String =
