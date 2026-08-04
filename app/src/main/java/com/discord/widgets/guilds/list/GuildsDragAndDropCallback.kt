@@ -18,6 +18,9 @@ import androidx.recyclerview.widget.RecyclerView
  */
 class GuildsDragAndDropCallback(private val controller: Controller) : ItemTouchHelper.Callback() {
 
+    private var dragged: RecyclerView.ViewHolder? = null
+    private var moved = false
+
     override fun getMovementFlags(
         recyclerView: RecyclerView,
         viewHolder: RecyclerView.ViewHolder,
@@ -52,12 +55,23 @@ class GuildsDragAndDropCallback(private val controller: Controller) : ItemTouchH
         recyclerView: RecyclerView,
         source: RecyclerView.ViewHolder,
         target: RecyclerView.ViewHolder,
-    ): Boolean = controller.onMove(recyclerView, source, target)
+    ): Boolean = controller.onMove(recyclerView, source, target).also { moved = moved || it }
 
     override fun onSelectedChanged(viewHolder: RecyclerView.ViewHolder?, actionState: Int) {
         when (actionState) {
-            ItemTouchHelper.ACTION_STATE_DRAG -> viewHolder?.let(controller::onDragStarted)
-            ItemTouchHelper.ACTION_STATE_IDLE -> controller.onDrop()
+            ItemTouchHelper.ACTION_STATE_DRAG -> {
+                dragged = viewHolder
+                moved = false
+                viewHolder?.let(controller::onDragStarted)
+            }
+            ItemTouchHelper.ACTION_STATE_IDLE -> {
+                controller.onDrop()
+                // Picking the row up cancels the touch the view's own long-click listener was
+                // waiting on, so a hold that never moved has to be replayed as the long press the
+                // user meant.
+                if (!moved) dragged?.itemView?.performLongClick()
+                dragged = null
+            }
         }
         super.onSelectedChanged(viewHolder, actionState)
     }

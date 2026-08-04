@@ -14,6 +14,7 @@ import androidx.fragment.app.FragmentManager
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.api.channel.Channel
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppToast
 import com.discord.app.AppViewFlipper
@@ -23,8 +24,10 @@ import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.views.CheckedSetting
+import com.discord.widgets.channels.WidgetCreateChannel
 import com.discord.widgets.guilds.contextmenu.ContextMenuNavigation
 import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
+import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventLocationSelect
 import com.discord.widgets.servers.WidgetServerNotifications
 import com.discord.widgets.servers.WidgetServerSettings
 import com.discord.widgets.servers.WidgetServerSettingsEmojis
@@ -211,6 +214,7 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
         root.findViewById<View>(R.id.guild_profile_sheet_mark_as_read)?.setOnClickListener {
             viewModel.onClickMarkAsRead(state.guildId)
         }
+        bindPrimaryActions(root, state, actions)
         (root.findViewById<View>(R.id.change_identity)
             ?: root.findViewById(R.id.guild_profile_sheet_change_nickname))?.setOnClickAndDismissListener {
             WidgetEditUserOrGuildMemberProfile.launch(requireContext(), state.guildId)
@@ -249,6 +253,33 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
             visibility = if (actions.isDeveloper) View.VISIBLE else View.GONE
             setOnClickListener { AppToast.copyToClipboard(requireContext(), state.guildId.toString()) }
         }
+    }
+
+    private fun bindPrimaryActions(
+        root: View,
+        state: WidgetGuildProfileSheetViewModel.ViewState.Loaded,
+        actions: WidgetGuildProfileSheetViewModel.Actions,
+    ) {
+        root.findViewById<View>(R.id.guild_profile_sheet_create_event)?.apply {
+            visibility = if (actions.canManageEvents) View.VISIBLE else View.GONE
+            setOnClickAndDismissListener {
+                WidgetGuildScheduledEventLocationSelect.launch(requireContext(), state.guildId)
+            }
+        }
+        root.findViewById<View>(R.id.guild_profile_sheet_create_channel)?.apply {
+            visibility = if (actions.canManageChannels) View.VISIBLE else View.GONE
+            setOnClickAndDismissListener {
+                WidgetCreateChannel.show(requireContext(), state.guildId, Channel.GUILD_TEXT)
+            }
+        }
+        root.findViewById<View>(R.id.guild_profile_sheet_create_category)?.apply {
+            visibility = if (actions.canManageChannels) View.VISIBLE else View.GONE
+            setOnClickAndDismissListener {
+                WidgetCreateChannel.show(requireContext(), state.guildId, Channel.CATEGORY)
+            }
+        }
+        root.findViewById<CardView>(R.id.guild_profile_sheet_primary_actions)?.visibility =
+            if (actions.canManageEvents || actions.canManageChannels) View.VISIBLE else View.GONE
     }
 
     companion object {

@@ -13,6 +13,8 @@ import androidx.lifecycle.ViewModelProvider
 import com.discord.R
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
+import com.discord.widgets.guilds.WidgetGuildFolderSettings
+import com.discord.widgets.guilds.leave.WidgetLeaveGuildDialog
 import com.discord.widgets.guilds.profile.WidgetGuildProfileSheet
 import com.discord.widgets.servers.WidgetServerNotifications
 
@@ -111,25 +113,21 @@ class WidgetGuildContextMenu : AnchoredContextMenu(R.layout.widget_guild_context
     }
 }
 
-/**
- * Context-menu destinations that do not exist in this project yet.
- *
- * Destinations still under reconstruction stay injectable so their menu rows do not need another
- * rewrite when those screens land.
- */
+/** Where the context-menu rows lead. Overridable so tests can observe the navigation. */
 object ContextMenuNavigation {
 
-    /** `WidgetLeaveGuildDialog.show(fragmentManager, guildId)`. */
     @Volatile
-    var showLeaveGuild: (FragmentManager, Long) -> Unit = { _, _ -> }
+    var showLeaveGuild: (FragmentManager, Long) -> Unit = { manager, guildId ->
+        WidgetLeaveGuildDialog.show(manager, guildId)
+    }
 
-    /** `WidgetGuildProfileSheet.show(fragmentManager, isGuildSelected, guildId)`. */
     @Volatile
     var showGuildProfile: (FragmentManager, Long, Boolean) -> Unit = { manager, guildId, viewingGuild ->
         WidgetGuildProfileSheet.show(manager, viewingGuild, guildId)
     }
 
-    /** `WidgetGuildFolderSettings.create(context, folderId)`. */
     @Volatile
-    var showFolderSettings: (Context, Long) -> Unit = { _, _ -> }
+    var showFolderSettings: (Context, Long) -> Unit = { context, folderId ->
+        WidgetGuildFolderSettings.create(context, folderId)
+    }
 }
