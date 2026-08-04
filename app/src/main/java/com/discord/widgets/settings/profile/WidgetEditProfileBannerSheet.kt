@@ -94,7 +94,6 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
         colorContainer.setOnClickListener {
             launchColorPicker(color ?: runCatching { Color.parseColor(defaultBannerColorHex) }.getOrDefault(Color.BLACK))
         }
-        // A guild profile has no accent colour of its own, so the row would go nowhere.
         colorContainer.visibility = visible(!isGuildContext)
         premiumUpsell.visibility = visible(state.showPremiumUpsell)
         changeImageContainer.setOnClickListener {

@@ -326,7 +326,6 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         }
     }
 
-    /** A per-server avatar, banner and bio all need Nitro. */
     private fun showPremiumRequired() = AppToast.show(this, R.string.premium_required)
 
     private fun configureBanner(state: SettingsUserProfileViewModel.ViewState.Loaded) {

@@ -13,6 +13,7 @@ import com.discord.R
 import com.discord.app.AppBottomSheet
 import com.discord.stores.StoreStream
 import com.discord.utilities.platform.Platform
+import com.discord.utilities.platform.resolvePlatformImage
 
 class WidgetSettingsUserConnectionsAdd : AppBottomSheet() {
     private val adapter = PlatformAdapter(::selectPlatform)
@@ -76,11 +77,7 @@ class WidgetSettingsUserConnectionsAdd : AppBottomSheet() {
 
         fun bind(platform: Platform) {
             name.text = platform.properName
-            val value = TypedValue()
-            val drawable = platform.themedPlatformImage?.takeIf {
-                itemView.context.theme.resolveAttribute(it, value, true)
-            }?.let { value.resourceId } ?: 0
-            image.setImageResource(drawable)
+            image.setImageResource(platform.resolvePlatformImage(itemView.context))
             itemView.setOnClickListener { onSelected(platform, it) }
         }
     }

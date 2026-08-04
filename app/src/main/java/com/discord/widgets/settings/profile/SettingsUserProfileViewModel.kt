@@ -98,17 +98,10 @@ class SettingsUserProfileViewModel(
             val isPronounsChanged: Boolean
                 get() = currentPronouns.orEmpty() != savedProfile?.pronouns.orEmpty()
 
-            /** The account-wide values a blank guild field falls back to. */
             val defaultPronouns = userProfile.userProfile?.pronouns.orEmpty()
             val defaultBio = user.bio.orEmpty()
 
-            /**
-             * A per-guild bio, avatar and banner are Nitro features, so outside a guild this is
-             * always true. Pronouns and the nickname are not gated.
-             *
-             * Keyed on [guild] rather than [meMember] so a member that has not loaded yet cannot
-             * briefly present the gated fields as editable.
-             */
+            /** A per-guild bio, avatar and banner need Nitro; pronouns and the nickname do not. */
             val canEditGuildProfile = guild == null || user.isPremiumTier2
 
             /** Only meaningful outside a guild scope; a guild profile has no display name. */
@@ -265,12 +258,7 @@ class SettingsUserProfileViewModel(
         updateViewState(restoreDraft(state, draft, ::parseBio))
     }
 
-    /**
-     * Identity and profile metadata live on separate endpoints, so a save is up to two sequential
-     * requests, each resolving to the edit it made to the view state. A failure abandons the fold
-     * and leaves the screen on its unsaved edits; whatever did land has already reached the store,
-     * so the next store emission reconciles it.
-     */
+    /** Identity and profile metadata live on separate endpoints, so a save is up to two requests. */
     @MainThread
     fun saveChanges(context: Context) {
         val state = viewState as? ViewState.Loaded ?: return
@@ -376,21 +364,15 @@ class SettingsUserProfileViewModel(
         }
 
         internal fun guildMemberPatch(state: ViewState.Loaded): PatchGuildMemberBody? {
-            // An unchanged nickname is omitted; a cleared one is an empty string, not a null.
             val nick = state.currentNickname.orEmpty()
                 .takeIf { it != state.meMember?.nick.orEmpty() }
             if (nick == null && state.currentAvatar == null) return null
             return PatchGuildMemberBody(nick, state.currentAvatar)
         }
 
-        /**
-         * The bio and pronouns are non-nullable server-side, so an empty string is how they are
-         * cleared; the banner and accent colour need an explicit null instead.
-         */
         internal fun profilePatch(state: ViewState.Loaded): PatchUserProfileBody? {
             val bio = if (state.isBioChanged) state.currentBio.orEmpty() else null
             val pronouns = if (state.isPronounsChanged) state.currentPronouns.orEmpty() else null
-            // A guild profile has no accent colour of its own.
             val accentColor = if (state.meMember != null) null else state.currentBannerColorHex?.toAccentColor()
             if (bio == null && pronouns == null && state.currentBannerImage == null && accentColor == null) {
                 return null

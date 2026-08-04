@@ -19,6 +19,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.integrations.SpotifyHelper
 import com.discord.utilities.notices.NoticeBuilders
 import com.discord.utilities.platform.Platform
+import com.discord.utilities.platform.resolvePlatformImage
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.utilities.uri.UriHandler
@@ -101,7 +102,7 @@ class WidgetSettingsUserConnections : AppFragment(R.layout.widget_settings_conne
             val platform = Platform.from(account)
             name.text = account.name
             image.contentDescription = platform.name
-            image.setImageResource(itemView.context.resolveDrawable(platform.themedPlatformImage))
+            image.setImageResource(platform.resolvePlatformImage(itemView.context))
             itemView.setOnClickListener {
                 platform.getProfileUrl(account)?.let { url -> UriHandler.handle(it.context, url) }
             }
@@ -169,12 +170,6 @@ class WidgetSettingsUserConnections : AppFragment(R.layout.widget_settings_conne
                 ),
             ),
         )
-    }
-
-    private fun Context.resolveDrawable(attribute: Int?): Int {
-        if (attribute == null) return 0
-        val value = TypedValue()
-        return if (theme.resolveAttribute(attribute, value, true)) value.resourceId else 0
     }
 
     companion object {

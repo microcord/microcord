@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.connectedaccounts.ConnectedAccount
 import com.discord.utilities.platform.Platform
+import com.discord.utilities.platform.resolvePlatformImage
 
 class UserProfileConnectionsView(context: Context, attrs: AttributeSet) : LinearLayout(context, attrs) {
     data class ConnectedAccountItem(val connectedAccount: ConnectedAccount) {
@@ -71,7 +72,7 @@ class UserProfileConnectionsView(context: Context, attrs: AttributeSet) : Linear
         override fun onBindViewHolder(holder: AccountViewHolder, position: Int) {
             val account = items[position].connectedAccount
             val (iconAttr, profileUrl) = platformInfo(account)
-            val icon = TypedValue().also { context.theme.resolveAttribute(iconAttr, it, true) }.resourceId
+            val icon = Platform.from(account).resolvePlatformImage(context)
             holder.text.setCompoundDrawablesWithIntrinsicBounds(icon, 0, 0, 0)
             holder.text.text = account.name
             holder.text.contentDescription = String.format("%s, %s", account.type, account.name)

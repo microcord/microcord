@@ -1,5 +1,7 @@
 package com.discord.utilities.platform
 
+import android.content.Context
+import android.util.TypedValue
 import androidx.annotation.AttrRes
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
@@ -33,6 +35,7 @@ enum class Platform(
     val canShowActivity: Boolean = false,
     /** The account link is offered in this build. */
     val enabled: Boolean = false,
+    private val wireName: String? = null,
 ) {
     BATTLENET(
         properName = "Battle.net",
@@ -110,10 +113,10 @@ enum class Platform(
         enabled = true,
     ),
     TWITTER(
-        properName = "Twitter",
+        properName = "X",
         colorResId = R.color.twitter,
-        themedPlatformImage = R.attr.ic_account_twitter,
-        whitePlatformImage = R.drawable.ic_account_twitter_white_24dp,
+        themedPlatformImage = R.attr.ic_account_x,
+        whitePlatformImage = R.drawable.ic_account_x_white_24dp,
         enabled = true,
     ),
     XBOX(
@@ -132,6 +135,97 @@ enum class Platform(
         enabled = true,
     ),
 
+    AMAZON_MUSIC(
+        properName = "Amazon Music",
+        themedPlatformImage = R.attr.ic_account_amazon_music,
+        enabled = true,
+        wireName = "amazon-music",
+    ),
+    BLUESKY(
+        properName = "Bluesky",
+        themedPlatformImage = R.attr.ic_account_bluesky,
+        whitePlatformImage = R.drawable.ic_account_bluesky_white_24dp,
+        enabled = true,
+    ),
+    BUNGIE(
+        properName = "Bungie.net",
+        themedPlatformImage = R.attr.ic_account_bungie,
+        whitePlatformImage = R.drawable.ic_account_bungie_white_24dp,
+        enabled = true,
+    ),
+    CRUNCHYROLL(
+        properName = "Crunchyroll",
+        themedPlatformImage = R.attr.ic_account_crunchyroll,
+        whitePlatformImage = R.drawable.ic_account_crunchyroll_white_24dp,
+        enabled = true,
+    ),
+    DOMAIN(
+        properName = "Domain",
+        themedPlatformImage = R.attr.ic_account_domain,
+        whitePlatformImage = R.drawable.ic_account_domain_white_24dp,
+        enabled = true,
+    ),
+    EBAY(
+        properName = "eBay",
+        themedPlatformImage = R.attr.ic_account_ebay,
+        whitePlatformImage = R.drawable.ic_account_ebay_white_24dp,
+        enabled = true,
+    ),
+    EPIC_GAMES(
+        properName = "Epic Games",
+        themedPlatformImage = R.attr.ic_account_epic_games,
+        whitePlatformImage = R.drawable.ic_account_epic_games_white_24dp,
+        enabled = true,
+        wireName = "epicgames",
+    ),
+    INSTAGRAM(
+        properName = "Instagram",
+        themedPlatformImage = R.attr.ic_account_instagram,
+        whitePlatformImage = R.drawable.ic_account_instagram_white_24dp,
+    ),
+    MASTODON(
+        properName = "Mastodon",
+        themedPlatformImage = R.attr.ic_account_mastodon,
+        whitePlatformImage = R.drawable.ic_account_mastodon_white_24dp,
+    ),
+    META_QUEST_OR_HORIZON(
+        properName = "Meta Quest",
+        themedPlatformImage = R.attr.ic_account_meta_quest,
+        whitePlatformImage = R.drawable.ic_account_meta_quest_white_24dp,
+        wireName = "meta_quest_or_horizon",
+    ),
+    PAYPAL(
+        properName = "PayPal",
+        themedPlatformImage = R.attr.ic_account_paypal,
+        whitePlatformImage = R.drawable.ic_account_paypal_white_24dp,
+        enabled = true,
+    ),
+    PLAYSTATION_STAGING(
+        properName = "PlayStation Network (Staging)",
+        colorResId = R.color.playstation,
+        themedPlatformImage = R.attr.ic_account_playstation,
+        whitePlatformImage = R.drawable.ic_account_playstation_white_24dp,
+        wireName = "playstation-stg",
+    ),
+    RIOT_GAMES(
+        properName = "Riot Games",
+        themedPlatformImage = R.attr.ic_account_riot_games,
+        whitePlatformImage = R.drawable.ic_account_riot_games_white_24dp,
+        enabled = true,
+        wireName = "riotgames",
+    ),
+    ROBLOX(
+        properName = "Roblox",
+        themedPlatformImage = R.attr.ic_account_roblox,
+        whitePlatformImage = R.drawable.ic_account_roblox_white_24dp,
+        enabled = true,
+    ),
+    TIKTOK(
+        properName = "TikTok",
+        themedPlatformImage = R.attr.ic_account_tiktok,
+        whitePlatformImage = R.drawable.ic_account_tiktok_white_24dp,
+    ),
+
     /**
      * "no service". Declared last to match the reference's `$VALUES` order — Vineflower prints the
      * constants alphabetically, but `getProfileUrl`'s ordinal switch proves `NONE` is the final
@@ -140,21 +234,28 @@ enum class Platform(
     NONE,
     ;
 
-    /** Wire identifier for this service — the lowercase enum name. */
-    val platformId: String = name.lowercase(Locale.ENGLISH)
+    /** Wire identifier for this service, as the REST/OAuth endpoints expect it. */
+    val platformId: String = wireName ?: name.lowercase(Locale.ENGLISH)
 
     /**
      * Web profile for [connectedAccount] on this service, or `null` where the service has no
      * addressable public profile (or the account link is not visible off-platform).
      */
     fun getProfileUrl(connectedAccount: ConnectedAccount): String? = when (this) {
+        BLUESKY -> "https://bsky.app/profile/${connectedAccount.id}"
+        DOMAIN -> "https://${connectedAccount.id}/"
+        EBAY -> "https://www.ebay.com/usr/${connectedAccount.name}"
         GITHUB -> "https://github.com/${connectedAccount.name}"
-        REDDIT -> "https://reddit.com/u/${connectedAccount.name}"
+        INSTAGRAM -> "https://www.instagram.com/${connectedAccount.name}"
+        MASTODON -> connectedAccount.id
+        REDDIT -> "https://www.reddit.com/u/${connectedAccount.name}"
+        ROBLOX -> "https://roblox.com/users/${connectedAccount.id}/profile"
         SPOTIFY -> "https://open.spotify.com/user/${connectedAccount.id}"
         STEAM -> "https://steamcommunity.com/profiles/${connectedAccount.id}"
-        TWITCH -> "https://twitch.tv/${connectedAccount.name}"
-        TWITTER -> "https://www.twitter.com/${connectedAccount.name}"
-        YOUTUBE -> "https://youtube.com/channel/${connectedAccount.id}"
+        TIKTOK -> "https://www.tiktok.com/@${connectedAccount.name}"
+        TWITCH -> "https://www.twitch.tv/${connectedAccount.name}"
+        TWITTER -> "https://x.com/${connectedAccount.name}"
+        YOUTUBE -> "https://www.youtube.com/channel/${connectedAccount.id}"
         else -> null
     }
 
@@ -176,12 +277,23 @@ enum class Platform(
         @JvmStatic
         fun from(connectedAccount: ConnectedAccount): Platform = from(connectedAccount.type)
 
-        /**
-         * Resolves a wire platform name. Unknown, blank and malformed names all yield [NONE] —
-         * the server adds services faster than clients ship.
-         */
+        private val byPlatformId = entries.associateBy(Platform::platformId)
+
+        /** Unknown, blank and malformed names all yield [NONE]. */
         @JvmStatic
         fun from(platformName: String): Platform =
-            runCatching { valueOf(platformName.trim().uppercase(Locale.ENGLISH)) }.getOrDefault(NONE)
+            byPlatformId[platformName.trim().lowercase(Locale.ENGLISH)] ?: NONE
+    }
+}
+
+/** The service glyph resolved against [context]'s theme, or a neutral one where there is none. */
+@DrawableRes
+fun Platform.resolvePlatformImage(context: Context): Int {
+    val attribute = themedPlatformImage ?: return R.drawable.ic_account_circle_grey_24dp
+    val value = TypedValue()
+    return if (context.theme.resolveAttribute(attribute, value, true)) {
+        value.resourceId
+    } else {
+        R.drawable.ic_account_circle_grey_24dp
     }
 }
