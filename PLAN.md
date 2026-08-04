@@ -2532,6 +2532,16 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   `assembleDebug` pass. Successful thread deletion now emits a close event after its confirmation toast,
   finishing the settings activity instead of leaving a deleted thread's menu open. The APK was installed
   successfully on WSA pending final live confirmation.
+- Wired the folder long-press menu's Folder Settings action to the already reconstructed
+  `WidgetGuildFolderSettings`; its production navigation seam had remained an empty lambda. Focused
+  folder/context-menu/list tests and `assembleDebug` pass. The screen now exposes toolbar Up navigation,
+  restores the missing 16dp name-field inset, and themes the third-party color picker with Discord
+  background and title/input colors across Presets/Custom layouts. Its stock AlertDialog actions are
+  replaced by the reference-shaped three-action row: `colorBackgroundAccent` filled Custom/Presets,
+  text-only Reset (which restores the brand default), and primary filled Select, all with mixed-case Discord styling and
+  no platform elevation. Custom uses the same material insets and visible size as Select, and the folder
+  name's text/hint baseline aligns with the 16dp section content line. The APK was installed successfully
+  on WSA.
 
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/applauncher/**` | Android 340.12
 Hermes `out.js` Apps launcher modules | log in on WSA and verify HOME/search/application/command/list

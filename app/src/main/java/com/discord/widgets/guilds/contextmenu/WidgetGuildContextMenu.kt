@@ -127,7 +127,5 @@ object ContextMenuNavigation {
     }
 
     @Volatile
-    var showFolderSettings: (Context, Long) -> Unit = { context, folderId ->
-        WidgetGuildFolderSettings.create(context, folderId)
-    }
+    var showFolderSettings: (Context, Long) -> Unit = WidgetGuildFolderSettings::create
 }
