@@ -3,6 +3,7 @@ package com.discord.restapi
 import okhttp3.CookieJar
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ResponseBody
@@ -16,6 +17,8 @@ import retrofit2.Call
 import retrofit2.Retrofit
 import retrofit2.http.Body
 import retrofit2.http.Header
+import retrofit2.http.Multipart
+import retrofit2.http.Part
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -74,6 +77,42 @@ class RestMetadataLoggingInterceptorTest {
         ).forEach { secret -> assertFalse("leaked $secret in $log", log.contains(secret)) }
     }
 
+    @Test
+    fun `verbose logging keeps API errors and redacts multipart secrets`() {
+        val server = MockWebServer()
+        val logs = mutableListOf<String>()
+        server.enqueue(
+            MockResponse().setResponseCode(403).setBody(
+                """{"code":50001,"message":"Missing Access","content":"private","token":"response-secret"}""",
+            ),
+        )
+        val client = OkHttpClient.Builder()
+            .cookieJar(CookieJar.NO_COOKIES)
+            .addDebugRestLogging(true, logs::add) { true }
+            .build()
+        val api = Retrofit.Builder().baseUrl(server.url("/api/v9/")).client(client).build()
+            .create(LoggingApi::class.java)
+        val payload = """{"name":"private title","content":"private body","nonce":"nonce-secret","applied_tags":["42"]}"""
+            .toRequestBody("application/json".toMediaType())
+        val file = MultipartBody.Part.createFormData(
+            "files[0]",
+            "private-filename.png",
+            "private-file-bytes".toRequestBody("image/png".toMediaType()),
+        )
+
+        api.createPost("123456789", "Bearer authorization-secret", payload, file).execute().body()?.close()
+        server.shutdown()
+
+        val log = logs.joinToString("\n")
+        assertTrue(log.contains("\"code\":50001"))
+        assertTrue(log.contains("Missing Access"))
+        assertTrue(log.contains("\"applied_tags\":[\"42\"]"))
+        listOf(
+            "123456789", "authorization-secret", "private title", "private body", "nonce-secret",
+            "private-filename.png", "private-file-bytes", "response-secret",
+        ).forEach { secret -> assertFalse("leaked $secret in $log", log.contains(secret)) }
+    }
+
     private interface LoggingApi {
         @POST("channels/{channelId}/messages")
         fun postMessage(
@@ -82,6 +121,15 @@ class RestMetadataLoggingInterceptorTest {
             @Header("Authorization") authorization: String,
             @Header("Cookie") cookie: String,
             @Body body: RequestBody,
+        ): Call<ResponseBody>
+
+        @Multipart
+        @POST("channels/{channelId}/threads")
+        fun createPost(
+            @Path("channelId") channelId: String,
+            @Header("Authorization") authorization: String,
+            @Part("payload_json") payload: RequestBody,
+            @Part file: MultipartBody.Part,
         ): Call<ResponseBody>
     }
 }

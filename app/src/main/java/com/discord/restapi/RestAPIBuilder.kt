@@ -4,14 +4,21 @@ import com.discord.BuildConfig
 import com.discord.app.AppLog
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.models.domain.Model
+import com.discord.utilities.logging.AppRestRequestLogger
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonElement
+import com.google.gson.JsonParser
+import com.google.gson.JsonPrimitive
 import java.util.concurrent.TimeUnit
 import okhttp3.CookieJar
 import okhttp3.Interceptor
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
+import okhttp3.RequestBody
 import okhttp3.Response
+import okio.Buffer
 import retrofit2.Invocation
 import retrofit2.Retrofit
 import retrofit2.adapter.rxjava.RxJavaCallAdapterFactory
@@ -28,20 +35,32 @@ import retrofit2.http.PUT
 internal fun OkHttpClient.Builder.addDebugRestLogging(
     enabled: Boolean,
     logger: (String) -> Unit = { AppLog.d("REST", it) },
+    verbose: () -> Boolean = AppRestRequestLogger::isEnabled,
 ) = apply {
-    if (enabled) addInterceptor(RestMetadataLoggingInterceptor(logger))
+    if (enabled) addInterceptor(RestMetadataLoggingInterceptor(logger, verbose))
 }
 
 internal class RestMetadataLoggingInterceptor(
     private val logger: (String) -> Unit,
+    private val verbose: () -> Boolean = { false },
 ) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val startedAt = System.nanoTime()
         val prefix = "method=${request.method} path=${request.routeTemplate()}"
+        val verbose = verbose()
+        if (verbose) {
+            logger("$prefix requestHeaders=${request.headers.sanitized()} requestBody=${request.body.sanitized()}")
+        }
         return try {
             chain.proceed(request).also { response ->
                 logger("$prefix status=${response.code} durationMs=${elapsedMillis(startedAt)}")
+                if (verbose) {
+                    logger(
+                        "$prefix responseHeaders=${response.headers.sanitized()} " +
+                            "responseBody=${RestLogRedactor.redact(response.peekBody(MAX_LOG_BODY_BYTES).string())}",
+                    )
+                }
             }
         } catch (failure: Exception) {
             logger("$prefix status=failed durationMs=${elapsedMillis(startedAt)} error=${failure.javaClass.simpleName}")
@@ -68,8 +87,56 @@ internal class RestMetadataLoggingInterceptor(
     private fun elapsedMillis(startedAt: Long) =
         TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)
 
+    private fun okhttp3.Headers.sanitized(): String = names().sorted().joinToString(prefix = "{", postfix = "}") { name ->
+        "$name=${if (name.lowercase() in SENSITIVE_HEADERS) "<redacted>" else values(name).joinToString() }"
+    }
+
+    private fun RequestBody?.sanitized(): String {
+        this ?: return "<none>"
+        if (this is MultipartBody) return parts.mapIndexed { index, part ->
+            val disposition = part.headers?.get("Content-Disposition").orEmpty()
+            if (disposition.contains("name=\"payload_json\"")) {
+                "payload_json=${part.body.readAndRedact()}"
+            } else {
+                "file[$index]=<redacted> contentType=${part.body.contentType()} size=${runCatching { part.body.contentLength() }.getOrDefault(-1)}"
+            }
+        }.joinToString(prefix = "[", postfix = "]")
+        return if (contentType()?.subtype == "json") readAndRedact() else "<redacted ${contentType()}>"
+    }
+
+    private fun RequestBody.readAndRedact(): String = runCatching {
+        if (contentLength() > MAX_LOG_BODY_BYTES) return@runCatching "<redacted body too large>"
+        Buffer().also(::writeTo).readUtf8().let(RestLogRedactor::redact)
+    }.getOrDefault("<redacted unreadable body>")
+
     private companion object {
         const val REDACTED_PATH = "[redacted]"
+        const val MAX_LOG_BODY_BYTES = 65_536L
+        val SENSITIVE_HEADERS = setOf("authorization", "cookie", "set-cookie", "x-super-properties")
+    }
+}
+
+internal object RestLogRedactor {
+    private val sensitiveKeys = setOf(
+        "authorization", "captcha_key", "captcha_rqtoken", "client_secret", "content", "email",
+        "filename", "mfa_code", "name", "nonce", "password", "phone", "session_id", "token",
+    )
+
+    fun redact(raw: String): String = runCatching {
+        JsonParser.parseString(raw).also(::redact).toString()
+    }.getOrDefault("<redacted non-json body>")
+
+    private fun redact(element: JsonElement) {
+        when {
+            element.isJsonArray -> element.asJsonArray.forEach(::redact)
+            element.isJsonObject -> element.asJsonObject.entrySet().forEach { (key, value) ->
+                if (key.lowercase() in sensitiveKeys) {
+                    element.asJsonObject.add(key, JsonPrimitive("<redacted>"))
+                } else {
+                    redact(value)
+                }
+            }
+        }
     }
 }
 

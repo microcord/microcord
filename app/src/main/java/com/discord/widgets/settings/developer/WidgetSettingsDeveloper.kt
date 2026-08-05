@@ -17,6 +17,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.experiments.ExperimentRegistry
 import com.discord.utilities.logging.AppGatewaySocketLogger
+import com.discord.utilities.logging.AppRestRequestLogger
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.hammerandchisel.libdiscord.Discord
@@ -54,6 +55,10 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
         binding.settingsDeveloperLogGatewayEvents.apply {
             isChecked = AppGatewaySocketLogger.isEnabled()
             setOnCheckedListener(AppGatewaySocketLogger::setEnabled)
+        }
+        binding.settingsDeveloperLogRestRequests.apply {
+            isChecked = AppRestRequestLogger.isEnabled()
+            setOnCheckedListener(AppRestRequestLogger::setEnabled)
         }
         binding.developerSettingsCrashKotlin.setOnClickListener {
             throw RuntimeException("This is a developer triggered crash.")
