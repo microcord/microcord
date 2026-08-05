@@ -29,14 +29,12 @@ import rx.schedulers.TestScheduler
 class MessageSendCoordinatorTest {
 
     private val restApi = RecordingRestApi()
-    private val reactNativeApi = RecordingRestApi()
     private val timerScheduler = TestScheduler()
     private var now = 1_700_000_000_000L
     private val updates = mutableListOf<MessageSendCoordinator.Update>()
 
     private val coordinator = MessageSendCoordinator(
         api = restApi.api,
-        reactNativeApi = reactNativeApi.api,
         now = { now },
         contentResolver = null,
         queueExecutor = DirectExecutorService(),
@@ -263,8 +261,7 @@ class MessageSendCoordinatorTest {
         )
 
         assertTrue(submission is MessageSendCoordinator.Submission.Accepted)
-        assertTrue(restApi.sendCalls.isEmpty())
-        assertEquals(listOf(99L), reactNativeApi.sendCalls.single().body?.stickerIds)
+        assertEquals(listOf(99L), restApi.sendCalls.single().body?.stickerIds)
     }
 
     @Test

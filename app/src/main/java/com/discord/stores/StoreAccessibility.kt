@@ -5,7 +5,6 @@ import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.accessibility.AccessibilityFeatureFlags
 import com.discord.utilities.accessibility.AccessibilityMonitor
 import com.discord.utilities.accessibility.AccessibilityState
-import com.discord.utilities.analytics.AnalyticSuperProperties
 import com.discord.utilities.persister.Persister
 import java.util.EnumSet
 import rx.Observable
@@ -92,7 +91,6 @@ class StoreAccessibility(
             if (fontScaledUp) add(AccessibilityFeatureFlags.CHAT_FONT_SCALE_INCREASED)
             if (fontScaledDown) add(AccessibilityFeatureFlags.CHAT_FONT_SCALE_DECREASED)
         }
-        AnalyticSuperProperties.setAccessibilityProperties(isScreenreaderEnabled(), getAccessibilityFeatures())
         reducedMotionCache.set(reducedMotionEnabled, persist = true)
     }
 }

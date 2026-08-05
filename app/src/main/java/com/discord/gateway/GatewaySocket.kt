@@ -78,7 +78,7 @@ class RealGatewayScheduler : GatewayScheduler {
 
 class GatewaySocket(
     private val identifyDataProvider: () -> IdentifyData?,
-    private val identifyProperties: Map<String, Any>,
+    private val identifyProperties: () -> Map<String, Any?>,
     private val eventHandler: GatewayEventHandler,
     private val scheduler: GatewayScheduler,
     private val discovery: GatewayDiscovery,
@@ -313,7 +313,7 @@ class GatewaySocket(
         token = data.token
         send(
             Opcode.IDENTIFY,
-            Identify(data.token, 100, true, 351, identifyProperties, data.clientState),
+            Identify(data.token, 100, true, 351, identifyProperties(), data.clientState),
         )
     }
 

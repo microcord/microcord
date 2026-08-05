@@ -93,6 +93,8 @@ class StoreStreamTest {
         dispatch(
             """{"op":0,"t":"VOICE_STATE_UPDATE","d":{"guild_id":1,"channel_id":10,"user_id":7,"session_id":"other","suppress":false,"self_mute":false,"self_deaf":false,"self_video":false,"self_stream":false,"mute":false,"deaf":false,"member":{"guild_id":1,"user":{"id":7,"username":"joined","discriminator":"0007"},"roles":[]}}}""",
         )
+        // VOICE_STATE_UPDATE is debounced; only a dispatch of another type flushes it.
+        dispatch("""{"op":0,"t":"CHANNEL_CREATE","d":{"id":11,"guild_id":1,"type":0,"name":"text"}}""")
 
         assertEquals("joined", StoreStream.getUsers().getUsers()[7]?.username)
         assertEquals(7L, StoreStream.getGuilds().getMembers()[1]?.get(7)?.userId)

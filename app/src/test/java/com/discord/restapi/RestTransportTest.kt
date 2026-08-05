@@ -23,7 +23,6 @@ import retrofit2.Response
 import retrofit2.http.GET
 import rx.Observable
 import java.util.Base64
-import java.util.UUID
 
 class RestTransportTest {
     private val server = MockWebServer()
@@ -43,7 +42,6 @@ class RestTransportTest {
             override fun getFingerprint() = "fixture-fingerprint"
             override fun getLocale() = "tr"
             override fun getAcceptLanguages() = "tr-TR,tr;q=0.9"
-            override fun getUserAgent() = "Manticord fixture"
             override fun getSpotifyToken(): String? = null
         }
         val api = RestAPIBuilder(server.url("/api/").toString(), MemoryCookieJar()).build(
@@ -60,20 +58,7 @@ class RestTransportTest {
         assertEquals("fixture-fingerprint", first.getHeader("X-Fingerprint"))
         assertEquals("tr", first.getHeader("X-Discord-Locale"))
         assertEquals("tr-TR,tr;q=0.9", first.getHeader("Accept-Language"))
-        assertEquals("Manticord fixture", first.getHeader("User-Agent"))
         assertEquals("session=abc", second.getHeader("Cookie"))
-    }
-
-    @Test
-    fun analyticsInterceptorAddsSuperProperties() {
-        server.enqueue(MockResponse().setBody("ok"))
-        val client = OkHttpClient.Builder()
-            .addInterceptor(RestAPI.buildAnalyticsInterceptor { "fixture-super-properties" })
-            .build()
-
-        client.newCall(request("/metadata")).execute().close()
-
-        assertEquals("fixture-super-properties", server.takeRequest().getHeader("X-Super-Properties"))
     }
 
     @Test
@@ -88,7 +73,6 @@ class RestTransportTest {
             override fun getFingerprint(): String? = null
             override fun getLocale(): String? = null
             override fun getAcceptLanguages(): String? = null
-            override fun getUserAgent() = "Manticord fixture"
             override fun getSpotifyToken(): String? = null
         }
         val cookieJar = MemoryCookieJar()
@@ -116,27 +100,12 @@ class RestTransportTest {
         server.takeRequest().also { request ->
             assertEquals("Bearer activity-token", request.getHeader("Authorization"))
             assertEquals(null, request.getHeader("Cookie"))
-            assertEquals(ReactNativeRequestMetadata.USER_AGENT, request.getHeader("User-Agent"))
+            assertEquals(AnalyticSuperProperties.USER_AGENT, request.getHeader("User-Agent"))
         }
     }
 
     @Test
-    fun reactNativeInterceptorIsScopedAndAddsStickerSendMetadata() {
-        server.enqueue(MockResponse().setBody("ok"))
-        val client = OkHttpClient.Builder()
-            .addInterceptor(ReactNativeHeadersInterceptor)
-            .build()
-
-        client.newCall(request("/rn-sticker")).execute().close()
-
-        val sent = server.takeRequest()
-        assertEquals(ReactNativeRequestMetadata.USER_AGENT, sent.getHeader("User-Agent"))
-        assertFalse(sent.getHeader("X-Super-Properties").isNullOrBlank())
-        assertFalse(sent.getHeader("X-Discord-Timezone").isNullOrBlank())
-    }
-
-    @Test
-    fun modernApplicationAndActivityClientsAlwaysUseReactNativeHeaders() {
+    fun everyClientCarriesTheSameClientMetadata() {
         server.enqueue(MockResponse().setBody("[]"))
         server.enqueue(MockResponse().setBody("{\"activities\":[],\"applications\":[],\"assets\":{}}"))
         server.enqueue(MockResponse().setBody("{\"applications\":[],\"application_commands\":[]}"))
@@ -147,10 +116,10 @@ class RestTransportTest {
 
         RestAPI.applicationDirectoryApiOrNull!!.categories("en-US").toBlocking().single()
         RestAPI.embeddedActivitiesApiOrNull!!.shelf().toBlocking().single()
-        RestAPI.reactNativeApiOrNull!!.getUserApplicationCommandIndex().toBlocking().single()
+        RestAPI.api.getUserApplicationCommandIndex().toBlocking().single()
         RestAPI.applicationDirectoryApiOrNull!!.applicationCommandIndex(10L).toBlocking().single()
-        RestAPI.reactNativeApiOrNull!!.searchForumThreads(20L).toBlocking().single()
-        RestAPI.reactNativeApiOrNull!!.sendApplicationCommand(
+        RestAPI.api.searchForumThreads(20L).toBlocking().single()
+        RestAPI.api.sendApplicationCommand(
             RestAPIParams.ApplicationCommand(
                 type = 4L,
                 channelId = "7",
@@ -179,7 +148,7 @@ class RestTransportTest {
 
         val requests = List(6) {
             val request = server.takeRequest()
-            assertEquals(ReactNativeRequestMetadata.USER_AGENT, request.getHeader("User-Agent"))
+            assertEquals(AnalyticSuperProperties.USER_AGENT, request.getHeader("User-Agent"))
             assertFalse(request.getHeader("X-Super-Properties").isNullOrBlank())
             assertFalse(request.getHeader("X-Discord-Timezone").isNullOrBlank())
             request
@@ -191,23 +160,17 @@ class RestTransportTest {
     }
 
     @Test
-    fun offlineSuperPropertiesCanUseAGeneratedAdvertiserId() {
-        val fakeAdvertiserId = UUID.randomUUID().toString()
-        AnalyticSuperProperties.setAdvertiserId(fakeAdvertiserId)
-        val encoded = Base64.getEncoder().encodeToString(
-            AnalyticSuperProperties.superPropertiesString.toByteArray(),
-        )
+    fun superPropertiesRideAlongAsBase64() {
         server.enqueue(MockResponse().setBody("ok"))
-        val client = OkHttpClient.Builder()
-            .addInterceptor(RestAPI.buildAnalyticsInterceptor { encoded })
-            .build()
+        val client = OkHttpClient.Builder().addInterceptor(ClientMetadataInterceptor).build()
 
         client.newCall(request("/offline-metadata")).execute().close()
 
         val decoded = String(Base64.getDecoder().decode(
             requireNotNull(server.takeRequest().getHeader("X-Super-Properties")),
         ))
-        assertTrue(decoded.contains("\"device_advertiser_id\":\"$fakeAdvertiserId\""))
+        assertTrue(decoded.contains("\"browser\":\"Discord Android\""))
+        assertTrue(decoded.contains("\"client_event_source\":null"))
     }
 
     @Test

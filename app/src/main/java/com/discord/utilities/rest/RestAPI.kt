@@ -8,8 +8,7 @@ import com.discord.restapi.EmbeddedActivityOAuthAPI
 import com.discord.restapi.MfaInterceptor
 import com.discord.restapi.RestAPIBuilder
 import com.discord.restapi.RestAPIInterface
-import com.discord.restapi.ReactNativeHeadersInterceptor
-import com.discord.utilities.analytics.AnalyticSuperProperties
+import com.discord.restapi.ClientMetadataInterceptor
 import okhttp3.CookieJar
 import okhttp3.Interceptor
 
@@ -19,7 +18,7 @@ import okhttp3.Interceptor
  * The reference exposes the same thing as `RestAPI.api`, and every screen that talks to the API
  * reads it from there rather than threading a client down through fragment arguments. The clients
  * are still owned and configured by the store graph; this object only publishes the normal
- * and null-serializing variants used by 126.21.
+ * and null-serializing variants.
  *
  * `StoreStream` must call [install] once it has built its `RestAPIInterface`; until it does,
  * [apiOrNull] is `null` and callers degrade instead of crashing.
@@ -31,9 +30,6 @@ object RestAPI {
 
     @Volatile
     private var installedSerializeNulls: RestAPIInterface? = null
-
-    @Volatile
-    private var installedReactNative: RestAPIInterface? = null
 
     @Volatile
     private var installedApplicationDirectory: ApplicationDirectoryAPI? = null
@@ -49,14 +45,9 @@ object RestAPI {
 
     /** Publishes the store graph's REST client. Safe to call more than once. */
     @JvmStatic
-    fun install(
-        api: RestAPIInterface,
-        apiSerializeNulls: RestAPIInterface = api,
-        reactNativeApi: RestAPIInterface = api,
-    ) {
+    fun install(api: RestAPIInterface, apiSerializeNulls: RestAPIInterface = api) {
         installed = api
         installedSerializeNulls = apiSerializeNulls
-        installedReactNative = reactNativeApi
     }
 
     /** Builds and publishes the authenticated client variants used by production. */
@@ -65,7 +56,7 @@ object RestAPI {
         // Both retry by re-running the chain below them, so each picks up fresh headers. MFA sits
         // outside captcha because its retry then carries the elevation through a captcha replay;
         // the other order re-prompts the user for a code the request already earned.
-        val chain = listOf(MfaInterceptor(), CaptchaInterceptor()) + interceptors
+        val chain = listOf(MfaInterceptor(), CaptchaInterceptor()) + interceptors + ClientMetadataInterceptor
         val api = builder.build(
             RestAPIInterface::class.java,
             interceptors = chain,
@@ -77,33 +68,28 @@ object RestAPI {
             interceptors = chain + ChannelReorderDiagnostics,
             clientName = "serializeNulls",
         )
-        val reactNativeApi = builder.build(
-            RestAPIInterface::class.java,
-            interceptors = chain + ReactNativeHeadersInterceptor,
-            clientName = "reactNative",
-        )
         installedApplicationDirectory = builder.build(
             ApplicationDirectoryAPI::class.java,
-            interceptors = chain + ReactNativeHeadersInterceptor,
+            interceptors = chain,
             clientName = "applicationDirectory",
         )
         installedEmbeddedActivities = builder.build(
             EmbeddedActivitiesAPI::class.java,
-            interceptors = chain + ReactNativeHeadersInterceptor,
+            interceptors = chain,
             clientName = "embeddedActivities",
         )
         installedEmbeddedActivityOAuth = builder.build(
             EmbeddedActivityOAuthAPI::class.java,
-            interceptors = chain + ReactNativeHeadersInterceptor,
+            interceptors = chain,
             clientName = "embeddedActivityOAuth",
         )
         installedEmbeddedActivityOAuthToken = builder.build(
             EmbeddedActivityOAuthAPI::class.java,
-            interceptors = listOf(ReactNativeHeadersInterceptor),
+            interceptors = listOf(ClientMetadataInterceptor),
             clientName = "embeddedActivityOAuthToken",
             cookieJar = CookieJar.NO_COOKIES,
         )
-        install(api, apiSerializeNulls, reactNativeApi)
+        install(api, apiSerializeNulls)
         return api
     }
 
@@ -112,23 +98,10 @@ object RestAPI {
     fun reset() {
         installed = null
         installedSerializeNulls = null
-        installedReactNative = null
         installedApplicationDirectory = null
         installedEmbeddedActivities = null
         installedEmbeddedActivityOAuth = null
         installedEmbeddedActivityOAuthToken = null
-    }
-
-    /** Adds the same client metadata header as Discord Android 126.21. */
-    @JvmStatic
-    fun buildAnalyticsInterceptor(
-        superPropertiesProvider: () -> String = { AnalyticSuperProperties.superPropertiesStringBase64 },
-    ): Interceptor = Interceptor { chain ->
-        chain.proceed(
-            chain.request().newBuilder()
-                .addHeader("X-Super-Properties", superPropertiesProvider())
-                .build(),
-        )
     }
 
     /** The REST client, or `null` before the store graph has published one. */
@@ -143,16 +116,12 @@ object RestAPI {
             "RestAPI.install() has not been called; the store graph publishes the REST client."
         }
 
-    /** The 126.21 null-serializing client used by bodies with explicit JSON nulls. */
+    /** The null-serializing client used by bodies with explicit JSON nulls. */
     @JvmStatic
     val apiSerializeNulls: RestAPIInterface
         get() = checkNotNull(installedSerializeNulls) {
             "RestAPI.install() has not been called; the store graph publishes the REST client."
         }
-
-    @JvmStatic
-    val reactNativeApiOrNull: RestAPIInterface?
-        get() = installedReactNative
 
     @JvmStatic
     val applicationDirectoryApiOrNull: ApplicationDirectoryAPI?

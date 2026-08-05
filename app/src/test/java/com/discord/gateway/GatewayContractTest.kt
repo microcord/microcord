@@ -119,7 +119,6 @@ class GatewayContractTest {
             override fun getFingerprint(): String? = null
             override fun getLocale(): String? = null
             override fun getAcceptLanguages(): String? = null
-            override fun getUserAgent(): String = "fixture"
             override fun getSpotifyToken(): String? = null
         }
         val server = MockWebServer()

@@ -2,7 +2,7 @@ package com.discord.activities
 
 import com.discord.api.channel.Channel
 import com.discord.restapi.EmbeddedActivityOAuthAPI
-import com.discord.restapi.ReactNativeHeadersInterceptor
+import com.discord.restapi.ClientMetadataInterceptor
 import com.discord.restapi.RestAPIBuilder
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
@@ -122,7 +122,7 @@ class EmbeddedActivityOAuthTest {
         try {
             val api = RestAPIBuilder(server.url("/api/").toString(), CookieJar.NO_COOKIES).build(
                 EmbeddedActivityOAuthAPI::class.java,
-                interceptors = listOf(ReactNativeHeadersInterceptor),
+                interceptors = listOf(ClientMetadataInterceptor),
             )
             block(server, api)
         } finally {

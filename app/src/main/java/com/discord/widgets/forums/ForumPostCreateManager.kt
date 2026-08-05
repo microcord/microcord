@@ -140,8 +140,8 @@ object ForumPostCreateManager {
             .filterIs<SendUtils.SendPayload.ReadyToSend>()
             .take(1)
             .flatMap { payload ->
-                val api = RestAPI.reactNativeApiOrNull
-                    ?: return@flatMap Observable.error<Channel>(IllegalStateException("RN API unavailable"))
+                val api = RestAPI.apiOrNull
+                    ?: return@flatMap Observable.error<Channel>(IllegalStateException("API unavailable"))
                 api.createForumPost(
                     channelId,
                     PayloadJSON(forumPostBody(name, autoArchiveDuration, payload.message)),

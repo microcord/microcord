@@ -95,7 +95,7 @@ sealed class OutgoingPayload private constructor() {
         private val largeThreshold: Int,
         private val compress: Boolean,
         private val capabilities: Long,
-        private val properties: Map<String, Any>,
+        private val properties: Map<String, Any?>,
         private val clientState: IdentifyClientState?,
     ) : OutgoingPayload() {
         override fun toString(): String =

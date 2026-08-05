@@ -162,7 +162,7 @@ class GatewaySocketTest {
                     IdentifyClientState(emptyMap(), 0, 0, 0),
                 )
             },
-            identifyProperties = mapOf("os" to "Android", "browser" to "Discord Android", "device" to "fixture"),
+            identifyProperties = { mapOf("os" to "Android", "browser" to "Discord Android", "device" to "fixture") },
             eventHandler = handler,
             scheduler = scheduler,
             discovery = GatewayDiscovery { ModelGateway("wss://gateway.example") },

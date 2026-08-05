@@ -32,7 +32,7 @@ import rx.Observable
 
 class WidgetForumPostStatusViewModel(
     storeStateObservable: Observable<StoreState> = observeStoreState(),
-    private val restAPI: () -> RestAPIInterface = { RestAPI.reactNativeApiOrNull ?: RestAPI.api },
+    private val restAPI: () -> RestAPIInterface = { RestAPI.api },
 ) : AppViewModel<WidgetForumPostStatusViewModel.ViewState>() {
 
     sealed class StoreState {

@@ -1,6 +1,7 @@
 package com.discord.restapi
 
 import com.discord.api.channel.Channel
+import com.discord.utilities.analytics.AnalyticSuperProperties
 import com.discord.utilities.rest.RestAPI
 import com.discord.widgets.servers.GuildChannelsSort
 import com.discord.widgets.servers.SettingsChannelListAdapter
@@ -54,7 +55,17 @@ class ChannelReorderContractTest {
 
         val request = server.takeRequest()
         val body = JsonParser.parseString(request.body.readUtf8()).asJsonArray
-        assertEquals(listOf("main", "serializeNulls", "reactNative"), clients.keys.toList())
+        assertEquals(
+            listOf(
+                "main",
+                "serializeNulls",
+                "applicationDirectory",
+                "embeddedActivities",
+                "embeddedActivityOAuth",
+                "embeddedActivityOAuthToken",
+            ),
+            clients.keys.toList(),
+        )
         assertNotSame(clients.getValue("main"), clients.getValue("serializeNulls"))
         assertEquals("PATCH", request.method)
         assertEquals("/api/v9/guilds/$GUILD_ID/channels", request.path)
@@ -62,8 +73,8 @@ class ChannelReorderContractTest {
         assertEquals("test-fingerprint", request.getHeader("X-Fingerprint"))
         assertEquals("en-US", request.getHeader("X-Discord-Locale"))
         assertEquals("en-US,en;q=0.9", request.getHeader("Accept-Language"))
-        assertEquals("Discord-Android/126021", request.getHeader("User-Agent"))
-        assertEquals("test-super-properties", request.getHeader("X-Super-Properties"))
+        assertEquals(AnalyticSuperProperties.USER_AGENT, request.getHeader("User-Agent"))
+        assertFalse(request.getHeader("X-Super-Properties").isNullOrBlank())
         assertEquals(listOf(CHANNEL_A, CATEGORY_A, CHANNEL_B, CATEGORY_B), body.map { it.asJsonObject["id"].asLong })
         assertTrue(body.all { it.asJsonObject["id"].asJsonPrimitive.isNumber })
         assertEquals(listOf(1, 2, 3, 4), body.map { it.asJsonObject["position"].asInt })
@@ -123,7 +134,6 @@ class ChannelReorderContractTest {
             RestAPIBuilder(server.url("/api/").toString(), CookieJar.NO_COOKIES),
             listOf(
                 RequiredHeadersInterceptor(headers),
-                RestAPI.buildAnalyticsInterceptor { "test-super-properties" },
             ),
         )
     }
@@ -183,7 +193,6 @@ class ChannelReorderContractTest {
             override fun getFingerprint() = "test-fingerprint"
             override fun getLocale() = "en-US"
             override fun getAcceptLanguages() = "en-US,en;q=0.9"
-            override fun getUserAgent() = "Discord-Android/126021"
             override fun getSpotifyToken(): String? = null
         }
     }

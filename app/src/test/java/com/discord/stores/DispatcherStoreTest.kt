@@ -94,10 +94,12 @@ class DispatcherStoreTest {
         StoreThreadScheduler.newThread {}
         val store = TestStore()
 
+        // AppLog is process-wide, so filter rather than count: a store thread left running by
+        // another test class can report into the same window.
         val reported = reportedErrors { store.value = 1 }
+            .filter { it.message == "markChanged() should be run from the Store Dispatcher" }
 
         assertEquals(1, reported.size)
-        assertEquals("markChanged() should be run from the Store Dispatcher", reported.single().message)
         assertTrue(reported.single().throwable is IllegalStateException)
         assertEquals(1, store.valueForTest)
 

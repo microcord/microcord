@@ -61,7 +61,7 @@ class StoreApplicationInteractions(
     private val storeLocalActionComponentState: StoreLocalActionComponentState,
     private val sharedPrefs: SharedPreferences = SharedPreferencesProvider.get(),
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
-    private val restApi: () -> RestAPIInterface? = { RestAPI.reactNativeApiOrNull },
+    private val restApi: () -> RestAPIInterface? = { RestAPI.apiOrNull },
     private val nonceGenerator: NonceGenerator = NonceGenerator(),
     private val now: () -> Long = System::currentTimeMillis,
     /**

@@ -43,7 +43,6 @@ import rx.subjects.AsyncSubject
  */
 class MessageSendCoordinator @JvmOverloads constructor(
     private val api: RestAPIInterface,
-    private val reactNativeApi: RestAPIInterface = RestAPI.reactNativeApiOrNull ?: api,
     private val now: () -> Long = System::currentTimeMillis,
     private val nonceGenerator: NonceGenerator = NonceGenerator(now),
     private val contentResolver: ContentResolver? = null,
@@ -369,7 +368,6 @@ class MessageSendCoordinator @JvmOverloads constructor(
             executorService = queueExecutor,
             clock = Clock { now() },
             api = api,
-            reactNativeApi = reactNativeApi,
             retryScheduler = retryScheduler,
         )
     }

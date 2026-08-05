@@ -148,6 +148,10 @@ object UserUtils {
     val User.discriminatorWithPadding: String
         get() = discriminatorSuffix(discriminator)
 
+    /** As [discriminatorWithPadding], for the raw API model, which carries the discriminator as text. */
+    val ApiUser.discriminatorWithPadding: String
+        get() = discriminatorSuffix(discriminator.toIntOrNull() ?: 0)
+
     /** [padDiscriminator] for callers holding a raw discriminator, empty for a migrated account. */
     fun discriminatorSuffix(discriminator: Int): String =
         if (discriminator == 0) "" else padDiscriminator(discriminator)
@@ -275,6 +279,8 @@ object UserUtils {
         flags = flags,
         bot = isBot,
         system = isSystemUser,
+        globalName = globalName,
+        collectibles = collectibles,
     )
 
     /**

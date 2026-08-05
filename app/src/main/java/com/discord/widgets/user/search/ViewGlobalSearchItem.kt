@@ -22,6 +22,7 @@ import com.discord.models.user.User
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
+import com.discord.utilities.user.UserUtils.discriminatorWithPadding
 import com.discord.views.GuildView
 import com.discord.views.StatusView
 import com.facebook.drawee.view.SimpleDraweeView
@@ -99,7 +100,7 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
                 description.setTextAndVisibility(data.presence?.activities.orEmpty().firstOrNull()?.let { it.state ?: it.details ?: it.name })
                 description.isAllCaps = false
                 val recipient = data.channel.recipients?.firstOrNull()
-                group.setTextAndVisibility(recipient?.let { "${it.username}#${it.discriminator}" })
+                group.setTextAndVisibility(recipient?.let { it.username + it.discriminatorWithPadding })
             }
             Channel.GUILD_TEXT, Channel.GUILD_VOICE, Channel.GUILD_ANNOUNCEMENT,
             Channel.ANNOUNCEMENT_THREAD, Channel.PUBLIC_THREAD, Channel.PRIVATE_THREAD,
@@ -159,8 +160,10 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
             channel.recipients.orEmpty().forEachIndexed { index, user ->
                 if (index > 0) append(", ")
                 append(user.username)
+                val suffix = user.discriminatorWithPadding
+                if (suffix.isEmpty()) return@forEachIndexed
                 val start = length
-                append('#').append(user.discriminator)
+                append(suffix)
                 setSpan(ForegroundColorSpan(color), start, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                 setSpan(RelativeSizeSpan(0.75f), start, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
             }

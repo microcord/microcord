@@ -53,7 +53,6 @@ class MessageQueue @JvmOverloads constructor(
     private val executorService: ExecutorService,
     private val clock: Clock,
     private val api: RestAPIInterface,
-    private val reactNativeApi: RestAPIInterface = api,
     private val networkBackoff: Backoff = Backoff(
         minBackoffMs = NETWORK_INITIAL_FAILURE_RETRY_MS,
         maxBackoffMs = MESSAGE_TIMEOUT_MS,
@@ -244,17 +243,7 @@ class MessageQueue @JvmOverloads constructor(
             }
             .filterIs<SendUtils.SendPayload.ReadyToSend>()
             .take(1)
-            .flatMap { ready ->
-                val hasStickers = !ready.message.stickerIds.isNullOrEmpty()
-                val canUsePremiumStickers =
-                    message.author?.premiumType?.grantsAccessToPremiumStickers() == true
-                sendReadyPayload(
-                    message.channelId,
-                    ready,
-                    captchaPolicy,
-                    if (hasStickers && !canUsePremiumStickers) reactNativeApi else api,
-                )
-            }
+            .flatMap { ready -> sendReadyPayload(message.channelId, ready, captchaPolicy, api) }
             .restSubscribeOn(retry = message.nonce != null)
             .appSubscribe(
                 errorClass = MessageQueue::class.java,

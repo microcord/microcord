@@ -146,7 +146,7 @@ class WidgetChannelListModelTest {
     }
 
     @Test
-    fun `the mfa notice is the first row and the invite row follows it`() {
+    fun `the mfa notice is the first row`() {
         val items = build(
             listOf(channel(2, Channel.GUILD_TEXT)),
             unelevated = true,
@@ -154,11 +154,7 @@ class WidgetChannelListModelTest {
         )
 
         assertEquals(
-            listOf(
-                ChannelListItem.TYPE_MFA_NOTICE,
-                ChannelListItem.TYPE_INVITE,
-                ChannelListItem.TYPE_CHANNEL,
-            ),
+            listOf(ChannelListItem.TYPE_MFA_NOTICE, ChannelListItem.TYPE_CHANNEL),
             items.map { it.type },
         )
     }

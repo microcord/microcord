@@ -33,7 +33,7 @@ class StoreMediaFavorites(
     private val migrationCache: Persister<Boolean> = Persister(MIGRATION_CACHE_KEY, false),
     private val legacyEmojiFrecencyCache: Persister<ExpressionFrecencyTracker> =
         Persister(EMOJI_FRECENCY_CACHE_KEY, ExpressionFrecencyTracker()),
-    private val rnApi: () -> RestAPIInterface? = RestAPI::reactNativeApiOrNull,
+    private val rnApi: () -> RestAPIInterface? = RestAPI::apiOrNull,
 ) : StoreV2() {
 
     sealed class Favorite {

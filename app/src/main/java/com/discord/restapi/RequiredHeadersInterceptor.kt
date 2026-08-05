@@ -9,13 +9,11 @@ class RequiredHeadersInterceptor(private val headersProvider: HeadersProvider) :
         fun getFingerprint(): String?
         fun getLocale(): String?
         fun getAcceptLanguages(): String?
-        fun getUserAgent(): String
         fun getSpotifyToken(): String?
     }
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request().newBuilder()
-            .header("User-Agent", headersProvider.getUserAgent())
             .apply {
                 headersProvider.getAuthToken()?.let { header("Authorization", it) }
                 headersProvider.getFingerprint()?.let { header("X-Fingerprint", it) }

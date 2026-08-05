@@ -34,7 +34,6 @@ class MessageQueueTest {
 
     private val clock = MutableClock()
     private val restApi = RecordingRestApi()
-    private val reactNativeApi = RecordingRestApi()
     private val backoffScheduler = ManualBackoffScheduler()
     private val timerScheduler = TestScheduler()
     private val settled = mutableListOf<Pair<String, MessageResult>>()
@@ -45,7 +44,6 @@ class MessageQueueTest {
         executorService = DirectExecutorService(),
         clock = clock,
         api = restApi.api,
-        reactNativeApi = reactNativeApi.api,
         networkBackoff = testBackoff(backoffScheduler),
         retryScheduler = timerScheduler,
     )
@@ -223,8 +221,7 @@ class MessageQueueTest {
             ),
         )
 
-        assertTrue(restApi.sendCalls.isEmpty())
-        assertEquals(listOf(9L), reactNativeApi.sendCalls.single().body?.stickerIds)
+        assertEquals(listOf(9L), restApi.sendCalls.single().body?.stickerIds)
     }
 
     @Test

@@ -82,7 +82,7 @@ class StoreApplicationCommands(
      * which is the same answer the store gives for a DM.
      */
     private val storePermissions: StorePermissions? = null,
-    private val restApi: () -> RestAPIInterface? = { RestAPI.reactNativeApiOrNull },
+    private val restApi: () -> RestAPIInterface? = { RestAPI.apiOrNull },
     private val applicationIndexRequest: (Long) -> Observable<ApplicationCommandIndex>? = { applicationId ->
         RestAPI.applicationDirectoryApiOrNull?.applicationCommandIndex(applicationId)
     },
@@ -451,7 +451,7 @@ class StoreApplicationCommands(
             }
         }
         pendingIndexSources = listOf(guildInstall, userInstall).count { it !in loadedIndexSources }
-        val api = RestAPI.reactNativeApiOrNull ?: restApi()
+        val api = restApi()
         if (api == null) {
             handleApplicationCommandIndexFailure(generation)
             return@schedule
@@ -891,7 +891,7 @@ class StoreApplicationCommands(
                 focused.name,
                 ApplicationCommandType.from(focused.type),
             )
-        val api = RestAPI.reactNativeApiOrNull ?: restApi()
+        val api = restApi()
         if (api == null) {
             handleAutocompleteFailure(nonce)
             return@schedule

@@ -8,7 +8,6 @@ import android.os.Build
 import android.os.LocaleList
 import android.util.Log
 import com.discord.utilities.user.NicknameUtils
-import com.discord.BuildConfig
 import com.discord.api.activity.ActivityEmoji
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayName
@@ -60,6 +59,7 @@ import com.discord.utilities.media.AppSound
 import com.discord.utilities.media.AppSoundManager
 import com.discord.utilities.networking.NetworkMonitor
 import com.discord.rtcconnection.VoiceTransport
+import com.discord.utilities.analytics.AnalyticSuperProperties
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.billing.BillingUtils
 import com.discord.utilities.logging.BootLog
@@ -396,7 +396,7 @@ class StoreStream private constructor(
         observationDeck,
         restApi = { if (::restApi.isInitialized) restApi else null },
         handleThreadCreateOrUpdate = { thread -> handleThreadCreateOrUpdateInternal(thread) },
-        forumApi = RestAPI::reactNativeApiOrNull,
+        forumApi = RestAPI::apiOrNull,
     )
     /** Mention counting and automatic acknowledgement feed the authoritative read-state ledger. */
     private val messageAck: StoreMessageAck = StoreMessageAck(
@@ -1235,17 +1235,7 @@ class StoreStream private constructor(
         }
         gateway = GatewaySocket(
             identifyDataProvider = gatewayConnection::getIdentifyData,
-            identifyProperties = mapOf(
-                "browser" to "Discord Android",
-                "browser_user_agent" to USER_AGENT,
-                "client_build_number" to BuildConfig.VERSION_CODE,
-                "client_version" to BuildConfig.VERSION_NAME,
-                "device" to Build.DEVICE,
-                "os" to "Android",
-                "os_sdk_version" to Build.VERSION.SDK_INT,
-                "os_version" to Build.VERSION.RELEASE,
-                "system_locale" to userSettingsSystem.getLocale(),
-            ),
+            identifyProperties = AnalyticSuperProperties::superProperties,
             eventHandler = gatewayConnection,
             scheduler = gatewayScheduler,
             discovery = GatewayDiscovery(preferences) { api.getGateway().toBlocking().single() },
@@ -1257,7 +1247,10 @@ class StoreStream private constructor(
         }
         connectivity.init(networkMonitor, messagesLoader.observeChannelMessagesLoading())
         com.discord.utilities.lifecycle.Backgrounded.observe().subscribe(
-            { backgrounded -> dispatcher.schedule { connectivity.handleBackgrounded(backgrounded) } },
+            { backgrounded ->
+                AnalyticSuperProperties.setBackgrounded(backgrounded)
+                dispatcher.schedule { connectivity.handleBackgrounded(backgrounded) }
+            },
             {},
         )
         BootLog.record(BootLogEvent.GATEWAY_READY)
@@ -2921,11 +2914,10 @@ class StoreStream private constructor(
             override fun getFingerprint() = authentication.getFingerprint()
             override fun getLocale() = userSettingsSystem.getLocale()
             override fun getAcceptLanguages() = acceptLanguages()
-            override fun getUserAgent() = USER_AGENT
             override fun getSpotifyToken(): String? = null
         }
         val builder = RestAPIBuilder(API_BASE_URL, CookieJars.persistent(context))
-        val interceptors = listOf(RequiredHeadersInterceptor(headers), RestAPI.buildAnalyticsInterceptor())
+        val interceptors = listOf(RequiredHeadersInterceptor(headers))
         val api = RestAPI.install(builder, interceptors)
         restApi = api
         return api
@@ -2934,7 +2926,6 @@ class StoreStream private constructor(
     companion object {
         private const val API_BASE_URL = "https://discord.com/api/"
         private const val RTC_LATENCY_URL = "https://latency.discord.media/rtc"
-        private const val USER_AGENT = "Discord-Android/126021"
         private const val GATEWAY_INIT_TIMEOUT_MS = 10_000L
         private const val GATEWAY_TAG = "ManticordGateway"
         @Volatile private var instance: StoreStream? = null
