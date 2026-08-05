@@ -2,7 +2,7 @@ package com.discord.stores
 
 import android.content.Context
 import com.discord.api.channel.Channel
-import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isTextChannel
 import com.discord.api.channel.isThread
 import com.discord.models.domain.ModelMuteConfig
@@ -235,7 +235,7 @@ class StoreUserGuildSettings(
         }
 
     fun setChannelNotificationFlags(context: Context, channel: Channel, flags: Int) {
-        if (!channel.isGuildForumChannel()) return
+        if (!channel.isThreadOnlyChannel()) return
         updateUserGuildSettings(
             context,
             channel.guildId,

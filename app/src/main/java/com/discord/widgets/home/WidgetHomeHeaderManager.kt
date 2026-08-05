@@ -14,7 +14,7 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isArchivedThread
 import com.discord.api.channel.isDMStatusVisible
-import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isGuildForumPost
 import com.discord.api.channel.isGuildTextyChannel
 import com.discord.api.channel.isPrivate
@@ -67,7 +67,8 @@ object WidgetHomeHeaderManager {
 
         val toolbarContainer = when (channel?.type) {
             Channel.DIRECTORY -> binding.root.findViewById<View>(R.id.widget_home_panel_directory)
-            Channel.GUILD_FORUM -> binding.root.findViewById<View>(R.id.widget_forum_channel_list)
+            Channel.GUILD_FORUM, Channel.GUILD_MEDIA ->
+                binding.root.findViewById<View>(R.id.widget_forum_channel_list)
             else -> binding.root.findViewById<View>(R.id.widget_home_panel_center_chat)
         }
         widgetHome.bindToolbar(toolbarContainer)
@@ -191,7 +192,7 @@ object WidgetHomeHeaderManager {
         val showPins = channelType in PINNED_MESSAGES_CHANNEL_TYPES
         val header = when (channelType) {
             Channel.DM, Channel.GROUP_DM, Channel.DIRECTORY -> MenuState(sidePanel = true)
-            Channel.GUILD_TEXT, Channel.GUILD_ANNOUNCEMENT, Channel.GUILD_FORUM -> MenuState(
+            Channel.GUILD_TEXT, Channel.GUILD_ANNOUNCEMENT, Channel.GUILD_FORUM, Channel.GUILD_MEDIA -> MenuState(
                 search = !isSmallScreen,
                 sidePanel = true,
                 threadBrowser = showThreadBrowser,
@@ -264,7 +265,7 @@ object WidgetHomeHeaderManager {
         context: Context?,
     ) {
         channel ?: return
-        val visible = !channel.isGuildForumChannel()
+        val visible = !channel.isThreadOnlyChannel()
         val item = toolbar?.menu?.findItem(R.id.menu_chat_thread_browser)
         item?.actionView?.findViewById<TextView>(R.id.thread_browser_count)?.apply {
             text = minOf(99, threadCount).toString()
@@ -297,6 +298,7 @@ object WidgetHomeHeaderManager {
         Channel.GROUP_DM,
         Channel.GUILD_ANNOUNCEMENT,
         Channel.GUILD_FORUM,
+        Channel.GUILD_MEDIA,
         Channel.GUILD_TEXT,
     )
 

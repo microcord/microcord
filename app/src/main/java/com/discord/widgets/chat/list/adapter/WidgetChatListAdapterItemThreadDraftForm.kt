@@ -12,6 +12,8 @@ import android.widget.ImageView
 import android.widget.TextView
 import com.discord.R
 import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isGuildMediaChannel
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.i18n.Hook
 import com.discord.i18n.I18nHooks
 import com.discord.stores.StoreStream
@@ -127,6 +129,7 @@ class WidgetChatListAdapterItemThreadDraftForm(
     private fun configureIcon(entry: ThreadDraftFormEntry) {
         icon.setImageResource(
             when {
+                entry.parentChannel.isGuildMediaChannel() -> R.drawable.ic_image_library_24dp
                 entry.parentChannel.isGuildForumChannel() -> R.drawable.ic_channel_forum_post
                 entry.threadDraftState.isPrivate -> R.drawable.ic_thread_locked
                 else -> R.drawable.ic_thread
@@ -136,7 +139,7 @@ class WidgetChatListAdapterItemThreadDraftForm(
 
     private fun configurePrivateThreadOption(entry: ThreadDraftFormEntry) {
         val draft = entry.threadDraftState
-        if (entry.parentChannel.isGuildForumChannel()) {
+        if (entry.parentChannel.isThreadOnlyChannel()) {
             // A forum post is always public; there is nothing to choose.
             privateToggle.visibility = View.GONE
             return

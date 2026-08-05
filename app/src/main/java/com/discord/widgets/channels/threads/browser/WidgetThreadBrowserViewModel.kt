@@ -3,7 +3,7 @@ package com.discord.widgets.channels.threads.browser
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isAnnouncementChannel
-import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isThread
 import com.discord.api.channel.isVoiceChannel
 import com.discord.api.permission.Permission
@@ -45,7 +45,7 @@ class WidgetThreadBrowserViewModel(
                     channel?.getDisplayName(),
                     canCreateThread(state.permissions, channel, state.guild),
                     canViewArchivedThreads(channel, state.permissions),
-                    channel?.isGuildForumChannel() == true,
+                    channel?.isThreadOnlyChannel() == true,
                 ),
             )
         }

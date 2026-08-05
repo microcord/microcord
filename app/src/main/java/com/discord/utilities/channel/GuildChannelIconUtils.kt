@@ -22,6 +22,7 @@ sealed class GuildChannelIconType {
     object Voice : GuildChannelIconType()
     object Announcements : GuildChannelIconType()
     object Forum : GuildChannelIconType()
+    object Media : GuildChannelIconType()
     object ForumPost : GuildChannelIconType()
     object Directory : GuildChannelIconType()
 
@@ -86,6 +87,8 @@ fun getChannelType(channel: Channel?): GuildChannelIconType {
             else -> GuildChannelIconType.Forum
         }
 
+        Channel.GUILD_MEDIA -> GuildChannelIconType.Media
+
         Channel.ANNOUNCEMENT_THREAD, Channel.PUBLIC_THREAD ->
             if (channel.nsfw) GuildChannelIconType.NSFW.Thread else GuildChannelIconType.Thread
 
@@ -109,6 +112,7 @@ fun mapGuildChannelTypeToIcon(guildChannelIconType: GuildChannelIconType): Int =
         GuildChannelIconType.Thread -> R.drawable.ic_thread
         GuildChannelIconType.Announcements -> R.drawable.ic_channel_announcements
         GuildChannelIconType.Forum -> R.drawable.ic_discord_forum_filled
+        GuildChannelIconType.Media -> R.drawable.ic_image_library_24dp
         GuildChannelIconType.ForumPost -> R.drawable.ic_channel_forum_post
 
         GuildChannelIconType.NSFW.Text -> R.drawable.ic_channel_text_nsfw

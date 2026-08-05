@@ -913,7 +913,9 @@ data class WidgetChannelListModel(
                             }
                         }
 
-                        Channel.GUILD_TEXT, Channel.GUILD_ANNOUNCEMENT, Channel.GUILD_FORUM -> {
+                        Channel.GUILD_TEXT, Channel.GUILD_ANNOUNCEMENT, Channel.GUILD_FORUM,
+                        Channel.GUILD_MEDIA,
+                        -> {
                             val item = toTextChannelItem() ?: continue
                             items.add(item)
                             items.addAll(threadItemsFor(channel))

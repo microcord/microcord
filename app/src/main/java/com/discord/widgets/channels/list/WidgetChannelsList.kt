@@ -261,6 +261,7 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
             Channel.CATEGORY,
             Channel.GUILD_ANNOUNCEMENT,
             Channel.GUILD_FORUM,
+            Channel.GUILD_MEDIA,
             Channel.GUILD_STAGE_VOICE,
             ->
                 WidgetChannelsListItemChannelActions.show(parentFragmentManager, channel.id)

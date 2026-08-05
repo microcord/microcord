@@ -3,9 +3,10 @@ package com.discord.widgets.forums
 import android.content.Context
 import com.discord.R
 import com.discord.api.channel.Channel
-import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.message.reaction.MessageReaction
 import com.discord.api.message.reaction.MessageReactionEmoji
+import com.discord.api.permission.Permission
 import com.discord.models.message.Message
 import com.discord.stores.ArchivedThreadsStore
 import com.discord.stores.StoreChannels
@@ -13,9 +14,22 @@ import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreEmoji
 import com.discord.stores.StoreStream
 import com.discord.utilities.cache.SharedPreferencesProvider
+import com.discord.utilities.permissions.PermissionUtils
 import rx.Observable
 
 object ForumUtils {
+    fun canCreatePost(permissions: Long?): Boolean =
+        PermissionUtils.can(Permission.SEND_MESSAGES, permissions) &&
+            PermissionUtils.can(Permission.CREATE_PUBLIC_THREADS, permissions)
+
+    fun getSortOrder(channelId: Long): ForumSortOrder = ForumSortOrder.entries.getOrElse(
+        SharedPreferencesProvider.get().getInt("forum_sort_order_$channelId", 0),
+    ) { ForumSortOrder.LATEST_ACTIVITY }
+
+    fun setSortOrder(channelId: Long, order: ForumSortOrder) {
+        SharedPreferencesProvider.get().edit().putInt("forum_sort_order_$channelId", order.ordinal).apply()
+    }
+
     fun isGuildNsfwGateAgreed(guildId: Long): Boolean = guildId.toString() in
         SharedPreferencesProvider.get().getStringSet(NSFW_GUILDS_ALLOWED_KEY, emptySet()).orEmpty()
 
@@ -29,7 +43,7 @@ object ForumUtils {
         channels: StoreChannels = StoreStream.getChannels(),
         selected: StoreChannelsSelected = StoreStream.getChannelsSelected(),
     ): Observable<Channel?> = selected.observeSelectedChannel().map { channel ->
-        channel?.takeIf { channels.getChannel(it.parentId)?.isGuildForumChannel() == true }
+        channel?.takeIf { channels.getChannel(it.parentId)?.isThreadOnlyChannel() == true }
     }.distinctUntilChanged()
 
     fun maybeLoadAndObserveThreadListing(
@@ -75,3 +89,5 @@ object ForumUtils {
     private const val THIRTY_DAYS = 2_592_000_000L
     private const val NSFW_GUILDS_ALLOWED_KEY = "GUILDS_ALLOWED_KEY"
 }
+
+enum class ForumSortOrder { LATEST_ACTIVITY, CREATION_DATE }

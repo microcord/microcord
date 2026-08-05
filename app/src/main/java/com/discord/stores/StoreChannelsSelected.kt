@@ -448,10 +448,12 @@ class StoreChannelsSelected(
 
         if (resolvedSelectedChannel is ResolvedSelectedChannel.Channel) {
             val channel = resolvedSelectedChannel.channel
-            userChannelSelections[channel.guildId] = UserChannelSelection.SelectedChannel(
-                channel.id,
-                resolvedSelectedChannel.peekParent,
-            )
+            if (shouldPersistResolvedSelection(userChannelSelections[channel.guildId], channel.id)) {
+                userChannelSelections[channel.guildId] = UserChannelSelection.SelectedChannel(
+                    channel.id,
+                    resolvedSelectedChannel.peekParent,
+                )
+            }
             if (channel.isVoiceChannel()) {
                 trackTextInVoiceOpened(channel.id, resolvedSelectedChannel.analyticsLocation)
             }
@@ -486,6 +488,9 @@ class StoreChannelsSelected(
     }
 
     companion object {
+        internal fun shouldPersistResolvedSelection(selection: UserChannelSelection?, resolvedChannelId: Long) =
+            selection == null || selection is UserChannelSelection.Unselected || selection.id == resolvedChannelId
+
         const val CACHE_KEY_SELECTED_CHANNEL_IDS = "CACHE_KEY_SELECTED_CHANNEL_IDS"
 
         /** The pseudo-guild that owns DMs and group DMs. */

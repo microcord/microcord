@@ -2,6 +2,7 @@ package com.discord.stores
 
 import android.util.Log
 import com.discord.api.channel.Channel
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.models.message.Message
 import com.discord.stores.StoreChat.InteractionState
 import com.discord.utilities.rx.filterNull
@@ -205,7 +206,7 @@ class StoreMessagesLoader @JvmOverloads constructor(
     @Synchronized
     @StoreThread
     fun handleChannelSelected(channel: Channel?) =
-        handleChannelSelected(channel?.id?.takeUnless { channel.type == Channel.GUILD_FORUM } ?: 0L)
+        handleChannelSelected(channel?.id?.takeUnless { channel.isThreadOnlyChannel() } ?: 0L)
 
     @Synchronized
     @StoreThread

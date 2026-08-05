@@ -1,7 +1,9 @@
 package com.discord.widgets.forums
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.view.View
+import android.widget.ImageView
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppFragment
@@ -12,6 +14,7 @@ import com.discord.databinding.WidgetForumBrowserBinding
 import com.discord.stores.SelectedChannelAnalyticsLocation
 import com.discord.stores.StoreStream
 import com.discord.utilities.channel.ChannelSelector
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.takeSingleUntilTimeout
 import com.discord.utilities.rx.ui
@@ -56,6 +59,15 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
         WidgetForumGuidelinesBottomSheet.registerForResult(this, CLOSE_GUIDELINES_CREATE) { guildId, channelId ->
             openCreatePostScreen(guildId, channelId)
         }
+        parentFragmentManager.setFragmentResultListener(
+            WidgetForumSortBottomSheet.RESULT_KEY,
+            this,
+        ) { _, result ->
+            val channelId = result.getLong(WidgetForumSortBottomSheet.ARG_CHANNEL_ID)
+            (viewModel.viewState as? WidgetForumBrowserViewModel.ViewState.Loaded)
+                ?.takeIf { it.channelId == channelId }
+                ?.let(::configure)
+        }
         val home = parentFragment as? WidgetHome
         val toolbar = if (home == null) {
             setActionBarDisplayHomeAsUpEnabled()
@@ -99,25 +111,37 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
                 binding.recyclerView.visibility = View.GONE
                 binding.createPost.visibility = View.GONE
                 binding.viewGuidelines.visibility = View.GONE
+                binding.forumDisplayOptions.visibility = View.GONE
                 adapterItems.clear()
                 adapter.setData(emptyList())
             }
             is WidgetForumBrowserViewModel.ViewState.Loaded -> {
                 binding.loadingView.root.visibility = View.GONE
-                setActionBarTitle(state.channelName, leadingDrawableRes = R.drawable.ic_discord_forum_filled_tinted)
+                setActionBarTitle(
+                    state.channelName,
+                    leadingDrawableRes = if (state.isMediaChannel) {
+                        R.drawable.ic_image_library_24dp
+                    } else {
+                        R.drawable.ic_discord_forum_filled_tinted
+                    },
+                )
+                actionBarTitleLayout?.findViewById<ImageView>(R.id.toolbar_icon)?.imageTintList =
+                    ColorStateList.valueOf(ColorCompat.getThemedColor(requireContext(), R.attr.colorInteractiveNormal))
                 configureButtons(state)
-                if (state.listItems.isEmpty()) {
+                val items = sortForumItems(state.listItems, ForumUtils.getSortOrder(state.channelId))
+                if (items.isEmpty()) {
                     binding.emptyView.root.visibility = View.VISIBLE
                     binding.recyclerView.visibility = View.GONE
                     binding.emptyView.forumBrowserEmptySubheading.text = getString(R.string.forum_empty_state_description)
                         .replace("{channelName}", state.channelName)
                     adapterItems.clear()
+                    adapter.setData(emptyList())
                 } else {
                     binding.emptyView.root.visibility = View.GONE
                     binding.recyclerView.visibility = View.VISIBLE
                     adapterItems.clear()
-                    adapterItems.addAll(state.listItems)
-                    adapter.setData(state.listItems)
+                    adapterItems.addAll(items)
+                    adapter.setData(items)
                     configureScrolling(state)
                 }
             }
@@ -127,6 +151,10 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
     private fun configureButtons(state: WidgetForumBrowserViewModel.ViewState.Loaded) {
         binding.createPost.visibility = if (state.canCreateForumChannelPosts && panelNsfwHidden) View.VISIBLE else View.GONE
         binding.viewGuidelines.visibility = if (state.channelTopic.isNotBlank() && panelNsfwHidden) View.VISIBLE else View.GONE
+        binding.forumDisplayOptions.visibility = if (state.isMediaChannel && panelNsfwHidden) View.VISIBLE else View.GONE
+        binding.forumSortOptions.setOnClickListener {
+            WidgetForumSortBottomSheet.show(parentFragmentManager, state.channelId)
+        }
         binding.createPost.setOnClickListener {
             if (state.channelTopic.isNotBlank() && !ForumGuidelinesManager.hasSeenGuidelines(state.channelId)) {
                 WidgetForumGuidelinesBottomSheet.show(

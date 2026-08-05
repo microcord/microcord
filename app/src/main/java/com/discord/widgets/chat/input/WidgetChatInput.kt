@@ -23,7 +23,7 @@ import com.discord.activities.EmbeddedActivityLauncher
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isAnnouncementChannel
-import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.guild.GuildVerificationLevel
 import com.discord.api.permission.Permission
 import com.discord.app.AppFragment
@@ -132,7 +132,9 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             if (restoringText) return
             val loaded = state ?: return
             if (!loaded.isEditing) drafts.setTextChannelInput(loaded.channelId, value)
-            coordinatorProvider()?.typing(loaded.channelId, value?.toString().orEmpty())
+            if (loaded.selectedThreadDraft == null) {
+                coordinatorProvider()?.typing(loaded.channelId, value?.toString().orEmpty())
+            }
         }
     }
 
@@ -474,7 +476,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 return true
             }
         }
-        if (loaded.selectedThreadDraft != null && loaded.channel.isGuildForumChannel()) {
+        if (loaded.selectedThreadDraft != null && loaded.channel.isThreadOnlyChannel()) {
             val attachmentsRequest = uploads.takeIf { it.isNotEmpty() }?.let {
                 ForumPostCreateManager.AttachmentsRequest(
                     currentFileSizeMB = it.sumOf(UploadAttachment::size).toFloat() / BYTES_PER_MEGABYTE,
@@ -623,7 +625,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val ableToSendMessages = when {
             next.selectedThreadDraft != null ->
                 PermissionUtils.can(Permission.SEND_MESSAGES_IN_THREADS, channelPermissions)
-            next.channel.isGuildForumChannel() -> false
+            next.channel.isThreadOnlyChannel() -> false
             else -> PermissionUtils.hasAccessWrite(next.channel, channelPermissions)
         }
         flexInputBinding?.renderSendPermission(ableToSendMessages)

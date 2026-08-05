@@ -59,7 +59,7 @@ class NotificationsOverridesAdapter(
 
             // Text, announcement and forum channels share the channel row. The reference throws for
             // every other type, voice included, and the override list is filtered to match.
-            Channel.GUILD_TEXT, Channel.GUILD_ANNOUNCEMENT, Channel.GUILD_FORUM ->
+            Channel.GUILD_TEXT, Channel.GUILD_ANNOUNCEMENT, Channel.GUILD_FORUM, Channel.GUILD_MEDIA ->
                 ViewHolder.ChannelOverridesViewHolder(
                     inflater.inflate(R.layout.view_channel_override_item, parent, false),
                     onClick,

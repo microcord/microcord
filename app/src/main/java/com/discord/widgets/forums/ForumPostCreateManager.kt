@@ -1,7 +1,9 @@
 package com.discord.widgets.forums
 
 import android.content.Context
+import com.discord.R
 import com.discord.api.channel.Channel
+import com.discord.app.AppToast
 import com.discord.models.domain.NonceGenerator
 import com.discord.restapi.RestAPIParams
 import com.discord.restapi.PayloadJSON
@@ -45,6 +47,11 @@ object ForumPostCreateManager {
         onFilesTooLarge: ((Int, Boolean) -> Unit)? = null,
     ): Boolean {
         if (isCreateInProgress.value == true) return false
+        val permissions = StoreStream.getPermissions().getPermissionsByChannel()[forumChannelId]
+        if (!ForumUtils.canCreatePost(permissions)) {
+            AppToast.show(context, R.string.guild_event_location_disabled_no_permission)
+            return false
+        }
         val threadName = threadDraftState.threadName
         if (threadName.isNullOrEmpty()) {
             StoreStream.getThreadDraft().setDraftState(threadDraftState.copy(shouldDisplayNameError = true))

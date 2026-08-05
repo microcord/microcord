@@ -2,7 +2,7 @@ package com.discord.widgets.channels
 
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isDirectory
-import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isThread
 import com.discord.api.user.NsfwAllowance
@@ -102,8 +102,8 @@ class WidgetChannelSidebarActionsViewModel(
                         hasUnreadPins = false,
                         disablePins = storeState.disablePins,
                         isThread = channel.isThread(),
-                        isGuildForumPost = storeState.parentChannel?.isGuildForumChannel() == true,
-                        isGuildForumChannel = channel.isGuildForumChannel(),
+                        isGuildForumPost = storeState.parentChannel?.isThreadOnlyChannel() == true,
+                        isGuildForumChannel = channel.isThreadOnlyChannel(),
                         shouldHideChannelSidebar = channel.isDirectory(),
                     ),
                 )

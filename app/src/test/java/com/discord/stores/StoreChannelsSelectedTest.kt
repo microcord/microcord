@@ -7,7 +7,9 @@ import java.nio.file.Files
 import org.junit.After
 import org.junit.AfterClass
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.BeforeClass
 import org.junit.Test
@@ -145,6 +147,15 @@ class StoreChannelsSelectedTest {
 
         assertEquals(StoreChannelsSelected.ID_UNAVAILABLE, channelsSelected.getId())
         assertNull(channelsSelected.getSelectedChannel())
+    }
+
+    @Test
+    fun transientFallbackDoesNotReplaceTheRequestedChannel() {
+        val requested = StoreChannelsSelected.UserChannelSelection.SelectedChannel(99)
+
+        assertFalse(StoreChannelsSelected.shouldPersistResolvedSelection(requested, 1))
+        assertTrue(StoreChannelsSelected.shouldPersistResolvedSelection(requested, 99))
+        assertTrue(StoreChannelsSelected.shouldPersistResolvedSelection(null, 1))
     }
 
     // -- helpers --------------------------------------------------------------------------------

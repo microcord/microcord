@@ -33,6 +33,7 @@ class ChannelUtilsTest {
         assertTrue(channel(type = Channel.GUILD_TEXT).isThreaded())
         assertTrue(channel(type = Channel.GUILD_ANNOUNCEMENT).isThreaded())
         assertTrue(channel(type = Channel.GUILD_FORUM).isThreaded())
+        assertTrue(channel(type = Channel.GUILD_MEDIA).isThreaded())
         assertFalse(channel(type = Channel.GUILD_VOICE).isThreaded())
         assertFalse(channel(type = Channel.PUBLIC_THREAD).isThreaded())
     }
@@ -41,6 +42,7 @@ class ChannelUtilsTest {
         val texty = listOf(
             Channel.GUILD_TEXT, Channel.GUILD_ANNOUNCEMENT, Channel.ANNOUNCEMENT_THREAD,
             Channel.PUBLIC_THREAD, Channel.PRIVATE_THREAD, Channel.DIRECTORY, Channel.GUILD_FORUM,
+            Channel.GUILD_MEDIA,
         )
         texty.forEach { assertTrue("type $it", channel(type = it).isGuildTextyChannel()) }
         val notTexty = listOf(
@@ -48,6 +50,13 @@ class ChannelUtilsTest {
             Channel.GUILD_STAGE_VOICE, Channel.GUILD_STORE,
         )
         notTexty.forEach { assertFalse("type $it", channel(type = it).isGuildTextyChannel()) }
+    }
+
+    @Test fun `thread only covers forum and media channels`() {
+        assertTrue(channel(type = Channel.GUILD_FORUM).isThreadOnlyChannel())
+        assertTrue(channel(type = Channel.GUILD_MEDIA).isThreadOnlyChannel())
+        assertTrue(channel(type = Channel.GUILD_MEDIA).isGuildMediaChannel())
+        assertFalse(channel(type = Channel.GUILD_TEXT).isThreadOnlyChannel())
     }
 
     @Test fun `text or voice excludes categories and stages`() {

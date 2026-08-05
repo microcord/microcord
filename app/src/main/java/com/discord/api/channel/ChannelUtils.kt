@@ -29,7 +29,7 @@ private const val DISPLAY_PREFIX_DM = "@"
 
 /**
  * True for channel types that can hold messages posted by users: guild text,
- * announcements, all three thread types, directories, and forums.
+ * announcements, all three thread types, directories, forums, and media channels.
  */
 fun isTextyChannelType(type: Int): Boolean =
     type == Channel.GUILD_TEXT ||
@@ -38,7 +38,8 @@ fun isTextyChannelType(type: Int): Boolean =
         type == Channel.PUBLIC_THREAD ||
         type == Channel.PRIVATE_THREAD ||
         type == Channel.DIRECTORY ||
-        type == Channel.GUILD_FORUM
+        type == Channel.GUILD_FORUM ||
+        type == Channel.GUILD_MEDIA
 
 /** A one-to-one direct message. */
 fun Channel.isDM(): Boolean = type == Channel.DM
@@ -62,11 +63,15 @@ fun Channel.isAnnouncementChannel(): Boolean = type == Channel.GUILD_ANNOUNCEMEN
 
 fun Channel.isGuildForumChannel(): Boolean = type == Channel.GUILD_FORUM
 
+fun Channel.isGuildMediaChannel(): Boolean = type == Channel.GUILD_MEDIA
+
+fun Channel.isThreadOnlyChannel(): Boolean = isGuildForumChannel() || isGuildMediaChannel()
+
 fun Channel.isDirectory(): Boolean = type == Channel.DIRECTORY
 
-/** A plain guild text channel or a forum channel. */
+/** A plain guild text channel or a thread-only channel. */
 fun Channel.isGuildTextChannel(): Boolean =
-    type == Channel.GUILD_TEXT || type == Channel.GUILD_FORUM
+    type == Channel.GUILD_TEXT || isThreadOnlyChannel()
 
 /** Any guild channel that renders a message list. See [isTextyChannelType]. */
 fun Channel.isGuildTextyChannel(): Boolean = isTextyChannelType(type)
@@ -97,13 +102,13 @@ fun Channel.isPrivateThread(): Boolean = type == Channel.PRIVATE_THREAD
 
 /** A channel that threads can be created inside of. */
 fun Channel.isThreaded(): Boolean =
-    type == Channel.GUILD_TEXT || type == Channel.GUILD_ANNOUNCEMENT || type == Channel.GUILD_FORUM
+    type == Channel.GUILD_TEXT || type == Channel.GUILD_ANNOUNCEMENT || isThreadOnlyChannel()
 
 fun Channel.isArchivedThread(): Boolean = threadMetadata?.archived == true
 
-/** A thread whose parent is a forum channel, i.e. a forum post. */
+/** A thread whose parent is a forum or media channel. */
 fun Channel.isGuildForumPost(parentChannel: Channel?): Boolean =
-    parentChannel?.type == Channel.GUILD_FORUM
+    parentChannel?.isThreadOnlyChannel() == true
 
 /**
  * A channel created and owned by an application (for example a group DM opened by a

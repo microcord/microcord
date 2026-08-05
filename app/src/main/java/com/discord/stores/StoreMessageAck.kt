@@ -5,6 +5,7 @@ import com.discord.api.channel.isArchivedThread
 import com.discord.api.channel.isManaged
 import com.discord.api.channel.isTextOrVoiceChannel
 import com.discord.api.channel.isThread
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelReadState
 import com.discord.models.message.Message
@@ -248,7 +249,7 @@ class StoreMessageAck @JvmOverloads constructor(
     fun handleThreadCreateOrUpdate(channel: Channel) {
         if (!channel.isThread() || channel.isArchivedThread() || channel.ownerId != meId()) return
         val parent = storeChannels.getChannel(channel.parentId) ?: return
-        if (parent.type == Channel.GUILD_FORUM) updateAcks(parent.id, Ack(channel.id, false, false))
+        if (parent.isThreadOnlyChannel()) updateAcks(parent.id, Ack(channel.id, false, false))
     }
 
     /**

@@ -4,7 +4,9 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.ForumTag
 import com.discord.api.message.attachment.MessageAttachment
 import com.discord.api.message.attachment.MessageAttachmentType
+import com.discord.api.permission.Permission
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -36,11 +38,44 @@ class ForumPostModelsTest {
     }
 
     @Test
+    fun creatingPostRequiresSendAndPublicThreadPermissions() {
+        assertTrue(ForumUtils.canCreatePost(Permission.SEND_MESSAGES or Permission.CREATE_PUBLIC_THREADS))
+        assertFalse(ForumUtils.canCreatePost(Permission.SEND_MESSAGES))
+        assertFalse(ForumUtils.canCreatePost(Permission.CREATE_PUBLIC_THREADS))
+    }
+
+    @Test
     fun browserOrdersMostRecentlyActivePostsFirst() {
         val older = ForumBrowserItem.PostItem(post(channel(1), 10))
         val newer = ForumBrowserItem.PostItem(post(channel(2), 20))
 
         assertEquals(listOf(newer, older), listOf(older, newer).sortedWith(ForumBrowserItem.postItemComparatorByMostRecent))
+    }
+
+    @Test
+    fun browserCanSortPostsByCreationDate() {
+        val olderIdWithNewActivity = ForumBrowserItem.PostItem(post(channel(1), 20))
+        val newerIdWithOldActivity = ForumBrowserItem.PostItem(post(channel(2), 10))
+        val items = listOf(olderIdWithNewActivity, newerIdWithOldActivity)
+
+        assertEquals(
+            listOf(newerIdWithOldActivity, olderIdWithNewActivity),
+            sortForumItems(items, ForumSortOrder.CREATION_DATE),
+        )
+        assertEquals(items, sortForumItems(items, ForumSortOrder.LATEST_ACTIVITY))
+    }
+
+    @Test
+    fun mediaGridUsesWideSingleAndLargeLeftTripleLayouts() {
+        assertEquals(listOf(MediaGridRect(0, 0, 320, 180)), mediaGridRects(1, 320, 180, 2))
+        assertEquals(
+            listOf(
+                MediaGridRect(0, 0, 159, 180),
+                MediaGridRect(161, 0, 159, 89),
+                MediaGridRect(161, 91, 159, 89),
+            ),
+            mediaGridRects(3, 320, 180, 2),
+        )
     }
 
     @Test

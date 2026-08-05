@@ -33,7 +33,7 @@ import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isAnnouncementChannel
 import com.discord.api.channel.isDM
-import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isGuildTextChannel
 import com.discord.api.channel.isGuildForumPost
 import com.discord.api.channel.isPrivate
@@ -300,7 +300,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         appActivity?.setToolbar(toolbar)
         val resolvedSelection = StoreStream.getChannelsSelected().getResolvedSelectedChannel()
         val threadDraft = resolvedSelection as? StoreChannelsSelected.ResolvedSelectedChannel.ThreadDraft
-        val isForumDraft = threadDraft?.parentChannel?.isGuildForumChannel() == true
+        val isForumDraft = threadDraft?.parentChannel?.isThreadOnlyChannel() == true
         val parentChannel = StoreStream.getChannels().findChannelById(channel.parentId)
         val isForumPost = channel.isGuildForumPost(parentChannel) ||
             StoreStream.getThreadsActive().getAllForumThreadsById().containsKey(channel.id)
@@ -413,14 +413,17 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     }
 
     private fun updateUnreadCount() {
-        val center = view?.findViewById<View>(R.id.widget_home_panel_center_chat) ?: return
-        val count = center.findViewById<TextView>(R.id.home_toolbar_unread_count)
-            ?: center.findViewById(R.id.unread)
-            ?: return
-        count.text = unreadCount.takeIf { it > 0 }?.toString()
-        count.visibility = if (unreadCount > 0) View.VISIBLE else View.GONE
-        count.setOnClickListener { WidgetQuickMentionsDialog.show(parentFragmentManager) }
-        center.findDescendant(Toolbar::class.java)?.positionUnreadCountView(count)
+        val root = view ?: return
+        listOfNotNull(
+            root.findViewById<View>(R.id.widget_home_panel_center_chat),
+            root.findViewById<View>(R.id.widget_forum_channel_list),
+        ).forEach { center ->
+            val count = center.findViewById<TextView>(R.id.home_toolbar_unread_count) ?: return@forEach
+            count.text = unreadCount.takeIf { it > 0 }?.toString()
+            count.visibility = if (unreadCount > 0) View.VISIBLE else View.GONE
+            count.setOnClickListener { WidgetQuickMentionsDialog.show(parentFragmentManager) }
+            center.findDescendant(Toolbar::class.java)?.positionUnreadCountView(count)
+        }
     }
 
     private fun privateCallLauncher() = PrivateCallLauncher(
@@ -457,7 +460,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
 
         internal fun centerSurface(selected: StoreChannelsSelected.ResolvedSelectedChannel): CenterSurface = when {
             selected is StoreChannelsSelected.ResolvedSelectedChannel.Channel &&
-                selected.channel.isGuildForumChannel() -> CenterSurface.FORUM
+                selected.channel.isThreadOnlyChannel() -> CenterSurface.FORUM
             selected.channelOrParent != null -> CenterSurface.CHAT
             else -> CenterSurface.NONE
         }

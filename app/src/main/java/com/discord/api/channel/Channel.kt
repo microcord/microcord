@@ -55,6 +55,7 @@ data class Channel(
         const val GUILD_STAGE_VOICE = 13
         const val DIRECTORY = 14
         const val GUILD_FORUM = 15
+        const val GUILD_MEDIA = 16
         const val FLAGS_NONE = 0L
         const val FLAG_PINNED = 2L
     }

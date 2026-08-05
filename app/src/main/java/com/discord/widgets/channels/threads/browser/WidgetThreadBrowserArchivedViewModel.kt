@@ -2,7 +2,7 @@ package com.discord.widgets.channels.threads.browser
 
 import com.discord.R
 import com.discord.api.channel.Channel
-import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.permission.Permission
 import com.discord.app.AppViewModel
 import com.discord.models.guild.Guild
@@ -93,7 +93,7 @@ class WidgetThreadBrowserArchivedViewModel(
                 listing,
                 input.members,
                 input.users,
-                input.channel?.isGuildForumChannel() == true,
+                input.channel?.isThreadOnlyChannel() == true,
             )
         }
         canLoadMore = (listing as? ArchivedThreadsStore.ThreadListingState.Listing)?.let { it.hasMore && !it.isLoadingMore } == true

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/primary_630"
+    android:orientation="vertical"
+    android:paddingBottom="8dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="16dp"
+        android:paddingTop="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="12dp"
+        android:text="@string/sort"
+        android:textColor="?attr/colorHeaderPrimary"
+        style="@style/UiKit.TextView.H2" />
+
+    <com.discord.views.CheckedSetting
+        android:id="@+id/forum_sort_activity"
+        app:cs_text="@string/forum_sort_activity"
+        app:cs_view_type="radio"
+        style="@style/UiKit.CheckedSetting.Themed" />
+
+    <com.discord.views.CheckedSetting
+        android:id="@+id/forum_sort_creation"
+        app:cs_text="@string/forum_sort_creation"
+        app:cs_view_type="radio"
+        style="@style/UiKit.CheckedSetting.Themed" />
+</LinearLayout>

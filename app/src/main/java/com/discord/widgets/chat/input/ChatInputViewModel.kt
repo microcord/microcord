@@ -2,7 +2,7 @@ package com.discord.widgets.chat.input
 
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isAnnouncementChannel
-import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isSystemDM
 import com.discord.api.channel.isThread
 import com.discord.api.channel.getDMRecipient
@@ -221,7 +221,7 @@ class ChatInputViewModel(
         // In a forum the composer only exists while a post is being drafted; the channel itself
         // has no message list to type into.
         val ableToSendMessage =
-            if (channel.isGuildForumChannel()) canSendHere && selectedThreadDraft != null else canSendHere
+            if (channel.isThreadOnlyChannel()) canSendHere && selectedThreadDraft != null else canSendHere
 
         val shouldShowFollow = channel.isAnnouncementChannel() && !ableToSendMessage
         val isVerificationLevelTriggered = verificationLevelTriggered != GuildVerificationLevel.NONE

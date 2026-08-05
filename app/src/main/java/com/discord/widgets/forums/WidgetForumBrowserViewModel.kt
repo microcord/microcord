@@ -2,7 +2,8 @@ package com.discord.widgets.forums
 
 import com.discord.R
 import com.discord.api.channel.Channel
-import com.discord.api.permission.Permission
+import com.discord.api.channel.isGuildMediaChannel
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.role.GuildRole
 import com.discord.api.user.NsfwAllowance
 import com.discord.app.AppViewModel
@@ -17,7 +18,6 @@ import com.discord.stores.ArchivedThreadsStore
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreThreadMessages
 import com.discord.utilities.SnowflakeUtils
-import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
@@ -97,6 +97,7 @@ class WidgetForumBrowserViewModel(
                 channelName = state.channel.name.orEmpty(),
                 channelId = state.channel.id,
                 guildId = state.channel.guildId,
+                isMediaChannel = state.channel.isGuildMediaChannel(),
             ),
         )
     }
@@ -155,6 +156,7 @@ class WidgetForumBrowserViewModel(
             readState = state.forumPostReadStates[channel.id] ?: ForumPostReadState.createDefault(channel.id),
             unreadCount = state.forumPostUnreadCounts[channel.id],
             typingUsers = typingUsers,
+            isMediaPost = state.channel.isGuildMediaChannel(),
         )
     }
 
@@ -177,6 +179,7 @@ class WidgetForumBrowserViewModel(
             val channelName: String,
             val channelId: Long,
             val guildId: Long,
+            val isMediaChannel: Boolean,
         ) : ViewState(nsfwPanelState)
     }
 
@@ -233,7 +236,7 @@ class WidgetForumBrowserViewModel(
         fun observeStoreState(): Observable<StoreState> = StoreStream.getChannelsSelected()
             .observeSelectedChannel()
             .switchMap { channel ->
-                if (channel == null || channel.type != Channel.GUILD_FORUM) {
+                if (channel?.isThreadOnlyChannel() != true) {
                     return@switchMap Observable.just<StoreState>(StoreState.Invalid)
                 }
                 Observable.combineLatest(
@@ -266,7 +269,7 @@ class WidgetForumBrowserViewModel(
             val messages = Observable.combineLatest(
                 StoreStream.getUserRelationships().observeForType(2).map { it.keys },
                 StoreStream.getPermissions().observePermissionsForChannel(channel.id)
-                    .map { PermissionUtils.can(Permission.SEND_MESSAGES, it) },
+                    .map(ForumUtils::canCreatePost),
                 StoreStream.getMessagesMostRecent().observeRecentMessageIds(),
                 StoreStream.getEmojis().getEmojiSet(channel.guildId, channel.id),
             ) { blocked, canCreate, recentIds, emojis ->

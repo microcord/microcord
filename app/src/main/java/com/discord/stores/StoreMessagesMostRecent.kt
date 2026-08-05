@@ -1,7 +1,7 @@
 package com.discord.stores
 
 import com.discord.api.channel.Channel
-import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isTextOrVoiceChannel
 import com.discord.api.channel.isThread
 import com.discord.api.guild.Guild
@@ -134,7 +134,7 @@ class StoreMessagesMostRecent @JvmOverloads constructor(
     private fun updateParentChannelMostRecentIds(channel: Channel): Boolean {
         if (!channel.isThread() || channel.threadMetadata?.archived == true) return false
         val parent = storeChannels?.getChannel(channel.parentId) ?: return false
-        if (!parent.isGuildForumChannel()) return false
+        if (!parent.isThreadOnlyChannel()) return false
         return updateMostRecentIds(parent.id, channel.id)
     }
 

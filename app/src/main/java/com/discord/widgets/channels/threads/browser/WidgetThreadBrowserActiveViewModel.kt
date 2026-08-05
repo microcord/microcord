@@ -2,7 +2,7 @@ package com.discord.widgets.channels.threads.browser
 
 import com.discord.R
 import com.discord.api.channel.Channel
-import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.role.GuildRole
 import com.discord.app.AppViewModel
 import com.discord.models.guild.Guild
@@ -86,7 +86,7 @@ class WidgetThreadBrowserActiveViewModel(
             val joined = state.activeJoinedThreads.values
             val others = state.activeThreads.filterKeys { it !in state.activeJoinedThreads }.values
             val rows = buildList<WidgetThreadBrowserAdapter.Item> {
-                if (state.channel?.isGuildForumChannel() == true) add(WidgetThreadBrowserAdapter.Item.Warning())
+                if (state.channel?.isThreadOnlyChannel() == true) add(WidgetThreadBrowserAdapter.Item.Warning())
                 if (joined.isNotEmpty()) {
                     add(WidgetThreadBrowserAdapter.Item.Header("joined", R.string.thread_browser_joined_header, joined.size))
                     addAll(joined.map { it.item() })

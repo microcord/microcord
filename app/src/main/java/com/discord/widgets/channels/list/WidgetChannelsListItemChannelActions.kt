@@ -11,7 +11,7 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.getDMRecipient
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isCategory
-import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isGuildTextChannel
 import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.channel.isMultiUserDM
@@ -130,7 +130,7 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
 
         // Forums have their own browser surface, and an NSFW channel's threads are not previewed.
         threadBrowser.visibility = if (
-            channel.isThreaded() && !channel.isGuildForumChannel() && !channel.nsfw
+            channel.isThreaded() && !channel.isThreadOnlyChannel() && !channel.nsfw
         ) {
             View.VISIBLE
         } else {

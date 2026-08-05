@@ -12,7 +12,7 @@ import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isCategory
-import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isStageVoiceChannel
 import com.discord.api.channel.isTextChannel
@@ -149,7 +149,7 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
             ),
         )
 
-        if (channel.isGuildForumChannel()) {
+        if (channel.isThreadOnlyChannel()) {
             configureForum(root, model)
         } else {
             root.findViewById<LinearLayout>(R.id.forum_channel_notification_settings).isVisible = false

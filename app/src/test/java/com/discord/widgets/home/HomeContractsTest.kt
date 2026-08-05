@@ -57,13 +57,18 @@ class HomeContractsTest {
     }
 
     @Test
-    fun `forum parents use browser while posts and drafts use chat`() {
+    fun `thread only parents use browser while posts and drafts use chat`() {
         val forum = channel(Channel.GUILD_FORUM)
+        val media = channel(Channel.GUILD_MEDIA)
         val post = channel(Channel.PUBLIC_THREAD)
 
         assertEquals(
             WidgetHome.Companion.CenterSurface.FORUM,
             WidgetHome.centerSurface(StoreChannelsSelected.ResolvedSelectedChannel.Channel(forum)),
+        )
+        assertEquals(
+            WidgetHome.Companion.CenterSurface.FORUM,
+            WidgetHome.centerSurface(StoreChannelsSelected.ResolvedSelectedChannel.Channel(media)),
         )
         assertEquals(
             WidgetHome.Companion.CenterSurface.CHAT,

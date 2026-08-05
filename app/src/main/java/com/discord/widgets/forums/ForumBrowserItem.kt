@@ -21,3 +21,24 @@ sealed class ForumBrowserItem(
         }
     }
 }
+
+internal fun sortForumItems(items: List<ForumBrowserItem>, order: ForumSortOrder): List<ForumBrowserItem> {
+    val comparator = compareByDescending<ForumBrowserItem.PostItem> { it.post.isPinned }.then(
+        when (order) {
+            ForumSortOrder.LATEST_ACTIVITY -> ForumBrowserItem.postItemComparatorByMostRecent
+            ForumSortOrder.CREATION_DATE -> compareByDescending { it.post.channel.id }
+        },
+    )
+    val sorted = ArrayList<ForumBrowserItem>(items.size)
+    var index = 0
+    while (index < items.size) {
+        if (items[index] !is ForumBrowserItem.PostItem) {
+            sorted += items[index++]
+            continue
+        }
+        val end = (index until items.size).firstOrNull { items[it] !is ForumBrowserItem.PostItem } ?: items.size
+        sorted += items.subList(index, end).filterIsInstance<ForumBrowserItem.PostItem>().sortedWith(comparator)
+        index = end
+    }
+    return sorted
+}

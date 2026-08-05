@@ -365,6 +365,7 @@ class WidgetChannelsListAdapter(
                 when (item.channel.type) {
                     Channel.GUILD_ANNOUNCEMENT -> announcementsIcon(item)
                     Channel.GUILD_FORUM -> forumIcon(item)
+                    Channel.GUILD_MEDIA -> R.drawable.ic_image_library_24dp
                     else -> hashIcon(item)
                 },
             )

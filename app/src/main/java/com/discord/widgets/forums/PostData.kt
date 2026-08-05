@@ -25,6 +25,7 @@ data class PostData(
     val readState: ForumPostReadState,
     val unreadCount: Int?,
     val typingUsers: List<UserGuildMember>,
+    val isMediaPost: Boolean = false,
 ) {
     val isActivePost: Boolean = channel.threadMetadata?.archived != true
     val isPinned: Boolean = channel.flags?.and(Channel.FLAG_PINNED) == Channel.FLAG_PINNED

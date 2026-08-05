@@ -2713,6 +2713,36 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
 - Post-review simplification removed the obsolete RN REST/metadata aliases, delegated duplicate bot-entry
   construction, deleted the unused spoilable marker/current-entry alias, and reused modal field flattening
   for file collection. Focused component/modal/poll/media tests and `assembleDebug` pass; APK reinstalled.
+- Began the media-channel backport from current Discord RN/Hermes and Userdoccers rather than the 126.21
+  reference, which predates channel type 16. `GUILD_MEDIA` now participates in channel-list, selection,
+  thread-only browser, active/archived post, first-message, unread/ack, notification, draft-composer, search,
+  and icon routing. Media post cards use the RN `ForumPostGridBody` geometry: a 192dp, screen-minus-48dp
+  mosaic with up to four previews, large-left three-item layout, portrait containment over a dimmed cover,
+  video indicators, spoiler concealment, and overflow count. Type-15 forum cards are unchanged. Focused
+  channel/forum/home tests and `assembleDebug` pass; the APK is installed and cold-launches on WSA without
+  a fatal. Live type-16 visual/create-post verification remains open until the test account has an accessible
+  media channel.
+- Added the RN media-channel display header and sort sheet: the 32dp sort pill opens persisted Recent
+  Activity/Creation Time radio options and reorders active and archived sections while retaining pinned posts.
+  Its sort and chevron assets use the RN `colorInteractiveNormal` themed tint rather than fixed gray resources.
+  Replaced the forum adapter's unconditional `notifyDataSetChanged()` with key/content `DiffUtil` updates, so
+  first-message, typing, read-state, and timestamp emissions no longer rebuild the entire list. Focused forum
+  ordering tests and `assembleDebug` pass; APK installed and cold-launched on WSA.
+- Media-channel device follow-up gives the sort sheet title a standalone 16dp inset, runtime-tints the media
+  toolbar icon with `colorInteractiveNormal`, and mounts the shared mention badge over the media/forum
+  hamburger toolbar. Draft typing no longer POSTs to thread-only parent channels. Post creation now requires
+  both `SEND_MESSAGES` and `CREATE_PUBLIC_THREADS` in the browser and again at the request boundary, preventing
+  the observed parent-typing and unauthorized thread-create 403s. Focused home/forum/create tests and
+  `assembleDebug` pass; APK reinstalled on WSA.
+- Developer Options now exposes opt-in sanitized REST request/response logging. Default debug logs remain
+  metadata-only; the toggle adds safe headers, redacted JSON or multipart structure, and response API
+  `code`/`message`/validation errors without consuming the body. Authorization, cookies, super-properties,
+  message content, names, nonces, filenames, file bytes, tokens, email, phone, and credentials remain
+  redacted. MockWebServer redaction/403-body tests and `assembleDebug` pass; APK reinstalled on WSA.
+- Fixed reconnect selection fallback: when a selected forum/media channel is temporarily absent during guild
+  rehydration, `StoreChannelsSelected` may display the first available channel but no longer overwrites the
+  user's requested channel intent. The existing reactive resolver returns to that channel when it reappears;
+  an explicit user selection still replaces it. Focused store tests and `assembleDebug` pass; APK reinstalled.
 
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/applauncher/**` | Android 340.12
 Hermes `out.js` Apps launcher modules | log in on WSA and verify HOME/search/application/command/list

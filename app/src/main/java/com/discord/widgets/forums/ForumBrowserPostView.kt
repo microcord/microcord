@@ -3,6 +3,7 @@ package com.discord.widgets.forums
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Typeface
+import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.text.SpannableString
@@ -16,6 +17,7 @@ import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
 import android.view.LayoutInflater
+import android.view.Gravity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
@@ -30,8 +32,13 @@ import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.facebook.drawee.backends.pipeline.Fresco
+import com.facebook.drawee.drawable.ScalingUtils
 import com.facebook.drawee.span.DraweeSpanStringBuilder
 import com.facebook.imagepipeline.request.ImageRequest
+import com.facebook.drawee.view.SimpleDraweeView
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.TextView
 import kotlin.math.max
 import com.discord.utilities.user.UserUtils.getDisplayName
 
@@ -49,6 +56,7 @@ class ForumBrowserPostView @JvmOverloads constructor(
         configureFirstMessage(post)
         configureOwner(post)
         configureAttachment(post)
+        configureMediaGrid(post)
         configureReaction(post.mostCommonReaction, post.isDefaultReaction, post.firstMessage?.id)
         configureMessageCount(post)
         binding.forumPostTag.visibility = if (post.tag == null) View.GONE else View.VISIBLE
@@ -134,6 +142,10 @@ class ForumBrowserPostView @JvmOverloads constructor(
     }
 
     private fun configureAttachment(post: PostData) {
+        if (post.isMediaPost) {
+            binding.inlineMediaImagePreview.visibility = View.GONE
+            return
+        }
         val attachment = post.firstMessage?.attachments?.firstOrNull { !it.isSpoiler }
         if (attachment == null) {
             binding.inlineMediaImagePreview.visibility = View.GONE
@@ -155,6 +167,87 @@ class ForumBrowserPostView @JvmOverloads constructor(
             .setOldController(binding.inlineMediaImagePreview.controller)
             .setFirstAvailableImageRequests(requests)
             .build()
+    }
+
+    private fun configureMediaGrid(post: PostData) {
+        val media = post.firstMessage?.attachments.orEmpty()
+            .filter { it.type != MessageAttachmentType.FILE }
+        binding.mediaPostGrid.visibility = if (post.isMediaPost && media.isNotEmpty()) View.VISIBLE else View.GONE
+        if (binding.mediaPostGrid.visibility != View.VISIBLE) {
+            binding.mediaPostGrid.removeAllViews()
+            return
+        }
+        binding.mediaPostGrid.tag = post.channel.id
+        binding.mediaPostGrid.post {
+            if (binding.mediaPostGrid.tag != post.channel.id) return@post
+            val root = binding.mediaPostGrid
+            val width = root.width
+            val height = root.height
+            if (width <= 0 || height <= 0) return@post
+            root.removeAllViews()
+            val gap = dpToPixels(2)
+            val shown = media.take(4)
+
+            fun addTile(index: Int, left: Int, top: Int, tileWidth: Int, tileHeight: Int) {
+                val attachment = shown[index]
+                val tile = FrameLayout(context).apply {
+                    layoutParams = FrameLayout.LayoutParams(tileWidth, tileHeight).also {
+                        it.leftMargin = left
+                        it.topMargin = top
+                    }
+                    setBackgroundColor(Color.BLACK)
+                }
+                if (attachment.isSpoiler) {
+                    tile.addView(TextView(context).apply {
+                        text = context.getString(R.string.spoiler).uppercase()
+                        setTextColor(Color.WHITE)
+                        gravity = Gravity.CENTER
+                    }, FrameLayout.LayoutParams(-1, -1))
+                } else {
+                    val source = "${attachment.proxyUrl}?width=640&height=360&format=webp"
+                    if ((attachment.height ?: 0) > (attachment.width ?: 0)) {
+                        tile.addView(SimpleDraweeView(context).apply {
+                            hierarchy.actualImageScaleType = ScalingUtils.ScaleType.CENTER_CROP
+                            alpha = 0.2f
+                            setImageURI(source)
+                        }, FrameLayout.LayoutParams(-1, -1))
+                    }
+                    tile.addView(SimpleDraweeView(context).apply {
+                        hierarchy.actualImageScaleType = if ((attachment.height ?: 0) > (attachment.width ?: 0)) {
+                            ScalingUtils.ScaleType.FIT_CENTER
+                        } else {
+                            ScalingUtils.ScaleType.CENTER_CROP
+                        }
+                        setImageURI(source)
+                    }, FrameLayout.LayoutParams(-1, -1))
+                    if (attachment.type == MessageAttachmentType.VIDEO) {
+                        tile.addView(ImageView(context).apply {
+                            setImageResource(R.drawable.ic_play_circle_outline_white_24dp)
+                            contentDescription = context.getString(R.string.video)
+                        }, FrameLayout.LayoutParams(dpToPixels(32), dpToPixels(32), Gravity.CENTER))
+                    }
+                }
+                root.addView(tile)
+            }
+
+            mediaGridRects(shown.size, width, height, gap).forEachIndexed { index, rect ->
+                addTile(index, rect.left, rect.top, rect.width, rect.height)
+            }
+            val extra = media.size - shown.size
+            if (extra > 0) {
+                root.addView(TextView(context).apply {
+                    text = "+$extra"
+                    setTextColor(Color.WHITE)
+                    textSize = 12f
+                    gravity = Gravity.CENTER
+                    setPadding(dpToPixels(8), 0, dpToPixels(8), 0)
+                    setBackgroundColor(Color.argb(180, 0, 0, 0))
+                }, FrameLayout.LayoutParams(-2, dpToPixels(24), Gravity.END or Gravity.BOTTOM).apply {
+                    rightMargin = dpToPixels(4)
+                    bottomMargin = dpToPixels(4)
+                })
+            }
+        }
     }
 
     private fun fileDrawable(filename: String): Int {
@@ -232,4 +325,24 @@ class ForumBrowserPostView @JvmOverloads constructor(
                 "r|wml|php|bash|applescript|fcgi|yaml|ex|exs|sh|ml|actionscript)",
         )
     }
+}
+
+internal data class MediaGridRect(val left: Int, val top: Int, val width: Int, val height: Int)
+
+internal fun mediaGridRects(count: Int, width: Int, height: Int, gap: Int): List<MediaGridRect> {
+    if (count <= 0) return emptyList()
+    if (count == 1) return listOf(MediaGridRect(0, 0, width, height))
+    val halfWidth = (width - gap) / 2
+    val halfHeight = (height - gap) / 2
+    if (count == 2) return listOf(
+        MediaGridRect(0, 0, halfWidth, height),
+        MediaGridRect(halfWidth + gap, 0, halfWidth, height),
+    )
+    val rects = mutableListOf(
+        MediaGridRect(0, 0, halfWidth, if (count == 3) height else halfHeight),
+        MediaGridRect(halfWidth + gap, 0, halfWidth, halfHeight),
+        MediaGridRect(halfWidth + gap, halfHeight + gap, halfWidth, halfHeight),
+    )
+    if (count >= 4) rects += MediaGridRect(0, halfHeight + gap, halfWidth, halfHeight)
+    return rects
 }

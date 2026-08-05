@@ -1,7 +1,7 @@
 package com.discord.widgets.status
 
 import com.discord.api.channel.Channel
-import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isThread
 import com.discord.api.permission.Permission
 import com.discord.app.AppViewModel
@@ -81,7 +81,7 @@ class WidgetThreadStatusViewModel(
         val status = when {
             selectedChannel == null || !selectedChannel.isThread() -> Status.Hide
             // A forum post carries its own status bar, so this one stands down.
-            parentChannel != null && parentChannel.isGuildForumChannel() -> Status.Hide
+            parentChannel != null && parentChannel.isThreadOnlyChannel() -> Status.Hide
             metadata?.archived == true -> Status.Archived(
                 isLocked = metadata.locked,
                 canArchive = storeState.canArchive,
