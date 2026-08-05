@@ -3,6 +3,7 @@ package com.discord.stores
 import com.discord.api.channel.Channel
 import com.discord.api.message.reaction.MessageReaction
 import com.discord.api.message.reaction.MessageReactionUpdate
+import com.discord.api.message.PollVoteEvent
 import com.discord.models.domain.ModelMessageDelete
 import com.discord.models.domain.ModelPayload
 import com.discord.models.message.Message
@@ -205,6 +206,13 @@ class StoreForumPostMessages(
         val reactions = message.reactions
             ?.filterNot { it.emoji.reactionKey == update.emoji.reactionKey }
         forumPostFirstMessage[message.channelId] = message.copy(reactions = reactions)
+        markChanged()
+    }
+
+    @StoreThread
+    fun handlePollVote(event: PollVoteEvent, added: Boolean, meUserId: Long) {
+        val message = forumPostFirstMessage[event.channelId]?.takeIf { it.id == event.messageId } ?: return
+        forumPostFirstMessage[event.channelId] = message.withPollVote(event, added, meUserId)
         markChanged()
     }
 

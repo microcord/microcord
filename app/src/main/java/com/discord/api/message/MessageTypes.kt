@@ -42,4 +42,5 @@ object MessageTypes {
     const val CONTEXT_MENU_COMMAND = 23
     const val AUTOMOD_SYSTEM_MESSAGE = 24
     const val ROLE_SUBSCRIPTION_PURCHASE_MESSAGE = 25
+    const val POLL_RESULT = 46
 }

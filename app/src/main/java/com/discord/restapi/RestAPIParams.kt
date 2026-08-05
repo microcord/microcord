@@ -547,6 +547,7 @@ object RestAPIParams {
         val messageReference: MessageReference? = null,
         val allowedMentions: AllowedMentions? = null,
         val attachments: List<Attachment>? = null,
+        val poll: Poll? = null,
         // ponytail: remove with StoreStream's legacy upload call site; 126.21 never sends this field.
         @Transient
         val enforceNonce: Boolean? = null,
@@ -559,6 +560,27 @@ object RestAPIParams {
             val id: Int,
             val filename: String,
             @SerializedName("is_spoiler") val isSpoiler: Boolean,
+        )
+
+        data class Poll(
+            val question: PollMedia,
+            val answers: List<PollAnswer>,
+            val duration: Int,
+            @SerializedName("allow_multiselect") val allowMultiselect: Boolean,
+            @SerializedName("layout_type") val layoutType: Int = 1,
+        )
+
+        data class PollAnswer(@SerializedName("poll_media") val pollMedia: PollMedia)
+
+        data class PollMedia(
+            val text: String,
+            val emoji: PollEmoji? = null,
+        )
+
+        data class PollEmoji(
+            val id: Long? = null,
+            val name: String,
+            val animated: Boolean? = null,
         )
 
         class Activity(
@@ -599,6 +621,8 @@ object RestAPIParams {
             }
         }
     }
+
+    data class PollVote(@SerializedName("answer_ids") val answerIds: List<Int>)
 
     /** `POST interactions` body for a modal submission. */
     data class ModalInteraction(

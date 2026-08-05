@@ -55,6 +55,7 @@ import com.discord.api.hubs.EmailVerification
 import com.discord.api.hubs.EmailVerificationCode
 import com.discord.api.hubs.WaitlistSignup
 import com.discord.api.message.Message
+import com.discord.api.message.PollVoters
 import com.discord.api.premium.ClaimedOutboundPromotion
 import com.discord.api.premium.OutboundPromotion
 import com.discord.api.report.MenuAPIResponse
@@ -673,6 +674,28 @@ interface RestAPIInterface {
         @Part files: Array<MultipartBody.Part>,
         @Tag captcha: CaptchaRequestPolicy?,
     ): Observable<Message>
+
+    @PUT("channels/{channelId}/polls/{messageId}/answers/@me")
+    fun votePoll(
+        @Path("channelId") channelId: Long,
+        @Path("messageId") messageId: Long,
+        @Body body: RestAPIParams.PollVote,
+    ): Observable<Void>
+
+    @POST("channels/{channelId}/polls/{messageId}/expire")
+    fun expirePoll(
+        @Path("channelId") channelId: Long,
+        @Path("messageId") messageId: Long,
+    ): Observable<Void>
+
+    @GET("channels/{channelId}/polls/{messageId}/answers/{answerId}")
+    fun getPollVoters(
+        @Path("channelId") channelId: Long,
+        @Path("messageId") messageId: Long,
+        @Path("answerId") answerId: Int,
+        @Query("limit") limit: Int = 100,
+        @Query("after") after: Long? = null,
+    ): Observable<PollVoters>
 
     @POST("channels/{channelId}/messages/{messageId}/ack")
     fun postChannelMessagesAck(

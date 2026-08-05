@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="8dp">
+
+    <FrameLayout
+        android:id="@+id/poll_answer_emoji_button"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/poll_answer_emoji"
+        app:layout_constraintBottom_toBottomOf="@id/poll_answer_wrap"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@id/poll_answer_wrap">
+        <com.facebook.drawee.view.SimpleDraweeView
+            android:id="@+id/poll_answer_emoji"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            app:actualImageScaleType="fitCenter" />
+        <ImageView
+            android:id="@+id/poll_answer_emoji_placeholder"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_emoji_24dp"
+            app:tint="?attr/colorInteractiveNormal" />
+    </FrameLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/poll_answer_wrap"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:hint="@string/poll_answer_hint"
+        app:layout_constraintEnd_toStartOf="@id/poll_answer_delete"
+        app:layout_constraintStart_toEndOf="@id/poll_answer_emoji_button"
+        app:layout_constraintTop_toTopOf="parent"
+        style="@style/UiKit.TextInputLayout.Primary">
+        <com.google.android.material.textfield.TextInputEditText
+            android:maxLength="55"
+            android:maxLines="2"
+            android:inputType="textCapSentences"
+            style="@style/UiKit.TextInputLayout.EditText.SingleLine" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <ImageButton
+        android:id="@+id/poll_answer_delete"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/poll_remove_answer"
+        android:padding="12dp"
+        android:src="@drawable/ic_delete_24dp"
+        app:tint="?attr/colorInteractiveNormal"
+        app:layout_constraintBottom_toBottomOf="@id/poll_answer_wrap"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@id/poll_answer_wrap" />
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -3,6 +3,7 @@ package com.discord.widgets.chat.list.entries
 import com.discord.api.channel.Channel
 import com.discord.api.message.embed.EmbedType
 import com.discord.api.message.embed.MessageEmbed
+import com.discord.api.message.MessageTypes
 import com.discord.api.role.GuildRole
 import com.discord.models.botuikit.MessageComponent
 import com.discord.models.member.GuildMember
@@ -88,6 +89,7 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
         const val AUTOMOD_SYSTEM_MESSAGE = 45
         const val FORWARDED_MESSAGE = 46
         const val ACTIVITY_MESSAGE = 47
+        const val POLL = 48
 
         /** `MessageTypes.AUTO_MODERATION_ACTION`; its single embed gets a dedicated row. */
         private const val AUTO_MOD_SYSTEM_MESSAGE_TYPE = 24
@@ -111,7 +113,11 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             roles: Map<Long, GuildRole>?,
             nickOrUsernames: Map<Long, String>,
         ): List<ChatListEntry> {
-            if (!message.hasAttachments() && !(message.hasEmbeds() && renderEmbeds)) return emptyList()
+            // Type 46 embeds contain poll closure metadata consumed by the system-message row.
+            if (message.type == MessageTypes.POLL_RESULT) return emptyList()
+            if (message.poll == null && !message.hasAttachments() && !(message.hasEmbeds() && renderEmbeds)) {
+                return emptyList()
+            }
 
             val seenUrls = HashSet<String?>()
             val embeds = ArrayList<MessageEmbed>()
@@ -125,7 +131,8 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             }
 
             val attachments = message.attachments.orEmpty()
-            val entries = ArrayList<ChatListEntry>(embeds.size + attachments.size)
+            val entries = ArrayList<ChatListEntry>(embeds.size + attachments.size + if (message.poll != null) 1 else 0)
+            message.poll?.let { entries.add(PollEntry(message, it)) }
             var embedIndex = 0
             attachments.forEach { attachment ->
                 entries.add(

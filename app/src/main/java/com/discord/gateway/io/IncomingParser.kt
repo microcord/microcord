@@ -23,6 +23,7 @@ import com.discord.api.guildscheduledevent.GuildScheduledEventUserUpdate
 import com.discord.api.interaction.InteractionModalCreate
 import com.discord.api.interaction.InteractionStateUpdate
 import com.discord.api.message.Message
+import com.discord.api.message.PollVoteEvent
 import com.discord.api.message.reaction.MessageReactionUpdate
 import com.discord.api.presence.Presence
 import com.discord.api.requiredaction.UserRequiredActionUpdate
@@ -173,6 +174,8 @@ class IncomingParser(private val gson: Gson) {
         "MESSAGE_REACTION_ADD", "MESSAGE_REACTION_REMOVE",
         "MESSAGE_REACTION_REMOVE_ALL", "MESSAGE_REACTION_REMOVE_EMOJI" ->
             gson.fromJson(data, MessageReactionUpdate::class.java)
+        "MESSAGE_POLL_VOTE_ADD", "MESSAGE_POLL_VOTE_REMOVE" ->
+            gson.fromJson(data, PollVoteEvent::class.java)
 
         // Presence and typing
         "PRESENCE_UPDATE" -> gson.fromJson(data, Presence::class.java)

@@ -24,16 +24,22 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.discord.R
+import com.discord.api.channel.isPrivate
+import com.discord.api.channel.isSystemDM
+import com.discord.api.permission.Permission
 import com.discord.api.sticker.Sticker
 import com.discord.app.AppFragment
 import com.discord.app.AppLog
 import com.discord.databinding.FragmentCameraBinding
 import com.discord.i18n.setI18nText
 import com.discord.models.domain.emoji.Emoji
+import com.discord.stores.StoreStream
 import com.discord.utilities.analytics.AnalyticsTracker
+import com.discord.utilities.permissions.PermissionUtils
 import com.discord.widgets.chat.input.attachments.AttachmentBottomSheet
 import com.discord.widgets.chat.input.emoji.EmojiPickerListener
 import com.discord.widgets.chat.input.expression.WidgetExpressionTray
+import com.discord.widgets.chat.polls.PollCreateLauncherFragment
 import com.discord.widgets.chat.input.sticker.StickerPickerListener
 import com.lytefast.flexinput.InputListener
 import com.lytefast.flexinput.FlexInputCoordinator
@@ -90,11 +96,18 @@ class WidgetChatInputAttachments(
      *   omitted rather than a blank tab being added.
      */
     fun configureFlexInputContentPages(canCreateThread: Boolean) {
-        flexInputFragment.setContentPages(
+        val pages = mutableListOf(
             page(R_DRAWABLE_IMAGE, R_STRING_PHOTOS) { DiscordMediaFragment() },
             page(R_DRAWABLE_FILE, R_STRING_FILES) { DiscordFilesFragment() },
             page(R_DRAWABLE_CAMERA, R_STRING_CAMERA) { DiscordCameraFragment() },
         )
+        val channel = StoreStream.getChannelsSelected().getSelectedChannel()
+        val permissions = channel?.let { StoreStream.getPermissions().getPermissionsByChannel()[it.id] }
+        if (channel != null && ((channel.isPrivate() && !channel.isSystemDM()) ||
+                PermissionUtils.can(Permission.SEND_POLLS, permissions))) {
+            pages += page(R.drawable.ic_sort_white_24dp, R.string.poll_create) { PollCreateLauncherFragment() }
+        }
+        flexInputFragment.setContentPages(*pages.toTypedArray())
         if (canCreateThread) {
             AppLog.i("thread-creation attachment page requested but not reconstructed")
         }

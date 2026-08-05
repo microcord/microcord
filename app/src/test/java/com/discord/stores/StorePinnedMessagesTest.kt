@@ -1,6 +1,12 @@
 package com.discord.stores
 
 import com.discord.api.user.User
+import com.discord.api.message.MessagePoll
+import com.discord.api.message.PollAnswer
+import com.discord.api.message.PollAnswerCount
+import com.discord.api.message.PollMedia
+import com.discord.api.message.PollResults
+import com.discord.api.message.PollVoteEvent
 import com.discord.models.message.Message
 import com.discord.stores.updates.ObservationDeck
 import org.junit.Assert.assertEquals
@@ -34,7 +40,37 @@ class StorePinnedMessagesTest {
         assertEquals(listOf(1L, 2L), observed.last().map(Message::id))
     }
 
+    @Test
+    fun pollVotesUpdateThePinnedSnapshot() {
+        val scheduler = TestScheduler()
+        val dispatcher = Dispatcher(scheduler)
+        val deck = ObservationDeck()
+        lateinit var callback: (Result<List<Message>>) -> Unit
+        val store = StorePinnedMessages(dispatcher, deck) { _, loaded -> callback = loaded }
+        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
+        val observed = mutableListOf<List<Message>>()
+        store.observeForChannel(CHANNEL_ID).subscribe(observed::add)
+        callback(Result.success(listOf(message(1).copy(poll = poll()))))
+        scheduler.triggerActions()
+
+        dispatcher.schedule {
+            store.handlePollVote(PollVoteEvent(7, CHANNEL_ID, 1, answerId = 1), true, 7)
+        }
+        scheduler.triggerActions()
+
+        assertEquals(1, observed.last().single().poll!!.results!!.answerCounts.single().count)
+    }
+
     private fun message(id: Long) = Message(id, CHANNEL_ID, author = User(id, "user$id"))
+
+    private fun poll() = MessagePoll(
+        question = PollMedia("Question"),
+        answers = listOf(PollAnswer(1, PollMedia("Answer"))),
+        expiry = null,
+        allowMultiselect = false,
+        layoutType = 1,
+        results = PollResults(false, listOf(PollAnswerCount(1, 0, false))),
+    )
 
     private companion object {
         const val CHANNEL_ID = 10L

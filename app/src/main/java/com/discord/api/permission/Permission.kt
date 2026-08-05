@@ -61,6 +61,7 @@ object Permission {
     const val SEND_MESSAGES_IN_THREADS: PermissionBit = 274877906944L
     const val USE_EMBEDDED_ACTIVITIES: PermissionBit = 549755813888L
     const val MODERATE_MEMBERS: PermissionBit = 1099511627776L
+    const val SEND_POLLS: PermissionBit = 562949953421312L
 
     /**
      * The permissions granted to a freshly created @everyone role.
@@ -75,7 +76,7 @@ object Permission {
     const val DEFAULT: PermissionBit = 521942851137L
 
     /** Every bit above. Granted to guild owners and to administrators. */
-    const val ALL: PermissionBit = 2199022731007L
+    const val ALL: PermissionBit = 565148976152319L
 
     /**
      * Permissions that require an elevated (MFA-verified) session when the guild has

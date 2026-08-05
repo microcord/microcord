@@ -10,6 +10,10 @@ import com.discord.api.message.MessageReference
 import com.discord.api.message.MessagePoll
 import com.discord.api.message.MessageResolvedData
 import com.discord.api.message.MessageSnapshot
+import com.discord.api.message.MessagePurchaseNotification
+import com.discord.api.message.MessageGiftInfo
+import com.discord.api.message.Potion
+import com.discord.api.message.SharedClientTheme
 import com.discord.api.message.activity.MessageActivity
 import com.discord.api.message.activity.MessageActivityInstance
 import com.discord.api.message.activity.MessageActivityType
@@ -19,6 +23,7 @@ import com.discord.api.message.call.MessageCall
 import com.discord.api.message.embed.MessageEmbed
 import com.discord.api.message.reaction.MessageReaction
 import com.discord.api.message.role_subscription.RoleSubscriptionData
+import com.discord.api.soundboard.SoundboardSound
 import com.discord.api.sticker.Sticker
 import com.discord.api.sticker.StickerPartial
 import com.discord.api.user.User
@@ -70,6 +75,15 @@ data class Message(
     val localAttachments: List<LocalAttachment>? = null,
     val captchaSolution: CaptchaSolution? = null,
     val activityInstance: MessageActivityInstance? = null,
+    val interactionMetadata: Interaction? = null,
+    val lobbyId: Long? = null,
+    val mentionChannels: List<Channel>? = null,
+    val purchaseNotification: MessagePurchaseNotification? = null,
+    val giftInfo: MessageGiftInfo? = null,
+    val changelogId: Long? = null,
+    val soundboardSounds: List<SoundboardSound>? = null,
+    val potions: List<Potion>? = null,
+    val sharedClientTheme: SharedClientTheme? = null,
 ) {
     constructor(message: com.discord.api.message.Message) : this(
         id = message.id,
@@ -83,6 +97,7 @@ data class Message(
         tts = message.tts,
         mentionEveryone = message.mentionEveryone,
         mentions = message.mentions,
+        mentionChannels = message.mentionChannels,
         mentionRoles = message.mentionRoles,
         attachments = message.attachments,
         embeds = message.embeds,
@@ -100,6 +115,8 @@ data class Message(
         stickerItems = message.stickerItems,
         referencedMessage = message.referencedMessage,
         interaction = message.interaction,
+        interactionMetadata = message.interactionMetadata,
+        lobbyId = message.lobbyId,
         thread = message.thread,
         components = message.components,
         call = message.call,
@@ -107,7 +124,13 @@ data class Message(
         roleSubscriptionData = message.roleSubscriptionData,
         messageSnapshots = message.messageSnapshots,
         poll = message.poll,
+        purchaseNotification = message.purchaseNotification,
         resolved = message.resolved,
+        giftInfo = message.giftInfo,
+        changelogId = message.changelogId,
+        soundboardSounds = message.soundboardSounds,
+        potions = message.potions,
+        sharedClientTheme = message.sharedClientTheme,
         activityInstance = message.activityInstance,
     )
 
@@ -136,7 +159,7 @@ data class Message(
     fun isWebhook() = webhookId != null
     fun isSpotifyListeningActivity() = activity?.type == MessageActivityType.LISTEN &&
         activity.partyId.contains("spotify", ignoreCase = true)
-    fun shouldShowReplyPreviewAsAttachment() = activity != null && application != null
+    fun shouldShowReplyPreviewAsAttachment() = poll != null || activity != null && application != null
     fun getCallDuration() = call?.endedTimestamp?.let { end -> timestamp?.let { end.dateTimeMillis - it.dateTimeMillis } } ?: 0L
     fun getReactionsMap() = reactions.orEmpty().associateBy { it.emoji.reactionKey }
 
@@ -152,6 +175,7 @@ data class Message(
         tts = new.tts ?: tts,
         mentionEveryone = new.mentionEveryone ?: mentionEveryone,
         mentions = new.mentions ?: mentions,
+        mentionChannels = new.mentionChannels ?: mentionChannels,
         mentionRoles = new.mentionRoles ?: mentionRoles,
         attachments = new.attachments ?: attachments,
         embeds = new.embeds ?: embeds,
@@ -169,13 +193,21 @@ data class Message(
         stickerItems = new.stickerItems ?: stickerItems,
         referencedMessage = new.referencedMessage ?: referencedMessage,
         interaction = new.interaction ?: interaction,
+        interactionMetadata = new.interactionMetadata ?: interactionMetadata,
+        lobbyId = new.lobbyId ?: lobbyId,
         thread = new.thread ?: thread,
         components = new.components ?: components,
         call = new.call ?: call,
         roleSubscriptionData = new.roleSubscriptionData ?: roleSubscriptionData,
         messageSnapshots = new.messageSnapshots ?: messageSnapshots,
-        poll = new.poll ?: poll,
+        poll = mergePoll(poll, new.poll),
+        purchaseNotification = new.purchaseNotification ?: purchaseNotification,
         resolved = new.resolved ?: resolved,
+        giftInfo = new.giftInfo ?: giftInfo,
+        changelogId = new.changelogId ?: changelogId,
+        soundboardSounds = new.soundboardSounds ?: soundboardSounds,
+        potions = new.potions ?: potions,
+        sharedClientTheme = new.sharedClientTheme ?: sharedClientTheme,
         activityInstance = new.activityInstance ?: activityInstance,
     )
 
@@ -190,6 +222,7 @@ data class Message(
         tts = tts,
         mentionEveryone = mentionEveryone,
         mentions = mentions,
+        mentionChannels = mentionChannels,
         mentionRoles = mentionRoles,
         attachments = attachments,
         embeds = embeds,
@@ -207,6 +240,8 @@ data class Message(
         stickerItems = stickerItems,
         referencedMessage = referencedMessage,
         interaction = interaction,
+        interactionMetadata = interactionMetadata,
+        lobbyId = lobbyId,
         thread = thread,
         components = components,
         call = call,
@@ -214,11 +249,31 @@ data class Message(
         roleSubscriptionData = roleSubscriptionData,
         messageSnapshots = messageSnapshots,
         poll = poll,
+        purchaseNotification = purchaseNotification,
         resolved = resolved,
+        giftInfo = giftInfo,
+        changelogId = changelogId,
+        soundboardSounds = soundboardSounds,
+        potions = potions,
+        sharedClientTheme = sharedClientTheme,
         activityInstance = activityInstance,
     )
 
     override fun toString() =
         "Message(id=$id, channelId=$channelId, guildId=$guildId, content=<redacted>, nonce=<redacted>, " +
             "localAttachments=<redacted>, captchaSolution=<redacted>, type=$type, flags=$flags)"
+}
+
+private fun mergePoll(current: MessagePoll?, update: MessagePoll?): MessagePoll? {
+    update ?: return current
+    val currentResults = current?.results ?: return update
+    val updateResults = update.results ?: return update.copy(results = currentResults)
+    val myAnswerIds = currentResults.answerCounts.filter { it.meVoted }.mapTo(HashSet()) { it.id }
+    return update.copy(
+        results = updateResults.copy(
+            answerCounts = updateResults.answerCounts.map { count ->
+                if (count.id in myAnswerIds) count.copy(meVoted = true) else count
+            },
+        ),
+    )
 }

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="wrap_content"
+    android:layout_height="50dp"
+    android:background="?attr/selectableItemBackground"
+    android:minWidth="60dp"
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp">
+
+    <LinearLayout
+        android:id="@+id/poll_details_answer_content"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_centerHorizontal="true"
+        android:gravity="center"
+        android:orientation="horizontal">
+        <com.facebook.drawee.view.SimpleDraweeView
+            android:id="@+id/poll_details_answer_emoji"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginEnd="8dp"
+            app:actualImageScaleType="fitCenter" />
+        <TextView
+            android:id="@+id/poll_details_answer_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="?attr/colorHeaderPrimary"
+            android:textSize="16sp" />
+    </LinearLayout>
+
+    <View
+        android:id="@+id/poll_details_answer_selected"
+        android:layout_width="wrap_content"
+        android:layout_height="4dp"
+        android:layout_alignStart="@id/poll_details_answer_content"
+        android:layout_alignEnd="@id/poll_details_answer_content"
+        android:layout_alignParentBottom="true"
+        android:background="?attr/manage_reactions_emoji_selection_indicator"
+        android:visibility="invisible" />
+</RelativeLayout>

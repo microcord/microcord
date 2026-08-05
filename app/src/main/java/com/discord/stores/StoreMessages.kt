@@ -5,6 +5,9 @@ import android.util.Log
 import com.discord.api.activity.Activity
 import com.discord.api.application.Application
 import com.discord.api.message.MessageReference
+import com.discord.api.message.PollAnswerCount
+import com.discord.api.message.PollResults
+import com.discord.api.message.PollVoteEvent
 import com.discord.api.interaction.InteractionStateUpdate
 import com.discord.api.message.activity.MessageActivity
 import com.discord.api.message.allowedmentions.MessageAllowedMentions
@@ -831,6 +834,11 @@ class StoreMessages @JvmOverloads constructor(
     }
 
     @StoreThread
+    fun handlePollVote(event: PollVoteEvent, added: Boolean, meUserId: Long) {
+        handleMessageUpdate(event.channelId, event.messageId) { it.withPollVote(event, added, meUserId) }
+    }
+
+    @StoreThread
     fun handleReactionUpdate(updates: List<MessageReactionUpdate>, add: Boolean) {
         holder.updateReactions(updates, add)
         markChanged()
@@ -1290,6 +1298,20 @@ class StoreMessages @JvmOverloads constructor(
         private const val TYPE_APPLICATION_COMMAND_FAILED = -4
         private const val MESSAGE_FLAG_LOADING = 128L
     }
+}
+
+internal fun Message.withPollVote(event: PollVoteEvent, added: Boolean, meUserId: Long): Message {
+    val poll = poll ?: return this
+    val existing = poll.results?.answerCounts.orEmpty()
+    val counts = poll.answers.map { answer ->
+        val count = existing.firstOrNull { it.id == answer.answerId }
+            ?: PollAnswerCount(answer.answerId, 0, false)
+        if (answer.answerId != event.answerId) count else count.copy(
+            count = (count.count + if (added) 1 else -1).coerceAtLeast(0),
+            meVoted = if (event.userId == meUserId) added else count.meVoted,
+        )
+    }
+    return copy(poll = poll.copy(results = PollResults(poll.results?.finalized == true, counts)))
 }
 
 /**

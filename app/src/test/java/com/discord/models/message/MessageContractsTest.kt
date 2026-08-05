@@ -26,8 +26,8 @@ class MessageContractsTest {
     fun preservesCompleteMessageContracts() {
         val api = gson.fromJson(FULL_MESSAGE, ApiMessage::class.java)
 
-        assertEquals(37, ApiMessage::class.java.declaredFields.count { !Modifier.isStatic(it.modifiers) })
-        assertEquals(44, Message::class.java.declaredFields.count { !Modifier.isStatic(it.modifiers) })
+        assertEquals(46, ApiMessage::class.java.declaredFields.count { !Modifier.isStatic(it.modifiers) })
+        assertEquals(53, Message::class.java.declaredFields.count { !Modifier.isStatic(it.modifiers) })
         assertEquals(1L, api.id)
         assertEquals(2L, api.channelId)
         assertEquals(3L, api.guildId)

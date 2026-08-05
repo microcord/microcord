@@ -1757,6 +1757,18 @@ class StoreStream private constructor(
             messageReactions.handleReactionRemoveEmoji(reaction.messageId, reaction.emoji)
             forumPostMessages.handleReactionRemoveEmoji(reaction)
         }
+        dispatchSubscribe(events.messagePollVoteAdd, "streamMessagePollVoteAdd") { vote ->
+            val meUserId = users.getMeInternal().id
+            messages.handlePollVote(vote, true, meUserId)
+            pinnedMessages.handlePollVote(vote, true, meUserId)
+            forumPostMessages.handlePollVote(vote, true, meUserId)
+        }
+        dispatchSubscribe(events.messagePollVoteRemove, "streamMessagePollVoteRemove") { vote ->
+            val meUserId = users.getMeInternal().id
+            messages.handlePollVote(vote, false, meUserId)
+            pinnedMessages.handlePollVote(vote, false, meUserId)
+            forumPostMessages.handlePollVote(vote, false, meUserId)
+        }
 
         // Voice, calls and streams
         dispatchSubscribeBatched(events.voiceStateUpdate, "streamVoiceStateUpdate") { voiceState ->

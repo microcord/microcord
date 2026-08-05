@@ -11,7 +11,9 @@ import com.discord.api.message.attachment.MessageAttachment
 import com.discord.api.message.call.MessageCall
 import com.discord.api.message.embed.MessageEmbed
 import com.discord.api.message.reaction.MessageReaction
+import com.discord.api.message.reaction.MessageReactionEmoji
 import com.discord.api.message.role_subscription.RoleSubscriptionData
+import com.discord.api.soundboard.SoundboardSound
 import com.discord.api.sticker.Sticker
 import com.discord.api.sticker.StickerPartial
 import com.discord.api.user.User
@@ -55,6 +57,15 @@ data class Message(
     val poll: MessagePoll? = null,
     val resolved: MessageResolvedData? = null,
     val activityInstance: MessageActivityInstance? = null,
+    val interactionMetadata: Interaction? = null,
+    val lobbyId: Long? = null,
+    val mentionChannels: List<Channel>? = null,
+    val purchaseNotification: MessagePurchaseNotification? = null,
+    val giftInfo: MessageGiftInfo? = null,
+    val changelogId: Long? = null,
+    val soundboardSounds: List<SoundboardSound>? = null,
+    val potions: List<Potion>? = null,
+    val sharedClientTheme: SharedClientTheme? = null,
 ) {
     override fun toString() =
         "Message(id=$id, channelId=$channelId, guildId=$guildId, content=<redacted>, nonce=<redacted>)"
@@ -95,6 +106,7 @@ data class MessagePoll(
     val question: PollMedia,
     val answers: List<PollAnswer>,
     val expiry: UtcDateTime?,
+    val duration: Int? = null,
     val allowMultiselect: Boolean,
     val layoutType: Int,
     val results: PollResults? = null,
@@ -117,7 +129,7 @@ data class PollEmoji(
 )
 
 data class PollResults(
-    val finalized: Boolean,
+    @com.google.gson.annotations.SerializedName("is_finalized") val finalized: Boolean,
     val answerCounts: List<PollAnswerCount>,
 )
 
@@ -125,4 +137,45 @@ data class PollAnswerCount(
     val id: Int,
     val count: Int,
     val meVoted: Boolean,
+)
+
+data class PollVoteEvent(
+    val userId: Long,
+    val channelId: Long,
+    val messageId: Long,
+    val guildId: Long? = null,
+    val answerId: Int,
+)
+
+data class PollVoters(val users: List<User>)
+
+data class MessagePurchaseNotification(
+    val type: Int? = null,
+    val guildProductPurchase: GuildProductPurchase? = null,
+)
+
+data class GuildProductPurchase(
+    val listingId: Long? = null,
+    val productName: String? = null,
+)
+
+data class MessageGiftInfo(
+    val emoji: MessageReactionEmoji? = null,
+    val sound: MessageSoundboardSound? = null,
+)
+
+data class MessageSoundboardSound(val id: String? = null)
+
+data class Potion(
+    val usedBy: Long? = null,
+    val type: Int? = null,
+    val emoji: List<MessageReactionEmoji>? = null,
+    val createdAt: UtcDateTime? = null,
+)
+
+data class SharedClientTheme(
+    val colors: List<String>? = null,
+    val gradientAngle: Int? = null,
+    val baseMix: Int? = null,
+    val baseTheme: Int? = null,
 )

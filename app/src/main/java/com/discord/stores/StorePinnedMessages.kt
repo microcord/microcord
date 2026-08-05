@@ -1,5 +1,6 @@
 package com.discord.stores
 
+import com.discord.api.message.PollVoteEvent
 import com.discord.models.message.Message
 import com.discord.stores.updates.ObservationDeck
 import java.util.Collections
@@ -77,6 +78,13 @@ class StorePinnedMessages(
             index >= 0 && !pinned -> { messages.removeAt(index); markChanged() }
             index >= 0 -> { messages[index] = messages[index].merge(message); markChanged() }
             pinned -> { messages += Message(message); messages.sortByDescending(Message::id); markChanged() }
+        }
+    }
+
+    @StoreThread
+    fun handlePollVote(event: PollVoteEvent, added: Boolean, meUserId: Long) {
+        handleMessageUpdate(event.channelId, event.messageId, pinned = true) {
+            it.withPollVote(event, added, meUserId)
         }
     }
 

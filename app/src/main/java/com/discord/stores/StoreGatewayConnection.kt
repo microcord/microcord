@@ -24,6 +24,7 @@ import com.discord.api.guildscheduledevent.GuildScheduledEventUserUpdate
 import com.discord.api.interaction.InteractionModalCreate
 import com.discord.api.interaction.InteractionStateUpdate
 import com.discord.api.message.Message
+import com.discord.api.message.PollVoteEvent
 import com.discord.api.message.reaction.MessageReactionUpdate
 import com.discord.api.presence.ClientStatus
 import com.discord.api.presence.Presence
@@ -230,6 +231,8 @@ class StoreGatewayConnection(
     val messageReactionRemove = behavior<MessageReactionUpdate>()
     val messageReactionRemoveAll = behavior<MessageReactionUpdate>()
     val messageReactionRemoveEmoji = behavior<MessageReactionUpdate>()
+    val messagePollVoteAdd = behavior<PollVoteEvent>()
+    val messagePollVoteRemove = behavior<PollVoteEvent>()
 
     // Presence and typing
     val presenceUpdate = behavior<Presence>()
@@ -544,6 +547,8 @@ class StoreGatewayConnection(
             "MESSAGE_REACTION_REMOVE" -> messageReactionRemove.emit(data)
             "MESSAGE_REACTION_REMOVE_ALL" -> messageReactionRemoveAll.emit(data)
             "MESSAGE_REACTION_REMOVE_EMOJI" -> messageReactionRemoveEmoji.emit(data)
+            "MESSAGE_POLL_VOTE_ADD" -> messagePollVoteAdd.emit(data)
+            "MESSAGE_POLL_VOTE_REMOVE" -> messagePollVoteRemove.emit(data)
 
             // Presence and typing
             "PRESENCE_UPDATE" -> presenceUpdate.emit(data)

@@ -26,6 +26,7 @@ import com.discord.views.sticker.StickerView
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
 import com.facebook.drawee.view.SimpleDraweeView
+import kotlin.math.roundToInt
 
 /**
  * Every message Discord generates itself: joins and leaves, channel renames, pins, boosts,
@@ -157,6 +158,12 @@ class WidgetChatListAdapterItemSystemMessage(
                 val threadChannelId = message.messageReference?.channelId
                 if (threadChannelId != null) {
                     StoreStream.selectChannel(adapter.data.guildId, threadChannelId)
+                }
+            }
+            TYPE_POLL_RESULT -> {
+                val reference = message.messageReference
+                if (reference?.channelId != null && reference.messageId != null) {
+                    StoreStream.getMessagesLoader().jumpToMessage(reference.channelId, reference.messageId)
                 }
             }
             TYPE_GUILD_MEMBER_SUBSCRIBED,
@@ -361,6 +368,8 @@ class WidgetChatListAdapterItemSystemMessage(
                 authorHook,
             )
 
+            TYPE_POLL_RESULT -> pollResultMessage(context, message, authorName)
+
             else -> context.getString(R.string.reply_quote_message_not_loaded)
         }
     }
@@ -402,6 +411,27 @@ class WidgetChatListAdapterItemSystemMessage(
         else -> R.string.premium_guild_tier_1
     }
 
+    private fun pollResultMessage(context: Context, message: Message, authorName: String?): String {
+        val fields = message.embeds.orEmpty().firstOrNull()?.fields.orEmpty()
+            .associate { it.name.orEmpty() to it.value.orEmpty() }
+        val question = fields["poll_question_text"].orEmpty()
+        val winner = fields["victor_answer_text"]
+        val winnerVotes = fields["victor_answer_votes"]?.toIntOrNull() ?: 0
+        val totalVotes = (fields["total_votes"]?.toIntOrNull() ?: 0).coerceAtLeast(1)
+        val percent = (winnerVotes * 100.0 / totalVotes).roundToInt()
+        return when {
+            winnerVotes == 0 -> context.getString(R.string.poll_result_no_votes, authorName.orEmpty(), question)
+            winner == null -> context.getString(R.string.poll_result_draw, authorName.orEmpty(), question, percent)
+            else -> context.getString(
+                R.string.poll_result_winner,
+                authorName.orEmpty(),
+                question,
+                winner,
+                percent,
+            )
+        }
+    }
+
     private fun iconFor(message: Message): Int = when (message.type) {
         TYPE_RECIPIENT_ADD,
         TYPE_GUILD_MEMBER_JOIN,
@@ -422,6 +452,7 @@ class WidgetChatListAdapterItemSystemMessage(
         TYPE_GUILD_DISCOVERY_GRACE_PERIOD_FINAL_WARNING,
         -> R.drawable.ic_warning_circle_24dp
         TYPE_THREAD_CREATED -> R.drawable.ic_thread
+        TYPE_POLL_RESULT -> R.drawable.ic_sort_white_24dp
         else -> R.drawable.ic_x_red_24dp
     }
 
@@ -444,6 +475,7 @@ class WidgetChatListAdapterItemSystemMessage(
         private const val TYPE_THREAD_CREATED = 18
         private const val TYPE_AUTO_MODERATION_ACTION = 24
         private const val TYPE_ROLE_SUBSCRIPTION_PURCHASE = 25
+        private const val TYPE_POLL_RESULT = 46
 
         /** Local placeholder produced when a thread's starter message cannot be fetched. */
         private const val TYPE_THREAD_STARTER_NOT_LOADED = -7

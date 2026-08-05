@@ -1170,6 +1170,7 @@ or observable behavior. Small implementation details do not belong here.
 | 2026-07-23 | Allow scoped JitPack access for recovered uCrop and FlexInput artifacts | Reference-compatible versions are unavailable from Google and Maven Central | Repository content filtering permits only `com.github.yalantis` and `com.github.lytefast` |
 | 2026-07-31 | Replace FlexInput's unavailable CameraKit `1.0.0-beta3.10` transitive with upstream JitPack `v1.0.0-beta3.11` | The original Bintray artifact is absent from Google and Maven Central and beta3.10 does not build on JitPack; beta3.11 preserves the `CameraKitView.ErrorListener` signature, camera APIs used by FlexInput, and resource attrs | Keep the unavailable CameraKit/JPEGKit transitives excluded, install CameraKit explicitly, and admit `com.github.CameraKit` through the scoped JitPack filter |
 | 2026-07-31 | Port Aliucord `DefaultStickers` behavior natively | The user explicitly requested default sticker access beyond stock 126.21 behavior | Standard packs/categories are shown to non-Nitro users, standard stickers are sendable, and only non-premium `sticker_ids` sends use a dedicated RN-metadata REST client; no Aliucord API or dependency is included |
+| 2026-08-05 | Port Aliucord poll behavior natively with XML-backed views and current RN transport | The user requested modern poll creation, rendering, voting, results, and closure on the 126.21 shell | Poll endpoints use only `RestAPI.reactNativeApiOrNull`; `MESSAGE_POLL_VOTE_*` updates the existing message store; no Aliucord runtime dependency or programmatic view hierarchy is included |
 | 2026-07-31 | Use 12 Gradle workers with parallel execution and build cache | The host has 12 physical/24 logical CPUs; 24 workers would worsen the compiler heap/disk contention already observed | Builds use physical-core parallelism while Kotlin/Gradle daemons retain 4 GB heap ceilings |
 | 2026-07-23 | Install upstream SimpleAST 2.8.0 with the reference 2.6.0 rule surface | Recovered behavior uniquely matches 2.6.0, but JitPack no longer serves that artifact; 2.8.0 is the available API-compatible upstream AAR | Public source is not reconstructed; Discord rules must omit post-2.6 diff behavior |
 | 2026-07-23 | Use JADX MCP for decompiled reference inspection | The connected JADX server provides direct class, method, field, and cross-reference evidence | Exported Java/DEX file inspection is fallback-only when MCP lacks a body |
@@ -2582,6 +2583,61 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   redundant subtext is hidden, and the action button uses a balanced 96x44dp size with medium text at the
   row end instead of an oversized or clipped scaled drawing. Focused activity/attachment tests and `assembleDebug` pass; installed
   on WSA and A65.
+- Backported current Discord polls from Aliucord's core plugin as a native Manticord slice. The
+  attachment tray exposes Poll only in DMs or with `SEND_POLLS`; XML-backed creation supports 2-10
+  answers, optional emoji, seven durations, and multiselect. Chat renders XML poll cards with
+  selection, live percentages, winner/self markers, result peeking, vote removal, paged voter details,
+  creator-only early closure, reply previews, and type-46 closure notices that jump to the source poll.
+  Current RN create/vote/voter/expire routes receive React Native headers, and typed
+  `MESSAGE_POLL_VOTE_ADD/REMOVE` events reconcile counts and `me_voted` through the store dispatcher.
+  The complete Aliucord `Message.patch` extension field set is typed on API/domain messages and retained
+  through conversion/merge/copy without shifting existing component order. Poll and message contract
+  tests plus `assembleDebug` pass; APK installation succeeds on WSA and A65. The full 1,867-test run
+  reached four unrelated existing failures (instant invites, voice member hydration, MFA/invite ordering,
+  forwarded-layout snapshot). `lintDebug` remains blocked by 7,035 stale-baseline errors outside this
+  slice; the refreshed report contains no poll errors. Live create/vote/expire behavior remains untested.
+- Poll emoji binding now reuses the existing Fresco/Drawee reaction renderer for Unicode and custom
+  emoji in creation rows, chat answers, and voter-detail tabs instead of printing names such as
+  `:emoji:`. Creation keeps two initial rows but permits deleting down to the Aliucord minimum of one.
+  Answer counters no longer enlarge and vertically misalign the emoji/delete controls; the duration and
+  multiselect rows now share the form content line and explicit 56dp geometry. Focused poll tests and
+  `assembleDebug` pass. Device logs then proved the create POST was still subscribed on main and failed
+  with `NetworkOnMainThreadException`; it now uses the shared REST scheduler. Drawee text spans still
+  clipped despite a larger content box, so poll creation, chat answers, and detail tabs now center fixed
+  24dp Fresco `SimpleDraweeView`s inside their XML rows; font metrics can no longer crop emoji artwork.
+  A post-install WSA screenshot confirms the existing poll-card emoji render fully. The corrected APK is
+  installed on WSA and A65. Duration selection now dismisses the reused radio-selector sheet after
+  applying the chosen value; previously the unchanged open sheet obscured the update and made each row
+  appear inert. Focused poll tests and `assembleDebug` pass after the fix.
+- The creation row's no-emoji state now uses a normal tinted XML `ImageView`; attempting to load the
+  vector picker glyph through Fresco left the 48dp action visibly empty. Fresco remains isolated to
+  selected Unicode/custom emoji. Focused poll tests and `assembleDebug` pass; installed on WSA/A65.
+- Poll closure type 46 embeds are metadata (`poll_question_text`, winner votes, total votes) consumed by
+  the system-message renderer, not user-visible cards. `ChatListEntry.createEmbedEntries` now suppresses
+  that one metadata embed type, removing the duplicate raw field card shown below the closure notice.
+  A focused row-builder regression test and `assembleDebug` pass; installed on WSA/A65.
+- Poll result bars now animate from zero to their percentage only when the card transitions from voting
+  to results (peek or submitted vote). Initial already-voted cards do not replay animation on scroll,
+  and the existing reduced-motion setting disables it. Focused poll tests and `assembleDebug` pass;
+  installed on WSA/A65.
+- Pending-reply propagation now includes `PollEntry`, so the poll row receives the same full-width wash
+  and brand gutter as the message body, attachments, embeds, reactions, Activity, and forwarded rows.
+  `WidgetChatListModelTest` covers the poll branch; focused chat-model/poll tests and `assembleDebug` pass.
+- Poll review follow-up closes all four findings: domain message merges retain prior results when closure
+  updates omit them and carry forward `me_voted` as Aliucord does; vote add/remove events now update live,
+  pinned, and forum-first-message caches; voter details render explicit empty/error states with retry; and
+  attached poll rows refresh their relative expiry text every minute while cancelling callbacks offscreen.
+  The review also corrected density-aware emoji CDN sizing, rounded closure percentages like Aliucord,
+  and dismisses the launcher page if channel selection disappears. Poll, pending-reply, pinned-message,
+  and forum-store tests plus `assembleDebug` pass.
+- Poll percentage animation now treats a newly created/recycled holder (`previous == null`) like a real
+  voting-to-results transition. The old strict `previous == false` condition made identical cards animate
+  or jump depending on RecyclerView reuse. Same-holder result rebinds still do not replay, and reduced
+  motion still disables animation. Focused transition tests and `assembleDebug` pass; installed on WSA/A65.
+- Final pre-commit review removed the one-case creation event hierarchy and made successful submission
+  part of replayed view state, so rotation/backgrounding cannot lose completion and restore a permanently
+  disabled form. No remaining correctness or unnecessary-complexity findings were found. Focused poll,
+  message-contract, pending-reply, pinned, and forum tests plus `assembleDebug` pass.
 
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/applauncher/**` | Android 340.12
 Hermes `out.js` Apps launcher modules | log in on WSA and verify HOME/search/application/command/list

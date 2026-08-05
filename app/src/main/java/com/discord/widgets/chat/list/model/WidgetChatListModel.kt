@@ -27,6 +27,7 @@ import com.discord.widgets.chat.list.entries.EmbedEntry
 import com.discord.widgets.chat.list.entries.ForwardedMessageEntry
 import com.discord.widgets.chat.list.entries.LoadingEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
+import com.discord.widgets.chat.list.entries.PollEntry
 import com.discord.widgets.chat.list.entries.ReactionsEntry
 import com.discord.widgets.chat.list.entries.SpacerEntry
 import com.discord.widgets.chat.list.entries.StickerGreetCompactEntry
@@ -164,6 +165,8 @@ data class WidgetChatListModel(
                     entry is ActivityMessageEntry && entry.messageId == pendingReplyMessageId ->
                         entry.copy(isPendingReply = true)
                     entry is ForwardedMessageEntry && entry.parentMessage.id == pendingReplyMessageId ->
+                        entry.copy(isPendingReply = true)
+                    entry is PollEntry && entry.message.id == pendingReplyMessageId ->
                         entry.copy(isPendingReply = true)
                     else -> entry
                 }

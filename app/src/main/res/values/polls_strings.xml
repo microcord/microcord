@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="poll_create">Create Poll</string>
+    <string name="poll_creating">Creating Poll&#8230;</string>
+    <string name="poll_question">Question</string>
+    <string name="poll_question_hint">Ask a question</string>
+    <string name="poll_answers">Answers</string>
+    <string name="poll_answer_hint">Type an answer</string>
+    <string name="poll_answer_emoji">Choose an emoji</string>
+    <string name="poll_remove_answer">Remove answer</string>
+    <string name="poll_add_answer">Add Answer</string>
+    <string name="poll_options">Options</string>
+    <string name="poll_duration">Duration</string>
+    <string name="poll_duration_one_hour">1 hour</string>
+    <string name="poll_duration_four_hours">4 hours</string>
+    <string name="poll_duration_eight_hours">8 hours</string>
+    <string name="poll_duration_one_day">24 hours</string>
+    <string name="poll_duration_three_days">3 days</string>
+    <string name="poll_duration_one_week">1 week</string>
+    <string name="poll_duration_two_weeks">2 weeks</string>
+    <string name="poll_allow_multiple_answers">Allow multiple answers</string>
+    <string name="poll_create_failed">Couldn\'t create the poll. Try again.</string>
+    <string name="poll_select_one">Select one answer</string>
+    <string name="poll_select_multiple">Select one or more answers</string>
+    <string name="poll_vote">Vote</string>
+    <string name="poll_show_results">Show Results</string>
+    <string name="poll_back_to_vote">Go Back to Vote</string>
+    <string name="poll_remove_vote">Remove Vote</string>
+    <string name="poll_you_voted">You voted for this answer</string>
+    <string name="poll_answer_result">%1$d%%  •  %2$s</string>
+    <string name="poll_answer_tab">%1$s (%2$d)</string>
+    <string name="poll_closed">Poll closed</string>
+    <string name="poll_ends_in">Ends %1$s</string>
+    <string name="poll_votes_and_status">%1$s  •  %2$s</string>
+    <string name="poll_vote_failed">Couldn\'t update your vote. Try again.</string>
+    <string name="poll_votes">Poll Votes</string>
+    <string name="poll_results_failed">Couldn\'t load poll votes. Try again.</string>
+    <string name="poll_no_votes">There are no votes for this answer.</string>
+    <string name="poll_end_now">End Poll Now</string>
+    <string name="poll_end_confirm_title">End poll now?</string>
+    <string name="poll_end_confirm_body">This will close the poll immediately and reveal the final results.</string>
+    <string name="poll_end_failed">Couldn\'t end the poll. Try again.</string>
+    <string name="poll_result_no_votes">%1$s\'s poll &quot;%2$s&quot; has closed. There were no votes.</string>
+    <string name="poll_result_draw">%1$s\'s poll &quot;%2$s&quot; has closed. The result was a draw (%3$d%%).</string>
+    <string name="poll_result_winner">%1$s\'s poll &quot;%2$s&quot; has closed. The winner was &quot;%3$s&quot; (%4$d%%).</string>
+    <plurals name="poll_vote_count">
+        <item quantity="one">%d vote</item>
+        <item quantity="other">%d votes</item>
+    </plurals>
+</resources>

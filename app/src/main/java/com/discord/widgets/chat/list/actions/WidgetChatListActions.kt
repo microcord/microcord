@@ -21,6 +21,7 @@ import com.discord.api.channel.isThread
 import com.discord.api.channel.isVoiceChannel
 import com.discord.api.permission.Permission
 import com.discord.app.AppBottomSheet
+import com.discord.app.AppToast
 import com.discord.models.domain.emoji.Emoji
 import com.discord.models.domain.emoji.EmojiSet
 import com.discord.models.guild.Guild
@@ -115,7 +116,14 @@ class WidgetChatListActions : AppBottomSheet() {
         val hasReactions = message.getReactionsMap().isNotEmpty()
 
         configureQuickReactions(root, model.recentEmojis, isLocal, manage.canAddReactions)
-        bind(root, R.id.dialog_chat_actions_edit, model.type == TYPE_CHAT && manage.canEdit) { editMessage(model) }
+        bind(root, R.id.dialog_chat_actions_edit, model.type == TYPE_CHAT && manage.canEdit && message.poll == null) {
+            editMessage(model)
+        }
+        val canEndPoll = message.poll?.let { poll ->
+            message.author?.id == model.me.id && poll.results?.finalized != true &&
+                (poll.expiry?.dateTimeMillis ?: Long.MAX_VALUE) > System.currentTimeMillis()
+        } == true
+        bind(root, R.id.dialog_chat_actions_end_poll, canEndPoll) { endPoll(message) }
         bind(root, R.id.dialog_chat_actions_publish, canPublish(model)) {
             MessageActionDialogs.showPublishMessageConfirmation(parentFragmentManager, requireContext(), message, this) {
                 dismiss()
@@ -227,6 +235,32 @@ class WidgetChatListActions : AppBottomSheet() {
                 host().requestMessageEdit(message, host().messageActionCoordinator())
                 dismiss()
             }
+    }
+
+    private fun endPoll(message: Message) {
+        WidgetNoticeDialog.show(
+            parentFragmentManager,
+            getString(R.string.poll_end_confirm_title),
+            getString(R.string.poll_end_confirm_body),
+            getString(R.string.poll_end_now),
+            getString(R.string.cancel),
+            mapOf(R.id.notice_ok to {
+                val api = RestAPI.reactNativeApiOrNull
+                if (api == null) {
+                    AppToast.show(this, R.string.poll_end_failed)
+                } else {
+                    api.expirePoll(message.channelId, message.id)
+                        .restSubscribeOn()
+                        .ui(this)
+                        .appSubscribe(
+                            WidgetChatListActions::class.java,
+                            context = context,
+                            onCompleted = { dismiss() },
+                            onNext = {},
+                        )
+                }
+            }),
+        )
     }
 
     private fun removeAllReactions(message: Message) {

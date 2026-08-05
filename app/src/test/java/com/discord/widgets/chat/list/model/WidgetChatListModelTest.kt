@@ -1,6 +1,9 @@
 package com.discord.widgets.chat.list.model
 
 import com.discord.api.channel.Channel
+import com.discord.api.message.MessagePoll
+import com.discord.api.message.PollAnswer
+import com.discord.api.message.PollMedia
 import com.discord.api.user.User
 import com.discord.models.message.Message
 import com.discord.stores.StoreMessagesLoader
@@ -8,6 +11,7 @@ import com.discord.widgets.chat.list.entries.LoadingEntry
 import com.discord.widgets.chat.list.entries.ActivityMessageEntry
 import com.discord.widgets.chat.list.entries.ForwardedMessageEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
+import com.discord.widgets.chat.list.entries.PollEntry
 import com.discord.widgets.chat.list.entries.ReactionsEntry
 import com.discord.widgets.chat.list.entries.SpacerEntry
 import org.junit.Assert.assertEquals
@@ -71,7 +75,14 @@ class WidgetChatListModelTest {
     }
 
     @Test fun pendingReplyHighlightsItsMessageEntry() {
-        val message = Message(id = 42, channelId = 10)
+        val poll = MessagePoll(
+            question = PollMedia("Question"),
+            answers = listOf(PollAnswer(1, PollMedia("Answer"))),
+            expiry = null,
+            allowMultiselect = false,
+            layoutType = 1,
+        )
+        val message = Message(id = 42, channelId = 10, poll = poll)
         val entry = MessageEntry(
             message = message,
             messageState = null,
@@ -91,6 +102,7 @@ class WidgetChatListModelTest {
                     ReactionsEntry(message, false, false, false),
                     ActivityMessageEntry(message.id, message.channelId, 1, null, null),
                     ForwardedMessageEntry(message, 0, ForwardedMessageEntry.State.LOADING),
+                    PollEntry(message, poll),
                 ),
                 42,
                 42,
@@ -112,6 +124,7 @@ class WidgetChatListModelTest {
         assertTrue(model.list.filterIsInstance<ReactionsEntry>().single().isPendingReply)
         assertTrue(model.list.filterIsInstance<ActivityMessageEntry>().single().isPendingReply)
         assertTrue(model.list.filterIsInstance<ForwardedMessageEntry>().single().isPendingReply)
+        assertTrue(model.list.filterIsInstance<PollEntry>().single().isPendingReply)
     }
 
     private fun channel(type: Int, recipients: List<User>? = null) = Channel(
