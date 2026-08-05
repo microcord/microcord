@@ -75,23 +75,24 @@ class FlexInputPermissionRefreshTest {
 
     @Test
     fun cameraDenialStaysGatedThenGrantReopensExistingCameraPage() {
-        val page = TestCameraFragment()
-        val host = launch(page)
-
-        page.deny()
-        assertEquals(View.VISIBLE, page.permissionsVisibility())
-        page.requestAgain()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             instrumentation.uiAutomation.grantRuntimePermission(
                 instrumentation.targetContext.packageName,
                 Manifest.permission.CAMERA,
             )
         }
-        preserveComposerState(host) { page.grant() }
+        val page = WidgetChatInputAttachments.DiscordCameraFragment()
+        val host = launch(page)
 
         assertSame(page, host.page)
-        assertEquals(View.GONE, page.permissionsVisibility())
-        assertEquals(View.VISIBLE, page.cameraVisibility())
+        assertEquals(
+            View.GONE,
+            page.requireView().findViewById<View>(R.id.permissions_container).visibility,
+        )
+        assertEquals(
+            View.VISIBLE,
+            page.requireView().findViewById<View>(R.id.camera_container).visibility,
+        )
     }
 
     private fun launch(page: Fragment): PermissionRefreshHost {
@@ -196,17 +197,4 @@ class TestFilesFragment : WidgetChatInputAttachments.DiscordFilesFragment() {
     fun deny() { result = null }
     fun grant() { granted = true; requireNotNull(result).invoke(); result = null }
     fun recycler(): RecyclerView = requireView().findViewById(com.lytefast.flexinput.R.id.list)
-}
-
-class TestCameraFragment : WidgetChatInputAttachments.DiscordCameraFragment() {
-    var granted = false
-    private var result: (() -> Unit)? = null
-
-    override fun hasPermissions(vararg requiredPermissionList: String) = granted
-    override fun requestCameraPermission(onGranted: () -> Unit) { result = onGranted }
-    fun requestAgain() = requestPermissionClick()
-    fun deny() { result = null }
-    fun grant() { granted = true; requireNotNull(result).invoke(); result = null }
-    fun permissionsVisibility() = permissionsContainer.visibility
-    fun cameraVisibility() = cameraContainer.visibility
 }

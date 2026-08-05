@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="component_modal_selection_count">%1$d selected</string>
+    <string name="component_modal_selection_required">Select between %1$d and %2$d options.</string>
+    <string name="component_modal_files_count">%1$d files selected</string>
+    <string name="component_modal_files_required">Attach between %1$d and %2$d files.</string>
+    <string name="component_modal_file_type_invalid">One or more files have an unsupported type.</string>
+</resources>

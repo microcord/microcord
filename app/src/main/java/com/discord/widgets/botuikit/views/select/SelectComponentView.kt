@@ -40,6 +40,7 @@ class SelectComponentView @JvmOverloads constructor(
         val chevron = requireNotNull(findViewById<ImageView>(R.id.select_component_chevron))
         val loadingDots = requireNotNull(findViewById<TypingDots>(R.id.select_component_loading))
         boundType = component.type
+        val enabled = component.stateInteraction !is ActionInteractionComponentState.Disabled
         val placeholder = component.placeholder
             ?: resources.getString(R.string.message_select_component_default_placeholder)
 
@@ -48,7 +49,12 @@ class SelectComponentView @JvmOverloads constructor(
                 text.visibility = View.VISIBLE
                 selectionRoot.visibility = View.GONE
                 icon.visibility = View.GONE
-                text.setTextColor(ColorCompat.getThemedColor(context, R.attr.colorInteractiveMuted))
+                text.setTextColor(
+                    ColorCompat.getThemedColor(
+                        context,
+                        if (enabled) R.attr.colorInteractiveMuted else R.attr.colorInteractiveNormal,
+                    ),
+                )
                 text.text = placeholder
             }
             component.maxValues == 1 -> {
@@ -83,12 +89,15 @@ class SelectComponentView @JvmOverloads constructor(
             }
         }
 
-        val enabled = component.stateInteraction !is ActionInteractionComponentState.Disabled
         val loading = component.stateInteraction is ActionInteractionComponentState.Loading
         if (loading) loadingDots.start() else loadingDots.stop()
         loadingDots.visibility = if (loading) View.VISIBLE else View.INVISIBLE
         chevron.visibility = if (loading) View.INVISIBLE else View.VISIBLE
-        setEnabledAlpha(enabled, 0.3f)
+        alpha = 1f
+        text.setEnabledAlpha(enabled, 0.65f)
+        selectionRoot.setEnabledAlpha(enabled, 0.65f)
+        icon.setEnabledAlpha(enabled, 0.65f)
+        chevron.setEnabledAlpha(enabled, 0.65f)
         setOnClickListener {
             componentActionListener.onSelectComponentClick(
                 component.index,
@@ -100,6 +109,7 @@ class SelectComponentView @JvmOverloads constructor(
                 component.minValues,
                 component.maxValues,
                 component.emojiAnimationsEnabled,
+                component.defaultValues.map { it.id.toString() },
             )
         }
         isClickable = enabled && !loading

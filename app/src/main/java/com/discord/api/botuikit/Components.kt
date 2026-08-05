@@ -11,9 +11,14 @@ import java.io.Serializable
 
 interface Component {
     val type: ComponentType
+    val id: Int? get() = null
 }
 
 abstract class ActionComponent : Component, Serializable
+
+abstract class ContentComponent : LayoutComponent() {
+    final override val components: List<Component> get() = emptyList()
+}
 
 abstract class LayoutComponent : Component, Serializable {
     abstract val components: List<Component>
@@ -22,6 +27,7 @@ abstract class LayoutComponent : Component, Serializable {
 data class ActionRowComponent(
     override val type: ComponentType,
     override val components: List<Component>,
+    override val id: Int? = null,
 ) : LayoutComponent()
 
 data class ButtonComponent(
@@ -33,6 +39,7 @@ data class ButtonComponent(
     val emoji: ComponentEmoji?,
     val url: String?,
     val skuId: Long? = null,
+    override val id: Int? = null,
 ) : ActionComponent()
 
 /**
@@ -48,10 +55,11 @@ data class SelectComponent(
     val placeholder: String?,
     val minValues: Int?,
     val maxValues: Int?,
-    val options: List<SelectItem>,
+    val options: List<SelectItem>?,
     val required: Boolean? = null,
     val defaultValues: List<SelectDefaultValue>? = null,
     val channelTypes: List<Int>? = null,
+    override val id: Int? = null,
 ) : ActionComponent()
 
 data class SelectDefaultValue(val id: Long, val type: String) : Serializable
@@ -63,10 +71,129 @@ data class TextComponent(
     val label: String,
     val value: String?,
     val placeholder: String?,
-    val minLength: Int,
-    val maxLength: Int,
+    val minLength: Int?,
+    val maxLength: Int?,
+    val required: Boolean?,
+    override val id: Int? = null,
+) : ActionComponent()
+
+data class SectionComponent(
+    override val type: ComponentType,
+    override val id: Int?,
+    override val components: List<Component>,
+    val accessory: Component,
+) : LayoutComponent()
+
+data class TextDisplayComponent(
+    override val type: ComponentType,
+    override val id: Int?,
+    val content: String,
+) : ContentComponent()
+
+data class ThumbnailComponent(
+    override val type: ComponentType,
+    override val id: Int?,
+    val media: UnfurledMediaItem,
+    val description: String?,
+    val spoiler: Boolean?,
+) : ContentComponent()
+
+data class MediaGalleryComponent(
+    override val type: ComponentType,
+    override val id: Int?,
+    val items: List<MediaGalleryItem>,
+) : ContentComponent()
+
+data class FileComponent(
+    override val type: ComponentType,
+    override val id: Int?,
+    val file: UnfurledMediaItem,
+    val spoiler: Boolean?,
+    val name: String,
+    val size: Long,
+) : ContentComponent()
+
+data class SeparatorComponent(
+    override val type: ComponentType,
+    override val id: Int?,
+    val divider: Boolean?,
+    val spacing: Int?,
+) : ContentComponent()
+
+data class ContainerComponent(
+    override val type: ComponentType,
+    override val id: Int?,
+    override val components: List<Component>,
+    val accentColor: Int?,
+    val spoiler: Boolean?,
+) : LayoutComponent()
+
+data class LabelComponent(
+    override val type: ComponentType,
+    override val id: Int?,
+    val label: String,
+    val description: String?,
+    val component: Component,
+) : LayoutComponent() {
+    override val components: List<Component> get() = listOf(component)
+}
+
+data class FileUploadComponent(
+    override val type: ComponentType,
+    override val id: Int?,
+    val customId: String,
+    val minValues: Int?,
+    val maxValues: Int?,
+    val required: Boolean?,
+    val fileTypes: List<String>? = null,
+) : ActionComponent()
+
+data class RadioGroupComponent(
+    override val type: ComponentType,
+    override val id: Int?,
+    val customId: String,
+    val options: List<ComponentOption>,
     val required: Boolean?,
 ) : ActionComponent()
+
+data class CheckboxGroupComponent(
+    override val type: ComponentType,
+    override val id: Int?,
+    val customId: String,
+    val options: List<ComponentOption>,
+    val minValues: Int?,
+    val maxValues: Int?,
+    val required: Boolean?,
+) : ActionComponent()
+
+data class CheckboxComponent(
+    override val type: ComponentType,
+    override val id: Int?,
+    val customId: String,
+    @SerializedName("default") val default: Boolean?,
+) : ActionComponent()
+
+data class ComponentOption(
+    val value: String,
+    val label: String,
+    val description: String?,
+    @SerializedName("default") val default: Boolean?,
+) : Serializable
+
+data class MediaGalleryItem(
+    val media: UnfurledMediaItem,
+    val description: String?,
+    val spoiler: Boolean?,
+) : Serializable
+
+data class UnfurledMediaItem(
+    val url: String,
+    val proxyUrl: String?,
+    val height: Int?,
+    val width: Int?,
+    val contentType: String?,
+    val attachmentId: Long?,
+) : Serializable
 
 class UnknownComponent : Component, Serializable {
     override val type = ComponentType.UNKNOWN
@@ -97,6 +224,18 @@ enum class ComponentType(val type: Int, val clazz: Class<out Component>) {
     ROLE_SELECT(6, SelectComponent::class.java),
     MENTIONABLE_SELECT(7, SelectComponent::class.java),
     CHANNEL_SELECT(8, SelectComponent::class.java),
+    SECTION(9, SectionComponent::class.java),
+    TEXT_DISPLAY(10, TextDisplayComponent::class.java),
+    THUMBNAIL(11, ThumbnailComponent::class.java),
+    MEDIA_GALLERY(12, MediaGalleryComponent::class.java),
+    FILE(13, FileComponent::class.java),
+    SEPARATOR(14, SeparatorComponent::class.java),
+    CONTAINER(17, ContainerComponent::class.java),
+    LABEL(18, LabelComponent::class.java),
+    FILE_UPLOAD(19, FileUploadComponent::class.java),
+    RADIO_GROUP(21, RadioGroupComponent::class.java),
+    CHECKBOX_GROUP(22, CheckboxGroupComponent::class.java),
+    CHECKBOX(23, CheckboxComponent::class.java),
     ;
 
     /** Every select shares one view and one sheet; only where the options come from differs. */

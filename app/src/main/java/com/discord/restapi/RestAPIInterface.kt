@@ -607,6 +607,13 @@ interface RestAPIInterface {
 
     @Multipart
     @POST("interactions")
+    fun sendModalInteraction(
+        @Part("payload_json") payloadJson: PayloadJSON<RestAPIParams.ModalInteraction>,
+        @Part files: Array<MultipartBody.Part>,
+    ): Observable<Void>
+
+    @Multipart
+    @POST("interactions")
     fun sendApplicationCommand(
         @Part("payload_json") payloadJson: PayloadJSON<RestAPIParams.ApplicationCommand>,
         @Part files: Array<MultipartBody.Part>,

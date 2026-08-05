@@ -15,7 +15,9 @@ import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.ImageButton
 import android.widget.ProgressBar
+import androidx.appcompat.widget.PopupMenu
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator
 import com.discord.R
 import com.discord.api.message.attachment.MessageAttachment
@@ -26,6 +28,7 @@ import com.discord.app.AppFragment
 import com.discord.app.AppLog
 import com.discord.app.AppScreenRouter
 import com.discord.app.appViewModels
+import com.discord.databinding.WidgetMediaBinding
 import com.discord.i18n.i18nFormat
 import com.discord.player.MediaSource
 import com.discord.player.MediaType
@@ -37,6 +40,7 @@ import com.discord.utilities.io.UserDownloadResult
 import com.discord.utilities.io.UserDownloadStartResult
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
+import com.discord.utilities.time.TimeUtils
 import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.view.ToastManager
 import com.discord.utilities.view.extensions.addOnHeightChangedListener
@@ -53,6 +57,7 @@ import com.google.android.exoplayer2.ui.PlayerControlView
 import com.google.android.exoplayer2.ui.PlayerView
 import com.google.android.material.appbar.AppBarLayout
 import java.util.concurrent.TimeUnit
+import java.io.Serializable
 import kotlin.math.abs
 import kotlin.math.hypot
 import rx.Observable
@@ -89,12 +94,8 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
 
     private val viewModel: WidgetMediaViewModel by appViewModels { WidgetMediaViewModel() }
 
-    private lateinit var mediaContainer: View
-    private lateinit var actionBarToolbarLayout: AppBarLayout
-    private lateinit var mediaImage: ZoomableDraweeView
-    private lateinit var mediaLoadingIndicator: ProgressBar
-    private lateinit var mediaPlayerControlView: PlayerControlView
-    private lateinit var mediaPlayerView: PlayerView
+    private var binding: WidgetMediaBinding? = null
+    private val bound get() = requireNotNull(binding)
 
     private val toastManager = ToastManager()
 
@@ -129,30 +130,26 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        mediaContainer = view.findViewById(R.id.media_container)
-        actionBarToolbarLayout = view.findViewById(R.id.action_bar_toolbar_layout)
-        mediaImage = view.findViewById(R.id.media_image)
-        mediaLoadingIndicator = view.findViewById(R.id.media_loading_indicator)
-        mediaPlayerControlView = view.findViewById(R.id.media_player_control_view)
-        mediaPlayerView = view.findViewById(R.id.media_player_view)
+        val binding = WidgetMediaBinding.bind(view).also { this.binding = it }
 
         setScreenStatusBarColor(ThemedColor.resolve(view.context, R.attr.primary_900))
 
         // The video surface swallows touches, so it needs the same tap handler as the container.
-        mediaPlayerView.videoSurfaceView?.setOnClickListener { onMediaClick() }
-        mediaContainer.setOnClickListener { onMediaClick() }
+        binding.mediaPlayerView.videoSurfaceView?.setOnClickListener { onMediaClick() }
+        binding.mediaContainer.setOnClickListener { onMediaClick() }
+        binding.mediaClose.setOnClickListener { activity?.finish() }
 
         // The two chrome heights are the travel distances of the hide/show animation and are only
         // known once each has been laid out.
-        actionBarToolbarLayout.addOnHeightChangedListener { height, _ -> toolbarHeight = height }
-        mediaPlayerControlView.addOnHeightChangedListener { height, _ -> playerControlsHeight = height }
+        binding.actionBarToolbarLayout.addOnHeightChangedListener { height, _ -> toolbarHeight = height }
+        binding.mediaBottomChrome.addOnHeightChangedListener { height, _ -> playerControlsHeight = height }
     }
 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
 
-        mediaImage.visibility = if (viewModel.showCoverFrame) View.VISIBLE else View.GONE
-        mediaLoadingIndicator.visibility = if (viewModel.showCoverFrame) View.VISIBLE else View.GONE
+        bound.mediaImage.visibility = if (viewModel.showCoverFrame) View.VISIBLE else View.GONE
+        bound.mediaLoadingIndicator.visibility = if (viewModel.showCoverFrame) View.VISIBLE else View.GONE
 
         val extras = launchExtras
         val sourceUri = Uri.parse(extras.getString(INTENT_URL))
@@ -166,13 +163,27 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         val title = extras.getString(INTENT_TITLE)
         val titleSubtext = if (title.isNullOrBlank()) sourceUri.toString() else title
 
-        setActionBarDisplayHomeAsUpEnabled()
-        setActionBarTitle(R.string.view_embed)
-        setActionBarSubtitle(titleSubtext)
-        setActionBarOptionsMenu(
-            menuResId = R.menu.menu_media,
-            onSelected = { menuItem -> onMenuItemSelected(menuItem, sourceUri, downloadUri, title, titleSubtext) },
-        )
+        bound.mediaMore.setOnClickListener { anchor ->
+            PopupMenu(requireContext(), anchor).apply {
+                menuInflater.inflate(R.menu.menu_media, menu)
+                setOnMenuItemClickListener { item ->
+                    onMenuItemSelected(item, sourceUri, downloadUri, title, titleSubtext)
+                    true
+                }
+                show()
+            }
+        }
+        val viewerContext = viewerContextExtra(extras)
+        bound.mediaAuthor.visibility = if (viewerContext == null) View.GONE else View.VISIBLE
+        viewerContext?.let { context ->
+            bound.mediaAuthorName.text = context.authorName
+            bound.mediaTimestamp.text = context.timestampMs?.let {
+                TimeUtils.toReadableTimeString(requireContext(), it)
+            }
+            bound.mediaAuthorAvatar.setImageURI(context.avatarUrl)
+        }
+        bound.mediaVolume.setOnClickListener { toggleMute(bound.mediaVolume) }
+        bound.mediaBottomChrome.visibility = if (isVideo()) View.VISIBLE else View.GONE
 
         configureMediaImage()
         showControls()
@@ -198,11 +209,12 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         controlsVisibilitySubscription?.unsubscribe()
         controlsVisibilitySubscription = null
         stopPositionPolling()
-        mediaImage.setTapListener(null)
-        MGImages.cancelImageRequests(mediaImage)
+        bound.mediaImage.setTapListener(null)
+        MGImages.cancelImageRequests(bound.mediaImage)
         // The player outlives the view, so it must let go of the views the view hierarchy owns.
-        mediaPlayerView.player = null
-        mediaPlayerControlView.player = null
+        bound.mediaPlayerView.player = null
+        bound.mediaPlayerControlView.player = null
+        binding = null
         super.onDestroyView()
     }
 
@@ -224,13 +236,13 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
      * otherwise fight the double-tap-drag zoom below.
      */
     private fun configureMediaImage() {
-        mediaImage.setIsLongpressEnabled(false)
-        mediaImage.setTapListener(ZoomGestureListener())
-        mediaImage.getZoomableController().setZoomTransitionDuration(ZOOM_ANIMATION_DURATION_MS)
-        MGImages.setScaleType(mediaImage, ScalingUtils.ScaleType.FIT_CENTER)
+        bound.mediaImage.setIsLongpressEnabled(false)
+        bound.mediaImage.setTapListener(ZoomGestureListener())
+        bound.mediaImage.getZoomableController().setZoomTransitionDuration(ZOOM_ANIMATION_DURATION_MS)
+        MGImages.setScaleType(bound.mediaImage, ScalingUtils.ScaleType.FIT_CENTER)
         MGImages.setImage(
-            view = mediaImage,
-            urls = listOf(mediaImage.context.getFormattedUrl(imageUri)),
+            view = bound.mediaImage,
+            urls = listOf(bound.mediaImage.context.getFormattedUrl(imageUri)),
             controllerListener = object : BaseControllerListener<ImageInfo>() {
                 override fun onFailure(id: String?, throwable: Throwable?) {
                     super.onFailure(id, throwable)
@@ -299,7 +311,7 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
             PlayerEvent.Buffering -> showLoadingIndicator()
             PlayerEvent.Ready -> {
                 // The first real frame is on screen, so the cover frame can come down for good.
-                mediaImage.visibility = View.GONE
+                bound.mediaImage.visibility = View.GONE
                 viewModel.showCoverFrame = false
                 hideLoadingIndicator()
             }
@@ -318,11 +330,12 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
             attachPlayerListener(it)
         }
 
-        mediaPlayerView.player = exoPlayer
-        mediaPlayerControlView.player = exoPlayer
+        bound.mediaPlayerView.player = exoPlayer
+        bound.mediaPlayerControlView.player = exoPlayer
         // A GIF is decoration: it repeats and it is never allowed to make noise.
         exoPlayer.repeatMode = if (loopMedia) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
         exoPlayer.volume = if (loopMedia) 0f else 1f
+        updateVolumeButton(bound.mediaVolume)
         exoPlayer.setMediaItem(MediaItem.fromUri(source.progressiveMediaUri))
         exoPlayer.prepare()
         exoPlayer.playWhenReady = viewModel.isPlaying
@@ -382,6 +395,20 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
 
     private fun isVideo(): Boolean = mediaSource?.mediaType == MediaType.VIDEO
 
+    private fun toggleMute(button: ImageButton) {
+        val player = player ?: return
+        player.volume = if (player.volume > 0f) 0f else 1f
+        updateVolumeButton(button)
+    }
+
+    private fun updateVolumeButton(button: ImageButton) {
+        val muted = player?.volume == 0f
+        button.setImageResource(
+            if (muted) R.drawable.ic_volume_off_24dp else R.drawable.ic_volume_up_white_24dp,
+        )
+        button.setContentDescription(getString(if (muted) R.string.unmute else R.string.mute))
+    }
+
     // endregion
 
     // region chrome
@@ -390,11 +417,11 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         if (getToolbarTranslationY() < 0f) showControls() else hideControls()
     }
 
-    private fun getToolbarTranslationY(): Float = actionBarToolbarLayout.translationY
+    private fun getToolbarTranslationY(): Float = bound.actionBarToolbarLayout.translationY
 
     private fun showControls() {
         if (isVideo()) {
-            mediaPlayerControlView.show()
+            bound.mediaPlayerControlView.show()
             controlsVisibilitySubscription?.unsubscribe()
             Observable.timer(SHOW_CONTROLS_TIMEOUT_MS, TimeUnit.MILLISECONDS)
                 .ui(this)
@@ -404,7 +431,7 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
                 ) { hideControls() }
         } else {
             // A still image has no transport, so the control bar is never part of its chrome.
-            mediaPlayerControlView.hide()
+            bound.mediaPlayerControlView.hide()
         }
         animateControlsTo(ControlsAnimationAction.SHOW, 0f)
     }
@@ -432,11 +459,11 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         animator.duration = VERTICAL_CONTROLS_ANIMATION_DURATION_MS
         animator.addUpdateListener { running ->
             val translationY = running.animatedValue as Float
-            actionBarToolbarLayout.translationY = translationY
+            bound.actionBarToolbarLayout.translationY = translationY
             // toolbarHeight is guarded as well as the reference's playerControlsHeight: it is only
             // known after layout, and a zero would make the ratio below a division by zero.
             if (isVideo() && playerControlsHeight > 0 && toolbarHeight > 0) {
-                mediaPlayerControlView.translationY =
+                bound.mediaBottomChrome.translationY =
                     -translationY / (toolbarHeight.toFloat() / playerControlsHeight)
             }
         }
@@ -449,11 +476,11 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
     }
 
     private fun showLoadingIndicator() {
-        mediaLoadingIndicator.visibility = View.VISIBLE
+        bound.mediaLoadingIndicator.visibility = View.VISIBLE
     }
 
     private fun hideLoadingIndicator() {
-        mediaLoadingIndicator.visibility = View.GONE
+        bound.mediaLoadingIndicator.visibility = View.GONE
     }
 
     /** Which direction the chrome is currently animating, or null when it is at rest. */
@@ -524,6 +551,10 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
     @Suppress("DEPRECATION")
     private fun mediaSourceExtra(extras: Bundle): MediaSource? = extras.getParcelable(INTENT_MEDIA_SOURCE)
 
+    @Suppress("DEPRECATION")
+    private fun viewerContextExtra(extras: Bundle): MediaViewerContext? =
+        extras.getSerializable(INTENT_VIEWER_CONTEXT) as? MediaViewerContext
+
     /**
      * The screen's arguments.
      *
@@ -553,7 +584,7 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         }
 
         override fun onDoubleTapEvent(e: MotionEvent): Boolean {
-            val controller = mediaImage.getZoomableController()
+            val controller = bound.mediaImage.getZoomableController()
             val viewPoint = PointF(e.x, e.y)
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
@@ -594,7 +625,7 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         ) > DOUBLE_TAP_SCROLL_THRESHOLD_PX
 
         private fun clampScale(scale: Float): Float {
-            val controller = mediaImage.getZoomableController()
+            val controller = bound.mediaImage.getZoomableController()
             // The controller silently ignores an out-of-range scale, which would freeze the drag.
             return scale.coerceIn(controller.getMinimumScale(), controller.getMaximumScale())
         }
@@ -609,6 +640,7 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         private const val INTENT_WIDTH = "INTENT_MEDIA_WIDTH"
         private const val INTENT_HEIGHT = "INTENT_MEDIA_HEIGHT"
         private const val INTENT_MEDIA_SOURCE = "INTENT_MEDIA_SOURCE"
+        private const val INTENT_VIEWER_CONTEXT = "INTENT_VIEWER_CONTEXT"
 
         private const val SHOW_CONTROLS_TIMEOUT_MS = 3000L
         private const val VERTICAL_CONTROLS_ANIMATION_DURATION_MS = 200L
@@ -632,11 +664,15 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
 
         /** Opens [attachment] fullscreen. Only images and videos belong here. */
         @JvmStatic
-        fun launch(context: Context, attachment: MessageAttachment) = launch(context, launchArgs(attachment))
+        fun launch(context: Context, attachment: MessageAttachment) = launch(context, launchArgs(attachment), null)
+
+        @JvmStatic
+        fun launch(context: Context, attachment: MessageAttachment, viewerContext: MediaViewerContext) =
+            launch(context, launchArgs(attachment), viewerContext)
 
         /** Opens [embed]'s media fullscreen. */
         @JvmStatic
-        fun launch(context: Context, embed: MessageEmbed) = launch(context, launchArgs(embed))
+        fun launch(context: Context, embed: MessageEmbed) = launch(context, launchArgs(embed), null)
 
         /** Builds the launch intent. Its extras are the screen's whole argument contract. */
         private fun intentFor(args: MediaLaunchArgs): Intent {
@@ -657,10 +693,20 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
                 .putExtra(INTENT_MEDIA_SOURCE, mediaSource)
         }
 
-        private fun launch(context: Context, args: MediaLaunchArgs) =
-            presentScreen(context, WidgetMedia::class.java, intentFor(args))
+        private fun launch(context: Context, args: MediaLaunchArgs, viewerContext: MediaViewerContext?) =
+            presentScreen(
+                context,
+                WidgetMedia::class.java,
+                intentFor(args).putExtra(INTENT_VIEWER_CONTEXT, viewerContext),
+            )
     }
 }
+
+data class MediaViewerContext(
+    val authorName: String?,
+    val avatarUrl: String?,
+    val timestampMs: Long?,
+) : Serializable
 
 /** Shows [screen] through the reference-shaped single-activity screen router. */
 internal fun presentScreen(context: Context, screen: Class<out AppFragment>, launchIntent: Intent) =

@@ -1,12 +1,6 @@
 package com.discord.models.botuikit
 
-import com.discord.api.botuikit.ActionRowComponent
-import com.discord.api.botuikit.ButtonComponent
-import com.discord.api.botuikit.ButtonStyle
-import com.discord.api.botuikit.ComponentEmoji
-import com.discord.api.botuikit.ComponentType
-import com.discord.api.botuikit.SelectComponent
-import com.discord.api.botuikit.SelectItem
+import com.discord.api.botuikit.*
 import com.discord.widgets.botuikit.ComponentChatListState.ComponentStoreState
 
 interface MessageComponent {
@@ -61,7 +55,67 @@ data class SelectMessageComponent(
     val options: List<SelectItem>,
     val selectedOptions: List<SelectItem>,
     val emojiAnimationsEnabled: Boolean,
+    val defaultValues: List<SelectDefaultValue> = emptyList(),
 ) : ActionMessageComponent()
+
+data class SectionMessageComponent(
+    override val type: ComponentType,
+    override val index: Int,
+    val id: Int?,
+    val components: List<MessageComponent>,
+    val accessory: MessageComponent?,
+) : LayoutMessageComponent() {
+    override val children: List<MessageComponent> get() = components + listOfNotNull(accessory)
+}
+
+data class TextDisplayMessageComponent(
+    override val type: ComponentType,
+    override val index: Int,
+    val id: Int?,
+    val content: String,
+) : MessageComponent
+
+data class ThumbnailMessageComponent(
+    override val type: ComponentType,
+    override val index: Int,
+    val id: Int?,
+    val media: UnfurledMediaItem,
+    val description: String?,
+    val spoiler: Boolean,
+) : MessageComponent
+
+data class MediaGalleryMessageComponent(
+    override val type: ComponentType,
+    override val index: Int,
+    val id: Int?,
+    val items: List<MediaGalleryItem>,
+) : MessageComponent
+
+data class FileMessageComponent(
+    override val type: ComponentType,
+    override val index: Int,
+    val id: Int?,
+    val file: UnfurledMediaItem,
+    val name: String,
+    val size: Long,
+    val spoiler: Boolean,
+) : MessageComponent
+
+data class SeparatorMessageComponent(
+    override val type: ComponentType,
+    override val index: Int,
+    val divider: Boolean,
+    val spacing: Int,
+) : MessageComponent
+
+data class ContainerMessageComponent(
+    override val type: ComponentType,
+    override val index: Int,
+    val id: Int?,
+    override val children: List<MessageComponent>,
+    val accentColor: Int?,
+    val spoiler: Boolean,
+) : LayoutMessageComponent()
 
 /**
  * Projects an API action row onto its renderable form.
@@ -116,7 +170,9 @@ fun SelectComponent.mergeToMessageComponent(
     index: Int,
     actionInteractionComponentState: ActionInteractionComponentState,
     componentStoreState: ComponentStoreState,
-): SelectMessageComponent = SelectMessageComponent(
+): SelectMessageComponent {
+    val options = options.orEmpty()
+    return SelectMessageComponent(
     type = type,
     index = index,
     stateInteraction = if (disabled) {
@@ -132,7 +188,38 @@ fun SelectComponent.mergeToMessageComponent(
     selectedOptions = componentStoreState.selections?.get(index)
         ?: options.filter { it.default },
     emojiAnimationsEnabled = componentStoreState.animateEmojis,
+    defaultValues = defaultValues.orEmpty(),
 )
+}
+
+fun SectionComponent.mergeToMessageComponent(
+    index: Int,
+    children: List<MessageComponent>,
+): SectionMessageComponent = SectionMessageComponent(
+    type,
+    index,
+    id,
+    children.dropLast(1),
+    children.lastOrNull(),
+)
+
+fun TextDisplayComponent.mergeToMessageComponent(index: Int) =
+    TextDisplayMessageComponent(type, index, id, content)
+
+fun ThumbnailComponent.mergeToMessageComponent(index: Int) =
+    ThumbnailMessageComponent(type, index, id, media, description, spoiler == true)
+
+fun MediaGalleryComponent.mergeToMessageComponent(index: Int) =
+    MediaGalleryMessageComponent(type, index, id, items)
+
+fun FileComponent.mergeToMessageComponent(index: Int) =
+    FileMessageComponent(type, index, id, file, name, size, spoiler == true)
+
+fun SeparatorComponent.mergeToMessageComponent(index: Int) =
+    SeparatorMessageComponent(type, index, divider != false, spacing ?: 1)
+
+fun ContainerComponent.mergeToMessageComponent(index: Int, children: List<MessageComponent>) =
+    ContainerMessageComponent(type, index, id, children, accentColor, spoiler == true)
 
 fun LayoutMessageComponent.childError(): ActionInteractionComponentState.Failed? =
     children.asSequence()
@@ -140,6 +227,18 @@ fun LayoutMessageComponent.childError(): ActionInteractionComponentState.Failed?
         .map(ActionMessageComponent::stateInteraction)
         .filterIsInstance<ActionInteractionComponentState.Failed>()
         .firstOrNull()
+
+fun MessageComponent.disabledForForward(): MessageComponent = when (this) {
+    is ButtonMessageComponent -> copy(stateInteraction = ActionInteractionComponentState.Disabled)
+    is SelectMessageComponent -> copy(stateInteraction = ActionInteractionComponentState.Disabled)
+    is ActionRowMessageComponent -> copy(components = components.map(MessageComponent::disabledForForward))
+    is SectionMessageComponent -> copy(
+        components = components.map(MessageComponent::disabledForForward),
+        accessory = accessory?.disabledForForward(),
+    )
+    is ContainerMessageComponent -> copy(children = children.map(MessageComponent::disabledForForward))
+    else -> this
+}
 
 /** `min_values` and `max_values` are both optional and both default to one. */
 private const val DEFAULT_SELECT_VALUES = 1

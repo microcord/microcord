@@ -10,9 +10,13 @@ import com.discord.api.permission.Permission
 import com.discord.api.user.User
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.message.Message
+import com.discord.models.botuikit.ActionInteractionComponentState
+import com.discord.models.botuikit.ActionRowMessageComponent
+import com.discord.models.botuikit.ButtonMessageComponent
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.stores.StoreMessagesLoader
 import com.discord.widgets.chat.list.entries.AttachmentEntry
+import com.discord.widgets.chat.list.entries.BotUiComponentEntry
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.EmbedEntry
 import com.discord.widgets.chat.list.entries.LoadingEntry
@@ -156,9 +160,13 @@ class ChatListRowsTest {
         assertEquals("forwarded body", entry.message!!.content)
         assertTrue(entry.rows.none { it is MessageEntry || it is ForwardedMessageEntry })
         assertEquals(
-            listOf(AttachmentEntry::class, EmbedEntry::class, StickerEntry::class),
+            listOf(AttachmentEntry::class, EmbedEntry::class, StickerEntry::class, BotUiComponentEntry::class),
             entry.rows.map { it::class },
         )
+        val component = entry.rows.filterIsInstance<BotUiComponentEntry>().single()
+        val button = (component.messageComponents.single() as ActionRowMessageComponent)
+            .components.single() as ButtonMessageComponent
+        assertEquals(ActionInteractionComponentState.Disabled, button.stateInteraction)
         assertFalse(entry.message!!.components.isNullOrEmpty())
         assertEquals("Sanitized question", entry.message!!.poll!!.question.text)
 

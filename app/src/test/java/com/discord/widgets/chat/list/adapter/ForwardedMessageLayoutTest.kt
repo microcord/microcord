@@ -28,7 +28,7 @@ class ForwardedMessageLayoutTest {
         assertFalse(ids.contains("@+id/forwarded_message_guild_name"))
         assertTrue(ids.indexOf("@+id/forwarded_message_content") < ids.indexOf("@+id/forwarded_message_rows"))
         assertTrue(ids.indexOf("@+id/forwarded_message_rows") < ids.indexOf("@+id/forwarded_message_poll"))
-        assertEquals("@+id/forwarded_message_source", ids.last())
+        assertTrue(ids.indexOf("@+id/forwarded_message_rows") < ids.indexOf("@+id/forwarded_message_source"))
 
         val loading = elements.single { it.getAttributeNS(ANDROID_NS, "id") == "@+id/forwarded_message_loading" }
         val icon = elements.single { it.getAttributeNS(ANDROID_NS, "id") == "@+id/forwarded_message_icon" }

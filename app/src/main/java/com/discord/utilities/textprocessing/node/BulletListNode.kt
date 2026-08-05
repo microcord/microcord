@@ -54,6 +54,6 @@ class BulletListNode<T : BasicRenderContext>(
     }
 
     private companion object {
-        const val MARKDOWN_BULLET_RADIUS = 8
+        const val MARKDOWN_BULLET_RADIUS = 4
     }
 }

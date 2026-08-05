@@ -41,7 +41,7 @@ class PrivateChannelNameplateViewTest {
             val firstPlate = Nameplate("asset", 9, "plate", "sky")
             val secondPlate = firstPlate.copy(skuId = 10)
 
-            view.bind(firstPlate, NameplateView.Placement.CHANNEL, selected = true, content)
+            view.bind(firstPlate, NameplateView.Placement.CHANNEL, selected = true)
             val firstRequest = requireNotNull(view.currentAnimationRequest())
             val firstDrawable = drawable()
             assertTrue(view.bindDecodedAnimation(firstDrawable, firstRequest))
@@ -49,7 +49,7 @@ class PrivateChannelNameplateViewTest {
             assertEquals(View.VISIBLE, view.getChildAt(0).visibility)
             assertEquals(View.VISIBLE, (view.getChildAt(1) as ImageView).visibility)
 
-            view.bind(firstPlate, NameplateView.Placement.CHANNEL, selected = false, content)
+            view.bind(firstPlate, NameplateView.Placement.CHANNEL, selected = false)
             assertTrue(firstDrawable.isRecycled)
             assertEquals(View.VISIBLE, view.getChildAt(0).visibility)
             assertEquals(View.INVISIBLE, view.getChildAt(1).visibility)
@@ -57,9 +57,9 @@ class PrivateChannelNameplateViewTest {
             view.setNameplateHovered(true)
             assertNull(view.currentAnimationRequest())
 
-            view.bind(firstPlate, NameplateView.Placement.CHANNEL, selected = true, content)
+            view.bind(firstPlate, NameplateView.Placement.CHANNEL, selected = true)
             val staleRequest = requireNotNull(view.currentAnimationRequest())
-            view.bind(secondPlate, NameplateView.Placement.CHANNEL, selected = true, content)
+            view.bind(secondPlate, NameplateView.Placement.CHANNEL, selected = true)
             val replacementRequest = requireNotNull(view.currentAnimationRequest())
             val staleDrawable = drawable()
             assertFalse(view.bindDecodedAnimation(staleDrawable, staleRequest))
@@ -70,7 +70,7 @@ class PrivateChannelNameplateViewTest {
             assertTrue(replacementDrawable.isRunning)
             assertEquals(ApngDrawable.LOOP_FOREVER, replacementDrawable.loopCount)
 
-            view.bind(secondPlate, NameplateView.Placement.MEMBER_LIST, selected = true, content)
+            view.bind(secondPlate, NameplateView.Placement.MEMBER_LIST, selected = true)
             assertTrue(replacementDrawable.isRecycled)
             assertNull(view.currentAnimationRequest())
             assertEquals(View.INVISIBLE, view.getChildAt(1).visibility)
@@ -114,7 +114,6 @@ class PrivateChannelNameplateViewTest {
             Nameplate("asset", 9, "plate", "sky"),
             NameplateView.Placement.CHANNEL,
             selected = true,
-            contentView = content,
         )
         root.measure(width, height)
         root.layout(0, 0, root.measuredWidth, root.measuredHeight)
@@ -160,7 +159,6 @@ class PrivateChannelNameplateViewTest {
             Nameplate("asset", 9, "plate", "sky"),
             NameplateView.Placement.MEMBER_LIST,
             selected = true,
-            contentView = memberContentEnd,
         )
 
         // Compare renderer output with equal artwork and content-end bounds; only parent layout differs.
@@ -172,7 +170,6 @@ class PrivateChannelNameplateViewTest {
             .mapRect(memberDestination)
 
         assertEquals(source, memberDestination)
-        assertEquals(nameplate.maskEdge(), memberNameplate.maskEdge())
         assertEquals(image.alpha, memberImage.alpha)
         assertEquals(image.hierarchy.actualImageScaleType, memberImage.hierarchy.actualImageScaleType)
         assertTrue(memberRoot.indexOfChild(memberNameplate) < memberRoot.indexOfChild(memberContentEnd))

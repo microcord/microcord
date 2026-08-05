@@ -43,6 +43,8 @@ class ButtonComponentView @JvmOverloads constructor(
         val loading = component.stateInteraction is ActionInteractionComponentState.Loading
         val enabled = component.stateInteraction !is ActionInteractionComponentState.Disabled
 
+        minimumWidth = dpToPixels(if (component.style == ButtonStyle.LINK) 160 else 52)
+        minimumHeight = dpToPixels(48)
         configureStyle(button, component.style)
         if (component.emoji != null && loading) emoji.visibility = View.INVISIBLE
         else ComponentViewUtils.run {
@@ -56,9 +58,9 @@ class ButtonComponentView @JvmOverloads constructor(
         label.setPadding(dpToPixels(start), 0, dpToPixels(end), 0)
         label.text = text
         label.visibility = if (loading) View.INVISIBLE else View.VISIBLE
-        label.setEnabledAlpha(enabled, 0.5f)
-        emoji.setEnabledAlpha(enabled)
-        linkIcon.setEnabledAlpha(enabled)
+        label.setEnabledAlpha(enabled, 0.65f)
+        emoji.setEnabledAlpha(enabled, 0.65f)
+        linkIcon.setEnabledAlpha(enabled, 0.65f)
         button.isEnabled = enabled
         button.setOnClickListener {
             val url = component.url

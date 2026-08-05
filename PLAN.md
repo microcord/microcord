@@ -2638,6 +2638,81 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   part of replayed view state, so rotation/backgrounding cannot lose completion and restore a permanently
   disabled form. No remaining correctness or unnecessary-complexity findings were found. Focused poll,
   message-contract, pending-reply, pinned, and forum tests plus `assembleDebug` pass.
+- Backported current modal and Components V2 contracts using Aliucord PR 681, Discord Userdoccers, and
+  Awoocord's ComponentsV2 renderer as references. The existing polymorphic component adapter now covers
+  types 9-14, 17-19, and 21-23 with IDs and current optional fields. Modals render legacy rows plus Label,
+  Text Display, string/entity selects, radio groups, checkbox groups, checkboxes, and filtered multi-file
+  uploads; restore entered text, selections, checked state, selected URIs, and an in-flight picker across
+  recreation; and submit the documented typed nested tree, switching to multipart only for file fields.
+  Chat maps V2 components in preorder (including Section accessories) and renders XML-backed markdown,
+  sections, entity selects, thumbnails, galleries, files, separators, and spoilerable accented containers
+  through the existing recycler/provider pipeline. The unified metadata-client migration keeps the old
+  RN accessor/metadata names as aliases rather than restoring a second client. Focused component adapter,
+  mapper, and modal tests plus `assembleDebug` pass. Live modal submission and device rendering/recycling
+  remain unverified.
+- Installed the Components V2 build on WSA (`localhost:58526`) and launched the authenticated app through
+  Gateway READY, channel navigation, and message loading with no fatal, inflation, modal, or component
+  errors. Added `ComponentsV2ViewSmokeTest`; its focused connected run on Android 13 inflates all four
+  current modal layouts, resolves generated bindings, and creates/measures every V2 message view through
+  `ComponentInflater`. The Android-test compile also exposed two stale tests from the preceding UI refactor:
+  the nameplate test now calls the current three-argument `bind`, and the camera permission test exercises
+  the real final camera fragment instead of removed subclass hooks. `connectedDebugAndroidTest` passes for
+  the focused V2 test. Live bot-driven modal submission remains the only unverified part of this slice.
+- Fixed forwarded snapshots with Components V2 rendering as empty cards. `forwardedAccessoryRows` had
+  carried only attachments, embeds, and stickers, while the forwarded adapter reduced legacy components
+  to disabled text summaries; every V2 type therefore vanished. Forwarded snapshots now map components
+  through the shared preorder mapper, retain the forwarded message/channel/member context required by
+  markdown and media, disable all nested actions, and configure the same XML component views through
+  `ComponentProvider`. The sanitized live-shaped forwarding fixture asserts that a disabled bot-component
+  row is produced. Focused forwarded/component tests and `assembleDebug` pass; the corrected APK is
+  installed and running on WSA with no forwarded/component inflation or fatal errors in logcat.
+- WSA exposed a follow-up that fixture construction had hidden: Gson allocates component DTOs without
+  running Kotlin body initializers, so deserialized `ContentComponent.components` was null and the shared
+  preorder mapper threw before publishing any chat rows. The empty child list is now a computed getter,
+  with a deserialization regression assertion. After reinstall, the live forwarded card renders gallery
+  media, separators, Section text/thumbnail, disabled action rows/selects, and top-level text; UIAutomator
+  confirms populated component bounds and logcat has no mapper, fatal, or inflation failure. Focused
+  forwarded/component tests and `assembleDebug` pass.
+- Replaced the initial functional Components V2 styling with current RN/Awoocord geometry. Hermes module
+  7069 (`transformMessageComponents.tsx`) confirms full markdown parsing, Mosaic media, themed rounded
+  containers, disabled forwarded interactions, and component-specific spoiler/media models; module 11019
+  confirms Text Display is full-width measured markdown. XML views now use 8dp rounded containers with
+  8dp content padding, responsive 1/2/3/4+ mosaics, large-left/stacked-right three-item layout, 16sp body
+  text and 20sp H2, 4px bullet radii, button accessories wrapped below Section text, thumbnail accessories
+  retained beside text, 44dp controls, one-line spoiler and ALT badges, separators, and bordered file rows
+  with link-colored names/download affordances. Forwarded chrome places its label above the card like RN.
+  WSA screenshots were inspected after each geometry pass; replacing `GridLayout` with exact rectangle
+  placement removed all gallery constraint warnings. Focused markdown/forwarded/component tests and
+  `assembleDebug` pass; the corrected APK is installed and running on WSA without component failures.
+- Device follow-up corrected the remaining component interaction/geometry mismatches. Disabled selects no
+  longer fade their background and muted placeholder together; only foreground content is dimmed, retaining
+  readable contrast. Buttons and selects measure exactly 44dp, link-button Section accessories retain a
+  160dp minimum, and forwarded top-level components receive 12dp horizontal insets. The Forwarded label is
+  back inside its card. Unfurled images/videos now create typed `MessageAttachment` launch data, video proxy
+  previews request WebP like Hermes module 7069, and media taps route to `WidgetMedia` rather than Chrome.
+  WSA verification revealed the spoiler, then opened `WidgetMedia`; navigation breadcrumbs named
+  `WidgetMedia` and ExoPlayer initialized for the video. Focused forwarded tests and `assembleDebug` pass;
+  the updated APK is installed on WSA.
+- Final WSA component pass keeps disabled select surfaces opaque and dims only foreground content, fixes
+  buttons/selects to explicit 44dp height with 160dp link-button minima, adds 12dp forwarded top-level
+  insets, and keeps the Forwarded marker inside its card. Unfurled video previews use the RN WebP proxy
+  transform and all image/video taps build typed attachments for `WidgetMedia`; WSA navigation reached
+  `WidgetMedia` and ExoPlayer initialized, with no Chrome route. A nested view-binding crash found during
+  cold-start verification was fixed by assigning unique `media_spoiler` and `container_spoiler` IDs instead
+  of sharing `spoiler` across nested layouts. Focused tests and `assembleDebug` pass; a force-stop/cold launch
+  on WSA has no app fatal, inflation, mapper, cast, or null failure. Final visual tuning increases component
+  buttons from 44dp to 48dp while retaining the verified select and link-button widths; the APK was rebuilt
+  and installed on WSA.
+- Replaced the legacy `WidgetMedia` video presentation with the current RN single-media design: black
+  edge-to-edge surface, X/overflow top chrome, overlay mute and custom ExoPlayer play/time/seek/duration
+  controls, and optional author avatar/name/timestamp context supplied by Components V2 messages. Media
+  remains FIT_CENTER and preserves the existing ExoPlayer lifecycle, cover frame, menu actions, and chrome
+  timeout. The muted and unmuted icons now share an explicit white tint. The select component's near-black
+  tertiary outline was also replaced with the current modifier-accent stroke. Focused media/forwarded tests
+  and `assembleDebug` pass; the APK is installed and cold-launches on WSA without media/player failures.
+- Post-review simplification removed the obsolete RN REST/metadata aliases, delegated duplicate bot-entry
+  construction, deleted the unused spoilable marker/current-entry alias, and reused modal field flattening
+  for file collection. Focused component/modal/poll/media tests and `assembleDebug` pass; APK reinstalled.
 
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/applauncher/**` | Android 340.12
 Hermes `out.js` Apps launcher modules | log in on WSA and verify HOME/search/application/command/list

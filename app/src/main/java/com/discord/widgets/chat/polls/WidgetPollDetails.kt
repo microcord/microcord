@@ -95,7 +95,7 @@ class WidgetPollDetails : AppFragment(R.layout.widget_poll_details) {
         loadedCount = -1
         bindAnswers()
         request?.unsubscribe()
-        val api = RestAPI.reactNativeApiOrNull
+        val api = RestAPI.apiOrNull
         if (api == null) {
             showStatus(R.string.poll_results_failed, retry = true)
             return
@@ -107,7 +107,7 @@ class WidgetPollDetails : AppFragment(R.layout.widget_poll_details) {
     }
 
     private fun fetchVoters(answerId: Int, users: LinkedHashMap<Long, com.discord.api.user.User>) {
-        val api = RestAPI.reactNativeApiOrNull ?: return
+        val api = RestAPI.apiOrNull ?: return
         request = api.getPollVoters(channelId, messageId, answerId, after = users.keys.lastOrNull())
             .subscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread())

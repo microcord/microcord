@@ -3,15 +3,13 @@ package com.discord.widgets.botuikit
 import android.content.Context
 import android.view.View
 import android.view.ViewGroup
-import com.discord.models.botuikit.ActionRowMessageComponent
-import com.discord.models.botuikit.ButtonMessageComponent
-import com.discord.models.botuikit.MessageComponent
-import com.discord.models.botuikit.SelectMessageComponent
+import com.discord.models.botuikit.*
 import com.discord.widgets.botuikit.views.ActionRowComponentView
 import com.discord.widgets.botuikit.views.ButtonComponentView
 import com.discord.widgets.botuikit.views.ComponentActionListener
 import com.discord.widgets.botuikit.views.ComponentView
 import com.discord.widgets.botuikit.views.select.SelectComponentView
+import com.discord.widgets.botuikit.views.v2.*
 
 class ComponentProvider(val context: Context) {
     fun getConfiguredComponentView(
@@ -39,6 +37,13 @@ class ComponentProvider(val context: Context) {
             view is ActionRowComponentView && component is ActionRowMessageComponent -> view.configure(component, this, listener)
             view is ButtonComponentView && component is ButtonMessageComponent -> view.configure(component, this, listener)
             view is SelectComponentView && component is SelectMessageComponent -> view.configure(component, this, listener)
+            view is SectionComponentView && component is SectionMessageComponent -> view.configure(component, this, listener)
+            view is TextDisplayComponentView && component is TextDisplayMessageComponent -> view.configure(component, this, listener)
+            view is ThumbnailComponentView && component is ThumbnailMessageComponent -> view.configure(component, this, listener)
+            view is MediaGalleryComponentView && component is MediaGalleryMessageComponent -> view.configure(component, this, listener)
+            view is FileComponentView && component is FileMessageComponent -> view.configure(component, this, listener)
+            view is SeparatorComponentView && component is SeparatorMessageComponent -> view.configure(component, this, listener)
+            view is ContainerComponentView && component is ContainerMessageComponent -> view.configure(component, this, listener)
         }
     }
 }

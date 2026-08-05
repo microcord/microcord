@@ -16,10 +16,17 @@ class ModalComponentTest {
     fun validatesRequiredAndBoundedTextLikeTheReference() {
         assertFalse(ModalComponent.accepts(text(required = true), ""))
         assertTrue(ModalComponent.accepts(text(required = false), ""))
+        assertFalse(ModalComponent.accepts(text(required = true).copy(required = null), ""))
         assertFalse(ModalComponent.accepts(text(required = true), "a"))
         assertTrue(ModalComponent.accepts(text(required = true), "ab"))
         assertTrue(ModalComponent.accepts(text(required = true), "abcd"))
         assertFalse(ModalComponent.accepts(text(required = true), "abcde"))
+        assertTrue(
+            ModalComponent.accepts(
+                text(required = true).copy(minLength = null, maxLength = null),
+                "current modal defaults",
+            ),
+        )
     }
 
     @Test

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.discord.widgets.botuikit.views.v2.ThumbnailComponentView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="80dp"
+    android:layout_height="80dp">
+
+    <com.facebook.drawee.view.SimpleDraweeView
+        android:id="@+id/image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        app:actualImageScaleType="centerCrop"
+        app:roundedCornerRadius="8dp" />
+
+    <FrameLayout
+        android:id="@+id/media_spoiler"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="?attr/colorBackgroundSecondary"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            style="@style/UiKit.TextView.Semibold"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:background="@drawable/bg_component_v2_badge"
+            android:maxLines="1"
+            android:singleLine="true"
+            android:text="@string/spoiler"
+            android:textAllCaps="true"
+            android:textColor="@color/white" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/alt"
+        style="@style/UiKit.TextView.Semibold"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="start|bottom"
+        android:layout_margin="8dp"
+        android:background="@drawable/bg_component_v2_badge"
+        android:text="@string/image_alt"
+        android:textAllCaps="true"
+        android:textColor="@color/white"
+        android:textSize="11sp" />
+</com.discord.widgets.botuikit.views.v2.ThumbnailComponentView>

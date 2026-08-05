@@ -10,11 +10,8 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.discord.R
-import com.discord.api.botuikit.ActionRowComponent
-import com.discord.api.botuikit.ButtonComponent
-import com.discord.api.botuikit.Component
-import com.discord.api.botuikit.SelectComponent
-import com.discord.api.botuikit.TextComponent
+import com.discord.api.botuikit.ComponentType
+import com.discord.api.botuikit.SelectItem
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isPrivate
 import com.discord.api.message.MessageFlags
@@ -22,6 +19,7 @@ import com.discord.api.message.attachment.MessageAttachment
 import com.discord.api.message.attachment.MessageAttachmentType
 import com.discord.api.message.embed.MessageEmbed
 import com.discord.databinding.WidgetChatListAdapterItemForwardedMessageBinding
+import com.discord.models.botuikit.ContainerMessageComponent
 import com.discord.stores.StoreStream
 import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.channel.ChannelSelector
@@ -40,10 +38,12 @@ import com.discord.widgets.chat.list.FragmentLifecycleListener
 import com.discord.widgets.chat.list.InlineMediaView
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.AttachmentEntry
+import com.discord.widgets.chat.list.entries.BotUiComponentEntry
 import com.discord.widgets.chat.list.entries.EmbedEntry
 import com.discord.widgets.chat.list.entries.ForwardedMessageEntry
 import com.discord.widgets.chat.list.entries.ForwardedSourcePrivacy
 import com.discord.widgets.chat.list.entries.StickerEntry
+import com.discord.widgets.botuikit.views.ComponentActionListener
 import com.discord.widgets.media.WidgetMedia
 
 class WidgetChatListAdapterItemForwardedMessage(
@@ -165,10 +165,10 @@ class WidgetChatListAdapterItemForwardedMessage(
                 is AttachmentEntry -> bindAttachment(row)
                 is EmbedEntry -> bindEmbed(row)
                 is StickerEntry -> bindSticker(row)
+                is BotUiComponentEntry -> bindComponents(row)
                 else -> Unit
             }
         }
-        bindComponents(entry.message?.components.orEmpty())
     }
 
     private fun bindAttachment(entry: AttachmentEntry) {
@@ -255,26 +255,42 @@ class WidgetChatListAdapterItemForwardedMessage(
         })
     }
 
-    private fun bindComponents(components: List<Component>) {
-        components.flatMap(::componentSummaries).forEach { summary ->
-            binding.forwardedMessageRows.addView(accessoryText(semibold = true).apply {
-                text = summary
-                contentDescription = summary
-                isEnabled = false
-                alpha = 0.7f
-            })
+    private fun bindComponents(entry: BotUiComponentEntry) {
+        val listener = ForwardedComponentListener(entry)
+        entry.messageComponents.forEach { component ->
+            val root = binding.forwardedMessageRows
+            parentAdapter.botUiComponentProvider
+                .getConfiguredComponentView(listener, component, root, root.childCount)
+                ?.let { configured ->
+                    val view = configured as View
+                    if (component !is ContainerMessageComponent) {
+                        (view.layoutParams as? ViewGroup.MarginLayoutParams)?.apply {
+                            marginStart = dp(COMPONENT_INSET_DP)
+                            marginEnd = dp(COMPONENT_INSET_DP)
+                        }
+                    }
+                    root.addView(view)
+                }
         }
     }
 
-    private fun componentSummaries(component: Component): List<String> = when (component) {
-        is ActionRowComponent -> component.components.flatMap(::componentSummaries)
-        is ButtonComponent -> listOfNotNull(component.label?.takeIf(String::isNotBlank))
-        is SelectComponent -> listOf(
-            component.placeholder?.takeIf(String::isNotBlank)
-                ?: itemView.context.getString(R.string.message_select_component_default_placeholder),
-        )
-        is TextComponent -> listOf(component.label)
-        else -> emptyList()
+    private class ForwardedComponentListener(
+        override val componentEntry: BotUiComponentEntry,
+    ) : ComponentActionListener {
+        override fun onButtonComponentClick(componentIndex: Int, customId: String) = Unit
+
+        override fun onSelectComponentClick(
+            componentIndex: Int,
+            componentType: ComponentType,
+            customId: String,
+            placeholder: String?,
+            options: List<SelectItem>,
+            selectedItems: List<SelectItem>,
+            minOptionsToSelect: Int,
+            maxOptionsToSelect: Int,
+            emojiAnimationsEnabled: Boolean,
+            defaultValues: List<String>,
+        ) = Unit
     }
 
     private fun embedDimensions(embed: MessageEmbed): Pair<Int, Int>? {
@@ -378,6 +394,7 @@ class WidgetChatListAdapterItemForwardedMessage(
 
     private companion object {
         const val ACCESSORY_INSET_DP = 12
+        const val COMPONENT_INSET_DP = 12
         const val ACCESSORY_SPACING_DP = 8
         const val STICKER_SIZE_DP = 160
     }

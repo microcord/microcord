@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.discord.widgets.botuikit.views.v2.ContainerComponentView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="4dp"
+    android:layout_marginBottom="4dp"
+    android:background="@drawable/bg_component_v2_container"
+    android:clipToOutline="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <View
+            android:id="@+id/accent"
+            android:layout_width="3dp"
+            android:layout_height="match_parent" />
+
+        <LinearLayout
+            android:id="@+id/components"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:padding="8dp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/container_spoiler"
+        style="@style/UiKit.TextView.Semibold"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="?attr/colorBackgroundSecondary"
+        android:gravity="center"
+        android:text="@string/spoiler"
+        android:textAllCaps="true" />
+</com.discord.widgets.botuikit.views.v2.ContainerComponentView>

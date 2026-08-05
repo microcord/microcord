@@ -171,6 +171,10 @@ object ChatListRows {
                 channel.guildId,
                 componentStoreState = null,
                 animateEmojis = state.animateEmojis,
+                messageState = messageState,
+                channel = channel,
+                guildMembers = state.guildMembers,
+                guildRoles = state.guildRoles,
             )
         }
         rows += ChatListEntry.createGameInviteEntries(message)
@@ -244,6 +248,19 @@ object ChatListRows {
             )
         }
         rows += ChatListEntry.createStickerEntries(message)
+        if (!message.components.isNullOrEmpty()) {
+            rows += ChatListEntry.createBotComponentEntries(
+                message = message,
+                guildId = state.channel.guildId,
+                componentStoreState = null,
+                animateEmojis = state.animateEmojis,
+                messageState = state.messageStates[message.id],
+                channel = state.channel,
+                guildMembers = state.guildMembers,
+                guildRoles = state.guildRoles,
+                disableInteractions = true,
+            )
+        }
         return rows
     }
 

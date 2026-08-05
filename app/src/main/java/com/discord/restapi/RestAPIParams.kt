@@ -640,14 +640,48 @@ object RestAPIParams {
         val id: Long,
         val customId: String,
         val components: List<ModalInteractionDataComponent>,
+        val attachments: List<ModalAttachment>? = null,
     )
 
-    data class ModalInteractionDataComponent(
-        val type: ComponentType,
-        val components: List<ModalInteractionDataComponent>?,
-        val customId: String?,
-        val value: String?,
-    )
+    data class ModalAttachment(val id: Long, val filename: String)
+
+    sealed interface ModalInteractionDataComponent {
+        val type: ComponentType
+        val id: Int?
+    }
+
+    data class ModalInteractionDataLayout(
+        override val type: ComponentType,
+        override val id: Int?,
+        val components: List<ModalInteractionDataComponent>? = null,
+        val component: ModalInteractionDataComponent? = null,
+    ) : ModalInteractionDataComponent
+
+    data class ModalInteractionDataText(
+        override val type: ComponentType,
+        override val id: Int?,
+        val customId: String,
+        val value: String,
+    ) : ModalInteractionDataComponent
+
+    data class ModalInteractionDataBoolean(
+        override val type: ComponentType,
+        override val id: Int?,
+        val customId: String,
+        val value: Boolean,
+    ) : ModalInteractionDataComponent
+
+    data class ModalInteractionDataValues(
+        override val type: ComponentType,
+        override val id: Int?,
+        val customId: String,
+        val values: List<String>,
+    ) : ModalInteractionDataComponent
+
+    data class ModalInteractionDataContent(
+        override val type: ComponentType,
+        override val id: Int?,
+    ) : ModalInteractionDataComponent
 
     class Nick(val nick: String?)
 

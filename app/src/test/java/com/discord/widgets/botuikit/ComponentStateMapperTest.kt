@@ -1,15 +1,7 @@
 package com.discord.widgets.botuikit
 
-import com.discord.api.botuikit.ActionRowComponent
-import com.discord.api.botuikit.ButtonComponent
-import com.discord.api.botuikit.ButtonStyle
-import com.discord.api.botuikit.ComponentType
-import com.discord.api.botuikit.SelectComponent
-import com.discord.api.botuikit.SelectItem
-import com.discord.models.botuikit.ActionInteractionComponentState
-import com.discord.models.botuikit.ActionRowMessageComponent
-import com.discord.models.botuikit.ButtonMessageComponent
-import com.discord.models.botuikit.SelectMessageComponent
+import com.discord.api.botuikit.*
+import com.discord.models.botuikit.*
 import com.discord.stores.StoreApplicationInteractions
 import com.discord.widgets.botuikit.ComponentChatListState.ComponentStoreState
 import org.junit.Assert.assertEquals
@@ -98,6 +90,39 @@ class ComponentStateMapperTest {
             ActionInteractionComponentState.Failed("try again"),
             (mapped.single() as ButtonMessageComponent).stateInteraction,
         )
+    }
+
+    @Test
+    fun mapsNestedComponentsV2AndSectionAccessoryInPreorder() {
+        val mapped = ComponentStateMapper.processComponentsToMessageComponents(
+            listOf(
+                ContainerComponent(
+                    type = ComponentType.CONTAINER,
+                    id = 1,
+                    components = listOf(
+                        TextDisplayComponent(ComponentType.TEXT_DISPLAY, 2, "hello"),
+                        SectionComponent(
+                            ComponentType.SECTION,
+                            3,
+                            listOf(TextDisplayComponent(ComponentType.TEXT_DISPLAY, 4, "section")),
+                            button("accessory"),
+                        ),
+                    ),
+                    accentColor = 0x5865f2,
+                    spoiler = false,
+                ),
+            ),
+            componentStoreState = null,
+            componentExperiments = allEnabled,
+            animateEmojis = false,
+        )
+
+        val container = mapped.single() as ContainerMessageComponent
+        val section = container.children[1] as SectionMessageComponent
+        assertEquals(listOf(0, 1, 2), listOf(container.index, container.children[0].index, section.index))
+        assertEquals(3, section.components.single().index)
+        assertEquals(4, section.accessory?.index)
+        assertTrue(section.accessory is ButtonMessageComponent)
     }
 
     private fun button(customId: String) = ButtonComponent(

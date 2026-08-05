@@ -390,7 +390,15 @@ data class WidgetChatListModelMessages(
                     BotComponentExperiments.get(StoreStream.getExperiments()),
                     animateEmojis,
                 )
-                rows += ChatListEntry.createBotComponentEntries(message, channel.guildId, components)
+                rows += ChatListEntry.createBotComponentEntries(
+                    message,
+                    channel.guildId,
+                    components,
+                    messageState,
+                    channel,
+                    guildMembers,
+                    guildRoles,
+                )
             }
             if (message.getReactionsMap().isNotEmpty()) {
                 val canAdd = channel.threadMetadata?.archived != true

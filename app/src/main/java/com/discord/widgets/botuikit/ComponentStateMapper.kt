@@ -1,11 +1,6 @@
 package com.discord.widgets.botuikit
 
-import com.discord.api.botuikit.ActionComponent
-import com.discord.api.botuikit.ActionRowComponent
-import com.discord.api.botuikit.ButtonComponent
-import com.discord.api.botuikit.Component
-import com.discord.api.botuikit.LayoutComponent
-import com.discord.api.botuikit.SelectComponent
+import com.discord.api.botuikit.*
 import com.discord.models.botuikit.ActionInteractionComponentState
 import com.discord.models.botuikit.MessageComponent
 import com.discord.models.botuikit.mergeToMessageComponent
@@ -48,7 +43,17 @@ object ComponentStateMapper {
         experimentController: ComponentExperiments,
     ): MessageComponent? {
         if (!experimentController.isEnabled(component.type)) return null
-        return (component as? ActionRowComponent)?.mergeToMessageComponent(index, children)
+        return when (component) {
+            is ActionRowComponent -> component.mergeToMessageComponent(index, children)
+            is SectionComponent -> component.mergeToMessageComponent(index, children)
+            is TextDisplayComponent -> component.mergeToMessageComponent(index)
+            is ThumbnailComponent -> component.mergeToMessageComponent(index)
+            is MediaGalleryComponent -> component.mergeToMessageComponent(index)
+            is FileComponent -> component.mergeToMessageComponent(index)
+            is SeparatorComponent -> component.mergeToMessageComponent(index)
+            is ContainerComponent -> component.mergeToMessageComponent(index, children)
+            else -> null
+        }
     }
 
     fun processComponentsToMessageComponents(
@@ -72,7 +77,10 @@ object ComponentStateMapper {
                 is LayoutComponent -> toMessageLayoutComponent(
                     component,
                     index,
-                    map(component.components),
+                    map(
+                        if (component is SectionComponent) component.components + component.accessory
+                        else component.components,
+                    ),
                     componentExperiments,
                 )
                 else -> null

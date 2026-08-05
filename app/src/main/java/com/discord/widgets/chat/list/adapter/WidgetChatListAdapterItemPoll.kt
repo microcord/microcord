@@ -187,7 +187,7 @@ class WidgetChatListAdapterItemPoll private constructor(
     }
 
     private fun submitVote(entry: PollEntry, answerIds: List<Int>) {
-        val api = RestAPI.reactNativeApiOrNull
+        val api = RestAPI.apiOrNull
         if (api == null) {
             AppToast.show(itemView.context, R.string.poll_vote_failed)
             return

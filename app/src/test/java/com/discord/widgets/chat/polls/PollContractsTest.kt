@@ -10,7 +10,7 @@ import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.gateway.io.IncomingParser
 import com.discord.models.message.Message
 import com.discord.api.channel.Channel
-import com.discord.restapi.ReactNativeRequestMetadata
+import com.discord.utilities.analytics.AnalyticSuperProperties
 import com.discord.restapi.RestAPIBuilder
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreMessages
@@ -65,14 +65,14 @@ class PollContractsTest {
             multiselect = true,
         ).toBody()
 
-        RestAPI.reactNativeApiOrNull!!.sendMessage(7, body, null).toBlocking().single()
-        RestAPI.reactNativeApiOrNull!!.votePoll(7, 9, RestAPIParams.PollVote(listOf(1, 2)))
+        RestAPI.apiOrNull!!.sendMessage(7, body, null).toBlocking().single()
+        RestAPI.apiOrNull!!.votePoll(7, 9, RestAPIParams.PollVote(listOf(1, 2)))
             .toBlocking().subscribe()
 
         val create = server.takeRequest()
         val vote = server.takeRequest()
-        assertEquals(ReactNativeRequestMetadata.USER_AGENT, create.getHeader("User-Agent"))
-        assertEquals(ReactNativeRequestMetadata.USER_AGENT, vote.getHeader("User-Agent"))
+        assertEquals(AnalyticSuperProperties.USER_AGENT, create.getHeader("User-Agent"))
+        assertEquals(AnalyticSuperProperties.USER_AGENT, vote.getHeader("User-Agent"))
         val json = gson.fromJson(create.body.readUtf8(), com.google.gson.JsonObject::class.java)
         assertEquals(4, json["poll"].asJsonObject["duration"].asInt)
         assertTrue(json["poll"].asJsonObject["allow_multiselect"].asBoolean)

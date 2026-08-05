@@ -37,6 +37,7 @@ class WidgetChatListAdapterItemBotComponentRow(
         itemView.findViewById(R.id.chat_list_adapter_item_component_root)
 
     private lateinit var entry: BotUiComponentEntry
+    override val componentEntry: BotUiComponentEntry get() = entry
 
     override fun onConfigure(position: Int, data: ChatListEntry) {
         super.onConfigure(position, data)
@@ -119,6 +120,7 @@ class WidgetChatListAdapterItemBotComponentRow(
         minOptionsToSelect: Int,
         maxOptionsToSelect: Int,
         emojiAnimationsEnabled: Boolean,
+        defaultValues: List<String>,
     ) {
         val lifecycleOwner = itemView.findViewTreeLifecycleOwner() ?: return
         adapter.fragmentManager.setFragmentResultListener(
@@ -139,6 +141,7 @@ class WidgetChatListAdapterItemBotComponentRow(
             )
         }
 
+        val resolvedOptions = options.ifEmpty { snowflakeOptions(componentType) }
         SelectComponentBottomSheet.show(
             fragmentManager = adapter.fragmentManager,
             componentContext = ComponentContext(
@@ -153,8 +156,8 @@ class WidgetChatListAdapterItemBotComponentRow(
             placeholder = placeholder,
             min = minOptionsToSelect,
             max = maxOptionsToSelect,
-            options = options.ifEmpty { snowflakeOptions(componentType) },
-            selectedItems = selectedItems,
+            options = resolvedOptions,
+            selectedItems = selectedItems.ifEmpty { resolvedOptions.filter { it.value in defaultValues } },
             emojiAnimationsEnabled = emojiAnimationsEnabled,
         )
     }

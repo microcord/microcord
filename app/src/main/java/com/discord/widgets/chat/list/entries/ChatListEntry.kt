@@ -6,10 +6,10 @@ import com.discord.api.message.embed.MessageEmbed
 import com.discord.api.message.MessageTypes
 import com.discord.api.role.GuildRole
 import com.discord.models.botuikit.MessageComponent
+import com.discord.models.botuikit.disabledForForward
 import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
 import com.discord.stores.StoreMessageState
-import com.discord.stores.StoreStream
 import com.discord.stores.StoreThreadMessages
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
@@ -350,10 +350,30 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             message: Message,
             guildId: Long,
             messageComponents: List<MessageComponent>,
+            messageState: StoreMessageState.State? = null,
+            channel: Channel? = null,
+            guildMembers: Map<Long, GuildMember> = emptyMap(),
+            guildRoles: Map<Long, GuildRole> = emptyMap(),
+            disableInteractions: Boolean = false,
         ): Collection<ChatListEntry> {
             if (message.components.isNullOrEmpty()) return emptyList()
             val applicationId = message.applicationId ?: message.author!!.id
-            return listOf(BotUiComponentEntry(message, applicationId, guildId, messageComponents))
+            return listOf(
+                BotUiComponentEntry(
+                    message,
+                    applicationId,
+                    guildId,
+                    if (disableInteractions) {
+                        messageComponents.map(MessageComponent::disabledForForward)
+                    } else {
+                        messageComponents
+                    },
+                    messageState = messageState,
+                    channel = channel,
+                    guildMembers = guildMembers,
+                    guildRoles = guildRoles,
+                ),
+            )
         }
 
         fun createBotComponentEntries(
@@ -361,17 +381,30 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             guildId: Long,
             componentStoreState: ComponentStoreState?,
             animateEmojis: Boolean,
+            messageState: StoreMessageState.State? = null,
+            channel: Channel? = null,
+            guildMembers: Map<Long, GuildMember> = emptyMap(),
+            guildRoles: Map<Long, GuildRole> = emptyMap(),
+            disableInteractions: Boolean = false,
         ): Collection<ChatListEntry> {
             val components = message.components
             if (components.isNullOrEmpty()) return emptyList()
             val mapped = ComponentStateMapper.processComponentsToMessageComponents(
                 components,
                 componentStoreState,
-                BotComponentExperiments.get(StoreStream.getExperiments()),
+                BotComponentExperiments.getOrDefault(),
                 animateEmojis,
             )
-            val applicationId = message.applicationId ?: message.author!!.id
-            return listOf(BotUiComponentEntry(message, applicationId, guildId, mapped))
+            return createBotComponentEntries(
+                message,
+                guildId,
+                mapped,
+                messageState,
+                channel,
+                guildMembers,
+                guildRoles,
+                disableInteractions,
+            )
         }
 
         /**

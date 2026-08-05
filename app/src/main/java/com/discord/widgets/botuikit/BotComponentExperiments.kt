@@ -13,9 +13,14 @@ class BotComponentExperiments(
 
     companion object {
         var botComponentExperiments: BotComponentExperiments? = null
+        private val defaults = object : ComponentExperiments {
+            override fun isEnabled(componentType: ComponentType) = componentType != ComponentType.UNKNOWN
+        }
 
         fun get(storeExperiments: StoreExperiments): ComponentExperiments =
             botComponentExperiments
                 ?: BotComponentExperiments(storeExperiments).also { botComponentExperiments = it }
+
+        fun getOrDefault(): ComponentExperiments = botComponentExperiments ?: defaults
     }
 }

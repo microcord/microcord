@@ -3,7 +3,6 @@ package com.discord.stores
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.collection.LruCache
-import com.discord.api.botuikit.ComponentType
 import com.discord.api.commands.ApplicationCommandData
 import com.discord.api.interaction.Interaction
 import com.discord.api.interaction.InteractionModalCreate
@@ -18,11 +17,13 @@ import com.discord.models.domain.NonceGenerator
 import com.discord.models.message.Message
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
+import com.discord.restapi.PayloadJSON
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.attachments.UploadAttachment
+import com.discord.utilities.rest.FileUpload
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
@@ -154,6 +155,8 @@ class StoreApplicationInteractions(
 
     fun observeSentInteractions(): Observable<Map<String, SentInteraction>> =
         observationDeck.connectRx(SentInteractionsUpdate) { sentInteractionsSnapshot }
+
+    fun getSentInteraction(nonce: String): SentInteraction? = sentInteractionsSnapshot[nonce]
 
     // -- Lifecycle -----------------------------------------------------------------------------
 
@@ -604,50 +607,43 @@ class StoreApplicationInteractions(
      */
     fun sendModalInteraction(
         modal: InteractionModalCreate,
-        components: List<Pair<String, String>>,
+        components: List<RestAPIParams.ModalInteractionDataComponent>,
+        uploads: List<FileUpload> = emptyList(),
         onNext: (String) -> Unit,
         onError: () -> Unit,
     ) {
-        val sent = sentInteractions[modal.nonce] ?: return
-        val nonce = nonceGenerator.nonce()
-        sentInteractions.put(nonce.toString(), sent)
         dispatcher.schedule {
+            val sent = sentInteractions[modal.nonce] ?: return@schedule
+            val nonce = nonceGenerator.nonce()
+            sentInteractions.put(nonce.toString(), sent)
             val api = restApi()
             if (api == null) {
                 onError()
                 return@schedule
             }
-            val rows = components.map { (customId, value) ->
-                RestAPIParams.ModalInteractionDataComponent(
-                    type = ComponentType.ACTION_ROW,
-                    components = listOf(
-                        RestAPIParams.ModalInteractionDataComponent(
-                            type = ComponentType.TEXT,
-                            components = null,
-                            customId = customId,
-                            value = value,
-                        ),
-                    ),
-                    customId = null,
-                    value = null,
-                )
-            }
-            api.sendModalInteraction(
-                RestAPIParams.ModalInteraction(
-                    type = TYPE_MODAL_INTERACTION,
-                    applicationId = modal.application.id,
-                    messageId = null,
-                    channelId = sent.channelId,
-                    guildId = sent.guildId,
-                    sessionId = sessionId,
-                    nonce = nonce,
-                    data = RestAPIParams.ModalInteractionData(
-                        id = modal.id,
-                        customId = modal.customId,
-                        components = rows,
-                    ),
+            val body = RestAPIParams.ModalInteraction(
+                type = TYPE_MODAL_INTERACTION,
+                applicationId = modal.application.id,
+                messageId = sent.messageId,
+                channelId = sent.channelId,
+                guildId = sent.guildId,
+                sessionId = sessionId,
+                nonce = nonce,
+                data = RestAPIParams.ModalInteractionData(
+                    id = modal.id,
+                    customId = modal.customId,
+                    components = components,
+                    attachments = uploads.takeIf { it.isNotEmpty() }?.mapIndexed { index, upload ->
+                        RestAPIParams.ModalAttachment(index.toLong(), upload.name)
+                    },
                 ),
             )
+            val request = if (uploads.isEmpty()) {
+                api.sendModalInteraction(body)
+            } else {
+                api.sendModalInteraction(PayloadJSON(body), uploads.map(FileUpload::part).toTypedArray())
+            }
+            request
                 .restSubscribeOn(false)
                 .appSubscribe(
                     StoreApplicationInteractions::class.java,

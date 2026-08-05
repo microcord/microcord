@@ -45,7 +45,7 @@ class PollCreateViewModel : AppViewModel<PollCreateViewModel.State>(State()) {
         val state = requireViewState()
         if (!state.valid || state.submitting) return
         updateViewState(state.copy(submitting = true))
-        val api = RestAPI.reactNativeApiOrNull
+        val api = RestAPI.apiOrNull
         if (api == null) {
             updateViewState(state.copy(submitting = false))
             failures.onNext(Unit)

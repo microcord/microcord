@@ -245,7 +245,7 @@ class WidgetChatListActions : AppBottomSheet() {
             getString(R.string.poll_end_now),
             getString(R.string.cancel),
             mapOf(R.id.notice_ok to {
-                val api = RestAPI.reactNativeApiOrNull
+                val api = RestAPI.apiOrNull
                 if (api == null) {
                     AppToast.show(this, R.string.poll_end_failed)
                 } else {
