@@ -42,6 +42,7 @@ import com.discord.widgets.channels.invite.GroupInviteFriendsSheet
 import com.discord.widgets.directories.WidgetDirectoryChannel
 import com.discord.widgets.friends.EmptyFriendsStateView
 import com.discord.widgets.hubs.events.WidgetHubEventsPage
+import com.discord.widgets.message_requests.WidgetMessageRequests
 import com.discord.widgets.user.search.WidgetGlobalSearchDialog
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.facebook.drawee.view.SimpleDraweeView
@@ -70,6 +71,8 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
     private lateinit var directMessagesTitle: TextView
     private lateinit var search: TextView
     private lateinit var startGroup: View
+    private lateinit var messageRequests: View
+    private lateinit var messageRequestsCount: TextView
     private lateinit var recycler: RecyclerView
     private lateinit var emptyFriendsState: EmptyFriendsStateView
     private lateinit var premiumGuildHint: ConstraintLayout
@@ -113,6 +116,7 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
         startGroup.setOnClickListener {
             GroupInviteFriendsSheet.show(parentFragmentManager, source = ANALYTICS_SOURCE)
         }
+        messageRequests.setOnClickListener { WidgetMessageRequests.show(requireContext()) }
         view.findViewById<View>(R.id.channels_list_premium_guild_hint_button)
             .setOnClickListener { ackPremiumGuildHint() }
 
@@ -168,6 +172,8 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
         directMessagesTitle = view.findViewById(R.id.channels_list_direct_messages_title)
         search = view.findViewById(R.id.channels_list_search)
         startGroup = view.findViewById(R.id.channels_list_start_group)
+        messageRequests = view.findViewById(R.id.channels_list_message_requests)
+        messageRequestsCount = view.findViewById(R.id.channels_list_message_requests_count)
         recycler = view.findViewById(R.id.channels_list)
         emptyFriendsState = view.findViewById(R.id.widget_channels_list_empty_friends_state_view)
         premiumGuildHint = view.findViewById(R.id.channels_list_premium_guild_hint)
@@ -340,6 +346,8 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
 
         privateChannelsHeader.visibility =
             if (!model.isGuildSelected && !model.showEmptyState) View.VISIBLE else View.GONE
+        messageRequests.visibility = if (model.messageRequestCount > 0) View.VISIBLE else View.GONE
+        messageRequestsCount.text = model.messageRequestCount.coerceAtMost(99).toString()
         search.visibility = if (model.isGuildSelected) View.GONE else View.VISIBLE
 
         header.text = guild?.name

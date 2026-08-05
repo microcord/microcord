@@ -205,6 +205,25 @@ class WidgetChannelListModelTest {
     }
 
     @Test
+    fun `message requests are grouped above regular direct messages`() {
+        val dm = channel(5, Channel.DM, name = "dm")
+        val request = channel(6, Channel.DM, name = "request").copy(isMessageRequest = true)
+        val spam = channel(7, Channel.DM, name = "spam").copy(isMessageRequest = true, isSpam = true)
+
+        val model = WidgetChannelListModel.privateListBuilder(
+            channels = listOf(dm, request, spam),
+            selectedChannelId = 0,
+            presences = emptyMap(),
+            mentionCounts = emptyMap(),
+            streamingUserIds = emptySet(),
+            notificationSettings = ModelNotificationSettings(),
+        )
+
+        assertEquals(2, model.messageRequestCount)
+        assertEquals(listOf(5L), model.items.filterIsInstance<ChannelListItemPrivate>().map { it.channel.id })
+    }
+
+    @Test
     fun `ready users hydrate the shipping direct message row nameplate`() {
         val scheduler = TestScheduler()
         val deck = ObservationDeck()

@@ -791,6 +791,15 @@ interface RestAPIInterface {
         @Path("recipientId") recipientId: Long,
     ): Observable<Void>
 
+    @PUT("channels/{channelId}/recipients/@me")
+    fun updateMessageRequest(
+        @Path("channelId") channelId: Long,
+        @Body body: RestAPIParams.MessageRequestConsentStatus,
+    ): Observable<Void>
+
+    @DELETE("channels/{channelId}/recipients/@me")
+    fun rejectMessageRequest(@Path("channelId") channelId: Long): Observable<Void>
+
     @POST("channels/{channelId}/typing")
     fun setUserTyping(
         @Path("channelId") channelId: Long,

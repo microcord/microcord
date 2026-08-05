@@ -23,10 +23,13 @@ import com.discord.activities.EmbeddedActivityLauncher
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isAnnouncementChannel
+import com.discord.api.channel.isPendingMessageRequestChannel
+import com.discord.api.channel.isSpamMessageRequestChannel
 import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.guild.GuildVerificationLevel
 import com.discord.api.permission.Permission
 import com.discord.app.AppFragment
+import com.discord.app.AppToast
 import com.discord.app.appActivityViewModels
 import com.discord.databinding.FlexInputWidgetBinding
 import com.discord.i18n.FormatUtils
@@ -43,6 +46,7 @@ import com.discord.utilities.duration.humanizeCountdownDuration
 import com.discord.utilities.messagesend.MessageResult
 import com.discord.utilities.messagesend.MessageSendCoordinator
 import com.discord.utilities.permissions.PermissionUtils
+import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.filterNull
 import com.discord.utilities.rx.restSubscribeOn
@@ -60,6 +64,7 @@ import com.discord.widgets.chat.input.emoji.EmojiPickerContextType
 import com.discord.widgets.chat.input.emoji.WidgetEmojiPicker
 import com.discord.widgets.chat.input.expression.WidgetExpressionTray
 import com.discord.widgets.forums.ForumPostCreateManager
+import com.discord.widgets.message_requests.setMessageRequestAccepted
 import com.google.android.material.button.MaterialButton
 import com.lytefast.flexinput.InputListener
 import com.lytefast.flexinput.fragment.FlexInputFragment
@@ -663,7 +668,8 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val showGuard = viewState.isLurking ||
             viewState.isVerificationLevelTriggered ||
             viewState.isSystemDM ||
-            viewState.shouldShowFollow
+            viewState.shouldShowFollow ||
+            viewState.channel.isPendingMessageRequestChannel()
         guard.visibility = if (showGuard) View.VISIBLE else View.GONE
         root.findViewById<View>(R.id.guard_member_verification).visibility =
             if (!showGuard && viewState.shouldShowVerificationGate) View.VISIBLE else View.GONE
@@ -678,6 +684,9 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         guardActionSecondary.visibility = View.GONE
 
         when {
+            viewState.channel.isPendingMessageRequestChannel() ->
+                configureMessageRequestGuard(guardText, guardSubtext, guardAction, guardActionSecondary, viewState)
+
             viewState.isSystemDM -> {
                 guardText.setText(R.string.system_dm_channel_description)
                 guardSubtext.setTextAndVisibilityBy(getString(R.string.system_dm_channel_description_subtext))
@@ -726,6 +735,64 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 }
             }
         }
+    }
+
+    private fun configureMessageRequestGuard(
+        text: TextView,
+        subtext: TextView,
+        primary: MaterialButton,
+        secondary: MaterialButton,
+        state: ChatInputViewModel.ViewState.Loaded,
+    ) {
+        val spam = state.channel.isSpamMessageRequestChannel()
+        text.setText(if (spam) R.string.message_requests_spam_guard_title else R.string.message_requests_guard_title)
+        subtext.setTextAndVisibilityBy(
+            getString(if (spam) R.string.message_requests_spam_guard_subtitle else R.string.message_requests_guard_subtitle),
+        )
+        bindGuardAction(
+            primary,
+            if (spam) R.string.message_requests_report_spam else R.string.message_requests_accept,
+            true,
+        ) { updateMessageRequest(state, accepted = !spam, primary, secondary) }
+        bindGuardAction(
+            secondary,
+            if (spam) R.string.message_requests_not_spam else R.string.message_requests_ignore,
+            true,
+        ) { updateMessageRequest(state, accepted = spam, primary, secondary) }
+    }
+
+    private fun updateMessageRequest(
+        state: ChatInputViewModel.ViewState.Loaded,
+        accepted: Boolean,
+        primary: MaterialButton,
+        secondary: MaterialButton,
+    ) {
+        val api = RestAPI.apiOrNull ?: return
+        primary.isEnabled = false
+        secondary.isEnabled = false
+        val request = api.setMessageRequestAccepted(state.channelId, accepted)
+        request.restSubscribeOn(false).ui(this).appSubscribe(
+            javaClass,
+            errorHandler = {
+                primary.isEnabled = true
+                secondary.isEnabled = true
+                AppToast.show(requireContext(), R.string.message_requests_action_failed)
+            },
+            onCompleted = {
+                if (accepted) {
+                    StoreStream.getChannels().onGroupCreated(
+                        state.channel.copy(isMessageRequest = false, isMessageRequestTimestamp = null, isSpam = false),
+                    )
+                } else {
+                    ChannelSelector.getInstance().selectChannel(0L, 0L)
+                }
+            },
+            onTerminated = {
+                primary.isEnabled = true
+                secondary.isEnabled = true
+            },
+            onNext = {},
+        )
     }
 
     private fun bindGuardAction(

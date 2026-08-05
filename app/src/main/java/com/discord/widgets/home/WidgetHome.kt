@@ -37,6 +37,7 @@ import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isGuildTextChannel
 import com.discord.api.channel.isGuildForumPost
 import com.discord.api.channel.isPrivate
+import com.discord.api.channel.isPendingMessageRequestChannel
 import com.discord.api.channel.isSystemDM
 import com.discord.api.channel.isThread
 import com.discord.app.appViewModels
@@ -53,6 +54,7 @@ import com.discord.widgets.settings.WidgetMuteSettingsSheet
 import com.discord.widgets.user.calls.PrivateCallLauncher
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.widgets.forums.WidgetForumBrowser
+import com.discord.widgets.message_requests.WidgetMessageRequests
 import com.discord.widgets.accessibility.AccessibilityDetectionNavigator
 import rx.Subscription
 
@@ -267,6 +269,10 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
             return
         }
         val selectedChannel = selected?.channel
+        if (selectedChannel?.isPendingMessageRequestChannel() == true) {
+            returnToMessageRequests()
+            return
+        }
         val parentChannel = selectedChannel?.let { StoreStream.getChannels().findChannelById(it.parentId) }
         if (selectedChannel?.isGuildForumPost(parentChannel) == true) {
             StoreStream.selectChannel(selectedChannel.guildId, selectedChannel.parentId)
@@ -304,6 +310,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         val parentChannel = StoreStream.getChannels().findChannelById(channel.parentId)
         val isForumPost = channel.isGuildForumPost(parentChannel) ||
             StoreStream.getThreadsActive().getAllForumThreadsById().containsKey(channel.id)
+        val isMessageRequest = channel.isPendingMessageRequestChannel()
         val title = when {
             isForumDraft -> getString(R.string.new_forum_post_new)
             threadDraft != null -> getString(R.string.create_thread)
@@ -321,10 +328,16 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
             },
         )
         setActionBarDisplayHomeAsUpEnabled(
-            iconRes = if (isForumPost || threadDraft != null) null else R.drawable.ic_menu_24dp,
-            iconAccessibilityLabel = if (isForumPost || threadDraft != null) R.string.back else R.string.toggle_drawer,
+            iconRes = if (isForumPost || threadDraft != null || isMessageRequest) null else R.drawable.ic_menu_24dp,
+            iconAccessibilityLabel = if (isForumPost || threadDraft != null || isMessageRequest) {
+                R.string.back
+            } else {
+                R.string.toggle_drawer
+            },
         )
-        toolbar.setNavigationOnClickListener { handleCenterPanelBack() }
+        toolbar.setNavigationOnClickListener {
+            if (isMessageRequest) returnToMessageRequests() else handleCenterPanelBack()
+        }
         if (toolbar.menu.size() == 0) {
             toolbar.inflateMenu(R.menu.menu_chat_toolbar)
         }
@@ -446,6 +459,11 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
 
     private fun openMuteSettings(channelId: Long) {
         WidgetMuteSettingsSheet.showForChannel(channelId, childFragmentManager)
+    }
+
+    private fun returnToMessageRequests() {
+        StoreStream.selectChannel(0L, 0L)
+        WidgetMessageRequests.show(requireContext())
     }
 
     private fun <T : View> View.findDescendant(type: Class<T>): T? {

@@ -2743,6 +2743,36 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   rehydration, `StoreChannelsSelected` may display the first available channel but no longer overwrites the
   user's requested channel intent. The existing reactive resolver returns to that channel when it reappears;
   an explicit user selection still replaces it. Focused store tests and `assembleDebug` pass; APK reinstalled.
+- Backported current RN message requests, a feature absent from 126.21. DM channels now retain the modern
+  `is_message_request`, request timestamp, and spam fields; pending/spam requests are removed from ordinary
+  DMs and surfaced through a counted Message Requests row. The modal uses RN-style centered/X chrome,
+  Requests/Spam segmented tabs, count headings, pending illustration empty states, 40dp sender rows,
+  relative timestamps, three-line previews, and 32dp accept/ignore actions. Preview opens the existing chat
+  surface with request/spam-specific guards instead of the normal composer. Accept/not-spam sends consent
+  status `2`; ignore/report-spam deletes `/channels/{id}/recipients/@me`. Focused DTO, route, channel-list,
+  predicate, and action tests plus `assembleDebug` pass; APK installed and cold-launches on WSA. Live action
+  verification remains open until the test account receives a request/spam DM.
+- Device follow-up replaced `MaterialButtonToggleGroup`, which crashes against the recovered overridden
+  MaterialButton background, with the existing first-party `SegmentedControlContainer`/`CardSegment` control.
+  The request pages now use RN's primary content surface beneath the secondary tab strip. Row actions use
+  separated 32dp circular surfaces, and sticker-only/attachment/embed requests render semantic preview labels
+  instead of the unloaded fallback. Focused request tests and `assembleDebug` pass; corrected APK reinstalled.
+- Message-request preview navigation now replaces the normal DM hamburger with Back; toolbar or hardware Back
+  clears the preview selection and reopens Message Requests. Row timestamps reserve 12dp before the fixed
+  action column, preventing collisions with accept/ignore. Focused request/home tests and `assembleDebug`
+  pass; APK reinstalled on WSA.
+- Moved the Message Requests entry from a full DM recycler row into a 40dp private-header action immediately
+  before Create Group DM, with a capped red count badge. The normal DM list remains request-free and the
+  header stays visible when requests are the only private-channel content. Focused channel-list tests and
+  `assembleDebug` pass; APK reinstalled on WSA.
+- Replaced the header's generic pending-state icon with the mail/conversation-request glyph. Pending/spam count
+  headings are now RecyclerView header rows via `ConcatAdapter`, so they scroll away with request content
+  instead of remaining pinned beneath the segmented tabs. Focused request tests and `assembleDebug` pass;
+  APK reinstalled on WSA.
+- Message-request actions now settle on `Observable<Void>.onCompleted`, matching the endpoint's 204 response,
+  so accept/ignore cannot remain loading forever. Preview waits for channel selection, then closes the home
+  side panel before dismissing. The first-party segmented control is 40dp tall to prevent Requests/Spam text
+  clipping. Focused request tests and `assembleDebug` pass; APK reinstalled on WSA.
 
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/applauncher/**` | Android 340.12
 Hermes `out.js` Apps launcher modules | log in on WSA and verify HOME/search/application/command/list

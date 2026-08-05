@@ -622,6 +622,8 @@ object RestAPIParams {
         }
     }
 
+    data class MessageRequestConsentStatus(val consentStatus: Int)
+
     data class PollVote(@SerializedName("answer_ids") val answerIds: List<Int>)
 
     /** `POST interactions` body for a modal submission. */

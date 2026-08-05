@@ -6,6 +6,7 @@ import com.discord.api.channel.getSortByMostRecent
 import com.discord.api.channel.getSortByNameAndType
 import com.discord.api.channel.isCategory
 import com.discord.api.channel.isDM
+import com.discord.api.channel.isPendingMessageRequestChannel
 import com.discord.api.channel.isThread
 import com.discord.api.guild.GuildFeature
 import com.discord.api.guild.GuildMaxVideoChannelUsers
@@ -71,6 +72,7 @@ data class WidgetChannelListModel(
     val showPremiumGuildHint: Boolean = false,
     val showEmptyState: Boolean = false,
     val guildScheduledEvents: List<GuildScheduledEvent> = emptyList(),
+    val messageRequestCount: Int = 0,
 ) {
 
     /**
@@ -495,7 +497,8 @@ data class WidgetChannelListModel(
             users: Map<Long, com.discord.models.user.User> = emptyMap(),
             friendNicknames: Map<Long, String> = emptyMap(),
         ): WidgetChannelListModel {
-            val rows = channels.map { channel ->
+            val requestCount = channels.count(Channel::isPendingMessageRequestChannel)
+            val rows = channels.filterNot(Channel::isPendingMessageRequestChannel).map { channel ->
                 val recipientId = channel.getDMRecipient()?.id
                     ?: channel.recipientIds?.singleOrNull().takeIf { channel.isDM() }
                 // A private channel is where the friend nickname applies, so it outranks the
@@ -526,7 +529,8 @@ data class WidgetChannelListModel(
             return WidgetChannelListModel(
                 selectedGuild = null,
                 items = rows + ChannelListBottomNavSpaceItem(),
-                showEmptyState = rows.isEmpty(),
+                showEmptyState = rows.isEmpty() && requestCount == 0,
+                messageRequestCount = requestCount,
             )
         }
 

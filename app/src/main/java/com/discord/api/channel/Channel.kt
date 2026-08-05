@@ -40,6 +40,9 @@ data class Channel(
     val memberCount: Int?,
     val memberIdsPreview: List<Long>?,
     val member: ThreadMember?,
+    val isMessageRequest: Boolean = false,
+    val isMessageRequestTimestamp: String? = null,
+    val isSpam: Boolean = false,
 ) {
     companion object {
         const val GUILD_TEXT = 0

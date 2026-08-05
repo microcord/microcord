@@ -4,6 +4,7 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.isAnnouncementChannel
 import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isSystemDM
+import com.discord.api.channel.isPendingMessageRequestChannel
 import com.discord.api.channel.isThread
 import com.discord.api.channel.getDMRecipient
 import com.discord.api.guild.GuildVerificationLevel
@@ -239,6 +240,7 @@ class ChatInputViewModel(
         val isCommunicationDisabled = meGuildMember?.isCommunicationDisabled() == true
 
         val isInputShowing = !channel.isSystemDM() &&
+            !channel.isPendingMessageRequestChannel() &&
             !isLurking &&
             !isVerificationLevelTriggered &&
             !shouldShowFollow &&

@@ -57,6 +57,13 @@ fun Channel.isPrivate(): Boolean = type == Channel.DM || type == Channel.GROUP_D
 fun Channel.isSystemDM(): Boolean =
     type == Channel.DM && recipients?.firstOrNull()?.system == true
 
+fun Channel.isMessageRequestChannel(): Boolean = isDM() && isMessageRequest && !isSpam
+
+fun Channel.isSpamMessageRequestChannel(): Boolean = isDM() && isSpam
+
+fun Channel.isPendingMessageRequestChannel(): Boolean =
+    isMessageRequestChannel() || isSpamMessageRequestChannel()
+
 fun Channel.isCategory(): Boolean = type == Channel.CATEGORY
 
 fun Channel.isAnnouncementChannel(): Boolean = type == Channel.GUILD_ANNOUNCEMENT

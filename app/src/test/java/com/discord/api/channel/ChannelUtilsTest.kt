@@ -52,6 +52,17 @@ class ChannelUtilsTest {
         notTexty.forEach { assertFalse("type $it", channel(type = it).isGuildTextyChannel()) }
     }
 
+    @Test fun `message requests distinguish pending and spam DMs`() {
+        val request = channel(type = Channel.DM).copy(isMessageRequest = true)
+        val spam = request.copy(isSpam = true)
+
+        assertTrue(request.isMessageRequestChannel())
+        assertFalse(request.isSpamMessageRequestChannel())
+        assertTrue(spam.isSpamMessageRequestChannel())
+        assertTrue(spam.isPendingMessageRequestChannel())
+        assertFalse(channel(type = Channel.GROUP_DM).copy(isMessageRequest = true).isPendingMessageRequestChannel())
+    }
+
     @Test fun `thread only covers forum and media channels`() {
         assertTrue(channel(type = Channel.GUILD_FORUM).isThreadOnlyChannel())
         assertTrue(channel(type = Channel.GUILD_MEDIA).isThreadOnlyChannel())

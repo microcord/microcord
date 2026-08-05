@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:minHeight="76dp"
+    android:paddingTop="14dp"
+    android:paddingBottom="12dp">
+
+    <com.facebook.drawee.view.SimpleDraweeView
+        android:id="@+id/message_request_avatar"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:importantForAccessibility="no"
+        app:roundAsCircle="true"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/message_request_name"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="?attr/colorHeaderPrimary"
+        android:textSize="16sp"
+        style="@style/UiKit.TextView.Semibold"
+        app:layout_constraintEnd_toStartOf="@id/message_request_timestamp"
+        app:layout_constraintStart_toEndOf="@id/message_request_avatar"
+        app:layout_constraintTop_toTopOf="@id/message_request_avatar" />
+
+    <TextView
+        android:id="@+id/message_request_timestamp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:layout_marginEnd="12dp"
+        android:textColor="?attr/colorTextMuted"
+        android:textSize="12sp"
+        style="@style/UiKit.TextView.Semibold"
+        app:layout_constraintBaseline_toBaselineOf="@id/message_request_name"
+        app:layout_constraintEnd_toStartOf="@id/message_request_accept" />
+
+    <TextView
+        android:id="@+id/message_request_preview"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:maxLines="3"
+        android:textColor="?attr/colorHeaderSecondary"
+        android:textSize="12sp"
+        style="@style/UiKit.TextView.Medium"
+        app:layout_constraintEnd_toStartOf="@id/message_request_accept"
+        app:layout_constraintStart_toStartOf="@id/message_request_name"
+        app:layout_constraintTop_toBottomOf="@id/message_request_name" />
+
+    <ImageButton
+        android:id="@+id/message_request_accept"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_marginEnd="16dp"
+        android:background="@drawable/bg_message_request_action_circle"
+        android:contentDescription="@string/message_requests_accept"
+        android:padding="8dp"
+        android:src="@drawable/ic_check_white_24dp"
+        app:tint="?attr/colorInteractiveNormal"
+        app:layout_constraintEnd_toStartOf="@id/message_request_reject"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <ImageButton
+        android:id="@+id/message_request_reject"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:background="@drawable/bg_message_request_action_circle"
+        android:contentDescription="@string/message_requests_ignore"
+        android:padding="8dp"
+        android:src="@drawable/ic_close_white_24dp"
+        app:tint="?attr/colorInteractiveNormal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <View
+        android:layout_width="0dp"
+        android:layout_height="1dp"
+        android:layout_marginTop="12dp"
+        android:background="?attr/colorBackgroundModifierAccent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="@id/message_request_name"
+        app:layout_constraintTop_toBottomOf="@id/message_request_preview" />
+</androidx.constraintlayout.widget.ConstraintLayout>
