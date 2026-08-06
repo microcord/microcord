@@ -305,8 +305,11 @@ class WidgetUserSheet : AppBottomSheet() {
         TextViewCompat.setCompoundDrawableTintList(binding.userSheetCopyId, ColorStateList.valueOf(iconColor))
         tintTaggedIcons(iconColor)
         profileActionButtons().forEach { button ->
-            button.setTextColor(ColorStateList.valueOf(colors?.textDefault ?: iconColor))
-            TextViewCompat.setCompoundDrawableTintList(button, ColorStateList.valueOf(iconColor))
+            button.setTextColor(colors?.textDefault?.let(ColorStateList::valueOf) ?: defaultTextColors.getValue(button))
+            TextViewCompat.setCompoundDrawableTintList(
+                button,
+                colors?.textDefault?.let(ColorStateList::valueOf),
+            )
         }
         binding.userSheetAddFriendActionButton.setTextColor(ColorCompat.getColor(requireContext(), R.color.status_green_600))
         binding.userSheetPendingFriendRequestActionButton.setTextColor(ColorCompat.getColor(requireContext(), R.color.status_yellow_500))
