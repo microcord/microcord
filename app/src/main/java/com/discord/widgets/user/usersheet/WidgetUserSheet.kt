@@ -32,6 +32,9 @@ import com.discord.app.AppLog
 import com.discord.app.appViewModels
 import com.discord.i18n.i18nFormat
 import com.discord.stores.StoreNavigation
+import android.view.ViewTreeObserver
+import com.discord.api.collectibles.ProfileFrameItem
+import com.google.android.material.R as MaterialR
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUserNotes
 import com.discord.utilities.channel.ChannelSelector
@@ -55,6 +58,7 @@ import com.discord.widgets.user.WidgetKickUser
 import com.discord.widgets.user.WidgetUserMutualFriends
 import com.discord.widgets.user.WidgetUserMutualGuilds
 import com.discord.widgets.user.presence.ViewHolderUserRichPresence
+import com.discord.widgets.user.profile.ProfileFrameView
 import com.discord.widgets.user.profile.UserProfileHeaderViewModel
 import com.discord.widgets.user.profile.ProfileThemeColors
 import com.google.android.material.button.MaterialButton
@@ -114,6 +118,10 @@ class WidgetUserSheet : AppBottomSheet() {
     private var defaultTextColors = emptyMap<TextView, ColorStateList>()
     private var defaultNoteTheme: UserSheetNoteTheme? = null
     private var profileThemeColors: ProfileThemeColors? = null
+    private var profileFrames: Map<Long, ProfileFrameItem> = emptyMap()
+    private var equippedFrameSkuId: Long? = null
+    private var frameViews: FrameViews? = null
+    private val frameAnchorListener = ViewTreeObserver.OnPreDrawListener { anchorProfileFrame() }
 
     private val messageNavigator by lazy(LazyThreadSafetyMode.NONE) {
         UserSheetMessageNavigator(
@@ -169,9 +177,27 @@ class WidgetUserSheet : AppBottomSheet() {
         viewModel.observeEvents()
             .ui(this)
             .appSubscribe(WidgetUserSheet::class.java) { handleEvent(it) }
+
+        // Frame artwork arrives after the profile it belongs to, so it is watched separately
+        // rather than holding up the rest of the sheet.
+        StoreStream.getUserProfiles().observeProfileFrames()
+            .ui(this)
+            .appSubscribe(WidgetUserSheet::class.java) { frames ->
+                profileFrames = frames
+                configureProfileFrame()
+            }
     }
 
     override fun onDestroyView() {
+        // The frame lives in the dialog, not in this fragment's view, so it outlives the binding.
+        frameViews?.let { views ->
+            (views.front.parent as? ViewGroup)?.let { decor ->
+                decor.viewTreeObserver.removeOnPreDrawListener(frameAnchorListener)
+                decor.removeView(views.front)
+                decor.removeView(views.back)
+            }
+        }
+        frameViews = null
         _binding?.userSheetProfileEffect?.clear()
         defaultButtonBackgroundTints = emptyMap()
         defaultButtonTextColors = emptyMap()
@@ -265,6 +291,8 @@ class WidgetUserSheet : AppBottomSheet() {
         header.updateViewState(headerState)
         applyProfileTheme(headerState)
         configureProfileEffect(headerState)
+        equippedFrameSkuId = state.userProfile.equippedProfileFrameSkuId()
+        configureProfileFrame()
     }
 
     private fun applyProfileTheme(state: UserProfileHeaderViewModel.ViewState.Loaded) {
@@ -390,6 +418,51 @@ class WidgetUserSheet : AppBottomSheet() {
         val effect = requireNotNull(binding.userSheetProfileEffect)
         effect.bind(state.profileEffect, state.reducedMotionEnabled && !state.allowAnimationInReducedMotion)
     }
+
+    /**
+     * Mounts the frame beside the sheet rather than inside it.
+     *
+     * A frame's top staple is drawn hanging above the profile's top edge, and everything above that
+     * edge is outside the sheet — a scrolling container that clips. So the two halves are attached
+     * either side of the sheet in the dialog itself, where the overhang has somewhere to draw, and
+     * follow the sheet's edge as it is dragged.
+     */
+    private fun configureProfileFrame() {
+        val sheet = dialog?.findViewById<View>(MaterialR.id.design_bottom_sheet) ?: return
+        val decor = sheet.parent as? ViewGroup ?: return
+        val frame = equippedFrameSkuId?.let(profileFrames::get)
+        if (frame == null && frameViews == null) return
+
+        val views = frameViews ?: FrameViews(
+            back = ProfileFrameView(requireContext()).apply { half = ProfileFrameView.Half.BACK },
+            front = ProfileFrameView(requireContext()),
+        ).also { created ->
+            frameViews = created
+            val params = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+            decor.addView(created.back, decor.indexOfChild(sheet), params)
+            decor.addView(created.front, params)
+            decor.viewTreeObserver.addOnPreDrawListener(frameAnchorListener)
+        }
+        views.back.bind(frame)
+        views.front.bind(frame)
+        anchorProfileFrame()
+    }
+
+    private fun anchorProfileFrame(): Boolean {
+        val views = frameViews ?: return true
+        val sheet = dialog?.findViewById<View>(MaterialR.id.design_bottom_sheet) ?: return true
+        val decor = sheet.parent as? ViewGroup ?: return true
+        val left = sheet.left
+        val top = sheet.top - decor.paddingTop
+        views.back.anchorTo(left, top, sheet.width)
+        views.front.anchorTo(left, top, sheet.width)
+        return true
+    }
+
+    private class FrameViews(val back: ProfileFrameView, val front: ProfileFrameView)
 
     /**
      * The activity card. The holder is rebuilt only when the *shape* of the activity changes;

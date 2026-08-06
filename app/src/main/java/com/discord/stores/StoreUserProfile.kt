@@ -1,5 +1,7 @@
 package com.discord.stores
 
+import com.discord.api.collectibles.ProfileFrameItem
+import com.discord.api.collectibles.ProfileFrameProduct
 import com.discord.api.guildmember.GuildMember
 import com.discord.api.user.User
 import com.discord.api.user.UserProfile
@@ -23,6 +25,11 @@ class StoreUserProfile(
         onSuccess: (UserProfile.ProfileEffectProduct) -> Unit,
         onFailure: () -> Unit,
     ) -> Unit = { _, _, failure -> failure() },
+    private val fetchProfileFrame: (
+        skuId: Long,
+        onSuccess: (ProfileFrameProduct) -> Unit,
+        onFailure: () -> Unit,
+    ) -> Unit = { _, _, failure -> failure() },
 ) : StoreV2() {
     private val profiles = HashMap<Long, UserProfile>()
     /**
@@ -38,6 +45,9 @@ class StoreUserProfile(
     private val profileEffectProducts = HashMap<Long, UserProfile.ProfileEffectProduct>()
     private val profileEffectsLoading = HashSet<Long>()
     private var profileEffectGeneration = 0
+    private val profileFrames = HashMap<Long, ProfileFrameItem>()
+    private val profileFramesLoading = HashSet<Long>()
+    private var profileFramesSnapshot: Map<Long, ProfileFrameItem> = emptyMap()
     private var profilesSnapshot: Map<Long, UserProfile> = emptyMap()
     private var profilesLoadingSnapshot: Set<Long> = emptySet()
     private var profileErrorsSnapshot: Set<Long> = emptySet()
@@ -61,6 +71,31 @@ class StoreUserProfile(
      */
     fun observeProfileEffectProducts(): Observable<Map<Long, UserProfile.ProfileEffectProduct>> =
         observationDeck.connectRx(this) { profileEffectProductsSnapshot }.distinctUntilChanged()
+
+    /** Frame artwork keyed by SKU, for the same reason [observeProfileEffectProducts] is exposed. */
+    fun observeProfileFrames(): Observable<Map<Long, ProfileFrameItem>> =
+        observationDeck.connectRx(this) { profileFramesSnapshot }.distinctUntilChanged()
+
+    fun fetchProfileFrameIfMissing(skuId: Long) = dispatcher.schedule {
+        if (skuId in profileFrames || !profileFramesLoading.add(skuId)) return@schedule
+        val generation = profileEffectGeneration
+        fetchProfileFrame(
+            skuId,
+            { product ->
+                dispatcher.schedule {
+                    if (generation != profileEffectGeneration) return@schedule
+                    profileFramesLoading.remove(skuId)
+                    product.frame()?.let { profileFrames[skuId] = it }
+                    markChanged()
+                }
+            },
+            {
+                dispatcher.schedule {
+                    if (generation == profileEffectGeneration) profileFramesLoading.remove(skuId)
+                }
+            },
+        )
+    }
 
     fun fetchProfileEffectIfMissing(skuId: Long) = dispatcher.schedule {
         if (skuId in profileEffectProducts || !profileEffectsLoading.add(skuId)) return@schedule
@@ -154,6 +189,7 @@ class StoreUserProfile(
         val resolved = resolveProfileEffects(userProfile)
         profiles[userProfile.user.id] = resolved
         loadProfileEffects(resolved)
+        loadProfileFrames(resolved)
         markChanged()
     }
 
@@ -166,6 +202,8 @@ class StoreUserProfile(
         profileErrors.clear()
         profileEffectProducts.clear()
         profileEffectsLoading.clear()
+        profileFrames.clear()
+        profileFramesLoading.clear()
         profileEffectGeneration++
         markChanged()
     }
@@ -175,6 +213,7 @@ class StoreUserProfile(
         profilesLoadingSnapshot = HashSet(profilesLoading)
         profileErrorsSnapshot = HashSet(profileErrors)
         profileEffectProductsSnapshot = HashMap(profileEffectProducts)
+        profileFramesSnapshot = HashMap(profileFrames)
     }
 
     @StoreThread
@@ -207,6 +246,11 @@ class StoreUserProfile(
         profiles[userId] = resolved
         loadProfileEffects(resolved)
         markChanged()
+    }
+
+    @StoreThread
+    private fun loadProfileFrames(profile: UserProfile) {
+        profile.equippedProfileFrameSkuId()?.let(::fetchProfileFrameIfMissing)
     }
 
     @StoreThread

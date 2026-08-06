@@ -35,6 +35,8 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
     private lateinit var premiumUpsell: MaterialButton
     private lateinit var profileEffectItem: View
     private lateinit var profileEffectDescription: TextView
+    private lateinit var profileFrameItem: View
+    private lateinit var profileFrameDescription: TextView
 
     override fun getContentViewResId() = R.layout.widget_edit_profile_banner_sheet
 
@@ -48,6 +50,8 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
         premiumUpsell = view.findViewById(R.id.premium_upsell_button)
         profileEffectItem = view.findViewById(R.id.banner_profile_effect_item)
         profileEffectDescription = view.findViewById(R.id.banner_profile_effect_item_description)
+        profileFrameItem = view.findViewById(R.id.banner_profile_frame_item)
+        profileFrameDescription = view.findViewById(R.id.banner_profile_frame_item_description)
 
         val hasBanner = argumentsOrDefault.getBoolean(ARG_HAS_BANNER_IMAGE)
         changeImageTitle.setText(
@@ -63,6 +67,12 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
             ?: getString(R.string.avatar_decoration_none)
         profileEffectItem.setOnClickListener {
             sendResult(ACTION_PROFILE_EFFECT)
+            dismiss()
+        }
+        profileFrameDescription.text = argumentsOrDefault.getString(ARG_PROFILE_FRAME_NAME)
+            ?: getString(R.string.avatar_decoration_none)
+        profileFrameItem.setOnClickListener {
+            sendResult(ACTION_PROFILE_FRAME)
             dismiss()
         }
         parentFragmentManager.setFragmentResultListener(
@@ -146,6 +156,7 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
         private const val ARG_INITIAL_COLOR_PREVIEW_HEX = "ARG_INITIAL_COLOR_PREVIEW_HEX"
         private const val ARG_HAS_BANNER_IMAGE = "ARG_HAS_BANNER_IMAGE"
         private const val ARG_PROFILE_EFFECT_NAME = "ARG_PROFILE_EFFECT_NAME"
+        private const val ARG_PROFILE_FRAME_NAME = "ARG_PROFILE_FRAME_NAME"
         private const val EXTRA_GUILD_ID = "com.discord.intent.extra.EXTRA_GUILD_ID"
         internal const val REQUEST_KEY = "EDIT_PROFILE_BANNER"
         internal const val RESULT_ACTION = "action"
@@ -155,6 +166,7 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
         internal const val ACTION_REMOVE_IMAGE = "remove_image"
         internal const val ACTION_COLOR = "color"
         internal const val ACTION_PROFILE_EFFECT = "profile_effect"
+        internal const val ACTION_PROFILE_FRAME = "profile_frame"
 
         fun show(
             guildId: Long? = null,
@@ -162,6 +174,7 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
             initialColorPreviewHex: String?,
             hasBannerImage: Boolean,
             profileEffectName: String?,
+            profileFrameName: String?,
             fragmentManager: FragmentManager,
         ) {
             WidgetEditProfileBannerSheet().apply {
@@ -170,6 +183,7 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
                     putString(ARG_INITIAL_COLOR_PREVIEW_HEX, initialColorPreviewHex)
                     putBoolean(ARG_HAS_BANNER_IMAGE, hasBannerImage)
                     putString(ARG_PROFILE_EFFECT_NAME, profileEffectName)
+                    putString(ARG_PROFILE_FRAME_NAME, profileFrameName)
                     guildId?.let { putLong(EXTRA_GUILD_ID, it) }
                 }
             }.show(fragmentManager, WidgetEditProfileBannerSheet::class.java.name)

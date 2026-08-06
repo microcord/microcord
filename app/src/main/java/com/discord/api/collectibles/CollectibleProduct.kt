@@ -49,12 +49,26 @@ data class CollectibleProduct(
     fun profileEffectThumbnail(): String? = item(TYPE_PROFILE_EFFECT)
         ?.let { it.thumbnailPreviewSrc ?: it.staticFrameSrc }
 
+    /** The purchases response carries a frame's full layer list, so no product fetch is needed. */
+    fun profileFrame(): ProfileFrameItem? = item(TYPE_PROFILE_FRAME)?.let { item ->
+        ProfileFrameItem(
+            skuId = item.skuId,
+            label = item.label,
+            layers = item.layers,
+            innerWidth = item.innerWidth ?: ProfileFrameItem.DEFAULT_INNER_WIDTH,
+            overflowTop = item.overflowTop ?: 0,
+            overflowBottom = item.overflowBottom ?: 0,
+            overflowHorizontal = item.overflowHorizontal ?: 0,
+        )
+    }
+
     private fun item(type: Int) = items.firstOrNull { it.type == type }
 
     companion object {
         const val TYPE_AVATAR_DECORATION = 0
         const val TYPE_PROFILE_EFFECT = 1
         const val TYPE_NAMEPLATE = 2
+        const val TYPE_PROFILE_FRAME = 3
         private const val PURCHASE_TYPE_SUBSCRIPTION = 7
         private const val PREMIUM_TYPE_NONE = 0
     }
@@ -76,6 +90,15 @@ data class CollectibleItem(
     val thumbnailPreviewSrc: String? = null,
     @SerializedName(value = "staticFrameSrc", alternate = ["static_frame_src"])
     val staticFrameSrc: String? = null,
+    val layers: List<ProfileFrameLayer> = emptyList(),
+    @SerializedName(value = "innerWidth", alternate = ["inner_width"])
+    val innerWidth: Int? = null,
+    @SerializedName(value = "overflowTop", alternate = ["overflow_top"])
+    val overflowTop: Int? = null,
+    @SerializedName(value = "overflowBottom", alternate = ["overflow_bottom"])
+    val overflowBottom: Int? = null,
+    @SerializedName(value = "overflowHorizontal", alternate = ["overflow_horizontal"])
+    val overflowHorizontal: Int? = null,
 ) : Serializable
 
 data class CollectibleItemAssets(

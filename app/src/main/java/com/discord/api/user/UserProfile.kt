@@ -43,6 +43,17 @@ data class UserProfile(
     val badges: List<ProfileBadge>? = null,
     val guildBadges: List<ProfileBadge>? = null,
 ) {
+    /**
+     * The frame this profile is wearing, if any.
+     *
+     * A per-guild identity replaces the global one outright rather than merging into it, which is
+     * why a guild profile with no frame hides the global one.
+     */
+    fun equippedProfileFrameSkuId(): Long? =
+        (guildMemberProfile ?: userProfile)?.collectibles
+            ?.firstOrNull { it.type == PROFILE_FRAME_TYPE }
+            ?.skuId
+
     data class GuildReference(val id: Long, val nick: String?)
 
     data class ProfileBadge(
@@ -139,4 +150,8 @@ data class UserProfile(
     )
 
     data class ProfileEffectSource(val src: String)
+
+    private companion object {
+        const val PROFILE_FRAME_TYPE = 3
+    }
 }

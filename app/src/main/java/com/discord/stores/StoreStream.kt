@@ -348,6 +348,11 @@ class StoreStream private constructor(
                 restApi.getCollectiblesProduct(skuId, userSettingsSystem.getLocale())
                     .subscribeOn(Schedulers.io()).subscribe(success, { failure() })
         },
+        fetchProfileFrame = { skuId, success, failure ->
+            if (!::restApi.isInitialized) failure() else
+                restApi.getProfileFrameProduct(skuId, userSettingsSystem.getLocale())
+                    .subscribeOn(Schedulers.io()).subscribe(success, { failure() })
+        },
     )
     private val guildProfiles = StoreGuildProfiles(dispatcher, observationDeck)
     private val guildWelcomeScreens = StoreGuildWelcomeScreens(dispatcher, observationDeck)

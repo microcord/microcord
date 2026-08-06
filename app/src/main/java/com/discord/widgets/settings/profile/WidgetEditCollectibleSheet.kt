@@ -26,6 +26,7 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.view.recycler.MaxHeightRecyclerView
 import com.discord.views.AvatarDecorationView
 import com.discord.views.NameplateView
+import com.discord.widgets.user.profile.ProfileFrameView
 import com.discord.widgets.settings.premium.WidgetSettingsPremium
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.button.MaterialButton
@@ -42,7 +43,7 @@ import rx.subscriptions.CompositeSubscription
  */
 class WidgetEditCollectibleSheet : AppBottomSheet() {
 
-    enum class Kind { AVATAR_DECORATION, NAMEPLATE, PROFILE_EFFECT }
+    enum class Kind { AVATAR_DECORATION, NAMEPLATE, PROFILE_EFFECT, PROFILE_FRAME }
 
     private sealed class Option {
         object None : Option()
@@ -67,6 +68,8 @@ class WidgetEditCollectibleSheet : AppBottomSheet() {
     private lateinit var nameplatePreview: FrameLayout
     private lateinit var effectPreview: FrameLayout
     private lateinit var effectImage: SimpleDraweeView
+    private lateinit var framePreview: FrameLayout
+    private lateinit var frameView: ProfileFrameView
     private lateinit var nameplateView: NameplateView
     private lateinit var nameplateAvatar: SimpleDraweeView
     private lateinit var nameplateName: TextView
@@ -91,6 +94,9 @@ class WidgetEditCollectibleSheet : AppBottomSheet() {
         nameplatePreview = view.findViewById(R.id.collectible_sheet_nameplate_preview)
         effectPreview = view.findViewById(R.id.collectible_sheet_effect_preview)
         effectImage = view.findViewById(R.id.collectible_sheet_effect_image)
+        framePreview = view.findViewById(R.id.collectible_sheet_frame_preview)
+        frameView = view.findViewById(R.id.collectible_sheet_frame)
+        frameView.half = ProfileFrameView.Half.BOTH
         nameplateView = view.findViewById(R.id.collectible_sheet_nameplate)
         nameplateAvatar = view.findViewById(R.id.collectible_sheet_nameplate_avatar)
         nameplateName = view.findViewById(R.id.collectible_sheet_nameplate_name)
@@ -111,6 +117,7 @@ class WidgetEditCollectibleSheet : AppBottomSheet() {
                 Kind.AVATAR_DECORATION -> R.string.collectibles_change_avatar_decoration
                 Kind.NAMEPLATE -> R.string.collectibles_change_nameplate
                 Kind.PROFILE_EFFECT -> R.string.collectibles_change_profile_effect
+                Kind.PROFILE_FRAME -> R.string.collectibles_change_profile_frame
             },
         )
         section.setText(
@@ -118,6 +125,7 @@ class WidgetEditCollectibleSheet : AppBottomSheet() {
                 Kind.AVATAR_DECORATION -> R.string.collectibles_your_decorations
                 Kind.NAMEPLATE -> R.string.collectibles_your_nameplates
                 Kind.PROFILE_EFFECT -> R.string.collectibles_your_profile_effects
+                Kind.PROFILE_FRAME -> R.string.collectibles_your_profile_frames
             },
         )
         empty.setText(
@@ -125,15 +133,18 @@ class WidgetEditCollectibleSheet : AppBottomSheet() {
                 Kind.AVATAR_DECORATION -> R.string.collectibles_empty_decorations
                 Kind.NAMEPLATE -> R.string.collectibles_empty_nameplates
                 Kind.PROFILE_EFFECT -> R.string.collectibles_empty_profile_effects
+                Kind.PROFILE_FRAME -> R.string.collectibles_empty_profile_frames
             },
         )
         decorationPreview.visibility = View.GONE
         nameplatePreview.visibility = View.GONE
         effectPreview.visibility = View.GONE
+        framePreview.visibility = View.GONE
         when (kind) {
             Kind.AVATAR_DECORATION -> decorationPreview.visibility = View.VISIBLE
             Kind.NAMEPLATE -> nameplatePreview.visibility = View.VISIBLE
             Kind.PROFILE_EFFECT -> effectPreview.visibility = View.VISIBLE
+            Kind.PROFILE_FRAME -> framePreview.visibility = View.VISIBLE
         }
 
         StoreStream.getUsers().getMe().let { me ->
@@ -182,6 +193,7 @@ class WidgetEditCollectibleSheet : AppBottomSheet() {
             Kind.AVATAR_DECORATION -> CollectibleProduct.TYPE_AVATAR_DECORATION
             Kind.NAMEPLATE -> CollectibleProduct.TYPE_NAMEPLATE
             Kind.PROFILE_EFFECT -> CollectibleProduct.TYPE_PROFILE_EFFECT
+            Kind.PROFILE_FRAME -> CollectibleProduct.TYPE_PROFILE_FRAME
         }
         val owned = state.purchases.values
             .filter { product -> product.items.any { it.type == type } && product.isActive() }
@@ -213,6 +225,7 @@ class WidgetEditCollectibleSheet : AppBottomSheet() {
             Kind.NAMEPLATE ->
                 nameplateView.bind(product?.nameplate(), NameplateView.Placement.MEMBER_LIST, selected = true)
             Kind.PROFILE_EFFECT -> effectImage.setImageURI(product?.profileEffectThumbnail())
+            Kind.PROFILE_FRAME -> frameView.bind(product?.profileFrame())
         }
         // Owning a Nitro-exclusive item is not enough once the subscription lapses, so the button
         // becomes the upsell rather than the tile becoming unselectable.
@@ -312,6 +325,7 @@ class WidgetEditCollectibleSheet : AppBottomSheet() {
         Kind.AVATAR_DECORATION -> avatarDecoration()?.imageUrls(animate = false)?.firstOrNull()
         Kind.NAMEPLATE -> nameplate()?.staticImageUrl()
         Kind.PROFILE_EFFECT -> profileEffectThumbnail()
+        Kind.PROFILE_FRAME -> profileFrame()?.topStaples()?.firstOrNull()?.assetUrl(skuId)
     }
 
     private fun android.content.res.Resources.tileSize() = (TILE_HEIGHT_DP * displayMetrics.density).toInt()

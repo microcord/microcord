@@ -224,6 +224,15 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
                             loaded.previewProfileEffect,
                         )
                     }
+                WidgetEditProfileBannerSheet.ACTION_PROFILE_FRAME ->
+                    (viewModel.viewState as? SettingsUserProfileViewModel.ViewState.Loaded)?.let { loaded ->
+                        WidgetEditCollectibleSheet.show(
+                            parentFragmentManager,
+                            WidgetEditCollectibleSheet.Kind.PROFILE_FRAME,
+                            loaded.guild?.id,
+                            loaded.previewProfileFrame,
+                        )
+                    }
                 WidgetEditProfileBannerSheet.ACTION_COLOR -> viewModel.updateBannerColor(
                     result.takeIf { it.getBoolean(WidgetEditProfileBannerSheet.RESULT_HAS_COLOR) }
                         ?.getInt(WidgetEditProfileBannerSheet.RESULT_COLOR)
@@ -268,6 +277,7 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
                 WidgetEditCollectibleSheet.Kind.AVATAR_DECORATION -> viewModel.selectAvatarDecoration(skuId)
                 WidgetEditCollectibleSheet.Kind.NAMEPLATE -> viewModel.selectNameplate(skuId)
                 WidgetEditCollectibleSheet.Kind.PROFILE_EFFECT -> viewModel.selectProfileEffect(skuId)
+                WidgetEditCollectibleSheet.Kind.PROFILE_FRAME -> viewModel.selectProfileFrame(skuId)
             }
         }
         childFragmentManager.setFragmentResultListener(
@@ -579,6 +589,7 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
             initialColorPreviewHex = state.nonDefaultColorPreviewHex,
             hasBannerImage = state.hasBannerImageForDisplay,
             profileEffectName = state.profileEffectName,
+            profileFrameName = state.profileFrameName,
             fragmentManager = parentFragmentManager,
         )
     }

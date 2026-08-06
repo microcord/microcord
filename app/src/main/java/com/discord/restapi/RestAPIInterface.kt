@@ -25,6 +25,7 @@ import com.discord.api.billing.BillingCountryCode
 import com.discord.api.bugreport.BugReportConfig
 import com.discord.api.channel.Channel
 import com.discord.api.collectibles.CollectibleProduct
+import com.discord.api.collectibles.ProfileFrameProduct
 import com.discord.api.commands.ApplicationCommandData
 import com.discord.api.connectedaccounts.ConnectedAccount
 import com.discord.api.creatormonetization.CreatorMonetizationEligibilityRequirements
@@ -1751,6 +1752,13 @@ interface RestAPIInterface {
         @Path("skuId") skuId: Long,
         @Query("locale") locale: String,
     ): Observable<UserProfile.ProfileEffectProduct>
+
+    /** The same product, read as a frame; the response carries every item type behind one shape. */
+    @GET("collectibles-products/{skuId}")
+    fun getProfileFrameProduct(
+        @Path("skuId") skuId: Long,
+        @Query("locale") locale: String,
+    ): Observable<ProfileFrameProduct>
 
     @POST("store/skus/{skuId}/purchase")
     fun claimSku(

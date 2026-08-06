@@ -73,6 +73,8 @@ class SettingsUserProfileViewModel(
         val themeColorsCleared: Boolean = false,
         val profileEffect: Long? = null,
         val profileEffectCleared: Boolean = false,
+        val profileFrame: Long? = null,
+        val profileFrameCleared: Boolean = false,
     ) : Serializable
 
     data class StoreState(
@@ -107,13 +109,14 @@ class SettingsUserProfileViewModel(
             val currentNameplate: NullSerializable<Nameplate>? = null,
             val currentThemeColors: NullSerializable<List<Int>>? = null,
             val currentProfileEffect: NullSerializable<Long>? = null,
+            val currentProfileFrame: NullSerializable<Long>? = null,
         ) : ViewState() {
             /** The metadata this screen edits: the guild profile in a guild, the global one otherwise. */
             val savedProfile = if (meMember != null) userProfile.guildMemberProfile else userProfile.userProfile
             val isDirty = currentAvatar != null || currentBannerImage != null ||
                 currentBannerColorHex != null || isBioChanged || isPronounsChanged ||
                 currentAvatarDecoration != null || currentNameplate != null ||
-                currentThemeColors != null || currentProfileEffect != null ||
+                currentThemeColors != null || currentProfileEffect != null || currentProfileFrame != null ||
                 (meMember != null && currentNickname.orEmpty() != meMember.nick.orEmpty()) ||
                 (meMember == null && isDisplayNameChanged)
 
@@ -147,6 +150,17 @@ class SettingsUserProfileViewModel(
             }
 
             val profileEffectName: String? get() = collectibleName(previewProfileEffect)
+
+            val savedProfileFrame: Long? = savedProfile?.collectibles
+                ?.firstOrNull { it.type == CollectibleProduct.TYPE_PROFILE_FRAME }?.skuId
+
+            val previewProfileFrame: Long? = when (currentProfileFrame) {
+                is NullSerializable.Value -> currentProfileFrame.value
+                is NullSerializable.Null -> null
+                null -> savedProfileFrame
+            }
+
+            val profileFrameName: String? get() = collectibleName(previewProfileFrame)
 
             /** Carries the artwork so an unsaved pick renders, not just the SKU. */
             val previewEffect: UserProfile.ProfileEffect? = previewProfileEffect?.let { skuId ->
@@ -284,6 +298,18 @@ class SettingsUserProfileViewModel(
         )
     }
 
+    @MainThread
+    fun selectProfileFrame(skuId: Long?) = update {
+        skuId?.let(storeUserProfile::fetchProfileFrameIfMissing)
+        copy(
+            currentProfileFrame = when {
+                skuId == savedProfileFrame -> null
+                skuId == null -> NullSerializable.Null()
+                else -> NullSerializable.Value(skuId)
+            },
+        )
+    }
+
     /** The pair is written whole; callers pass the effective colours, including any fallbacks. */
     @MainThread
     fun updateThemeColors(colors: List<Int>) = update {
@@ -408,6 +434,8 @@ class SettingsUserProfileViewModel(
             it.currentThemeColors is NullSerializable.Null,
             (it.currentProfileEffect as? NullSerializable.Value)?.value,
             it.currentProfileEffect is NullSerializable.Null,
+            (it.currentProfileFrame as? NullSerializable.Value)?.value,
+            it.currentProfileFrame is NullSerializable.Null,
         )
     }
 
@@ -484,7 +512,7 @@ class SettingsUserProfileViewModel(
             storeUserProfile.updateProfileMetadata(state.user.id, metadata)
             storeUserProfile.fetchProfile(state.user.id, id)
             val edit: SavedEdit = {
-                it.withSavedProfile(metadata).copy(currentThemeColors = null, currentProfileEffect = null)
+                it.withSavedProfile(metadata).copy(currentThemeColors = null, currentProfileEffect = null, currentProfileFrame = null)
             }
             edit
         }
@@ -533,6 +561,7 @@ class SettingsUserProfileViewModel(
                 effectProducts = storeState.effectProducts,
                 currentThemeColors = current?.currentThemeColors,
                 currentProfileEffect = current?.currentProfileEffect,
+                currentProfileFrame = current?.currentProfileFrame,
                 currentAvatarDecoration = current?.currentAvatarDecoration,
                 currentNameplate = current?.currentNameplate,
             )
@@ -596,17 +625,24 @@ class SettingsUserProfileViewModel(
         }
 
         /**
-         * The whole equipped set, with the effect swapped in or dropped. Collectibles of other types
-         * ride along untouched: the server replaces the set wholesale, so omitting a profile frame
-         * this client cannot render would unequip it.
+         * The whole equipped set, with the edited types swapped in or dropped. Types this screen
+         * does not edit ride along untouched: the server replaces the set wholesale, so omitting
+         * one would unequip it.
          */
         private fun ViewState.Loaded.collectiblesPatch(): List<String>? {
-            val pending = currentProfileEffect ?: return null
+            if (currentProfileEffect == null && currentProfileFrame == null) return null
+            val edited = setOfNotNull(
+                CollectibleProduct.TYPE_PROFILE_EFFECT.takeIf { currentProfileEffect != null },
+                CollectibleProduct.TYPE_PROFILE_FRAME.takeIf { currentProfileFrame != null },
+            )
             val kept = savedProfile?.collectibles.orEmpty()
-                .filter { it.type != CollectibleProduct.TYPE_PROFILE_EFFECT }
+                .filter { it.type !in edited }
                 .map { it.skuId }
-            val effect = (pending as? NullSerializable.Value)?.value
-            return (kept + listOfNotNull(effect)).map(Long::toString)
+            val picked = listOfNotNull(
+                previewProfileEffect.takeIf { currentProfileEffect != null },
+                previewProfileFrame.takeIf { currentProfileFrame != null },
+            )
+            return (kept + picked).map(Long::toString)
         }
 
         private fun NullSerializable<String>.toAccentColor(): NullSerializable<Int> =
@@ -652,6 +688,8 @@ class SettingsUserProfileViewModel(
                 ?: NullSerializable.Null<List<Int>>().takeIf { draft.themeColorsCleared },
             currentProfileEffect = draft.profileEffect?.let { NullSerializable.Value(it) }
                 ?: NullSerializable.Null<Long>().takeIf { draft.profileEffectCleared },
+            currentProfileFrame = draft.profileFrame?.let { NullSerializable.Value(it) }
+                ?: NullSerializable.Null<Long>().takeIf { draft.profileFrameCleared },
         )
 
         private fun observeStoreState(guildId: Long?): Observable<StoreState> =
