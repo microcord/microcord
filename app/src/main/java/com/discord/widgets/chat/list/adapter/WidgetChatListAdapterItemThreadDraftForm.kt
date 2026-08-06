@@ -11,6 +11,8 @@ import android.view.inputmethod.EditorInfo
 import android.widget.ImageView
 import android.widget.TextView
 import com.discord.R
+import com.discord.api.permission.Permission
+import com.discord.utilities.permissions.PermissionUtils
 import com.discord.api.channel.isGuildForumChannel
 import com.discord.api.channel.isGuildMediaChannel
 import com.discord.api.channel.isThreadOnlyChannel
@@ -20,6 +22,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.view.extensions.clear
 import com.discord.views.ThemedColor
 import com.discord.widgets.channels.threads.WidgetThreadDraftArchiveSheet
+import com.discord.widgets.forums.WidgetForumPostTagsSheet
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.ThreadDraftFormEntry
 import com.google.android.material.switchmaterial.SwitchMaterial
@@ -44,6 +47,7 @@ class WidgetChatListAdapterItemThreadDraftForm(
     private val privateToggleSwitch: SwitchMaterial =
         itemView.findViewById(R.id.private_thread_toggle_switch)
     private val autoArchiveDuration: TextView = itemView.findViewById(R.id.auto_archive_duration)
+    private val tagPicker: TextView = itemView.findViewById(R.id.thread_draft_tags)
 
     private var nameTextWatcher: TextWatcher? = null
 
@@ -53,6 +57,8 @@ class WidgetChatListAdapterItemThreadDraftForm(
         configureThreadNameInput(entry)
         configureAutoArchive(entry)
         configureIcon(entry)
+        configureNameHint(entry)
+        configureTagPicker(entry)
         configurePrivateThreadOption(entry)
         nameInput.requestFocus()
     }
@@ -124,6 +130,43 @@ class WidgetChatListAdapterItemThreadDraftForm(
             ),
         )
         autoArchiveDuration.setOnClickListener(openPicker)
+    }
+
+    /** Only a forum post carries tags, and only when its channel offers any. */
+    private fun configureTagPicker(entry: ThreadDraftFormEntry) {
+        val tags = entry.parentChannel.availableTags.orEmpty()
+        val isForumPost = entry.parentChannel.isThreadOnlyChannel()
+        tagPicker.visibility = if (isForumPost && tags.isNotEmpty()) View.VISIBLE else View.GONE
+        if (tagPicker.visibility != View.VISIBLE) return
+
+        val selected = entry.threadDraftState.appliedTags
+        tagPicker.text = if (selected.isEmpty()) {
+            itemView.context.getString(R.string.add_tag_forum_post)
+        } else {
+            tags.filter { it.id in selected }.joinToString { it.name }
+        }
+        tagPicker.setOnClickListener {
+            WidgetForumPostTagsSheet.show(
+                adapter.fragmentManager,
+                entry.parentChannel.id,
+                selected,
+                canManageThreads = PermissionUtils.can(
+                    Permission.MANAGE_THREADS,
+                    StoreStream.getPermissions().getPermissionsByChannel()[entry.parentChannel.id],
+                ),
+            )
+        }
+    }
+
+    /** A forum post is titled, not named, so the reference labels the field "Title" there. */
+    private fun configureNameHint(entry: ThreadDraftFormEntry) {
+        nameInput.hint = itemView.context.getString(
+            if (entry.parentChannel.isThreadOnlyChannel()) {
+                R.string.forum_post_title_placeholder_focused
+            } else {
+                R.string.thread_name
+            },
+        )
     }
 
     private fun configureIcon(entry: ThreadDraftFormEntry) {

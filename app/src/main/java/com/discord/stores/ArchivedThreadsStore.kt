@@ -127,6 +127,9 @@ class ArchivedThreadsStore(
     private var listings = HashMap<Pair<Long, ThreadListingType>, ThreadListingState>()
     private var listingsSnapshot: Map<Pair<Long, ThreadListingType>, ThreadListingState> = emptyMap()
     private var fetchSubscriptions = HashMap<Pair<Long, ThreadListingType>, Subscription>()
+    private val forumSearches = HashMap<Long, ThreadListingState>()
+    private var forumSearchesSnapshot: Map<Long, ThreadListingState> = emptyMap()
+    private val searchSubscriptions = HashMap<Long, Subscription>()
 
     // -- Commands -------------------------------------------------------------------------------
 
@@ -212,6 +215,60 @@ class ArchivedThreadsStore(
     fun observeGuildForumThreadListing(channelId: Long): Observable<ThreadListingState> =
         observeListing(channelId, ThreadListingType.GUILD_FORUM_THREADS)
 
+    /**
+     * Forum search, which is a listing of its own rather than a filter over the loaded one: the
+     * server matches archived posts the browser has never paged in.
+     */
+    fun searchForumThreads(channelId: Long, query: String, tagSetting: String?) = dispatcher.schedule {
+        val api = restApi()
+        if (api == null) {
+            forumSearches[channelId] = ThreadListingState.Error
+            markChanged()
+            return@schedule
+        }
+        forumSearches[channelId] = ThreadListingState.Listing(emptyList(), hasMore = false, isLoadingMore = true)
+        markChanged()
+        searchSubscriptions[channelId]?.unsubscribe()
+        api.searchForumThreads(
+            channelId = channelId,
+            name = query,
+            tagSetting = tagSetting,
+            sortBy = "last_message_time",
+            sortOrder = "desc",
+            limit = FORUM_SEARCH_PAGE_SIZE,
+        )
+            .restSubscribeOn()
+            .appSubscribe(
+                errorClass = javaClass,
+                subscriptionHandler = { subscription -> searchSubscriptions[channelId] = subscription },
+                errorHandler = {
+                    dispatcher.schedule {
+                        forumSearches[channelId] = ThreadListingState.Error
+                        markChanged()
+                    }
+                },
+            ) { result ->
+                dispatcher.schedule {
+                    result.threads.forEach(handleThreadCreateOrUpdate)
+                    forumSearches[channelId] = ThreadListingState.Listing(
+                        threads = result.threads,
+                        hasMore = false,
+                        isLoadingMore = false,
+                    )
+                    result.firstMessages?.let(storeForumPostMessages::bulkCreateFirstMessage)
+                    markChanged()
+                }
+            }
+    }
+
+    fun clearForumSearch(channelId: Long) = dispatcher.schedule {
+        searchSubscriptions.remove(channelId)?.unsubscribe()
+        if (forumSearches.remove(channelId) != null) markChanged()
+    }
+
+    fun observeForumSearch(channelId: Long): Observable<ThreadListingState?> =
+        observationDeck.connectRx(this) { forumSearchesSnapshot[channelId] }.distinctUntilChanged()
+
     private fun observeListing(
         channelId: Long,
         threadListingType: ThreadListingType,
@@ -241,5 +298,10 @@ class ArchivedThreadsStore(
     @StoreThread
     override fun snapshotData() {
         listingsSnapshot = HashMap(listings)
+        forumSearchesSnapshot = HashMap(forumSearches)
+    }
+
+    private companion object {
+        const val FORUM_SEARCH_PAGE_SIZE = 25
     }
 }

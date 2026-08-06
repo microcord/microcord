@@ -3,6 +3,8 @@ package com.discord.widgets.channels.settings
 import android.content.Context
 import android.content.Intent
 import android.text.Editable
+import android.text.InputFilter
+import android.text.SpannableStringBuilder
 import android.text.TextWatcher
 import android.view.View
 import android.widget.LinearLayout
@@ -15,8 +17,10 @@ import com.discord.api.channel.getDeletedMessage
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isAnnouncementChannel
 import com.discord.api.channel.isCategory
+import com.discord.api.channel.isGuildForumChannel
 import com.discord.api.channel.isGuildTextyChannel
 import com.discord.api.channel.isThread
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isThreaded
 import com.discord.api.guild.GuildFeature
 import com.discord.api.permission.Permission
@@ -26,6 +30,7 @@ import com.discord.app.AppToast
 import com.discord.models.guild.Guild
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
+import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
@@ -35,8 +40,15 @@ import com.discord.utilities.rx.ui
 import com.discord.views.CheckedSetting
 import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.channels.permissions.WidgetChannelSettingsPermissionsOverview
+import com.discord.widgets.forums.ForumLayout
+import com.discord.widgets.forums.ForumPostTagView
+import com.discord.widgets.forums.ForumSortOrder
+import com.discord.widgets.forums.ForumTagSetting
+import com.discord.widgets.forums.PostTagData
+import com.discord.widgets.forums.WidgetForumTagEdit
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.settings.SettingsStrings
+import com.google.android.flexbox.FlexboxLayout
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.radiobutton.MaterialRadioButton
 import com.google.android.material.textfield.TextInputLayout
@@ -131,9 +143,18 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         draftArchiveDuration = savedArchiveDuration
         bindingState = false
 
+        val isThreadOnly = channel.isThreadOnlyChannel()
         root.findViewById<LinearLayout>(R.id.channel_settings_edit_wrap).isVisible = next.canManageChannel
         topic.isVisible = !category
-        root.findViewById<LinearLayout>(R.id.channel_settings_pinned_messages_container).isVisible = !category
+        topic.hint = getString(
+            if (isThreadOnly) R.string.form_label_channel_guidelines else R.string.form_label_channel_topic,
+        )
+        topic.editText?.filters = arrayOf(
+            InputFilter.LengthFilter(if (isThreadOnly) MAX_FORUM_TOPIC_LENGTH else MAX_TOPIC_LENGTH),
+        )
+        // Only a channel that holds messages itself has pins; a forum's posts carry their own.
+        root.findViewById<LinearLayout>(R.id.channel_settings_pinned_messages_container).isVisible =
+            channel.type == Channel.GUILD_TEXT || channel.isAnnouncementChannel()
         root.findViewById<TextView>(R.id.channel_settings_pinned_messages).apply {
             isEnabled = next.isPinsEnabled
             setOnClickListener { WidgetChannelPinnedMessages.show(context, channel.id) }
@@ -151,6 +172,19 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
 
         root.findViewById<CheckedSetting>(R.id.channel_settings_announcement).apply {
             isVisible = next.canToggleAnnouncement
+            if (isVisible) {
+                val help = SettingsStrings.render(
+                    context,
+                    R.string.form_help_news,
+                    "documentationLink" to ANNOUNCEMENT_ARTICLE_URL,
+                ).trim()
+                setSubtext(
+                    SpannableStringBuilder(help)
+                        .append("\n\n")
+                        .append(getString(R.string.guild_profile_announcement_channel_disclaimer)),
+                    true,
+                )
+            }
             setOnCheckedListener(null)
             isChecked = channel.isAnnouncementChannel()
             setOnCheckedListener { checked -> saveImmediate(type = if (checked) Channel.GUILD_ANNOUNCEMENT else Channel.GUILD_TEXT) }
@@ -165,6 +199,9 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         root.findViewById<LinearLayout>(R.id.channel_settings_section_slow_mode).isVisible =
             next.canManageChannel && !category && !channel.isAnnouncementChannel()
 
+        configureForumTags(root, next)
+        configureForumDefaults(root, next)
+
         val archiveSection = root.findViewById<LinearLayout>(R.id.channel_settings_section_default_auto_archive_duration)
         archiveSection.isVisible = next.canManageChannel && channel.isThreaded()
         bindArchiveOption(R.id.option_one_hour, R.id.option_one_hour_radio, 60)
@@ -173,6 +210,95 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         bindArchiveOption(R.id.option_seven_days, R.id.option_seven_days_radio, 10_080)
         updateArchiveRadios()
         updateSaveVisibility()
+    }
+
+    private fun configureForumTags(root: View, model: Model) {
+        val channel = model.channel
+        val section = root.findViewById<LinearLayout>(R.id.channel_settings_section_forum_tags)
+        section.isVisible = channel.isThreadOnlyChannel()
+        if (!section.isVisible) return
+
+        val tags = channel.availableTags.orEmpty()
+        root.findViewById<TextView>(R.id.channel_settings_forum_tags_description).isVisible = tags.isEmpty()
+        root.findViewById<TextView>(R.id.channel_settings_forum_tag_create).apply {
+            isVisible = tags.isEmpty()
+            isEnabled = model.canManageChannel
+            setOnClickListener { WidgetForumTagEdit.launch(context, channel.id, null) }
+        }
+
+        val container = root.findViewById<FlexboxLayout>(R.id.channel_settings_forum_tags)
+        container.isVisible = tags.isNotEmpty()
+        container.removeAllViews()
+        tags.forEach { tag ->
+            val pill = ForumPostTagView(requireContext()).apply {
+                configureTag(PostTagData.fromTag(tag))
+                isEnabled = model.canManageChannel
+                alpha = if (model.canManageChannel) 1f else 0.6f
+                setOnClickListener {
+                    if (model.canManageChannel) WidgetForumTagEdit.launch(context, channel.id, tag.id)
+                }
+            }
+            container.addView(pill, tagLayoutParams())
+        }
+        if (model.canManageChannel && tags.size < WidgetForumTagEdit.MAX_FORUM_TAGS) {
+            val add = ForumPostTagView(requireContext()).apply {
+                configureAdd()
+                setOnClickListener { WidgetForumTagEdit.launch(context, channel.id, null) }
+            }
+            container.addView(add, tagLayoutParams())
+        }
+
+        root.findViewById<CheckedSetting>(R.id.channel_settings_forum_require_tag).apply {
+            setOnCheckedListener(null)
+            isChecked = (channel.flags ?: 0L) and Channel.FLAG_REQUIRE_TAG != 0L
+            // Nothing but moderator tags leaves a member with no way to satisfy the requirement.
+            isEnabled = model.canManageChannel && !(tags.isNotEmpty() && tags.all { it.moderated })
+            setOnCheckedListener { checked ->
+                val flags = (channel.flags ?: 0L)
+                saveImmediate(flags = if (checked) flags or Channel.FLAG_REQUIRE_TAG else flags and Channel.FLAG_REQUIRE_TAG.inv())
+            }
+        }
+    }
+
+    private fun tagLayoutParams() = FlexboxLayout.LayoutParams(
+        FlexboxLayout.LayoutParams.WRAP_CONTENT,
+        FlexboxLayout.LayoutParams.WRAP_CONTENT,
+    ).apply { setMargins(dpToPixels(6), dpToPixels(6), dpToPixels(6), dpToPixels(6)) }
+
+    private fun configureForumDefaults(root: View, model: Model) {
+        val channel = model.channel
+        val section = root.findViewById<LinearLayout>(R.id.channel_settings_section_forum_defaults)
+        section.isVisible = channel.isThreadOnlyChannel() && model.canManageChannel
+        if (!section.isVisible) return
+
+        // A media channel is always a gallery, so it has no layout to choose.
+        val showLayout = channel.isGuildForumChannel()
+        val layoutList = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_layout_list)
+        val layoutGallery = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_layout_gallery)
+        listOf(
+            root.findViewById<TextView>(R.id.channel_settings_forum_layout_header),
+            root.findViewById<TextView>(R.id.channel_settings_forum_layout_description),
+            layoutList,
+            layoutGallery,
+        ).forEach { it.isVisible = showLayout }
+        layoutList.isChecked = channel.defaultForumLayout != ForumLayout.GALLERY.apiValue
+        layoutGallery.isChecked = channel.defaultForumLayout == ForumLayout.GALLERY.apiValue
+        layoutList.setContainerClickListener { saveImmediate(defaultForumLayout = ForumLayout.LIST.apiValue) }
+        layoutGallery.setContainerClickListener { saveImmediate(defaultForumLayout = ForumLayout.GALLERY.apiValue) }
+
+        val sortActivity = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_sort_activity)
+        val sortCreation = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_sort_creation)
+        sortCreation.isChecked = channel.defaultSortOrder == ForumSortOrder.CREATION_DATE.ordinal
+        sortActivity.isChecked = !sortCreation.isChecked
+        sortActivity.setContainerClickListener { saveImmediate(defaultSortOrder = ForumSortOrder.LATEST_ACTIVITY.ordinal) }
+        sortCreation.setContainerClickListener { saveImmediate(defaultSortOrder = ForumSortOrder.CREATION_DATE.ordinal) }
+
+        val matchAll = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_tag_match_all)
+        val matchSome = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_tag_match_some)
+        matchAll.isChecked = channel.defaultTagSetting == ForumTagSetting.MATCH_ALL.apiValue
+        matchSome.isChecked = !matchAll.isChecked
+        matchSome.setContainerClickListener { saveImmediate(defaultTagSetting = ForumTagSetting.MATCH_SOME.apiValue) }
+        matchAll.setContainerClickListener { saveImmediate(defaultTagSetting = ForumTagSetting.MATCH_ALL.apiValue) }
     }
 
     private fun bindArchiveOption(rowId: Int, radioId: Int, minutes: Int) {
@@ -214,11 +340,29 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         }
     }
 
-    private fun saveImmediate(type: Int? = null, nsfw: Boolean? = null) {
+    private fun saveImmediate(
+        type: Int? = null,
+        nsfw: Boolean? = null,
+        flags: Long? = null,
+        defaultForumLayout: Int? = null,
+        defaultSortOrder: Int? = null,
+        defaultTagSetting: String? = null,
+    ) {
         val channel = model?.channel ?: return
         RestAPI.api.editTextChannel(
             channel.id,
-            RestAPIParams.TextChannel(null, type, null, nsfw, null, null),
+            RestAPIParams.TextChannel(
+                name = null,
+                type = type,
+                topic = null,
+                nsfw = nsfw,
+                rateLimitPerUser = null,
+                defaultAutoArchiveDuration = null,
+                flags = flags,
+                defaultForumLayout = defaultForumLayout,
+                defaultSortOrder = defaultSortOrder,
+                defaultTagSetting = defaultTagSetting,
+            ),
         ).restSubscribeOn().ui(this).appSubscribe(WidgetTextChannelSettings::class.java, context = context) { }
     }
 
@@ -271,8 +415,10 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         val isPinsEnabled: Boolean,
         val isProtectedCommunityChannel: Boolean,
     ) {
-        val canToggleAnnouncement: Boolean = canManageChannel && guild.hasFeature(GuildFeature.COMMUNITY) &&
-            !isProtectedCommunityChannel && !channel.isCategory()
+        /** Only a plain text channel can become an announcement channel, and only back again. */
+        val canToggleAnnouncement: Boolean = canManageChannel && guild.hasFeature(GuildFeature.NEWS) &&
+            !isProtectedCommunityChannel &&
+            (channel.type == Channel.GUILD_TEXT || channel.isAnnouncementChannel())
 
         companion object {
             fun observe(channelId: Long): Observable<Model?> = StoreStream.getChannels().observeChannel(channelId)
@@ -306,6 +452,9 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
     companion object {
         const val ARG_CHANNEL_ID = "com.discord.intent.extra.EXTRA_CHANNEL_ID"
         const val DEFAULT_ARCHIVE_DURATION = 1_440
+        private const val ANNOUNCEMENT_ARTICLE_URL = "https://support.discord.com/hc/en-us/articles/360032008192"
+        private const val MAX_TOPIC_LENGTH = 1_024
+        private const val MAX_FORUM_TOPIC_LENGTH = 4_096
         val SLOWMODE_COOLDOWN_VALUES = listOf(0, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1_800, 3_600, 7_200, 21_600)
 
         @JvmStatic

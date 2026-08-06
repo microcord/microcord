@@ -212,6 +212,7 @@ class StoreNotificationsTest {
     private fun channel(id: Long = CHANNEL, type: Int = Channel.GUILD_TEXT, parentId: Long = 0) = Channel(
         null, type, GUILD, "channel", 0, id, 0, null, null, 0, null, 0, 0, null, 0, 0,
         null, false, parentId, null, 0, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null,
     )
 
     companion object {

@@ -10,6 +10,8 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
+import android.text.TextPaint
+import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.GestureDetector
 import android.view.KeyEvent
@@ -63,6 +65,7 @@ import com.otaliastudios.cameraview.CameraOptions
 import com.otaliastudios.cameraview.PictureResult
 import com.otaliastudios.cameraview.controls.Facing
 import com.otaliastudios.cameraview.controls.Flash
+import java.net.URLConnection
 import java.io.File
 import kotlinx.coroutines.launch
 
@@ -170,6 +173,7 @@ class WidgetChatInputAttachments(
         val previewList = flexInputFragment.view
             ?.findViewById<RecyclerView>(com.lytefast.flexinput.R.id.attachment_preview_list)
             ?: return
+        previewList.addItemDecoration(FilePreviewDecoration(adapter))
         previewList.addItemDecoration(SpoilerPreviewDecoration(adapter))
         installLongPressToOpenSheet(fragment, previewList, adapter)
     }
@@ -329,46 +333,91 @@ class WidgetChatInputAttachments(
         }
     }
 
-    open class DiscordFilesFragment : FilesFragment() {
-        private var grantedSelectionCoordinator: SelectionCoordinator<Attachment<Any>, Attachment<File>>? = null
+    /**
+     * The documents tab, which hands off to the system document picker.
+     *
+     * FlexInput's own tab lists a directory it walks itself. Under scoped storage an app cannot
+     * read the shared Downloads folder without being a file manager, so that listing is empty on
+     * any current device and the tab renders blank with nothing to explain it. The system picker is
+     * both the supported route to a document and the only one that can reach cloud providers.
+     *
+     * The picker is asked for a *persistable* grant, because the bytes are not read at pick time —
+     * the send may happen much later, and a one-shot grant will have lapsed by then.
+     */
+    class DiscordFilesFragment : Fragment(R.layout.widget_chat_input_perm_req_files) {
 
-        override fun hasPermissions(vararg requiredPermissionList: String): Boolean =
-            appFragment()?.hasGallery() == true
+        /**
+         * Guards against re-opening while the picker is already up, and against opening at all
+         * before this tab is the one on screen. The tray builds the neighbouring page in advance,
+         * so acting on view creation would launch the picker while the gallery is still showing.
+         */
+        private var pickerOpen = false
 
-        override fun newPermissionsRequestAdapter(onClickListener: View.OnClickListener): EmptyListAdapter =
-            PermissionsEmptyListAdapter(View.OnClickListener { requestGallery() })
-
-        private fun requestGallery() {
-            requestGalleryPermission(::refreshAfterGrant)
+        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+            super.onViewCreated(view, savedInstanceState)
+            view.findViewById<TextView>(R.id.perm_req_text)
+                ?.setI18nText(R.string.attachment_files_browse_body)
+            view.findViewById<View>(R.id.action_btn)?.setOnClickListener { openDocumentPicker() }
         }
 
-        protected open fun requestGalleryPermission(onGranted: () -> Unit) =
-            appFragment()?.requestGallery(onGranted)
+        override fun setUserVisibleHint(isVisibleToUser: Boolean) {
+            super.setUserVisibleHint(isVisibleToUser)
+            if (isVisibleToUser) openIfSelected() else pickerOpen = false
+        }
 
-        internal fun refreshAfterGrant() {
-            val context = context ?: return
-            val recyclerView = view?.findViewById<RecyclerView>(com.lytefast.flexinput.R.id.list) ?: return
-            grantedSelectionCoordinator?.close()
-            val coordinator = SelectionCoordinator<Attachment<Any>, Attachment<File>>()
-            flexInputCoordinator()?.selectionAggregator?.registerSelectionCoordinator(coordinator)
-            grantedSelectionCoordinator = coordinator
-            val adapter = FileListAdapter(context.contentResolver, coordinator)
-            recyclerView.adapter = adapter
-            val swipeRefresh = view?.findViewById<SwipeRefreshLayout>(com.lytefast.flexinput.R.id.swipeRefreshLayout)
-            fun loadFiles() {
-                viewLifecycleOwner.lifecycleScope.launch {
-                    adapter.load(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS))
-                    swipeRefresh?.isRefreshing = false
+        override fun onResume() {
+            super.onResume()
+            openIfSelected()
+        }
+
+        /** There is nothing to browse in-tab, so selecting it goes straight to the system picker. */
+        private fun openIfSelected() {
+            if (pickerOpen || !userVisibleHint || !isResumed) return
+            openDocumentPicker()
+        }
+
+        private fun openDocumentPicker() {
+            pickerOpen = true
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("*/*")
+                .putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                .addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            runCatching { startActivityForResult(intent, REQUEST_OPEN_DOCUMENT) }
+                .onFailure {
+                    pickerOpen = false
+                    AppLog.e("No document picker available", it)
                 }
-            }
-            swipeRefresh?.setOnRefreshListener(::loadFiles)
-            loadFiles()
         }
 
-        override fun onDestroyView() {
-            grantedSelectionCoordinator?.close()
-            grantedSelectionCoordinator = null
-            super.onDestroyView()
+        override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+            super.onActivityResult(requestCode, resultCode, data)
+            if (requestCode != REQUEST_OPEN_DOCUMENT) return
+            // Cancelling returns to an empty tab rather than reopening the picker in a loop.
+            if (resultCode != Activity.RESULT_OK) return
+            val coordinator = flexInputCoordinator() ?: return
+            val resolver = context?.contentResolver ?: return
+            pickedUris(data).forEach { uri ->
+                // Hold the grant now: this is the last moment the picker's permission is ours to
+                // keep, and the file is not read until the message is actually sent.
+                runCatching {
+                    resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                coordinator.addExternalAttachment(
+                    SourcedAttachment(uri.toAttachment(resolver), SOURCE_DOCUMENT_PICKER),
+                )
+            }
+        }
+
+        private fun pickedUris(data: Intent?): List<android.net.Uri> {
+            val clip = data?.clipData
+            if (clip != null) return (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
+            return listOfNotNull(data?.data)
+        }
+
+        private companion object {
+            const val REQUEST_OPEN_DOCUMENT = 4568
         }
     }
 
@@ -468,7 +517,22 @@ class WidgetChatInputAttachments(
                 }
             }
             binding.launchCameraBtn.setOnClickListener { launchSystemCamera() }
-            if (appFragment()?.hasCamera() == true) showCamera() else showPermissions()
+            if (appFragment()?.hasCamera() != true) showPermissions() else if (userVisibleHint) showCamera()
+        }
+
+        /**
+         * The tray keeps the neighbouring page created and resumed, so opening the camera when the
+         * view is built would hold the device's camera open while the gallery is on screen — and on
+         * a phone with one camera that also stops any other tab from using it.
+         */
+        override fun setUserVisibleHint(isVisibleToUser: Boolean) {
+            super.setUserVisibleHint(isVisibleToUser)
+            val binding = _binding ?: return
+            if (isVisibleToUser) {
+                if (appFragment()?.hasCamera() == true) showCamera()
+            } else {
+                binding.cameraView.close()
+            }
         }
 
         private fun showPermissions() {
@@ -537,6 +601,87 @@ class WidgetChatInputAttachments(
             }
     }
 
+    /**
+     * Draws a file tile over anything that is not an image.
+     *
+     * FlexInput hands every attachment to Fresco as a picture. A document has nothing to decode, so
+     * the decode fails and — with no failure image on the view — the cell renders empty. Rather
+     * than a blank square, the tile names the file and shows its extension, which is the only part
+     * of a document worth previewing.
+     */
+    private class FilePreviewDecoration(
+        private val adapter: AttachmentPreviewAdapter<Attachment<Any>>,
+    ) : RecyclerView.ItemDecoration() {
+        private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(47, 49, 54) }
+        private val namePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textAlign = Paint.Align.CENTER
+        }
+        private val extensionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(135, 144, 156)
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+        }
+
+        /** Resolved once per uri: a content lookup on every frame would stutter the strip. */
+        private val isImageByUri = mutableMapOf<String, Boolean>()
+
+        override fun onDrawOver(canvas: Canvas, parent: RecyclerView, state: RecyclerView.State) {
+            val density = parent.resources.displayMetrics.scaledDensity
+            namePaint.textSize = 10f * density
+            extensionPaint.textSize = 13f * density
+            repeat(parent.childCount) { index ->
+                val child = parent.getChildAt(index)
+                val position = parent.getChildAdapterPosition(child)
+                if (position == RecyclerView.NO_POSITION || position >= adapter.selectionAggregator.size) return@repeat
+                val attachment = adapter.selectionAggregator[position]
+                if (isImage(parent, attachment)) return@repeat
+                drawTile(canvas, child, attachment, density)
+            }
+        }
+
+        private fun drawTile(canvas: Canvas, child: View, attachment: Attachment<Any>, density: Float) {
+            val radius = 3f * density
+            canvas.drawRoundRect(
+                child.left.toFloat(),
+                child.top.toFloat(),
+                child.right.toFloat(),
+                child.bottom.toFloat(),
+                radius,
+                radius,
+                backgroundPaint,
+            )
+            val name = attachment.displayName.orEmpty()
+            val centerX = (child.left + child.right) / 2f
+            val extension = name.substringAfterLast('.', "").uppercase().take(MAX_EXTENSION_CHARS)
+            canvas.drawText(
+                extension.ifEmpty { FALLBACK_EXTENSION },
+                centerX,
+                (child.top + child.bottom) / 2f,
+                extensionPaint,
+            )
+            // The name is the only way to tell two documents apart, so it is always shown, cut to
+            // whatever the tile can hold rather than overflowing into the neighbouring cell.
+            val available = (child.right - child.left) - 8f * density
+            val label = TextUtils.ellipsize(name, TextPaint(namePaint), available, TextUtils.TruncateAt.MIDDLE)
+            canvas.drawText(label, 0, label.length, centerX, child.bottom - 6f * density, namePaint)
+        }
+
+        private fun isImage(parent: RecyclerView, attachment: Attachment<Any>): Boolean {
+            val key = attachment.uri?.toString() ?: return true
+            return isImageByUri.getOrPut(key) {
+                val mime = runCatching { parent.context.contentResolver.getType(attachment.uri) }.getOrNull()
+                    ?: URLConnection.guessContentTypeFromName(attachment.displayName.orEmpty())
+                mime == null || mime.startsWith("image/") || mime.startsWith("video/")
+            }
+        }
+
+        private companion object {
+            const val MAX_EXTENSION_CHARS = 4
+            const val FALLBACK_EXTENSION = "FILE"
+        }
+    }
+
     private class SpoilerPreviewDecoration(
         private val adapter: AttachmentPreviewAdapter<Attachment<Any>>,
     ) : RecyclerView.ItemDecoration() {
@@ -567,6 +712,7 @@ class WidgetChatInputAttachments(
     private companion object {
         const val SOURCE_KEYBOARD = "keyboard"
         const val SOURCE_MEDIA_PICKER = "media_picker"
+        const val SOURCE_DOCUMENT_PICKER = "document_picker"
         const val MEDIA_GRID_COLUMNS = 3
 
         val R_DRAWABLE_IMAGE = com.lytefast.flexinput.R.drawable.ic_image_24dp

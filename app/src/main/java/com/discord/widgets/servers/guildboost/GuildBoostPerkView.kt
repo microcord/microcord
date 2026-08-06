@@ -123,7 +123,7 @@ class GuildBoostPerkView @JvmOverloads constructor(
             R.drawable.ic_upload_24dp,
             i18nFormat(
                 R.string.guild_settings_guild_premium_perk_title_tier_any_upload_limit,
-                "fileSize" to i18nFormat(R.string.file_size_mb, "size" to PremiumUtils.getGuildMaxFileSizeMB(tier)),
+                "fileSize" to i18nFormat(R.string.file_size_mb, "size" to PremiumUtils.getMarketingMaxFileSizeMB(tier)),
             ),
         )
 

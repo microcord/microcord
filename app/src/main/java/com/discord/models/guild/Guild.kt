@@ -55,7 +55,18 @@ data class Guild(
     fun isOwner(userId: Long) = ownerId == userId
     fun isHub() = hasFeature(GuildFeature.HUB)
     fun canHaveAnimatedBanner() = hasFeature(GuildFeature.ANIMATED_BANNER)
-    fun canHaveBanner() = hasFeature(GuildFeature.BANNER) || hasFeature(GuildFeature.VERIFIED) || premiumTier >= 2
-    fun canHaveSplash() = hasFeature(GuildFeature.INVITE_SPLASH) || hasFeature(GuildFeature.VERIFIED) || premiumTier >= 1
-    fun canHaveVanityURL() = hasFeature(GuildFeature.VANITY_URL) || premiumTier >= 3
+
+    /*
+     * Boosting is tierless: a guild unlocks a perk by having powerups applied to it, and the server
+     * reports the result in `features`. `premiumTier` is now only the level shown on progress bars
+     * and badges, so deriving entitlement from it grants perks the guild has not actually unlocked.
+     */
+
+    fun canHaveBanner() = hasFeature(GuildFeature.BANNER)
+    fun canHaveSplash() = hasFeature(GuildFeature.INVITE_SPLASH)
+
+    /** A guild that lost the perk keeps a vanity it already set, but can no longer edit it. */
+    fun canHaveVanityURL() =
+        hasFeature(GuildFeature.VANITY_URL) ||
+            (hasFeature(GuildFeature.GUILD_WEB_PAGE_VANITY_URL) && !vanityUrlCode.isNullOrEmpty())
 }

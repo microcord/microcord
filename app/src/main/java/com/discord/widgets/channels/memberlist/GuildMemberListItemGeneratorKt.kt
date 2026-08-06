@@ -96,7 +96,8 @@ internal fun ChannelMemberListRow.toAdapterItem(guildId: Long? = null): ChannelM
     is ChannelMemberListRow.PlaceholderHeader -> ChannelMembersListAdapter.Item.PlaceholderHeader(key)
     is ChannelMemberListRow.PlaceholderMember -> PLACEHOLDER_INSTANCES[(key.hashCode() and Int.MAX_VALUE) % PLACEHOLDER_INSTANCES.size]
     is ChannelMemberListRow.AddMember -> ChannelMembersListAdapter.Item.AddMember(key, title)
-    is ChannelMemberListRow.JoinLeaveThread -> ChannelMembersListAdapter.Item.JoinLeaveThread(key, joined)
+    is ChannelMemberListRow.JoinLeaveThread ->
+        ChannelMembersListAdapter.Item.JoinLeaveThread(key, joined, isForumPost)
 }
 
 private val THREAD_TYPES = setOf(Channel.ANNOUNCEMENT_THREAD, Channel.PUBLIC_THREAD, Channel.PRIVATE_THREAD)

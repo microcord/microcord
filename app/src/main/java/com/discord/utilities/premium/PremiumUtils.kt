@@ -12,13 +12,12 @@ import com.discord.models.domain.ModelSku
 import com.discord.models.domain.ModelSubscription
 import com.discord.models.domain.premium.SubscriptionPlanType
 import com.discord.models.guild.Guild
-import com.discord.models.user.User
+import com.discord.utilities.attachments.AttachmentLimits
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.gifting.getCustomStyle
 import com.discord.utilities.gifting.hasCustomStyle
 import com.discord.utilities.uri.UriHandler
-import com.discord.utilities.user.UserUtils
 
 /**
  * The limits and entitlements Nitro and server boosting unlock.
@@ -41,37 +40,33 @@ object PremiumUtils {
     const val PREMIUM_YEARLY_DISCOUNT_PERCENT: Float = 0.16f
 
     /**
-     * Guild features gated behind each boost tier, cumulative.
+     * Whether the guild has unlocked [feature].
      *
-     * Declared as a chain — tier 2 is tier 1 plus its own, tier 3 is tier 2 plus its own — because
-     * [getMinimumBoostTierForGuildFeature] walks them in order and returns the first that contains
-     * the feature. Flattening them into three independent sets would make that lookup wrong.
+     * Boosting is tierless: powerups are applied individually and the server reports what they
+     * unlocked in `features`, so there is no longer a tier a feature can be looked up against.
      */
-    private val tier1BoostFeatures: Set<GuildFeature> =
-        setOf(GuildFeature.INVITE_SPLASH, GuildFeature.ANIMATED_ICON)
+    fun guildCanAccessFeature(guild: Guild?, feature: GuildFeature): Boolean =
+        guild?.hasFeature(feature) == true
 
-    private val tier2BoostFeatures: Set<GuildFeature> = tier1BoostFeatures +
-        setOf(GuildFeature.BANNER, GuildFeature.PRIVATE_THREADS, GuildFeature.ROLE_ICONS)
-
-    private val tier3BoostFeatures: Set<GuildFeature> = tier2BoostFeatures +
-        setOf(GuildFeature.VANITY_URL, GuildFeature.ANIMATED_BANNER)
-
-    /** The lowest boost tier that unlocks [guildFeature], or null if boosting never unlocks it. */
-    fun getMinimumBoostTierForGuildFeature(guildFeature: GuildFeature): Int? = when (guildFeature) {
-        in tier1BoostFeatures -> 1
-        in tier2BoostFeatures -> 2
-        in tier3BoostFeatures -> 3
+    /**
+     * The boost level a perk is still *advertised* under.
+     *
+     * Display only — [guildCanAccessFeature] decides entitlement. The level cards and the perk list
+     * keep describing perks by level even though reaching a level no longer unlocks them.
+     */
+    fun getMarketingBoostTierForGuildFeature(guildFeature: GuildFeature): Int? = when (guildFeature) {
+        GuildFeature.INVITE_SPLASH, GuildFeature.ANIMATED_ICON -> 1
+        GuildFeature.BANNER, GuildFeature.ROLE_ICONS -> 2
+        GuildFeature.VANITY_URL, GuildFeature.ANIMATED_BANNER -> 3
         else -> null
     }
 
-    /**
-     * Whether the guild's boost tier reaches the feature's requirement.
-     *
-     * A feature no tier gates requires tier `0`, so an unboosted guild passes; a null guild is
-     * treated as tier `-1` and fails everything, including those.
-     */
-    fun doesGuildHaveEnoughBoostsForFeature(guild: Guild?, feature: GuildFeature): Boolean =
-        (guild?.premiumTier ?: -1) >= (getMinimumBoostTierForGuildFeature(feature) ?: 0)
+    /** Upload ceiling advertised for a boost level. Display only; see [getGuildMaxFileSize]. */
+    fun getMarketingMaxFileSizeMB(boostTier: Int): Int = when (boostTier) {
+        0, 1 -> 10
+        2 -> 50
+        else -> 100
+    }
 
     /** "Level 1"/"Level 2"/"Level 3" for the badge next to a gated control. */
     fun getBoostTierShortText(context: Context, premiumTier: Int?): CharSequence? = when (premiumTier) {
@@ -105,7 +100,7 @@ object PremiumUtils {
                 textColor = ColorCompat.getThemedColor(context, R.attr.colorTextNormal),
             )
         }
-        val minimumBoostTier = getMinimumBoostTierForGuildFeature(guildFeature)
+        val minimumBoostTier = getMarketingBoostTierForGuildFeature(guildFeature)
         return BoostFeatureBadgeData(
             onClickListener = onLockedClick?.let { click -> { view -> click(view, minimumBoostTier) } },
             iconColor = ColorCompat.getThemedColor(context, R.attr.colorInteractiveNormal),
@@ -145,26 +140,8 @@ object PremiumUtils {
         else -> 0
     }
 
-    /** Upload ceiling in megabytes for a guild at [guildPremiumTier]. */
-    fun getGuildMaxFileSizeMB(guildPremiumTier: Int): Int = when (guildPremiumTier) {
-        0, 1 -> 8
-        2 -> 50
-        else -> 100
-    }
-
-    /**
-     * Upload ceiling in megabytes for a user.
-     *
-     * Staff get 200 regardless of tier. Note `TIER_0` (Nitro Basic) is *below* `TIER_1` in this
-     * enum's declaration order but grants 20 MB, so the checks are by identity, not by rank.
-     */
-    fun getMaxFileSizeMB(user: User?): Int = when {
-        user != null && with(UserUtils) { user.isStaff } -> 200
-        user?.premiumTier == PremiumTier.TIER_1 -> 50
-        user?.premiumTier == PremiumTier.TIER_2 -> 100
-        user?.premiumTier == PremiumTier.TIER_0 -> 20
-        else -> 8
-    }
+    /** Upload ceiling the guild's powerups grant, in bytes. */
+    fun getGuildMaxFileSize(guild: Guild?): Long = AttachmentLimits.guildMaxFileSize(guild)
 
     /** Boosts bundled with a subscription — two for any tier-2 (Nitro) plan, none otherwise. */
     fun ModelSubscription.getGuildBoostCountFromSubscription(): Int = when (premiumBasePlanId) {

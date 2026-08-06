@@ -52,6 +52,7 @@ object RestAPIAbortCodes {
     const val RATE_LIMIT_DM_OPEN = 40003
     const val SEND_MESSAGE_TEMPORARILY_DISABLED = 40004
     const val USER_BANNED = 40007
+    const val NON_MODERATED_TAG_REQUIRED = 40066
 
     const val INVALID_ACCESS = 50001
     const val INVALID_ACCOUNT_TYPE = 50002

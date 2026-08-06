@@ -19,7 +19,7 @@ data class PostData(
     val isFirstMessageBlocked: Boolean,
     val mostRecentMessageTimestamp: Long?,
     val messageCount: Int?,
-    val tag: PostTagData?,
+    val tags: PostTagsData,
     val mostCommonReaction: MessageReaction?,
     val isDefaultReaction: Boolean,
     val readState: ForumPostReadState,

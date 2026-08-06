@@ -9,6 +9,7 @@ import androidx.annotation.DrawableRes
 import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.api.channel.Channel
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.permission.Permission
 import com.discord.app.AppBottomSheet
@@ -19,6 +20,8 @@ import com.discord.models.guild.Guild
 import com.discord.models.user.MeUser
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
+import com.discord.widgets.channels.settings.ThreadDeleteDialog
+import com.discord.widgets.forums.WidgetForumPostTagsSheet
 import com.discord.stores.StoreThreadsJoined.JoinedThread
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
@@ -65,6 +68,9 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
     private lateinit var leave: TextView
     private lateinit var developerDivider: View
     private lateinit var copyId: TextView
+    private lateinit var editTags: TextView
+    private lateinit var pin: TextView
+    private lateinit var delete: TextView
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -81,6 +87,9 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
         join = view.findViewById(R.id.channels_list_item_thread_actions_join)
         archive = view.findViewById(R.id.channels_list_item_thread_actions_archive)
         lock = view.findViewById(R.id.channels_list_item_thread_actions_lock)
+        editTags = view.findViewById(R.id.channels_list_item_thread_actions_edit_tags)
+        pin = view.findViewById(R.id.channels_list_item_thread_actions_pin)
+        delete = view.findViewById(R.id.channels_list_item_thread_actions_delete)
         copyLink = view.findViewById(R.id.channels_list_item_thread_actions_copy_link)
         unarchive = view.findViewById(R.id.channels_list_item_thread_actions_unarchive)
         leave = view.findViewById(R.id.channels_list_item_thread_actions_leave)
@@ -111,6 +120,8 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
 
         if (model.guild != null) IconUtils.setIcon(icon, model.guild) else IconUtils.setIcon(icon, channel)
         title.text = channel.getDisplayNameOrDefault(requireContext())
+        configureForumPostLabels(model)
+        configureForumPostActions(model)
 
         markAsRead.setOnClickAndDismissListener {
             StoreStream.getMessageAck().ack(channel.id, isLockedAck = false, clearLock = true)
@@ -170,7 +181,13 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
         archive.setOnClickListener { setThreadSettings(channel, RestAPIParams.ThreadSettings(archived = true)) }
 
         lock.visibility = if (model.isModerator) View.VISIBLE else View.GONE
-        lock.setText(if (metadata?.locked == true) R.string.unlock_thread else R.string.lock_thread)
+        lock.setText(
+            if (isForumPost(model)) {
+                if (metadata?.locked == true) R.string.unlock_forum_post else R.string.lock_forum_post
+            } else {
+                if (metadata?.locked == true) R.string.unlock_thread else R.string.lock_thread
+            },
+        )
         lock.setOnClickListener {
             setThreadSettings(channel, RestAPIParams.ThreadSettings(locked = metadata?.locked != true))
         }
@@ -193,6 +210,22 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
             ChannelListNavigation.copyToClipboard(requireContext(), channel.id.toString())
         }
     }
+
+    /**
+     * A thread inside a forum is a "post" everywhere in the product, so the same sheet relabels
+     * itself rather than there being a near-identical forum copy of it.
+     */
+    private fun configureForumPostLabels(model: Model) {
+        if (!isForumPost(model)) return
+        edit.setText(R.string.edit_forum_post)
+        join.setText(R.string.join_forum_post)
+        leave.setText(R.string.leave_forum_post)
+        archive.setText(R.string.archive_forum_post)
+        unarchive.setText(R.string.unarchive_forum_post)
+    }
+
+    private fun isForumPost(model: Model): Boolean =
+        StoreStream.getChannels().getChannel(model.channel.parentId)?.isThreadOnlyChannel() == true
 
     /** `mute_channel` emphasises the name, so it needs the span renderer rather than plain fill-in. */
     private fun muteThreadText(channel: Channel, isMuted: Boolean, context: Context): CharSequence =
@@ -245,6 +278,54 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
                 WidgetChannelsListItemThreadActions::class.java,
                 context = context,
             ) { dismiss() }
+    }
+
+    /**
+     * The three actions that only exist on a forum post: its tags, its pinned slot, and deleting it.
+     *
+     * A forum only keeps one pinned post, so pinning over an existing one replaces it — the
+     * reference asks first.
+     */
+    private fun configureForumPostActions(model: Model) {
+        val channel = model.channel
+        val isPost = isForumPost(model)
+        val parent = StoreStream.getChannels().getChannel(channel.parentId)
+        val hasTags = !parent?.availableTags.isNullOrEmpty()
+
+        editTags.visibility = if (isPost && model.canManageThread && hasTags) View.VISIBLE else View.GONE
+        editTags.setOnClickListener {
+            WidgetForumPostTagsSheet.show(
+                parentFragmentManager,
+                channel.parentId,
+                channel.appliedTags.orEmpty(),
+                threadId = channel.id,
+                canManageThreads = model.canManageThread,
+            )
+            dismiss()
+        }
+
+        val isPinned = channel.flags?.and(Channel.FLAG_PINNED) == Channel.FLAG_PINNED
+        pin.visibility = if (isPost && model.isModerator) View.VISIBLE else View.GONE
+        pin.setText(if (isPinned) R.string.unpin_post else R.string.pin_post)
+        pin.setOnClickListener {
+            val flags = channel.flags ?: 0L
+            setThreadSettings(
+                channel,
+                RestAPIParams.ThreadSettings(
+                    flags = if (isPinned) flags and Channel.FLAG_PINNED.inv() else flags or Channel.FLAG_PINNED,
+                ),
+            )
+        }
+
+        delete.visibility = if (isPost && model.canManageThread) View.VISIBLE else View.GONE
+        delete.setOnClickListener {
+            ThreadDeleteDialog.show(
+                parentFragmentManager,
+                channel.id,
+                channel.getDisplayNameOrDefault(requireContext()),
+            )
+            dismiss()
+        }
     }
 
     /** Closing and locking share one PATCH; the caller decides which field it is changing. */

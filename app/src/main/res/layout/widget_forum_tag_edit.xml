@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout android:paddingBottom="@dimen/padding_bottom_fab_screen" style="@style/UiKit.ViewGroup.LinearLayout">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginLeft="16dp" android:layout_marginTop="16dp" android:layout_marginRight="16dp" android:gravity="center_vertical" android:orientation="horizontal">
+                <FrameLayout android:id="@+id/forum_tag_edit_emoji_wrap" android:layout_width="32dp" android:layout_height="32dp" android:background="?attr/selectableItemBackgroundBorderless">
+                    <ImageView android:id="@+id/forum_tag_edit_emoji_placeholder" android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:contentDescription="@string/emoji" android:src="@drawable/ic_add_reaction_grey_a60_24dp"/>
+                    <com.discord.utilities.view.text.SimpleDraweeSpanTextView android:id="@+id/forum_tag_edit_emoji" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:visibility="gone" style="@style/UiKit.TextView"/>
+                </FrameLayout>
+                <EditText android:id="@+id/forum_tag_edit_name" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginLeft="12dp" android:layout_weight="1" android:background="@null" android:hint="@string/forum_mobile_tag_placeholder" android:imeOptions="actionDone" android:inputType="text" android:maxLength="20" android:maxLines="1" android:textColor="?attr/colorHeaderPrimary" android:textColorHint="?attr/colorTextMuted" style="@style/UiKit.TextView"/>
+                <ImageView android:id="@+id/forum_tag_edit_clear" android:layout_width="24dp" android:layout_height="24dp" android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="@string/clear" android:src="@drawable/ic_close_circle_grey_24dp" android:visibility="gone"/>
+            </LinearLayout>
+            <TextView android:layout_marginLeft="16dp" android:layout_marginTop="8dp" android:layout_marginRight="16dp" android:text="@string/forum_tag_create_description" style="@style/UiKit.TextView.Subtext"/>
+            <com.discord.views.CheckedSetting android:id="@+id/forum_tag_edit_moderated" android:layout_marginTop="16dp" app:cs_text="@string/forum_moderated_tag_checkbox" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+            <View style="@style/UiKit.Settings.Divider"/>
+            <TextView android:id="@+id/forum_tag_edit_remove" android:text="@string/forum_tag_remove" android:textColor="?attr/colorTextDanger" android:visibility="gone" style="@style/UiKit.Settings.Item"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+    <com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@+id/forum_tag_edit_save" android:visibility="gone" android:src="@drawable/icon_save" android:contentDescription="@string/save_changes" style="@style/Settings.FloatingActionButton"/>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

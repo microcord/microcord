@@ -51,6 +51,8 @@ class ForumBrowserPostView @JvmOverloads constructor(
     private val avatarSizePx = dpToPixels(16)
     private val overlapAmountPx = dpToPixels(4)
 
+    var layout: ForumLayout = ForumLayout.LIST
+
     fun configurePost(post: PostData) {
         binding.formPostTitle.text = post.channel.name
         configureFirstMessage(post)
@@ -59,8 +61,7 @@ class ForumBrowserPostView @JvmOverloads constructor(
         configureMediaGrid(post)
         configureReaction(post.mostCommonReaction, post.isDefaultReaction, post.firstMessage?.id)
         configureMessageCount(post)
-        binding.forumPostTag.visibility = if (post.tag == null) View.GONE else View.VISIBLE
-        post.tag?.let(binding.forumPostTag::configureTag)
+        configureTags(post)
         configureReadState(post)
         val isTyping = post.typingUsers.isNotEmpty()
         if (isTyping) configureTyping(post)
@@ -142,7 +143,7 @@ class ForumBrowserPostView @JvmOverloads constructor(
     }
 
     private fun configureAttachment(post: PostData) {
-        if (post.isMediaPost) {
+        if (post.showsMediaGrid()) {
             binding.inlineMediaImagePreview.visibility = View.GONE
             return
         }
@@ -172,7 +173,13 @@ class ForumBrowserPostView @JvmOverloads constructor(
     private fun configureMediaGrid(post: PostData) {
         val media = post.firstMessage?.attachments.orEmpty()
             .filter { it.type != MessageAttachmentType.FILE }
-        binding.mediaPostGrid.visibility = if (post.isMediaPost && media.isNotEmpty()) View.VISIBLE else View.GONE
+        val showsGrid = post.showsMediaGrid() && media.isNotEmpty()
+        binding.mediaPostGrid.visibility = if (showsGrid) View.VISIBLE else View.GONE
+        if (showsGrid) {
+            // A gallery post is taller than a media-channel post, which is fixed at 16:9.
+            binding.mediaPostGrid.layoutParams.height =
+                dpToPixels(if (post.isMediaPost) MEDIA_GRID_HEIGHT_DP else GALLERY_GRID_HEIGHT_DP)
+        }
         if (binding.mediaPostGrid.visibility != View.VISIBLE) {
             binding.mediaPostGrid.removeAllViews()
             return
@@ -292,7 +299,10 @@ class ForumBrowserPostView @JvmOverloads constructor(
     }
 
     private fun configureReadState(post: PostData) {
-        binding.neverSeenBefore.visibility = if (!post.readState.hasSeenBefore && !post.isMe) View.VISIBLE else View.GONE
+        // The reference marks a post nobody has opened with a badge beside the author, not a dot.
+        val neverSeen = !post.readState.hasSeenBefore && !post.isMe
+        binding.forumPostNewBadge.visibility = if (neverSeen) View.VISIBLE else View.GONE
+        binding.neverSeenBefore.visibility = View.GONE
         val alpha = if (post.readState.hasUnread) 1f else 0.8f
         binding.forumPostOwnerAvatar.alpha = alpha
         binding.forumPostOwnerName.alpha = alpha
@@ -313,18 +323,52 @@ class ForumBrowserPostView @JvmOverloads constructor(
         binding.typingIndicator.layoutParams = params
     }
 
+    /**
+     * A gallery row swaps the inline thumbnail for the collage, and falls back to the list body
+     * when the post has no media to show — as the reference does.
+     */
+    private fun PostData.showsMediaGrid(): Boolean = isMediaPost || layout == ForumLayout.GALLERY
+
     private fun themedDrawable(attribute: Int): Drawable? =
         context.getThemedDrawableRes(attribute).takeIf { it != 0 }
             ?.let { AppCompatResources.getDrawable(context, it) }
 
 
     private companion object {
+        const val MEDIA_GRID_HEIGHT_DP = 192
+        const val GALLERY_GRID_HEIGHT_DP = 225
+
         val CODE_EXTENSION = Regex(
             "(?:c\\+\\+|cpp|cc|c|h|hpp|mm|m|json|js|rb|rake|py|asm|fs|pyc|dtd|cgi|bat|rss|" +
                 "java|graphml|idb|lua|o|gml|prl|sls|conf|cmake|make|sln|vbe|cxx|wbf|vbs|" +
                 "r|wml|php|bash|applescript|fcgi|yaml|ex|exs|sh|ml|actionscript)",
         )
     }
+    /** Chips are recycled rather than re-inflated: a row rebinds on every list diff. */
+    private fun configureTags(post: PostData) {
+        val container = binding.forumPostTags
+        val chips = post.tags.visible
+        val needed = chips.size + if (post.tags.overflow > 0) 1 else 0
+        container.visibility = if (needed == 0) View.GONE else View.VISIBLE
+        while (container.childCount < needed) {
+            val params = com.google.android.flexbox.FlexboxLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
+            // Set on the params rather than the view: a child has no layoutParams until it is added.
+            if (container.childCount > 0) params.marginStart = dpToPixels(4)
+            container.addView(ForumPostTagView(context), params)
+        }
+        for (index in 0 until container.childCount) {
+            val view = container.getChildAt(index) as ForumPostTagView
+            view.visibility = if (index < needed) View.VISIBLE else View.GONE
+            when {
+                index < chips.size -> view.configureTag(chips[index])
+                index == chips.size && post.tags.overflow > 0 -> view.configureOverflow(post.tags.overflow)
+            }
+        }
+    }
+
 }
 
 internal data class MediaGridRect(val left: Int, val top: Int, val width: Int, val height: Int)
@@ -345,4 +389,6 @@ internal fun mediaGridRects(count: Int, width: Int, height: Int, gap: Int): List
     )
     if (count >= 4) rects += MediaGridRect(0, halfHeight + gap, halfWidth, halfHeight)
     return rects
+
+
 }

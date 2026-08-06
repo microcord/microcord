@@ -641,7 +641,7 @@ class StoreApplicationInteractions(
             val request = if (uploads.isEmpty()) {
                 api.sendModalInteraction(body)
             } else {
-                api.sendModalInteraction(PayloadJSON(body), uploads.map(FileUpload::part).toTypedArray())
+                api.sendModalInteraction(PayloadJSON(body), uploads.mapNotNull(FileUpload::part).toTypedArray())
             }
             request
                 .restSubscribeOn(false)

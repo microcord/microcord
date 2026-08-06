@@ -9,11 +9,18 @@ import com.discord.utilities.drawable.getThemedDrawableRes
 
 class ChannelMembersListViewHolderJoinLeaveThread(private val binding: WidgetChannelMembersListItemAddOrLeaveBinding) :
     RecyclerView.ViewHolder(binding.root) {
-    fun bind(onClicked: () -> Unit, isThreadJoined: Boolean) {
+    fun bind(onClicked: () -> Unit, isThreadJoined: Boolean, isForumPost: Boolean = false) {
         val context = binding.root.context
         binding.root.setOnClickListener { onClicked() }
         binding.root.findViewById<android.widget.TextView>(R.id.channel_members_list_item_add_or_leave_title)
-            .setText(if (isThreadJoined) R.string.leave_thread else R.string.join_thread)
+                        .setText(
+                when {
+                    isForumPost && isThreadJoined -> R.string.leave_forum_post
+                    isForumPost -> R.string.join_forum_post
+                    isThreadJoined -> R.string.leave_thread
+                    else -> R.string.join_thread
+                },
+            )
         binding.root.findViewById<android.widget.ImageView>(R.id.channel_members_list_item_add_or_leave).apply {
             setImageResource(context.getThemedDrawableRes(if (isThreadJoined) R.attr.ic_exit_to_app else R.attr.ic_person_add))
             imageTintList = ColorStateList.valueOf(ColorCompat.getThemedColor(

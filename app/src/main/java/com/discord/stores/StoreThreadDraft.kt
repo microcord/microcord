@@ -19,11 +19,15 @@ class StoreThreadDraft(private val dispatcher: Dispatcher) : StoreV2() {
         val threadName: String? = null,
         val isSending: Boolean = false,
         val shouldDisplayNameError: Boolean = false,
+        /** Forum posts only; the order is the order they were picked. */
+        val appliedTags: List<Long> = emptyList(),
     )
 
     private val draftStateSubject = BehaviorSubject.create(ThreadDraftState())
 
     fun observeDraftState(): Observable<ThreadDraftState> = draftStateSubject
+
+    fun getDraftState(): ThreadDraftState = draftStateSubject.value
 
     fun setDraftState(draftState: ThreadDraftState) = dispatcher.schedule {
         draftStateSubject.onNext(draftState)

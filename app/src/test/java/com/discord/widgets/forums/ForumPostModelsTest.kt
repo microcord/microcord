@@ -92,19 +92,22 @@ class ForumPostModelsTest {
         assertEquals(ForumPostReadState(2, hasSeenBefore = false, hasUnread = true), states[2])
     }
 
+    /** Unknown ids are dropped, applied order is kept, and anything past the cap becomes overflow. */
     @Test
-    fun tagProjectionUsesFirstKnownAppliedTag() {
-        val first = ForumTag(1, "Help", null, "question")
-        val second = ForumTag(2, "News", null, "newspaper")
-        val parent = channel(10).copy(availableTags = listOf(first, second))
-        val post = channel(11).copy(appliedTags = listOf(99, 2, 1))
+    fun tagProjectionKeepsTwoKnownTagsAndCountsTheRest() {
+        val tags = (1L..4L).map { ForumTag(it, "Tag$it", null, "emoji$it") }
+        val parent = channel(10).copy(availableTags = tags)
+        val post = channel(11).copy(appliedTags = listOf(99, 2, 1, 4))
 
-        assertEquals("News", resolvePostTag(parent, post, emptyMap())?.tagName)
+        val projected = resolvePostTags(parent, post, emptyMap())
+
+        assertEquals(listOf("Tag2", "Tag1"), projected.visible.map { it.tagName })
+        assertEquals(1, projected.overflow)
     }
 
     private fun post(channel: Channel, timestamp: Long) = PostData(
         channel, null, 0, emptyMap(), emptyMap(), emptyMap(), null, false, timestamp, null,
-        null, null, false, ForumPostReadState.createDefault(channel.id), null, emptyList(),
+        PostTagsData(), null, false, ForumPostReadState.createDefault(channel.id), null, emptyList(),
     )
 
     private fun channel(id: Long) = Channel(

@@ -142,7 +142,7 @@ class WidgetChatListAdapterItemStart(
         editChannel.setOnClickListener {
             WidgetThreadSettings.launch(entry.channelId, itemView.context)
         }
-        editChannel.setText(R.string.edit_thread)
+        editChannel.setText(if (entry.isGuildForumPost) R.string.edit_forum_post else R.string.edit_thread)
         editChannel.visibility = if (entry.canManageThread) View.VISIBLE else View.GONE
     }
 

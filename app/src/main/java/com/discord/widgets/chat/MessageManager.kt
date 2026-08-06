@@ -15,6 +15,7 @@ import com.discord.api.sticker.Sticker
 import com.discord.api.sticker.StickerType
 import com.discord.models.guild.Guild
 import com.discord.models.user.MeUser
+import com.discord.utilities.attachments.AttachmentLimits
 import com.discord.models.user.User
 import com.discord.stores.StoreApplicationInteractions
 import com.discord.stores.StoreChannelsSelected
@@ -49,13 +50,16 @@ class MessageManager(
 ) {
     private sealed class AttachmentValidationResult {
         object EmptyAttachments : AttachmentValidationResult()
-        data class FilesTooLarge(val attachmentsRequest: AttachmentsRequest) : AttachmentValidationResult()
+        data class FilesTooLarge(
+            val attachmentsRequest: AttachmentsRequest,
+            val violation: AttachmentLimits.Violation,
+        ) : AttachmentValidationResult()
         object Success : AttachmentValidationResult()
     }
 
     class AttachmentsRequest(
-        val currentFileSizeMB: Float,
-        val maxFileSizeMB: Int,
+        val sizes: List<Long>,
+        val maxFileSize: Long,
         val attachments: List<Attachment<*>>? = null,
     )
 
@@ -93,10 +97,11 @@ class MessageManager(
         )
     }
 
-    private fun validateAttachments(request: AttachmentsRequest?): AttachmentValidationResult = when {
-        request?.attachments.isNullOrEmpty() -> AttachmentValidationResult.EmptyAttachments
-        request!!.currentFileSizeMB >= request.maxFileSizeMB -> AttachmentValidationResult.FilesTooLarge(request)
-        else -> AttachmentValidationResult.Success
+    private fun validateAttachments(request: AttachmentsRequest?): AttachmentValidationResult {
+        if (request?.attachments.isNullOrEmpty()) return AttachmentValidationResult.EmptyAttachments
+        val violation = AttachmentLimits.validate(request!!.sizes, request.maxFileSize)
+            ?: return AttachmentValidationResult.Success
+        return AttachmentValidationResult.FilesTooLarge(request, violation)
     }
 
     private fun validateMessageContent(
@@ -151,7 +156,7 @@ class MessageManager(
         content: String,
         attachmentsRequest: AttachmentsRequest? = null,
         onMessageTooLong: ((Int, Int) -> Unit)?,
-        onFilesTooLarge: ((Int, Boolean) -> Unit)?,
+        onFilesTooLarge: ((AttachmentLimits.Violation, Boolean) -> Unit)?,
     ): Boolean {
         val me = storeUser.getMe()
         val contentValidation = validateMessageContent(content, emptyList(), me, isEditing = false)
@@ -161,7 +166,7 @@ class MessageManager(
         }
         val attachmentValidation = validateAttachments(attachmentsRequest)
         if (attachmentValidation is AttachmentValidationResult.FilesTooLarge) {
-            onFilesTooLarge?.invoke(attachmentValidation.attachmentsRequest.maxFileSizeMB, me.isPremium())
+            onFilesTooLarge?.invoke(attachmentValidation.violation, me.isPremium())
             return false
         }
         return true
@@ -175,11 +180,11 @@ class MessageManager(
         attachmentRequest: AttachmentsRequest? = null,
         onSuccess: () -> Unit,
         onFail: (RestApiError) -> Unit,
-        onFilesTooLarge: ((Int, Boolean) -> Unit)? = null,
+        onFilesTooLarge: ((AttachmentLimits.Violation, Boolean) -> Unit)? = null,
     ): Boolean {
         val validation = validateAttachments(attachmentRequest)
         if (validation is AttachmentValidationResult.FilesTooLarge) {
-            onFilesTooLarge?.invoke(validation.attachmentsRequest.maxFileSizeMB, storeUser.getMe().isPremium())
+            onFilesTooLarge?.invoke(validation.violation, storeUser.getMe().isPremium())
             return false
         }
         storeApplicationInteractions.sendApplicationCommand(
@@ -202,7 +207,7 @@ class MessageManager(
         stickers: List<BaseSticker> = emptyList(),
         consumePendingReply: Boolean = true,
         onMessageTooLong: ((Int, Int) -> Unit)? = null,
-        onFilesTooLarge: ((Int, Boolean) -> Unit)? = null,
+        onFilesTooLarge: ((AttachmentLimits.Violation, Boolean) -> Unit)? = null,
         messageSendResultHandler: (MessageSendResult) -> Unit = defaultMessageResultHandler,
     ): Boolean {
         val me = storeUser.getMe()
@@ -213,7 +218,7 @@ class MessageManager(
         }
         val attachmentValidation = validateAttachments(attachmentsRequest)
         if (attachmentValidation is AttachmentValidationResult.FilesTooLarge) {
-            onFilesTooLarge?.invoke(attachmentValidation.attachmentsRequest.maxFileSizeMB, me.isPremium())
+            onFilesTooLarge?.invoke(attachmentValidation.violation, me.isPremium())
             return false
         }
 

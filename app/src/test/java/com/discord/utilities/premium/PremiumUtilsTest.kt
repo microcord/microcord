@@ -2,40 +2,39 @@ package com.discord.utilities.premium
 
 import com.discord.api.guild.GuildFeature
 import com.discord.api.premium.PremiumTier
+import com.discord.models.guild.Guild
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PremiumUtilsTest {
 
     @Test
-    fun `boost feature tiers are cumulative`() {
-        // A tier-1 feature is also present in the tier-2 and tier-3 sets, so the lookup must return
-        // the *lowest* tier that unlocks it.
-        assertEquals(1, PremiumUtils.getMinimumBoostTierForGuildFeature(GuildFeature.INVITE_SPLASH))
-        assertEquals(1, PremiumUtils.getMinimumBoostTierForGuildFeature(GuildFeature.ANIMATED_ICON))
-        assertEquals(2, PremiumUtils.getMinimumBoostTierForGuildFeature(GuildFeature.BANNER))
-        assertEquals(2, PremiumUtils.getMinimumBoostTierForGuildFeature(GuildFeature.PRIVATE_THREADS))
-        assertEquals(2, PremiumUtils.getMinimumBoostTierForGuildFeature(GuildFeature.ROLE_ICONS))
-        assertEquals(3, PremiumUtils.getMinimumBoostTierForGuildFeature(GuildFeature.VANITY_URL))
-        assertEquals(3, PremiumUtils.getMinimumBoostTierForGuildFeature(GuildFeature.ANIMATED_BANNER))
+    fun `a perk follows the guild's features, not its boost level`() {
+        // Tierless boosting: a level 3 guild that never applied the powerup has not unlocked it.
+        assertTrue(PremiumUtils.guildCanAccessFeature(guild(GuildFeature.ROLE_ICONS), GuildFeature.ROLE_ICONS))
+        assertFalse(PremiumUtils.guildCanAccessFeature(guild(premiumTier = 3), GuildFeature.ROLE_ICONS))
+        assertFalse(PremiumUtils.guildCanAccessFeature(null, GuildFeature.ROLE_ICONS))
     }
 
     @Test
-    fun `a feature boosting never unlocks has no minimum tier`() {
-        assertNull(PremiumUtils.getMinimumBoostTierForGuildFeature(GuildFeature.PARTNERED))
-        assertNull(PremiumUtils.getMinimumBoostTierForGuildFeature(GuildFeature.HUB))
+    fun `guild upload ceiling is the largest size powerup applied`() {
+        val mb = 1024L * 1024L
+        assertEquals(10 * mb, PremiumUtils.getGuildMaxFileSize(guild(premiumTier = 3)))
+        assertEquals(50 * mb, PremiumUtils.getGuildMaxFileSize(guild(GuildFeature.MAX_FILE_SIZE_50_MB)))
+        assertEquals(250 * mb, PremiumUtils.getGuildMaxFileSize(guild(GuildFeature.MAX_FILE_SIZE_250_MB)))
+        // Holding several at once takes the biggest rather than the last listed.
+        assertEquals(
+            250 * mb,
+            PremiumUtils.getGuildMaxFileSize(
+                guild(GuildFeature.MAX_FILE_SIZE_50_MB, GuildFeature.MAX_FILE_SIZE_250_MB),
+            ),
+        )
     }
 
-    @Test
-    fun `guild upload ceiling steps at tier 2 and tier 3`() {
-        assertEquals(8, PremiumUtils.getGuildMaxFileSizeMB(0))
-        assertEquals(8, PremiumUtils.getGuildMaxFileSizeMB(1))
-        assertEquals(50, PremiumUtils.getGuildMaxFileSizeMB(2))
-        assertEquals(100, PremiumUtils.getGuildMaxFileSizeMB(3))
-    }
+    private fun guild(vararg features: GuildFeature, premiumTier: Int = 0) =
+        Guild(id = 1, premiumTier = premiumTier, features = features.toSet())
 
     @Test
     fun `emoji slots grow with the tier`() {

@@ -20,6 +20,7 @@ import com.discord.app.appViewModels
 import com.discord.databinding.ViewImageBinding
 import com.discord.databinding.WidgetIncomingShareBinding
 import com.discord.dialogs.ImageUploadFailedDialog
+import com.discord.utilities.attachments.AttachmentLimits
 import com.discord.models.guild.Guild
 import com.discord.models.message.Message
 import com.discord.models.user.MeUser
@@ -277,13 +278,13 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
         }
         val me = StoreStream.getUsers().getMe()
         val guild = StoreStream.getGuilds().getGuild(channel.guildId)
-        val limitMb = uploadLimitMB(me.premiumTier, guild?.premiumTier ?: 0, me.isStaff)
-        if (attachments.sumOf(UploadAttachment::size) > limitMb * BYTES_PER_MEGABYTE) {
+        val violation = AttachmentLimits.validate(attachments.map(UploadAttachment::size), me, guild)
+        if (violation != null) {
             setSending(false)
             ImageUploadFailedDialog.show(
                 parentFragmentManager,
                 isPremium(me.premiumTier),
-                limitMb,
+                violation,
                 onResendCompressed = null,
                 isVideo = attachments.any { it.mimeType.startsWith("video/") },
             )
@@ -504,21 +505,6 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
             attachmentCount: Int,
             forwarding: Boolean = false,
         ): Boolean = selected && (forwarding || comment.isNotBlank() || attachmentCount > 0)
-
-        internal fun uploadLimitMB(premiumTier: PremiumTier, guildPremiumTier: Int, isStaff: Boolean): Int = maxOf(
-            when {
-                isStaff -> 200
-                premiumTier == PremiumTier.TIER_1 -> 50
-                premiumTier == PremiumTier.TIER_2 -> 100
-                premiumTier == PremiumTier.TIER_0 -> 20
-                else -> 8
-            },
-            when (guildPremiumTier) {
-                0, 1 -> 8
-                2 -> 50
-                else -> 100
-            },
-        )
 
         private fun isPremium(tier: PremiumTier) = tier in setOf(
             PremiumTier.TIER_0,

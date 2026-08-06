@@ -7,6 +7,7 @@ import com.discord.utilities.io.sanitizeDownloadFileName
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import com.discord.utilities.attachments.AttachmentUrlRefresher
 import rx.Observable
 
 object DownloadUtils {
@@ -15,6 +16,28 @@ object DownloadUtils {
         class Completed(val file: File) : DownloadState()
         class Failure(val exception: Exception) : DownloadState()
     }
+
+    /**
+     * Re-signs [fileUrl] first when its signature has lapsed.
+     *
+     * A message that has been in the store since before its links expired still holds the stale
+     * ones, and the CDN refuses those outright, so a download started from an old row would fail
+     * for no reason the user could act on.
+     */
+    @JvmStatic
+    @JvmOverloads
+    @RequiresPermission(value = Manifest.permission.WRITE_EXTERNAL_STORAGE, conditional = true)
+    fun downloadRefreshedFile(
+        context: Context,
+        fileUrl: String,
+        fileName: String,
+        downloadDirectory: File = context.cacheDir,
+    ): Observable<DownloadState> =
+        AttachmentUrlRefresher.refreshExpired(listOf(fileUrl), System.currentTimeMillis())
+            .onErrorReturn { mapOf(fileUrl to fileUrl) }
+            .flatMap { refreshed ->
+                downloadFile(context, refreshed[fileUrl] ?: fileUrl, fileName, downloadDirectory)
+            }
 
     @JvmStatic
     @JvmOverloads

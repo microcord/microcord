@@ -35,6 +35,10 @@ data class Channel(
     @Transient var guildHashes: GuildHashes?,
     val availableTags: List<ForumTag>?,
     val appliedTags: List<ForumTagId>?,
+    /** What a thread-only channel starts on before the viewer overrides it for themselves. */
+    val defaultForumLayout: Int? = null,
+    val defaultSortOrder: Int? = null,
+    val defaultTagSetting: String? = null,
     val threadMetadata: ThreadMetadata?,
     var messageCount: Int?,
     val memberCount: Int?,
@@ -61,6 +65,7 @@ data class Channel(
         const val GUILD_MEDIA = 16
         const val FLAGS_NONE = 0L
         const val FLAG_PINNED = 2L
+        const val FLAG_REQUIRE_TAG = 16L
     }
 }
 
@@ -71,6 +76,8 @@ data class ForumTag(
     val name: String,
     val emojiId: Long?,
     val emojiName: String?,
+    /** Only a member with `MANAGE_THREADS` may apply this one. */
+    val moderated: Boolean = false,
 ) {
     val customEmojiId: String? = emojiId?.toString()
 }

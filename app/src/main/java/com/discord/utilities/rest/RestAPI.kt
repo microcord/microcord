@@ -43,6 +43,9 @@ object RestAPI {
     @Volatile
     private var installedEmbeddedActivityOAuthToken: EmbeddedActivityOAuthAPI? = null
 
+    @Volatile
+    private var installedCloudUpload: RestAPIInterface.CloudUpload? = null
+
     /** Publishes the store graph's REST client. Safe to call more than once. */
     @JvmStatic
     fun install(api: RestAPIInterface, apiSerializeNulls: RestAPIInterface = api) {
@@ -89,6 +92,14 @@ object RestAPI {
             clientName = "embeddedActivityOAuthToken",
             cookieJar = CookieJar.NO_COOKIES,
         )
+        // No auth chain: the presigned URL authenticates itself, and attaching the account token
+        // would hand it to Google's storage bucket.
+        installedCloudUpload = builder.build(
+            RestAPIInterface.CloudUpload::class.java,
+            interceptors = listOf(ClientMetadataInterceptor),
+            clientName = "cloudUpload",
+            cookieJar = CookieJar.NO_COOKIES,
+        )
         install(api, apiSerializeNulls)
         return api
     }
@@ -102,7 +113,13 @@ object RestAPI {
         installedEmbeddedActivities = null
         installedEmbeddedActivityOAuth = null
         installedEmbeddedActivityOAuthToken = null
+        installedCloudUpload = null
     }
+
+    /** The unauthenticated client used to PUT a file to its presigned storage URL. */
+    @JvmStatic
+    val cloudUploadOrNull: RestAPIInterface.CloudUpload?
+        get() = installedCloudUpload
 
     /** The REST client, or `null` before the store graph has published one. */
     @JvmStatic

@@ -6,6 +6,7 @@ import com.google.gson.GsonBuilder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import com.discord.utilities.attachments.AttachmentLimits
 import org.junit.Test
 
 class ForumPostCreateManagerTest {
@@ -24,10 +25,10 @@ class ForumPostCreateManagerTest {
         )
         assertEquals(2001 to 2000, messageError)
 
-        var fileError: Pair<Int, Boolean>? = null
+        var fileError: Pair<AttachmentLimits.Violation, Boolean>? = null
         val oversized = ForumPostCreateManager.AttachmentsRequest(
-            currentFileSizeMB = 8f,
-            maxFileSizeMB = 8,
+            sizes = listOf(AttachmentLimits.MAX_ATTACHMENT_SIZE + 1),
+            maxFileSize = AttachmentLimits.MAX_ATTACHMENT_SIZE,
             // Validation only checks whether the collection is empty; no Android Uri is needed here.
             attachments = listOf<com.discord.utilities.attachments.UploadAttachment?>(null) as
                 List<com.discord.utilities.attachments.UploadAttachment>,
@@ -38,10 +39,16 @@ class ForumPostCreateManagerTest {
                 attachmentsRequest = oversized,
                 isPremiumTier2 = true,
                 isPremium = true,
-                onFilesTooLarge = { max, premium -> fileError = max to premium },
+                onFilesTooLarge = { violation, premium -> fileError = violation to premium },
             ),
         )
-        assertEquals(8 to true, fileError)
+        assertEquals(
+            AttachmentLimits.Violation.FileTooLarge(
+                AttachmentLimits.MAX_ATTACHMENT_SIZE + 1,
+                AttachmentLimits.MAX_ATTACHMENT_SIZE,
+            ) to true,
+            fileError,
+        )
         assertTrue(ForumPostCreateManager.isValidFirstMessage("", null, false, false))
         assertTrue(ForumPostCreateManager.isValidFirstMessage("x".repeat(4000), null, true, true))
     }

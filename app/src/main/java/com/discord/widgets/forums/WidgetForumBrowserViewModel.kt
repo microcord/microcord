@@ -110,6 +110,16 @@ class WidgetForumBrowserViewModel(
             return ForumBrowserItem.PostItem(createPostData(state, channel))
         }
 
+        // A search is its own listing: results replace the browser rather than filtering it.
+        val search = state.searchState
+        if (search != null) {
+            if (search is ArchivedThreadsStore.ThreadListingState.Listing) {
+                val results = search.threads.mapNotNull(::post)
+                return if (search.isLoadingMore) results + ForumBrowserItem.LoadingItem else results
+            }
+            return emptyList()
+        }
+
         val active = state.activeThreads.values
         val pinned = active.filter { it.flags?.and(Channel.FLAG_PINNED) == Channel.FLAG_PINNED }
             .mapNotNull(::post).sortedWith(ForumBrowserItem.postItemComparatorByMostRecent)
@@ -131,7 +141,7 @@ class WidgetForumBrowserViewModel(
     private fun createPostData(state: StoreState.Loaded, channel: Channel): PostData {
         val message = state.forumPostFirstMessages[channel.id]
         val reaction = ForumUtils.run { message?.mostCommonReaction(StoreStream.getEmojis()) }
-        val tag = resolvePostTag(state.channel, channel, state.guildEmojis)
+        val tags = resolvePostTags(state.channel, channel, state.guildEmojis)
         val typingUsers = state.typingUsers[channel.id].orEmpty().mapNotNull { userId ->
             val user = state.users[userId] ?: return@mapNotNull null
             val member = state.guildMembers[userId] ?: return@mapNotNull null
@@ -148,7 +158,7 @@ class WidgetForumBrowserViewModel(
             isFirstMessageBlocked = message?.author?.id in state.myBlockedUserIds,
             mostRecentMessageTimestamp = state.mostRecentMessageIds[channel.id]?.let(SnowflakeUtils::toTimestamp),
             messageCount = state.forumPostMessageCounts[channel.id]?.count,
-            tag = tag,
+            tags = tags,
             mostCommonReaction = reaction,
             isDefaultReaction = ForumUtils.run {
                 reaction?.isDefaultPostReaction(StoreStream.getEmojis()) == true
@@ -203,6 +213,7 @@ class WidgetForumBrowserViewModel(
             val forumPostReadStates: Map<Long, ForumPostReadState>,
             val forumPostUnreadCounts: Map<Long, Int>,
             val typingUsers: Map<Long, Set<Long>>,
+            val searchState: ArchivedThreadsStore.ThreadListingState? = null,
         ) : StoreState()
     }
 
@@ -211,6 +222,7 @@ class WidgetForumBrowserViewModel(
         val users: Map<Long, User>,
         val archived: ArchivedThreadsStore.ThreadListingState,
         val names: Map<Long, String>,
+        val search: ArchivedThreadsStore.ThreadListingState? = null,
     )
     private data class GuildState(
         val members: Map<Long, GuildMember>,
@@ -253,10 +265,13 @@ class WidgetForumBrowserViewModel(
             val base = Observable.combineLatest(
                 StoreStream.getUsers().observeMe(),
                 StoreStream.getUsers().observeAllUsers(),
-                ForumUtils.maybeLoadAndObserveThreadListing(channel.id, active.isNotEmpty()),
+                Observable.combineLatest(
+                    ForumUtils.maybeLoadAndObserveThreadListing(channel.id, active.isNotEmpty()),
+                    StoreStream.getArchivedThreads().observeForumSearch(channel.id),
+                ) { archived, search -> archived to search },
                 StoreStream.getChannels().observeNames(),
-            ) { me, users, archived, names ->
-                BaseState(me, users, archived, names)
+            ) { me, users, listings, names ->
+                BaseState(me, users, listings.first, names, listings.second)
             }
             val guild = Observable.combineLatest(
                 StoreStream.getGuilds().observeGuildMembers(channel.guildId),
@@ -288,6 +303,7 @@ class WidgetForumBrowserViewModel(
                     g.firstMessages, g.counts, m.blocked, m.canCreate, m.recentIds,
                     m.emojis.emojiIndex, r.readStates, r.unreadCounts,
                     r.typing.filterKeys(active::containsKey),
+                    searchState = b.search,
                 ) as StoreState
             }
         }

@@ -9,6 +9,8 @@ import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.fragment.app.viewModels
 import com.discord.R
+import com.discord.api.channel.isThreadOnlyChannel
+import com.discord.stores.StoreStream
 import com.discord.views.CheckedSetting
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayNameOrDefault
@@ -86,7 +88,10 @@ class WidgetThreadSettings : AppFragment(R.layout.widget_thread_settings) {
             return
         }
         setActionBarDisplayHomeAsUpEnabled()
-        setActionBarTitle(R.string.thread_settings)
+        // A thread in a forum is a post everywhere else in the product; the settings screen follows.
+        val isForumPost = StoreStream.getChannels()
+            .getChannel(state.channel.parentId)?.isThreadOnlyChannel() == true
+        setActionBarTitle(if (isForumPost) R.string.forum_post_settings else R.string.thread_settings)
         setActionBarSubtitle(state.channel.getDisplayNameOrDefault(requireContext(), includePrefix = false))
         setActionBarOptionsMenu(
             R.menu.menu_category_settings,
@@ -94,7 +99,7 @@ class WidgetThreadSettings : AppFragment(R.layout.widget_thread_settings) {
             onConfigured = { menu ->
                 menu.findItem(R.id.menu_channel_settings_delete).apply {
                     isVisible = state.canManageThread
-                    setTitle(R.string.delete_thread)
+                    setTitle(if (isForumPost) R.string.delete_forum_post else R.string.delete_thread)
                 }
                 menu.findItem(R.id.menu_channel_settings_reset).isVisible = false
             },

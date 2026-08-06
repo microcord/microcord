@@ -29,5 +29,5 @@ private val WHITESPACE = Regex("\\s")
 /** Indexes a member list by user id, preserving encounter order. */
 fun List<GuildMember>.asMap(): Map<Long, GuildMember> = associateBy { it.user.id }
 
-/** Upload ceiling for this guild's boost tier, in megabytes. */
-fun getMaxFileSizeMB(guild: Guild): Int = PremiumUtils.getGuildMaxFileSizeMB(guild.premiumTier)
+/** Upload ceiling this guild's powerups grant, in bytes. */
+fun getMaxFileSize(guild: Guild): Long = PremiumUtils.getGuildMaxFileSize(guild)

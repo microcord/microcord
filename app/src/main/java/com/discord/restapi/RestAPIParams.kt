@@ -556,10 +556,16 @@ object RestAPIParams {
             "Message(nonce=$nonce, applicationId=$applicationId, stickerIds=$stickerIds, " +
                 "content=<redacted>)"
 
+        /**
+         * [uploadedFilename] names a file already sitting in storage, which is how a cloud upload
+         * is claimed. It is absent only for the legacy multipart send, where the bytes travel with
+         * the request instead.
+         */
         data class Attachment(
             val id: Int,
             val filename: String,
             @SerializedName("is_spoiler") val isSpoiler: Boolean,
+            @SerializedName("uploaded_filename") val uploadedFilename: String? = null,
         )
 
         data class Poll(
@@ -787,6 +793,19 @@ object RestAPIParams {
         val defaultAutoArchiveDuration: Int?,
         /** Private threads only. */
         val invitable: Boolean? = null,
+        val flags: Long? = null,
+        /** Thread-only channels: what members see before overriding it for themselves. */
+        val defaultForumLayout: Int? = null,
+        val defaultSortOrder: Int? = null,
+        val defaultTagSetting: String? = null,
+    )
+
+    /** A forum tag being created or edited; [emojiName] and [emojiId] are mutually exclusive. */
+    data class ForumTag(
+        val name: String,
+        val emojiId: Long? = null,
+        val emojiName: String? = null,
+        val moderated: Boolean = false,
     )
 
     data class ThreadCreationSettings(
@@ -813,6 +832,8 @@ object RestAPIParams {
         val locked: Boolean? = null,
         val autoArchiveDuration: Int? = null,
         val invitable: Boolean? = null,
+        val appliedTags: List<Long>? = null,
+        val flags: Long? = null,
     )
 
     class Thumbnail(val thumbnail: String)

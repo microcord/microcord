@@ -95,6 +95,7 @@ class ChannelMembersListAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>(
             is Item.JoinLeaveThread -> (holder as ChannelMembersListViewHolderJoinLeaveThread).bind(
                 { onJoinLeaveThreadClicked?.invoke() },
                 item.isThreadJoined,
+                item.isForumPost,
             )
             is Item.PlaceholderMember -> (holder as ChannelMembersListViewHolderLoading).bind(position)
             is Item.PlaceholderHeader -> Unit
@@ -138,7 +139,11 @@ class ChannelMembersListAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>(
         data class Header(override val rowId: String, val headerType: Type, val memberCount: Int) : Item(ViewType.HEADER, rowId) {
             enum class Type { ONLINE, OFFLINE, GROUP_DM }
         }
-        data class JoinLeaveThread(override val rowId: String, val isThreadJoined: Boolean) :
+        data class JoinLeaveThread(
+            override val rowId: String,
+            val isThreadJoined: Boolean,
+            val isForumPost: Boolean = false,
+        ) :
             Item(ViewType.JOIN_LEAVE_THREAD, rowId)
         data class Member(
             val userId: Long,

@@ -1,32 +1,112 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="?attr/primary_630"
-    android:orientation="vertical"
-    android:paddingBottom="8dp">
+    android:background="?attr/primary_630">
 
-    <TextView
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingStart="16dp"
-        android:paddingTop="16dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="12dp"
-        android:text="@string/sort"
-        android:textColor="?attr/colorHeaderPrimary"
-        style="@style/UiKit.TextView.H2" />
+        android:orientation="vertical"
+        android:paddingBottom="8dp">
 
-    <com.discord.views.CheckedSetting
-        android:id="@+id/forum_sort_activity"
-        app:cs_text="@string/forum_sort_activity"
-        app:cs_view_type="radio"
-        style="@style/UiKit.CheckedSetting.Themed" />
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="16dp"
+            android:paddingTop="16dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="12dp">
 
-    <com.discord.views.CheckedSetting
-        android:id="@+id/forum_sort_creation"
-        app:cs_text="@string/forum_sort_creation"
-        app:cs_view_type="radio"
-        style="@style/UiKit.CheckedSetting.Themed" />
-</LinearLayout>
+            <TextView
+                android:id="@+id/forum_display_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true"
+                android:text="@string/forum_channel_sort_and_view"
+                android:textColor="?attr/colorHeaderPrimary"
+                style="@style/UiKit.TextView.H2" />
+
+            <TextView
+                android:id="@+id/forum_display_reset"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:padding="4dp"
+                android:text="@string/forum_channel_reset_all"
+                android:textColor="?attr/colorTextLink"
+                style="@style/UiKit.TextView" />
+        </RelativeLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="4dp"
+            android:text="@string/forum_channel_sort_by"
+            style="@style/UiKit.TextView.H6" />
+
+        <com.discord.views.CheckedSetting
+            android:id="@+id/forum_sort_activity"
+            app:cs_text="@string/forum_sort_activity"
+            app:cs_view_type="radio"
+            style="@style/UiKit.CheckedSetting.Themed" />
+
+        <com.discord.views.CheckedSetting
+            android:id="@+id/forum_sort_creation"
+            app:cs_text="@string/forum_sort_creation"
+            app:cs_view_type="radio"
+            style="@style/UiKit.CheckedSetting.Themed" />
+
+        <TextView
+            android:id="@+id/forum_layout_header"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="16dp"
+            android:paddingTop="12dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="4dp"
+            android:text="@string/forum_channel_view_as"
+            style="@style/UiKit.TextView.H6" />
+
+        <com.discord.views.CheckedSetting
+            android:id="@+id/forum_layout_list"
+            app:cs_text="@string/forum_channel_view_as_list"
+            app:cs_view_type="radio"
+            style="@style/UiKit.CheckedSetting.Themed" />
+
+        <com.discord.views.CheckedSetting
+            android:id="@+id/forum_layout_gallery"
+            app:cs_text="@string/forum_channel_view_as_grid"
+            app:cs_view_type="radio"
+            style="@style/UiKit.CheckedSetting.Themed" />
+
+        <TextView
+            android:id="@+id/forum_tag_matching_header"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="16dp"
+            android:paddingTop="12dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="4dp"
+            android:text="@string/forum_channel_tag_filtering"
+            style="@style/UiKit.TextView.H6" />
+
+        <com.discord.views.CheckedSetting
+            android:id="@+id/forum_tag_match_some"
+            app:cs_text="@string/forum_channel_tag_match_some"
+            app:cs_view_type="radio"
+            style="@style/UiKit.CheckedSetting.Themed" />
+
+        <com.discord.views.CheckedSetting
+            android:id="@+id/forum_tag_match_all"
+            app:cs_text="@string/forum_channel_tag_match_all"
+            app:cs_view_type="radio"
+            style="@style/UiKit.CheckedSetting.Themed" />
+    </LinearLayout>
+</ScrollView>

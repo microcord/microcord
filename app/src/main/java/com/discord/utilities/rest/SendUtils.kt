@@ -17,8 +17,8 @@ import rx.Observable
  *
  * - **No attachments** — a single [SendPayload.ReadyToSend] with an empty upload list.
  * - **With attachments** — [SendPayload.Preprocessing] first, emitted synchronously on subscribe
- *   before any file is touched, so the UI can show "preparing 3 files" immediately; then, once every
- *   part has been built, a single [SendPayload.ReadyToSend] carrying the multipart parts.
+ *   before any file is touched, so the UI can show "preparing 3 files" immediately; then a single
+ *   [SendPayload.ReadyToSend] carrying the files, as multipart parts or as names alone.
  *
  * `MessageQueue` consumes that stream with `doOnNext` side effects
  * (`onPreprocessing` / `onProgress`), then `filterIs<ReadyToSend>().take(1)` before issuing the REST
@@ -50,7 +50,7 @@ object SendUtils {
             val mimeType: String? = null,
         ) : SendPayload()
 
-        /** The message body and its built multipart parts, ready for the send endpoint. */
+        /** The message body and the files it will claim once they are uploaded. */
         data class ReadyToSend(
             val message: RestAPIParams.Message,
             val uploads: List<FileUpload>,
@@ -67,11 +67,15 @@ object SendUtils {
      *
      * [contentResolver] is only required when [attachments] is non-empty; a text-only send emits
      * immediately and never touches it.
+     *
+     * Pass `inlineFileBodies = false` when the caller uploads the bytes to storage itself, so the
+     * files are not also read into request bodies nothing will send.
      */
     fun getSendPayload(
         contentResolver: ContentResolver?,
         message: RestAPIParams.Message,
         attachments: List<UploadAttachment>?,
+        inlineFileBodies: Boolean = true,
     ): Observable<SendPayload> {
         if (attachments.isNullOrEmpty()) {
             return Observable.just(SendPayload.ReadyToSend(message, emptyList()))
@@ -91,7 +95,12 @@ object SendUtils {
                     )
                 },
             )
-            SendPayload.ReadyToSend(messageWithAttachments, buildUploads(contentResolver, prepared)) as SendPayload
+            val uploads = if (inlineFileBodies) {
+                buildUploads(contentResolver, prepared)
+            } else {
+                MessageUploadPayloadBuilder.describeUploads(prepared)
+            }
+            SendPayload.ReadyToSend(messageWithAttachments, uploads) as SendPayload
         }
         return Observable.concat(preprocessing, readyToSend)
     }

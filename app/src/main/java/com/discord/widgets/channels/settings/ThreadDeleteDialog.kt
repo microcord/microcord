@@ -5,14 +5,20 @@ import android.view.View
 import android.widget.TextView
 import androidx.fragment.app.FragmentManager
 import com.discord.R
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.app.AppDialog
+import com.discord.stores.StoreStream
 import com.google.android.material.button.MaterialButton
 import com.discord.i18n.i18nRender
 
 internal class ThreadDeleteDialog : AppDialog(R.layout.widget_channel_settings_delete) {
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        view.findViewById<TextView>(R.id.channel_settings_delete_title).setText(R.string.delete_thread)
+        val isForumPost = StoreStream.getChannels()
+            .getChannel(argumentsOrDefault.getLong(ARG_CHANNEL_ID))
+            ?.let { StoreStream.getChannels().getChannel(it.parentId)?.isThreadOnlyChannel() } == true
+        view.findViewById<TextView>(R.id.channel_settings_delete_title)
+            .setText(if (isForumPost) R.string.delete_forum_post else R.string.delete_thread)
         view.findViewById<TextView>(R.id.channel_settings_delete_body).text =
             requireContext().i18nRender(
                 R.string.delete_channel_body,

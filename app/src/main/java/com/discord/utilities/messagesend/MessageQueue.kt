@@ -9,6 +9,8 @@ import com.discord.utilities.captcha.CaptchaRequestPolicy
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.networking.Backoff
 import com.discord.utilities.rest.FileUpload
+import com.discord.utilities.attachments.CloudUploader
+import com.discord.utilities.attachments.UploadAttachment
 import com.discord.utilities.rest.SendUtils
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.filterIs
@@ -231,7 +233,7 @@ class MessageQueue @JvmOverloads constructor(
         )
         val captchaPolicy = CaptchaRequestPolicy.preSolved(message.captchaSolution)
 
-        SendUtils.getSendPayload(contentResolver, body, request.attachments)
+        SendUtils.getSendPayload(contentResolver, body, request.attachments, inlineFileBodies = false)
             .doOnNext { payload ->
                 when (payload) {
                     is SendUtils.SendPayload.Preprocessing -> request.onPreprocessing(payload)
@@ -243,7 +245,16 @@ class MessageQueue @JvmOverloads constructor(
             }
             .filterIs<SendUtils.SendPayload.ReadyToSend>()
             .take(1)
-            .flatMap { ready -> sendReadyPayload(message.channelId, ready, captchaPolicy, api) }
+            .flatMap { ready ->
+                sendReadyPayload(
+                    message.channelId,
+                    ready,
+                    request.attachments,
+                    captchaPolicy,
+                    api,
+                    request.onProgress,
+                )
+            }
             .restSubscribeOn(retry = message.nonce != null)
             .appSubscribe(
                 errorClass = MessageQueue::class.java,
@@ -252,21 +263,58 @@ class MessageQueue @JvmOverloads constructor(
                 },
                 errorHandler = { error -> handleError(error, drainListener, message) },
                 onNext = { resultMessage -> handleSuccess(resultMessage, drainListener) },
+                // A stream that ends without ever producing a message or an error would otherwise
+                // leave the request unsettled: the queue stays marked as draining and every later
+                // send for this channel stalls behind a message that just sits there. Settling it
+                // as a failure is recoverable — the row shows as failed and can be retried — where
+                // a stalled queue is not. `DrainListener` ignores this once already settled.
+                onTerminated = { drainListener.complete(MessageResult.NoResult) },
             )
     }
 
+    /**
+     * Uploads the files to storage first, then sends a message that claims them.
+     *
+     * The bytes no longer ride inside the send, so the request stays small however large the files
+     * are, and a failed upload costs no message. Anything already staged when a later file fails is
+     * released rather than left orphaned in the bucket.
+     */
     private fun sendReadyPayload(
         channelId: Long,
         ready: SendUtils.SendPayload.ReadyToSend,
+        attachments: List<UploadAttachment>?,
         captchaPolicy: CaptchaRequestPolicy,
         client: RestAPIInterface = api,
+        onProgress: (List<FileUpload>) -> Unit = {},
     ): Observable<com.discord.api.message.Message> {
-        val parts = ready.uploads.map(FileUpload::part)
-        return if (parts.isEmpty()) {
-            client.sendMessage(channelId, ready.message, captchaPolicy)
-        } else {
-            client.sendMessage(channelId, PayloadJSON(ready.message), parts.toTypedArray(), captchaPolicy)
+        if (attachments.isNullOrEmpty() || contentResolver == null) {
+            return client.sendMessage(channelId, ready.message, captchaPolicy)
         }
+        val staged = mutableListOf<String>()
+        // Claimed by a message that was actually sent, so it must survive the unsubscribe that
+        // follows completion. `settled` also keeps the error and unsubscribe paths from each
+        // releasing the same files.
+        var settled = false
+        fun release() {
+            if (settled) return
+            settled = true
+            if (staged.isNotEmpty()) CloudUploader.discard(staged)
+        }
+        return CloudUploader.stage(
+            channelId,
+            contentResolver,
+            attachments,
+            onProgress = { upload -> onProgress(listOf(upload)) },
+        )
+            .doOnNext { uploads -> staged += uploads.map { it.uploadedFilename } }
+            .flatMap { uploads ->
+                client.sendMessage(channelId, claimUploads(ready.message, uploads), captchaPolicy)
+            }
+            .doOnNext { settled = true }
+            .doOnError { release() }
+            // `doOnUnsubscribe` also runs on normal completion, so releasing unconditionally here
+            // would delete the very files the sent message just claimed.
+            .doOnUnsubscribe { release() }
     }
 
     private fun doSendApplicationCommand(
@@ -287,7 +335,7 @@ class MessageQueue @JvmOverloads constructor(
             .take(1)
             .flatMap { ready ->
                 val body = ready.command.toRestApiParam()
-                val parts = ready.uploads.map(FileUpload::part)
+                val parts = ready.uploads.mapNotNull(FileUpload::part)
                 if (parts.isEmpty()) {
                     api.sendApplicationCommand(body)
                 } else {
@@ -425,3 +473,22 @@ private fun com.discord.api.message.allowedmentions.MessageAllowedMentions.toRes
         roles = roles,
         repliedUser = repliedUser,
     )
+
+/**
+ * Points each attachment entry at the file it just uploaded.
+ *
+ * Matched by position, not by name: `SendUtils` renames the entries on the message so that two
+ * files chosen with the same name stay distinguishable, while the uploads keep the names they were
+ * picked with. Keying on the filename therefore misses exactly the attachments that were renamed,
+ * and an entry with no `uploaded_filename` is one the server cannot resolve. Position is reliable
+ * because the entries are built from the same list, in order, and the uploads run through
+ * `concatMap`, which preserves it.
+ */
+internal fun claimUploads(
+    message: RestAPIParams.Message,
+    uploads: List<CloudUploader.StagedUpload>,
+): RestAPIParams.Message = message.copy(
+    attachments = message.attachments?.mapIndexed { index, attachment ->
+        attachment.copy(uploadedFilename = uploads.getOrNull(index)?.uploadedFilename)
+    },
+)

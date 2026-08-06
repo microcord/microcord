@@ -10,8 +10,14 @@ import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.app.appViewModels
 import com.discord.api.channel.Channel
+import com.discord.widgets.channels.list.WidgetChannelsListItemThreadActions
 import com.discord.databinding.WidgetForumBrowserBinding
 import com.discord.stores.SelectedChannelAnalyticsLocation
+import com.discord.restapi.RestAPIParams
+import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rx.restSubscribeOn
+import com.discord.api.permission.Permission
+import com.discord.utilities.permissions.PermissionUtils
 import com.discord.stores.StoreStream
 import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.color.ColorCompat
@@ -31,6 +37,8 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
     private lateinit var scrollListener: ForumBrowserScrollListener
     private lateinit var nsfwPanel: WidgetHomePanelNsfw
     private var panelNsfwHidden = true
+    private val searchHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var searchWatcher: android.text.TextWatcher? = null
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -48,7 +56,7 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
                 }
         }
 
-        adapter = WidgetForumBrowserAdapter(::openForumPost)
+        adapter = WidgetForumBrowserAdapter(::openForumPost, ::openForumPostActions)
         layoutManager = ForumBrowserLayoutManager(binding.recyclerView)
         scrollListener = ForumBrowserScrollListener()
         binding.recyclerView.layoutManager = layoutManager
@@ -58,6 +66,15 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
 
         WidgetForumGuidelinesBottomSheet.registerForResult(this, CLOSE_GUIDELINES_CREATE) { guildId, channelId ->
             openCreatePostScreen(guildId, channelId)
+        }
+        parentFragmentManager.setFragmentResultListener(
+            WidgetForumTagFilterBottomSheet.RESULT_KEY,
+            this,
+        ) { _, result ->
+            val channelId = result.getLong(WidgetForumTagFilterBottomSheet.ARG_CHANNEL_ID)
+            (viewModel.viewState as? WidgetForumBrowserViewModel.ViewState.Loaded)
+                ?.takeIf { it.channelId == channelId }
+                ?.let(::configure)
         }
         parentFragmentManager.setFragmentResultListener(
             WidgetForumSortBottomSheet.RESULT_KEY,
@@ -128,10 +145,26 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
                 actionBarTitleLayout?.findViewById<ImageView>(R.id.toolbar_icon)?.imageTintList =
                     ColorStateList.valueOf(ColorCompat.getThemedColor(requireContext(), R.attr.colorInteractiveNormal))
                 configureButtons(state)
-                val items = sortForumItems(state.listItems, ForumUtils.getSortOrder(state.channelId))
+                configureSearchMenu(state)
+                val channel = StoreStream.getChannels().getChannel(state.channelId)
+                adapter.layout = ForumUtils.getLayout(state.channelId, channel)
+                val items = sortForumItems(
+                    filterForumItemsByTags(
+                        state.listItems,
+                        ForumUtils.getTagFilter(state.channelId),
+                        ForumUtils.getTagSetting(state.channelId, channel),
+                    ),
+                    ForumUtils.getSortOrder(state.channelId, channel),
+                )
                 if (items.isEmpty()) {
                     binding.emptyView.root.visibility = View.VISIBLE
                     binding.recyclerView.visibility = View.GONE
+                    val searching = binding.forumSearchInput.text?.isNotBlank() == true
+                    binding.emptyView.forumBrowserEmptyHeading.setText(
+                        if (searching) R.string.forum_search_no_matching_posts else R.string.forum_empty_state_title,
+                    )
+                    binding.emptyView.forumBrowserEmptySubheading.visibility =
+                        if (searching) View.GONE else View.VISIBLE
                     binding.emptyView.forumBrowserEmptySubheading.text = getString(R.string.forum_empty_state_description)
                         .replace("{channelName}", state.channelName)
                     adapterItems.clear()
@@ -148,10 +181,92 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
         }
     }
 
+    private fun openForumPostActions(channel: Channel) {
+        WidgetChannelsListItemThreadActions.show(parentFragmentManager, channel.id)
+    }
+
+    /**
+     * Forum search runs against the server so it can match archived posts the browser has never
+     * paged in; results replace the listing until the query is cleared.
+     */
+    /** The reference only offers search to someone who may read the post history. */
+    private fun configureSearchMenu(state: WidgetForumBrowserViewModel.ViewState.Loaded) {
+        val canSearch = PermissionUtils.can(
+            Permission.READ_MESSAGE_HISTORY,
+            StoreStream.getPermissions().getPermissionsByChannel()[state.channelId],
+        )
+        if (!canSearch) return
+        setActionBarOptionsMenu(
+            R.menu.menu_search,
+            onSelected = { if (it.itemId == R.id.search) toggleSearch() },
+        )
+    }
+
+    private fun configureSearch(state: WidgetForumBrowserViewModel.ViewState.Loaded) {
+        val input = binding.forumSearchInput
+        if (input.tag == state.channelId) return
+        input.tag = state.channelId
+        searchWatcher?.let(input::removeTextChangedListener)
+        input.setText("")
+        val watcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(t: CharSequence?, s: Int, c: Int, a: Int) = Unit
+            override fun onTextChanged(t: CharSequence?, s: Int, b: Int, c: Int) = Unit
+            override fun afterTextChanged(editable: android.text.Editable?) {
+                val query = editable?.toString()?.trim().orEmpty()
+                searchHandler.removeCallbacksAndMessages(null)
+                searchHandler.postDelayed({ runSearch(state.channelId, query) }, SEARCH_DEBOUNCE_MS)
+            }
+        }
+        input.addTextChangedListener(watcher)
+        searchWatcher = watcher
+    }
+
+    private fun runSearch(channelId: Long, query: String) {
+        val archived = StoreStream.getArchivedThreads()
+        if (query.isEmpty()) {
+            archived.clearForumSearch(channelId)
+            return
+        }
+        val channel = StoreStream.getChannels().getChannel(channelId)
+        archived.searchForumThreads(
+            channelId,
+            query,
+            ForumUtils.getTagSetting(channelId, channel).apiValue,
+        )
+    }
+
+    private fun toggleSearch() {
+        val input = binding.forumSearchInput
+        val showing = input.visibility == View.VISIBLE
+        input.visibility = if (showing) View.GONE else View.VISIBLE
+        if (showing) {
+            input.setText("")
+        } else {
+            input.requestFocus()
+        }
+    }
+
     private fun configureButtons(state: WidgetForumBrowserViewModel.ViewState.Loaded) {
         binding.createPost.visibility = if (state.canCreateForumChannelPosts && panelNsfwHidden) View.VISIBLE else View.GONE
         binding.viewGuidelines.visibility = if (state.channelTopic.isNotBlank() && panelNsfwHidden) View.VISIBLE else View.GONE
-        binding.forumDisplayOptions.visibility = if (state.isMediaChannel && panelNsfwHidden) View.VISIBLE else View.GONE
+        binding.forumDisplayOptions.visibility = if (panelNsfwHidden) View.VISIBLE else View.GONE
+        // A media channel is always a gallery, so it only gets the sort half of the sheet.
+        binding.forumSortOptions.setText(
+            if (state.isMediaChannel) R.string.sort else R.string.forum_channel_sort_and_view,
+        )
+        // A channel with no tags has nothing to filter by.
+        val tags = StoreStream.getChannels().getChannel(state.channelId)?.availableTags.orEmpty()
+        val selectedTags = ForumUtils.getTagFilter(state.channelId)
+        binding.forumTagFilterOptions.visibility = if (tags.isEmpty()) View.GONE else View.VISIBLE
+        binding.forumTagFilterOptions.text = if (selectedTags.isEmpty()) {
+            getString(R.string.forum_tags)
+        } else {
+            "${getString(R.string.forum_tags)} · ${selectedTags.size}"
+        }
+        configureSearch(state)
+        binding.forumTagFilterOptions.setOnClickListener {
+            WidgetForumTagFilterBottomSheet.show(parentFragmentManager, state.channelId)
+        }
         binding.forumSortOptions.setOnClickListener {
             WidgetForumSortBottomSheet.show(parentFragmentManager, state.channelId)
         }
@@ -231,6 +346,8 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
 
     companion object {
         private const val FETCH_WINDOW = 10
+        /** Matches the reference's THREAD_SEARCH_DEBOUNCE_MS. */
+        private const val SEARCH_DEBOUNCE_MS = 350L
         private const val CLOSE_GUIDELINES_CREATE = "CLOSE_FORUM_GUIDELINES_REQUEST_KEY"
         private const val CLOSE_GUIDELINES_NOOP = "CLOSE_FORUM_GUIDELINES_NOOP_REQUEST_KEY"
 

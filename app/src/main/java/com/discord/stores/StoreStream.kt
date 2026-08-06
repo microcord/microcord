@@ -2340,7 +2340,7 @@ class StoreStream private constructor(
         preprocessingUploads.remove(nonce)
         upload.aggregateProgress.subscribe { progress -> dispatcher.schedule { messageUploads.onProgress(nonce, progress) } }
         val requestSubscription = restApi
-            .sendMessage(channelId, PayloadJSON(body), upload.uploads.map { it.part }.toTypedArray(), null)
+            .sendMessage(channelId, PayloadJSON(body), upload.uploads.mapNotNull { it.part }.toTypedArray(), null)
             .subscribeOn(Schedulers.io())
             .subscribe(
             { apiMessage ->

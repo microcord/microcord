@@ -2,7 +2,6 @@ package com.discord.widgets.forums
 
 import android.os.Bundle
 import android.view.View
-import android.widget.TextView
 import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
@@ -10,6 +9,10 @@ import androidx.fragment.app.setFragmentResult
 import androidx.fragment.app.setFragmentResultListener
 import com.discord.R
 import com.discord.app.AppBottomSheet
+import com.discord.models.message.Message
+import com.discord.utilities.textprocessing.DiscordParser
+import com.discord.utilities.textprocessing.MessageTextRenderer
+import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.stores.StoreStream
 import com.discord.utilities.rx.filterNull
 import com.discord.utilities.rx.ui
@@ -20,7 +23,7 @@ class WidgetForumGuidelinesBottomSheet : AppBottomSheet() {
     private val channelId get() = argumentsOrDefault.getLong(EXTRA_CHANNEL_ID)
     private val guildId get() = argumentsOrDefault.getLong(EXTRA_GUILD_ID)
     private val requestKey get() = argumentsOrDefault.getString(EXTRA_REQUEST_KEY).orEmpty()
-    private lateinit var topic: TextView
+    private lateinit var topic: SimpleDraweeSpanTextView
     private lateinit var gotIt: MaterialButton
 
     override fun getContentViewResId() = R.layout.widget_forum_guidelines_bottom_sheet
@@ -34,7 +37,12 @@ class WidgetForumGuidelinesBottomSheet : AppBottomSheet() {
     override fun bindSubscriptions(compositeSubscription: CompositeSubscription) {
         compositeSubscription.add(
             StoreStream.getChannels().observeChannel(channelId).filterNull().ui(this).subscribe { channel ->
-                topic.text = channel.topic
+                // The reference parses guidelines as markdown, headings and lists included.
+                MessageTextRenderer.render(
+                    Message(id = channel.id, channelId = channel.id, content = channel.topic),
+                    topic,
+                    parserOptions = DiscordParser.ParserOptions.FORUM_POST_FIRST_MESSAGE,
+                )
                 gotIt.setOnClickListener {
                     setFragmentResult(requestKey, bundleOf(EXTRA_GUILD_ID to guildId, EXTRA_CHANNEL_ID to channelId))
                     dismiss()

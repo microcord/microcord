@@ -74,4 +74,13 @@ sealed class MessageResult {
 
     /** The user cancelled the request, either while queued or in flight. */
     data object UserCancelled : MessageResult()
+
+    /**
+     * The send stream ended without producing either a message or an error.
+     *
+     * Nothing should reach this, but a request that never settles keeps the queue marked as
+     * draining and stalls every later send for the channel, so it is settled as a failure rather
+     * than left hanging.
+     */
+    data object NoResult : MessageResult()
 }

@@ -4,11 +4,12 @@ import android.os.Bundle
 import android.view.View
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.stores.StoreStream
+import com.discord.widgets.forums.WidgetForumPostTagsSheet
 import com.discord.api.channel.Channel
 import com.discord.models.message.Message
 import com.discord.stores.StoreMessages
 import com.discord.stores.StoreMessagesLoader
-import com.discord.stores.StoreStream
 import com.discord.app.AppFragment
 import com.discord.app.appActivityViewModels
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
@@ -51,6 +52,11 @@ class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListAct
         recycler = list
         val existing = adapter
         if (existing == null) createAdapter(list) else configureExistingAdapter(existing, list)
+        // The picker is shown from a chat row, so its result lands here rather than in the row.
+        WidgetForumPostTagsSheet.registerForResult(this) { tags ->
+            val draft = StoreStream.getThreadDraft()
+            draft.setDraftState(draft.getDraftState().copy(appliedTags = tags))
+        }
     }
 
     override fun onViewBoundOrOnResume() {

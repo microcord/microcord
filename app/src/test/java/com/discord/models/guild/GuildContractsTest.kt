@@ -10,8 +10,16 @@ class GuildContractsTest {
     @Test
     fun derivesNamesAndPremiumFeatures() {
         assertEquals("MS", Guild(name = "Manti's Server").shortName)
-        assertTrue(Guild(premiumTier = 2).canHaveBanner())
-        assertFalse(Guild(premiumTier = 2).canHaveVanityURL())
+        // Tierless boosting: reaching a level unlocks nothing on its own.
+        assertFalse(Guild(premiumTier = 3).canHaveBanner())
+        assertTrue(Guild(features = setOf(GuildFeature.BANNER)).canHaveBanner())
+        assertTrue(Guild(features = setOf(GuildFeature.VANITY_URL)).canHaveVanityURL())
+        // A guild that lost the perk keeps a vanity it had already set.
+        assertTrue(
+            Guild(features = setOf(GuildFeature.GUILD_WEB_PAGE_VANITY_URL), vanityUrlCode = "manti")
+                .canHaveVanityURL(),
+        )
+        assertFalse(Guild(features = setOf(GuildFeature.GUILD_WEB_PAGE_VANITY_URL)).canHaveVanityURL())
         assertTrue(Guild(features = setOf(GuildFeature.HUB)).isHub())
     }
 }

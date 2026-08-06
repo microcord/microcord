@@ -14,7 +14,21 @@ import com.discord.utilities.dimen.dpToPixels
 
 class WidgetForumBrowserAdapter(
     private val onPostClick: (Channel) -> Unit,
+    private val onPostLongClick: (Channel) -> Unit,
 ) : ListAdapter<ForumBrowserItem, RecyclerView.ViewHolder>(DIFF) {
+
+    /**
+     * Switches rows between the list body and the gallery collage.
+     *
+     * The rows themselves are unchanged, so a diff would find nothing to rebind — the change has to
+     * invalidate them itself or the new layout would not appear until something else moved.
+     */
+    var layout: ForumLayout = ForumLayout.LIST
+        set(value) {
+            if (field == value) return
+            field = value
+            notifyDataSetChanged()
+        }
 
     val itemDecoration = object : RecyclerView.ItemDecoration() {
         override fun getItemOffsets(outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State) {
@@ -67,9 +81,13 @@ class WidgetForumBrowserAdapter(
 
     private inner class PostHolder(private val postView: ForumBrowserPostView) : RecyclerView.ViewHolder(postView) {
         fun bind(post: PostData) {
+            postView.layout = layout
             postView.configurePost(post)
             postView.setOnClickListener { onPostClick(post.channel) }
-            postView.setOnLongClickListener(null)
+            postView.setOnLongClickListener {
+                onPostLongClick(post.channel)
+                true
+            }
         }
     }
 

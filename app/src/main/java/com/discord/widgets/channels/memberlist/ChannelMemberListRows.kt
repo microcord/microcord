@@ -48,7 +48,11 @@ sealed class ChannelMemberListRow(open val key: String) {
     data class PlaceholderHeader(override val key: String) : ChannelMemberListRow(key)
     data class PlaceholderMember(override val key: String) : ChannelMemberListRow(key)
     data class AddMember(override val key: String, val title: Int) : ChannelMemberListRow(key)
-    data class JoinLeaveThread(override val key: String, val joined: Boolean) : ChannelMemberListRow(key)
+    data class JoinLeaveThread(
+        override val key: String,
+        val joined: Boolean,
+        val isForumPost: Boolean = false,
+    ) : ChannelMemberListRow(key)
 }
 
 sealed class LazyMemberListRow(open val key: String) {
@@ -165,11 +169,12 @@ object ChannelMemberListRows {
         presences: Map<Long, Presence>,
         roles: Map<Long, GuildRole>,
         joined: Boolean? = null,
+        isForumPost: Boolean = false,
         streamingUserIds: Set<Long> = emptySet(),
     ): List<ChannelMemberListRow> {
         val filteredUsers = users.filterKeys(memberIds::contains)
         return buildList {
-            if (joined != null) add(ChannelMemberListRow.JoinLeaveThread("$listId:join-leave", joined))
+            if (joined != null) add(ChannelMemberListRow.JoinLeaveThread("$listId:join-leave", joined, isForumPost))
             addAll(loadedGuild(listId, ownerId, filteredUsers, members, presences, roles, streamingUserIds))
         }
     }

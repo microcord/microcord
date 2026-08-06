@@ -26,7 +26,8 @@ data class UploadProgress(val bytesWritten: Long, val contentLength: Long) {
 data class FileUpload(
     val name: String,
     val contentLength: Long,
-    val part: MultipartBody.Part,
+    /** Null for a cloud upload, whose bytes go straight to storage instead of into the request. */
+    val part: MultipartBody.Part?,
     val mimeType: String,
     val bytesWrittenObservable: Observable<Long>,
 ) {
@@ -56,11 +57,28 @@ class MessageUploadPayload internal constructor(
 object MessageUploadPayloadBuilder {
 
     /**
+     * Names and sizes only, for a send whose bytes are uploaded to storage separately.
+     *
+     * The rows exist so the UI can list the files while they upload; the real byte counts arrive
+     * from `CloudUploader`, so opening a request body here would only read every file twice.
+     */
+    fun describeUploads(attachments: List<UploadAttachment>): List<FileUpload> {
+        val names = uniqueUploadFileNames(attachments)
+        return attachments.mapIndexed { index, attachment ->
+            FileUpload(
+                name = names[index],
+                contentLength = attachment.size,
+                part = null,
+                mimeType = attachment.mimeType,
+                bytesWrittenObservable = Observable.just(0L),
+            )
+        }
+    }
+
+    /**
      * Builds the multipart parts for [attachments] without wiring up an aggregate progress stream.
      *
-     * This is what `SendUtils.getSendPayload` hands to `MessageQueue`, which passes the parts
-     * straight to the multipart send endpoint and reports per-file progress through
-     * `MessageRequest.Send.onProgress`.
+     * Used by the application-command send, which still puts its files in the request body.
      */
     fun buildUploads(
         resolver: ContentResolver,
@@ -110,7 +128,7 @@ object MessageUploadPayloadBuilder {
                 bytesWrittenObservable = body.bytesWrittenObservable,
             )
         }
-        val multipart = buildMultipartBody(payloadJson, uploads.map(FileUpload::part))
+        val multipart = buildMultipartBody(payloadJson, uploads.mapNotNull(FileUpload::part))
         return MessageUploadPayload(multipart, uploads, aggregate.distinctUntilChanged(), rawBodies, subscriptions, aggregate)
     }
 }

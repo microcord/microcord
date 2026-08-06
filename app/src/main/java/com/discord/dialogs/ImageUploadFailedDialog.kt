@@ -6,6 +6,7 @@ import android.widget.RelativeLayout
 import android.widget.TextView
 import androidx.fragment.app.FragmentManager
 import com.discord.R
+import com.discord.utilities.attachments.AttachmentLimits
 import com.discord.app.AppDialog
 import com.discord.i18n.i18nRender
 import com.discord.stores.StoreStream
@@ -34,8 +35,12 @@ class ImageUploadFailedDialog : AppDialog(R.layout.image_upload_failed_dialog) {
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         val arguments = argumentsOrDefault
-        val maxFileSizeMb = arguments.getInt(PARAM_MAX_FILE_SIZE_MB)
-        val isUserPremium = arguments.getBoolean(PARAM_IS_USER_PREMIUM)
+        val limitBytes = arguments.getLong(PARAM_LIMIT_BYTES)
+        val isTotal = arguments.getBoolean(PARAM_IS_TOTAL)
+        // Nitro raises the per-file ceiling only, so a message that is too big overall must not be
+        // sold a subscription that would not help.
+        val isUserPremium = arguments.getBoolean(PARAM_IS_USER_PREMIUM) || isTotal ||
+            !arguments.getBoolean(PARAM_NITRO_WOULD_HELP)
         val canCompress = onResendCompressed != null && arguments.getBoolean(PARAM_CAN_COMPRESS)
 
         val sendCompressed = view.findViewById<MaterialButton>(R.id.image_upload_failed_send_compress)
@@ -72,12 +77,13 @@ class ImageUploadFailedDialog : AppDialog(R.layout.image_upload_failed_dialog) {
             StoreStream.getUserSettings().setIsAutoImageCompressionEnabled(isChecked)
         }
 
-        val limitRes = limitStringRes(maxFileSizeMb)
-        val limitText: CharSequence = limitRes.takeIf { it != 0 }?.let { context?.i18nRender(it) } ?: ""
-        val bodyRes = if (!isUserPremium && canCompress) {
-            R.string.upload_area_too_large_help_mobile
-        } else {
-            R.string.upload_area_too_large_help
+        val limitText: CharSequence = context
+            ?.i18nRender(R.string.file_size_mb, "size" to limitBytes / BYTES_PER_MEGABYTE)
+            ?: ""
+        val bodyRes = when {
+            isTotal -> R.string.upload_area_request_limit_help
+            !isUserPremium && canCompress -> R.string.upload_area_too_large_help_mobile
+            else -> R.string.upload_area_too_large_help
         }
         view.findViewById<TextView>(R.id.image_upload_failed_text).text =
             context?.i18nRender(bodyRes, "maxSize" to limitText)
@@ -86,19 +92,10 @@ class ImageUploadFailedDialog : AppDialog(R.layout.image_upload_failed_dialog) {
     companion object {
         private const val PARAM_IS_USER_PREMIUM = "PARAM_IS_USER_PREMIUM"
         private const val PARAM_CAN_COMPRESS = "PARAM_CAN_COMPRESS"
-        private const val PARAM_MAX_FILE_SIZE_MB = "PARAM_MAX_FILE_SIZE_MB"
-
-        /**
-         * The upload ceiling is quoted from a fixed set of tier strings, so an unexpected limit
-         * renders no size rather than a raw number.
-         */
-        private fun limitStringRes(maxFileSizeMb: Int): Int = when (maxFileSizeMb) {
-            8 -> R.string.file_upload_limit_standard
-            20 -> R.string.file_upload_limit_premium_tier_0
-            50 -> R.string.file_upload_limit_premium_tier_1
-            100 -> R.string.file_upload_limit_premium_tier_2
-            else -> 0
-        }
+        private const val PARAM_LIMIT_BYTES = "PARAM_LIMIT_BYTES"
+        private const val PARAM_IS_TOTAL = "PARAM_IS_TOTAL"
+        private const val PARAM_NITRO_WOULD_HELP = "PARAM_NITRO_WOULD_HELP"
+        private const val BYTES_PER_MEGABYTE = 1024L * 1024L
 
         /**
          * @param isUserPremium also selects the alert variant the reference reports to analytics
@@ -108,7 +105,7 @@ class ImageUploadFailedDialog : AppDialog(R.layout.image_upload_failed_dialog) {
         fun show(
             fragmentManager: FragmentManager,
             isUserPremium: Boolean,
-            maxFileSizeMb: Int,
+            violation: AttachmentLimits.Violation,
             onResendCompressed: (() -> Unit)?,
             isVideo: Boolean = false,
             isAlreadyCompressed: Boolean = false,
@@ -118,7 +115,19 @@ class ImageUploadFailedDialog : AppDialog(R.layout.image_upload_failed_dialog) {
                 arguments = Bundle().apply {
                     putBoolean(PARAM_IS_USER_PREMIUM, isUserPremium)
                     putBoolean(PARAM_CAN_COMPRESS, !isVideo && !isAlreadyCompressed)
-                    putInt(PARAM_MAX_FILE_SIZE_MB, maxFileSizeMb)
+                    putLong(
+                        PARAM_LIMIT_BYTES,
+                        when (violation) {
+                            is AttachmentLimits.Violation.FileTooLarge -> violation.limit
+                            else -> AttachmentLimits.MAX_TOTAL_ATTACHMENT_SIZE
+                        },
+                    )
+                    putBoolean(PARAM_IS_TOTAL, violation !is AttachmentLimits.Violation.FileTooLarge)
+                    putBoolean(
+                        PARAM_NITRO_WOULD_HELP,
+                        violation is AttachmentLimits.Violation.FileTooLarge &&
+                            AttachmentLimits.wouldNitroAllow(violation.size),
+                    )
                 }
             }.show(fragmentManager, ImageUploadFailedDialog::class.java.name)
         }

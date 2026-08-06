@@ -7,9 +7,11 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.content.res.AppCompatResources
 import com.discord.R
+import com.discord.stores.StoreStream
 import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.renderReactionEmoji
+import com.discord.widgets.channels.list.ChannelListNavigation
 
 class ForumPostTagView @JvmOverloads constructor(
     context: Context,
@@ -33,8 +35,32 @@ class ForumPostTagView @JvmOverloads constructor(
     }
 
     fun configureTag(tag: PostTagData) {
+        tagEmoji.visibility = VISIBLE
         renderReactionEmoji(tagEmoji, tag.messageReactionEmoji, true, dpToPixels(12))
         tagName.text = tag.tagName
+        // Developer mode adds "Copy Tag ID" wherever a tag is drawn.
+        val tagId = tag.tagId
+        if (tagId == null || !StoreStream.getUserSettings().getIsDeveloperMode()) {
+            setOnLongClickListener(null)
+        } else {
+            setOnLongClickListener {
+                ChannelListNavigation.copyToClipboard(context, tagId.toString())
+                true
+            }
+        }
+    }
+
+    /** The "+N" chip standing in for the tags that did not fit. */
+    fun configureOverflow(count: Int) {
+        tagEmoji.visibility = GONE
+        tagName.text = context.getString(R.string.forum_reactions_overflow).replace("{count}", count.toString())
+    }
+
+    /** The trailing chip that opens tag creation in channel settings. */
+    fun configureAdd() {
+        tagEmoji.visibility = GONE
+        tagName.text = "+"
+        contentDescription = context.getString(R.string.forum_tag_create)
     }
 
 }

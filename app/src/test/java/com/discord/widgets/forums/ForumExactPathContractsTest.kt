@@ -64,7 +64,7 @@ class ForumExactPathContractsTest {
         isFirstMessageBlocked = false,
         mostRecentMessageTimestamp = null,
         messageCount = null,
-        tag = null,
+        tags = PostTagsData(),
         mostCommonReaction = null,
         isDefaultReaction = false,
         readState = ForumPostReadState.createDefault(channel.id),

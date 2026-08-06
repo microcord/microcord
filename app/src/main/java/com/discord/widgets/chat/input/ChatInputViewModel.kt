@@ -9,7 +9,6 @@ import com.discord.api.channel.isThread
 import com.discord.api.channel.getDMRecipient
 import com.discord.api.guild.GuildVerificationLevel
 import com.discord.api.permission.Permission
-import com.discord.api.premium.PremiumTier
 import com.discord.app.AppViewModel
 import com.discord.models.domain.ModelUserRelationship
 import com.discord.models.guild.Guild
@@ -28,10 +27,10 @@ import com.discord.stores.StoreUserRelationships
 import com.discord.utilities.guilds.GuildVerificationLevelUtils
 import com.discord.utilities.guilds.MemberVerificationUtils
 import com.discord.utilities.permissions.PermissionUtils
+import com.discord.utilities.attachments.AttachmentLimits
 import com.discord.utilities.rx.ui
 import com.discord.utilities.time.Clock
 import com.discord.utilities.time.ClockFactory
-import com.discord.utilities.user.UserUtils.isStaff
 import rx.Observable
 
 /**
@@ -74,7 +73,7 @@ class ChatInputViewModel(
             val isLurking: Boolean,
             val isSystemDM: Boolean,
             val isOnCooldown: Boolean,
-            val maxFileSizeMB: Int,
+            val maxFileSize: Long,
             val shouldShowFollow: Boolean,
             val pendingReplyState: PendingReplyState,
             val shouldBadgeChatInput: Boolean,
@@ -258,7 +257,7 @@ class ChatInputViewModel(
             isLurking = isLurking,
             isSystemDM = channel.isSystemDM(),
             isOnCooldown = isOnCooldown,
-            maxFileSizeMB = maxFileSizeMB(me, guild),
+            maxFileSize = maxFileSize(me, guild),
             shouldShowFollow = shouldShowFollow,
             pendingReplyState = pendingReplyState,
             // Reference passes a literal `false`: the expression-tray badge was retired but the
@@ -297,27 +296,9 @@ class ChatInputViewModel(
      * Upload cap in megabytes: the larger of the user's own Nitro allowance and the guild's boost
      * allowance.
      *
-     * Reference: `PremiumUtils.getMaxFileSizeMB` / `getGuildMaxFileSizeMB`. That object is not
-     * reconstructed; the tiers are transcribed here and should move to
-     * `utilities/premium/PremiumUtils` when it lands.
+     * The guild's share is granted by powerup features rather than by a boost tier.
      */
-    private fun maxFileSizeMB(me: MeUser, guild: Guild?): Int = maxOf(
-        when {
-            me.isStaff -> STAFF_MAX_FILE_SIZE_MB
-            me.premiumTier == PremiumTier.TIER_1 -> 50
-            me.premiumTier == PremiumTier.TIER_2 -> 100
-            me.premiumTier == PremiumTier.TIER_0 -> 20
-            else -> DEFAULT_MAX_FILE_SIZE_MB
-        },
-        when (guild?.premiumTier ?: 0) {
-            0, 1 -> DEFAULT_MAX_FILE_SIZE_MB
-            2 -> 50
-            else -> 100
-        },
-    )
+    private fun maxFileSize(me: MeUser, guild: Guild?): Long = AttachmentLimits.maxFileSize(me, guild)
 
-    private companion object {
-        private const val DEFAULT_MAX_FILE_SIZE_MB = 8
-        private const val STAFF_MAX_FILE_SIZE_MB = 200
-    }
+
 }

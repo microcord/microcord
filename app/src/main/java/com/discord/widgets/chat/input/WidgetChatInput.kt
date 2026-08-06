@@ -19,6 +19,7 @@ import androidx.appcompat.widget.AppCompatImageButton
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.RecyclerView
+import androidx.appcompat.app.AlertDialog
 import com.discord.R
 import com.discord.activities.EmbeddedActivityLauncher
 import com.discord.api.channel.Channel
@@ -126,6 +127,8 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     private var state: ChatInputViewModel.ViewState.Loaded? = null
     private var hasAttachments = false
     private var threadCreateInProgress = false
+    /** Set once the author declines, so the prompt asks only on the first media send. */
+    private var addMediaPromptShown = false
 
     /** `true` while [restoreInput] rewrites the composer, so the draft watcher ignores the edit. */
     private var restoringText = false
@@ -484,11 +487,15 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 return true
             }
         }
+        if (uploads.isNotEmpty() && shouldOfferMediaForOriginalPost(loaded)) {
+            promptAddMediaToOriginalPost(loaded, content, uploads, attachments)
+            return false
+        }
         if (loaded.selectedThreadDraft != null && loaded.channel.isThreadOnlyChannel()) {
             val attachmentsRequest = uploads.takeIf { it.isNotEmpty() }?.let {
                 ForumPostCreateManager.AttachmentsRequest(
-                    currentFileSizeMB = it.sumOf(UploadAttachment::size).toFloat() / BYTES_PER_MEGABYTE,
-                    maxFileSizeMB = loaded.maxFileSizeMB,
+                    sizes = it.map(UploadAttachment::size),
+                    maxFileSize = loaded.maxFileSize,
                     attachments = it,
                 )
             }
@@ -959,6 +966,53 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
 
     internal fun currentChannelId(): Long? = state?.channelId
 
+    /**
+     * A forum row takes its thumbnail from the post's opening message, so media sent afterwards
+     * never reaches the browser unless it is added there — which the reference offers the author.
+     */
+    private fun shouldOfferMediaForOriginalPost(
+        loaded: ChatInputViewModel.ViewState.Loaded,
+    ): Boolean {
+        val channel = loaded.channel
+        val parent = StoreStream.getChannels().getChannel(channel.parentId) ?: return false
+        if (!parent.isThreadOnlyChannel()) return false
+        val first = StoreStream.getForumPostMessages().getForumPostFirstMessage(channel.id) ?: return false
+        return first.author?.id == StoreStream.getUsers().getMe().id &&
+            first.attachments.isNullOrEmpty() &&
+            !addMediaPromptShown
+    }
+
+    private fun promptAddMediaToOriginalPost(
+        loaded: ChatInputViewModel.ViewState.Loaded,
+        content: String,
+        uploads: List<UploadAttachment>,
+        attachments: List<Attachment<*>>,
+    ) {
+        val first = StoreStream.getForumPostMessages().getForumPostFirstMessage(loaded.channel.id) ?: return
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.forum_add_media_to_original_post_title)
+            .setMessage(R.string.forum_add_media_to_original_post_description)
+            .setPositiveButton(R.string.forum_add_media_to_original_post_add) { _, _ ->
+                ForumPostCreateManager.addMediaToOriginalPost(
+                    requireContext(),
+                    loaded.channel.id,
+                    first.id,
+                    content,
+                    uploads,
+                ) {
+                    input?.setText("")
+                    (childFragmentManager.findFragmentById(R.id.chat_input_widget) as? FlexInputFragment)
+                        ?.clearAttachments()
+                }
+            }
+            .setNegativeButton(R.string.forum_add_media_to_original_post_dont_add) { _, _ ->
+                addMediaPromptShown = true
+                submit(attachments)
+            }
+            .setNeutralButton(R.string.cancel, null)
+            .show()
+    }
+
     private fun validationMessage(result: MessageResult): String = when (result) {
         is MessageResult.ValidationError -> result.message
         MessageResult.NoValidContent -> getString(R.string.message_too_long_header)
@@ -969,7 +1023,6 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         /** Discord's own help-centre article on timeouts; the reference hardcodes the same id. */
         private const val TIMEOUT_HELP_ARTICLE_URL =
             "https://support.discord.com/hc/articles/360045138571"
-        private const val BYTES_PER_MEGABYTE = 1024f * 1024f
         private const val DEFAULT_THREAD_ARCHIVE_DURATION = 1_440
         private const val THREAD_CREATE_RATE_LIMIT_CODE = 20016
 
@@ -993,4 +1046,6 @@ internal fun configureExpressionTrayButton(button: AppCompatImageButton, shown: 
     // 126.21 changes the drawable and description; it does not use selected/activated selectors.
     button.isSelected = false
     button.isActivated = false
+
+
 }

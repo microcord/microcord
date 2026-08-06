@@ -129,7 +129,12 @@ import com.discord.models.sticker.dto.ModelStickerPack
 import com.discord.models.sticker.dto.ModelStickerStoreDirectory
 import com.discord.utilities.captcha.CaptchaRequestPolicy
 import com.google.gson.JsonObject
+import com.discord.api.attachment.CreateAttachmentsBody
+import com.discord.api.attachment.CreateAttachmentsResponse
+import com.discord.api.attachment.RefreshAttachmentUrlsBody
+import com.discord.api.attachment.RefreshAttachmentUrlsResponse
 import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
@@ -687,6 +692,28 @@ interface RestAPIInterface {
         @Tag captcha: CaptchaRequestPolicy?,
     ): Observable<Message>
 
+    /**
+     * Reserves a storage slot per file and returns a presigned URL to PUT each one to.
+     *
+     * The upload happens before the message exists; the message then claims the finished files by
+     * `uploaded_filename`, so a failed upload costs no message and leaves nothing half-sent.
+     */
+    @POST("channels/{channelId}/attachments")
+    fun createAttachments(
+        @Path("channelId") channelId: Long,
+        @Body body: CreateAttachmentsBody,
+    ): Observable<CreateAttachmentsResponse>
+
+    /** Releases a reserved upload the message never claimed. */
+    @DELETE("attachments/{uploadFilename}")
+    fun deleteAttachment(@Path("uploadFilename", encoded = true) uploadFilename: String): Observable<Void>
+
+    /** Re-signs CDN links whose signature has expired. Accepts 1-50 at a time. */
+    @POST("attachments/refresh-urls")
+    fun refreshAttachmentUrls(
+        @Body body: RefreshAttachmentUrlsBody,
+    ): Observable<RefreshAttachmentUrlsResponse>
+
     @PUT("channels/{channelId}/polls/{messageId}/answers/@me")
     fun votePoll(
         @Path("channelId") channelId: Long,
@@ -950,6 +977,16 @@ interface RestAPIInterface {
         @Part files: Array<MultipartBody.Part>,
     ): Observable<Channel>
 
+    /** Adding media to a forum post's opening message, which the JSON edit cannot carry. */
+    @Multipart
+    @PATCH("channels/{channelId}/messages/{messageId}")
+    fun editMessageWithAttachments(
+        @Path("channelId") channelId: Long,
+        @Path("messageId") messageId: Long,
+        @Part("payload_json") payloadJson: PayloadJSON<RestAPIParams.Message>,
+        @Part files: Array<MultipartBody.Part>,
+    ): Observable<Message>
+
     @Multipart
     @POST("channels/{channelId}/threads?use_nested_fields=true")
     fun createForumPost(
@@ -1014,6 +1051,25 @@ interface RestAPIInterface {
         @Query("limit") limit: Int? = null,
         @Query("offset") offset: Int? = null,
     ): Observable<ThreadListing>
+
+    @POST("channels/{channelId}/tags")
+    fun createForumTag(
+        @Path("channelId") channelId: Long,
+        @Body body: RestAPIParams.ForumTag,
+    ): Observable<Channel>
+
+    @PUT("channels/{channelId}/tags/{tagId}")
+    fun updateForumTag(
+        @Path("channelId") channelId: Long,
+        @Path("tagId") tagId: Long,
+        @Body body: RestAPIParams.ForumTag,
+    ): Observable<Channel>
+
+    @DELETE("channels/{channelId}/tags/{tagId}")
+    fun deleteForumTag(
+        @Path("channelId") channelId: Long,
+        @Path("tagId") tagId: Long,
+    ): Observable<Channel>
 
     @POST("channels/{channelId}/post-data")
     fun getForumPostData(
@@ -1920,6 +1976,22 @@ interface RestAPIInterface {
     interface Files {
         @GET
         fun getFile(@Url url: String): Observable<ResponseBody>
+    }
+
+    /**
+     * The presigned Google Cloud Storage upload.
+     *
+     * Deliberately a separate interface with no API base URL and no auth interceptor: the URL
+     * already carries its own credentials, and sending the Discord token to a storage bucket would
+     * leak it to a third party.
+     */
+    interface CloudUpload {
+        @PUT
+        fun put(
+            @Url url: String,
+            @Body body: RequestBody,
+            @Header("Content-Range") contentRange: String?,
+        ): Observable<Response<Void>>
     }
 
     /** Absolute-URL fetch for the voice-region latency probe list. */
