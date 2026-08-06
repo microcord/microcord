@@ -198,7 +198,7 @@ class RestAPIBuilder(
         const val CONTENT_TYPE_JSON = "application/json"
         const val CONTENT_TYPE_TEXT = "text/plain"
         const val API_VERSION = 9
-        const val DEFAULT_TIMEOUT_MILLIS = 10_000L
+        const val DEFAULT_TIMEOUT_MILLIS = 30_000L
 
         @JvmStatic
         var clientCallback: (String, OkHttpClient) -> Unit = { _, _ -> }
