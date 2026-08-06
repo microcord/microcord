@@ -2,7 +2,7 @@
 <com.discord.widgets.botuikit.views.v2.TextDisplayComponentView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginTop="2dp"
+    android:layout_marginTop="0dp"
     android:layout_marginBottom="2dp">
 
     <com.discord.utilities.view.text.SimpleDraweeSpanTextView
