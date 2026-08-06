@@ -10,6 +10,7 @@ import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.button.MaterialButton
+import com.discord.utilities.user.NicknameUtils
 import com.discord.utilities.user.UserUtils.displayName
 
 class WidgetSettingsBlockedUsersAdapter(recycler: RecyclerView) :
@@ -40,7 +41,7 @@ class WidgetSettingsBlockedUsersAdapter(recycler: RecyclerView) :
             super.onConfigure(position, data)
             itemView.setOnClickListener { adapter.onClickUserProfile(data.user) }
             IconUtils.setIcon(avatar, data.user, R.dimen.avatar_size_standard)
-            name.text = data.user.displayName
+            name.text = NicknameUtils.getFriendName(data.user)
             unblock.setOnClickListener { adapter.onClickUnblock(data.user) }
         }
     }

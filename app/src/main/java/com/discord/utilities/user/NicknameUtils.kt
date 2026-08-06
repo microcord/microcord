@@ -36,4 +36,18 @@ object NicknameUtils {
 
     fun getName(guildId: Long?, channelId: Long?, user: ApiUser?): String =
         user?.getDisplayName(getNickname(guildId, channelId, user.id)).orEmpty()
+
+    /**
+     * The friend nickname alone, for a row that belongs to no guild and no channel — a friends or
+     * blocked list, an invite picker, a search result.
+     *
+     * [getNickname] needs a private channel to key off, which those surfaces do not have; the
+     * reference gates them on there being no guild instead.
+     */
+    fun getFriendNickname(userId: Long): String? =
+        StoreStream.getUserRelationships().getNickname(userId)
+
+    /** The friend nickname if one is set, else the account display name. */
+    fun getFriendName(user: User?): String =
+        user?.getDisplayName(getFriendNickname(user.id)).orEmpty()
 }

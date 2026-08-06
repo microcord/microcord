@@ -285,7 +285,9 @@ class WidgetChatListAdapterItemMessage(
         val guildId = StoreStream.getChannels().getChannel(entry.message.channelId)?.guildId
         val guildRoles = guildId?.let { StoreStream.getGuilds().getRoles()[it] }
         val roles = entry.author?.getRoles().orEmpty()
-        itemRoleIcon.setRoleIconPreview(GuildMember.getHighestRoleIconRole(roles, guildRoles))
+        // `setRole` rather than `setRoleIconPreview`: the preview overloads are the role editor's,
+        // and skip the entitlement check that keeps a guild without the perk from showing icons.
+        itemRoleIcon.setRole(GuildMember.getHighestRoleIconRole(roles, guildRoles), guildId)
     }
 
     /**
@@ -533,6 +535,7 @@ class WidgetChatListAdapterItemMessage(
                 }
             holder.bind(index, accessory)
             adoptAccessoryTouches(holder.itemView, entry)
+            collapseLeadingGap(holder.itemView, isFirst = index == 0)
         }
     }
 
@@ -562,6 +565,33 @@ class WidgetChatListAdapterItemMessage(
             if (target is ViewGroup) repeat(target.childCount) { apply(target.getChildAt(it)) }
         }
         apply(view)
+    }
+
+    /**
+     * Each accessory carries a top margin that separates it from the author line. Only the first
+     * one is under the author; for the rest that margin stacks with the previous accessory's bottom
+     * margin, so it is dropped and the gap comes from one side only.
+     */
+    private fun collapseLeadingGap(view: View, isFirst: Boolean) {
+        val spacer = view.findViewById<View>(R.id.chat_list_adapter_item_component_root)
+            ?: view.findViewById(R.id.chat_list_item_embed_container_card)
+            ?: view.findViewById(R.id.chat_list_item_attachment_view)
+            ?: return
+        val params = spacer.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+        val top = if (isFirst) {
+            spacer.getTag(R.id.chat_list_adapter_item_attachments) as? Int
+                ?: params.topMargin.also { spacer.setTag(R.id.chat_list_adapter_item_attachments, it) }
+        } else {
+            spacer.getTag(R.id.chat_list_adapter_item_attachments) ?: spacer.setTag(
+                R.id.chat_list_adapter_item_attachments,
+                params.topMargin,
+            )
+            0
+        }
+        if (params.topMargin != top) {
+            params.topMargin = top
+            spacer.layoutParams = params
+        }
     }
 
     private fun configureReplyPreview(entry: MessageEntry) {

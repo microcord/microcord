@@ -20,6 +20,17 @@ class FriendsListViewModelTest {
 
     private fun user(id: Long, name: String): User = CoreUser(id = id, username = name)
 
+    /**
+     * Row keys mix ids and string-resource ids, so matching one by suffix collides with whatever
+     * resource id a header happens to carry.
+     */
+    private fun FriendsListViewModel.Item.userId(): Long? = when (this) {
+        is FriendsListViewModel.Item.Friend -> user.id
+        is FriendsListViewModel.Item.PendingFriendRequest -> user.id
+        is FriendsListViewModel.Item.SuggestedFriend -> suggestion.user.id
+        else -> null
+    }
+
     private fun presence(status: ClientStatus) = Presence(status, null, null)
 
     private fun sections() = FriendsListViewModel.buildListSections(
@@ -35,7 +46,7 @@ class FriendsListViewModelTest {
             2L to user(2, "Offline"),
             3L to user(3, "Amy"),
             4L to user(4, "Zed"),
-            5L to user(5, "Blocked"),
+            BLOCKED_USER_ID to user(BLOCKED_USER_ID, "Blocked"),
         ),
         presences = mapOf(1L to presence(ClientStatus.ONLINE)),
         applicationStreams = emptyMap(),
@@ -51,7 +62,7 @@ class FriendsListViewModelTest {
         val allItems = listSections.pendingItems +
             listSections.friendsItemsWithHeaders +
             listSections.suggestedFriendItems
-        assertTrue(allItems.none { it.key.endsWith("5") })
+        assertTrue(allItems.none { it.userId() == BLOCKED_USER_ID })
     }
 
     @Test
@@ -127,6 +138,10 @@ class FriendsListViewModelTest {
         assertTrue(
             FriendsListViewModel.getVisibleItems(empty, false, false).isEmpty(),
         )
+    }
+
+    private companion object {
+        const val BLOCKED_USER_ID = 5L
     }
 
     @Test

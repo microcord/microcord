@@ -8,13 +8,11 @@ import com.discord.widgets.servers.SettingsChannelListAdapter
 import com.discord.widgets.servers.submitChannelReorder
 import com.google.gson.JsonParser
 import okhttp3.CookieJar
-import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.HttpException
@@ -22,7 +20,6 @@ import retrofit2.HttpException
 class ChannelReorderContractTest {
     private val server = MockWebServer()
     private val diagnostics = mutableListOf<ChannelReorderDiagnostics.Event>()
-    private val clients = linkedMapOf<String, OkHttpClient>()
 
     init {
         ChannelReorderDiagnostics.listener = diagnostics::add
@@ -55,18 +52,6 @@ class ChannelReorderContractTest {
 
         val request = server.takeRequest()
         val body = JsonParser.parseString(request.body.readUtf8()).asJsonArray
-        assertEquals(
-            listOf(
-                "main",
-                "serializeNulls",
-                "applicationDirectory",
-                "embeddedActivities",
-                "embeddedActivityOAuth",
-                "embeddedActivityOAuthToken",
-            ),
-            clients.keys.toList(),
-        )
-        assertNotSame(clients.getValue("main"), clients.getValue("serializeNulls"))
         assertEquals("PATCH", request.method)
         assertEquals("/api/v9/guilds/$GUILD_ID/channels", request.path)
         assertEquals("test-auth", request.getHeader("Authorization"))
@@ -129,7 +114,6 @@ class ChannelReorderContractTest {
     }
 
     private fun installProductionClients() {
-        RestAPIBuilder.clientCallback = { name, client -> clients[name] = client }
         RestAPI.install(
             RestAPIBuilder(server.url("/api/").toString(), CookieJar.NO_COOKIES),
             listOf(

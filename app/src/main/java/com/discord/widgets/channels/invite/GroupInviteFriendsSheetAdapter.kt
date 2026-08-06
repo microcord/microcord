@@ -9,6 +9,7 @@ import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
+import com.discord.utilities.user.NicknameUtils
 import com.discord.utilities.user.UserUtils.displayName
 
 class GroupInviteFriendsSheetAdapter(
@@ -49,7 +50,7 @@ class GroupInviteFriendsSheetAdapter(
         private val binding = GroupInviteFriendsSheetItemBinding.bind(itemView)
 
         override fun onConfigure(position: Int, data: FriendItem) {
-            binding.friendsListItemName.text = data.user.displayName
+            binding.friendsListItemName.text = NicknameUtils.getFriendName(data.user)
             IconUtils.setIcon(binding.friendsListItemAvatar, data.user, R.dimen.avatar_size_standard)
             binding.userSelectedCheckbox.isChecked = data.isSelected
             binding.userSelectedCheckbox.contentDescription = data.user.username
