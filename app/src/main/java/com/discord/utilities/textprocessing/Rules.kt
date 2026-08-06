@@ -27,11 +27,12 @@ import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.textprocessing.node.BasicRenderContext
 import com.discord.utilities.textprocessing.node.BlockBackgroundNode
 import com.discord.utilities.textprocessing.node.BlockQuoteNode
-import com.discord.utilities.textprocessing.node.BulletListNode
 import com.discord.utilities.textprocessing.node.ChannelMentionNode
 import com.discord.utilities.textprocessing.node.CommandMentionNode
 import com.discord.utilities.textprocessing.node.EmojiNode
 import com.discord.utilities.textprocessing.node.HeaderNode
+import com.discord.utilities.textprocessing.node.ListItemNode
+import com.discord.utilities.textprocessing.node.ListNode
 import com.discord.utilities.textprocessing.node.RoleMentionNode
 import com.discord.utilities.textprocessing.node.SpoilerNode
 import com.discord.utilities.textprocessing.node.SubtextNode
@@ -81,8 +82,47 @@ object Rules {
     private val PATTERN_HOOKED_LINK: Pattern = Pattern.compile(HOOKED_LINK)
     private val PATTERN_SOFT_HYPHEN: Pattern = Pattern.compile("^\\u00AD")
     private val PATTERN_SPOILER: Pattern = Pattern.compile("^\\|\\|([\\s\\S]+?)\\|\\|")
-    private val PATTERN_LIST_ITEM: Pattern =
-        Pattern.compile("^([^\\S\\r\\n]*)([*-]|\\d+\\.) +(.*)(\\n|\$)?")
+    /** `-`, `*` and `1.`; `+` is deliberately absent, as in the reference. */
+    private const val LIST_BULLET = "(?:[*-]|\\d+\\.)"
+
+    /**
+     * A whole list, from its first bullet to the line that stops being part of it: a line that is
+     * neither indented nor another bullet at the same indent.
+     */
+    private val PATTERN_LIST: Pattern =
+        Pattern.compile("^( *)($LIST_BULLET) [\\s\\S]+?(?:\\n(?! )(?!\\1$LIST_BULLET )|\$)")
+
+    /** The bullet and the space after it, which is stripped before an item's content is parsed. */
+    private val PATTERN_LIST_ITEM_PREFIX: Pattern = Pattern.compile("^( *)($LIST_BULLET) +")
+
+    /**
+     * One item and its continuation lines, with `%INDENT%` replaced by the leading-space run that
+     * makes a bullet a sibling of the first one.
+     */
+    private const val LIST_ITEM_TEMPLATE =
+        "(%INDENT%)($LIST_BULLET) +[^\\n]*(?:\\n(?!%INDENT%$LIST_BULLET )[^\\n]*)*(\\n|\$)"
+
+    private val PATTERN_LIST_ITEM_END: Pattern = Pattern.compile(" *\\n\\z")
+
+    /**
+     * A list may open on a line that still has indentation in front of it.
+     *
+     * An item strips only as much indentation from its continuation lines as its own bullet took, so
+     * a sub-list indented by more than that keeps the difference. The text rule swallows the newline
+     * together with those leftover spaces, which leaves the capture before the bullet ending in a
+     * space rather than the newline every other block rule insists on.
+     */
+    private val PATTERN_LIST_LOOKBEHIND: Pattern = Pattern.compile("\\n *$")
+
+    /**
+     * SimpleAST's text pattern with one stop added, before `12.`.
+     *
+     * Digits are ordinary text, so without it the text preceding a nested ordered list swallows the
+     * newline and the marker's digits, and the list rule never sees a line to start on.
+     */
+    private val PATTERN_TEXT: Pattern = Pattern.compile(
+        "^[\\s\\S]+?(?=[^0-9A-Za-z\\s\\u00c0-\\uffff]|\\n| {2,}\\n|\\w+:\\S|[0-9]+\\.|\$)",
+    )
     private val PATTERN_HEADER_ITEM: Pattern =
         Pattern.compile("^ *(#{1,3})(?:\\s+)([^\\n]+?)#*\\s*(?:\\n|\$)")
     private val PATTERN_SUBTEXT: Pattern = Pattern.compile("^ *-# +((?!(-#)+)[^\\n]+?) *(?:\\n|\$)")
@@ -95,6 +135,10 @@ object Rules {
     private const val PATHOLOGICAL_MASKED_LINK_MIN_LENGTH = 30
     private const val PATHOLOGICAL_MASKED_LINK_SUSPICIOUS_RATIO = 0.3
 
+    private const val MIN_LIST_START = 1L
+    /** Past this an ordered list stops counting, as on desktop, where the attribute is ignored. */
+    private const val MAX_LIST_START = 1_000_000_000L
+
     // endregion
 
     /**
@@ -104,6 +148,34 @@ object Rules {
     interface BlockQuoteState<Self : BlockQuoteState<Self>> {
         val isInQuote: Boolean
         fun newBlockQuoteState(isInQuote: Boolean): Self
+    }
+
+    /** Threaded through the parser so the list rule can nest and suppress headers inside an item. */
+    interface ListState<Self : ListState<Self>> {
+        val listLevel: Int
+        val allowHeaders: Boolean
+        fun newListItemState(): Self
+    }
+
+    /**
+     * A block rule that matches with a fresh [Matcher] every time.
+     *
+     * [Rule] keeps one matcher per rule and hands it to the parser, which reads the capture only
+     * after `parse` has returned. The block rules below parse their own content by re-entering the
+     * parser, which can match the same rule again and reset that one matcher out from under the
+     * caller, so each match needs a matcher of its own.
+     */
+    private abstract class ReentrantBlockRule<R, T : Node<R>, S>(
+        private val pattern: Pattern,
+    ) : Rule<R, T, S>(pattern) {
+
+        /** A block starts a line. [createListRule] relaxes this; see [PATTERN_LIST_LOOKBEHIND]. */
+        protected open fun isAtLineStart(lastCapture: String): Boolean = lastCapture.endsWith('\n')
+
+        override fun match(inspectionSource: CharSequence, lastCapture: String?, state: S): Matcher? {
+            if (lastCapture != null && !isAtLineStart(lastCapture)) return null
+            return pattern.matcher(inspectionSource).takeIf(Matcher::find)
+        }
     }
 
     /**
@@ -234,57 +306,145 @@ object Rules {
             },
         )
 
-    /** `# heading` through `### heading`. */
-    fun <T : BasicRenderContext, S> createHeaderItemRule(): Rule.BlockRule<T, HeaderNode<T>, S> =
-        object : Rule.BlockRule<T, HeaderNode<T>, S>(PATTERN_HEADER_ITEM) {
+    /**
+     * `# heading` through `### heading`.
+     *
+     * Parses its own content instead of handing back a range, because SimpleAST keeps a single flat
+     * "last capture" for the whole traversal: descending into a child would overwrite the newline
+     * this rule matched, and the next [Rule.BlockRule] on the following line would refuse to match.
+     * A nested parse runs its own loop, so the header's capture is what the next rule sees.
+     */
+    fun <T : BasicRenderContext, S : ListState<S>> createHeaderItemRule(): Rule<T, HeaderNode<T>, S> =
+        object : ReentrantBlockRule<T, HeaderNode<T>, S>(PATTERN_HEADER_ITEM) {
+            override fun match(inspectionSource: CharSequence, lastCapture: String?, state: S): Matcher? =
+                if (state.allowHeaders) super.match(inspectionSource, lastCapture, state) else null
+
             override fun parse(
                 matcher: Matcher,
                 parser: Parser<T, in HeaderNode<T>, S>,
                 state: S,
-            ): ParseSpec<T, S> = ParseSpec(
-                HeaderNode(matcher.group(1)?.length ?: 1),
-                state,
-                matcher.start(2),
-                matcher.end(2),
-            )
+            ): ParseSpec<T, S> {
+                val node = HeaderNode<T>(matcher.group(1)?.length ?: 1)
+                parseInto(node, parser, matcher.group(2).orEmpty(), state)
+                return ParseSpec.createTerminal(node, state)
+            }
         }
 
     /** `-# muted supporting text`; unlike headings, this is enabled in every message parser. */
-    fun <T : BasicRenderContext, S> createSubtextRule(): Rule.BlockRule<T, SubtextNode<T>, S> =
-        object : Rule.BlockRule<T, SubtextNode<T>, S>(PATTERN_SUBTEXT) {
+    fun <T : BasicRenderContext, S> createSubtextRule(): Rule<T, SubtextNode<T>, S> =
+        object : ReentrantBlockRule<T, SubtextNode<T>, S>(PATTERN_SUBTEXT) {
             override fun parse(
                 matcher: Matcher,
                 parser: Parser<T, in SubtextNode<T>, S>,
                 state: S,
-            ): ParseSpec<T, S> = ParseSpec(
-                SubtextNode(),
-                state,
-                matcher.start(1),
-                matcher.end(1),
-            )
-        }
-
-    /** `- item` / `* item`, with one level of indentation supported. */
-    fun <T : BasicRenderContext, S> createListItemRule(): Rule<T, BulletListNode<T>, S> =
-        object : Rule<T, BulletListNode<T>, S>(PATTERN_LIST_ITEM) {
-            override fun parse(
-                matcher: Matcher,
-                parser: Parser<T, in BulletListNode<T>, S>,
-                state: S,
             ): ParseSpec<T, S> {
-                val nestedLevel = (matcher.group(1).orEmpty().length / 2 + 1).coerceAtMost(11)
-                val rawMarker = matcher.group(2).orEmpty()
-                val orderedMarker = rawMarker.removeSuffix(".").takeIf { rawMarker.endsWith('.') }
-                // Group 4 only captures when the item is terminated by a newline of its own.
-                val includesNewline = !matcher.group(4).isNullOrEmpty()
-                return ParseSpec(
-                    BulletListNode(nestedLevel, includesNewline, orderedMarker),
-                    state,
-                    matcher.start(3),
-                    matcher.end(3),
-                )
+                val node = SubtextNode<T>()
+                parseInto(node, parser, matcher.group(1).orEmpty().trim(), state)
+                return ParseSpec.createTerminal(node, state)
             }
         }
+
+    /**
+     * A whole `- item` / `1. item` list.
+     *
+     * The list is captured in one match and split into items here rather than one rule match per
+     * line, because an item owns its continuation lines and its indented sub-list, and the nesting
+     * level of a bullet is only meaningful relative to the first bullet of the list it belongs to.
+     */
+    fun <T : BasicRenderContext, S : ListState<S>> createListRule(): Rule<T, ListNode<T>, S> =
+        object : ReentrantBlockRule<T, ListNode<T>, S>(PATTERN_LIST) {
+            override fun isAtLineStart(lastCapture: String): Boolean =
+                lastCapture.isEmpty() || PATTERN_LIST_LOOKBEHIND.matcher(lastCapture).find()
+
+            override fun match(inspectionSource: CharSequence, lastCapture: String?, state: S): Matcher? =
+                if (state.listLevel >= MessageParseState.MAX_LIST_NESTING_LEVEL) {
+                    null
+                } else {
+                    super.match(inspectionSource, lastCapture, state)
+                }
+
+            override fun parse(
+                matcher: Matcher,
+                parser: Parser<T, in ListNode<T>, S>,
+                state: S,
+            ): ParseSpec<T, S> {
+                val ordered = matcher.group(2).orEmpty().length > 1
+                val start = if (ordered) {
+                    matcher.group(2).orEmpty().removeSuffix(".").toLongOrNull()
+                        ?.coerceIn(MIN_LIST_START, MAX_LIST_START)?.toInt() ?: MIN_LIST_START.toInt()
+                } else {
+                    0
+                }
+                val node = ListNode<T>()
+                splitListItems(matcher.group()).forEachIndexed { index, content ->
+                    val item = ListItemNode<T>(
+                        marker = if (ordered) "${start + index}. " else null,
+                        level = state.listLevel,
+                    )
+                    node.addChild(item)
+                    // A sub-list is hoisted next to the item that introduced it, not under it.
+                    parseListItem(parser, content, state).forEach { child ->
+                        if (child is ListNode<*>) node.addChild(child) else item.addChild(child)
+                    }
+                }
+                return ParseSpec.createTerminal(node, state)
+            }
+        }
+
+    /**
+     * Splits a captured list into its sibling items.
+     *
+     * A bullet is a sibling of the first one when it carries the same leading-space run, or one
+     * more; anything deeper belongs to the item above it and is re-parsed as part of its content.
+     */
+    private fun splitListItems(capturedList: String): List<String> {
+        val prefix = PATTERN_LIST_ITEM_PREFIX.matcher(capturedList)
+        if (!prefix.find()) return emptyList()
+        val prefixLength = prefix.group().length
+        val leadingSpaces = prefix.group(1).orEmpty().length
+        val siblingIndent = " {$leadingSpaces,${leadingSpaces + 1}}"
+        val itemPattern = Pattern.compile(
+            LIST_ITEM_TEMPLATE.replace("%INDENT%", siblingIndent),
+            Pattern.MULTILINE,
+        )
+        // Every line of an item's continuation carries the first bullet's indentation; the
+        // reference measures that from the first bullet alone so deeper bullets keep their level.
+        val continuationIndent = Pattern.compile("^ {1,$prefixLength}", Pattern.MULTILINE)
+
+        val items = ArrayList<String>()
+        val matcher = itemPattern.matcher(capturedList)
+        while (matcher.find()) {
+            val withoutBullet = PATTERN_LIST_ITEM_PREFIX.matcher(matcher.group()).replaceFirst("")
+            items += continuationIndent.matcher(withoutBullet).replaceAll("")
+        }
+        return items
+    }
+
+    private fun <T : BasicRenderContext, S : ListState<S>> parseListItem(
+        parser: Parser<T, in ListNode<T>, S>,
+        content: String,
+        state: S,
+    ): List<Node<T>> {
+        @Suppress("UNCHECKED_CAST")
+        val innerParser = parser as Parser<T, Node<T>, S>
+        val trimmed = PATTERN_LIST_ITEM_END.matcher(content).replaceFirst("")
+        val parsed = innerParser.parse(trimmed, state.newListItemState()).toMutableList()
+        // An item owns the break that ends it, so any the content left behind — at its end, or
+        // ahead of the sub-list it introduces — would draw a blank line between two bullets.
+        for (index in parsed.indices.reversed()) {
+            val node = parsed[index]
+            if (node !is TextNode<*> || node.content.isNotBlank()) continue
+            if (index == parsed.lastIndex || parsed[index + 1] is ListNode<*>) parsed.removeAt(index)
+        }
+        return parsed
+    }
+
+    private fun <T, S> parseInto(node: Node<T>, parser: Parser<T, *, S>, source: String, state: S) {
+        if (source.isEmpty()) return
+        @Suppress("UNCHECKED_CAST")
+        val innerParser = parser as Parser<T, Node<T>, S>
+        innerParser.parse(source, state).forEach(node::addChild)
+    }
 
     // endregion
 
@@ -560,7 +720,7 @@ object Rules {
      * result, so a surrogate in the middle of a word still becomes an emoji image.
      */
     fun <T : EmojiNode.RenderContext, S> createTextReplacementRule(): Rule<T, Node<T>, S> =
-        object : Rule<T, Node<T>, S>(SimpleMarkdownRules.PATTERN_TEXT) {
+        object : Rule<T, Node<T>, S>(PATTERN_TEXT) {
             private val innerRules: List<Rule<T, Node<T>, S>> = listOf(
                 createNamedEmojiRule(),
                 SimpleMarkdownRules.createTextRule(),

@@ -28,6 +28,7 @@ import com.discord.utilities.embed.EmbedResourceUtils
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.textprocessing.DiscordParser
+import com.discord.utilities.textprocessing.MarkupEligibility
 import com.discord.utilities.textprocessing.MessagePreprocessor
 import com.discord.utilities.textprocessing.MessageRenderContext
 import com.discord.utilities.time.TimeUtils
@@ -147,7 +148,7 @@ class WidgetChatListAdapterItemForwardedMessage(
                 shouldJumboify = true,
                 maxNodes = null,
             ),
-            DiscordParser.ParserOptions.DEFAULT,
+            MarkupEligibility.parserOptionsFor(message),
             false,
         )
         binding.forwardedMessageContent.visibility = if (rendered.isEmpty()) View.GONE else View.VISIBLE

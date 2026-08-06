@@ -13,6 +13,7 @@ import com.discord.stores.StoreMessageState
 import com.discord.stores.StoreStream
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.textprocessing.DiscordParser
+import com.discord.utilities.textprocessing.MarkupEligibility
 import com.discord.utilities.textprocessing.MessagePreprocessor
 import com.discord.utilities.textprocessing.MessageRenderContext
 import com.discord.utilities.time.TimeUtils
@@ -92,7 +93,7 @@ class WidgetChatListAdapterItemAutoModBlocked(
             messageText = message.content,
             messageRenderContext = messageRenderContext(context, entry),
             preprocessor = messagePreprocessor(adapter.data.userId, message, entry.messageState),
-            parserOptions = DiscordParser.ParserOptions.DEFAULT,
+            parserOptions = MarkupEligibility.parserOptionsFor(message),
             isEdited = isEdited,
         )
         messageContent.visibility = if (rendered.isNotEmpty()) View.VISIBLE else View.GONE

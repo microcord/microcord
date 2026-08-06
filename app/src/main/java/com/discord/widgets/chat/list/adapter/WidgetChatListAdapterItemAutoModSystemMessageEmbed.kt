@@ -15,6 +15,7 @@ import com.discord.stores.StoreMessageState
 import com.discord.stores.StoreStream
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.textprocessing.DiscordParser
+import com.discord.utilities.textprocessing.MarkupEligibility
 import com.discord.utilities.textprocessing.MessagePreprocessor
 import com.discord.utilities.textprocessing.MessageRenderContext
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
@@ -120,7 +121,7 @@ class WidgetChatListAdapterItemAutoModSystemMessageEmbed(
             messageText = entry.embed.description,
             messageRenderContext = messageRenderContext(context, entry),
             preprocessor = messagePreprocessor(adapter.data.userId, entry.message, entry.messageState),
-            parserOptions = DiscordParser.ParserOptions.DEFAULT,
+            parserOptions = MarkupEligibility.parserOptionsFor(entry.message),
             isEdited = isEdited,
         )
         messageContent.visibility = if (rendered.isNotEmpty()) View.VISIBLE else View.GONE

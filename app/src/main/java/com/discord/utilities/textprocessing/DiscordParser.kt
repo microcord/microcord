@@ -19,26 +19,32 @@ object DiscordParser {
 
     /** Selects which parser a surface gets, and therefore which rules are enabled. */
     enum class ParserOptions {
-        /** Current chat messages: masked links, headings, lists and entity mentions enabled. */
+        /**
+         * A message written since headers, lists and masked links shipped. Callers that hold a
+         * message decide between this and [LEGACY_MESSAGE] with [MarkupEligibility].
+         */
         DEFAULT,
 
-        /** Surfaces that are allowed to show `[label](url)`, such as system and bot content. */
-        ALLOW_MASKED_LINKS,
+        /**
+         * A message predating those features, whose `#` and `-` were written as punctuation and
+         * must keep rendering as punctuation.
+         */
+        LEGACY_MESSAGE,
 
         /** Inline reply previews: single line, so block quotes are disabled. */
         REPLY,
 
-        /** The opening post of a forum thread, which may use headers and lists. */
+        /** The opening post of a forum thread, which gets headers and lists whatever its age. */
         FORUM_POST_FIRST_MESSAGE,
     }
 
-    private val SAFE_LINK_PARSER = createParser(
+    private val IMPROVED_MARKDOWN_PARSER = createParser(
         allowMaskedLinks = true,
         supportEntityMentions = true,
         renderHeaders = true,
         renderLists = true,
     )
-    private val MASKED_LINK_PARSER = createParser(allowMaskedLinks = true, supportEntityMentions = true)
+    private val LEGACY_MESSAGE_PARSER = createParser(allowMaskedLinks = false, supportEntityMentions = true)
     private val REPLY_PARSER = createParser(
         allowMaskedLinks = false,
         supportEntityMentions = true,
@@ -51,6 +57,13 @@ object DiscordParser {
         renderLists = true,
     )
 
+    private fun parserFor(parserOptions: ParserOptions) = when (parserOptions) {
+        ParserOptions.DEFAULT -> IMPROVED_MARKDOWN_PARSER
+        ParserOptions.LEGACY_MESSAGE -> LEGACY_MESSAGE_PARSER
+        ParserOptions.REPLY -> REPLY_PARSER
+        ParserOptions.FORUM_POST_FIRST_MESSAGE -> FORUM_POST_FIRST_MESSAGE_PARSER
+    }
+
     @JvmStatic
     @JvmOverloads
     fun createParser(
@@ -59,6 +72,9 @@ object DiscordParser {
         renderBlockQuotes: Boolean = true,
         renderHeaders: Boolean = false,
         renderLists: Boolean = false,
+        renderCodeBlocks: Boolean = true,
+        renderSubtext: Boolean = true,
+        renderLinks: Boolean = true,
     ): Parser<MessageRenderContext, Node<MessageRenderContext>, MessageParseState> {
         val parser = Parser<MessageRenderContext, Node<MessageRenderContext>, MessageParseState>(false)
 
@@ -69,18 +85,24 @@ object DiscordParser {
         if (renderBlockQuotes) {
             parser.addRule(Rules.createBlockQuoteRule())
         }
-        parser.addRule(Rules.createCodeBlockRule())
+        if (renderCodeBlocks) {
+            parser.addRule(Rules.createCodeBlockRule())
+        }
         parser.addRule(Rules.createInlineCodeRule())
         parser.addRule(Rules.createSpoilerRule())
-        parser.addRule(Rules.createSubtextRule())
-
-        if (allowMaskedLinks) {
-            parser.addRule(Rules.createMaskedLinkRule())
+        if (renderSubtext) {
+            parser.addRule(Rules.createSubtextRule())
         }
-        parser.addRule(Rules.createUrlNoEmbedRule())
-        parser.addRule(Rules.createMailtoRule())
-        parser.addRule(Rules.createTelephoneRule())
-        parser.addRule(Rules.createUrlRule())
+
+        if (renderLinks) {
+            if (allowMaskedLinks) {
+                parser.addRule(Rules.createMaskedLinkRule())
+            }
+            parser.addRule(Rules.createUrlNoEmbedRule())
+            parser.addRule(Rules.createMailtoRule())
+            parser.addRule(Rules.createTelephoneRule())
+            parser.addRule(Rules.createUrlRule())
+        }
 
         parser.addRule(Rules.createCustomEmojiRule())
         parser.addRule(Rules.createNamedEmojiRule())
@@ -100,7 +122,7 @@ object DiscordParser {
             parser.addRule(Rules.createHeaderItemRule())
         }
         if (renderLists) {
-            parser.addRule(Rules.createListItemRule())
+            parser.addRule(Rules.createListRule())
         }
 
         // Bold, underline, italics, strikethrough and newlines; escapes and the text rule are
@@ -127,14 +149,7 @@ object DiscordParser {
         parserOptions: ParserOptions = ParserOptions.DEFAULT,
         isEdited: Boolean = false,
     ): DraweeSpanStringBuilder {
-        val parser = when (parserOptions) {
-            ParserOptions.DEFAULT -> SAFE_LINK_PARSER
-            ParserOptions.ALLOW_MASKED_LINKS -> MASKED_LINK_PARSER
-            ParserOptions.REPLY -> REPLY_PARSER
-            ParserOptions.FORUM_POST_FIRST_MESSAGE -> FORUM_POST_FIRST_MESSAGE_PARSER
-        }
-
-        val ast = parse(parser, messageText)
+        val ast = parse(parserFor(parserOptions), messageText)
         preprocessor.process(ast)
         if (isEdited) {
             ast.add(EditedMessageNode(context))
@@ -149,15 +164,7 @@ object DiscordParser {
     fun parse(
         messageText: String?,
         parserOptions: ParserOptions = ParserOptions.DEFAULT,
-    ): MutableList<Node<MessageRenderContext>> = parse(
-        when (parserOptions) {
-            ParserOptions.DEFAULT -> SAFE_LINK_PARSER
-            ParserOptions.ALLOW_MASKED_LINKS -> MASKED_LINK_PARSER
-            ParserOptions.REPLY -> REPLY_PARSER
-            ParserOptions.FORUM_POST_FIRST_MESSAGE -> FORUM_POST_FIRST_MESSAGE_PARSER
-        },
-        messageText,
-    )
+    ): MutableList<Node<MessageRenderContext>> = parse(parserFor(parserOptions), messageText)
 
     private fun parse(
         parser: Parser<MessageRenderContext, Node<MessageRenderContext>, MessageParseState>,

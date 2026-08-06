@@ -7,11 +7,12 @@ import com.discord.simpleast.core.node.TextNode
 import com.discord.simpleast.core.parser.Parser
 import com.discord.utilities.textprocessing.node.BlockBackgroundNode
 import com.discord.utilities.textprocessing.node.BlockQuoteNode
-import com.discord.utilities.textprocessing.node.BulletListNode
 import com.discord.utilities.textprocessing.node.ChannelMentionNode
 import com.discord.utilities.textprocessing.node.CommandMentionNode
 import com.discord.utilities.textprocessing.node.EmojiNode
 import com.discord.utilities.textprocessing.node.HeaderNode
+import com.discord.utilities.textprocessing.node.ListItemNode
+import com.discord.utilities.textprocessing.node.ListNode
 import com.discord.utilities.textprocessing.node.RoleMentionNode
 import com.discord.utilities.textprocessing.node.SpoilerNode
 import com.discord.utilities.textprocessing.node.SubtextNode
@@ -117,17 +118,79 @@ class DiscordMarkdownRulesTest {
         assertTrue(parse("#### not-a-heading").none { it is HeaderNode<*> })
     }
 
+    /** A message predating the feature wrote `#` and `-` as punctuation and has to keep them. */
     @Test
-    fun listRuleSupportsCurrentOrderedAndNestedForms() {
-        val item = parse("- item\n")
-            .filterIsInstance<BulletListNode<*>>()
-            .single()
-        assertEquals("item", plainText(item.getChildren().orEmpty()))
+    fun legacyMessagesGetNoHeadersListsOrMaskedLinks() {
+        val legacy = DiscordParser.ParserOptions.LEGACY_MESSAGE
+        assertTrue(parse("# Title\n", legacy).none { it is HeaderNode<*> })
+        assertTrue(parse("- item\n", legacy).none { it is ListNode<*> })
 
-        val ordered = parse("2. second\n").filterIsInstance<BulletListNode<*>>().single()
-        assertEquals("2", ordered.marker)
-        val nested = parse("    * nested\n").filterIsInstance<BulletListNode<*>>().single()
-        assertEquals(3, nested.nestedLevel)
+        // The bare URL is still a link; what legacy loses is the label standing in for it, so the
+        // brackets stay as literal text instead of being absorbed into the link.
+        val source = "[label](https://example.com)"
+        assertEquals("[label]()", plainText(parse(source, legacy)))
+        assertEquals("", plainText(parse(source, DiscordParser.ParserOptions.DEFAULT)))
+    }
+
+    /**
+     * SimpleAST keeps one "last capture" for the whole traversal, so a block rule that hands back a
+     * range has its trailing newline overwritten by its own children and the next header on the
+     * following line stops matching.
+     */
+    @Test
+    fun consecutiveHeadersAllParse() {
+        val headers = parse("# One\n## Two\n### Three\n").filterIsInstance<HeaderNode<*>>()
+        assertEquals(
+            listOf("One", "Two", "Three"),
+            headers.map { plainText(it.getChildren().orEmpty()) },
+        )
+    }
+
+    @Test
+    fun aBlockAfterAListStillParses() {
+        assertEquals(1, parse("- item\n# After\n").filterIsInstance<HeaderNode<*>>().size)
+    }
+
+    @Test
+    fun listRuleGroupsSiblingItemsUnderOneList() {
+        val items = parse("- one\n- two\n").listItems()
+        assertEquals(listOf("one", "two"), items.map { plainText(it.getChildren().orEmpty()) })
+        assertEquals(listOf(0, 0), items.map { it.level })
+    }
+
+    /** The reference numbers from the first bullet onwards rather than echoing each marker. */
+    @Test
+    fun orderedListRenumbersFromItsFirstMarker() {
+        val items = parse("5. five\n5. six\n").listItems()
+        assertEquals(listOf("5. five", "6. six"), items.map(::renderedItem))
+    }
+
+    @Test
+    fun indentedItemsBecomeADeeperListNextToTheItemAboveThem() {
+        val items = parse("- outer\n  - inner\n").listItems()
+        assertEquals(listOf("outer", "inner"), items.map { plainText(it.getChildren().orEmpty()) })
+        assertEquals(listOf(0, 1), items.map { it.level })
+    }
+
+    /**
+     * An item strips only its own bullet's worth of indentation from the lines below it, so a
+     * sub-list indented further keeps the leftover spaces in front of its bullet.
+     */
+    @Test
+    fun anyIndentDeepEnoughToNestNests() {
+        listOf(2, 3, 4, 8).forEach { indent ->
+            val items = parse("- outer\n${" ".repeat(indent)}- inner\n").listItems()
+            assertEquals("indent of $indent", listOf(0, 1), items.map { it.level })
+        }
+        // One space still reads as the same level, as it does on desktop.
+        assertEquals(listOf(0, 0), parse("- outer\n - inner\n").listItems().map { it.level })
+    }
+
+    /** Headers inside an item would change its line height, so the reference turns them off. */
+    @Test
+    fun headersAreInertInsideAListItem() {
+        val items = parse("- # not a header\n").listItems()
+        assertEquals("# not a header", plainText(items.single().getChildren().orEmpty()))
     }
 
     @Test
@@ -194,7 +257,7 @@ class DiscordMarkdownRulesTest {
     fun maskedLinkRuleRefusesBracketFloodedInput() {
         val attack = "[".repeat(40) + "](https://example.com)"
 
-        val rendered = plainText(parse(attack, DiscordParser.ParserOptions.ALLOW_MASKED_LINKS))
+        val rendered = plainText(parse(attack, DiscordParser.ParserOptions.DEFAULT))
         assertTrue(rendered.startsWith("[[["))
     }
 
@@ -371,6 +434,20 @@ class DiscordMarkdownRulesTest {
                 Rules.setEmojiDataProvider(NO_EMOJI_DATA)
             }
         }
+
+        /** Every item of every list, outer first, in the order they render. */
+        fun List<Node<*>>.listItems(): List<ListItemNode<*>> =
+            filterIsInstance<ListNode<*>>().flatMap { list ->
+                list.getChildren().orEmpty().flatMap { child ->
+                    when (child) {
+                        is ListItemNode<*> -> listOf(child)
+                        else -> listOf(child).listItems()
+                    }
+                }
+            }
+
+        fun renderedItem(item: ListItemNode<*>): String =
+            item.marker.orEmpty() + plainText(item.getChildren().orEmpty())
 
         fun List<Node<*>>.flatten(): List<Node<*>> =
             flatMap { listOf(it) + it.getChildren().orEmpty().toList().flatten() }

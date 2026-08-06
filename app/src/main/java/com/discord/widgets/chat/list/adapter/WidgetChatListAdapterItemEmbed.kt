@@ -27,6 +27,7 @@ import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.member.GuildMember
 import com.discord.models.gifpicker.dto.ModelGif
 import com.discord.simpleast.core.node.Node
+import com.discord.simpleast.core.node.TextNode
 import com.discord.simpleast.core.parser.Parser
 import com.discord.stores.StoreStream
 import com.discord.utilities.dimen.dpToPixels
@@ -37,6 +38,7 @@ import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
 import com.discord.utilities.textprocessing.AstRenderer
 import com.discord.utilities.textprocessing.DiscordParser
+import com.discord.utilities.textprocessing.MarkupEligibility
 import com.discord.utilities.textprocessing.MessageParseState
 import com.discord.utilities.textprocessing.MessagePreprocessor
 import com.discord.utilities.textprocessing.MessageRenderContext
@@ -142,10 +144,13 @@ class WidgetChatListAdapterItemEmbed(
         }
         configureCellHighlight(entry.message, highlightedBackground, gutterBackground, entry.isPendingReply)
 
+        val improvedMarkdown = MarkupEligibility.allowsImprovedMarkdown(entry.message)
         val model = Model(
             embedEntry = entry,
-            parsedDescription = entry.embed.description?.let { UI_THREAD_VALUES_PARSER.parseText(it) },
-            parsedFields = parseFields(entry.embed.fields),
+            parsedDescription = entry.embed.description
+                ?.takeIf { entry.embed.showsDescription() }
+                ?.let { entry.embed.parseDescription(it, improvedMarkdown) },
+            parsedFields = parseFields(entry.embed.fields, improvedMarkdown),
         )
         configureUI(model)
 
@@ -335,7 +340,7 @@ class WidgetChatListAdapterItemEmbed(
             return
         }
         val embedIndex = model.embedEntry.embedIndex
-        val ast = UI_THREAD_TITLES_PARSER.parseText(titleText)
+        val ast = embed.parseTitle(titleText)
         model.preprocessorFor(embedIndex, PART_TITLE).process(ast)
         title.setDraweeSpanStringBuilder(
             AstRenderer.render(
@@ -542,12 +547,16 @@ class WidgetChatListAdapterItemEmbed(
     private fun shouldRenderMedia(): Boolean =
         userSettings.getIsEmbedMediaInlined() && userSettings.getIsRenderEmbedsEnabled()
 
-    private fun parseFields(fields: List<EmbedField>?): List<ParsedField>? = fields?.map {
-        ParsedField(
-            parsedName = UI_THREAD_TITLES_PARSER.parseText(it.name),
-            parsedValue = UI_THREAD_VALUES_PARSER.parseText(it.value),
-        )
-    }
+    private fun parseFields(fields: List<EmbedField>?, improvedMarkdown: Boolean): List<ParsedField>? =
+        fields?.map { field ->
+            val valueParser =
+                if (improvedMarkdown) UI_THREAD_FIELD_VALUE_IMPROVED_PARSER else UI_THREAD_VALUES_PARSER
+            ParsedField(
+                parsedName = UI_THREAD_TITLES_PARSER.parseText(field.name),
+                // A tab would indent the value into looking like a list item's continuation.
+                parsedValue = valueParser.parseText(field.value.replace("\t", "")),
+            )
+        }
 
     // endregion
 
@@ -723,18 +732,81 @@ private val MAX_EMBED_IMAGE_HEIGHT_PX = dpToPixels(360)
 
 /**
  * Titles, field names and the message body: no masked links (a bot could otherwise disguise a link
- * as arbitrary text) and no entity mentions.
+ * as arbitrary text), no entity mentions, and none of the block constructs, which a single-line
+ * heading has no room for.
  */
-private val UI_THREAD_TITLES_PARSER =
-    DiscordParser.createParser(allowMaskedLinks = false, supportEntityMentions = false)
+private val UI_THREAD_TITLES_PARSER = DiscordParser.createParser(
+    allowMaskedLinks = false,
+    supportEntityMentions = false,
+    renderCodeBlocks = false,
+    renderSubtext = false,
+)
 
-/** Descriptions and field values, which may legitimately carry both. */
+/**
+ * A title of an embed that carries a URL.
+ *
+ * The whole title is already a link to that URL, so a link inside it would nest one tappable
+ * region in another.
+ */
+private val UI_THREAD_TITLES_NO_LINKS_PARSER = DiscordParser.createParser(
+    allowMaskedLinks = false,
+    supportEntityMentions = false,
+    renderCodeBlocks = false,
+    renderSubtext = false,
+    renderLinks = false,
+)
+
+/**
+ * Descriptions and field values, which may legitimately carry masked links and mentions whatever
+ * the message's age — only headers and lists are held back before the improved-markdown epoch.
+ *
+ * A field is laid out in a narrow column beside its neighbours, so it takes lists but not headers.
+ */
 private val UI_THREAD_VALUES_PARSER =
     DiscordParser.createParser(allowMaskedLinks = true, supportEntityMentions = true)
+
+private val UI_THREAD_DESCRIPTION_IMPROVED_PARSER = DiscordParser.createParser(
+    allowMaskedLinks = true,
+    supportEntityMentions = true,
+    renderHeaders = true,
+    renderLists = true,
+)
+
+private val UI_THREAD_FIELD_VALUE_IMPROVED_PARSER = DiscordParser.createParser(
+    allowMaskedLinks = true,
+    supportEntityMentions = true,
+    renderLists = true,
+)
 
 private fun Parser<MessageRenderContext, Node<MessageRenderContext>, MessageParseState>.parseText(
     text: String,
 ): MutableList<Node<MessageRenderContext>> = ArrayList(parse(text, MessageParseState.initialState))
+
+/** A media embed shows its image where a description would go. */
+private fun MessageEmbed.showsDescription(): Boolean = when (type) {
+    EmbedType.IMAGE, EmbedType.VIDEO, EmbedType.GIFV -> false
+    else -> true
+}
+
+/**
+ * Only a rich embed carries text anyone wrote markdown into. Everything else was scraped from the
+ * page being previewed, so it renders exactly as it arrived — a `*` in an article's summary is a
+ * bullet character, not emphasis.
+ */
+private fun MessageEmbed.parseDescription(
+    text: String,
+    improvedMarkdown: Boolean,
+): MutableList<Node<MessageRenderContext>> = when {
+    type != EmbedType.RICH -> arrayListOf(TextNode(text))
+    improvedMarkdown -> UI_THREAD_DESCRIPTION_IMPROVED_PARSER.parseText(text)
+    else -> UI_THREAD_VALUES_PARSER.parseText(text)
+}
+
+private fun MessageEmbed.parseTitle(text: String): MutableList<Node<MessageRenderContext>> = when {
+    type != EmbedType.RICH -> arrayListOf(TextNode(text))
+    url.isNullOrEmpty() -> UI_THREAD_TITLES_PARSER.parseText(text)
+    else -> UI_THREAD_TITLES_NO_LINKS_PARSER.parseText(text)
+}
 
 /**
  * Long-pressing any embed text copies it, matching the reference's embed rows.

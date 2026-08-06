@@ -35,6 +35,7 @@ import com.discord.utilities.message.MessageUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.spans.ClickableSpan
 import com.discord.utilities.textprocessing.DiscordParser
+import com.discord.utilities.textprocessing.MarkupEligibility
 import com.discord.utilities.textprocessing.MessagePreprocessor
 import com.discord.utilities.textprocessing.MessageRenderContext
 import com.discord.utilities.textprocessing.node.SpoilerNode
@@ -313,10 +314,10 @@ class WidgetChatListAdapterItemMessage(
 
         val preprocessor = messagePreprocessor(adapter.data.userId, message, entry.messageState)
         val renderContext = messageRenderContext(context, entry, spoilerClickHandler(message))
-        val parserOptions = when {
-            entry.isGuildForumPostFirstMessage -> DiscordParser.ParserOptions.FORUM_POST_FIRST_MESSAGE
-            message.isWebhook() -> DiscordParser.ParserOptions.ALLOW_MASKED_LINKS
-            else -> DiscordParser.ParserOptions.DEFAULT
+        val parserOptions = if (entry.isGuildForumPostFirstMessage) {
+            DiscordParser.ParserOptions.FORUM_POST_FIRST_MESSAGE
+        } else {
+            MarkupEligibility.parserOptionsFor(message)
         }
         val rendered = DiscordParser.parseChannelMessage(
             context,
