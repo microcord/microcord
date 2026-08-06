@@ -60,6 +60,7 @@ import com.discord.models.domain.UserSettingsProtoUpdate
 import com.discord.models.thread.dto.ModelThreadListSync
 import com.google.gson.Gson
 import com.google.gson.JsonElement
+import com.google.gson.JsonParseException
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 
@@ -100,7 +101,13 @@ class IncomingParser(private val gson: Gson) {
         // Pure "refetch me" nudges: whatever body they carry is discarded.
         if (type in BODYLESS_EVENTS) return Unit
         if (data == null) return null
-        return parseDispatchBody(type, data)
+        return try {
+            parseDispatchBody(type, data)
+        } catch (error: JsonParseException) {
+            // The socket only sees the throwable; without the dispatch type its log cannot say which
+            // event's model is wrong.
+            throw JsonParseException("$type: ${error.message}", error)
+        }
     }
 
     private fun parseDispatchBody(type: String?, data: JsonElement): Any? = when (type) {

@@ -264,7 +264,10 @@ class GatewaySocket(
                         if (gatewaySocketLogger.logLevel == GatewaySocketLogger.LogLevel.VERBOSE) {
                             runCatching { gatewaySocketLogger.logMessageInflateFailed(error) }
                         }
-                        logError("inflate/parse failure: ${error.javaClass.simpleName}", error)
+                        logError(
+                            "inflate/parse failure: ${error.javaClass.simpleName}: ${error.message}",
+                            error,
+                        )
                         reconnect("Gateway inflate/parse failure: ${error.javaClass.simpleName}", immediate = false)
                     }
                 }
