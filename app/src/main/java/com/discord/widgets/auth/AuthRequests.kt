@@ -3,6 +3,7 @@ package com.discord.widgets.auth
 import com.discord.R
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
+import com.discord.stores.StoreNux
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.lifecycle.ApplicationProvider
 import com.discord.utilities.rest.RestAPI
@@ -190,7 +191,16 @@ object AuthRequests {
                 globalName = action.globalName?.takeUnless(String::isBlank),
                 promotionalEmailOptIn = action.promotionalEmailOptIn,
             )
-            .dispatch("REST: register", callback) { AuthResult.Success() }
+            .dispatch("REST: register", callback) {
+                StoreStream.getNux().setNewUserType(
+                    if (landing?.guildTemplateCode != null) {
+                        StoreNux.NewUserType.ORGANIC_REGISTERED_GUILD_TEMPLATE
+                    } else {
+                        StoreNux.NewUserType.ORGANIC_REGISTERED
+                    },
+                )
+                AuthResult.Success()
+            }
     }
 
     /** Starts phone registration; the code screen follows. */

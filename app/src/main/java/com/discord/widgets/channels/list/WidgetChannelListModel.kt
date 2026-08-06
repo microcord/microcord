@@ -44,6 +44,7 @@ import com.discord.widgets.channels.list.items.ChannelListItemDirectory
 import com.discord.widgets.channels.list.items.ChannelListItemEventsSeparator
 import com.discord.widgets.channels.list.items.ChannelListItemGuildJoinRequest
 import com.discord.widgets.channels.list.items.ChannelListItemGuildRoleSubscriptionsOverview
+import com.discord.widgets.channels.list.items.ChannelListItemGuildOnboarding
 import com.discord.widgets.channels.list.items.ChannelListItemGuildScheduledEvents
 import com.discord.widgets.channels.list.items.ChannelListItemInvite
 import com.discord.widgets.channels.list.items.ChannelListItemMfaNotice
@@ -634,6 +635,11 @@ data class WidgetChannelListModel(
                 val canCreate = models.hasFeature(GuildFeature.COMMUNITY) && canCreateAnyEvent
                 if (hasEvents || canCreate) {
                     items.add(ChannelListItemGuildScheduledEvents(guildScheduledEvents, models))
+                }
+                if (models.hasFeature(GuildFeature.GUILD_ONBOARDING_HAS_PROMPTS) ||
+                    models.hasFeature(GuildFeature.GUILD_ONBOARDING)
+                ) {
+                    items.add(ChannelListItemGuildOnboarding)
                 }
             }
 

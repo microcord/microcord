@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    style="@style/UiKit.ViewGroup.Page">
+
+    <com.facebook.drawee.view.SimpleDraweeView
+        android:id="@+id/guild_onboarding_splash"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0" />
+    <View
+        android:id="@+id/guild_onboarding_splash_gradient"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@drawable/bg_guild_onboarding_splash_gradient"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/guild_onboarding_splash"
+        app:layout_constraintEnd_toEndOf="@id/guild_onboarding_splash"
+        app:layout_constraintStart_toStartOf="@id/guild_onboarding_splash"
+        app:layout_constraintTop_toTopOf="@id/guild_onboarding_splash" />
+
+    <ProgressBar
+        android:id="@+id/guild_onboarding_loading"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <androidx.appcompat.widget.AppCompatImageButton
+        android:id="@+id/guild_onboarding_close"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="8dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/close"
+        android:padding="12dp"
+        android:src="@drawable/ic_clear_24dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:tint="?attr/colorInteractiveNormal" />
+
+    <ViewAnimator
+        android:id="@+id/guild_onboarding_page_host"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/guild_onboarding_actions"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+    <LinearLayout
+        android:id="@+id/guild_onboarding_content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingStart="16dp"
+        android:paddingTop="64dp"
+        android:paddingEnd="16dp">
+        <TextView
+            android:id="@+id/guild_onboarding_step"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="start"
+            android:layout_marginBottom="8dp"
+            android:textColor="?attr/colorTextMuted"
+            style="@style/UiKit.TextView.Semibold" />
+        <com.airbnb.lottie.LottieAnimationView
+            android:id="@+id/guild_onboarding_landing_animation"
+            android:layout_width="match_parent"
+            android:layout_height="420dp"
+            android:importantForAccessibility="no"
+            android:visibility="gone"
+            app:lottie_autoPlay="false"
+            app:lottie_fileName="animations/anim_guild_onboarding.json"
+            app:lottie_loop="false" />
+        <TextView
+            android:id="@+id/guild_onboarding_landing_welcome"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textColor="?attr/colorHeaderPrimary"
+            android:textSize="18sp"
+            android:visibility="gone"
+            style="@style/UiKit.TextView.Semibold" />
+        <TextView
+            android:id="@+id/guild_onboarding_landing_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:gravity="center"
+            android:text="@string/guild_onboarding_customize_title"
+            android:textColor="?attr/colorHeaderPrimary"
+            android:textSize="28sp"
+            android:visibility="gone"
+            style="@style/UiKit.TextView.Bold" />
+        <TextView
+            android:id="@+id/guild_onboarding_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="start"
+            android:textColor="?attr/colorHeaderPrimary"
+            android:textSize="28sp"
+            style="@style/UiKit.TextView.Bold" />
+        <TextView
+            android:id="@+id/guild_onboarding_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="16dp"
+            android:gravity="start"
+            android:textColor="?attr/colorHeaderSecondary"
+            style="@style/UiKit.TextView.Medium" />
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/guild_onboarding_options"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:paddingBottom="16dp" />
+        <TextView
+            android:id="@+id/guild_onboarding_selection_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:gravity="center"
+            android:textColor="?attr/colorHeaderSecondary"
+            android:visibility="gone"
+            style="@style/UiKit.TextView.Medium" />
+        <TextView
+            android:id="@+id/guild_onboarding_error"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textColor="?attr/colorTextDanger"
+            android:visibility="gone"
+            style="@style/UiKit.TextView.Medium" />
+    </LinearLayout>
+    </ViewAnimator>
+
+    <TextView
+        android:id="@+id/guild_onboarding_privacy"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="24dp"
+        android:layout_marginEnd="24dp"
+        android:layout_marginBottom="24dp"
+        android:gravity="center"
+        android:text="@string/guild_onboarding_privacy"
+        android:textColor="?attr/colorTextMuted"
+        android:visibility="gone"
+        style="@style/UiKit.TextView.Medium"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <LinearLayout
+        android:id="@+id/guild_onboarding_actions"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/guild_onboarding_back"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="@string/back"
+            style="@style/UiKit.Material.Button.Secondary" />
+        <com.discord.views.LoadingButton
+            android:id="@+id/guild_onboarding_next"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            app:lb_text="@string/guild_onboarding_next"
+            style="@style/UiKit.Material.Button" />
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

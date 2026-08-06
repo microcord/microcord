@@ -144,9 +144,13 @@ object ChannelListNavigation {
         WidgetGuildScheduledEventDetailsBottomSheet.showForGuild(fragment.parentFragmentManager, eventId)
     }
 
-    /** TODO(MemberVerificationUtils): the membership-screening card's button. */
-    @JvmField
-    var showMemberVerification: (fragment: Fragment, guildId: Long) -> Unit = { _, _ -> }
+    fun showMemberVerification(fragment: Fragment, guildId: Long) {
+        com.discord.widgets.servers.member_verification.WidgetMemberVerification.create(
+            fragment.requireContext(),
+            guildId,
+            "Channel List",
+        )
+    }
 
     fun ackPremiumGuildHint() = StoreStream.getNux().setPremiumGuildHintGuildId(null)
 

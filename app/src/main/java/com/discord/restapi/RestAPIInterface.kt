@@ -37,6 +37,8 @@ import com.discord.api.friendsuggestions.BulkAddFriendsResponse
 import com.discord.api.friendsuggestions.BulkFriendSuggestions
 import com.discord.api.friendsuggestions.FriendSuggestion
 import com.discord.api.guild.Guild
+import com.discord.api.guild.GuildOnboarding
+import com.discord.api.guild.GuildOnboardingResponses
 import com.discord.api.guild.PruneCountResponse
 import com.discord.api.guild.VanityUrlResponse
 import com.discord.api.guild.preview.GuildPreview
@@ -1289,6 +1291,15 @@ interface RestAPIInterface {
 
     @GET("guilds/{guildId}/welcome-screen")
     fun getGuildWelcomeScreen(@Path("guildId") guildId: Long): Observable<GuildWelcomeScreen>
+
+    @GET("guilds/{guildId}/onboarding")
+    fun getGuildOnboarding(@Path("guildId") guildId: Long): Observable<GuildOnboarding>
+
+    @POST("guilds/{guildId}/onboarding-responses")
+    fun completeGuildOnboarding(
+        @Path("guildId") guildId: Long,
+        @Body body: GuildOnboardingResponses,
+    ): Observable<Response<GuildOnboarding>>
 
     @GET("guilds/{guildId}/member-verification")
     fun getGuildMemberVerificationForm(

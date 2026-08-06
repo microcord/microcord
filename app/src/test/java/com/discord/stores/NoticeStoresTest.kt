@@ -159,7 +159,7 @@ class NoticeStoresTest {
     // region StoreNux
 
     @Test fun nuxFlagsPublishOnEveryChangeAndClearTogether() {
-        val store = StoreNux(dispatcher)
+        val store = StoreNux(dispatcher, preferences)
         val states = mutableListOf<StoreNux.NuxState>()
         store.getNuxState().subscribe { states += it }
 
@@ -176,7 +176,7 @@ class NoticeStoresTest {
     }
 
     @Test fun selectingADifferentGuildRetiresAPendingBoostHint() {
-        val store = StoreNux(dispatcher)
+        val store = StoreNux(dispatcher, preferences)
         dispatcher.registerDispatchHandlers(DispatchHandler { })
 
         store.setPremiumGuildHintGuildId(GUILD_ID)
@@ -189,6 +189,23 @@ class NoticeStoresTest {
         dispatcher.schedule { store.handleGuildSelected(OTHER_GUILD_ID) }
         scheduler.triggerActions()
         assertNull(currentNux(store).guildBoostHintGuildId)
+    }
+
+    @Test fun newUserFlowResumesAcrossStoreInstancesAndCompletionClearsIt() {
+        val first = StoreNux(dispatcher, preferences)
+        first.setNewUserType(StoreNux.NewUserType.ORGANIC_REGISTERED)
+        first.completeNewUserStep(StoreNux.NewUserStep.AVATAR)
+        scheduler.triggerActions()
+
+        val restored = StoreNux(dispatcher, preferences).apply { init(STUB_CONTEXT) }
+        assertEquals(StoreNux.NewUserType.ORGANIC_REGISTERED, restored.getNuxStateSnapshot().newUserType)
+        assertEquals(setOf(StoreNux.NewUserStep.AVATAR), restored.getNuxStateSnapshot().completedNewUserSteps)
+
+        restored.setNewUserType(null)
+        scheduler.triggerActions()
+        val completed = StoreNux(dispatcher, preferences).apply { init(STUB_CONTEXT) }
+        assertNull(completed.getNuxStateSnapshot().newUserType)
+        assertTrue(completed.getNuxStateSnapshot().completedNewUserSteps.isEmpty())
     }
 
     // endregion

@@ -26,6 +26,7 @@ data class GuildMember(
     val communicationDisabledUntil: UtcDateTime? = null,
     val collectibles: Collectibles? = null,
     val avatarDecoration: AvatarDecorationData? = null,
+    val flags: Int = 0,
 ) {
     constructor() : this(0, 0, null, null, null, false, null, 0, 0)
 
@@ -66,6 +67,7 @@ data class GuildMember(
                 communicationDisabledUntil = apiGuildMember.communicationDisabledUntil,
                 collectibles = apiGuildMember.collectibles,
                 avatarDecoration = apiGuildMember.avatarDecorationData,
+                flags = apiGuildMember.flags,
             )
         }
 

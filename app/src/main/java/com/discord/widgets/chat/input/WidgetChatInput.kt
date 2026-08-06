@@ -66,6 +66,7 @@ import com.discord.widgets.chat.input.emoji.WidgetEmojiPicker
 import com.discord.widgets.chat.input.expression.WidgetExpressionTray
 import com.discord.widgets.forums.ForumPostCreateManager
 import com.discord.widgets.message_requests.setMessageRequestAccepted
+import com.discord.widgets.servers.member_verification.WidgetMemberVerification
 import com.google.android.material.button.MaterialButton
 import com.lytefast.flexinput.InputListener
 import com.lytefast.flexinput.fragment.FlexInputFragment
@@ -840,8 +841,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         root.findViewById<ImageView>(R.id.chat_input_member_verification_guard_icon)
             .setImageResource(R.drawable.img_member_verification_started)
         root.findViewById<View>(R.id.chat_input_member_verification_guard).setOnClickListener {
-            ChatInputGuardActions.showMemberVerificationGate
-                ?.invoke(requireContext(), parentFragmentManager, viewState.channel.guildId)
+            WidgetMemberVerification.create(requireContext(), viewState.channel.guildId, "Chat Input")
         }
     }
 

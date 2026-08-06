@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:paddingStart="16dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="8dp"
+    android:layout_marginBottom="4dp"
+    style="@style/UiKit.ViewGroup.LinearLayout.Horizontal">
+    <ImageView
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginEnd="8dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_settings_24dp" />
+    <TextView
+        android:id="@+id/guild_onboarding_channel_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/guild_onboarding_channels_and_roles"
+        android:textColor="@color/channel_item_hub_selector"
+        style="@style/UiKit.TextView.Large" />
+</LinearLayout>

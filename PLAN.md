@@ -2777,6 +2777,144 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   while APNG loading or on failure, is hidden once animation starts, and is restored when animation clears.
   This removes the doubled static/animated frame on profiles without profile-only visibility workarounds.
   `assembleDebug` passes; live profile playback remains the device verification boundary.
+- Began the current RN guild-onboarding backport after confirming the existing `WidgetChannelOnboarding` is
+  only the unrelated 126-era channel-list tooltip. Added exact prompt/option/connection/response DTOs, modern
+  guild features and member onboarding flags, a dispatcher-owned `StoreGuildOnboarding`, dedicated RN REST
+  transport headers, GET onboarding plus POST completion and PUT response routes, required and single-select
+  behavior, seen timestamps, provider/application connection cards, automatic STARTED-to-COMPLETED launch,
+  default-channel handoff, and a Channels & Roles re-entry row. Focused store, transport, channel-list, NUX,
+  and persistence tests plus `assembleDebug` pass; APK installed on WSA. Remaining parity work is deliberately
+  open: integrate membership-screening rules inside the modal, add the Channels & Roles Browse channel-opt-in
+  tab and Server Guide/home actions, verify application account-linking completion, and run a live onboarding
+  guild through role/channel grants and the Gateway COMPLETED_ONBOARDING update.
+- Also added the current mobile post-registration NUF requested during this slice: persisted new-user type and
+  resumable steps, avatar upload/default selection and skip confirmation, notification pre-prompt/system grant,
+  the existing complete contact-sync funnel, discoverability and its phone/name/background-sync branch, deferred
+  invite handoff, and `nuo_transition` analytics. WSA verified notification -> contact sync -> discoverability
+  routing without a fatal; focused persistence/order tests and `assembleDebug` pass.
+- Onboarding device-log follow-up found and fixed three runtime defects: store-thread emissions touched views,
+  authorized-app lookup performed network I/O on main, and a valid 204 response from PUT onboarding-responses
+  entered a non-null DTO callback and crashed. All UI observations now hop to main, OAuth token fetch uses the REST
+  scheduler, and completion/update endpoints return Retrofit `Response` so 204 is handled without a fake body.
+  An independent restored emoji-picker context now falls back to Global instead of throwing an exhaustive-when
+  crash. Material button elevation and pressed elevation animators are disabled globally at the shared Material
+  base style. Focused onboarding/transport/emoji/channel-list tests and `assembleDebug` pass; APK reinstalled and
+  a cleared-log cold launch has no app fatal, wrong-thread, network-on-main, or onboarding exception.
+- Guild-onboarding visual/device follow-up added the missing options-list layout manager and replaced option emoji
+  name text with the shared Fresco pipeline: Unicode stays text, custom emoji load from Discord's emoji CDN, and
+  animated emoji use GIF/autoplay only when the user's animated-emoji plus reduced-motion setting allows it.
+  The globally flattened Material button base now fixes both resting and pressed elevation. WSA exercised live
+  onboarding GET and PUT responses including a 204; cleared logs contain no fatal, wrong-thread, main-network,
+  exhaustive-when, or onboarding exception. Focused tests and `assembleDebug` pass; APK reinstalled.
+- Current-RN onboarding follow-up extracted the exact embedded 60fps 512px guild-onboarding Lottie from Hermes,
+  added its two-second landing sequence, reduced-motion freeze and prompt transition, and restored the explicit X
+  exit that returns to the previously selected guild. Prompt options now fetch role-member counts and show the
+  `+N people in common` badge only while selected; the footer resolves selected role/channel names into the
+  `You will receive...` summary. WSA verified option emoji images, selected-only count, role summary, X exit, and
+  a fatal-free flow. `Channels & Roles` intentionally continues to open onboarding for now; its later purpose is
+  the current app's channel-visibility selector, and that Browse/opt-in behavior remains an explicit open task.
+- Landing-flow parity follow-up adds the guild splash plus fade gradient behind the exact Lottie, moves/fades the
+  whole landing composition upward before the delayed prompt entrance, and prevents question 1 or the connections
+  page from navigating backward into the landing animation. Guild selection itself now observes incomplete
+  onboarding directly: entering any `GUILD_ONBOARDING` guild without `COMPLETED_ONBOARDING` launches the modal,
+  and leaving/re-entering re-arms it. WSA verified question 1 exposes only X/Next, with no Back path to the cover;
+  focused home/onboarding/transport tests and `assembleDebug` pass, and the APK is installed.
+- Auto-open and navigation-animation follow-up retries the incomplete-onboarding decision when guild or self-member
+  hydration changes, not only when the selected guild ID changes; the authoritative gate is now simply
+  `GUILD_ONBOARDING && !COMPLETED_ONBOARDING`, matching current RN. The onboarding activity opens/closes vertically,
+  prompt pages slide horizontally forward/back, and question 1 remains X-only. `Channels & Roles` no longer enters
+  edit mode: until Browse/visibility selection is built, it intentionally serves the same four enabled
+  `in_onboarding` questions rather than exposing all admin-only prompts. Focused home/channel-list/store tests and
+  `assembleDebug` pass; WSA shows a four-question flow and the updated APK is installed.
+- Hydration/animation follow-up separates the current guild visit from the launched-modal guard: guild/member updates
+  can now retry an early incomplete check, X suppresses immediate reopening, and leaving/re-entering re-arms the
+  launch. Prompt transitions keep the outgoing page at 72% opacity and move only 28% width before the incoming page
+  overlaps it, avoiding the prior blank visual gap. Focused home/onboarding/channel-list tests and `assembleDebug`
+  pass; APK reinstalled.
+- Transition/render follow-up replaces the visible 72%-opacity page swap with a real snapshot overlap: the old page
+  and synchronously rendered new page now move concurrently, so there is no blank frame or midpoint jump. Option
+  rows now match the RN card structure more closely with rounded outlined/selected surfaces, circular checks,
+  left-aligned large headings, selected-only member-count pills and normalized role summaries. The guild-entry
+  observer combines selected guild, guild hydration and computed self-member hydration, so an early null/stale check
+  cannot suppress incomplete onboarding for the visit. Focused tests and `assembleDebug` pass; WSA confirms automatic
+  onboarding activity launch and the updated four-question card UI, with no app fatal in logs.
+- Final visual pass replaces the snapshot cross-fade with simultaneous fully opaque full-width page slides and lays
+  out the old-page snapshot explicitly, removing the blank/jump glitch. Selected options use the lighter modifier
+  surface, brand outline, circular animated check and selected-only count pill. The landing screen now uses a full
+  guild-splash background/gradient, 420dp exact Lottie art, separate `Welcome to {guild}!` and
+  `Let's customize your experience` typography, and linked Privacy Policy footer without reserving recycler space.
+  Its dwell is 2 seconds while the shortened exit/entry keeps total handoff responsive. Focused tests and
+  `assembleDebug` pass; WSA confirms automatic launch and the four-question card screen, and APK is installed.
+- Post-onboarding completion pass locks page transitions against repeated taps, renders outgoing/incoming pages from
+  a laid-out snapshot with synchronous option rows, and adds immediate press-scale plus selected check animations.
+  Membership screening is now part of the flow: onboarding fetches the guild form, launches the real Rules/
+  verification screen before submitting responses, waits for a successful activity result, then shows the explicit
+  completion page and Finish CTA. The chat-input blocker and channel-list screening notice now open that same real
+  screen instead of nullable/no-op hooks. Focused onboarding, member-verification and chat-input tests plus
+  `assembleDebug` pass; APK reinstalled and cleared device logs show no app fatal.
+- Rules/error-state follow-up makes membership screening X-only, consumes hardware Back as close, and computes the
+  initial Complete CTA from actual form validity plus terms approval; the ViewModel also refuses disabled/double
+  submissions. Onboarding no longer auto-retries a failed final request or renders completion early: it exposes an
+  explicit error/Retry state, chains successful Rules back into response submission, then shows one completion page
+  with Finish. Successful 204/200 onboarding responses suppress immediate auto-relaunch while member flags catch up.
+  Both chat and channel-list “complete a few more steps” entry points now launch the real verification screen.
+  Focused onboarding/member-verification/chat tests and clean `assembleDebug` pass; APK installed.
+- Live Rules acceptance returned HTTP 410 only after a Gateway `GUILD_MEMBER_UPDATE`; this is the existing-member
+  idempotency path, not a malformed payload. The verification ViewModel now treats 410 as success only when the live
+  self-member is already non-pending, suppressing the false “failed to update settings” toast while preserving real
+  410 failures. Rules remains X-only and Complete remains guarded in both UI state and the submit method. Focused
+  member-verification/onboarding tests and `assembleDebug` pass; APK reinstalled.
+- Join-flow follow-up routes a successful invite for a `GUILD_ONBOARDING` guild directly into onboarding, including
+  the membership-screening race branch, instead of waiting for Home hydration or opening Rules first. Rules keeps
+  the post-onboarding position in the chain. Its toolbar now uses a themed X rather than the black recovered clear
+  vector. Focused invite/member-verification/onboarding tests and `assembleDebug` pass; APK installed.
+- Simplification pass removes the unused future edit mode and PUT response route, unused row IDs/member flags,
+  duplicate Home trigger, dedicated Handler and duplicate themed X vector. Guild onboarding, option rows, new-user
+  onboarding, membership verification and its avatar view now use generated bindings. Page changes use a native
+  `ViewAnimator` with the existing slide resources instead of manually driving overlay view animations. Rules
+  success hides onboarding behind a neutral loading state, submits once, and closes directly to the channel; the
+  intermediate “You’re all set” page and old-question flash are removed. Failed submits restore an explicit Retry
+  state. Focused onboarding/rules/invite tests and `assembleDebug` pass; APK reinstalled.
+- A65 follow-up found membership acceptance returning 403 (versus WSA's 410) while the device remained behind the
+  screening gate. The Rules toolbar now installs an explicit themed-X click listener, so it always closes on Samsung/
+  Nothing Android behavior instead of relying on host toolbar wiring. Idempotent 403/410 responses are accepted only
+  when Gateway has already made the live self-member non-pending; genuine pending-member failures remain visible.
+  Focused member-verification tests and `assembleDebug` pass; APK installed on A65.
+- A65 403 follow-up corrected the verification-level gate: LOW now requires verified e-mail even when a phone is
+  present, HIGHEST requires phone, and NONE/MEDIUM/HIGH do not invent an e-mail step. This prevents Complete from
+  sending a form Discord must reject when the account still needs e-mail verification. The latest focused rules
+  tests and `assembleDebug` pass; APK reinstalled on A65.
+- Lifecycle follow-up prevents the two-second landing runnable and page-cleanup callback from touching a detached
+  `WidgetGuildOnboarding`; both now require a live binding/attached fragment and become no-ops after close. Prompt
+  content/actions are hidden in XML until first state render, removing the brief next-page flash. Rules reapplies X
+  and hardware-back close handling on every resume. `assembleDebug` passes; APK installed on A65 and WSA.
+- Rules close follow-up restores the required `action_bar_toolbar` ID. The host now adopts the Rules toolbar before
+  binding the screen, so its X and back dispatcher belong to `WidgetMemberVerification` rather than the underlying
+  onboarding activity. The latest `assembleDebug` passes and APK is installed on A65.
+- Reopen/false-launch follow-up treats Rules cancellation as cancellation of the whole onboarding flow, so returning
+  from X cannot immediately relaunch Rules from the final prompt. Home auto-launch now requires authoritative
+  `STARTED_ONBOARDING` and absence of `COMPLETED_ONBOARDING`; partial members with default flags no longer flash
+  onboarding for already-completed servers. Direct invite joins still launch immediately. Focused onboarding/invite
+  tests and `assembleDebug` pass; APK installed on A65 and WSA.
+- Re-entry follow-up resets the onboarding visit guard before filtering DM/unselected guild ID `0`; closing to DMs
+  and re-entering the same incomplete guild now counts as a new visit and relaunches onboarding. `assembleDebug`
+  passes; APK installed on A65 and WSA.
+- Rules handoff follow-up submits onboarding responses before opening membership screening. On successful onboarding
+  response, Rules launches as a separate activity and the onboarding activity finishes immediately; accepting or
+  closing Rules can no longer reveal the previous question underneath. Completion handling is one-shot to prevent
+  duplicate launches from concurrent store emissions. Focused onboarding/rules tests and `assembleDebug` pass; APK
+  installed on A65 and WSA.
+- Completion navigation now keeps onboarding visible until `StoreChannelsSelected` confirms the target guild/channel;
+  only then does it launch Rules or finish. Main can no longer expose the DM list while the dispatcher resolves the
+  post-onboarding channel. Focused onboarding tests and `assembleDebug` pass; APK installed on A65 (WSA offline).
+- Final-prompt handoff no longer enters the page-transition host: Finish submits directly into the neutral loading
+  state, so the last question cannot appear twice before Rules. Focused onboarding tests and `assembleDebug` pass;
+  APK installed on A65.
+- Second simplification pass removes the unused edit/PUT path, mutable one-implementation verification hooks, API
+  provider injection, binding aliases, duplicate metadata implementation, unused row IDs/flags and one-use render
+  wrappers. Guild/new-user onboarding, option rows, Rules and verification avatar views use generated bindings.
+  Privacy uses `I18nHooks`; page changes use a native `ViewAnimator` plus existing slide resources. Focused
+  onboarding/rules/invite tests and `assembleDebug` pass; APK installed on A65.
 
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/applauncher/**` | Android 340.12
 Hermes `out.js` Apps launcher modules | log in on WSA and verify HOME/search/application/command/list

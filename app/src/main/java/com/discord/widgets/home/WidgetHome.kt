@@ -29,6 +29,7 @@ import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.quickmentions.WidgetQuickMentionsDialog
 import com.discord.widgets.search.WidgetSearch
 import com.discord.api.channel.Channel
+import com.discord.api.guild.GuildFeature
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isAnnouncementChannel
@@ -55,8 +56,12 @@ import com.discord.widgets.user.calls.PrivateCallLauncher
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.widgets.forums.WidgetForumBrowser
 import com.discord.widgets.message_requests.WidgetMessageRequests
+import com.discord.widgets.nux.WidgetNewUserOnboarding
+import com.discord.widgets.guilds.onboarding.WidgetGuildOnboarding
+import com.discord.models.member.GuildMemberFlags
 import com.discord.widgets.accessibility.AccessibilityDetectionNavigator
 import rx.Subscription
+import rx.Observable
 
 class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private val viewModel: WidgetHomeViewModel by appViewModels { WidgetHomeViewModel() }
@@ -71,6 +76,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private var friendNicknameSubscription: Subscription? = null
     private var unreadCount = 0
     private var initialChannelShown = false
+    private var onboardingGuildId: Long? = null
+    private var onboardingVisitGuildId: Long = Long.MIN_VALUE
     private var startPanelState: PanelState = PanelState.Closed
     private var endPanelState: PanelState = PanelState.Closed
 
@@ -392,6 +399,19 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
             .filter { it.hasUnreadUrgentMessages }
             .ui(this)
             .appSubscribe(WidgetHome::class.java) { showUrgentMessageDialog() }
+        StoreStream.getNux().getNuxState()
+            .filter { it.newUserType != null }
+            .take(1)
+            .ui(this)
+            .appSubscribe(WidgetHome::class.java) { WidgetNewUserOnboarding.launch(requireContext()) }
+        Observable.combineLatest(
+            StoreStream.getGuildSelected().observeSelectedGuildId(),
+            StoreStream.getGuilds().observeGuilds(),
+            StoreStream.getGuilds().observeComputed(),
+        ) { guildId, _, _ -> guildId }
+            .ui(this)
+            .bindToComponentLifecycle(this)
+            .appSubscribe(WidgetHome::class.java, onNext = ::maybeLaunchGuildOnboarding)
     }
 
     private fun showUrgentMessageDialog() {
@@ -464,6 +484,23 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private fun returnToMessageRequests() {
         StoreStream.selectChannel(0L, 0L)
         WidgetMessageRequests.show(requireContext())
+    }
+
+    private fun maybeLaunchGuildOnboarding(guildId: Long) {
+        if (onboardingVisitGuildId != guildId) {
+            onboardingVisitGuildId = guildId
+            onboardingGuildId = null
+        }
+        if (guildId <= 0) return
+        if (onboardingGuildId == guildId) return
+        val guild = StoreStream.getGuilds().getGuild(guildId) ?: return
+        if (!guild.hasFeature(GuildFeature.GUILD_ONBOARDING)) return
+        val member = StoreStream.getGuilds().getMember(guildId, StoreStream.getUsers().getMe().id) ?: return
+        if (StoreStream.getGuildOnboarding().get(guildId).completed) return
+        if (!GuildMemberFlags.has(member.flags, GuildMemberFlags.STARTED_ONBOARDING)) return
+        if (GuildMemberFlags.has(member.flags, GuildMemberFlags.COMPLETED_ONBOARDING)) return
+        onboardingGuildId = guildId
+        WidgetGuildOnboarding.launch(requireContext(), guildId)
     }
 
     private fun <T : View> View.findDescendant(type: Class<T>): T? {

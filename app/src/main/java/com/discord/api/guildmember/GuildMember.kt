@@ -22,4 +22,5 @@ data class GuildMember(
     val communicationDisabledUntil: UtcDateTime? = null,
     val avatarDecorationData: AvatarDecorationData? = null,
     val collectibles: Collectibles? = null,
+    val flags: Int = 0,
 )

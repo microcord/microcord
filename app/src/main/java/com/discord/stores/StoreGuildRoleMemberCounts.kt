@@ -51,6 +51,13 @@ class StoreGuildRoleMemberCounts(
     }
 
     @StoreThread
+    fun reset() {
+        guildRoleMemberCounts.clear()
+        guildRoleMemberCountFetchTimes.clear()
+        markChanged()
+    }
+
+    @StoreThread
     private fun fetchGuildRoleMemberCountsIfNecessary(guildId: Long) {
         val lastFetch = guildRoleMemberCountFetchTimes[guildId]
         val isFresh = guildRoleMemberCounts[guildId] != null &&

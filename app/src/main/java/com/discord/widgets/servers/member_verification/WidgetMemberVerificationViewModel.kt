@@ -4,6 +4,7 @@ import com.discord.api.guild.GuildVerificationLevel
 import com.discord.api.guildjoinrequest.ApplicationStatus
 import com.discord.api.role.GuildRole
 import com.discord.app.AppViewModel
+import com.discord.app.AppLog
 import com.discord.models.domain.ModelMemberVerificationForm
 import com.discord.models.guild.Guild
 import com.discord.models.user.MeUser
@@ -48,7 +49,7 @@ class WidgetMemberVerificationViewModel(
     enum class VerificationType { PHONE, EMAIL }
 
     sealed class Event {
-        object Error : Event()
+        data class Error(val message: String?) : Event()
         data class Success(
             val guildId: Long?,
             val guildName: String?,
@@ -127,6 +128,7 @@ class WidgetMemberVerificationViewModel(
 
     fun applyToJoinGuild() {
         val loaded = viewState as? ViewState.Loaded ?: return
+        if (loaded.disabled || loaded.submitting) return
         updateViewState(loaded.copy(submitting = true))
         val fields = loaded.form?.formFields.orEmpty()
         formUserInputDataMap.forEach { (index, response) ->
@@ -142,16 +144,31 @@ class WidgetMemberVerificationViewModel(
             RestAPIParams.MemberVerificationForm(fields, loaded.form?.version),
         ).restSubscribeOn().ui(this).appSubscribe(
             errorClass = WidgetMemberVerificationViewModel::class.java,
-            errorHandler = {
-                updateViewState(loaded.copy(submitting = false))
-                eventSubject.onNext(Event.Error)
+            errorHandler = { error ->
+                val member = StoreStream.getGuilds().getMember(guildId, StoreStream.getUsers().getMe().id)
+                if (error.statusCode in setOf(403, 410) && member?.pending == false) {
+                    error.showErrorToasts = false
+                    error.shouldLog = false
+                    emitSuccess(loaded, ApplicationStatus.APPROVED, null)
+                } else {
+                    updateViewState(loaded.copy(submitting = false))
+                    val message = error.message ?: error.messages.values.firstNotNullOfOrNull(List<String>::firstOrNull)
+                    AppLog.i("Member verification rejected status=${error.statusCode} code=${error.code} message=$message")
+                    eventSubject.onNext(Event.Error(message))
+                }
             },
         ) { response ->
-            updateViewState(loaded.copy(submitting = false))
-            eventSubject.onNext(
-                Event.Success(loaded.guild?.id, loaded.guild?.name, response.applicationStatus, response.lastSeen),
-            )
+            emitSuccess(loaded, response.applicationStatus, response.lastSeen)
         }
+    }
+
+    private fun emitSuccess(
+        loaded: ViewState.Loaded,
+        status: ApplicationStatus,
+        lastSeen: String?,
+    ) {
+        updateViewState(loaded.copy(submitting = false))
+        eventSubject.onNext(Event.Success(loaded.guild?.id, loaded.guild?.name, status, lastSeen))
     }
 
     override fun onCleared() {
@@ -170,14 +187,15 @@ class WidgetMemberVerificationViewModel(
 
     private fun loadedState(state: StoreState): ViewState.Loaded {
         val fields = state.memberVerificationFormData?.form?.formFields
-        val verificationType = if (state.guild?.verificationLevel == GuildVerificationLevel.HIGHEST) {
-            VerificationType.PHONE
-        } else {
-            VerificationType.EMAIL
+        val verificationType = when (state.guild?.verificationLevel) {
+            GuildVerificationLevel.HIGHEST -> VerificationType.PHONE
+            GuildVerificationLevel.LOW -> VerificationType.EMAIL
+            else -> null
         }
         val needsVerification = when (verificationType) {
             VerificationType.PHONE -> !state.me.hasPhone
-            VerificationType.EMAIL -> !state.me.isVerified && !state.me.hasPhone
+            VerificationType.EMAIL -> !state.me.isVerified
+            null -> false
         }
         val previousFields = (viewState as? ViewState.Loaded)?.form?.formFields
         val hasTerms = if (fields != null && fields != previousFields) {
@@ -197,10 +215,11 @@ class WidgetMemberVerificationViewModel(
         val isTermsApproved = !hasTerms
         val items = createFormItems(fields, isTermsApproved, state)
         val fieldsEmpty = fields.isNullOrEmpty()
+        val formValid = isFormValid()
         return ViewState.Loaded(
             isRulesListVisible = !fieldsEmpty,
             submitting = false,
-            disabled = fieldsEmpty || needsVerification,
+            disabled = fieldsEmpty || !(formValid && isTermsApproved && !needsVerification),
             verificationType = verificationType,
             needsAdditionalVerification = needsVerification,
             formItems = items,
@@ -208,7 +227,7 @@ class WidgetMemberVerificationViewModel(
             channelNames = state.channels,
             roles = state.roles,
             allowAnimatedEmojis = state.allowAnimatedEmojis,
-            isFormValid = fieldsEmpty && !needsVerification,
+            isFormValid = formValid,
             isTermsApproved = isTermsApproved,
             guild = state.guild,
         )

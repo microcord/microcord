@@ -17,6 +17,7 @@ import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.takeSingleUntilTimeout
 import com.discord.utilities.rx.ui
 import com.discord.widgets.servers.member_verification.WidgetMemberVerification
+import com.discord.widgets.guilds.onboarding.WidgetGuildOnboarding
 import rx.Observable
 
 /**
@@ -90,6 +91,9 @@ object InviteJoinHelper {
         val channel = invite.channel
         if (channel == null) {
             navigateToGuild(invite)
+            invite.guild?.takeIf { GuildFeature.GUILD_ONBOARDING in it.features }?.let {
+                WidgetGuildOnboarding.launch(fragment.requireContext(), it.id)
+            }
             onInviteFlowFinished(invite)
             return
         }
@@ -115,6 +119,14 @@ object InviteJoinHelper {
                 errorClass = InviteJoinHelper::class.java,
                 errorHandler = { onInviteFlowFinished(invite) },
             ) { (resolvedChannel, joinRequest) ->
+                if (guild != null && GuildFeature.GUILD_ONBOARDING in guild.features) {
+                    resolvedChannel?.let { invite.channel = it }
+                    navigateToGuild(invite)
+                    resolvedChannel?.let { navigateToChannel(invite) }
+                    WidgetGuildOnboarding.launch(fragment.requireContext(), guild.id)
+                    onInviteFlowFinished(invite)
+                    return@appSubscribe
+                }
                 if (joinRequest != null && guild != null) {
                     WidgetMemberVerification.create(fragment.requireContext(), guild.id, location, invite)
                     return@appSubscribe

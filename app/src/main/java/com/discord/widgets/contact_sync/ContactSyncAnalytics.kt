@@ -92,7 +92,7 @@ interface ContactSyncAnalytics {
                 "skip" to skip,
             )
             stepStartedAtMs?.let {
-                properties["seconds_on_from_step"] = ClockFactory.get().currentTimeMillis() - it
+                properties["seconds_on_from_step"] = (ClockFactory.get().currentTimeMillis() - it) / 1000
             }
             tracker.track("nuo_transition", properties)
         }

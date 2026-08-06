@@ -5,6 +5,7 @@ import com.discord.utilities.error.RestApiError
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.analytics.AnalyticSuperProperties
 import com.discord.models.domain.ModelGuildFolder
+import com.discord.api.guild.GuildOnboardingResponses
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
@@ -157,6 +158,55 @@ class RestTransportTest {
         assertEquals("/api/v9/channels/20/threads/search", requests[4].path)
         assertEquals("/api/v9/interactions", requests.last().path)
         assertTrue(requests.last().body.readUtf8().contains("\"type\":4"))
+    }
+
+    @Test
+    fun guildOnboardingUsesReactNativeTransportHeaders() {
+        val response = """{"guild_id":"1","prompts":[],"default_channel_ids":[],"responses":[],"mode":0,"enabled":true,"onboarding_prompts_seen":{},"onboarding_responses_seen":{},"below_requirements":false,"connections":[]}"""
+        server.enqueue(MockResponse().setBody(response))
+        server.enqueue(MockResponse().setResponseCode(204))
+        val headers = object : RequiredHeadersInterceptor.HeadersProvider {
+            override fun getAuthToken() = "fixture-token"
+            override fun getFingerprint() = "fixture-fingerprint"
+            override fun getLocale() = "en-US"
+            override fun getAcceptLanguages() = "en-US"
+            override fun getSpotifyToken(): String? = null
+        }
+        RestAPI.install(
+            RestAPIBuilder(server.url("/api/").toString(), MemoryCookieJar()),
+            listOf(RequiredHeadersInterceptor(headers)),
+        )
+
+        val rnApi = RestAPI.reactNativeApiOrNull!!
+        assertFalse(rnApi === RestAPI.api)
+        rnApi.getGuildOnboarding(1).toBlocking().single()
+        rnApi.completeGuildOnboarding(
+            1,
+            GuildOnboardingResponses(listOf(10), mapOf("2" to 3), mapOf("10" to 3)),
+        ).toBlocking().single()
+
+        val requests = listOf(server.takeRequest(), server.takeRequest())
+        requests.forEach { request ->
+            assertEquals("fixture-token", request.getHeader("Authorization"))
+            assertEquals(AnalyticSuperProperties.USER_AGENT, request.getHeader("User-Agent"))
+            assertFalse(request.getHeader("X-Super-Properties").isNullOrBlank())
+            assertFalse(request.getHeader("X-Discord-Timezone").isNullOrBlank())
+        }
+        assertEquals("GET", requests[0].method)
+        assertEquals("/api/v9/guilds/1/onboarding", requests[0].path)
+        assertEquals("POST", requests[1].method)
+        assertEquals("/api/v9/guilds/1/onboarding-responses", requests[1].path)
+        assertTrue(requests[1].body.readUtf8().contains("\"onboarding_responses\":[10]"))
+        run {
+            val get = RestAPIInterface::class.java.getMethod("getGuildOnboarding", Long::class.javaPrimitiveType)
+            val post = RestAPIInterface::class.java.getMethod(
+                "completeGuildOnboarding",
+                Long::class.javaPrimitiveType,
+                GuildOnboardingResponses::class.java,
+            )
+            assertEquals("guilds/{guildId}/onboarding", get.getAnnotation(retrofit2.http.GET::class.java).value)
+            assertEquals("guilds/{guildId}/onboarding-responses", post.getAnnotation(retrofit2.http.POST::class.java).value)
+        }
     }
 
     @Test

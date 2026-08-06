@@ -148,6 +148,7 @@ class EmojiPickerViewModel(
                     store.getEmojiSet(StoreEmoji.EmojiContext.Global, false, false)
                 is EmojiPickerContextType.Guild ->
                     store.getEmojiSet(StoreEmoji.EmojiContext.Guild(contextType.guildId), false, false)
+                else -> store.getEmojiSet(StoreEmoji.EmojiContext.Global, false, false)
             }
         }
 

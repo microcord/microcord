@@ -40,5 +40,6 @@ interface ChannelListItem : MGRecyclerDataPayload {
         const val TYPE_HUB_INVITE = 20
         const val TYPE_GUILD_ROLE_SUBSCRIPTIONS_OVERVIEW = 21
         const val TYPE_GUILD_JOIN_REQUEST = 22
+        const val TYPE_GUILD_ONBOARDING = 23
     }
 }

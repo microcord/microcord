@@ -13,7 +13,7 @@ import rx.Observable
  * because logging out does not end the process, and the next account must not see the previous
  * account's applications.
  */
-internal object AuthorizedApps {
+object AuthorizedApps {
 
     private data class Snapshot(val userId: Long, val tokens: List<ModelOAuth2Token>)
 

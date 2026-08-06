@@ -40,7 +40,4 @@ object ChatInputGuardActions {
     @JvmStatic
     var launchAccountVerification: ((Context, GuildVerificationLevel) -> Unit)? = null
 
-    /** Opens the membership-screening rules the user must accept before talking. */
-    @JvmStatic
-    var showMemberVerificationGate: ((Context, FragmentManager, guildId: Long) -> Unit)? = null
 }

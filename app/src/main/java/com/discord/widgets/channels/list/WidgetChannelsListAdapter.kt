@@ -125,6 +125,7 @@ class WidgetChannelsListAdapter(
     var onViewGuildScheduledEvents: (Guild) -> Unit = {}
 
     var onViewGuildRoleSubscriptions: () -> Unit = {}
+    var onViewGuildOnboarding: () -> Unit = {}
 
     /** `(category, wasCollapsed)` — the holder reports the *previous* state, as the reference does. */
     var onCollapseCategory: (Channel, Boolean) -> Unit = { _, _ -> }
@@ -198,6 +199,8 @@ class WidgetChannelsListAdapter(
             ItemGuildRoleSubscriptionsOverview(R.layout.widget_channels_list_item_guild_role_subs, this)
         ChannelListItem.TYPE_GUILD_JOIN_REQUEST ->
             ItemGuildJoinRequest(R.layout.widget_channels_list_item_guild_join_request, this)
+        ChannelListItem.TYPE_GUILD_ONBOARDING ->
+            ItemGuildOnboarding(R.layout.widget_channels_list_item_guild_onboarding, this)
         else -> throw invalidViewTypeException(viewType)
     }
 
@@ -1162,6 +1165,16 @@ class WidgetChannelsListAdapter(
             )
             name.setText(R.string.guild_role_subscriptions_channel_label)
             root.setOnClickListener { adapter.onViewGuildRoleSubscriptions() }
+        }
+    }
+
+    class ItemGuildOnboarding(
+        @LayoutRes layoutResId: Int,
+        adapter: WidgetChannelsListAdapter,
+    ) : Item(layoutResId, adapter) {
+        override fun onConfigure(position: Int, data: ChannelListItem) {
+            super.onConfigure(position, data)
+            itemView.setOnClickListener { adapter.onViewGuildOnboarding() }
         }
     }
 

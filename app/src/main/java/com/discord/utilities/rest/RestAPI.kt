@@ -9,6 +9,7 @@ import com.discord.restapi.MfaInterceptor
 import com.discord.restapi.RestAPIBuilder
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.ClientMetadataInterceptor
+import com.discord.restapi.ReactNativeHeadersInterceptor
 import okhttp3.CookieJar
 import okhttp3.Interceptor
 
@@ -30,6 +31,9 @@ object RestAPI {
 
     @Volatile
     private var installedSerializeNulls: RestAPIInterface? = null
+
+    @Volatile
+    private var installedReactNative: RestAPIInterface? = null
 
     @Volatile
     private var installedApplicationDirectory: ApplicationDirectoryAPI? = null
@@ -56,31 +60,31 @@ object RestAPI {
         // Both retry by re-running the chain below them, so each picks up fresh headers. MFA sits
         // outside captcha because its retry then carries the elevation through a captcha replay;
         // the other order re-prompts the user for a code the request already earned.
-        val chain = listOf(MfaInterceptor(), CaptchaInterceptor()) + interceptors + ClientMetadataInterceptor
+        val chain = listOf(MfaInterceptor(), CaptchaInterceptor()) + interceptors
         val api = builder.build(
             RestAPIInterface::class.java,
-            interceptors = chain,
+            interceptors = chain + ClientMetadataInterceptor,
             clientName = "main",
         )
         val apiSerializeNulls = builder.build(
             RestAPIInterface::class.java,
             serializeNulls = true,
-            interceptors = chain + ChannelReorderDiagnostics,
+            interceptors = chain + ClientMetadataInterceptor + ChannelReorderDiagnostics,
             clientName = "serializeNulls",
         )
         installedApplicationDirectory = builder.build(
             ApplicationDirectoryAPI::class.java,
-            interceptors = chain,
+            interceptors = chain + ClientMetadataInterceptor,
             clientName = "applicationDirectory",
         )
         installedEmbeddedActivities = builder.build(
             EmbeddedActivitiesAPI::class.java,
-            interceptors = chain,
+            interceptors = chain + ClientMetadataInterceptor,
             clientName = "embeddedActivities",
         )
         installedEmbeddedActivityOAuth = builder.build(
             EmbeddedActivityOAuthAPI::class.java,
-            interceptors = chain,
+            interceptors = chain + ClientMetadataInterceptor,
             clientName = "embeddedActivityOAuth",
         )
         installedEmbeddedActivityOAuthToken = builder.build(
@@ -88,6 +92,11 @@ object RestAPI {
             interceptors = listOf(ClientMetadataInterceptor),
             clientName = "embeddedActivityOAuthToken",
             cookieJar = CookieJar.NO_COOKIES,
+        )
+        installedReactNative = builder.build(
+            RestAPIInterface::class.java,
+            interceptors = chain + ReactNativeHeadersInterceptor,
+            clientName = "reactNative",
         )
         install(api, apiSerializeNulls)
         return api
@@ -98,6 +107,7 @@ object RestAPI {
     fun reset() {
         installed = null
         installedSerializeNulls = null
+        installedReactNative = null
         installedApplicationDirectory = null
         installedEmbeddedActivities = null
         installedEmbeddedActivityOAuth = null
@@ -115,6 +125,10 @@ object RestAPI {
         get() = checkNotNull(installed) {
             "RestAPI.install() has not been called; the store graph publishes the REST client."
         }
+
+    @JvmStatic
+    val reactNativeApiOrNull: RestAPIInterface?
+        get() = installedReactNative
 
     /** The null-serializing client used by bodies with explicit JSON nulls. */
     @JvmStatic

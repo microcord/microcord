@@ -269,6 +269,7 @@ class StoreStream private constructor(
         getJoinedThreadFlags = { threadsJoined.getJoinedThread(it)?.flags ?: 0 },
     )
     private val guildMemberCounts = StoreGuildMemberCounts(observationDeck)
+    private val guildRoleMemberCounts = StoreGuildRoleMemberCounts(dispatcher, clock, observationDeck)
     private val experiments = StoreExperiments(
         clock,
         dispatcher,
@@ -285,6 +286,7 @@ class StoreStream private constructor(
     // `emojiCustom`, `permissions` and `guildsSorted`, all of which are already built.
     private val notices = StoreNotices(clock, sessionDurablePreferences)
     private val nux = StoreNux(dispatcher)
+    private val guildOnboarding = StoreGuildOnboarding(dispatcher)
     private val reviewRequest = StoreReviewRequest(clock, notices, sessionDurablePreferences)
     private val emojiCustom = StoreEmojiCustom(guilds)
     private val emoji = StoreEmoji(
@@ -866,6 +868,7 @@ class StoreStream private constructor(
         notifications,
         gameParty,
         guildMemberCounts,
+        guildRoleMemberCounts,
         userRequiredActions,
         userConnections,
         contactSync,
@@ -1130,6 +1133,7 @@ class StoreStream private constructor(
         // after the catalog is loaded and before anything parses a message. Miss it and named and
         // unicode emoji render as literal text app-wide, with no error anywhere.
         notices.init(context)
+        nux.init(context)
         reviewRequest.init(context)
         changeLog.init(context.applicationContext as Application)
         emoji.initBlocking(context)
@@ -2647,6 +2651,7 @@ class StoreStream private constructor(
         guildMemberVerificationForm.reset()
         auditLog.reset()
         guildRoleSubscriptions.reset()
+        guildRoleMemberCounts.reset()
         guildBoost.reset()
         guildScheduledEvents.reset()
         instantInvites.reset()
@@ -2659,6 +2664,7 @@ class StoreStream private constructor(
         stickers.handlePreLogout()
         guildStickers.reset()
         nux.clearNux()
+        guildOnboarding.reset()
         // `bans`, `guildIntegrations` and `stageChannels` have no `reset()`; their connection-open
         // handlers are the clear, matching the reference.
         bans.handleConnectionOpen()
@@ -2934,6 +2940,7 @@ class StoreStream private constructor(
         val builder = RestAPIBuilder(API_BASE_URL, CookieJars.persistent(context))
         val interceptors = listOf(RequiredHeadersInterceptor(headers))
         val api = RestAPI.install(builder, interceptors)
+        guildRoleMemberCounts.bindApi(api)
         restApi = api
         return api
     }
@@ -3157,6 +3164,8 @@ class StoreStream private constructor(
         @JvmStatic fun getGuildStickers() = requireInstance().guildStickers
         @JvmStatic fun getNotices() = requireInstance().notices
         @JvmStatic fun getNux() = requireInstance().nux
+        @JvmStatic fun getGuildOnboarding() = requireInstance().guildOnboarding
+        @JvmStatic fun getGuildRoleMemberCounts() = requireInstance().guildRoleMemberCounts
         @JvmStatic fun getReviewRequest() = requireInstance().reviewRequest
         @JvmStatic fun getChangeLog() = requireInstance().changeLog
 
