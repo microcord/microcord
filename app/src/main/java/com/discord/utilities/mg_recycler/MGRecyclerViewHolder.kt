@@ -28,10 +28,15 @@ open class MGRecyclerViewHolder<T : MGRecyclerAdapter<D>, D>(
     protected open val subscription: Subscription? get() = null
 
     fun onBindViewHolder(position: Int): T {
-        subscription?.let { adapter.cellSubscriptions.remove(it) }
-        onConfigure(position, adapter.getItem(position))
-        subscription?.let { adapter.cellSubscriptions.add(it) }
+        bind(position, adapter.getItem(position))
         return adapter
+    }
+
+    /** Binds [data] that does not come from the adapter's list, for rows hosted inside another. */
+    fun bind(position: Int, data: D) {
+        subscription?.let { adapter.cellSubscriptions.remove(it) }
+        onConfigure(position, data)
+        subscription?.let { adapter.cellSubscriptions.add(it) }
     }
 
     protected open fun onConfigure(position: Int, data: D) = Unit

@@ -11,7 +11,9 @@ import android.text.style.StyleSpan
 import android.text.util.Linkify
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.annotation.StringRes
 import androidx.core.text.BidiFormatter
@@ -51,6 +53,10 @@ import com.discord.views.FailedUploadList
 import com.discord.views.ThemedColor
 import com.discord.views.typing.TypingDots
 import com.discord.widgets.chat.list.entries.ChatListEntry
+import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
+import com.discord.widgets.chat.list.FragmentLifecycleListener
+import com.discord.widgets.chat.list.ChatAttachmentView
+import com.discord.widgets.chat.list.entries.AttachmentEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
 import com.discord.widgets.chat.list.utils.didReplyMention
 import com.discord.widgets.roles.RoleIconView
@@ -76,6 +82,8 @@ class WidgetChatListAdapterItemMessage(
 
     private val itemText: SimpleDraweeSpanTextView =
         itemView.findViewById(R.id.chat_list_adapter_item_text)
+    private val itemAttachments: LinearLayout? =
+        itemView.findViewById(R.id.chat_list_adapter_item_attachments)
     private val itemAvatar: ImageView? =
         itemView.findViewById(R.id.chat_list_adapter_item_text_avatar)
     private val itemAvatarDecoration: AvatarDecorationView? =
@@ -172,6 +180,7 @@ class WidgetChatListAdapterItemMessage(
             )
         }
 
+        configureAccessories(entry)
         configureReplyPreview(entry)
         configureAvatar(entry, message)
         configureRoleIcon(entry)
@@ -486,6 +495,69 @@ class WidgetChatListAdapterItemMessage(
      * An interaction response shows which command produced it instead; an ordinary reply shows the
      * referenced message, or a placeholder when that message is blocked, deleted, or not loaded.
      */
+    /**
+     * Attachments, embeds and bot components are drawn inside the message's own row so that
+     * spacing, the press highlight and the long-press menu treat the message as one unit. Each is
+     * rendered by its normal view holder, so their binding logic is shared with the standalone rows
+     * the forwarded and search surfaces still use.
+     */
+    private fun configureAccessories(entry: MessageEntry) {
+        val container = itemAttachments ?: return
+        container.visibility = if (entry.accessories.isEmpty()) View.GONE else View.VISIBLE
+        while (container.childCount > entry.accessories.size) {
+            val index = container.childCount - 1
+            (container.getChildAt(index).getTag(R.id.chat_list_adapter_item_attachments) as? FragmentLifecycleListener)
+                ?.onPause()
+            container.removeViewAt(index)
+        }
+        entry.accessories.forEachIndexed { index, accessory ->
+            val existing = container.getChildAt(index)
+            val holder = existing
+                ?.getTag(R.id.chat_list_adapter_item_attachments)
+                ?.takeIf { it is MGRecyclerViewHolder<*, *> && existing.getTag(R.id.chat_list_adapter_item_text) == accessory.type }
+                ?.let {
+                    @Suppress("UNCHECKED_CAST")
+                    it as MGRecyclerViewHolder<WidgetChatListAdapter, ChatListEntry>
+                }
+                ?: adapter.onCreateViewHolder(container, accessory.type).also { created ->
+                    created.itemView.setTag(R.id.chat_list_adapter_item_attachments, created)
+                    created.itemView.setTag(R.id.chat_list_adapter_item_text, accessory.type)
+                    existing?.let { container.removeViewAt(index) }
+                    container.addView(created.itemView, index)
+                }
+            holder.bind(index, accessory)
+            adoptAccessoryTouches(holder.itemView, entry)
+        }
+    }
+
+    /**
+     * A hosted row arrives wired for standalone use: its own press background and its own
+     * click/long-click handlers. Both are stripped so the message row owns the highlight and the
+     * action sheet, and long-press is forwarded from any child that would otherwise swallow it.
+     */
+    private fun adoptAccessoryTouches(view: View, entry: MessageEntry) {
+        view.background = null
+        view.setOnClickListener(null)
+        view.isClickable = false
+        val forward = View.OnLongClickListener {
+            val rendered = itemText.text
+            adapter.eventHandler.onMessageLongClicked(
+                entry.message,
+                rendered.subSequence(0, max(rendered.length - 1, 0)),
+                entry.isThreadStarterMessage,
+            )
+            true
+        }
+        view.isLongClickable = false
+        // Only views that already swallow touches get the forwarder: making anything else
+        // long-clickable would consume the gesture and stop the message row being pressed at all.
+        fun apply(target: View) {
+            if (target !== view && target.isClickable) target.setOnLongClickListener(forward)
+            if (target is ViewGroup) repeat(target.childCount) { apply(target.getChildAt(it)) }
+        }
+        apply(view)
+    }
+
     private fun configureReplyPreview(entry: MessageEntry) {
         val replyHolder = replyHolder ?: return
         val replyLinkItem = replyLinkItem ?: return

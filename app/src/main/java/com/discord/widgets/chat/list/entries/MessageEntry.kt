@@ -26,6 +26,9 @@ data class MessageEntry(
     private val isMinimal: Boolean = false,
     private val isExpandedBlocked: Boolean,
     val animateEmojis: Boolean = true,
+    val autoPlayGifs: Boolean = false,
+    /** Attachments, embeds and bot components, drawn inside this row rather than after it. */
+    val accessories: List<ChatListEntry> = emptyList(),
     val replyData: ReplyData? = null,
     val interactionAuthor: GuildMember? = null,
     val isThreadStarterMessage: Boolean = false,

@@ -24,6 +24,8 @@ import com.discord.widgets.botuikit.BotComponentExperiments
 import com.discord.widgets.botuikit.ComponentChatListState
 import com.discord.widgets.botuikit.ComponentStateMapper
 import com.discord.widgets.chat.list.entries.BlockedMessagesEntry
+import com.discord.widgets.chat.list.entries.AttachmentEntry
+import com.discord.widgets.chat.list.entries.EmbedEntry
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.EphemeralMessageEntry
 import com.discord.widgets.chat.list.entries.InviteEmbedResolver
@@ -335,9 +337,33 @@ data class WidgetChatListModelMessages(
             val isForumPostFirstMessage = channel.isGuildForumPost(parentChannel) && channel.id == message.id
             val isForumPostAuthor = channel.isGuildForumPost(parentChannel) &&
                 channel.ownerId == message.author?.id
+            val embedRows = ChatListEntry.createEmbedEntries(
+                message, messageState, blockedChunkExpanded, animateEmojis, autoPlayGifs, renderEmbeds,
+                isThreadStarterMessage, channel, author, roles, names,
+            )
+            val componentRows =
+                if (showBotComponents && !message.components.isNullOrEmpty()) {
+                    ChatListEntry.createBotComponentEntries(
+                        message,
+                        channel.guildId,
+                        ComponentStateMapper.processComponentsToMessageComponents(
+                            message.components.orEmpty(),
+                            componentStoreState[message.id],
+                            BotComponentExperiments,
+                            animateEmojis,
+                        ),
+                        messageState,
+                        channel,
+                        guildMembers,
+                        guildRoles,
+                    )
+                } else {
+                    emptyList()
+                }
+            val inRow = embedRows.filter { it is AttachmentEntry || it is EmbedEntry } + componentRows
             rows += MessageEntry(
                 message, messageState, author, firstMention, roles, names, shouldConcat,
-                blockedChunkExpanded, animateEmojis, replyData, interactionAuthor,
+                blockedChunkExpanded, animateEmojis, autoPlayGifs, inRow, replyData, interactionAuthor,
                 isThreadStarterMessage, isForumPostFirstMessage, isForumPostAuthor,
                 parseCtaData(message, meUserId, guildMembers, channel, permissionsForChannel),
                 permissionsForChannel,
@@ -359,10 +385,7 @@ data class WidgetChatListModelMessages(
                 )
             }
             val threadSpineStart = rows.size
-            rows += ChatListEntry.createEmbedEntries(
-                message, messageState, blockedChunkExpanded, animateEmojis, autoPlayGifs, renderEmbeds,
-                isThreadStarterMessage, channel, author, roles, names,
-            )
+            rows += embedRows.filterNot { it is AttachmentEntry || it is EmbedEntry }
             rows += ChatListEntry.createStickerEntries(message)
             rows += ChatListEntry.createGameInviteEntries(message)
             rows += ChatListEntry.createActivityMessageEntries(message)
@@ -373,23 +396,6 @@ data class WidgetChatListModelMessages(
             if (isThreadStarterMessage) {
                 rows += ThreadStarterDividerEntry(channel.id, message.id)
                 return rows
-            }
-            if (showBotComponents && !message.components.isNullOrEmpty()) {
-                val components = ComponentStateMapper.processComponentsToMessageComponents(
-                    message.components.orEmpty(),
-                    componentStoreState[message.id],
-                    BotComponentExperiments,
-                    animateEmojis,
-                )
-                rows += ChatListEntry.createBotComponentEntries(
-                    message,
-                    channel.guildId,
-                    components,
-                    messageState,
-                    channel,
-                    guildMembers,
-                    guildRoles,
-                )
             }
             if (message.getReactionsMap().isNotEmpty()) {
                 val canAdd = channel.threadMetadata?.archived != true
