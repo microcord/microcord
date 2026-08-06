@@ -2773,6 +2773,10 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   so accept/ignore cannot remain loading forever. Preview waits for channel selection, then closes the home
   side panel before dismissing. The first-party segmented control is 40dp tall to prevent Requests/Spam text
   clipping. Focused request tests and `assembleDebug` pass; APK reinstalled on WSA.
+- Fixed animated avatar decorations at the shared `AvatarDecorationView`: the static fallback remains visible
+  while APNG loading or on failure, is hidden once animation starts, and is restored when animation clears.
+  This removes the doubled static/animated frame on profiles without profile-only visibility workarounds.
+  `assembleDebug` passes; live profile playback remains the device verification boundary.
 
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/applauncher/**` | Android 340.12
 Hermes `out.js` Apps launcher modules | log in on WSA and verify HOME/search/application/command/list

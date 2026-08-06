@@ -190,6 +190,7 @@ class AvatarDecorationView @JvmOverloads constructor(
                     layout(0, 0, this@AvatarDecorationView.width, this@AvatarDecorationView.height)
                     visibility = VISIBLE
                 }
+                image?.visibility = INVISIBLE
                 drawable.start()
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
@@ -209,6 +210,7 @@ class AvatarDecorationView @JvmOverloads constructor(
             it.visibility = INVISIBLE
             it.setImageDrawable(null)
         }
+        image?.visibility = VISIBLE
         animatedDrawable?.let(::recycle)
         animatedDrawable = null
     }
