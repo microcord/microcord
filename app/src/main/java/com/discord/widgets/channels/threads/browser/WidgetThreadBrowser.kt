@@ -11,15 +11,12 @@ import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.stores.SelectedChannelAnalyticsLocation
 import com.discord.utilities.channel.ChannelSelector
-import com.discord.utilities.simple_pager.SimplePager
-import com.google.android.material.tabs.TabLayout
 import rx.Subscription
 
 class WidgetThreadBrowser : AppFragment(R.layout.widget_thread_browser) {
     private val guildId get() = mostRecentIntent.getLongExtra(EXTRA_GUILD_ID, 0)
     private val channelId get() = mostRecentIntent.getLongExtra(EXTRA_CHANNEL_ID, 0)
     private lateinit var viewModel: WidgetThreadBrowserViewModel
-    private lateinit var pager: SimplePager
     private var browserState: WidgetThreadBrowserViewModel.ViewState.Browser? = null
     private var subscription: Subscription? = null
 
@@ -27,7 +24,11 @@ class WidgetThreadBrowser : AppFragment(R.layout.widget_thread_browser) {
         super.onViewCreated(view, savedInstanceState)
         viewModel = ViewModelProvider(viewModelStore, factory { WidgetThreadBrowserViewModel(guildId, channelId) })
             .get(WidgetThreadBrowserViewModel::class.java)
-        pager = view.findViewById(R.id.thread_browser_view_pager)
+        if (childFragmentManager.findFragmentById(R.id.thread_browser_container) == null) {
+            childFragmentManager.beginTransaction()
+                .replace(R.id.thread_browser_container, WidgetThreadBrowserList.create(guildId, channelId))
+                .commit()
+        }
         setActionBarTitle(R.string.thread_browser_title)
         setActionBarDisplayHomeAsUpEnabled()
     }
@@ -54,29 +55,14 @@ class WidgetThreadBrowser : AppFragment(R.layout.widget_thread_browser) {
             }
             is WidgetThreadBrowserViewModel.ViewState.Browser -> {
                 browserState = state
-                if (pager.adapter == null) {
-                    val pages = buildList {
-                        add(SimplePager.Item(getString(R.string.thread_browser_active)) {
-                            WidgetThreadBrowserActive.create(guildId, channelId)
-                        })
-                        if (state.canViewArchivedThreads) add(SimplePager.Item(getString(R.string.thread_browser_archived)) {
-                            WidgetThreadBrowserArchived.create(guildId, channelId)
-                        })
-                    }
-                    pager.adapter = SimplePager.Adapter(childFragmentManager, *pages.toTypedArray())
-                    pager.setTabLayout(view?.findViewById<TabLayout>(R.id.action_bar_tabs))
-                    pager.addOnPageChangeListener(object : androidx.viewpager.widget.ViewPager.SimpleOnPageChangeListener() {
-                        override fun onPageSelected(position: Int) = configureMenu(position)
-                    })
-                }
                 if (state.isForumChannel) setActionBarTitle("#${state.channelName.orEmpty()}")
                 else setActionBarSubtitle(state.channelName?.let { "#$it" })
-                configureMenu(pager.currentItem)
+                configureMenu()
             }
         }
     }
 
-    private fun configureMenu(page: Int) {
+    private fun configureMenu() {
         val state = browserState ?: return
         setActionBarOptionsMenu(
             R.menu.menu_thread_browser,
@@ -87,17 +73,10 @@ class WidgetThreadBrowser : AppFragment(R.layout.widget_thread_browser) {
                             .openCreateThread(guildId, channelId, startThreadLocation = "Thread Browser Toolbar")
                         requireActivity().finish()
                     }
-                    R.id.menu_thread_browser_filters -> WidgetThreadBrowserFilterSheet.show(
-                        parentFragmentManager,
-                        guildId,
-                        channelId,
-                    )
                 }
             },
             onConfigured = { menu ->
-                menu.findItem(R.id.menu_thread_browser_filters)?.isVisible = page == ARCHIVED_PAGE
-                menu.findItem(R.id.menu_thread_browser_create_thread)?.isVisible =
-                    page == ACTIVE_PAGE && state.canCreateThread
+                menu.findItem(R.id.menu_thread_browser_create_thread)?.isVisible = state.canCreateThread
             },
         )
     }
@@ -105,8 +84,6 @@ class WidgetThreadBrowser : AppFragment(R.layout.widget_thread_browser) {
     companion object {
         private const val EXTRA_GUILD_ID = "com.discord.intent.extra.EXTRA_GUILD_ID"
         private const val EXTRA_CHANNEL_ID = "com.discord.intent.extra.EXTRA_CHANNEL_ID"
-        private const val ACTIVE_PAGE = 0
-        private const val ARCHIVED_PAGE = 1
 
         fun show(context: Context, guildId: Long, channelId: Long, location: String) {
             AppScreenRouter.launch(context, WidgetThreadBrowser::class.java, Intent().apply {

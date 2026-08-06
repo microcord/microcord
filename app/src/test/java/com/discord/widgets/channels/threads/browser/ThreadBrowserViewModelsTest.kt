@@ -1,8 +1,12 @@
 package com.discord.widgets.channels.threads.browser
 
+import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.permission.Permission
+import com.discord.api.premium.PremiumTier
+import com.discord.api.user.NsfwAllowance
 import com.discord.models.guild.Guild
+import com.discord.models.user.MeUser
 import com.discord.stores.ArchivedThreadsStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -10,83 +14,98 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ThreadBrowserViewModelsTest {
-    @Test fun archivedViewModeSelectsTheReferenceEndpoint() {
-        assertEquals(
-            ArchivedThreadsStore.ThreadListingType.ALL_ARCHIVED_PUBLIC_THREADS,
-            WidgetThreadBrowserArchivedViewModel.ViewMode(
-                WidgetThreadBrowserArchivedViewModel.VisibilityMode.PublicThreads,
-                true,
-            ).threadListingType,
-        )
-        assertEquals(
-            ArchivedThreadsStore.ThreadListingType.MY_ARCHIVED_PRIVATE_THREADS,
-            WidgetThreadBrowserArchivedViewModel.ViewMode(
-                WidgetThreadBrowserArchivedViewModel.VisibilityMode.PrivateThreads,
-                false,
-            ).threadListingType,
-        )
-        assertEquals(
-            ArchivedThreadsStore.ThreadListingType.ALL_ARCHIVED_PRIVATE_THREADS,
-            WidgetThreadBrowserArchivedViewModel.ViewMode(
-                WidgetThreadBrowserArchivedViewModel.VisibilityMode.PrivateThreads,
-                true,
-            ).threadListingType,
-        )
-    }
-
     @Test fun threadCreationRequiresARealEligibleChannelAndGuild() {
         val channel = channel(Channel.GUILD_TEXT)
         val guild = Guild(id = channel.guildId)
         assertFalse(WidgetThreadBrowserViewModel.canCreateThread(null, channel, guild))
         assertFalse(WidgetThreadBrowserViewModel.canCreateThread(Permission.CREATE_PUBLIC_THREADS, null, guild))
         assertFalse(WidgetThreadBrowserViewModel.canCreateThread(Permission.CREATE_PUBLIC_THREADS, channel, null))
-        assertFalse(WidgetThreadBrowserViewModel.canCreateThread(Permission.CREATE_PUBLIC_THREADS, channel(Channel.GUILD_VOICE), guild))
-    }
-
-    @Test fun archivedRowsKeepHeadersAndUseCreatedAtOnlyForMyPrivateThreads() {
-        val thread = channel(Channel.PRIVATE_THREAD)
-        val listing = ArchivedThreadsStore.ThreadListingState.Listing(listOf(thread), hasMore = false, isLoadingMore = false)
-
-        val mine = WidgetThreadBrowserArchivedViewModel.buildItems(
-            WidgetThreadBrowserArchivedViewModel.ViewMode(
-                WidgetThreadBrowserArchivedViewModel.VisibilityMode.PrivateThreads,
-                false,
+        assertFalse(
+            WidgetThreadBrowserViewModel.canCreateThread(
+                Permission.CREATE_PUBLIC_THREADS,
+                channel(Channel.GUILD_VOICE),
+                guild,
             ),
-            listing,
-            emptyMap(),
-            emptyMap(),
-            isForumChannel = true,
-        )
-        val moderator = WidgetThreadBrowserArchivedViewModel.buildItems(
-            WidgetThreadBrowserArchivedViewModel.ViewMode(
-                WidgetThreadBrowserArchivedViewModel.VisibilityMode.PrivateThreads,
-                true,
-            ),
-            listing,
-            emptyMap(),
-            emptyMap(),
-            isForumChannel = false,
-        )
-
-        assertTrue(mine[0] is WidgetThreadBrowserAdapter.Item.Warning)
-        assertTrue(mine[1] is WidgetThreadBrowserAdapter.Item.Header)
-        assertEquals(
-            ThreadBrowserThreadView.TimestampMode.CreatedAt,
-            ((mine[2] as WidgetThreadBrowserAdapter.Item.Thread).threadData as ThreadBrowserThreadView.ThreadData.ArchivedThread).timestampMode,
-        )
-        assertEquals(
-            ThreadBrowserThreadView.TimestampMode.ArchivedAt,
-            ((moderator[1] as WidgetThreadBrowserAdapter.Item.Thread).threadData as ThreadBrowserThreadView.ThreadData.ArchivedThread).timestampMode,
         )
     }
 
-    private fun channel(type: Int) = Channel(
+    @Test fun oneListCarriesJoinedActiveAndOlderSections() {
+        val joined = channel(Channel.PUBLIC_THREAD, id = 10)
+        val live = channel(Channel.PUBLIC_THREAD, id = 11)
+        val older = channel(Channel.PUBLIC_THREAD, id = 12)
+        val items = WidgetThreadBrowserListViewModel.buildState(
+            storeState(
+                joinedThreads = mapOf(joined.id to joined),
+                liveThreads = mapOf(joined.id to joined, live.id to live),
+                older = ArchivedThreadsStore.ThreadListingState.Listing(
+                    listOf(older),
+                    hasMore = false,
+                    isLoadingMore = false,
+                ),
+            ),
+        ).listItems
+
+        assertEquals(
+            listOf(
+                R.string.thread_browser_joined_count,
+                R.string.thread_browser_active_count,
+                R.string.thread_browser_older_header,
+            ),
+            items.filterIsInstance<WidgetThreadBrowserAdapter.Item.Header>().map { it.stringResId },
+        )
+        // A joined thread is not repeated in the active section.
+        assertEquals(
+            listOf(joined.id, live.id, older.id),
+            items.filterIsInstance<WidgetThreadBrowserAdapter.Item.Thread>().map { it.threadData.channel.id },
+        )
+    }
+
+    @Test fun emptyChannelReportsEmptyRatherThanBareSections() {
+        val state = WidgetThreadBrowserListViewModel.buildState(
+            storeState(
+                older = ArchivedThreadsStore.ThreadListingState.Listing(
+                    emptyList(),
+                    hasMore = false,
+                    isLoadingMore = false,
+                ),
+            ),
+        )
+        assertTrue(state.isEmpty)
+        assertTrue(state.listItems.isEmpty())
+    }
+
+    private fun storeState(
+        joinedThreads: Map<Long, Channel> = emptyMap(),
+        liveThreads: Map<Long, Channel> = emptyMap(),
+        older: ArchivedThreadsStore.ThreadListingState,
+    ) = WidgetThreadBrowserListViewModel.StoreState(
+        meUser = me(),
+        joinedThreads = joinedThreads,
+        liveThreads = liveThreads,
+        threadStates = emptyMap(),
+        guildMembers = emptyMap(),
+        users = emptyMap(),
+        guildRoles = emptyMap(),
+        channelNames = emptyMap(),
+        permissions = null,
+        blockedUsers = emptyMap(),
+        channel = channel(Channel.GUILD_TEXT),
+        guild = null,
+        olderThreads = older,
+    )
+
+    private fun me() = MeUser(
+        1, "me", null, null, false, false, 0, PremiumTier.NONE,
+        null, false, true, null, 0, 0, null, NsfwAllowance.UNKNOWN, null, null, null,
+    )
+
+    private fun channel(type: Int, id: Long = 2) = Channel(
         topic = null,
         type = type,
         guildId = 1,
         name = "threads",
         lastMessageId = 0,
-        id = 2,
+        id = id,
         ownerId = 3,
         recipientIds = null,
         recipients = null,

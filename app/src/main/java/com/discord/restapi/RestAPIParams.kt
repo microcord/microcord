@@ -785,6 +785,8 @@ object RestAPIParams {
         val nsfw: Boolean?,
         val rateLimitPerUser: Int?,
         val defaultAutoArchiveDuration: Int?,
+        /** Private threads only. */
+        val invitable: Boolean? = null,
     )
 
     data class ThreadCreationSettings(
@@ -810,6 +812,7 @@ object RestAPIParams {
         val archived: Boolean? = null,
         val locked: Boolean? = null,
         val autoArchiveDuration: Int? = null,
+        val invitable: Boolean? = null,
     )
 
     class Thumbnail(val thumbnail: String)

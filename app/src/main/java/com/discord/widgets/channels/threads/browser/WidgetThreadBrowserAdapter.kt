@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
+import com.discord.i18n.i18nFormat
 
 class WidgetThreadBrowserAdapter(
     private val onOpenThread: (Channel) -> Unit,
@@ -45,7 +46,7 @@ class WidgetThreadBrowserAdapter(
                 is Item.Warning -> itemView.findViewById<TextView>(R.id.warning)
                     .setText(R.string.moderator_view_description)
                 is Item.Header -> itemView.findViewById<TextView>(R.id.header_name).text =
-                    itemView.context.getString(item.stringResId).replace("{count}", item.count.toString())
+                    itemView.context.i18nFormat(item.stringResId, "count" to item.count)
                 is Item.Thread -> (itemView as ThreadBrowserThreadView).apply {
                     setThreadData(item.threadData)
                     setOnClickListener { onOpenThread(item.threadData.channel) }

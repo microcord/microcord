@@ -30,6 +30,7 @@ import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.threads.ThreadUtils
+import com.discord.widgets.settings.SettingsStrings
 import com.discord.widgets.settings.WidgetMuteSettingsSheet
 import com.facebook.drawee.view.SimpleDraweeView
 import java.util.Locale
@@ -56,6 +57,10 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
     private lateinit var edit: TextView
     private lateinit var archiveSettings: LinearLayout
     private lateinit var archiveSettingsSubheader: TextView
+    private lateinit var join: TextView
+    private lateinit var archive: TextView
+    private lateinit var lock: TextView
+    private lateinit var copyLink: TextView
     private lateinit var unarchive: TextView
     private lateinit var leave: TextView
     private lateinit var developerDivider: View
@@ -73,6 +78,10 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
         archiveSettings = view.findViewById(R.id.channels_list_item_thread_actions_archive_settings)
         archiveSettingsSubheader =
             view.findViewById(R.id.channels_list_item_thread_actions_archive_settings_subheader)
+        join = view.findViewById(R.id.channels_list_item_thread_actions_join)
+        archive = view.findViewById(R.id.channels_list_item_thread_actions_archive)
+        lock = view.findViewById(R.id.channels_list_item_thread_actions_lock)
+        copyLink = view.findViewById(R.id.channels_list_item_thread_actions_copy_link)
         unarchive = view.findViewById(R.id.channels_list_item_thread_actions_unarchive)
         leave = view.findViewById(R.id.channels_list_item_thread_actions_leave)
         developerDivider = view.findViewById(R.id.channels_list_item_thread_actions_developer_divider)
@@ -148,9 +157,32 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
             WidgetThreadArchiveActions.show(parentFragmentManager, channel.id, channel.guildId)
         }
 
+        join.visibility = if (model.joinedThread == null) View.VISIBLE else View.GONE
+        join.setOnClickListener { joinThread(channel) }
+
         unarchive.visibility =
             if (model.canUnarchiveThread && metadata?.archived == true) View.VISIBLE else View.GONE
         unarchive.setOnClickListener { unarchiveThread(channel, model.isModerator) }
+
+        // The reference offers closing only while the thread is still open, and only to a manager.
+        archive.visibility =
+            if (model.canManageThread && metadata?.archived == false) View.VISIBLE else View.GONE
+        archive.setOnClickListener { setThreadSettings(channel, RestAPIParams.ThreadSettings(archived = true)) }
+
+        lock.visibility = if (model.isModerator) View.VISIBLE else View.GONE
+        lock.setText(if (metadata?.locked == true) R.string.unlock_thread else R.string.lock_thread)
+        lock.setOnClickListener {
+            setThreadSettings(channel, RestAPIParams.ThreadSettings(locked = metadata?.locked != true))
+        }
+
+        copyLink.setOnClickAndDismissListener {
+            val guildSegment = channel.guildId.takeIf { it != 0L }?.toString() ?: "@me"
+            AppToast.copyToClipboard(
+                requireContext(),
+                "https://discord.com/channels/$guildSegment/${channel.id}",
+                getString(R.string.link_copied),
+            )
+        }
 
         leave.visibility = if (model.joinedThread != null) View.VISIBLE else View.GONE
         leave.setOnClickListener { leaveThread(channel) }
@@ -162,15 +194,13 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
         }
     }
 
+    /** `mute_channel` emphasises the name, so it needs the span renderer rather than plain fill-in. */
     private fun muteThreadText(channel: Channel, isMuted: Boolean, context: Context): CharSequence =
-        if (isMuted) {
-            context.getString(R.string.unmute)
-        } else {
-            context.i18nFormat(
-                R.string.mute_channel,
-                "name" to channel.getDisplayNameOrDefault(context),
-            )
-        }
+        SettingsStrings.render(
+            context,
+            if (isMuted) R.string.unmute_channel else R.string.mute_channel,
+            "name" to channel.getDisplayNameOrDefault(context),
+        )
 
     @DrawableRes
     private fun muteIconResId(isMuted: Boolean, context: Context): Int = context.getThemedDrawableRes(
@@ -203,6 +233,29 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
                     )
                     error.showErrorToasts = false
                 },
+            ) { dismiss() }
+    }
+
+    private fun joinThread(channel: Channel) {
+        RestAPI.api
+            .joinThread(channel.id, JOIN_LOCATION, RestAPIParams.EmptyBody())
+            .restSubscribeOn()
+            .ui(this)
+            .appSubscribe(
+                WidgetChannelsListItemThreadActions::class.java,
+                context = context,
+            ) { dismiss() }
+    }
+
+    /** Closing and locking share one PATCH; the caller decides which field it is changing. */
+    private fun setThreadSettings(channel: Channel, settings: RestAPIParams.ThreadSettings) {
+        RestAPI.api
+            .editThread(channel.id, settings)
+            .restSubscribeOn()
+            .ui(this)
+            .appSubscribe(
+                WidgetChannelsListItemThreadActions::class.java,
+                context = context,
             ) { dismiss() }
     }
 
@@ -321,6 +374,9 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
 
         /** Analytics location reported when the user leaves the thread from this sheet. */
         private const val LEAVE_LOCATION = "Context Menu"
+
+        /** Same analytics location the reference reports when joining from this sheet. */
+        private const val JOIN_LOCATION = "Context Menu"
 
         @JvmStatic
         fun show(fragmentManager: FragmentManager, channelId: Long) {

@@ -7,15 +7,17 @@ import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.app.AppDialog
 import com.google.android.material.button.MaterialButton
+import com.discord.i18n.i18nRender
 
 internal class ThreadDeleteDialog : AppDialog(R.layout.widget_channel_settings_delete) {
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         view.findViewById<TextView>(R.id.channel_settings_delete_title).setText(R.string.delete_thread)
         view.findViewById<TextView>(R.id.channel_settings_delete_body).text =
-            getString(R.string.delete_channel_body)
-                .replace("!!{channelName}!!", argumentsOrDefault.getString(ARG_CHANNEL_NAME).orEmpty())
-                .replace("**", "")
+            requireContext().i18nRender(
+                R.string.delete_channel_body,
+                "channelName" to argumentsOrDefault.getString(ARG_CHANNEL_NAME).orEmpty(),
+            )
         view.findViewById<MaterialButton>(R.id.channel_settings_delete_cancel)
             .setOnClickListener { dismiss() }
         view.findViewById<MaterialButton>(R.id.channel_settings_delete_confirm)

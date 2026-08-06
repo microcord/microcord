@@ -63,6 +63,9 @@ class WidgetThreadSettingsViewModel(
             val channel: Channel,
             val channelNameDraft: String?,
             val slowModeCooldownDraft: Int,
+            /** Only a private thread can restrict who adds members; absent means anyone may. */
+            val invitableDraft: Boolean,
+            val isPrivateThread: Boolean,
             val hasUnsavedChanges: Boolean,
             val canManageThread: Boolean,
             /** Pins are hidden behind an un-agreed NSFW gate. */
@@ -89,6 +92,8 @@ class WidgetThreadSettingsViewModel(
                     channel = channel,
                     channelNameDraft = channel.name,
                     slowModeCooldownDraft = channel.rateLimitPerUser,
+                    invitableDraft = channel.threadMetadata?.invitable != false,
+                    isPrivateThread = channel.type == Channel.PRIVATE_THREAD,
                     hasUnsavedChanges = false,
                     canManageThread = storeState.canManageThread,
                     isPinsEnabled = isPinsEnabled,
@@ -104,6 +109,11 @@ class WidgetThreadSettingsViewModel(
     }
 
     @MainThread
+    fun onInvitableChanged(invitable: Boolean) {
+        val current = viewState as? ViewState.Valid ?: return
+        updateViewState(current.copy(invitableDraft = invitable, hasUnsavedChanges = true))
+    }
+
     fun onSlowModeInputChanged(cooldown: Int) {
         val current = viewState as? ViewState.Valid ?: return
         updateViewState(current.copy(slowModeCooldownDraft = cooldown, hasUnsavedChanges = true))
@@ -130,6 +140,8 @@ class WidgetThreadSettingsViewModel(
         val current = viewState as? ViewState.Valid ?: return
         val name = current.channelNameDraft.takeIf { it != current.channel.name }
         val rateLimit = current.slowModeCooldownDraft.takeIf { it != current.channel.rateLimitPerUser }
+        val invitable = current.invitableDraft
+            .takeIf { current.isPrivateThread && it != (current.channel.threadMetadata?.invitable != false) }
         restApi.editTextChannel(
             channelId,
             RestAPIParams.TextChannel(
@@ -139,6 +151,7 @@ class WidgetThreadSettingsViewModel(
                 nsfw = null,
                 rateLimitPerUser = rateLimit,
                 defaultAutoArchiveDuration = null,
+                invitable = invitable,
             ),
         )
             .restSubscribeOn()
@@ -152,7 +165,8 @@ class WidgetThreadSettingsViewModel(
                     StoreStream.handleThreadCreateOrUpdate(channel)
                     val latest = viewState as? ViewState.Valid ?: return@appSubscribe
                     val unchangedSinceSubmit = latest.channelNameDraft == current.channelNameDraft &&
-                        latest.slowModeCooldownDraft == current.slowModeCooldownDraft
+                        latest.slowModeCooldownDraft == current.slowModeCooldownDraft &&
+                        latest.invitableDraft == current.invitableDraft
                     updateViewState(
                         latest.copy(
                             channel = channel,

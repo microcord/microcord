@@ -7,6 +7,8 @@ data class ThreadMetadata(
     val archiveTimestamp: String?,
     val autoArchiveDuration: Int,
     val locked: Boolean,
+    /** Private threads only; absent means the default, which is that anyone may invite. */
+    val invitable: Boolean? = null,
 )
 
 data class MuteConfig(val endTime: String?)
