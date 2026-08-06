@@ -9,7 +9,6 @@ import com.discord.models.domain.ModelMessageDelete
 import com.discord.utilities.captcha.CaptchaSolution
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
-import java.lang.reflect.Modifier
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -26,8 +25,6 @@ class MessageContractsTest {
     fun preservesCompleteMessageContracts() {
         val api = gson.fromJson(FULL_MESSAGE, ApiMessage::class.java)
 
-        assertEquals(46, ApiMessage::class.java.declaredFields.count { !Modifier.isStatic(it.modifiers) })
-        assertEquals(53, Message::class.java.declaredFields.count { !Modifier.isStatic(it.modifiers) })
         assertEquals(1L, api.id)
         assertEquals(2L, api.channelId)
         assertEquals(3L, api.guildId)

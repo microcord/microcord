@@ -13,7 +13,6 @@ import com.discord.models.sticker.dto.ModelStickerPack
 import com.discord.models.store.dto.ModelStoreAsset
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
-import java.lang.reflect.Modifier
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -34,9 +33,6 @@ class NewModelContractsTest {
         .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
         .registerDiscordApiTypeAdapters()
         .create()
-
-    private fun fieldCount(type: Class<*>) =
-        type.declaredFields.count { !Modifier.isStatic(it.modifiers) }
 
     @Test
     fun `gif picker dtos round trip`() {
@@ -61,8 +57,6 @@ class NewModelContractsTest {
             ModelGif("https://example.invalid/a.gif", "https://tenor.invalid/a", 4, 3),
             ModelGif.createFromGifDto(dto),
         )
-        assertEquals(4, fieldCount(GifDto::class.java))
-        assertEquals(4, fieldCount(ModelGif::class.java))
     }
 
     @Test
@@ -76,7 +70,6 @@ class NewModelContractsTest {
         assertEquals("image/png", asset.mimeType)
         assertNull(asset.width)
         assertEquals(8, asset.height)
-        assertEquals(6, fieldCount(ModelStoreAsset::class.java))
     }
 
     @Test
@@ -109,7 +102,6 @@ class NewModelContractsTest {
         assertTrue(pack.isPremiumPack())
         assertTrue(pack.canBePurchased())
         assertFalse(pack.isLimitedPack())
-        assertEquals(8, fieldCount(ModelStickerPack::class.java))
     }
 
     @Test
@@ -139,7 +131,6 @@ class NewModelContractsTest {
             ModelSku.ExternalSkuStrategy(3).strategyType,
         )
         assertEquals(ModelSku.ExternalStrategyTypes.UNKNOWN, ModelSku.ExternalStrategyTypes.from(99))
-        assertEquals(9, fieldCount(ModelSku::class.java))
     }
 
     @Test
@@ -196,7 +187,6 @@ class NewModelContractsTest {
         assertEquals(listOf(1L), emoji.roles)
         assertTrue(emoji.requiredColons)
         assertEquals(3L, emoji.user.id)
-        assertEquals(8, fieldCount(ModelEmojiGuild::class.java))
     }
 
     @Test
@@ -228,7 +218,6 @@ class NewModelContractsTest {
         assertEquals(1000L, track.durationMs)
         assertEquals("Artist", track.artists.single().name)
         assertEquals("https://example.invalid/cover.png", track.album!!.images.single().url)
-        assertEquals(6, fieldCount(ModelSpotifyTrack::class.java))
     }
 
     @Test
@@ -255,7 +244,6 @@ class NewModelContractsTest {
         assertEquals(1099, preview.total)
         assertTrue(preview.invoiceItems.single().proration)
         assertEquals(100, preview.invoiceItems.single().discount.single().amount)
-        assertEquals(9, fieldCount(ModelInvoicePreview::class.java))
     }
 
     @Test

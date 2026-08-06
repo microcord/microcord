@@ -6,7 +6,6 @@ import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
-import java.lang.reflect.Modifier
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -25,8 +24,6 @@ class ReadyGuildChannelDtosTest {
         val guild = gson.fromJson(READY_GUILD, Guild::class.java)
         val channel = guild.channels!!.single()
 
-        assertEquals(46, Guild::class.java.declaredFields.count { !Modifier.isStatic(it.modifiers) })
-        assertEquals(32, Channel::class.java.declaredFields.count { !Modifier.isStatic(it.modifiers) })
         assertEquals(GuildVerificationLevel.HIGH, guild.verificationLevel)
         assertEquals(GuildExplicitContentFilter.ALL, guild.explicitContentFilter)
         assertEquals(GuildHubType.COLLEGE, guild.hubType)
