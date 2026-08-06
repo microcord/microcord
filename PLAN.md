@@ -2915,6 +2915,8 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   wrappers. Guild/new-user onboarding, option rows, Rules and verification avatar views use generated bindings.
   Privacy uses `I18nHooks`; page changes use a native `ViewAnimator` plus existing slide resources. Focused
   onboarding/rules/invite tests and `assembleDebug` pass; APK installed on A65.
+- Added a `master` push workflow that builds the debug APK with Java 17 and creates a numbered GitHub release using
+  the standard release action. The first server-side run remains verification.
 
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/applauncher/**` | Android 340.12
 Hermes `out.js` Apps launcher modules | log in on WSA and verify HOME/search/application/command/list
