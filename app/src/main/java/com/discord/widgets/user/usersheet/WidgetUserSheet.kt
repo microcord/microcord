@@ -104,6 +104,7 @@ class WidgetUserSheet : AppBottomSheet() {
 
     /** Reused across re-renders so the elapsed timer and image loads survive a presence tick. */
     private var richPresenceViewHolder: ViewHolderUserRichPresence? = null
+    private var renderedBioAst: List<com.discord.simpleast.core.node.Node<MessageRenderContext>>? = null
 
     /** Set while the note field is being populated from state, so the watcher ignores it. */
     private var settingNote = false
@@ -472,15 +473,20 @@ class WidgetUserSheet : AppBottomSheet() {
             return
         }
 
-        binding.aboutMeText.text = AstRenderer.render(
-            bioAst,
-            MessageRenderContext(
-                context = requireContext(),
-                myId = 0L,
-                isAnimationEnabled = true,
-                spoilerOnClick = viewModel::handleBioIndexClicked,
-            ),
-        )
+        // Re-rendering an unchanged bio re-measures the whole card; the view model hands back the
+        // same instance until the text or a revealed spoiler actually changes.
+        if (bioAst !== renderedBioAst) {
+            renderedBioAst = bioAst
+            binding.aboutMeText.text = AstRenderer.render(
+                bioAst,
+                MessageRenderContext(
+                    context = requireContext(),
+                    myId = 0L,
+                    isAnimationEnabled = true,
+                    spoilerOnClick = viewModel::handleBioIndexClicked,
+                ),
+            )
+        }
 
         // A guild-scoped bio is badged with the guild it belongs to, and says so when tapped.
         val showGuildChip = state.hasGuildMemberBio && state.guildName != null

@@ -434,16 +434,29 @@ class WidgetUserSheetViewModel(
         )
     }
 
+    /**
+     * Memoised: every store emission rebuilds the view state, and re-parsing the bio each time hands
+     * the view a new list, which forces it to re-render and re-measure the whole card. A long bio
+     * makes that per-gateway-event cost enough to stall the screen.
+     */
     private fun createAndProcessBioAstFromText(text: String?): List<Node<MessageRenderContext>>? {
         if (text.isNullOrBlank()) return null
+        if (text == cachedBioText && revealedBioIndices.size == cachedBioRevealCount) return cachedBioAst
         val ast = DiscordParser.parse(text)
         MessagePreprocessor(
             myUserId = -1L,
             visibleSpoilerNodeIndices = revealedBioIndices,
             shouldJumboify = false,
         ).process(ast)
+        cachedBioText = text
+        cachedBioRevealCount = revealedBioIndices.size
+        cachedBioAst = ast
         return ast
     }
+
+    private var cachedBioText: String? = null
+    private var cachedBioRevealCount = -1
+    private var cachedBioAst: List<Node<MessageRenderContext>>? = null
 
     /** Reveals the tapped spoiler and re-renders the bio around it. */
     fun handleBioIndexClicked(node: SpoilerNode<*>) {
