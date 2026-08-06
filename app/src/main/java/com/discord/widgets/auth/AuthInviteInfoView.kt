@@ -17,6 +17,7 @@ import com.discord.api.user.User
 import com.discord.models.domain.ModelGuildTemplate
 import com.discord.models.domain.ModelInvite
 import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.i18n.i18nRender
 
 class AuthInviteInfoView @JvmOverloads constructor(
     context: Context,
@@ -132,13 +133,8 @@ class AuthInviteInfoView @JvmOverloads constructor(
         } else DEFAULT_ICON)
     }
 
-    private fun usernameText(resourceId: Int, username: String): CharSequence {
-        val text = context.getString(resourceId).replace("!!{username}!!", username).replace("**", "")
-        return SpannableString(text).apply {
-            val start = text.indexOf(username)
-            if (start >= 0) setSpan(StyleSpan(Typeface.BOLD), start, start + username.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        }
-    }
+    private fun usernameText(resourceId: Int, username: String): CharSequence =
+        context.i18nRender(resourceId, "username" to username)
 
     private companion object {
         val GUILD_CHANNEL_TYPES = setOf(Channel.GUILD_TEXT, Channel.GUILD_VOICE, Channel.GUILD_ANNOUNCEMENT, Channel.GUILD_STAGE_VOICE)

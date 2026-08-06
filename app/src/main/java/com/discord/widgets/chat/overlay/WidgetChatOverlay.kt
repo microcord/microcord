@@ -11,6 +11,8 @@ import com.discord.utilities.time.TimeUtils
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
 import java.util.concurrent.TimeUnit
+import com.discord.i18n.FormatUtils
+import com.discord.i18n.I18nSpans
 
 class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
     data class State(
@@ -126,16 +128,18 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
             if (typing.channelRateLimit > 0) View.VISIBLE else View.GONE
     }
 
-    private fun typingText(users: List<CharSequence>): CharSequence = formatTypingText(
-        getString(
-            when (users.size) {
-                1 -> R.string.one_user_typing
-                2 -> R.string.two_users_typing
-                3 -> R.string.three_users_typing
-                else -> R.string.several_users_typing
-            },
+    private fun typingText(users: List<CharSequence>): CharSequence = I18nSpans.render(
+        formatTypingText(
+            getString(
+                when (users.size) {
+                    1 -> R.string.one_user_typing
+                    2 -> R.string.two_users_typing
+                    3 -> R.string.three_users_typing
+                    else -> R.string.several_users_typing
+                },
+            ),
+            users,
         ),
-        users,
     )
 
     companion object {
@@ -143,10 +147,15 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
         @JvmField var stateSource: (() -> Observable<State>)? = null
         @JvmField var onJumpToPresent: (() -> Unit)? = null
 
+        /** Substitution only; the emphasis markers survive for [I18nSpans] to turn into spans. */
         internal fun formatTypingText(template: String, users: List<CharSequence>): String =
-            template.replace("!!{a}!!", users.getOrNull(0)?.toString().orEmpty())
-                .replace("!!{b}!!", users.getOrNull(1)?.toString().orEmpty())
-                .replace("!!{c}!!", users.getOrNull(2)?.toString().orEmpty())
-                .replace("**", "")
+            FormatUtils.substitute(
+                template,
+                mapOf(
+                    "a" to users.getOrNull(0)?.toString().orEmpty(),
+                    "b" to users.getOrNull(1)?.toString().orEmpty(),
+                    "c" to users.getOrNull(2)?.toString().orEmpty(),
+                ),
+            )
     }
 }

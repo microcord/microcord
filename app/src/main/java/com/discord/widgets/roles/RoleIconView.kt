@@ -16,6 +16,7 @@ import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.view.ToastManager
 import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.i18n.i18nRender
 
 /**
  * The small badge shown next to a name for a role that has an icon or a unicode emoji.
@@ -89,7 +90,7 @@ class RoleIconView(
      * `textprocessing/node/EmojiNode` exists.**
      */
     private fun showRoleIconToast(context: Context, role: GuildRole) {
-        ToastManager().show(context, context.i18nFormat(R.string.role_icon_toast_message, "roleName" to role.name))
+        ToastManager().show(context, context.i18nRender(R.string.role_icon_toast_message, "roleName" to role.name))
     }
 
     private fun GuildRole.hasIcon(): Boolean = !icon.isNullOrEmpty()

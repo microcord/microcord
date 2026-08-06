@@ -19,6 +19,7 @@ import com.discord.views.premium.AccountCreditView
 import com.google.android.material.button.MaterialButton
 import java.text.NumberFormat
 import java.util.Currency
+import com.discord.i18n.i18nRender
 
 /** Premium settings presentation. Billing and REST actions are emitted to the owning host. */
 class WidgetSettingsPremium : AppFragment(R.layout.widget_settings_premium) {
@@ -149,9 +150,9 @@ class WidgetSettingsPremium : AppFragment(R.layout.widget_settings_premium) {
         val subscription = state.premiumSubscription ?: return
         root.findViewById<TextView>(R.id.premium_settings_billing_information).text =
             when (subscription.status) {
-                ModelSubscription.Status.CANCELED -> getString(R.string.premium_settings_cancelled_info)
-                ModelSubscription.Status.PAST_DUE -> getString(R.string.premium_settings_past_due_info)
-                ModelSubscription.Status.ACCOUNT_HOLD -> getString(R.string.premium_settings_account_hold_info)
+                ModelSubscription.Status.CANCELED -> requireContext().i18nRender(R.string.premium_settings_cancelled_info)
+                ModelSubscription.Status.PAST_DUE -> requireContext().i18nRender(R.string.premium_settings_past_due_info)
+                ModelSubscription.Status.ACCOUNT_HOLD -> requireContext().i18nRender(R.string.premium_settings_account_hold_info)
                 else -> getString(R.string.premium_settings_renewal_info)
             }
         root.findViewById<TextView>(R.id.premium_settings_google_play_manage).visibility =

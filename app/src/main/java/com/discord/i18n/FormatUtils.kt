@@ -33,17 +33,26 @@ object FormatUtils {
     private val HOOK_LINK = Regex("""\$\[([^\[\]]*)\]\(([^()\s]+)\)""")
 
     @JvmStatic
-    fun format(template: CharSequence, args: Map<String, Any?>): String {
-        val substituted = if (args.isEmpty()) {
+    fun format(template: CharSequence, args: Map<String, Any?>): String =
+        stripHookMarkers(substitute(template, args))
+
+    /**
+     * Substitutes [args] but leaves the `!!…!!` emphasis markers in place.
+     *
+     * [format] drops them because it returns plain text and has nowhere to put the emphasis. A
+     * caller that renders spans wants them: they are what says *which* run the screen should style,
+     * and searching the finished sentence for the substituted value instead would also match an
+     * occurrence that happens to appear elsewhere in it.
+     */
+    @JvmStatic
+    fun substitute(template: CharSequence, args: Map<String, Any?>): String =
+        if (args.isEmpty()) {
             template.toString()
         } else {
             PLACEHOLDER.replace(template) { match ->
-                val name = match.groupValues[1]
-                args[name]?.toString() ?: match.value
+                args[match.groupValues[1]]?.toString() ?: match.value
             }
         }
-        return stripHookMarkers(substituted)
-    }
 
     @JvmStatic
     fun format(template: CharSequence, vararg args: Pair<String, Any?>): String =

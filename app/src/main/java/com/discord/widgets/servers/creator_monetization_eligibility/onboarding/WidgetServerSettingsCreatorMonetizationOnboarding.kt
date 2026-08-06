@@ -26,6 +26,7 @@ import com.discord.views.LoadingButton
 import com.discord.widgets.servers.creator_monetization_eligibility.EligibilityChecklistView
 import com.discord.widgets.settings.SettingsNavigation
 import com.google.android.material.button.MaterialButton
+import com.discord.i18n.I18nSpans
 
 class WidgetServerSettingsCreatorMonetizationOnboarding :
     AppFragment(R.layout.widget_server_settings_creator_monetization_onboarding) {
@@ -220,7 +221,8 @@ class WidgetServerSettingsCreatorMonetizationOnboarding :
         HtmlCompat.FROM_HTML_MODE_LEGACY,
     )
 
-    private fun displayTemplate(text: String) = text.replace(HOOK, "$1").replace("**", "")
+    /** Unwraps the hook label and renders the emphasis, rather than dropping both. */
+    private fun displayTemplate(text: String): CharSequence = I18nSpans.render(text.replace(HOOK, "$1"))
 
     companion object {
         private const val EXTRA_GUILD_ID = "com.discord.intent.extra.EXTRA_GUILD_ID"

@@ -17,6 +17,7 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.time.TimeUtils
 import com.discord.views.LoadingButton
 import com.google.android.material.button.MaterialButton
+import com.discord.i18n.i18nRender
 
 internal class GuildBoostCancelDialog : AppDialog(R.layout.guild_boost_cancel_dialog) {
     private val slotId get() = argumentsOrDefault.getLong(ARG_SLOT_ID)
@@ -43,7 +44,7 @@ internal class GuildBoostCancelDialog : AppDialog(R.layout.guild_boost_cancel_di
             R.string.premium_guild_subscription_cancel_body_guild
         }
         view.findViewById<TextView>(R.id.guild_boost_cancel_body).text =
-            getString(body).replace("{endDate}", endDate).replace("**", "")
+            requireContext().i18nRender(body, "endDate" to endDate)
     }
 
     private fun cancelBoost() {

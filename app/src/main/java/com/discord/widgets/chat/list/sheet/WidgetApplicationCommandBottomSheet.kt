@@ -23,6 +23,7 @@ import com.discord.utilities.rx.ui
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.button.MaterialButton
 import rx.subscriptions.CompositeSubscription
+import com.discord.i18n.i18nRender
 
 class WidgetApplicationCommandBottomSheet : AppBottomSheet() {
 
@@ -79,7 +80,7 @@ class WidgetApplicationCommandBottomSheet : AppBottomSheet() {
     private fun configureLoaded(state: WidgetApplicationCommandBottomSheetViewModel.ViewState.Loaded) {
         val commandName = "/${state.applicationCommandData.name}"
         val username = state.interactionUser?.nick ?: state.user?.username.orEmpty()
-        title.text = title.i18nFormat(
+        title.text = title.context.i18nRender(
             R.string.system_message_application_command_used_as_title,
             "username" to username,
             "commandName" to commandName,
@@ -138,7 +139,6 @@ class WidgetApplicationCommandBottomSheet : AppBottomSheet() {
         private const val EXTRA_GUILD_ID = "com.discord.intent.extra.EXTRA_GUILD_ID"
         private const val EXTRA_USER_ID = "com.discord.intent.extra.EXTRA_USER_ID"
         private const val EXTRA_APPLICATION_ID = "com.discord.intent.extra.EXTRA_APPLICATION_ID"
-        private const val DISABLED_EXPERIMENT = "2021-03_android_app_slash_commands_bottom_sheet_disabled"
 
         fun show(
             fragmentManager: FragmentManager,
@@ -150,7 +150,6 @@ class WidgetApplicationCommandBottomSheet : AppBottomSheet() {
             applicationId: Long,
             messageNonce: String?,
         ) {
-            if (StoreStream.getExperiments().getUserExperiment(DISABLED_EXPERIMENT)?.bucket == 1) return
             WidgetApplicationCommandBottomSheet().apply {
                 arguments = Bundle().apply {
                     putLong(EXTRA_INTERACTION_ID, interactionId)

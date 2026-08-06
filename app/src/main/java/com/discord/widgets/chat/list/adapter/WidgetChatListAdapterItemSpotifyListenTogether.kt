@@ -27,6 +27,7 @@ import com.discord.widgets.chat.list.entries.SpotifyListenTogetherEntry
 import com.facebook.drawee.view.SimpleDraweeView
 import rx.Observable
 import rx.Subscription
+import com.discord.i18n.i18nRender
 
 /**
  * A "listen along on Spotify" invite.
@@ -89,7 +90,7 @@ class WidgetChatListAdapterItemSpotifyListenTogether(
 
         userAdapter.setData(model.users)
         track.text = listeningActivity?.details
-        artist.text = artist.i18nFormat(
+        artist.text = artist.context.i18nRender(
             R.string.user_activity_listening_artists,
             "artists" to listeningActivity?.state.orEmpty(),
         )

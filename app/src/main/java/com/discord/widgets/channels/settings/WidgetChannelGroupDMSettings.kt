@@ -28,6 +28,7 @@ import com.discord.widgets.settings.WidgetMuteSettingsSheet
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputLayout
+import com.discord.i18n.i18nRender
 
 /**
  * "Customize Group": rename a group DM, change or remove its icon, mute it, or leave it.
@@ -64,7 +65,7 @@ class WidgetChannelGroupDMSettings : AppFragment(R.layout.widget_channel_group_d
         groupIconLabel = view.findViewById(R.id.settings_group_icon_label)
         groupIconRemove = view.findViewById(R.id.settings_group_icon_remove)
 
-        groupIconLabel.text = requireContext().i18nFormat(R.string.minimum_size, "size" to ICON_MIN_SIZE_PX)
+        groupIconLabel.text = requireContext().i18nRender(R.string.minimum_size, "size" to ICON_MIN_SIZE_PX)
         editName.editText?.addTextChangedListener(
             object : android.text.TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit

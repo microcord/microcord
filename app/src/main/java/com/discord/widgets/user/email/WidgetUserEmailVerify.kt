@@ -19,6 +19,7 @@ import com.discord.widgets.user.account.WidgetUserAccountVerifyBase
 import com.discord.widgets.user.account.WidgetUserAccountVerifyBase.Mode
 import com.google.android.material.button.MaterialButton
 import rx.Observable
+import com.discord.i18n.i18nRender
 
 /**
  * "Check your inbox" — the waiting room for an unverified e-mail address, with the two escapes the
@@ -81,7 +82,7 @@ class WidgetUserEmailVerify : WidgetUserAccountVerifyBase(R.layout.widget_user_e
             .appSubscribe(WidgetUserEmailVerify::class.java, context) {
                 AppToast.show(
                     this,
-                    requireContext().i18nFormat(R.string.verification_email_body, "email" to email),
+                    requireContext().i18nRender(R.string.verification_email_body, "email" to email),
                 )
             }
     }

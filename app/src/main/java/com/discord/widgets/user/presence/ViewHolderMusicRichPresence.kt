@@ -21,6 +21,7 @@ import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.time.TimeUtils
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.i18n.i18nRender
 
 /**
  * A listening activity, laid out like a now-playing bar: track, artists, album, and a scrub bar
@@ -92,10 +93,10 @@ class ViewHolderMusicRichPresence(
         richPresenceHeader.text = PresenceUtils.getActivityHeader(richPresenceHeader.context, activity)
         richPresenceTitle.text = activity.details
         richPresenceDetails?.setTextAndVisibilityBy(
-            context.i18nFormat(R.string.user_activity_listening_artists, "artists" to artists),
+            context.i18nRender(R.string.user_activity_listening_artists, "artists" to artists),
         )
         richPresenceTime.setTextAndVisibilityBy(
-            context.i18nFormat(R.string.user_activity_listening_album, "album" to activity.assets?.largeText),
+            context.i18nRender(R.string.user_activity_listening_album, "album" to activity.assets?.largeText),
         )
         richPresenceTextContainer.isSelected = true
         configureAssetUi(activity, streamContext)

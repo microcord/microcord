@@ -16,6 +16,7 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.google.android.material.button.MaterialButton
+import com.discord.i18n.i18nRender
 
 /**
  * Explains why a call could not be placed: the two users are not friends.
@@ -62,7 +63,7 @@ class WidgetCallFailed : AppDialog(R.layout.view_dialog_confirmation) {
             dismiss()
             return
         }
-        body.text = requireContext().i18nFormat(
+        body.text = requireContext().i18nRender(
             R.string.call_invite_not_friends,
             "username" to user.username,
         )

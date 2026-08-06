@@ -15,6 +15,7 @@ import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventDetailsB
 import com.facebook.drawee.view.SimpleDraweeView
 import androidx.recyclerview.widget.RecyclerView
 import rx.subscriptions.CompositeSubscription
+import com.discord.i18n.i18nRender
 
 class WidgetGuildWelcomeSheet : AppBottomSheet() {
     private val guildId by lazy { argumentsOrDefault.getLong(EXTRA_GUILD_ID) }
@@ -52,7 +53,7 @@ class WidgetGuildWelcomeSheet : AppBottomSheet() {
             is WidgetGuildWelcomeSheetViewModel.ViewState.Loaded -> {
                 flipper.displayedChild = LOADED_VIEW_INDEX
                 val channels = state.welcomeChannelsData ?: return
-                name.text = requireContext().i18nFormat(
+                name.text = requireContext().i18nRender(
                     R.string.welcome_screen_title,
                     "guildName" to state.guildName,
                 )

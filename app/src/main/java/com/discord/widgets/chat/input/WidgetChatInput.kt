@@ -7,6 +7,7 @@ import android.text.SpannableString
 import android.text.Spanned
 import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.InputMethodManager
@@ -76,6 +77,7 @@ import java.io.File
 import rx.Subscription
 import rx.subjects.PublishSubject
 import com.discord.utilities.user.UserUtils.getDisplayName
+import com.discord.i18n.i18nRender
 
 internal fun FlexInputWidgetBinding.renderSendPermission(ableToSendMessages: Boolean) {
     cannotSendText.visibility = if (ableToSendMessages) View.GONE else View.VISIBLE
@@ -914,20 +916,24 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             author?.id?.let { StoreStream.getGuilds().getMember(guildId, it) }
         }
         val username = author?.getDisplayName(member?.nick).orEmpty()
-        val text = FormatUtils.format(getString(R.string.mobile_replying_to), "username" to username)
-            .replace("**", "")
-        description.text = SpannableString(text).apply {
-            val start = text.indexOf(username)
-            if (start >= 0) {
+        val rendered = requireContext().i18nRender(R.string.mobile_replying_to, "username" to username)
+        description.text = SpannableString(rendered).apply {
+            // The renderer's emphasis run is exactly the name, so the role colour rides on it.
+            getSpans(0, length, StyleSpan::class.java).forEach { emphasis ->
                 setSpan(
-                    ForegroundColorSpan(GuildMember.getColor(member, ColorCompat.getThemedColor(requireContext(), R.attr.colorHeaderPrimary))),
-                    start,
-                    start + username.length,
+                    ForegroundColorSpan(
+                        GuildMember.getColor(
+                            member,
+                            ColorCompat.getThemedColor(requireContext(), R.attr.colorHeaderPrimary),
+                        ),
+                    ),
+                    getSpanStart(emphasis),
+                    getSpanEnd(emphasis),
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
                 )
             }
         }
-        bar.contentDescription = text
+        bar.contentDescription = rendered
         bar.isClickable = true
         bar.setOnClickListener {
             val reference = pending.messageReference

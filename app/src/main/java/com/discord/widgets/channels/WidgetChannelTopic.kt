@@ -35,6 +35,7 @@ import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.user.WidgetUserMutualGuilds
 import com.facebook.drawee.span.DraweeSpanStringBuilder
 import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.i18n.i18nRender
 
 /**
  * The header strip at the top of the right-hand channel panel: channel icon, channel name, and —
@@ -322,8 +323,8 @@ class WidgetChannelTopic : AppFragment(R.layout.widget_channel_topic) {
                     // closing a one-to-one DM only hides it and is not.
                     WidgetNoticeDialog.show(
                         fragmentManager = parentFragmentManager,
-                        headerText = requireContext().i18nFormat(R.string.leave_group_dm_title, "name" to channelTitle),
-                        bodyText = requireContext().i18nFormat(R.string.leave_group_dm_body, "name" to channelTitle),
+                        headerText = requireContext().i18nRender(R.string.leave_group_dm_title, "name" to channelTitle),
+                        bodyText = requireContext().i18nRender(R.string.leave_group_dm_body, "name" to channelTitle),
                         okText = getString(R.string.leave_group_dm),
                         cancelText = getString(R.string.cancel),
                         listenerMap = mapOf(

@@ -43,6 +43,14 @@ object I18nSpans {
     private val STRIKETHROUGH = Regex("""~~(?=\S)([\s\S]*?\S)~~""")
 
     /**
+     * `!!value!!` — Discord's marker for a substituted value the screen is meant to emphasise.
+     *
+     * [FormatUtils.format] strips these because it returns plain text; here they become the same
+     * bold run the reference renders, which is what every hand-rolled `indexOf` was approximating.
+     */
+    private val EMPHASIS = Regex("""!!(.+?)!!""", RegexOption.DOT_MATCHES_ALL)
+
+    /**
      * Substitutes [args] into [template] and converts the surviving markdown into spans.
      *
      * Link targets become [URLSpan]s so a `LinkifiedTextView` (or any view with a link movement
@@ -50,12 +58,13 @@ object I18nSpans {
      */
     @JvmStatic
     fun render(template: CharSequence, vararg args: Pair<String, Any?>): CharSequence =
-        renderMarkdown(FormatUtils.format(template, *args))
+        renderMarkdown(FormatUtils.substitute(template, args.toMap()))
 
     private fun renderMarkdown(source: String): CharSequence {
         val builder = SpannableStringBuilder(source)
         applyInline(builder, MASKED_LINK) { match -> URLSpan(match.groupValues[2]) }
         applyInline(builder, BOLD) { StyleSpan(android.graphics.Typeface.BOLD) }
+        applyInline(builder, EMPHASIS) { StyleSpan(android.graphics.Typeface.BOLD) }
         applyInline(builder, ITALIC_UNDERSCORE) { StyleSpan(android.graphics.Typeface.ITALIC) }
         applyInline(builder, ITALIC_STAR) { StyleSpan(android.graphics.Typeface.ITALIC) }
         applyInline(builder, STRIKETHROUGH) { StrikethroughSpan() }

@@ -27,6 +27,7 @@ import com.facebook.drawee.view.SimpleDraweeView
 import rx.Subscription
 import rx.android.schedulers.AndroidSchedulers
 import rx.schedulers.Schedulers
+import com.discord.i18n.i18nRender
 
 class EmbeddedActivityActivity : AppCompatActivity() {
     private lateinit var binding: ActivityEmbeddedActivityBinding
@@ -236,7 +237,7 @@ class EmbeddedActivityActivity : AppCompatActivity() {
             R.string.oauth2_cannot_read_send_notice
         }
         view.findViewById<TextView>(R.id.embedded_oauth_security_notice).text =
-            getString(securityNotice).replace("**", "")
+            i18nRender(securityNotice)
     }
 
     private fun showLoading() {
