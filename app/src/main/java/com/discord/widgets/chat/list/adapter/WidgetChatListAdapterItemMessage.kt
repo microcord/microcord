@@ -45,11 +45,13 @@ import com.discord.utilities.user.UserUtils
 import com.discord.utilities.user.UserUtils.displayName
 import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
+import com.discord.views.AvatarDecorationView
 import com.discord.views.FailedUploadList
 import com.discord.views.ThemedColor
 import com.discord.views.typing.TypingDots
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
+import com.discord.widgets.chat.list.utils.didReplyMention
 import com.discord.widgets.roles.RoleIconView
 import com.facebook.drawee.span.DraweeSpanStringBuilder
 import kotlin.math.max
@@ -509,11 +511,11 @@ class WidgetChatListAdapterItemMessage(
             replyData.messageState is StoreMessageReplies.MessageState.Deleted ->
                 configureReplySystemMessage(R.string.reply_quote_message_deleted)
             replyData.messageState is StoreMessageReplies.MessageState.Loaded && repliedEntry != null ->
-                configureLoadedReply(repliedEntry)
+                configureLoadedReply(entry, repliedEntry)
         }
     }
 
-    private fun configureLoadedReply(repliedEntry: MessageEntry) {
+    private fun configureLoadedReply(entry: MessageEntry, repliedEntry: MessageEntry) {
         val repliedMessage = repliedEntry.message
         replyHolder?.setOnClickListener {
             StoreStream.getMessagesLoader()
@@ -531,7 +533,12 @@ class WidgetChatListAdapterItemMessage(
         }
 
         val author = repliedMessage.author ?: return
-        configureReplyAuthor(CoreUser(author), repliedEntry.author, repliedEntry)
+        configureReplyAuthor(
+            CoreUser(author),
+            repliedEntry.author,
+            repliedEntry,
+            didReplyMention(entry.message, repliedMessage),
+        )
 
         val replyText = replyText ?: return
         if (replyLeadingViewsHolder == null) return
@@ -667,12 +674,10 @@ class WidgetChatListAdapterItemMessage(
         replyAuthor: User,
         replyGuildMember: GuildMember?,
         messageEntry: MessageEntry,
+        didMention: Boolean = false,
     ) {
         configureReplyAvatar(replyAuthor, replyGuildMember ?: messageEntry.author)
         val name = messageEntry.nickOrUsernames[replyAuthor.id] ?: replyAuthor.displayName
-        // Reproduces the reference exactly: the mention list consulted is the one on [messageEntry],
-        // which for a loaded reply is the *replied* message rather than the reply itself.
-        val didMention = messageEntry.message.mentions.orEmpty().any { it.id == replyAuthor.id }
         configureReplyName(name, authorTextColor(replyGuildMember), didMention)
     }
 
