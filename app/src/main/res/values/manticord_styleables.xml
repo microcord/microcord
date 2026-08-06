@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <declare-styleable name="AvatarDecorationView">
+        <attr name="avd_target" format="reference"/>
+    </declare-styleable>
     <declare-styleable name="CommunityGetStartedInformationView">
         <attr name="csi_description_text" />
         <attr name="csi_icon" />

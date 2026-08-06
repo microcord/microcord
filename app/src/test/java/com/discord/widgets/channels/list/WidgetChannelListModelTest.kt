@@ -2,6 +2,7 @@ package com.discord.widgets.channels.list
 
 import com.discord.api.channel.Channel
 import com.discord.api.permission.Permission
+import com.discord.nullserializable.NullSerializable
 import com.discord.api.user.Collectibles
 import com.discord.api.user.Nameplate
 import com.discord.api.utcdatetime.UtcDateTime
@@ -239,7 +240,7 @@ class WidgetChannelListModelTest {
                 com.discord.api.user.User(
                     7,
                     "recipient",
-                    collectibles = Collectibles(nameplate),
+                    collectibles = NullSerializable.Value(Collectibles(nameplate)),
                     globalName = "Recipient Display",
                 ),
             )

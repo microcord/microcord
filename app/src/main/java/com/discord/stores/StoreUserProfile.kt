@@ -25,6 +25,13 @@ class StoreUserProfile(
     ) -> Unit = { _, _, failure -> failure() },
 ) : StoreV2() {
     private val profiles = HashMap<Long, UserProfile>()
+    /**
+     * The guild each cached profile was fetched for. A profile is guild-scoped — `guildMember` and
+     * `guildMemberProfile` are only populated when the request carried a `guild_id` — but the cache
+     * is keyed by user alone, so without this a global fetch would satisfy a guild request and the
+     * per-guild identity would never load.
+     */
+    private val profileScopes = HashMap<Long, Long?>()
     private val profilesLoading = HashSet<Long>()
     private val profileErrors = HashSet<Long>()
     // ponytail: session cache; add the shop's ten-minute refresh only if effect metadata proves mutable.
@@ -34,6 +41,7 @@ class StoreUserProfile(
     private var profilesSnapshot: Map<Long, UserProfile> = emptyMap()
     private var profilesLoadingSnapshot: Set<Long> = emptySet()
     private var profileErrorsSnapshot: Set<Long> = emptySet()
+    private var profileEffectProductsSnapshot: Map<Long, UserProfile.ProfileEffectProduct> = emptyMap()
 
     fun getUserProfile(userId: Long): UserProfile = profilesSnapshot[userId] ?: EMPTY_PROFILE
     fun getUserProfiles(): Map<Long, UserProfile> = profilesSnapshot
@@ -46,6 +54,31 @@ class StoreUserProfile(
 
     fun observeUserProfiles(): Observable<Map<Long, UserProfile>> =
         observationDeck.connectRx(this) { profilesSnapshot }.distinctUntilChanged()
+
+    /**
+     * Effect artwork keyed by SKU. Exposed so an unsaved pick can be previewed: the loader only
+     * fetches effects already on a cached profile, which a pending one is not.
+     */
+    fun observeProfileEffectProducts(): Observable<Map<Long, UserProfile.ProfileEffectProduct>> =
+        observationDeck.connectRx(this) { profileEffectProductsSnapshot }.distinctUntilChanged()
+
+    fun fetchProfileEffectIfMissing(skuId: Long) = dispatcher.schedule {
+        if (skuId in profileEffectProducts || !profileEffectsLoading.add(skuId)) return@schedule
+        val generation = profileEffectGeneration
+        fetchProfileEffect(
+            skuId,
+            { product ->
+                dispatcher.schedule {
+                    if (generation == profileEffectGeneration) handleProfileEffectProduct(skuId, product)
+                }
+            },
+            {
+                dispatcher.schedule {
+                    if (generation == profileEffectGeneration) profileEffectsLoading.remove(skuId)
+                }
+            },
+        )
+    }
 
     fun fetchProfile(
         userId: Long,
@@ -63,11 +96,14 @@ class StoreUserProfile(
         guildId: Long? = null,
         withMutualGuilds: Boolean = false,
     ) = dispatcher.schedule {
-        if (profiles.containsKey(userId) || userId in profilesLoading) return@schedule
+        if (userId in profilesLoading) return@schedule
+        val cached = profiles.containsKey(userId) && profileScopes[userId] == guildId
+        if (cached) return@schedule
         startFetch(userId, guildId, withMutualGuilds, null)
     }
 
     fun invalidateProfile(userId: Long) = dispatcher.schedule {
+        profileScopes.remove(userId)
         if (profiles.remove(userId) == null) return@schedule
         markChanged()
     }
@@ -89,6 +125,7 @@ class StoreUserProfile(
             withMutualGuilds,
             { profile ->
                 dispatcher.schedule {
+                    profileScopes[userId] = guildId
                     handleUserProfile(profile)
                     // The reference's `StoreStream.handleUserProfile(profile, guildId)` fan-out is
                     // exactly this: the member is only propagated when the fetch was scoped to a
@@ -124,6 +161,7 @@ class StoreUserProfile(
     fun handlePreLogout() {
         StoreThreadScheduler.assertCurrentThread()
         profiles.clear()
+        profileScopes.clear()
         profilesLoading.clear()
         profileErrors.clear()
         profileEffectProducts.clear()
@@ -136,6 +174,7 @@ class StoreUserProfile(
         profilesSnapshot = HashMap(profiles)
         profilesLoadingSnapshot = HashSet(profilesLoading)
         profileErrorsSnapshot = HashSet(profileErrors)
+        profileEffectProductsSnapshot = HashMap(profileEffectProducts)
     }
 
     @StoreThread
@@ -212,6 +251,7 @@ class StoreUserProfile(
         StoreThreadScheduler.assertCurrentThread()
         profileEffectsLoading.remove(skuId)
         profileEffectProducts[skuId] = product
+        markChanged()
         var changed = false
         profiles.entries.forEach { entry ->
             val resolved = resolveProfileEffects(entry.value)

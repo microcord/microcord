@@ -522,6 +522,11 @@ data class WidgetChannelListModel(
                     } else {
                         channel.getDMRecipient()?.collectibles?.nameplate
                     },
+                    avatarDecoration = if (recipientId != null && recipientId in users) {
+                        users[recipientId]?.avatarDecoration
+                    } else {
+                        channel.getDMRecipient()?.avatarDecoration
+                    },
                     displayName = channel.name?.takeUnless(String::isBlank)
                         ?: recipientDisplayNames.joinToString().takeUnless(String::isBlank),
                 )

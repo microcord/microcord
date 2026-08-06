@@ -9,7 +9,22 @@ import android.view.MotionEvent
 import android.view.View
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import android.graphics.drawable.GradientDrawable
 import androidx.cardview.widget.CardView
+import androidx.core.graphics.ColorUtils
+import com.discord.api.user.AvatarDecorationData
+import com.discord.api.user.Nameplate
+import com.discord.i18n.I18nHooks
+import com.discord.nullserializable.NullSerializable
+import com.discord.stores.StoreCollectibles
+import com.discord.stores.StoreStream
+import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.icon.IconUtils
+import com.discord.widgets.settings.premium.PremiumUpsellDialog
+import com.discord.views.AvatarDecorationView
+import com.discord.views.NameplateView
+import com.discord.widgets.user.profile.ProfileEffectView
+import com.facebook.drawee.view.SimpleDraweeView
 import androidx.core.widget.doAfterTextChanged
 import com.discord.R
 import com.discord.app.AppFragment
@@ -28,6 +43,7 @@ import com.discord.utilities.textprocessing.MessageRenderContext
 import com.discord.utilities.view.text.LinkifiedTextView
 import com.discord.widgets.user.Badge
 import com.discord.widgets.user.profile.UserProfileHeaderView
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -69,6 +85,22 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
     private lateinit var bioEditorCard: CardView
     private lateinit var bioEditor: TextInputEditText
     private lateinit var bioEditorWrap: TextInputLayout
+    private lateinit var profileEffect: ProfileEffectView
+    private lateinit var themeColorsHeader: TextView
+    private lateinit var themeColorsCard: CardView
+    private lateinit var themeColorsUpsell: MaterialButton
+    private lateinit var themeColorPrimary: View
+    private lateinit var themeColorAccent: View
+    private lateinit var themeColorsReset: TextView
+    private lateinit var avatarDecorationHeader: TextView
+    private lateinit var nameplateHeader: TextView
+    private lateinit var avatarDecorationCard: CardView
+    private lateinit var avatarDecorationPreviewAvatar: SimpleDraweeView
+    private lateinit var avatarDecorationPreview: AvatarDecorationView
+    private lateinit var avatarDecorationValue: TextView
+    private lateinit var nameplateCard: CardView
+    private lateinit var nameplatePreview: NameplateView
+    private lateinit var nameplateValue: TextView
     private lateinit var save: FloatingActionButton
     private lateinit var dimmer: DimmerView
 
@@ -105,6 +137,7 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         super.onViewBound(view)
         root = view as TouchInterceptingCoordinatorLayout
         header = view.findViewById(R.id.user_settings_profile_header_view)
+        profileEffect = view.findViewById(R.id.user_settings_profile_effect)
         guildExplainer = view.findViewById(R.id.guild_profile_explainer_container)
         guildHelp = view.findViewById(R.id.guild_member_profile_help_text_overall)
         nickContainer = view.findViewById(R.id.nick_container)
@@ -120,6 +153,21 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         bioEditorCard = view.findViewById(R.id.bio_editor_card)
         bioEditor = view.findViewById(R.id.bio_editor_text_input_field)
         bioEditorWrap = view.findViewById(R.id.bio_editor_text_input_field_wrap)
+        themeColorsHeader = view.findViewById(R.id.theme_colors_header)
+        themeColorsCard = view.findViewById(R.id.theme_colors_card)
+        themeColorsUpsell = view.findViewById(R.id.theme_colors_upsell)
+        themeColorPrimary = view.findViewById(R.id.theme_color_primary)
+        themeColorAccent = view.findViewById(R.id.theme_color_accent)
+        themeColorsReset = view.findViewById(R.id.theme_colors_reset)
+        avatarDecorationHeader = view.findViewById(R.id.avatar_decoration_header)
+        nameplateHeader = view.findViewById(R.id.nameplate_header)
+        avatarDecorationCard = view.findViewById(R.id.avatar_decoration_card)
+        avatarDecorationPreviewAvatar = view.findViewById(R.id.avatar_decoration_preview_avatar)
+        avatarDecorationPreview = view.findViewById(R.id.avatar_decoration_preview)
+        avatarDecorationValue = view.findViewById(R.id.avatar_decoration_value)
+        nameplateCard = view.findViewById(R.id.nameplate_card)
+        nameplatePreview = view.findViewById(R.id.nameplate_preview)
+        nameplateValue = view.findViewById(R.id.nameplate_value)
         save = view.findViewById(R.id.save_fab)
         dimmer = view.findViewById(R.id.dimmer_view)
 
@@ -144,7 +192,6 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         }
         pronouns.setEndIconOnClickListener { viewModel.updatePronouns("") }
         bioEditor.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
-        bioPreviewCard.setOnClickListener { viewModel.updateIsEditingBio(true) }
         save.setOnClickListener {
             setCurrentBioFromEditor()
             dimmer.setDimmed(true)
@@ -166,6 +213,17 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
                     bannerSelection = null
                     viewModel.updateBannerImage(null)
                 }
+                // Not gated: owning the effect is what matters, and the picker's own CTA handles
+                // a lapsed subscription, exactly as for decorations and nameplates.
+                WidgetEditProfileBannerSheet.ACTION_PROFILE_EFFECT ->
+                    (viewModel.viewState as? SettingsUserProfileViewModel.ViewState.Loaded)?.let { loaded ->
+                        WidgetEditCollectibleSheet.show(
+                            parentFragmentManager,
+                            WidgetEditCollectibleSheet.Kind.PROFILE_EFFECT,
+                            loaded.guild?.id,
+                            loaded.previewProfileEffect,
+                        )
+                    }
                 WidgetEditProfileBannerSheet.ACTION_COLOR -> viewModel.updateBannerColor(
                     result.takeIf { it.getBoolean(WidgetEditProfileBannerSheet.RESULT_HAS_COLOR) }
                         ?.getInt(WidgetEditProfileBannerSheet.RESULT_COLOR)
@@ -185,6 +243,33 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
                 viewModel.updateAvatar(null)
             }
         }
+        parentFragmentManager.setFragmentResultListener(
+            ProfileColorPickerDialog.REQUEST_KEY,
+            viewLifecycleOwner,
+        ) { _, result ->
+            val index = when (result.getString(ProfileColorPickerDialog.RESULT_TARGET)) {
+                THEME_TARGET_PRIMARY -> 0
+                THEME_TARGET_ACCENT -> 1
+                else -> return@setFragmentResultListener
+            }
+            if (!result.getBoolean(ProfileColorPickerDialog.RESULT_HAS_COLOR)) {
+                return@setFragmentResultListener viewModel.resetThemeColors()
+            }
+            val loaded = viewModel.viewState as? SettingsUserProfileViewModel.ViewState.Loaded
+                ?: return@setFragmentResultListener
+            val (primary, accent) = effectiveThemeColors(loaded)
+            val picked = result.getInt(ProfileColorPickerDialog.RESULT_COLOR)
+            viewModel.updateThemeColors(
+                if (index == 0) listOf(picked, accent) else listOf(primary, picked),
+            )
+        }
+        WidgetEditCollectibleSheet.registerForResult(this) { kind, skuId ->
+            when (kind) {
+                WidgetEditCollectibleSheet.Kind.AVATAR_DECORATION -> viewModel.selectAvatarDecoration(skuId)
+                WidgetEditCollectibleSheet.Kind.NAMEPLATE -> viewModel.selectNameplate(skuId)
+                WidgetEditCollectibleSheet.Kind.PROFILE_EFFECT -> viewModel.selectProfileEffect(skuId)
+            }
+        }
         childFragmentManager.setFragmentResultListener(
             ProfileDiscardChangesDialog.REQUEST_KEY,
             viewLifecycleOwner,
@@ -201,12 +286,151 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         viewModel.observeHeaderViewState().bindToComponentLifecycle(this)
             .appSubscribe(WidgetEditUserOrGuildMemberProfile::class.java) { state ->
                 (state as? com.discord.widgets.user.profile.UserProfileHeaderViewModel.ViewState.Loaded)
-                    ?.let(header::updateViewState)
+                    ?.let { loaded ->
+                        header.updateViewState(loaded)
+                        // The profile renders the effect over the header, so the editor must too or
+                        // an unsaved pick cannot be judged.
+                        profileEffect.bind(
+                            loaded.profileEffect,
+                            loaded.reducedMotionEnabled && !loaded.allowAnimationInReducedMotion,
+                        )
+                    }
             }
         viewModel.observeEvents().bindToComponentLifecycle(this)
             .appSubscribe(WidgetEditUserOrGuildMemberProfile::class.java) {
                 dimmer.setDimmed(false)
             }
+    }
+
+    /**
+     * Primary and accent are written as one pair, so editing either sends both and the reset clears
+     * both — the API has no way to express half a theme.
+     */
+    private fun configureThemeColors(loaded: SettingsUserProfileViewModel.ViewState.Loaded) {
+        themeColorsHeader.setCompoundDrawablesRelativeWithIntrinsicBounds(
+            0, 0, R.drawable.ic_nitro_wheel_16dp, 0,
+        )
+        // Without Nitro the swatches would advertise avatar-derived colours the profile will never
+        // use, so the section is the upsell instead of a preview of something unreachable.
+        val canEdit = loaded.canEditThemeColors
+        themeColorsCard.visibility = visible(canEdit)
+        themeColorsUpsell.visibility = visible(!canEdit)
+        themeColorsUpsell.setOnClickListener { showPremiumRequired() }
+        if (!canEdit) {
+            themeColorsReset.visibility = View.GONE
+            return
+        }
+        val (primary, accent) = effectiveThemeColors(loaded)
+        tintSwatch(themeColorPrimary, primary)
+        tintSwatch(themeColorAccent, accent)
+        themeColorsReset.visibility = visible(loaded.previewThemeColors != null)
+        themeColorsReset.setOnClickListener { viewModel.resetThemeColors() }
+        themeColorPrimary.setOnClickListener { openThemeColorPicker(loaded, THEME_TARGET_PRIMARY, primary) }
+        themeColorAccent.setOnClickListener { openThemeColorPicker(loaded, THEME_TARGET_ACCENT, accent) }
+    }
+
+    /**
+     * An unset theme shows what the profile actually renders, which the reference derives from the
+     * avatar; a placeholder swatch would just look broken.
+     */
+    private fun effectiveThemeColors(loaded: SettingsUserProfileViewModel.ViewState.Loaded): Pair<Int, Int> {
+        loaded.previewThemeColors?.takeIf { it.size == 2 }?.let { return it[0] to it[1] }
+        val derived = runCatching { Color.parseColor(avatarColorHex) }
+            .getOrDefault(ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundAccent))
+        return derived to darken(derived)
+    }
+
+    private fun darken(color: Int): Int = FloatArray(3)
+        .also { ColorUtils.colorToHSL(color, it) }
+        .also { it[2] = it[2] * ACCENT_LIGHTNESS_SCALE }
+        .let(ColorUtils::HSLToColor)
+
+    private fun openThemeColorPicker(
+        loaded: SettingsUserProfileViewModel.ViewState.Loaded,
+        target: String,
+        initialColor: Int,
+    ) {
+        if (!loaded.canEditThemeColors) return showPremiumRequired()
+        hideKeyboard()
+        ProfileColorPickerDialog.show(parentFragmentManager, initialColor, target)
+    }
+
+    private fun tintSwatch(swatch: View, color: Int) {
+        (swatch.background as? GradientDrawable)?.mutate()?.let { drawable ->
+            (drawable as GradientDrawable).setColor(color)
+            swatch.background = drawable
+        }
+    }
+
+    /**
+     * The row shows what the profile will end up with, so in a guild an inherited item still renders
+     * and is only labelled as the default.
+     */
+    private fun configureCollectibles(loaded: SettingsUserProfileViewModel.ViewState.Loaded) {
+        val inGuild = loaded.guild != null
+        // Per-guild decorations and nameplates are premium-only on the API, so an ungated picker
+        // would just earn a rejected save.
+        val canEdit = loaded.canEditGuildProfile
+        val badge = if (inGuild) R.drawable.ic_nitro_wheel_16dp else 0
+        avatarDecorationHeader.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, badge, 0)
+        nameplateHeader.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, badge, 0)
+        val decoration = loaded.previewAvatarDecoration
+        avatarDecorationPreviewAvatar.setImageURI(IconUtils.getForUser(loaded.user))
+        avatarDecorationPreview.bind(decoration)
+        avatarDecorationValue.text = collectibleLabel(
+            decoration,
+            loaded.avatarDecorationName,
+            isDefault = inGuild && loaded.currentAvatarDecoration.isInherited(loaded.savedAvatarDecoration),
+        )
+        avatarDecorationCard.setOnClickListener {
+            if (!canEdit) return@setOnClickListener showPremiumRequired()
+            WidgetEditCollectibleSheet.show(
+                parentFragmentManager,
+                WidgetEditCollectibleSheet.Kind.AVATAR_DECORATION,
+                loaded.guild?.id,
+                loaded.currentAvatarDecoration.selectedSkuId(loaded.savedAvatarDecoration?.skuId),
+            )
+        }
+
+        val nameplate = loaded.previewNameplate
+        nameplatePreview.bind(nameplate, NameplateView.Placement.MEMBER_LIST, selected = true)
+        nameplateValue.text = collectibleLabel(
+            nameplate,
+            loaded.nameplateName,
+            isDefault = inGuild && loaded.currentNameplate.isInherited(loaded.savedNameplate),
+        )
+        nameplateCard.setOnClickListener {
+            if (!canEdit) return@setOnClickListener showPremiumRequired()
+            WidgetEditCollectibleSheet.show(
+                parentFragmentManager,
+                WidgetEditCollectibleSheet.Kind.NAMEPLATE,
+                loaded.guild?.id,
+                loaded.currentNameplate.selectedSkuId(loaded.savedNameplate?.skuId),
+            )
+        }
+    }
+
+    /** Only "None" when nothing is equipped; an equipped-but-unnamed item is still loading. */
+    private fun collectibleLabel(equipped: Any?, productName: String?, isDefault: Boolean): CharSequence {
+        val label = productName ?: if (equipped == null) getString(R.string.avatar_decoration_none) else ""
+        return if (isDefault && label.isNotEmpty()) {
+            I18nHooks.format(requireContext(), R.string.collectibles_default_with_label, mapOf("label" to label))
+        } else {
+            label
+        }
+    }
+
+    private fun <T> NullSerializable<T>?.isInherited(saved: T?) =
+        this is NullSerializable.Null || (this == null && saved == null)
+
+    private fun <T> NullSerializable<T>?.selectedSkuId(savedSkuId: Long?): Long? = when (this) {
+        is NullSerializable.Null -> null
+        null -> savedSkuId
+        is NullSerializable.Value -> when (val item = value) {
+            is AvatarDecorationData -> item.skuId
+            is Nameplate -> item.skuId
+            else -> null
+        }
     }
 
     private fun configureUI(state: SettingsUserProfileViewModel.ViewState) {
@@ -218,6 +442,9 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
                 .replace("{guildName}", it.name)
                 .replace("!!", "")
         }
+
+        configureThemeColors(loaded)
+        configureCollectibles(loaded)
 
         nickContainer.visibility = visible(loaded.guild != null)
         // The display name is account-wide, so it has no place on a per-guild profile.
@@ -262,11 +489,19 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         }
 
         bioHeader.setText(if (loaded.meMember == null) R.string.user_popout_about_me else R.string.change_identity_bio_header)
-        // A per-server bio is a Nitro feature, so without it the whole section stands down.
-        bioHeader.visibility = visible(loaded.canEditGuildProfile)
-        bioHelp.visibility = visible(loaded.guild != null && loaded.canEditGuildProfile)
-        bioEditorCard.visibility = visible(loaded.canEditGuildProfile && loaded.showBioEditor)
-        bioPreviewCard.visibility = visible(loaded.canEditGuildProfile && !loaded.showBioEditor)
+        // A per-server bio needs Nitro to *edit*; hiding the section entirely made the setting
+        // look absent, so it stays visible and the tap explains itself instead.
+        val canEditBio = loaded.canEditGuildProfile
+        bioHeader.setCompoundDrawablesRelativeWithIntrinsicBounds(
+            0, 0, if (loaded.guild != null) R.drawable.ic_nitro_wheel_16dp else 0, 0,
+        )
+        bioHeader.visibility = View.VISIBLE
+        bioHelp.visibility = visible(loaded.guild != null)
+        bioEditorCard.visibility = visible(canEditBio && loaded.showBioEditor)
+        bioPreviewCard.visibility = visible(!canEditBio || !loaded.showBioEditor)
+        bioPreviewCard.setOnClickListener {
+            if (canEditBio) viewModel.updateIsEditingBio(true) else showPremiumRequired()
+        }
         bioEditorWrap.placeholderText = loaded.defaultBio.takeIf { loaded.guild != null }
         if (loaded.isEditingBio && bioEditor.text?.toString() != loaded.currentBio.orEmpty()) {
             bioEditor.setText(loaded.currentBio.orEmpty())
@@ -326,7 +561,16 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         }
     }
 
-    private fun showPremiumRequired() = AppToast.show(this, R.string.premium_required)
+    /** A locked control explains what Nitro unlocks before offering the store. */
+    private fun showPremiumRequired() = PremiumUpsellDialog.show(
+        parentFragmentManager,
+        if (guildId != null) {
+            PremiumUpsellDialog.ValueProp.GUILD_IDENTITY
+        } else {
+            PremiumUpsellDialog.ValueProp.PROFILE_BANNER
+        },
+        PREMIUM_UPSELL_LOCATION,
+    )
 
     private fun configureBanner(state: SettingsUserProfileViewModel.ViewState.Loaded) {
         WidgetEditProfileBannerSheet.show(
@@ -334,6 +578,7 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
             defaultBannerColorHex = avatarColorHex,
             initialColorPreviewHex = state.nonDefaultColorPreviewHex,
             hasBannerImage = state.hasBannerImageForDisplay,
+            profileEffectName = state.profileEffectName,
             fragmentManager = parentFragmentManager,
         )
     }
@@ -495,6 +740,10 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
     }
 
     companion object {
+        private const val PREMIUM_UPSELL_LOCATION = "User Profile Edit"
+        private const val THEME_TARGET_PRIMARY = "theme_primary"
+        private const val THEME_TARGET_ACCENT = "theme_accent"
+        private const val ACCENT_LIGHTNESS_SCALE = 0.7f
         const val MAX_AVATAR_SIZE = 1024
         const val MAX_BANNER_FILE_SIZE_MB = 30
         const val MAX_BANNER_IMAGE_SIZE = 1080

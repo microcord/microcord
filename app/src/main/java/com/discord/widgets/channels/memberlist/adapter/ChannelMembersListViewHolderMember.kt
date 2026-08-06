@@ -13,6 +13,7 @@ import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.presence.statusIcon
 import com.discord.databinding.WidgetChannelMembersListItemUserBinding
 import com.discord.utilities.color.ColorCompat
+import com.discord.views.AvatarDecorationView
 import com.discord.views.StatusView
 import com.discord.views.NameplateView
 import com.discord.views.UsernameView
@@ -64,6 +65,8 @@ class ChannelMembersListViewHolderMember(private val binding: WidgetChannelMembe
         }
         reserveArtGutter(data.nameplate != null)
         binding.root.findViewById<SimpleDraweeView>(R.id.channel_members_list_item_avatar).setImageURI(data.avatarUrl)
+        binding.root.findViewById<AvatarDecorationView>(R.id.channel_members_list_item_avatar_decoration)
+            .bind(data.avatarDecoration)
         binding.root.findViewById<UsernameView>(R.id.channel_members_list_item_name).apply {
             configureUsername(data.name)
             configureTag(data.isBot, data.tagText ?: R.string.bot_tag_bot, data.tagVerified)

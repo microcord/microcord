@@ -18,6 +18,7 @@ import com.discord.app.AppScreenRouter
 import com.discord.models.guild.Guild
 import com.discord.models.presence.Presence
 import com.discord.models.user.User
+import com.discord.views.AvatarDecorationView
 import com.discord.stores.StoreStream
 import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.i18n.I18nHooks
@@ -112,6 +113,8 @@ class WidgetUserMutualFriends : AppFragment(R.layout.widget_user_mutual_friends)
                 visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
             }
             itemView.findViewById<SimpleDraweeView>(R.id.user_profile_adapter_item_friend_avatar).setImageURI(avatarUrl(friend.user))
+            itemView.findViewById<AvatarDecorationView>(R.id.user_profile_adapter_item_friend_avatar_decoration)
+                .bind(friend.user.avatarDecoration)
             listOf(R.id.mutual_server_1, R.id.mutual_server_2, R.id.mutual_server_3, R.id.mutual_server_4).forEachIndexed { index, id ->
                 val root = itemView.findViewById<View>(id)
                 val guild = friend.mutualGuilds.getOrNull(index)

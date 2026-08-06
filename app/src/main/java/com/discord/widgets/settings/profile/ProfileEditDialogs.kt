@@ -142,8 +142,12 @@ class ProfileColorPickerDialog : AppDialog(R.layout.profile_color_picker_dialog)
             picker.color = parsed
             panel.color = parsed
         }
+        val target = argumentsOrDefault.getString(ARG_TARGET).orEmpty()
         view.findViewById<TextView>(R.id.profile_color_use_default).setOnClickListener {
-            parentFragmentManager.setFragmentResult(REQUEST_KEY, bundleOf(RESULT_HAS_COLOR to false))
+            parentFragmentManager.setFragmentResult(
+                REQUEST_KEY,
+                bundleOf(RESULT_HAS_COLOR to false, RESULT_TARGET to target),
+            )
             dismiss()
         }
         view.findViewById<Button>(R.id.profile_color_select).apply {
@@ -151,7 +155,11 @@ class ProfileColorPickerDialog : AppDialog(R.layout.profile_color_picker_dialog)
             setOnClickListener {
                 parentFragmentManager.setFragmentResult(
                     REQUEST_KEY,
-                    bundleOf(RESULT_HAS_COLOR to true, RESULT_COLOR to (selectedColor and 0xFFFFFF)),
+                    bundleOf(
+                        RESULT_HAS_COLOR to true,
+                        RESULT_COLOR to (selectedColor and 0xFFFFFF),
+                        RESULT_TARGET to target,
+                    ),
                 )
                 dismiss()
             }
@@ -180,14 +188,21 @@ class ProfileColorPickerDialog : AppDialog(R.layout.profile_color_picker_dialog)
         internal const val REQUEST_KEY = "PROFILE_COLOR_PICKER"
         internal const val RESULT_COLOR = "color"
         internal const val RESULT_HAS_COLOR = "has_color"
+        internal const val RESULT_TARGET = "target"
         internal const val TAG = "ProfileColorPickerDialog"
         private const val ARG_INITIAL_COLOR = "initial_color"
+        private const val ARG_TARGET = "target"
         private const val STATE_COLOR = "selected_color"
 
-        fun show(fragmentManager: FragmentManager, initialColor: Int): ProfileColorPickerDialog =
+        @JvmOverloads
+        fun show(
+            fragmentManager: FragmentManager,
+            initialColor: Int,
+            target: String = "",
+        ): ProfileColorPickerDialog =
             (fragmentManager.findFragmentByTag(TAG) as? ProfileColorPickerDialog)
                 ?: ProfileColorPickerDialog().apply {
-                    arguments = bundleOf(ARG_INITIAL_COLOR to initialColor)
+                    arguments = bundleOf(ARG_INITIAL_COLOR to initialColor, ARG_TARGET to target)
                     show(fragmentManager, TAG)
                 }
     }

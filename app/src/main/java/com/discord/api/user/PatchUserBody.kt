@@ -14,4 +14,6 @@ import com.discord.nullserializable.NullSerializable
 data class PatchUserBody(
     val avatar: NullSerializable<String>? = null,
     val globalName: NullSerializable<String>? = null,
+    val avatarDecorationSkuId: NullSerializable<String>? = null,
+    val nameplateSkuId: NullSerializable<String>? = null,
 )

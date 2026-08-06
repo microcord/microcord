@@ -190,7 +190,10 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
 
     private fun render(data: ParticipantData?) {
         val participant = data?.voiceParticipant
-        participant?.let { voiceUser.setVoiceUser(it, R.dimen.avatar_size_large) }
+        participant?.let {
+            voiceUser.setVoiceUser(it, R.dimen.avatar_size_large)
+            voiceUser.setAvatarDecoration(it.guildMember?.avatarDecoration ?: it.user.avatarDecoration)
+        }
         mute.visibility = visible(participant?.isMuted == true && data?.type == ParticipantData.Type.DEFAULT)
         deafen.visibility = visible(participant?.isDeafened == true && data?.type == ParticipantData.Type.DEFAULT)
         indicators.visibility = visible(mute.isShown || deafen.isShown)

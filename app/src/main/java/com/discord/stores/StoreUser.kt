@@ -195,7 +195,8 @@ class StoreUser(
         bio = merge(old.bio, new.bio),
         bannerColor = merge(old.bannerColor, new.bannerColor),
         globalName = new.globalName,
-        collectibles = new.collectibles ?: old.collectibles,
+        collectibles = merge(old.collectibles, new.collectibles),
+        avatarDecoration = merge(old.avatarDecoration, new.avatarDecorationData),
     )
 
     private fun mergeMe(old: MeUser, new: ApiUser) = old.copy(
@@ -217,7 +218,8 @@ class StoreUser(
         bio = merge(old.bio, new.bio),
         bannerColor = merge(old.bannerColor, new.bannerColor),
         globalName = new.globalName,
-        collectibles = new.collectibles ?: old.collectibles,
+        collectibles = merge(old.collectibles, new.collectibles),
+        avatarDecoration = merge(old.avatarDecoration, new.avatarDecorationData),
     )
 
     private fun <T> merge(old: T?, new: NullSerializable<T>?): T? = when (new) {

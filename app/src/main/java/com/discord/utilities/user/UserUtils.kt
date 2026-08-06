@@ -280,7 +280,8 @@ object UserUtils {
         bot = isBot,
         system = isSystemUser,
         globalName = globalName,
-        collectibles = collectibles,
+        collectibles = collectibles?.let { NullSerializable.Value(it) },
+        avatarDecorationData = avatarDecoration?.let { NullSerializable.Value(it) },
     )
 
     /**

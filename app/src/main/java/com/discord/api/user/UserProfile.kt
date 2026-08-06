@@ -4,15 +4,30 @@ import com.discord.api.application.ProfileApplication
 import com.discord.api.connectedaccounts.ConnectedAccount
 import com.discord.api.guildmember.GuildMember
 import com.google.gson.annotations.SerializedName
+import java.io.Serializable
 
 data class AvatarDecorationData(
     val asset: String,
     val skuId: Long,
     val expiresAt: Long? = null,
-) {
-    fun cdnUrl(size: Int = 256, passthrough: Boolean = true): String? = asset
-        .takeIf(String::isNotBlank)
-        ?.let { "https://cdn.discordapp.com/avatar-decoration-presets/$it.png?size=$size&passthrough=$passthrough" }
+) : Serializable {
+    /** Collectibles-shop asset first, legacy preset second; Fresco takes the first that resolves. */
+    fun imageUrls(animate: Boolean): List<String> =
+        if (isActive()) listOfNotNull(collectiblesUrl(animate), presetUrl(animate)) else emptyList()
+
+    fun isActive(nowEpochSeconds: Long = System.currentTimeMillis() / 1000) =
+        expiresAt == null || expiresAt > nowEpochSeconds
+
+    private fun collectiblesUrl(animate: Boolean) = skuId.takeIf { it > 0 }
+        ?.let { "$CDN/media/v1/collectibles-shop/$it/${if (animate) "animated" else "static"}" }
+
+    private fun presetUrl(animate: Boolean) = asset.takeIf(String::isNotBlank)
+        ?.let { "$CDN/avatar-decoration-presets/$it.png?size=$PRESET_SIZE&passthrough=$animate" }
+
+    private companion object {
+        const val CDN = "https://cdn.discordapp.com"
+        const val PRESET_SIZE = 256
+    }
 }
 
 data class UserProfile(
@@ -44,9 +59,19 @@ data class UserProfile(
         val banner: String? = null,
         val accentColor: Int? = null,
         val themeColors: List<Int>? = null,
-        val popoutAnimationParticleType: Long? = null,
+        /** Snowflake-shaped, but sent as a raw JSON number that can exceed [Long]; kept as text. */
+        val popoutAnimationParticleType: String? = null,
         val emoji: ProfileEmoji? = null,
         val profileEffect: ProfileEffect? = null,
+        /** Every equipped collectible, including types this client does not render. */
+        val collectibles: List<ProfileCollectible> = emptyList(),
+    )
+
+    data class ProfileCollectible(
+        @SerializedName("sku_id")
+        val skuId: Long,
+        val type: Int,
+        val expiresAt: String? = null,
     )
 
     data class ProfileEmoji(

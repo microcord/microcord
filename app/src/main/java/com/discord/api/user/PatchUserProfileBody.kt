@@ -16,4 +16,10 @@ data class PatchUserProfileBody(
     val bio: String? = null,
     val pronouns: String? = null,
     val accentColor: NullSerializable<Int>? = null,
+    val themeColors: NullSerializable<List<Int>>? = null,
+    /**
+     * Every collectible the profile should end up with, by SKU. The server replaces the whole set,
+     * so an unchanged frame has to be sent back alongside a changed effect or it is unequipped.
+     */
+    val collectiblesSkuIds: List<String>? = null,
 )

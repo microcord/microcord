@@ -7,6 +7,7 @@ import com.discord.models.member.GuildMember
 import com.discord.models.user.CoreUser
 import com.discord.widgets.channels.memberlist.adapter.ChannelMembersListAdapter
 import com.google.gson.FieldNamingPolicy
+import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.google.gson.GsonBuilder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -17,13 +18,15 @@ import org.junit.Test
 class NameplateRowsTest {
     @Test
     fun payloadAndAssetContractsMatchDesktopRenderer() {
-        val gson = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES).create()
+        val gson = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .registerDiscordApiTypeAdapters()
+            .create()
         val json = """{"id":"2","username":"target","discriminator":"0","collectibles":{"nameplate":{"asset":"ignored-by-renderer","sku_id":"1344802364934062152","label":"Angel nameplate","palette":"bubble_gum","expires_at":null}}}"""
         val user = gson.fromJson(json, com.discord.api.user.User::class.java)
         val profile = gson.fromJson("""{"user":$json}""", UserProfile::class.java)
-        val plate = requireNotNull(user.collectibles?.nameplate)
+        val plate = requireNotNull(user.collectibles?.value?.nameplate)
 
-        assertEquals(user.collectibles, CoreUser(user).collectibles)
+        assertEquals(user.collectibles?.value, CoreUser(user).collectibles)
         assertEquals(user.collectibles, profile.user.collectibles)
         assertEquals(
             "https://cdn.discordapp.com/media/v1/collectibles-shop/1344802364934062152/static",

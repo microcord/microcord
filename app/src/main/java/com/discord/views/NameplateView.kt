@@ -18,6 +18,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import com.discord.api.user.Nameplate
 import com.discord.stores.StoreStream
+import com.discord.utilities.images.CollectibleAssets
 import com.discord.utilities.images.MGImages
 import com.facebook.drawee.drawable.ScalingUtils
 import com.facebook.drawee.view.SimpleDraweeView
@@ -31,7 +32,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Call
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import kotlin.coroutines.coroutineContext
 
@@ -231,7 +231,7 @@ class NameplateView @JvmOverloads constructor(
             var decoded: ApngDrawable? = null
             try {
                 decoded = withContext(Dispatchers.IO) {
-                    val call = client.newCall(Request.Builder().url(request.key).build())
+                    val call = CollectibleAssets.client.newCall(Request.Builder().url(request.key).build())
                     animationCall = call
                     val cancellation = coroutineContext[Job]?.invokeOnCompletion { call.cancel() }
                     try {
@@ -332,8 +332,6 @@ class NameplateView @JvmOverloads constructor(
     }
 
     companion object {
-        private val client = OkHttpClient()
-
         /** Trailing space a row reserves for the artwork. */
         const val ART_GUTTER_DP = 40
     }

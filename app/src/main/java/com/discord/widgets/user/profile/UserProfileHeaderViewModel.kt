@@ -89,9 +89,14 @@ class UserProfileHeaderViewModel @JvmOverloads constructor(
                 ?.takeIf { it.size == 2 }
                 ?.mapNotNull(::profileColorToArgb)
                 ?.takeIf { it.size == 2 }
-            val avatarDecorationData = userProfile.guildMember?.avatarDecorationData
-                ?: userProfile.user.avatarDecorationData
-            val avatarDecorationUrl = avatarDecorationData?.cdnUrl(passthrough = shouldAnimateBanner)
+            /** A guild profile's pronouns fall back to the account's, as its bio does not. */
+            val pronouns: String? = (
+                userProfile.guildMemberProfile?.pronouns?.takeIf(String::isNotBlank)
+                    ?: userProfile.userProfile?.pronouns
+                )?.takeIf(String::isNotBlank)
+
+            val avatarDecoration = userProfile.guildMember?.avatarDecorationData
+                ?: userProfile.user.avatarDecorationData?.value
             val profileEffect = userProfile.guildMemberProfile?.profileEffect
                 ?: userProfile.userProfile?.profileEffect
             val avatarColorId by lazy { user.avatar ?: user.discriminator.toString() }

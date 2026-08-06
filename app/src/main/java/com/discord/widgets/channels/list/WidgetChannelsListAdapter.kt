@@ -58,6 +58,7 @@ import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.utilities.view.text.LinkifiedTextView
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
+import com.discord.views.AvatarDecorationView
 import com.discord.views.NameplateView
 import com.discord.views.StatusView
 import com.discord.views.ThemedColor
@@ -885,6 +886,8 @@ class WidgetChannelsListAdapter(
         private val tag: TextView = itemView.findViewById(R.id.channels_list_item_private_tag)
         private val nameplate: NameplateView =
             itemView.findViewById(R.id.channels_list_item_private_nameplate)
+        private val avatarDecoration: AvatarDecorationView =
+            itemView.findViewById(R.id.channels_list_item_private_avatar_decoration)
         private val content: View = itemView.findViewById(R.id.channels_list_item_private_content)
 
         override fun onConfigure(position: Int, data: ChannelListItem) {
@@ -919,6 +922,7 @@ class WidgetChannelsListAdapter(
             tag.visibility = if (channel.isSystemDM()) View.VISIBLE else View.GONE
 
             IconUtils.setIcon(avatar, channel, R.dimen.avatar_size_standard)
+            avatarDecoration.bind(item.avatarDecoration ?: channel.getDMRecipient()?.avatarDecoration)
 
             status.visibility =
                 if (channel.isDMStatusVisible(item.presence)) View.VISIBLE else View.GONE

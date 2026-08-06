@@ -52,6 +52,7 @@ import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.restapi.cookie.CookieJars
 import com.discord.stores.updates.ObservationDeck
+import com.discord.stores.updates.ObservationDeckProvider
 import com.discord.stores.utilities.Batched
 import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.streams.StreamContextService
@@ -112,6 +113,7 @@ import com.discord.utilities.attachments.toUploadAttachment
 import com.discord.api.message.MessageReference
 import com.discord.utilities.rest.MessageUploadPayloadBuilder
 import com.discord.utilities.rest.RestAPI
+import com.discord.widgets.guild_role_subscriptions.GuildRoleSubscriptionsFeatureFlag
 import com.discord.utilities.textprocessing.Rules
 import com.discord.restapi.PayloadJSON
 import com.google.gson.Gson
@@ -207,7 +209,13 @@ class StoreStream private constructor(
     private val guildTemplates = StoreGuildTemplates(dispatcher, observationDeck)
     private val guildMemberVerificationForm = StoreGuildMemberVerificationForm(dispatcher, observationDeck)
     private val auditLog = StoreAuditLog(dispatcher, observationDeck)
-    private val guildRoleSubscriptions = StoreGuildRoleSubscriptions(dispatcher, observationDeck)
+    private val guildRoleSubscriptions = StoreGuildRoleSubscriptions(
+        dispatcher,
+        observationDeck,
+        isGuildEligibleForTrials = {
+            GuildRoleSubscriptionsFeatureFlag.INSTANCE.isGuildEligibleForGuildRoleSubscriptionTrials(it)
+        },
+    )
     private val guildBoost = StoreGuildBoost(dispatcher, observationDeck)
     private val guildScheduledEvents = StoreGuildScheduledEvents(
         dispatcher, permissions, users, guilds, clock, observationDeck,
@@ -514,6 +522,11 @@ class StoreStream private constructor(
         observationDeck = observationDeck,
         restApi = { if (::restApi.isInitialized) restApi else null },
     )
+    private val collectibles = StoreCollectibles(
+        dispatcher = dispatcher,
+        observationDeck = observationDeck,
+        restApi = { if (::restApi.isInitialized) restApi else null },
+    )
     private val googlePlayPurchases = StoreGooglePlayPurchases(
         observationDeck = observationDeck,
         dispatcher = dispatcher,
@@ -814,6 +827,7 @@ class StoreStream private constructor(
         applicationAssets,
         applicationStreamPreviews,
         entitlements,
+        collectibles,
         googlePlayPurchases,
         googlePlaySkuDetails,
         subscriptions,
@@ -2561,6 +2575,7 @@ class StoreStream private constructor(
         analytics.handlePreLogout()
         userRelationships.handlePreLogout()
         userProfiles.handlePreLogout()
+        collectibles.handlePreLogout()
         userNotes.handlePreLogout()
         friendSuggestions.handlePreLogout()
         userAffinities.handlePreLogout()
@@ -2999,7 +3014,7 @@ class StoreStream private constructor(
             preferences: SharedPreferences,
             sessionDurablePreferences: SharedPreferences,
         ): StoreStream {
-            val deck = ObservationDeck()
+            val deck = ObservationDeckProvider.get()
             val dispatcher = Dispatcher(scheduler)
             // `ChannelSelector` is the single owner of "open this channel" and is reachable from
             // widgets as a singleton, exactly as in the reference; it only needs the dispatcher and
@@ -3067,6 +3082,7 @@ class StoreStream private constructor(
         @JvmStatic fun getApplicationAssets() = requireInstance().applicationAssets
         @JvmStatic fun getApplicationStreamPreviews() = requireInstance().applicationStreamPreviews
         @JvmStatic fun getEntitlements() = requireInstance().entitlements
+        @JvmStatic fun getCollectibles() = requireInstance().collectibles
         @JvmStatic fun getGooglePlayPurchases() = requireInstance().googlePlayPurchases
         @JvmStatic fun getGooglePlaySkuDetails() = requireInstance().googlePlaySkuDetails
         @JvmStatic fun getSubscriptions() = requireInstance().subscriptions

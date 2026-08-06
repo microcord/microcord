@@ -16,8 +16,10 @@ import com.discord.R
 import com.discord.api.presence.ClientStatus
 import com.discord.models.member.GuildMember
 import com.discord.models.presence.Presence
+import com.discord.api.user.AvatarDecorationData
 import com.discord.models.user.User
 import com.discord.utilities.streams.StreamContext
+import com.discord.views.AvatarDecorationView
 import com.discord.views.StatusView
 import com.discord.views.ThemedColor
 import com.facebook.drawee.backends.pipeline.Fresco
@@ -47,6 +49,7 @@ class UserAvatarPresenceView @JvmOverloads constructor(
     }
 
     private val avatar: SimpleDraweeView
+    private val avatarDecoration: AvatarDecorationView
     private val avatarCutout: ImageView
     private val staticAvatar: SimpleDraweeView
     private val status: StatusView
@@ -56,6 +59,7 @@ class UserAvatarPresenceView @JvmOverloads constructor(
     init {
         LayoutInflater.from(context).inflate(R.layout.user_avatar_presence_view, this, true)
         avatar = requireNotNull(findViewById(R.id.avatar))
+        avatarDecoration = requireNotNull(findViewById(R.id.avatar_decoration))
         avatarCutout = requireNotNull(findViewById(R.id.avatar_cutout))
         staticAvatar = requireNotNull(findViewById(R.id.static_avatar))
         status = requireNotNull(findViewById(R.id.user_avatar_presence_status))
@@ -77,6 +81,11 @@ class UserAvatarPresenceView @JvmOverloads constructor(
         }
         avatar.clipToOutline = true
     }
+
+    /** The reference passes decorations in per surface rather than resolving them here. */
+    @JvmOverloads
+    fun setAvatarDecoration(decoration: AvatarDecorationData?, animate: Boolean = false) =
+        avatarDecoration.bind(decoration, animate)
 
     fun configure(viewState: ViewState) {
         val animationsEnabled = Settings.Global.getFloat(

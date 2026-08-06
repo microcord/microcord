@@ -19,6 +19,7 @@ import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
+import com.discord.views.AvatarDecorationView
 import com.discord.views.StatusView
 import com.facebook.drawee.view.SimpleDraweeView
 import com.discord.stores.StoreStream
@@ -81,6 +82,8 @@ class WidgetFriendsListAdapter(recycler: RecyclerView) :
             itemView.findViewById(R.id.friends_list_item_activity)
         private val avatar: SimpleDraweeView = itemView.findViewById(R.id.friends_list_item_avatar)
         private val status: StatusView = itemView.findViewById(R.id.friends_list_item_status)
+        private val avatarDecoration: AvatarDecorationView =
+            itemView.findViewById(R.id.friends_list_item_avatar_decoration)
         private val callButton: AppCompatImageView =
             itemView.findViewById(R.id.friends_list_item_call_button)
         private val chatButton: AppCompatImageView =
@@ -101,6 +104,7 @@ class WidgetFriendsListAdapter(recycler: RecyclerView) :
                 showFallbackStatusText = true,
             )
             IconUtils.setIcon(avatar, item.user, R.dimen.avatar_size_standard)
+            avatarDecoration.bind(item.user.avatarDecoration)
             callButton.setOnClickListener { adapter.onClickCall(item.user) }
             chatButton.setOnClickListener { adapter.onClickChat(item.user) }
         }
@@ -114,6 +118,8 @@ class WidgetFriendsListAdapter(recycler: RecyclerView) :
             itemView.findViewById(R.id.friends_list_item_activity)
         private val avatar: SimpleDraweeView = itemView.findViewById(R.id.friends_list_item_avatar)
         private val status: StatusView = itemView.findViewById(R.id.friends_list_item_status)
+        private val avatarDecoration: AvatarDecorationView =
+            itemView.findViewById(R.id.friends_list_item_avatar_decoration)
         private val acceptButton: AppCompatImageView =
             itemView.findViewById(R.id.friends_list_item_accept_button)
         private val declineButton: AppCompatImageView =
@@ -146,6 +152,7 @@ class WidgetFriendsListAdapter(recycler: RecyclerView) :
             )
 
             IconUtils.setIcon(avatar, item.user, R.dimen.avatar_size_standard)
+            avatarDecoration.bind(item.user.avatarDecoration)
             acceptButton.setOnClickListener { adapter.onClickAcceptFriend(item.user) }
             declineButton.setOnClickListener {
                 adapter.onClickDeclineFriend(item.user, item.relationshipType)

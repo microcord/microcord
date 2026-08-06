@@ -95,6 +95,7 @@ data class WidgetChatListModelTop(val item: ChatListEntry) {
                     channelType = channel.type,
                     channelIcon = IconUtils.getForChannel(channel),
                     isSystemDM = channel.isSystemDM(),
+                avatarDecoration = channel.getDMRecipient()?.avatarDecoration,
                     mutualGuilds = inputs.mutualGuilds,
                 )
             }

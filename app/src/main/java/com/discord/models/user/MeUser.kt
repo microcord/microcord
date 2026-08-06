@@ -1,9 +1,11 @@
 package com.discord.models.user
 
 import com.discord.api.premium.PremiumTier
+import com.discord.api.user.AvatarDecorationData
 import com.discord.api.user.Collectibles
 import com.discord.api.user.NsfwAllowance
 import com.discord.api.user.Phone
+import com.discord.api.user.UserStoreCountry
 
 data class MeUser(
     override val id: Long,
@@ -26,6 +28,8 @@ data class MeUser(
     override val bannerColor: String?,
     override val globalName: String? = null,
     override val collectibles: Collectibles? = null,
+    override val avatarDecoration: AvatarDecorationData? = null,
+    val storeCountry: UserStoreCountry? = null,
 ) : User {
     constructor(user: com.discord.api.user.User) : this(
         id = user.id,
@@ -47,7 +51,9 @@ data class MeUser(
         bio = user.bio?.value,
         bannerColor = user.bannerColor?.value,
         globalName = user.globalName,
-        collectibles = user.collectibles,
+        collectibles = user.collectibles?.value,
+        avatarDecoration = user.avatarDecorationData?.value,
+        storeCountry = user.storeCountry,
     )
 
     val hasBirthday = nsfwAllowance != NsfwAllowance.UNKNOWN

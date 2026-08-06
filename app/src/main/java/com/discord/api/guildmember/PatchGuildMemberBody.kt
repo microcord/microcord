@@ -15,4 +15,18 @@ import com.discord.nullserializable.NullSerializable
 data class PatchGuildMemberBody(
     val nick: String? = null,
     val avatar: NullSerializable<String>? = null,
+    val avatarDecorationSkuId: NullSerializable<String>? = null,
+    val collectibles: NullSerializable<PatchCollectibles>? = null,
 )
+
+/**
+ * Per-guild collectibles. The nameplate is nested here, unlike the account-wide `nameplate_sku_id`
+ * on [com.discord.api.user.PatchUserBody] — the two scopes genuinely disagree on shape.
+ *
+ * `{"nameplate": null}` drops the guild override so the global nameplate applies again.
+ */
+data class PatchCollectibles(
+    val nameplate: NullSerializable<PatchNameplate>? = null,
+)
+
+data class PatchNameplate(val skuId: String)

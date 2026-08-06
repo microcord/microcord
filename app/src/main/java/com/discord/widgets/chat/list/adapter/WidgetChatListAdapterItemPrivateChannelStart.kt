@@ -11,6 +11,7 @@ import com.discord.i18n.i18nPlural
 import com.discord.utilities.icon.IconUtils
 import com.discord.views.PileView
 import com.discord.widgets.chat.list.entries.ChatListEntry
+import com.discord.views.AvatarDecorationView
 import com.discord.widgets.chat.list.entries.StartOfPrivateChatEntry
 import com.facebook.drawee.view.SimpleDraweeView
 
@@ -31,6 +32,8 @@ class WidgetChatListAdapterItemPrivateChannelStart(
     private val channelImage: SimpleDraweeView =
         itemView.findViewById(R.id.private_channel_start_image)
     private val channelText: TextView = itemView.findViewById(R.id.private_channel_start_text)
+    private val channelImageDecoration: AvatarDecorationView =
+        itemView.findViewById(R.id.private_channel_start_image_decoration)
 
     override fun onConfigure(position: Int, data: ChatListEntry) {
         super.onConfigure(position, data)
@@ -45,6 +48,7 @@ class WidgetChatListAdapterItemPrivateChannelStart(
             entry.channelIcon ?: DEFAULT_GROUP_ICON,
             R.dimen.avatar_size_xxlarge,
         )
+        channelImageDecoration.bind(entry.avatarDecoration)
 
         if (entry.isSystemDM) {
             channelText.setText(R.string.system_dm_empty_message)

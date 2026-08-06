@@ -10,8 +10,8 @@ import androidx.core.os.bundleOf
 import androidx.core.widget.ImageViewCompat
 import androidx.fragment.app.FragmentManager
 import com.discord.R
+import com.discord.widgets.settings.premium.PremiumUpsellDialog
 import com.discord.app.AppBottomSheet
-import com.discord.app.AppToast
 import com.discord.app.appViewModels
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
@@ -33,6 +33,8 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
     private lateinit var changeImageTitle: TextView
     private lateinit var removeImage: TextView
     private lateinit var premiumUpsell: MaterialButton
+    private lateinit var profileEffectItem: View
+    private lateinit var profileEffectDescription: TextView
 
     override fun getContentViewResId() = R.layout.widget_edit_profile_banner_sheet
 
@@ -44,6 +46,8 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
         changeImageTitle = view.findViewById(R.id.banner_change_image_item_title)
         removeImage = view.findViewById(R.id.banner_remove_image_item)
         premiumUpsell = view.findViewById(R.id.premium_upsell_button)
+        profileEffectItem = view.findViewById(R.id.banner_profile_effect_item)
+        profileEffectDescription = view.findViewById(R.id.banner_profile_effect_item_description)
 
         val hasBanner = argumentsOrDefault.getBoolean(ARG_HAS_BANNER_IMAGE)
         changeImageTitle.setText(
@@ -54,7 +58,13 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
             sendResult(ACTION_REMOVE_IMAGE)
             dismiss()
         }
-        premiumUpsell.setOnClickListener { AppToast.show(this, R.string.premium_required) }
+        premiumUpsell.setOnClickListener { launchPremium() }
+        profileEffectDescription.text = argumentsOrDefault.getString(ARG_PROFILE_EFFECT_NAME)
+            ?: getString(R.string.avatar_decoration_none)
+        profileEffectItem.setOnClickListener {
+            sendResult(ACTION_PROFILE_EFFECT)
+            dismiss()
+        }
         parentFragmentManager.setFragmentResultListener(
             ProfileColorPickerDialog.REQUEST_KEY,
             viewLifecycleOwner,
@@ -98,12 +108,22 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
         premiumUpsell.visibility = visible(state.showPremiumUpsell)
         changeImageContainer.setOnClickListener {
             if (state.showPremiumUpsell) {
-                AppToast.show(this, R.string.premium_required)
+                launchPremium()
             } else {
                 sendResult(ACTION_CHANGE_IMAGE)
                 dismiss()
             }
         }
+    }
+
+    private fun launchPremium() {
+        val manager = parentFragmentManager
+        dismiss()
+        PremiumUpsellDialog.show(
+            manager,
+            PremiumUpsellDialog.ValueProp.PROFILE_BANNER,
+            PREMIUM_UPSELL_LOCATION,
+        )
     }
 
     private fun launchColorPicker(initialColor: Int) {
@@ -121,9 +141,11 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
     private val isGuildContext get() = argumentsOrDefault.containsKey(EXTRA_GUILD_ID)
 
     companion object {
+        private const val PREMIUM_UPSELL_LOCATION = "Profile Banner Sheet"
         private const val ARG_DEFAULT_BANNER_COLOR_HEX = "ARG_DEFAULT_BANNER_COLOR_HEX"
         private const val ARG_INITIAL_COLOR_PREVIEW_HEX = "ARG_INITIAL_COLOR_PREVIEW_HEX"
         private const val ARG_HAS_BANNER_IMAGE = "ARG_HAS_BANNER_IMAGE"
+        private const val ARG_PROFILE_EFFECT_NAME = "ARG_PROFILE_EFFECT_NAME"
         private const val EXTRA_GUILD_ID = "com.discord.intent.extra.EXTRA_GUILD_ID"
         internal const val REQUEST_KEY = "EDIT_PROFILE_BANNER"
         internal const val RESULT_ACTION = "action"
@@ -132,12 +154,14 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
         internal const val ACTION_CHANGE_IMAGE = "change_image"
         internal const val ACTION_REMOVE_IMAGE = "remove_image"
         internal const val ACTION_COLOR = "color"
+        internal const val ACTION_PROFILE_EFFECT = "profile_effect"
 
         fun show(
             guildId: Long? = null,
             defaultBannerColorHex: String,
             initialColorPreviewHex: String?,
             hasBannerImage: Boolean,
+            profileEffectName: String?,
             fragmentManager: FragmentManager,
         ) {
             WidgetEditProfileBannerSheet().apply {
@@ -145,6 +169,7 @@ class WidgetEditProfileBannerSheet : AppBottomSheet() {
                     putString(ARG_DEFAULT_BANNER_COLOR_HEX, defaultBannerColorHex)
                     putString(ARG_INITIAL_COLOR_PREVIEW_HEX, initialColorPreviewHex)
                     putBoolean(ARG_HAS_BANNER_IMAGE, hasBannerImage)
+                    putString(ARG_PROFILE_EFFECT_NAME, profileEffectName)
                     guildId?.let { putLong(EXTRA_GUILD_ID, it) }
                 }
             }.show(fragmentManager, WidgetEditProfileBannerSheet::class.java.name)

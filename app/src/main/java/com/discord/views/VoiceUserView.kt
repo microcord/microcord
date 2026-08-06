@@ -14,6 +14,7 @@ import androidx.annotation.DimenRes
 import androidx.annotation.MainThread
 import com.discord.R
 import com.discord.databinding.ViewVoiceUserBinding
+import com.discord.api.user.AvatarDecorationData
 import com.discord.stores.StoreVoiceParticipants
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.view.extensions.fadeBy
@@ -36,6 +37,11 @@ class VoiceUserView @JvmOverloads constructor(
     defStyleAttr: Int = 0,
 ) : FrameLayout(context, attrs, defStyleAttr) {
     private val binding = ViewVoiceUserBinding.inflate(LayoutInflater.from(context), this)
+
+    init {
+        clipChildren = false
+    }
+
     private var defaultVoiceStateBackground = android.R.color.transparent
     private var state: VoiceDisplayState? = null
     private var voiceUser: StoreVoiceParticipants.VoiceUser? = null
@@ -129,6 +135,11 @@ class VoiceUserView @JvmOverloads constructor(
     @MainThread
     fun a(voiceUser: StoreVoiceParticipants.VoiceUser, @DimenRes sizeDimenRes: Int) =
         setVoiceUser(voiceUser, sizeDimenRes)
+
+    /** Voice tiles show decorations; the participant sheet rows do not, so this is opt-in. */
+    @MainThread
+    fun setAvatarDecoration(decoration: AvatarDecorationData?) =
+        binding.voiceUserAvatarDecoration.bind(decoration)
 
     @MainThread
     fun setAvatarSize(avatarSize: Int) {

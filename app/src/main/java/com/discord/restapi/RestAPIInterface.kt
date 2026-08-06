@@ -21,8 +21,10 @@ import com.discord.api.auth.mfa.GetBackupCodesSendVerificationKeyRequestBody
 import com.discord.api.auth.mfa.GetBackupCodesSendVerificationKeyResponse
 import com.discord.api.auth.mfa.GetBackupCodesVerificationRequestBody
 import com.discord.api.auth.mfa.SendMfaSmsResponse
+import com.discord.api.billing.BillingCountryCode
 import com.discord.api.bugreport.BugReportConfig
 import com.discord.api.channel.Channel
+import com.discord.api.collectibles.CollectibleProduct
 import com.discord.api.commands.ApplicationCommandData
 import com.discord.api.connectedaccounts.ConnectedAccount
 import com.discord.api.creatormonetization.CreatorMonetizationEligibilityRequirements
@@ -1499,6 +1501,9 @@ interface RestAPIInterface {
 
     // -- Billing --------------------------------------------------------------------------------------------------------------
 
+    @GET("users/@me/billing/country-code")
+    fun getBillingCountryCode(): Observable<BillingCountryCode>
+
     @GET("users/@me/billing/payment-sources")
     fun getPaymentSources(): Observable<List<PaymentSourceRaw>>
 
@@ -1666,6 +1671,9 @@ interface RestAPIInterface {
 
     @GET("stickers/{stickerId}/guild")
     fun getStickerGuild(@Path("stickerId") stickerId: Long): Observable<Guild>
+
+    @GET("users/@me/collectibles-purchases")
+    fun getCollectiblesPurchases(): Observable<List<CollectibleProduct>>
 
     @GET("collectibles-products/{skuId}")
     fun getCollectiblesProduct(

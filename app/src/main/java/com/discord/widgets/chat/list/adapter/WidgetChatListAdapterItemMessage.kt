@@ -77,6 +77,8 @@ class WidgetChatListAdapterItemMessage(
         itemView.findViewById(R.id.chat_list_adapter_item_text)
     private val itemAvatar: ImageView? =
         itemView.findViewById(R.id.chat_list_adapter_item_text_avatar)
+    private val itemAvatarDecoration: AvatarDecorationView? =
+        itemView.findViewById(R.id.chat_list_adapter_item_text_avatar_decoration)
     private val itemName: TextView? = itemView.findViewById(R.id.chat_list_adapter_item_text_name)
     private val itemRoleIcon: RoleIconView? =
         itemView.findViewById(R.id.chat_list_adapter_item_text_role_icon)
@@ -229,6 +231,7 @@ class WidgetChatListAdapterItemMessage(
 
     private fun configureAvatar(entry: MessageEntry, message: Message) {
         val itemAvatar = itemAvatar ?: return
+        itemAvatarDecoration?.bind(entry.author?.avatarDecoration ?: message.author?.avatarDecorationData?.value)
         itemAvatar.setOnClickListener {
             adapter.eventHandler.onMessageAuthorAvatarClicked(message, adapter.data.guildId)
         }

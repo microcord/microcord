@@ -19,3 +19,9 @@ fun PremiumTier.grantsAccessToCustomTagAndAnimatedAvatarFeatures(): Boolean =
 /** Premium sticker packs: Nitro and Nitro Basic — Nitro Classic is excluded. */
 fun PremiumTier.grantsAccessToPremiumStickers(): Boolean =
     this == PremiumTier.TIER_2 || this == PremiumTier.TIER_0
+
+/** Nitro-exclusive shop collectibles: Nitro only. Owning one is not enough to equip it. */
+fun PremiumTier.grantsAccessToCollectibles(): Boolean = this == PremiumTier.TIER_2
+
+/** Profile theme colours and the other paid customisations: Nitro only, on every profile scope. */
+fun PremiumTier.grantsAccessToProfileCustomization(): Boolean = this == PremiumTier.TIER_2

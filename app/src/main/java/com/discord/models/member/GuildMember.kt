@@ -4,6 +4,7 @@ import android.graphics.Color
 import androidx.annotation.ColorInt
 import com.discord.api.guildmember.GuildMember as ApiGuildMember
 import com.discord.api.role.GuildRole
+import com.discord.api.user.AvatarDecorationData
 import com.discord.api.user.Collectibles
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.user.User
@@ -24,6 +25,7 @@ data class GuildMember(
     val bio: String? = null,
     val communicationDisabledUntil: UtcDateTime? = null,
     val collectibles: Collectibles? = null,
+    val avatarDecoration: AvatarDecorationData? = null,
 ) {
     constructor() : this(0, 0, null, null, null, false, null, 0, 0)
 
@@ -63,6 +65,7 @@ data class GuildMember(
                 bio = apiGuildMember.bio,
                 communicationDisabledUntil = apiGuildMember.communicationDisabledUntil,
                 collectibles = apiGuildMember.collectibles,
+                avatarDecoration = apiGuildMember.avatarDecorationData,
             )
         }
 

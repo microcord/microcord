@@ -15,6 +15,7 @@ import com.discord.utilities.mfa.MfaSolver
 import com.discord.utilities.lifecycle.ActivityProvider
 import com.discord.utilities.lifecycle.ApplicationProvider
 import com.discord.utilities.lifecycle.Backgrounded
+import com.discord.utilities.images.CollectibleAssets
 import com.discord.utilities.images.MGImagesConfig
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
@@ -46,6 +47,7 @@ class App : Application() {
         Backgrounded.init(this)
         PersisterConfig.init(this, ClockFactory.get())
         MGImagesConfig.init(this)
+        CollectibleAssets.init(this)
         // The reference's UriHandler enqueues the masked-link notice itself; ours has no dependency
         // on the widget tree, so the confirmation dialog installs itself here instead. Without this
         // an untrusted masked link is dropped with no user-visible confirmation.

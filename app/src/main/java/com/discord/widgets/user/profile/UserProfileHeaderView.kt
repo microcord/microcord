@@ -9,7 +9,6 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.cardview.widget.CardView
@@ -30,16 +29,13 @@ import com.discord.views.UsernameView
 import com.discord.views.user.UserAvatarPresenceView
 import com.discord.widgets.channels.UserAkaView
 import com.discord.widgets.user.Badge
-import com.facebook.drawee.controller.BaseControllerListener
 import com.facebook.drawee.view.SimpleDraweeView
-import com.facebook.imagepipeline.image.ImageInfo
 
 class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayout(context, attrs) {
     private val banner: SimpleDraweeView
     private val bannerEdit: CardView
     private val gifTag: ImageView
     private val avatar: UserAvatarPresenceView
-    private val avatarDecoration: SimpleDraweeView
     private val avatarEdit: CardView
     private val aka: UserAkaView
     private val badges: LinearLayout
@@ -59,15 +55,6 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         bannerEdit = requireNotNull(findViewById(R.id.banner_edit))
         gifTag = requireNotNull(findViewById(R.id.gif_tag))
         avatar = requireNotNull(findViewById(R.id.large_avatar))
-        avatarDecoration = SimpleDraweeView(context).apply {
-            visibility = View.INVISIBLE
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            scaleType = ImageView.ScaleType.FIT_CENTER
-        }
-        requireNotNull<FrameLayout>(avatar.findViewById(R.id.avatar_container)).addView(
-            avatarDecoration,
-            FrameLayout.LayoutParams(dp(DECORATION_SIZE_DP), dp(DECORATION_SIZE_DP), Gravity.CENTER),
-        )
         avatarEdit = requireNotNull(findViewById(R.id.avatar_edit))
         aka = requireNotNull(findViewById(R.id.user_aka))
         badges = requireNotNull(findViewById(R.id.user_profile_header_badges))
@@ -101,7 +88,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         avatarEdit.setOnClickListener { if (state.editable) onAvatarEdit() }
         configureBanner(state)
         avatar.configure(UserAvatarPresenceView.ViewState(state.user, state.presence, state.showPresence, state.guildMember))
-        configureAvatarDecoration(state)
+        avatar.setAvatarDecoration(state.avatarDecoration, animate = state.shouldAnimateBanner)
         configureNames(state.user, state.guildMember, state)
         aka.visibility = if (state.showAkas) View.VISIBLE else View.GONE
         aka.configure(state.guildMembersForAka)
@@ -132,33 +119,6 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
             secondaryName.setTextColor(ColorCompat.getThemedColor(context, R.attr.primary_400))
             customStatus.setTextColor(ColorCompat.getThemedColor(context, R.attr.colorHeaderSecondary))
         }
-    }
-
-    private fun configureAvatarDecoration(state: UserProfileHeaderViewModel.ViewState.Loaded) {
-        val url = state.avatarDecorationUrl
-        if (url == null) {
-            avatarDecoration.visibility = View.INVISIBLE
-            MGImages.setImage(avatarDecoration, emptyList())
-            return
-        }
-        avatarDecoration.visibility = View.INVISIBLE
-        MGImages.setImage(
-            avatarDecoration,
-            listOf(url),
-            width = DECORATION_ASSET_SIZE_PX,
-            height = DECORATION_ASSET_SIZE_PX,
-            useSmallCache = true,
-            controllerListener = object : BaseControllerListener<ImageInfo>() {
-                override fun onFinalImageSet(id: String?, imageInfo: ImageInfo?, animatable: android.graphics.drawable.Animatable?) {
-                    avatarDecoration.visibility = if (imageInfo == null) View.INVISIBLE else View.VISIBLE
-                }
-
-                override fun onFailure(id: String?, throwable: Throwable?) {
-                    avatarDecoration.visibility = View.INVISIBLE
-                }
-            },
-            autoPlayAnimations = state.shouldAnimateBanner,
-        )
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
@@ -204,9 +164,16 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         val primary = if (displayName == user.username) accountName else displayName
         primaryName.configureUsername(primary)
         primaryName.configureTag(user.isBot, if (user.isSystemUser) R.string.system_dm_tag_system else R.string.bot_tag_bot, false)
-        val secondary = accountName.takeUnless { it.toString() == primary.toString() }
+        // Reference: the username and pronouns share one line, joined by a divider dot.
+        // The aka row already names the account, so only the pronouns survive alongside it.
+        val accountLine = accountName
+            .takeUnless { it.toString() == primary.toString() }
+            ?.takeUnless { state.showAkas }
+        val secondary = listOfNotNull(accountLine, state.pronouns)
+            .takeIf(List<CharSequence>::isNotEmpty)
+            ?.joinToString(DIVIDER_DOT)
         secondaryName.text = secondary
-        secondaryName.visibility = if (secondary != null && !state.showAkas) View.VISIBLE else View.GONE
+        secondaryName.visibility = if (secondary != null) View.VISIBLE else View.GONE
     }
 
     /**
@@ -282,14 +249,13 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         }
 
     companion object {
-        internal const val DECORATION_SIZE_DP = 96
+        private const val DIVIDER_DOT = " ∙ "
         private const val BADGE_SIZE_DP = 20
         private const val BADGE_GAP_DP = 4
         private const val BADGE_ROW_GAP_DP = 8
         private const val BADGE_ROW_RADIUS_DP = 8
         private const val BADGE_ROW_PADDING_H_DP = 7
         private const val BADGE_ROW_PADDING_V_DP = 2
-        private const val DECORATION_ASSET_SIZE_PX = 256
         private const val BANNER_ASPECT_RATIO = 300f / 105f
     }
 

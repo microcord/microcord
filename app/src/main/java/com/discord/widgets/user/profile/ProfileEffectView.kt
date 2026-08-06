@@ -1,6 +1,7 @@
 package com.discord.widgets.user.profile
 
 import android.content.Context
+import android.graphics.Matrix
 import android.graphics.Outline
 import android.os.Handler
 import android.os.Looper
@@ -11,6 +12,7 @@ import android.view.ViewOutlineProvider
 import android.widget.FrameLayout
 import android.widget.ImageView
 import com.discord.api.user.UserProfile
+import com.discord.utilities.images.CollectibleAssets
 import com.discord.utilities.images.MGImages
 import com.facebook.drawee.view.SimpleDraweeView
 import com.linecorp.apng.ApngDrawable
@@ -25,7 +27,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Call
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import kotlin.random.Random
 
@@ -38,6 +39,7 @@ class ProfileEffectView @JvmOverloads constructor(
     private val calls = CopyOnWriteArrayList<Call>()
     private val drawables = mutableListOf<ApngDrawable>()
     private var generation = 0
+    private val layerPositions = mutableListOf<Pair<ImageView, UserProfile.ProfileEffectLayer>>()
     private var boundEffect: UserProfile.ProfileEffect? = null
     private var boundReducedMotion: Boolean? = null
 
@@ -92,17 +94,13 @@ class ProfileEffectView @JvmOverloads constructor(
         layers.sortedBy { it.first.zIndex }.forEach { (layer, drawable) ->
             drawables += drawable
             val image = ImageView(context).apply {
-                scaleType = ImageView.ScaleType.FIT_START
+                scaleType = ImageView.ScaleType.MATRIX
                 visibility = INVISIBLE
                 setImageDrawable(drawable)
-                val scale = this@ProfileEffectView.width.takeIf { it > 0 }
-                    ?.toFloat()
-                    ?.div(DESKTOP_PROFILE_WIDTH)
-                    ?: 1f
-                translationX = (layer.position?.x ?: 0) * scale
-                translationY = (layer.position?.y ?: 0) * scale
             }
             addView(image, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+            layerPositions += image to layer
+            positionLayer(image, layer)
             scheduleLayer(image, drawable, layer, introDelay)
         }
     }
@@ -125,6 +123,7 @@ class ProfileEffectView @JvmOverloads constructor(
             it.recycle()
         }
         drawables.clear()
+        layerPositions.clear()
         removeAllViews()
         visibility = GONE
     }
@@ -142,7 +141,7 @@ class ProfileEffectView @JvmOverloads constructor(
                 var drawable: ApngDrawable? = null
                 try {
                     val bytes = withContext(Dispatchers.IO) {
-                        val call = client.newCall(Request.Builder().url(layer.src).build()).also(calls::add)
+                        val call = CollectibleAssets.client.newCall(Request.Builder().url(layer.src).build()).also(calls::add)
                         try {
                             call.execute().use { response ->
                                 check(response.isSuccessful)
@@ -175,6 +174,27 @@ class ProfileEffectView @JvmOverloads constructor(
                 }
             }
         }
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        // Layer offsets are in the desktop profile's coordinate space, so they can only be scaled
+        // once this view has a width; binding happens before the first layout pass.
+        layerPositions.forEach { (image, layer) -> positionLayer(image, layer) }
+    }
+
+    /**
+     * Each layer is authored at its own size and offset in the desktop profile's 304pt-wide space,
+     * so it is drawn through a matrix rather than stretched to the view: fitting every layer to the
+     * full bounds would scale them all to the same rectangle and lose the composition.
+     */
+    private fun positionLayer(image: ImageView, layer: UserProfile.ProfileEffectLayer) {
+        val scale = width.takeIf { it > 0 }?.toFloat()?.div(DESKTOP_PROFILE_WIDTH) ?: return
+        image.imageMatrix = Matrix().apply {
+            setScale(scale, scale)
+            postTranslate((layer.position?.x ?: 0) * scale, (layer.position?.y ?: 0) * scale)
+        }
+        image.invalidate()
     }
 
     private fun showStill(url: String) {
@@ -233,7 +253,6 @@ class ProfileEffectView @JvmOverloads constructor(
         const val INTRO_DELAY_MS = 500L
         const val DESKTOP_PROFILE_WIDTH = 304f
         const val CORNER_RADIUS_DP = 8
-        val client = OkHttpClient()
     }
 
 }

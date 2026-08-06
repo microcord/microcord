@@ -11,6 +11,7 @@ import com.discord.models.user.CoreUser
 import com.discord.models.user.MeUser
 import com.discord.nullserializable.NullSerializable
 import com.google.gson.FieldNamingPolicy
+import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.google.gson.GsonBuilder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -23,6 +24,7 @@ class UserProfileContractsTest {
     fun parsesModernProfileThemeMetadata() {
         val profile = GsonBuilder()
             .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .registerDiscordApiTypeAdapters()
             .create()
             .fromJson(
                 """{
@@ -51,15 +53,16 @@ class UserProfileContractsTest {
         assertEquals(1090395834966880336L, profile.guildMemberProfile?.emoji?.id)
         assertEquals(33L, profile.guildMemberProfile?.profileEffect?.skuId)
         assertEquals(1740124800L, profile.guildMemberProfile?.profileEffect?.expiresAt)
-        assertEquals("a_global", profile.user.avatarDecorationData?.asset)
+        assertEquals("a_global", profile.user.avatarDecorationData?.value?.asset)
         assertEquals("a_guild", profile.guildMember?.avatarDecorationData?.asset)
+        // The fixture's decoration expired in 2025, so it resolves to nothing to render.
         assertEquals(
-            "https://cdn.discordapp.com/avatar-decoration-presets/a_guild.png?size=256&passthrough=true",
-            profile.guildMember?.avatarDecorationData?.cdnUrl(),
+            emptyList<String>(),
+            profile.guildMember?.avatarDecorationData?.imageUrls(animate = true),
         )
         assertEquals(
-            "https://cdn.discordapp.com/avatar-decoration-presets/a_guild.png?size=256&passthrough=true",
-            loaded(null, false).copy(userProfile = profile).avatarDecorationUrl,
+            emptyList<String>(),
+            loaded(null, false).copy(userProfile = profile).avatarDecoration?.imageUrls(animate = true).orEmpty(),
         )
     }
 
@@ -353,21 +356,28 @@ class UserProfileContractsTest {
             user = com.discord.api.user.User(
                 2,
                 "target",
-                avatarDecorationData = com.discord.api.user.AvatarDecorationData("a_frame", 3),
+                avatarDecorationData = com.discord.nullserializable.NullSerializable.Value(
+                    com.discord.api.user.AvatarDecorationData("a_frame", 3),
+                ),
             ),
         )
         val animated = loaded(null, false).copy(userProfile = profile)
         val reduced = animated.copy(reducedMotionEnabled = true)
 
         assertEquals(
-            "https://cdn.discordapp.com/avatar-decoration-presets/a_frame.png?size=256&passthrough=true",
-            animated.avatarDecorationUrl,
+            listOf(
+                "https://cdn.discordapp.com/media/v1/collectibles-shop/3/animated",
+                "https://cdn.discordapp.com/avatar-decoration-presets/a_frame.png?size=256&passthrough=true",
+            ),
+            animated.avatarDecoration?.imageUrls(animated.shouldAnimateBanner),
         )
         assertEquals(
-            "https://cdn.discordapp.com/avatar-decoration-presets/a_frame.png?size=256&passthrough=false",
-            reduced.avatarDecorationUrl,
+            listOf(
+                "https://cdn.discordapp.com/media/v1/collectibles-shop/3/static",
+                "https://cdn.discordapp.com/avatar-decoration-presets/a_frame.png?size=256&passthrough=false",
+            ),
+            reduced.avatarDecoration?.imageUrls(reduced.shouldAnimateBanner),
         )
-        assertEquals(96, UserProfileHeaderView.DECORATION_SIZE_DP)
     }
 
     private fun loaded(

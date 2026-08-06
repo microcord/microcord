@@ -1,6 +1,7 @@
 package com.discord.widgets.chat.list.model
 
 import com.discord.api.channel.Channel
+import com.discord.api.channel.getDMRecipient
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isGuildForumPost
 import com.discord.api.channel.isPrivate
@@ -282,6 +283,7 @@ object ChatListRows {
                 channelType = channel.type,
                 channelIcon = IconUtils.getForChannel(channel),
                 isSystemDM = channel.isSystemDM(),
+                avatarDecoration = channel.getDMRecipient()?.avatarDecoration,
                 // Mutual guilds come from `StoreUserMutualGuilds`, which does not exist yet.
                 mutualGuilds = emptyList(),
             )
