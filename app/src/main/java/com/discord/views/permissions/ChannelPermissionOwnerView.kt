@@ -20,6 +20,7 @@ import com.facebook.imagepipeline.request.ImageRequestBuilder
 import java.util.Locale
 import com.discord.utilities.user.UserUtils
 import com.discord.utilities.user.UserUtils.getDisplayName
+import com.discord.utilities.icon.IconUtils
 
 class ChannelPermissionOwnerView(context: Context, attrs: AttributeSet) :
     ConstraintLayout(context, attrs) {
@@ -62,7 +63,7 @@ class ChannelPermissionOwnerView(context: Context, attrs: AttributeSet) :
         val url = user.avatar?.let {
             val extension = if (it.startsWith("a_")) "gif" else "webp"
             "https://cdn.discordapp.com/avatars/${user.id}/$it.$extension?size=32"
-        } ?: "asset://asset/images/default_avatar_${user.discriminator % 5}.png"
+        } ?: IconUtils.getDefaultAvatar(IconUtils.getDefaultAvatarIndex(user.id, user.discriminator, user.isWebhook))
         image.hierarchy.setPlaceholderImage(ColorDrawable(0))
         image.controller = Fresco.newDraweeControllerBuilder()
             .setOldController(image.controller)

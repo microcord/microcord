@@ -44,8 +44,17 @@ object IconUtils  {
 
     private const val IMAGE_SIZE_ASSET_DEFAULT_PX = 160
 
-    /** Number of default avatar variants keyed off the user discriminator. */
-    private const val DEFAULT_AVATAR_COUNT = 5
+    /** Default avatar variants for an account that still has a discriminator. */
+    private const val LEGACY_DEFAULT_AVATAR_COUNT = 5
+
+    /** Default avatar variants for an account migrated to a unique username. */
+    private const val DEFAULT_AVATAR_COUNT = 6
+
+    /** Reference bit-shifts the id before bucketing so ids minted together do not collide. */
+    private const val DEFAULT_AVATAR_ID_SHIFT = 22
+
+    /** Webhook authors report this discriminator; the reference pins them to the first variant. */
+    const val WEBHOOK_DISCRIMINATOR = "0000"
 
     private val GROUP_DM_DEFAULT_ICONS: List<String> =
         (0..7).map { "asset://asset/images/group_dm_icon_$it.png" }
@@ -122,9 +131,7 @@ object IconUtils  {
     /**
      * Avatar URL for a raw user tuple.
      *
-     * - A [userId] of `-1` is the "synthetic user" marker: [userAvatar] is already a full URL.
-     * - Without an avatar hash the discriminator selects one of the bundled default avatars; a
-     *   missing id or discriminator falls back to variant `0`.
+     * A [userId] of `-1` is the "synthetic user" marker: [userAvatar] is already a full URL.
      */
     @JvmStatic
     fun getForUser(
@@ -133,26 +140,37 @@ object IconUtils  {
         discriminator: Int? = null,
         allowAnimation: Boolean = false,
         size: Int? = null,
+        isWebhook: Boolean = false,
     ): String? {
-        var defaultAvatarIndex = 0
-        if (userId != null) {
-            if (userId == -1L) return userAvatar
-            if (userAvatar != null) {
-                val extension = getImageExtension(userAvatar, allowAnimation)
-                return withSize("$CDN_HOST/avatars/$userId/$userAvatar.$extension", size)
-            }
-            if (discriminator != null) {
-                defaultAvatarIndex = discriminator % DEFAULT_AVATAR_COUNT
-            }
+        if (userId == -1L) return userAvatar
+        if (userId != null && userAvatar != null) {
+            val extension = getImageExtension(userAvatar, allowAnimation)
+            return withSize("$CDN_HOST/avatars/$userId/$userAvatar.$extension", size)
         }
-        return getDefaultAvatar(defaultAvatarIndex)
+        return getDefaultAvatar(getDefaultAvatarIndex(userId, discriminator, isWebhook))
     }
 
     @JvmStatic
     fun getForUser(user: User?, allowAnimation: Boolean = false, size: Int? = null): String? =
-        getForUser(user?.id, user?.avatar, user?.discriminator, allowAnimation, size)
+        getForUser(user?.id, user?.avatar, user?.discriminator, allowAnimation, size, user?.isWebhook == true)
 
-    /** Bundled asset avatar for the given discriminator bucket (`0` until `4`). */
+    /**
+     * Reference `getDefaultAvatarURL`.
+     *
+     * An account migrated to a unique username reports discriminator `0`, and is bucketed by id
+     * across [DEFAULT_AVATAR_COUNT] variants; one that still has a discriminator keeps the older
+     * [LEGACY_DEFAULT_AVATAR_COUNT] buckets. Both paths are live — the discriminator is what
+     * chooses between them.
+     */
+    @JvmStatic
+    fun getDefaultAvatarIndex(userId: Long?, discriminator: Int?, isWebhook: Boolean = false): Int = when {
+        isWebhook -> 0
+        discriminator != null && discriminator > 0 -> discriminator % LEGACY_DEFAULT_AVATAR_COUNT
+        userId != null -> ((userId ushr DEFAULT_AVATAR_ID_SHIFT) % DEFAULT_AVATAR_COUNT).toInt()
+        else -> 0
+    }
+
+    /** Bundled asset avatar for the given bucket (`0` until `5`). */
     fun getDefaultAvatar(index: Int): String = "asset://asset/images/default_avatar_$index.png"
 
     fun getForUserBanner(

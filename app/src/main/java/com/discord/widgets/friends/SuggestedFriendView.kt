@@ -41,7 +41,7 @@ class SuggestedFriendView @JvmOverloads constructor(
                 val base = "https://cdn.discordapp.com/avatars/$userId/$avatarHash.$extension"
                 if (avatar.height > 0) "$base?size=${IconUtils.getMediaProxySize(avatar.height)}" else base
             }
-            else -> "asset://asset/images/default_avatar_${discriminator?.rem(5) ?: 0}.png"
+            else -> IconUtils.getDefaultAvatar(IconUtils.getDefaultAvatarIndex(userId, discriminator))
         }
         avatar.controller = if (url == null) {
             null

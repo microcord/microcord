@@ -147,8 +147,13 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
                 "https://cdn.discordapp.com/channel-icons/${channel.id}/$hash.webp"
             hash != null && recipient != null ->
                 "https://cdn.discordapp.com/avatars/${recipient.id}/$hash.webp"
-            recipient != null ->
-                "asset://asset/images/default_avatar_${recipient.discriminator.toIntOrNull()?.rem(5) ?: 0}.png"
+            recipient != null -> IconUtils.getDefaultAvatar(
+                IconUtils.getDefaultAvatarIndex(
+                    recipient.id,
+                    recipient.discriminator.toIntOrNull(),
+                    recipient.discriminator == IconUtils.WEBHOOK_DISCRIMINATOR,
+                ),
+            )
             else -> "asset://asset/images/default_icon.jpg"
         }
         icon.setImageURI(Uri.parse(uri))
@@ -194,7 +199,7 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
         private fun userAvatar(user: User): String = user.avatar?.let {
             val extension = if (it.startsWith("a_")) "gif" else "webp"
             "https://cdn.discordapp.com/avatars/${user.id}/$it.$extension"
-        } ?: "asset://asset/images/default_avatar_${user.discriminator.rem(5)}.png"
+        } ?: IconUtils.getDefaultAvatar(IconUtils.getDefaultAvatarIndex(user.id, user.discriminator, user.isWebhook))
     }
 }
 

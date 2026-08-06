@@ -1,8 +1,10 @@
 package com.discord.models.user
 
 import com.discord.api.premium.PremiumTier
+import com.discord.api.user.AvatarDecorationData
 import com.discord.api.user.Collectibles
 import com.discord.nullserializable.NullSerializable
+import com.discord.utilities.icon.IconUtils
 
 data class CoreUser(
     override val id: Long,
@@ -19,6 +21,8 @@ data class CoreUser(
     override val bannerColor: String? = null,
     override val globalName: String? = null,
     override val collectibles: Collectibles? = null,
+    override val avatarDecoration: AvatarDecorationData? = null,
+    override val isWebhook: Boolean = false,
 ) : User {
     constructor(user: com.discord.api.user.User) : this(
         user.id,
@@ -34,7 +38,9 @@ data class CoreUser(
         user.bio?.value,
         user.bannerColor?.value,
         user.globalName,
-        user.collectibles,
+        user.collectibles?.value,
+        user.avatarDecorationData?.value,
+        user.bot == true && user.discriminator == IconUtils.WEBHOOK_DISCRIMINATOR,
     )
 
     companion object {
@@ -52,7 +58,9 @@ data class CoreUser(
             bio = mergeNullSerializable(oldUser.bio, newUser.bio),
             bannerColor = mergeNullSerializable(oldUser.bannerColor, newUser.bannerColor),
             globalName = newUser.globalName,
-            collectibles = newUser.collectibles ?: oldUser.collectibles,
+            collectibles = mergeNullSerializable(oldUser.collectibles, newUser.collectibles),
+            avatarDecoration = mergeNullSerializable(oldUser.avatarDecoration, newUser.avatarDecorationData),
+            isWebhook = newUser.bot == true && newUser.discriminator == IconUtils.WEBHOOK_DISCRIMINATOR,
         )
 
         private fun <T> mergeNullSerializable(old: T?, new: NullSerializable<T>?): T? = when (new) {

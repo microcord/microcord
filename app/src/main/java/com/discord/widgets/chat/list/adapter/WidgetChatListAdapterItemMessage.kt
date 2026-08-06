@@ -234,12 +234,17 @@ class WidgetChatListAdapterItemMessage(
             adapter.eventHandler.onMessageAuthorLongClicked(message, adapter.data.guildId)
         }
 
-        // A message posted by an application through the interactions API has no bot account, so
-        // its "avatar" is the application's icon rather than a user avatar.
-        val avatarHash = message.author?.avatar?.value
-        val applicationId = message.applicationId
-        if (applicationId != null && message.author?.bot != true && avatarHash != null) {
-            IconUtils.setIcon(itemAvatar, IconUtils.getApplicationIcon(applicationId, avatarHash))
+        // Reference `createMessageContent`: only a local interaction placeholder falls back to the
+        // application's icon, and only when neither the author nor the member has an avatar. The
+        // hash is the application's own — an ordinary message merely carrying `application_id`
+        // still renders its author.
+        val application = message.application
+        if (message.isLocalApplicationCommand() &&
+            message.author?.avatar?.value == null &&
+            entry.author?.avatarHash == null &&
+            application?.icon != null
+        ) {
+            IconUtils.setIcon(itemAvatar, IconUtils.getApplicationIcon(application.id, application.icon))
             return
         }
 

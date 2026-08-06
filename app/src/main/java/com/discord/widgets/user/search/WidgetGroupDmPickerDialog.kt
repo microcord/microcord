@@ -28,6 +28,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import rx.Observable
 import rx.Subscription
 import java.util.Locale
+import com.discord.utilities.icon.IconUtils
 
 /**
  * Picks the friends for a new group DM.
@@ -251,7 +252,7 @@ private fun Presence.activityText() =
 private fun userAvatar(user: User): String = user.avatar?.let {
     val extension = if (it.startsWith("a_")) "gif" else "webp"
     "https://cdn.discordapp.com/avatars/${user.id}/$it.$extension?size=64"
-} ?: "asset://asset/images/default_avatar_${user.discriminator.rem(5)}.png"
+} ?: IconUtils.getDefaultAvatar(IconUtils.getDefaultAvatarIndex(user.id, user.discriminator, user.isWebhook))
 
 private fun View.findToolbar(): Toolbar? {
     if (this is Toolbar) return this

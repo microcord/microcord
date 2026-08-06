@@ -39,7 +39,9 @@ class ApplicationCategoryViewHolder(
             val icon = when {
                 application.hasBotAvatar() -> IconUtils.getForUser(bot?.let(::CoreUser))
                 !application.icon.isNullOrBlank() -> IconUtils.getApplicationIcon(application.id, application.icon)
-                else -> "asset://asset/images/default_avatar_${bot?.discriminator?.toIntOrNull()?.rem(5) ?: 0}.png"
+                else -> IconUtils.getDefaultAvatar(
+                    IconUtils.getDefaultAvatarIndex(bot?.id, bot?.discriminator?.toIntOrNull()),
+                )
             }
             MGImages.setImage(binding.commandCategoryItemIcon, icon)
         }

@@ -44,7 +44,9 @@ class SelectedAppCommandTitleAdapterItem(
                 bot.discriminator.toIntOrNull(),
             )
             applicationIcon != null -> IconUtils.getApplicationIcon(application.id, applicationIcon)
-            else -> IconUtils.getDefaultAvatar((bot?.discriminator?.toIntOrNull() ?: 0) % 5)
+            else -> IconUtils.getDefaultAvatar(
+                IconUtils.getDefaultAvatarIndex(bot?.id, bot?.discriminator?.toIntOrNull()),
+            )
         }
         MGImages.setImage(avatar, url)
     }
