@@ -14,6 +14,7 @@ import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.api.guild.GuildFeature
 import com.discord.app.AppBottomSheet
+import com.discord.widgets.settings.premium.WidgetSettingsPremium
 import com.discord.app.AppViewFlipper
 import com.discord.app.appViewModels
 import com.discord.i18n.i18nFormat
@@ -182,11 +183,9 @@ class WidgetEmojiSheet : AppBottomSheet() {
                 premiumBtn.visibility = View.VISIBLE
                 joinBtn.visibility = View.GONE
                 premiumBtn.setOnClickListener {
+                    val context = requireContext()
                     dismiss()
-                    // Reference: WidgetSettingsPremium.launch(context, "Emoji Upsell Popout").
-                    // That screen is not reconstructed; the sheet closes rather than leading
-                    // nowhere. Reported in the handoff.
-                    onPremiumUpsell(PREMIUM_UPSELL_LOCATION)
+                    WidgetSettingsPremium.launch(context, locationSection = PREMIUM_UPSELL_LOCATION)
                 }
             }
 
@@ -284,13 +283,6 @@ class WidgetEmojiSheet : AppBottomSheet() {
         private const val RESIZE_TRANSITION_MS = 150L
         private const val FAVORITE_FADE_MS = 200L
         private const val PREMIUM_UPSELL_LOCATION = "Emoji Upsell Popout"
-
-        /**
-         * Reference: `WidgetSettingsPremium.launch(context, location)`. That screen does not exist
-         * in this project, so the Nitro button closes the sheet and reports here.
-         */
-        @JvmStatic
-        var onPremiumUpsell: (location: String) -> Unit = { }
 
         /**
          * Queues the popout instead of showing it now, for callers that are mid-transition.

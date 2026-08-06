@@ -4,6 +4,7 @@ import android.view.View
 import android.widget.TextView
 import androidx.fragment.app.FragmentManager
 import com.discord.R
+import com.discord.widgets.settings.premium.WidgetSettingsPremium
 import com.discord.app.AppDialog
 import com.discord.i18n.setI18nText
 import com.google.android.material.button.MaterialButton
@@ -20,9 +21,11 @@ class UnsendableStickerPremiumUpsellDialog : AppDialog(R.layout.sticker_premium_
             .setI18nText(R.string.premium_upsell_global_stickers_description_mobile)
         view.findViewById<TextView>(R.id.sticker_premium_upsell_close_button)
             .setOnClickListener { dismiss() }
-        // Same dead end as StickerPremiumUpsellDialog's Subscribe: WidgetSettingsPremium is absent.
         view.findViewById<MaterialButton>(R.id.sticker_premium_upsell_subscribe_button)
-            .setOnClickListener { dismiss() }
+            .setOnClickListener {
+                WidgetSettingsPremium.launch(requireContext())
+                dismiss()
+            }
     }
 
     companion object {

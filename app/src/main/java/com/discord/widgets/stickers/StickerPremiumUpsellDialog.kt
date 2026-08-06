@@ -6,6 +6,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.fragment.app.FragmentManager
 import com.discord.R
+import com.discord.widgets.settings.premium.WidgetSettingsPremium
 import com.discord.app.AppDialog
 import com.discord.i18n.i18nPlural
 import com.discord.i18n.setI18nText
@@ -51,10 +52,10 @@ class StickerPremiumUpsellDialog : AppDialog(R.layout.premium_sticker_upsell_dia
 
         view.findViewById<ImageView>(R.id.premium_upsell_close).setOnClickListener { dismiss() }
         view.findViewById<TextView>(R.id.close_button).setOnClickListener { dismiss() }
-        // The reference's Subscribe button opens WidgetSettingsPremium at tier 2. That screen has
-        // not been reconstructed, so this is the one dead end in the sticker flow — reported to the
-        // settings wave. It dismisses rather than doing nothing at all.
-        view.findViewById<MaterialButton>(R.id.subscribe_button).setOnClickListener { dismiss() }
+        view.findViewById<MaterialButton>(R.id.subscribe_button).setOnClickListener {
+            WidgetSettingsPremium.launch(requireContext())
+            dismiss()
+        }
     }
 
     companion object {
