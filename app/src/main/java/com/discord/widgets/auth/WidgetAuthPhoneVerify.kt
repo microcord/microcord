@@ -20,7 +20,8 @@ class WidgetAuthPhoneVerify : AuthFragment(R.layout.widget_auth_phone_verify, Au
             model.state.phone?.let { submit(AuthAction.ResendPhoneCode(it)) }
         }
         view.findViewById<TextView>(R.id.auth_phone_bailout).apply {
-            visibility = if (model.state.email != null) View.VISIBLE else View.GONE
+            // Only registration can switch identity; a login or reset is already tied to an account.
+            visibility = if (model.state.phonePurpose == AuthPhonePurpose.REGISTRATION) View.VISIBLE else View.GONE
             setOnClickListener {
                 actions.navigate(
                     AuthRoute.REGISTER_IDENTITY,

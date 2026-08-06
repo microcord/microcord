@@ -141,7 +141,6 @@ class WidgetVoiceBottomSheetViewModel(
             val rtcConnectionId: String?,
             val mediaSessionId: String?,
             val callDurationMs: Long,
-            val callFeedbackTriggerRateDenominator: Int,
         ) : Event()
     }
 
@@ -387,8 +386,6 @@ class WidgetVoiceBottomSheetViewModel(
                     rtcConnectionId = metadata?.rtcConnectionId,
                     mediaSessionId = metadata?.mediaSessionId,
                     callDurationMs = valid.callModel.getCallDurationMs(clock),
-                    callFeedbackTriggerRateDenominator =
-                        valid.callModel.callFeedbackTriggerRateDenominator,
                 ),
             )
         }

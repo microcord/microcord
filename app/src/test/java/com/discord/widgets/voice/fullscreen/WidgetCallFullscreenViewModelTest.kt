@@ -70,8 +70,8 @@ class WidgetCallFullscreenViewModelTest {
             WidgetCallFullscreenViewModel.MenuItem.values().map { it.name },
         )
         assertEquals(
-            WidgetCallFullscreenViewModel.Event.EnqueueCallFeedbackSheet(1L, "rtc", "media", 2L, 3),
-            WidgetCallFullscreenViewModel.Event.EnqueueCallFeedbackSheet(1L, "rtc", "media", 2L, 3),
+            WidgetCallFullscreenViewModel.Event.EnqueueCallFeedbackSheet(1L, "rtc", "media", 2L),
+            WidgetCallFullscreenViewModel.Event.EnqueueCallFeedbackSheet(1L, "rtc", "media", 2L),
         )
     }
 
@@ -127,8 +127,6 @@ class WidgetCallFullscreenViewModelTest {
             inputMode = MediaEngineConnection.InputMode.VOICE_ACTIVITY,
         ),
         rtcConnectionMetadata = null,
-        callFeedbackTriggerRateDenominator = 0,
-        streamFeedbackTriggerRateDenominator = 0,
         activeStream = null,
         voiceChannelJoinability = VoiceChannelJoinability.CAN_JOIN,
         guildMaxVideoChannelMembers = GuildMaxVideoChannelUsers.Unlimited,

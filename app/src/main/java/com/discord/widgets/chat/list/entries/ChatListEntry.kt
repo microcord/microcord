@@ -392,7 +392,7 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             val mapped = ComponentStateMapper.processComponentsToMessageComponents(
                 components,
                 componentStoreState,
-                BotComponentExperiments.getOrDefault(),
+                BotComponentExperiments,
                 animateEmojis,
             )
             return createBotComponentEntries(

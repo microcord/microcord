@@ -406,7 +406,6 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
                     event.rtcConnectionId,
                     event.mediaSessionId,
                     event.callDurationMs,
-                    event.callFeedbackTriggerRateDenominator,
                 )
             is WidgetVoiceBottomSheetViewModel.Event.LaunchVideoCall -> {
                 // Stop rendering before handing off, or the sheet keeps reacting to state it is
@@ -472,7 +471,7 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
      */
     object Navigation {
         @JvmField
-        var enqueueCallFeedback: (Long, String?, String?, Long, Int) -> Unit = { _, _, _, _, _ -> }
+        var enqueueCallFeedback: (Long, String?, String?, Long?) -> Unit = { _, _, _, _ -> }
 
     }
 

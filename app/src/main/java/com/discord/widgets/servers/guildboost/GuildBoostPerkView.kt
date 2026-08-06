@@ -72,7 +72,7 @@ class GuildBoostPerkView @JvmOverloads constructor(
             else ColorCompat.getThemedColor(context, R.attr.primary_300),
         )
 
-        val required = boostsRequired(premiumTier, guild)
+        val required = boostsRequired(premiumTier)
         boostCount.text = context.i18nPlural(
             R.plurals.guild_settings_premium_guild_tier_requirement_required,
             required,
@@ -159,22 +159,8 @@ class GuildBoostPerkView @JvmOverloads constructor(
         else -> 0
     }
 
-    private fun boostsRequired(tier: Int, guild: Guild?): Int {
-        val smallBucket = guild?.takeIf {
-            it.hasFeature(GuildFeature.BOOSTING_TIERS_EXPERIMENT_SMALL_GUILD)
-        }?.let {
-            StoreStream.getExperiments().getGuildExperiment("2022-03_boosting_tiers_small_guilds", it.id, true)?.bucket
-        }
-        val mediumBucket = guild?.takeIf {
-            it.hasFeature(GuildFeature.BOOSTING_TIERS_EXPERIMENT_MEDIUM_GUILD)
-        }?.let {
-            StoreStream.getExperiments().getGuildExperiment("2022-03_boosting_tiers_medium_guilds", it.id, true)?.bucket
-        }
-        val thresholds = when {
-            smallBucket == 1 || smallBucket == 2 -> intArrayOf(2, 3, 4)
-            mediumBucket == 1 || mediumBucket == 2 -> intArrayOf(2, 7, 10)
-            else -> intArrayOf(2, 7, 14)
-        }
+    private fun boostsRequired(tier: Int): Int {
+        val thresholds = intArrayOf(2, 7, 14)
         return thresholds.getOrElse(tier - 1) { 0 }
     }
 }

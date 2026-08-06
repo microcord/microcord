@@ -22,9 +22,8 @@ object CallFeedbackSheetNavigator {
         rtcConnectionId: String?,
         mediaSessionId: String?,
         callDurationMs: Long?,
-        triggerRateDenominator: Int,
     ) {
-        if (triggerRateDenominator < 1 || !shouldEnqueue(random.nextInt(triggerRateDenominator))) return
+        if (!shouldEnqueue(random.nextInt(TRIGGER_RATE_DENOMINATOR))) return
         val notices = StoreStream.getNotices()
         val name = "Call feedback notice for rtcConnectionId: $rtcConnectionId"
         val requestedAt = clock.currentTimeMillis()
@@ -73,6 +72,8 @@ object CallFeedbackSheetNavigator {
     }
 
     internal fun shouldEnqueue(randomDraw: Int): Boolean = randomDraw == 0
+
+    private const val TRIGGER_RATE_DENOMINATOR = 5
 
     private const val NOTICE_FRESHNESS_MS = 3_000L
 }

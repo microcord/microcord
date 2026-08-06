@@ -12,8 +12,8 @@ object StreamFeedbackSheetNavigator {
     private val clock = ClockFactory.get()
     private val random = Random()
 
-    fun enqueueNotice(streamKey: String, mediaSessionId: String?, triggerRateDenominator: Int) {
-        if (triggerRateDenominator < 1 || random.nextInt(triggerRateDenominator) != 0) return
+    fun enqueueNotice(streamKey: String, mediaSessionId: String?) {
+        if (random.nextInt(TRIGGER_RATE_DENOMINATOR) != 0) return
         val notices = StoreStream.getNotices()
         val name = "Stream feedback notice for streamKey: $streamKey"
         val requestedAt = clock.currentTimeMillis()
@@ -44,6 +44,8 @@ object StreamFeedbackSheetNavigator {
             )
         }.show(fragmentManager, WidgetFeedbackSheet::class.java.name)
     }
+
+    private const val TRIGGER_RATE_DENOMINATOR = 5
 
     private const val NOTICE_FRESHNESS_MS = 3_000L
 }

@@ -48,9 +48,7 @@ object RoleSubscriptionsLinkingUtil {
                 val handled = performHandoff(context, "/channels/$guildId/$ROLE_SUBSCRIPTIONS_ROUTE")
                 if (handled) HandoffResult.SUCCESS else HandoffResult.FAILURE
             }
-            HandoffEligibility.INELIGIBLE_FOR_MOBILE_WEB_PURCHASE,
-            HandoffEligibility.INELIGIBLE_FOR_ROLE_SUBSCRIPTIONS,
-            -> {
+            HandoffEligibility.INELIGIBLE_FOR_ROLE_SUBSCRIPTIONS -> {
                 AppToast.show(context, R.string.inaccessible_channel_link_title)
                 HandoffResult.INELIGIBLE
             }
@@ -83,13 +81,10 @@ object RoleSubscriptionsLinkingUtil {
         if (guildId == 0L || StoreStream.getGuilds().getGuild(guildId) == null) {
             return HandoffEligibility.UNKNOWN_GUILD
         }
-        val featureFlag = GuildRoleSubscriptionsFeatureFlag.INSTANCE
-        return when {
-            !featureFlag.canGuildSeePremiumMemberships(guildId) ->
-                HandoffEligibility.INELIGIBLE_FOR_ROLE_SUBSCRIPTIONS
-            !featureFlag.canGuildAccessMobileWebPurchases(guildId) ->
-                HandoffEligibility.INELIGIBLE_FOR_MOBILE_WEB_PURCHASE
-            else -> HandoffEligibility.ELIGIBLE
+        return if (GuildRoleSubscriptionsFeatureFlag.INSTANCE.canGuildSeePremiumMemberships(guildId)) {
+            HandoffEligibility.ELIGIBLE
+        } else {
+            HandoffEligibility.INELIGIBLE_FOR_ROLE_SUBSCRIPTIONS
         }
     }
 
@@ -99,7 +94,6 @@ object RoleSubscriptionsLinkingUtil {
         ELIGIBLE,
         UNKNOWN_GUILD,
         INELIGIBLE_FOR_ROLE_SUBSCRIPTIONS,
-        INELIGIBLE_FOR_MOBILE_WEB_PURCHASE,
     }
 
     enum class HandoffResult { SUCCESS, FAILURE, INELIGIBLE }

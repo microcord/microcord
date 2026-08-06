@@ -143,7 +143,7 @@ class WidgetGuildBoost : AppFragment(R.layout.widget_server_boost_status) {
 
     private fun configureProgressBar(guildId: Long, tier: Int, boosts: Int) {
         requireView().findViewById<ProgressBar>(R.id.boost_bar_progress_bar).apply {
-            progress = totalProgress(guildId, tier, boosts)
+            progress = totalProgress(tier, boosts, BOOST_THRESHOLDS)
             contentDescription = getString(
                 when (tier) {
                     1 -> R.string.premium_guild_tier_1
@@ -263,27 +263,7 @@ class WidgetGuildBoost : AppFragment(R.layout.widget_server_boost_status) {
             Intent().putExtra(INTENT_EXTRA_GUILD_ID, guildId),
         )
 
-        internal fun totalProgress(guildId: Long, tier: Int, boosts: Int): Int {
-            val guild = StoreStream.getGuilds().getGuild(guildId)
-            val smallBucket = guild?.takeIf {
-                it.hasFeature(com.discord.api.guild.GuildFeature.BOOSTING_TIERS_EXPERIMENT_SMALL_GUILD)
-            }?.let {
-                StoreStream.getExperiments()
-                    .getGuildExperiment("2022-03_boosting_tiers_small_guilds", guildId, true)?.bucket
-            }
-            val mediumBucket = guild?.takeIf {
-                it.hasFeature(com.discord.api.guild.GuildFeature.BOOSTING_TIERS_EXPERIMENT_MEDIUM_GUILD)
-            }?.let {
-                StoreStream.getExperiments()
-                    .getGuildExperiment("2022-03_boosting_tiers_medium_guilds", guildId, true)?.bucket
-            }
-            val thresholds = when {
-                smallBucket == 1 || smallBucket == 2 -> intArrayOf(2, 3, 4)
-                mediumBucket == 1 || mediumBucket == 2 -> intArrayOf(2, 7, 10)
-                else -> intArrayOf(2, 7, 14)
-            }
-            return totalProgress(tier, boosts, thresholds)
-        }
+        internal val BOOST_THRESHOLDS = intArrayOf(2, 7, 14)
 
         internal fun totalProgress(tier: Int, boosts: Int, thresholds: IntArray): Int {
             if (tier >= 3) return 100

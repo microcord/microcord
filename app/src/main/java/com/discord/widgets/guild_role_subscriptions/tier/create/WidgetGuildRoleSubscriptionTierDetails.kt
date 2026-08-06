@@ -35,7 +35,7 @@ class WidgetGuildRoleSubscriptionTierDetails :
     private lateinit var descriptionLayout: TextInputLayout
     private lateinit var price: TextView
 
-    private val tierImageSelectedResult: (String) -> Unit = viewModel::updateImage
+    private val tierImageSelectedResult: (String) -> Unit = { viewModel.updateImage(it) }
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)

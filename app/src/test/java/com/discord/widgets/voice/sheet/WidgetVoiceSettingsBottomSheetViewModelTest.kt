@@ -41,8 +41,6 @@ class WidgetVoiceSettingsBottomSheetViewModelTest {
             voiceParticipantsHidden = true,
         ),
         rtcConnectionMetadata = null,
-        callFeedbackTriggerRateDenominator = 0,
-        streamFeedbackTriggerRateDenominator = 0,
         activeStream = null,
         voiceChannelJoinability = VoiceChannelJoinability.CAN_JOIN,
         guildMaxVideoChannelMembers = GuildMaxVideoChannelUsers.Unlimited,

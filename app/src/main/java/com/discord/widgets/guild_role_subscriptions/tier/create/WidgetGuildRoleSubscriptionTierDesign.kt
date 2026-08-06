@@ -39,7 +39,7 @@ class WidgetGuildRoleSubscriptionTierDesign :
     private lateinit var lightPreview: GuildRoleSubscriptionMemberPreview
     private lateinit var darkPreview: GuildRoleSubscriptionMemberPreview
 
-    private val memberBadgeImageSelectedResult: (String) -> Unit = viewModel::updateMemberIcon
+    private val memberBadgeImageSelectedResult: (String) -> Unit = { viewModel.updateMemberIcon(it) }
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)

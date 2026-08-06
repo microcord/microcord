@@ -15,7 +15,6 @@ import rx.subjects.PublishSubject
 
 class CallFeedbackSheetViewModel(
     config: Config,
-    storeStateObservable: Observable<StoreState> = observeStoreState(),
     private val submitter: CallFeedbackSubmitter = CallFeedbackSubmitter(
         PendingFeedback.CallFeedback(
             config.channelId,
@@ -32,14 +31,12 @@ class CallFeedbackSheetViewModel(
 ) : AppViewModel<FeedbackSheetViewModel.ViewState>(createViewState()), FeedbackSheetViewModel {
     private val eventSubject = PublishSubject.create<FeedbackSheetViewModel.Event>()
     private var pendingFeedback = submitter.pendingCallFeedback
-    private var mostRecentStoreState: StoreState? = null
     private var submitOnDismiss = true
     private var submitted = false
     private val issues = ISSUES.shuffled() + FeedbackIssue.OTHER
 
     init {
         onShown(config.channelId)
-        storeStateObservable.takeUntil(unsubscribeSignal).subscribe { mostRecentStoreState = it }
     }
 
     override fun observeEvents(): Observable<FeedbackSheetViewModel.Event> = eventSubject
@@ -67,7 +64,7 @@ class CallFeedbackSheetViewModel(
             eventSubject.onNext(
                 FeedbackSheetViewModel.Event.NavigateToIssueDetails(
                     pendingFeedback,
-                    mostRecentStoreState?.shouldShowCxLinkForIssueDetails == true,
+                    true,
                 ),
             )
         } else if (requireViewState().selectedFeedbackRating in listOf(FeedbackRating.NEUTRAL, FeedbackRating.BAD)) {
@@ -90,8 +87,6 @@ class CallFeedbackSheetViewModel(
         if (submitOnDismiss) submitForm()
         super.onCleared()
     }
-
-    data class StoreState(val shouldShowCxLinkForIssueDetails: Boolean)
 
     data class Config(
         val channelId: Long,
@@ -146,10 +141,6 @@ class CallFeedbackSheetViewModel(
             FeedbackIssue.SPEAKERPHONE_ISSUE to 9,
             FeedbackIssue.HEADSET_OR_BLUETOOTH_ISSUE to 10,
         )
-
-        private fun observeStoreState(): Observable<StoreState> =
-            StoreStream.getExperiments().observeUserExperiment("2020-08_feedback_modal_helpdesk_link", true)
-                .map { StoreState(it?.bucket == 1) }
 
         private fun createViewState(
             rating: FeedbackRating = FeedbackRating.NO_RESPONSE,

@@ -17,6 +17,8 @@ import com.discord.widgets.servers.auditlog.WidgetServerSettingsAuditLog
 import com.discord.widgets.servers.community.WidgetServerSettingsCommunityOverview
 import com.discord.widgets.servers.community.WidgetServerSettingsEnableCommunitySteps
 import com.discord.widgets.servers.creator_monetization_eligibility.onboarding.WidgetServerSettingsCreatorMonetizationOnboarding
+import com.discord.widgets.servers.guild_role_subscription.WidgetServerSettingsGuildRoleSubscriptionTierList
+import com.discord.widgets.servers.guild_role_subscription.WidgetServerSettingsGuildRoleSubscriptions
 import com.discord.widgets.servers.guild_role_subscription.payments.WidgetServerSettingsGuildRoleSubscriptionEarnings
 import com.discord.widgets.servers.settings.invites.WidgetServerSettingsInstantInvites
 import com.discord.widgets.servers.settings.members.WidgetServerSettingsMembers
@@ -188,6 +190,12 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
         bindDestination(R.id.server_settings_guild_role_subscription_get_started) {
             WidgetServerSettingsCreatorMonetizationOnboarding.launch(it.context, guildId)
         }
+        bindDestination(R.id.server_settings_guild_role_subscription_basic_info) {
+            WidgetServerSettingsGuildRoleSubscriptions.launch(it.context, guildId)
+        }
+        bindDestination(R.id.server_settings_guild_role_subscription_tiers) {
+            WidgetServerSettingsGuildRoleSubscriptionTierList.launch(it.context, guildId)
+        }
         bindDestination(R.id.server_settings_guild_role_subscription_earnings) {
             WidgetServerSettingsGuildRoleSubscriptionEarnings.launch(it.context)
         }
@@ -250,6 +258,8 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
             R.id.server_settings_community_overview_option,
             R.id.server_settings_enable_community_option,
             R.id.server_settings_guild_role_subscription_get_started,
+            R.id.server_settings_guild_role_subscription_basic_info,
+            R.id.server_settings_guild_role_subscription_tiers,
             R.id.server_settings_guild_role_subscription_earnings,
         )
 

@@ -35,8 +35,6 @@ data class CallModel(
     val selectedVideoDevice: VideoInputDeviceDescription?,
     val voiceSettings: StoreMediaSettings.VoiceConfiguration,
     val rtcConnectionMetadata: RtcConnection.Metadata?,
-    val callFeedbackTriggerRateDenominator: Int,
-    val streamFeedbackTriggerRateDenominator: Int,
     val activeStream: StoreApplicationStreaming.ActiveApplicationStream?,
     val voiceChannelJoinability: VoiceChannelJoinability,
     val guildMaxVideoChannelMembers: GuildMaxVideoChannelUsers,
@@ -103,11 +101,6 @@ data class CallModel(
         private const val MANAGE_EVENTS_BASE = 0x200000400L
         private const val MANAGE_STAGE_EVENT = Permission.START_STAGE_EVENT
         private const val MANAGE_VOICE_EVENT = Permission.START_VOICE_EVENT
-
-        private const val CALL_FEEDBACK_EXPERIMENT =
-            "2019-12_android_call_feedback_sheet_sample_rate_denominator"
-        private const val STREAM_FEEDBACK_EXPERIMENT =
-            "2020-09_stream_feedback_sheet_sample_rate_denominator"
 
         /** The reference throttles the participant map because it re-emits per speaking frame. */
         private const val PARTICIPANTS_THROTTLE_MS = 250L
@@ -184,23 +177,16 @@ data class CallModel(
             }
 
         private fun observeModel(channelId: Long, channel: Channel): Observable<CallModel> {
-            val experiments = StoreStream.getExperiments()
             val model = Observable.combineLatest(
                 observeChunk(channel),
                 StoreStream.getApplicationStreaming().observeActiveStream(),
                 VoiceStoreAccess.observeRtcConnectionMetadata(),
-                experiments.observeUserExperiment(CALL_FEEDBACK_EXPERIMENT, true)
-                    .map { it?.bucket ?: 0 },
-                experiments.observeUserExperiment(STREAM_FEEDBACK_EXPERIMENT, true)
-                    .map { it?.bucket ?: 0 },
                 VoiceChannelJoinabilityUtils.observeJoinability(channelId),
                 StoreStream.getGuilds().observeFromChannelId(channelId),
                 StoreStream.getVoiceChannelSelected().observeSelectedVoiceChannelId(),
             ) { chunk,
                 activeStream,
                 rtcConnectionMetadata,
-                callFeedbackTriggerRateDenominator,
-                streamFeedbackTriggerRateDenominator,
                 voiceChannelJoinability,
                 guild,
                 selectedVoiceChannelId ->
@@ -217,8 +203,6 @@ data class CallModel(
                     selectedVideoDevice = chunk.selectedVideoDevice,
                     activeStream = activeStream,
                     rtcConnectionMetadata = rtcConnectionMetadata,
-                    callFeedbackTriggerRateDenominator = callFeedbackTriggerRateDenominator,
-                    streamFeedbackTriggerRateDenominator = streamFeedbackTriggerRateDenominator,
                     audioManagerState = chunk.audioManagerState,
                     voiceChannelJoinability = voiceChannelJoinability,
                     guildScheduledEvents = emptyList(),
@@ -274,8 +258,6 @@ data class CallModel(
             selectedVideoDevice: VideoInputDeviceDescription?,
             activeStream: StoreApplicationStreaming.ActiveApplicationStream?,
             rtcConnectionMetadata: RtcConnection.Metadata?,
-            callFeedbackTriggerRateDenominator: Int,
-            streamFeedbackTriggerRateDenominator: Int,
             audioManagerState: StoreAudioManagerV2.State,
             voiceChannelJoinability: VoiceChannelJoinability,
             guildScheduledEvents: List<GuildScheduledEvent>,
@@ -289,8 +271,6 @@ data class CallModel(
             selectedVideoDevice = selectedVideoDevice,
             voiceSettings = voiceConfig,
             rtcConnectionMetadata = rtcConnectionMetadata,
-            callFeedbackTriggerRateDenominator = callFeedbackTriggerRateDenominator,
-            streamFeedbackTriggerRateDenominator = streamFeedbackTriggerRateDenominator,
             activeStream = activeStream,
             voiceChannelJoinability = voiceChannelJoinability,
             guildMaxVideoChannelMembers = guild?.maxVideoChannelUsers

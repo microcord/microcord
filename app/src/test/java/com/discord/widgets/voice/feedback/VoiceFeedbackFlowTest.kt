@@ -15,7 +15,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import rx.Observable
 
 class VoiceFeedbackFlowTest {
     @Test
@@ -24,7 +23,6 @@ class VoiceFeedbackFlowTest {
         val initial = PendingFeedback.CallFeedback(10L, "rtc", 500L, "media")
         val viewModel = CallFeedbackSheetViewModel(
             config = CallFeedbackSheetViewModel.Config(10L, "rtc", "media", 500L),
-            storeStateObservable = Observable.just(CallFeedbackSheetViewModel.StoreState(false)),
             submitter = CallFeedbackSubmitter(initial) { report = it },
             onShown = {},
         )
@@ -45,7 +43,6 @@ class VoiceFeedbackFlowTest {
         val events = mutableListOf<FeedbackSheetViewModel.Event>()
         val viewModel = CallFeedbackSheetViewModel(
             config = CallFeedbackSheetViewModel.Config(10L, null, null, null),
-            storeStateObservable = Observable.just(CallFeedbackSheetViewModel.StoreState(true)),
             submitter = CallFeedbackSubmitter(PendingFeedback.CallFeedback(10L)) { report = it },
             onShown = {},
         )
@@ -66,7 +63,6 @@ class VoiceFeedbackFlowTest {
         val viewModel = StreamFeedbackSheetViewModel(
             streamKey = "guild:1:2:3",
             mediaSessionId = "media",
-            storeStateObservable = Observable.just(StreamFeedbackSheetViewModel.StoreState(false)),
             report = reports::add,
         )
 

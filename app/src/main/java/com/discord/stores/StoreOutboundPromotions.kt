@@ -30,11 +30,7 @@ class StoreOutboundPromotions(
     private val dispatcher: Dispatcher,
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
     private val restApi: () -> RestAPIInterface? = { RestAPI.apiOrNull },
-    /**
-     * Reference `OutboundPromosPreviewFeatureFlag`, a staff-only switch that swaps the live
-     * promotions endpoint for the preview one. `StoreExperiments`-backed flags for this surface do
-     * not exist yet, so it defaults to off.
-     */
+    /** Staff-only switch that swaps the live promotions endpoint for the preview one. */
     private val previewFeatureFlagEnabled: () -> Boolean = { false },
 ) : StoreV2() {
 

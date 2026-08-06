@@ -9,7 +9,6 @@ import com.discord.models.guild.Guild
 import com.discord.models.user.MeUser
 import com.discord.panels.PanelState
 import com.discord.stores.StoreChannelsSelected
-import com.discord.stores.StoreExperiments
 import com.discord.stores.StoreGuildSelected
 import com.discord.stores.StoreGuildWelcomeScreens
 import com.discord.stores.StoreGuilds
@@ -52,7 +51,6 @@ import rx.subjects.PublishSubject
 class WidgetHomeViewModel(
     private val storeNavigation: StoreNavigation = StoreStream.getNavigation(),
     private val storeGuildWelcomeScreens: StoreGuildWelcomeScreens = StoreStream.getGuildWelcomeScreens(),
-    storeExperiments: StoreExperiments = StoreStream.getExperiments(),
     storeGuilds: StoreGuilds = StoreStream.getGuilds(),
     storePermissions: StorePermissions = StoreStream.getPermissions(),
     storeUser: StoreUser = StoreStream.getUsers(),
@@ -61,7 +59,6 @@ class WidgetHomeViewModel(
         storeNavigation = storeNavigation,
         storeUser = storeUser,
         storeGuildWelcomeScreens = storeGuildWelcomeScreens,
-        storeExperiments = storeExperiments,
         storePermissions = storePermissions,
     ),
     navigationPanelActionObservable: Observable<StoreNavigation.PanelAction> =
@@ -95,7 +92,6 @@ class WidgetHomeViewModel(
         val guildInfo: GuildInfo,
         val me: MeUser,
         val isThreadPeek: Boolean,
-        val isInEventsUpsellExperiment: Boolean,
         val isChannelNsfw: Boolean,
         val nsfwAllowed: NsfwAllowance?,
         val guildId: Long,
@@ -203,7 +199,7 @@ class WidgetHomeViewModel(
             ) ->
                 eventSubject.onNext(Event.ShowChannelOnboardingSheet)
 
-            shouldShowGuildEventUpsell(storeState.guildInfo.canManageEvents, storeState.isInEventsUpsellExperiment) -> {
+            shouldShowGuildEventUpsell(storeState.guildInfo.canManageEvents) -> {
                 sharedPreferences.edit().putBoolean(GUILD_EVENT_UPSELL_CACHE_KEY, true).apply()
                 eventSubject.onNext(Event.ShowGuildEventUpsell(guildId))
             }
@@ -225,16 +221,12 @@ class WidgetHomeViewModel(
      * Channel onboarding is offered at the moment the guild list finishes opening for a new user in
      * a guild — never mid-swipe, which is why both the previous and the current panel state matter.
      */
-    private fun shouldShowGuildEventUpsell(canManageEvents: Boolean, isInEventsUpsellExperiment: Boolean): Boolean =
-        canManageEvents &&
-            !sharedPreferences.getBoolean(GUILD_EVENT_UPSELL_CACHE_KEY, false) &&
-            isInEventsUpsellExperiment
+    private fun shouldShowGuildEventUpsell(canManageEvents: Boolean): Boolean =
+        canManageEvents && !sharedPreferences.getBoolean(GUILD_EVENT_UPSELL_CACHE_KEY, false)
 
     companion object {
         /** Matches `WidgetGuildScheduledEventUpsellBottomSheet.GUILD_EVENT_UPSELL_CACHE_KEY`. */
         const val GUILD_EVENT_UPSELL_CACHE_KEY = "CACHE_KEY_GUILD_EVENT_UPSELL"
-
-        private const val EVENTS_UPSELL_EXPERIMENT = "2021-09_events_upsell"
 
         internal fun shouldShowChannelOnboardingSheet(
             previousLeftPanelState: PanelState?,
@@ -279,7 +271,6 @@ class WidgetHomeViewModel(
             storeUser: StoreUser = StoreStream.getUsers(),
             storeGuildWelcomeScreens: StoreGuildWelcomeScreens? = null,
             storeChannelsSelected: StoreChannelsSelected = StoreStream.getChannelsSelected(),
-            storeExperiments: StoreExperiments = StoreStream.getExperiments(),
             storePermissions: StorePermissions = StoreStream.getPermissions(),
             storeUserConnections: StoreUserConnections = StoreStream.getUserConnections(),
         ): Observable<StoreState> {
@@ -309,9 +300,8 @@ class WidgetHomeViewModel(
                 guildInfoObservable,
                 storeUser.observeMe(),
                 storeChannelsSelected.observeResolvedSelectedChannel(),
-                storeExperiments.observeUserExperiment(EVENTS_UPSELL_EXPERIMENT),
                 storeUserConnections.observeConnectedAccounts(),
-            ) { leftPanelState, rightPanelState, guildInfo, me, selectedChannel, eventsUpsellExperiment, connectedAccounts ->
+            ) { leftPanelState, rightPanelState, guildInfo, me, selectedChannel, connectedAccounts ->
                 val channel = selectedChannel.maybeChannel
                 val isThreadPeek =
                     (selectedChannel as? StoreChannelsSelected.ResolvedSelectedChannel.Channel)?.peekParent != null
@@ -321,7 +311,6 @@ class WidgetHomeViewModel(
                     guildInfo = guildInfo,
                     me = me,
                     isThreadPeek = isThreadPeek,
-                    isInEventsUpsellExperiment = eventsUpsellExperiment?.bucket == 1,
                     isChannelNsfw = channel != null && channel.nsfw,
                     nsfwAllowed = me.nsfwAllowance,
                     guildId = guildInfo.guildId,

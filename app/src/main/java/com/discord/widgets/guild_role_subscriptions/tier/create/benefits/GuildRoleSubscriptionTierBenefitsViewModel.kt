@@ -2,7 +2,6 @@ package com.discord.widgets.guild_role_subscriptions.tier.create.benefits
 
 import com.discord.api.guildrolesubscription.SubscriptionTrialInterval
 import com.discord.app.AppViewModel
-import com.discord.stores.StoreExperiments
 import com.discord.stores.StoreGuildRoleSubscriptions
 import com.discord.stores.StoreStream
 import com.discord.stores.updates.ObservationDeck
@@ -17,12 +16,11 @@ import rx.Observable
 class GuildRoleSubscriptionTierBenefitsViewModel(
     private val guildId: Long,
     private val benefitListType: GuildRoleSubscriptionTierBenefitListType,
-    experimentsStore: StoreExperiments = StoreStream.getExperiments(),
     private val guildRoleSubscriptionsStore: StoreGuildRoleSubscriptions =
         StoreStream.getGuildRoleSubscriptions(),
     observationDeck: ObservationDeck = ObservationDeckProvider.get(),
     storeStateObservable: Observable<StoreState> = observationDeck.connectRx(
-        experimentsStore,
+        StoreStream.getGuilds(),
         guildRoleSubscriptionsStore,
     ) {
         StoreState(

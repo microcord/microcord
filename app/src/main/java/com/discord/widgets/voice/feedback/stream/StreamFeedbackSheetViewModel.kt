@@ -14,7 +14,6 @@ import rx.subjects.PublishSubject
 class StreamFeedbackSheetViewModel(
     streamKey: String,
     mediaSessionId: String?,
-    storeStateObservable: Observable<StoreState> = observeStoreState(),
     private val report: (PendingFeedback.StreamFeedback) -> Unit = {
         StreamFeedbackSubmitter(it).submit(null)
     },
@@ -24,14 +23,9 @@ class StreamFeedbackSheetViewModel(
         ModelApplicationStream.decodeStreamKey(streamKey),
         mediaSessionId = mediaSessionId,
     )
-    private var mostRecentStoreState: StoreState? = null
     private var submitOnDismiss = true
     private var submitted = false
     private val issues = ISSUES.shuffled() + FeedbackIssue.OTHER
-
-    init {
-        storeStateObservable.takeUntil(unsubscribeSignal).subscribe { mostRecentStoreState = it }
-    }
 
     override fun observeEvents(): Observable<FeedbackSheetViewModel.Event> = eventSubject
 
@@ -53,7 +47,7 @@ class StreamFeedbackSheetViewModel(
             eventSubject.onNext(
                 FeedbackSheetViewModel.Event.NavigateToIssueDetails(
                     pendingFeedback,
-                    mostRecentStoreState?.shouldShowCxLinkForIssueDetails == true,
+                    true,
                 ),
             )
         } else if (requireViewState().selectedFeedbackRating in listOf(FeedbackRating.NEUTRAL, FeedbackRating.BAD)) {
@@ -77,8 +71,6 @@ class StreamFeedbackSheetViewModel(
         super.onCleared()
     }
 
-    data class StoreState(val shouldShowCxLinkForIssueDetails: Boolean)
-
     companion object {
         internal val ISSUES = listOf(
             FeedbackIssue.STREAM_REPORT_ENDED_BLACK,
@@ -89,10 +81,6 @@ class StreamFeedbackSheetViewModel(
             FeedbackIssue.STREAM_REPORT_ENDED_AUDIO_POOR,
             FeedbackIssue.STREAM_REPORT_ENDED_STREAM_STOPPED_UNEXPECTEDLY,
         )
-
-        private fun observeStoreState(): Observable<StoreState> =
-            StoreStream.getExperiments().observeUserExperiment("2020-08_feedback_modal_helpdesk_link", true)
-                .map { StoreState(it?.bucket == 1) }
 
         private fun createViewState(
             rating: FeedbackRating = FeedbackRating.NO_RESPONSE,

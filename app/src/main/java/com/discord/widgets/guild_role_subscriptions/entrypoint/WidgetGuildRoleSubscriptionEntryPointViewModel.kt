@@ -3,7 +3,6 @@ package com.discord.widgets.guild_role_subscriptions.entrypoint
 import com.discord.app.AppViewModel
 import com.discord.models.guild.Guild
 import com.discord.stores.StoreConnectivity
-import com.discord.stores.StoreExperiments
 import com.discord.stores.StoreGuildRoleSubscriptions
 import com.discord.stores.StoreGuilds
 import com.discord.stores.StoreStream
@@ -29,7 +28,6 @@ import rx.Subscription
  */
 class WidgetGuildRoleSubscriptionEntryPointViewModel(
     private val connectivityStore: StoreConnectivity = StoreStream.getConnectivity(),
-    private val experimentsStore: StoreExperiments = StoreStream.getExperiments(),
     private val guildsStore: StoreGuilds = StoreStream.getGuilds(),
     /**
      * `StoreStream` does not construct or publish [StoreSubscriptions] yet, so the default is
@@ -133,7 +131,6 @@ class WidgetGuildRoleSubscriptionEntryPointViewModel(
     private fun observeStoreState(guildId: Long): Observable<StoreState> {
         val updateSources = listOfNotNull(
             connectivityStore,
-            experimentsStore,
             guildsStore,
             subscriptionsStore,
             guildRoleSubscriptionsStore,

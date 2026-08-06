@@ -489,13 +489,11 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
                     event.rtcConnectionId,
                     event.mediaSessionId,
                     event.callDuration,
-                    event.triggerRateDenominator,
                 )
             is WidgetCallFullscreenViewModel.Event.EnqueueStreamFeedbackSheet ->
                 StreamFeedbackSheetNavigator.enqueueNotice(
                     event.streamKey,
                     event.mediaSessionId,
-                    event.triggerRateDenominator,
                 )
             WidgetCallFullscreenViewModel.Event.NavigateToPremiumSettings ->
                 WidgetSettingsPremium.launch(requireContext())

@@ -56,8 +56,6 @@ class ParticipantsListItemGeneratorTest {
             inputMode = MediaEngineConnection.InputMode.VOICE_ACTIVITY,
         ),
         rtcConnectionMetadata = null,
-        callFeedbackTriggerRateDenominator = 0,
-        streamFeedbackTriggerRateDenominator = 0,
         activeStream = null,
         voiceChannelJoinability = VoiceChannelJoinability.CAN_JOIN,
         guildMaxVideoChannelMembers = GuildMaxVideoChannelUsers.Unlimited,

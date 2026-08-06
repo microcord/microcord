@@ -184,8 +184,6 @@ class WidgetCallPreviewFullscreenViewModelTest {
             inputMode = MediaEngineConnection.InputMode.VOICE_ACTIVITY,
         ),
         rtcConnectionMetadata = null,
-        callFeedbackTriggerRateDenominator = 0,
-        streamFeedbackTriggerRateDenominator = 0,
         activeStream = null,
         voiceChannelJoinability = joinability,
         guildMaxVideoChannelMembers = GuildMaxVideoChannelUsers.Unlimited,

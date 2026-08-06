@@ -11,7 +11,6 @@ import com.discord.stores.updates.ObservationDeckProvider
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
-import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
 import com.discord.widgets.guild_role_subscriptions.GuildRoleSubscriptionUtils
 import com.discord.widgets.guild_role_subscriptions.getFullServerGatingOverwrite
@@ -66,8 +65,11 @@ class ServerSettingsGuildRoleSubscriptionViewModel(
 
     init {
         storeGuildRoleSubscriptions.fetchGuildRoleSubscriptionGroupsForGuild(guildId)
-        storeObservable.computationLatest().ui(this)
-            .appSubscribe(ServerSettingsGuildRoleSubscriptionViewModel::class.java, onNext = ::handleStoreState)
+        storeObservable.distinctUntilChanged().ui(this).appSubscribe(
+            ServerSettingsGuildRoleSubscriptionViewModel::class.java,
+            errorHandler = { updateViewState(ViewState.Failed) },
+            onNext = ::handleStoreState,
+        )
     }
 
     fun observeEvents(): Observable<Event> = eventSubject
@@ -143,7 +145,10 @@ class ServerSettingsGuildRoleSubscriptionViewModel(
             observationDeck: ObservationDeck,
             storeGuildRoleSubscriptions: StoreGuildRoleSubscriptions,
             storeGuilds: StoreGuilds,
-        ): Observable<StoreState> = observationDeck.connectRx(storeGuildRoleSubscriptions) {
+        ): Observable<StoreState> = observationDeck.connectRx(
+            storeGuildRoleSubscriptions,
+            storeGuilds,
+        ) {
             val state = storeGuildRoleSubscriptions.getGuildRoleSubscriptionState(guildId)
             val overwrite = (state as? StoreGuildRoleSubscriptions.GuildRoleSubscriptionGroupState.Loaded)
                 ?.guildRoleSubscriptionGroupListing

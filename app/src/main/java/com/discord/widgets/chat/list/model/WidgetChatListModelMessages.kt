@@ -33,7 +33,6 @@ import com.discord.widgets.chat.list.entries.ReactionsEntry
 import com.discord.widgets.chat.list.entries.ThreadStarterDividerEntry
 import com.discord.widgets.chat.list.entries.TimestampEntry
 import com.discord.widgets.chat.list.entries.UploadProgressEntry
-import com.discord.widgets.guild_role_subscriptions.GuildRoleSubscriptionsFeatureFlag
 import java.util.Calendar
 import rx.Observable
 
@@ -131,8 +130,6 @@ data class WidgetChatListModelMessages(
                 stores.getUsers().observeMeId(),
                 ComponentChatListState.observeChatListComponentState(),
                 observeInviteResolver(),
-                GuildRoleSubscriptionsFeatureFlag()
-                    .observeCanGuildSeePurchaseFeedbackLoopSystemMessages(channel.guildId),
                 ::ThirdInputs,
             )
             return Observable.combineLatest(first, second, third) { a, b, c ->
@@ -152,7 +149,6 @@ data class WidgetChatListModelMessages(
                     meUserId = c.meUserId,
                     componentStoreState = c.components,
                     inviteResolver = c.inviteResolver,
-                    showRoleSubscriptionPurchaseSystemMessage = c.showRoleSubscriptionMessages,
                 )
             }
         }
@@ -173,8 +169,6 @@ data class WidgetChatListModelMessages(
                 stores.getUsers().observeMeId(),
                 stores.getUserSettings().observeIsRenderEmbedsEnabled(),
                 observeInviteResolver(),
-                GuildRoleSubscriptionsFeatureFlag()
-                    .observeCanGuildSeePurchaseFeedbackLoopSystemMessages(channel.guildId),
                 ::SingleSecondInputs,
             )
             return Observable.combineLatest(first, second) { a, b ->
@@ -183,7 +177,7 @@ data class WidgetChatListModelMessages(
                     channel, a.members, a.roles, emptyMap(), null, null, message,
                     a.metadata.messageState[messageId], a.metadata.messageReplyState, false, false,
                     null, a.animateEmojis, b.autoPlayGifs, b.renderEmbeds, b.meUserId, false,
-                    emptyMap(), b.inviteResolver, false, b.showRoleSubscriptionMessages,
+                    emptyMap(), b.inviteResolver, false,
                 ).asReversed()
             }
         }
@@ -204,7 +198,6 @@ data class WidgetChatListModelMessages(
             meUserId: Long = 0L,
             componentStoreState: Map<Long, ComponentChatListState.ComponentStoreState> = emptyMap(),
             inviteResolver: InviteEmbedResolver,
-            showRoleSubscriptionPurchaseSystemMessage: Boolean = false,
         ): WidgetChatListModelMessages {
             val items = Items(metadata.messages.size)
             var nextDayTimestamp = 0L
@@ -263,7 +256,7 @@ data class WidgetChatListModelMessages(
                                 message, metadata.messageState[message.id], metadata.messageReplyState,
                                 blockedChunkExpanded, concatenate, permissionsForChannel, animateEmojis,
                                 autoPlayGifs, renderEmbeds, meUserId, true, componentStoreState,
-                                inviteResolver, false, showRoleSubscriptionPurchaseSystemMessage,
+                                inviteResolver, false,
                             ),
                         )
                     }
@@ -307,10 +300,8 @@ data class WidgetChatListModelMessages(
             componentStoreState: Map<Long, ComponentChatListState.ComponentStoreState>,
             inviteResolver: InviteEmbedResolver,
             isThreadStarterMessage: Boolean = false,
-            showRoleSubscriptionPurchaseSystemMessage: Boolean = false,
         ): List<ChatListEntry> {
             if (message.type == 38 && !PermissionUtils.can(Permission.CREATE_INSTANT_INVITE, permissionsForChannel)) return emptyList()
-            if (message.type == 25 && !showRoleSubscriptionPurchaseSystemMessage) return emptyList()
 
             val rows = ArrayList<ChatListEntry>()
             val replyState = message.messageReference?.messageId?.let(repliedMessages::get)
@@ -320,7 +311,7 @@ data class WidgetChatListModelMessages(
                         channel, guildMembers, guildRoles, blockedRelationships, thread,
                         threadEmbedMetadata, replied, messageState, repliedMessages, blockedChunkExpanded,
                         false, null, animateEmojis, autoPlayGifs, renderEmbeds, meUserId, false,
-                        emptyMap(), inviteResolver, false, showRoleSubscriptionPurchaseSystemMessage,
+                        emptyMap(), inviteResolver, false,
                     ).firstOrNull() as? MessageEntry
                 }
                 MessageEntry.ReplyData(
@@ -387,7 +378,7 @@ data class WidgetChatListModelMessages(
                 val components = ComponentStateMapper.processComponentsToMessageComponents(
                     message.components.orEmpty(),
                     componentStoreState[message.id],
-                    BotComponentExperiments.get(StoreStream.getExperiments()),
+                    BotComponentExperiments,
                     animateEmojis,
                 )
                 rows += ChatListEntry.createBotComponentEntries(
@@ -486,7 +477,7 @@ data class WidgetChatListModelMessages(
                 starterChannel, guildMembers, guildRoles, blockedRelationships, null, null, starter,
                 metadata.messageState[starter.id], metadata.parentChannelMessageReplyState, false, false,
                 null, animateEmojis, autoPlayGifs, renderEmbeds, meUserId, true,
-                componentStoreState, inviteResolver, true, false,
+                componentStoreState, inviteResolver, true,
             )
         }
 
@@ -607,7 +598,6 @@ data class WidgetChatListModelMessages(
             val meUserId: Long,
             val components: Map<Long, ComponentChatListState.ComponentStoreState>,
             val inviteResolver: InviteEmbedResolver,
-            val showRoleSubscriptionMessages: Boolean,
         )
 
         private data class SingleFirstInputs(
@@ -623,7 +613,6 @@ data class WidgetChatListModelMessages(
             val meUserId: Long,
             val renderEmbeds: Boolean,
             val inviteResolver: InviteEmbedResolver,
-            val showRoleSubscriptionMessages: Boolean,
         )
     }
 }

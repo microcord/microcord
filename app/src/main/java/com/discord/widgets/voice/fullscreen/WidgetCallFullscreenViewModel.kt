@@ -379,7 +379,6 @@ class WidgetCallFullscreenViewModel constructor(
                     state.callModel.rtcConnectionMetadata?.rtcConnectionId,
                     state.callModel.rtcConnectionMetadata?.mediaSessionId,
                     state.callModel.getCallDurationMs(clock),
-                    state.callModel.callFeedbackTriggerRateDenominator,
                 ),
             )
         }
@@ -564,7 +563,6 @@ class WidgetCallFullscreenViewModel constructor(
                 Event.EnqueueStreamFeedbackSheet(
                     it.encodedStreamKey,
                     state.callModel.rtcConnectionMetadata?.mediaSessionId,
-                    state.callModel.streamFeedbackTriggerRateDenominator,
                 ),
             )
         }
@@ -622,7 +620,6 @@ class WidgetCallFullscreenViewModel constructor(
                 Event.EnqueueStreamFeedbackSheet(
                     it.encodedStreamKey,
                     state.callModel.rtcConnectionMetadata?.mediaSessionId,
-                    state.callModel.streamFeedbackTriggerRateDenominator,
                 ),
             )
         }
@@ -1134,12 +1131,10 @@ class WidgetCallFullscreenViewModel constructor(
             val rtcConnectionId: String?,
             val mediaSessionId: String?,
             val callDuration: Long,
-            val triggerRateDenominator: Int,
         ) : Event()
         data class EnqueueStreamFeedbackSheet(
             val streamKey: String,
             val mediaSessionId: String?,
-            val triggerRateDenominator: Int,
         ) : Event()
         object NavigateToPremiumSettings : Event()
         data class OnIdleStateChanged(val isIdle: Boolean) : Event()
