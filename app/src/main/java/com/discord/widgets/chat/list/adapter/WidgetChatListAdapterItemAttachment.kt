@@ -6,6 +6,7 @@ import android.content.Context
 import android.net.Uri
 import android.text.format.Formatter
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import com.discord.R
@@ -66,6 +67,26 @@ class WidgetChatListAdapterItemAttachment(
         configureUI(entry)
     }
 
+    /**
+     * The gap above an attachment separates it from the message text. The first attachment of a
+     * message with no text sits directly under the author line, which brings its own spacing.
+     */
+    private fun configureTopSpacing(entry: AttachmentEntry) {
+        val spaced = entry.embedIndex > 0 || !entry.message.content.isNullOrEmpty()
+        val top = if (spaced) {
+            itemView.resources.getDimensionPixelSize(R.dimen.chat_cell_vertical_spacing_padding)
+        } else {
+            0
+        }
+        listOf(inlineMedia, card).forEach { view ->
+            val params = view.layoutParams as ViewGroup.MarginLayoutParams
+            if (params.topMargin != top) {
+                params.topMargin = top
+                view.layoutParams = params
+            }
+        }
+    }
+
     override fun onPause() = inlineMedia.onPause()
 
     override fun onResume() = inlineMedia.onResume()
@@ -73,6 +94,7 @@ class WidgetChatListAdapterItemAttachment(
     private fun configureUI(entry: AttachmentEntry) {
         val attachment = entry.attachment
 
+        configureTopSpacing(entry)
         configureSpoiler(entry)
 
         itemView.setOnLongClickListenerConsumeClick {
