@@ -3,6 +3,7 @@ package com.discord.models.user
 import com.discord.api.premium.PremiumTier
 import com.discord.api.user.AvatarDecorationData
 import com.discord.api.user.Collectibles
+import com.discord.api.user.PrimaryGuild
 import com.discord.nullserializable.NullSerializable
 import com.discord.utilities.icon.IconUtils
 
@@ -23,6 +24,7 @@ data class CoreUser(
     override val collectibles: Collectibles? = null,
     override val avatarDecoration: AvatarDecorationData? = null,
     override val isWebhook: Boolean = false,
+    override val primaryGuild: PrimaryGuild? = null,
 ) : User {
     constructor(user: com.discord.api.user.User) : this(
         user.id,
@@ -41,6 +43,7 @@ data class CoreUser(
         user.collectibles?.value,
         user.avatarDecorationData?.value,
         user.bot == true && user.discriminator == IconUtils.WEBHOOK_DISCRIMINATOR,
+        user.primaryGuild,
     )
 
     companion object {
@@ -61,6 +64,7 @@ data class CoreUser(
             collectibles = mergeNullSerializable(oldUser.collectibles, newUser.collectibles),
             avatarDecoration = mergeNullSerializable(oldUser.avatarDecoration, newUser.avatarDecorationData),
             isWebhook = newUser.bot == true && newUser.discriminator == IconUtils.WEBHOOK_DISCRIMINATOR,
+            primaryGuild = newUser.primaryGuild ?: oldUser.primaryGuild,
         )
 
         private fun <T> mergeNullSerializable(old: T?, new: NullSerializable<T>?): T? = when (new) {

@@ -502,6 +502,11 @@ class GuildStoreGraphTest {
         dispatcher.schedule { store.handleGuildProfileFetchStart(1) }
         scheduler.triggerActions()
         assertEquals(StoreGuildProfiles.FetchStates.FETCHING, store.getGuildProfile(1)?.fetchState)
+
+        dispatcher.schedule { store.handleGuildProfileFetchPrivate(1) }
+        scheduler.triggerActions()
+        assertEquals(true, store.getGuildProfile(1)?.isPrivate)
+        assertEquals(StoreGuildProfiles.FetchStates.SUCCEEDED, store.getGuildProfile(1)?.fetchState)
     }
 
     // endregion

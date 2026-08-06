@@ -59,6 +59,7 @@ import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.utilities.view.text.LinkifiedTextView
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.AvatarDecorationView
+import com.discord.views.GuildTagView
 import com.discord.views.NameplateView
 import com.discord.views.StatusView
 import com.discord.views.ThemedColor
@@ -887,6 +888,7 @@ class WidgetChannelsListAdapter(
             itemView.findViewById(R.id.channels_list_item_private_mentions)
         private val name: TextView = itemView.findViewById(R.id.channels_list_item_private_name)
         private val tag: TextView = itemView.findViewById(R.id.channels_list_item_private_tag)
+        private val guildTag: GuildTagView = itemView.findViewById(R.id.channels_list_item_private_guild_tag)
         private val nameplate: NameplateView =
             itemView.findViewById(R.id.channels_list_item_private_nameplate)
         private val avatarDecoration: AvatarDecorationView =
@@ -922,6 +924,7 @@ class WidgetChannelsListAdapter(
 
             name.text = channelName
             name.setTextColor(textColor(item))
+            guildTag.bind(channel.getDMRecipient()?.primaryGuild)
             tag.visibility = if (channel.isSystemDM()) View.VISIBLE else View.GONE
 
             IconUtils.setIcon(avatar, channel, R.dimen.avatar_size_standard)

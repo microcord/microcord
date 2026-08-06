@@ -30,6 +30,42 @@ class StoreLurkingTest {
         assertFalse(StoreLurking.isLurking(false, 5, setOf(6)))
     }
 
+    @Test fun readyRestoresLurkedGuildsAndReopensWithoutAnotherRequest() {
+        val scheduler = TestScheduler()
+        val dispatcher = Dispatcher(scheduler)
+        val deck = ObservationDeck()
+        val users = StoreUser(dispatcher = dispatcher, observationDeck = deck)
+        val guilds = StoreGuilds(users, dispatcher, deck)
+        val selected = StoreGuildSelected(dispatcher, deck)
+        val channels = StoreChannels(dispatcher, deck, isAuthenticated = { true })
+        var navigatedGuildId = 0L
+        val store = StoreLurking(
+            guilds,
+            selected,
+            channels,
+            dispatcher,
+            selectGuild = { navigatedGuildId = it },
+        )
+        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(users, guilds, selected, channels), deck))
+
+        dispatcher.schedule {
+            store.handleConnectionOpen(ModelPayload().apply {
+                sessionId = "session"
+                this.guilds = listOf(guild(5), guild(6).copy(joinedAt = "joined"))
+            })
+        }
+        scheduler.triggerActions()
+        assertEquals(setOf(5L), store.getLurkingGuildIdsSync())
+
+        store.startLurkingAndNavigate(5, null)
+        scheduler.triggerActions()
+        assertEquals(5L, navigatedGuildId)
+
+        dispatcher.schedule { store.handleCurrentUserJoined(5) }
+        scheduler.triggerActions()
+        assertEquals(emptySet<Long>(), store.getLurkingGuildIdsSync())
+    }
+
     @Test fun queuedRequestReplaysOnReadyAndGatewayRemovalEmitsItsIdLifecycle() {
         val scheduler = TestScheduler()
         val dispatcher = Dispatcher(scheduler)

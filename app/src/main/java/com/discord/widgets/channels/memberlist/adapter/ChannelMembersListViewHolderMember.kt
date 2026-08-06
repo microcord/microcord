@@ -69,6 +69,7 @@ class ChannelMembersListViewHolderMember(private val binding: WidgetChannelMembe
             .bind(data.avatarDecoration)
         binding.root.findViewById<UsernameView>(R.id.channel_members_list_item_name).apply {
             configureUsername(data.name)
+            configureGuildTag(data.primaryGuild)
             configureTag(data.isBot, data.tagText ?: R.string.bot_tag_bot, data.tagVerified)
             setUsernameColor(data.color?.takeUnless { it == Color.BLACK || it == 0 }
                 ?: ColorCompat.getThemedColor(context, R.attr.primary_000))

@@ -8,14 +8,10 @@ import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
-import android.widget.ImageView
 import android.widget.LinearLayout
-import androidx.cardview.widget.CardView
-import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import com.discord.utilities.user.NicknameUtils
 import com.discord.R
+import com.discord.databinding.UserProfileHeaderViewBinding
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
 import com.discord.utilities.color.ColorCompat
@@ -24,24 +20,12 @@ import com.discord.utilities.images.MGImages
 import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.utilities.user.UserUtils.getUserNameWithDiscriminator
-import com.discord.utilities.view.text.SimpleDraweeSpanTextView
-import com.discord.views.UsernameView
 import com.discord.views.user.UserAvatarPresenceView
-import com.discord.widgets.channels.UserAkaView
 import com.discord.widgets.user.Badge
 import com.facebook.drawee.view.SimpleDraweeView
 
 class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayout(context, attrs) {
-    private val banner: SimpleDraweeView
-    private val bannerEdit: CardView
-    private val gifTag: ImageView
-    private val avatar: UserAvatarPresenceView
-    private val avatarEdit: CardView
-    private val aka: UserAkaView
-    private val badges: LinearLayout
-    private val customStatus: SimpleDraweeSpanTextView
-    private val primaryName: UsernameView
-    private val secondaryName: SimpleDraweeSpanTextView
+    private val binding = UserProfileHeaderViewBinding.inflate(LayoutInflater.from(context), this, true)
     private val bannerChangeDetector = MGImages.DistinctChangeDetector()
     private var backgroundColor: Int
     private var onAvatarEdit: () -> Unit = {}
@@ -50,17 +34,6 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
     private var onAvatarRepresentativeColorUpdated: (Int) -> Unit = {}
 
     init {
-        LayoutInflater.from(context).inflate(R.layout.user_profile_header_view, this)
-        banner = requireNotNull(findViewById(R.id.banner))
-        bannerEdit = requireNotNull(findViewById(R.id.banner_edit))
-        gifTag = requireNotNull(findViewById(R.id.gif_tag))
-        avatar = requireNotNull(findViewById(R.id.large_avatar))
-        avatarEdit = requireNotNull(findViewById(R.id.avatar_edit))
-        aka = requireNotNull(findViewById(R.id.user_aka))
-        badges = requireNotNull(findViewById(R.id.user_profile_header_badges))
-        customStatus = requireNotNull(findViewById(R.id.user_profile_header_custom_status))
-        primaryName = requireNotNull(findViewById(R.id.user_profile_header_primary_name))
-        secondaryName = requireNotNull(findViewById(R.id.user_profile_header_secondary_name))
         backgroundColor = context.obtainStyledAttributes(attrs, intArrayOf(R.attr.user_profile_header_background_color)).run {
             try {
                 getColor(0, ColorCompat.getThemedColor(context, R.attr.colorBackgroundTertiary))
@@ -69,8 +42,8 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
             }
         }
         setBackgroundColor(backgroundColor)
-        avatar.setAvatarBackgroundColor(backgroundColor)
-        banner.setBackgroundColor(backgroundColor)
+        binding.largeAvatar.setAvatarBackgroundColor(backgroundColor)
+        binding.banner.setBackgroundColor(backgroundColor)
     }
 
     fun setOnAvatarEdit(callback: () -> Unit) { onAvatarEdit = callback }
@@ -80,44 +53,44 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
 
     fun updateViewState(state: UserProfileHeaderViewModel.ViewState.Loaded) {
         configureTheme(state)
-        avatar.setOnAvatarBitmapLoadedListener { bitmap, _ ->
+        binding.largeAvatar.setOnAvatarBitmapLoadedListener { bitmap, _ ->
             val pixel = bitmap.getPixel(bitmap.width / 2, bitmap.height / 2)
             onAvatarRepresentativeColorUpdated(pixel)
         }
-        avatar.setOnClickListener { if (state.editable) onAvatarEdit() }
-        avatarEdit.setOnClickListener { if (state.editable) onAvatarEdit() }
+        binding.largeAvatar.setOnClickListener { if (state.editable) onAvatarEdit() }
+        binding.avatarEdit.setOnClickListener { if (state.editable) onAvatarEdit() }
         configureBanner(state)
-        avatar.configure(UserAvatarPresenceView.ViewState(state.user, state.presence, state.showPresence, state.guildMember))
-        avatar.setAvatarDecoration(state.avatarDecoration, animate = state.shouldAnimateBanner)
+        binding.largeAvatar.configure(UserAvatarPresenceView.ViewState(state.user, state.presence, state.showPresence, state.guildMember))
+        binding.largeAvatar.setAvatarDecoration(state.avatarDecoration, animate = state.shouldAnimateBanner)
         configureNames(state.user, state.guildMember, state)
-        aka.visibility = if (state.showAkas) View.VISIBLE else View.GONE
-        aka.configure(state.guildMembersForAka)
+        binding.userAka.visibility = if (state.showAkas) View.VISIBLE else View.GONE
+        binding.userAka.configure(state.guildMembersForAka)
         setBadges(badgesFor(state))
-        PresenceUtils.setCustomStatusText(state.presence, customStatus)
-        avatarEdit.visibility = if (state.editable) View.VISIBLE else View.GONE
-        bannerEdit.visibility = if (state.editable) View.VISIBLE else View.GONE
+        PresenceUtils.setCustomStatusText(state.presence, binding.userProfileHeaderCustomStatus)
+        binding.avatarEdit.visibility = if (state.editable) View.VISIBLE else View.GONE
+        binding.bannerEdit.visibility = if (state.editable) View.VISIBLE else View.GONE
     }
 
     fun updateBannerColor(state: UserProfileHeaderViewModel.ViewState.Loaded) {
         val color = state.profileThemeColors(isDarkTheme())?.primary
             ?: runCatching { state.bannerColorHex?.let(Color::parseColor) }.getOrNull()
             ?: backgroundColor
-        banner.setBackgroundColor(color)
+        binding.banner.setBackgroundColor(color)
     }
 
     private fun configureTheme(state: UserProfileHeaderViewModel.ViewState.Loaded) {
         val colors = state.profileThemeColors(isDarkTheme())
         val surface = colors?.headerSurface ?: backgroundColor
         setBackgroundColor(surface)
-        avatar.setAvatarBackgroundColor(surface)
+        binding.largeAvatar.setAvatarBackgroundColor(surface)
         colors?.let {
-            primaryName.setUsernameColor(it.textDefault)
-            secondaryName.setTextColor(it.textMuted)
-            customStatus.setTextColor(it.textDefault)
+            binding.userProfileHeaderPrimaryName.setUsernameColor(it.textDefault)
+            binding.userProfileHeaderSecondaryName.setTextColor(it.textMuted)
+            binding.userProfileHeaderCustomStatus.setTextColor(it.textDefault)
         } ?: run {
-            primaryName.setUsernameColor(ColorCompat.getThemedColor(context, R.attr.colorHeaderPrimary))
-            secondaryName.setTextColor(ColorCompat.getThemedColor(context, R.attr.primary_400))
-            customStatus.setTextColor(ColorCompat.getThemedColor(context, R.attr.colorHeaderSecondary))
+            binding.userProfileHeaderPrimaryName.setUsernameColor(ColorCompat.getThemedColor(context, R.attr.colorHeaderPrimary))
+            binding.userProfileHeaderSecondaryName.setTextColor(ColorCompat.getThemedColor(context, R.attr.primary_400))
+            binding.userProfileHeaderCustomStatus.setTextColor(ColorCompat.getThemedColor(context, R.attr.colorHeaderSecondary))
         }
     }
 
@@ -141,17 +114,17 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
             )
             else -> IconUtils.getForUserBanner(state.user.id, hash, size, state.shouldAnimateBanner)
         }
-        banner.aspectRatio = BANNER_ASPECT_RATIO
+        binding.banner.aspectRatio = BANNER_ASPECT_RATIO
         MGImages.setImage(
-            banner,
+            binding.banner,
             url,
             changeDetector = bannerChangeDetector,
             autoPlayAnimations = state.shouldAutoPlayBanner,
         )
         updateBannerColor(state)
-        banner.setOnClickListener { onBannerPress() }
-        bannerEdit.setOnClickListener { onBannerPress() }
-        gifTag.visibility = if (state.shouldShowGIFTag) View.VISIBLE else View.GONE
+        binding.banner.setOnClickListener { onBannerPress() }
+        binding.bannerEdit.setOnClickListener { onBannerPress() }
+        binding.gifTag.visibility = if (state.shouldShowGIFTag) View.VISIBLE else View.GONE
     }
 
     private fun configureNames(user: User, member: GuildMember?, state: UserProfileHeaderViewModel.ViewState.Loaded) {
@@ -162,8 +135,9 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
             ?: NicknameUtils.getNickname(member?.guildId, state.channelId, user.id)
         val displayName = user.getDisplayName(contextNickname)
         val primary = if (displayName == user.username) accountName else displayName
-        primaryName.configureUsername(primary)
-        primaryName.configureTag(user.isBot, if (user.isSystemUser) R.string.system_dm_tag_system else R.string.bot_tag_bot, false)
+        binding.userProfileHeaderPrimaryName.configureUsername(primary)
+        binding.userProfileHeaderPrimaryName.configureGuildTag(user.primaryGuild, 15f)
+        binding.userProfileHeaderPrimaryName.configureTag(user.isBot, if (user.isSystemUser) R.string.system_dm_tag_system else R.string.bot_tag_bot, false)
         // Reference: the username and pronouns share one line, joined by a divider dot.
         // The aka row already names the account, so only the pronouns survive alongside it.
         val accountLine = accountName
@@ -172,8 +146,8 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         val secondary = listOfNotNull(accountLine, state.pronouns)
             .takeIf(List<CharSequence>::isNotEmpty)
             ?.joinToString(DIVIDER_DOT)
-        secondaryName.text = secondary
-        secondaryName.visibility = if (secondary != null) View.VISIBLE else View.GONE
+        binding.userProfileHeaderSecondaryName.text = secondary
+        binding.userProfileHeaderSecondaryName.visibility = if (secondary != null) View.VISIBLE else View.GONE
     }
 
     /**
@@ -194,16 +168,17 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
      * surface, so a short final row does not leave an empty tail behind it.
      */
     private fun setBadges(items: List<Badge>) {
-        badges.removeAllViews()
+        binding.userProfileHeaderBadges.removeAllViews()
         if (items.isEmpty()) return
         val perRow = badgesPerRow()
         items.chunked(perRow).forEach { row ->
-            badges.addView(badgeRow(row))
+            binding.userProfileHeaderBadges.addView(badgeRow(row))
         }
     }
 
     private fun badgesPerRow(): Int {
-        val available = (badges.parent as? View)?.width?.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+        val available = (binding.userProfileHeaderBadges.parent as? View)?.width?.takeIf { it > 0 }
+            ?: resources.displayMetrics.widthPixels
         val usable = available / 2 - dp(BADGE_ROW_PADDING_H_DP) * 2
         val step = dp(BADGE_SIZE_DP) + dp(BADGE_GAP_DP)
         return ((usable + dp(BADGE_GAP_DP)) / step).coerceAtLeast(1)
@@ -220,7 +195,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
             LinearLayout.LayoutParams.WRAP_CONTENT,
-        ).apply { topMargin = if (badges.childCount == 0) 0 else dp(BADGE_ROW_GAP_DP) }
+        ).apply { topMargin = if (binding.userProfileHeaderBadges.childCount == 0) 0 else dp(BADGE_ROW_GAP_DP) }
         items.forEachIndexed { index, badge ->
             addView(badgeView(badge), LinearLayout.LayoutParams(dp(BADGE_SIZE_DP), dp(BADGE_SIZE_DP)).apply {
                 if (index > 0) marginStart = dp(BADGE_GAP_DP)
@@ -243,8 +218,8 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         set(value) {
             if (field == value) return
             field = value
-            for (i in 0 until badges.childCount) {
-                (badges.getChildAt(i).background as? GradientDrawable)?.setColor(value)
+            for (i in 0 until binding.userProfileHeaderBadges.childCount) {
+                (binding.userProfileHeaderBadges.getChildAt(i).background as? GradientDrawable)?.setColor(value)
             }
         }
 

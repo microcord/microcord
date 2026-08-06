@@ -189,7 +189,7 @@ class WidgetNewUserOnboarding : AppFragment(R.layout.widget_new_user_onboarding)
 
     private fun saveAvatar() {
         val data = pendingAvatar ?: return
-        val api = RestAPI.reactNativeApiOrNull ?: return
+        val api = RestAPI.apiOrNull ?: return
         binding.newUserAvatarNext.setIsLoading(true)
         api.patchUser(PatchUserBody(avatar = NullSerializable.Value(data)))
             .restSubscribeOn(false)
@@ -220,7 +220,7 @@ class WidgetNewUserOnboarding : AppFragment(R.layout.widget_new_user_onboarding)
     }
 
     private fun saveDiscoverability() {
-        val api = RestAPI.reactNativeApiOrNull ?: return
+        val api = RestAPI.apiOrNull ?: return
         binding.newUserDiscoverabilityNext.setIsLoading(true)
         val flags = if (binding.newUserDiscoverabilityToggle.isChecked) DISCOVERABLE_BY_PHONE or DISCOVERABLE_BY_EMAIL else 0
         api.updateUserSettings(RestAPIParams.UserSettings.createWithFriendDiscoveryFlags(flags))
@@ -243,7 +243,7 @@ class WidgetNewUserOnboarding : AppFragment(R.layout.widget_new_user_onboarding)
     }
 
     private fun saveDiscoverabilityName() {
-        val api = RestAPI.reactNativeApiOrNull ?: return
+        val api = RestAPI.apiOrNull ?: return
         val name = binding.newUserDiscoverabilityNameWrap.getTextOrEmpty().trim().ifBlank { null }
         binding.newUserDiscoverabilityNameNext.setIsLoading(true)
         api.createConnectionContacts(RestAPIParams.ConnectedAccountContacts(name, friendSync = true))

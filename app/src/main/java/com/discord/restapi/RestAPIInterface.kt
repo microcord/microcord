@@ -42,6 +42,7 @@ import com.discord.api.guild.GuildOnboardingResponses
 import com.discord.api.guild.PruneCountResponse
 import com.discord.api.guild.VanityUrlResponse
 import com.discord.api.guild.preview.GuildPreview
+import com.discord.api.guild.profile.GuildProfile
 import com.discord.api.guild.welcome.GuildWelcomeScreen
 import com.discord.api.guildmember.GuildMember
 import com.discord.api.guildmember.PatchGuildMemberBody
@@ -1288,6 +1289,9 @@ interface RestAPIInterface {
 
     @GET("guilds/{guildId}/preview")
     fun getGuildPreview(@Path("guildId") guildId: Long): Observable<GuildPreview>
+
+    @GET("guilds/{guildId}/profile")
+    fun getGuildProfile(@Path("guildId") guildId: Long): Observable<GuildProfile>
 
     @GET("guilds/{guildId}/welcome-screen")
     fun getGuildWelcomeScreen(@Path("guildId") guildId: Long): Observable<GuildWelcomeScreen>

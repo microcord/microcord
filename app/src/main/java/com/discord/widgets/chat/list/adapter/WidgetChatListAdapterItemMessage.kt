@@ -50,6 +50,7 @@ import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.AvatarDecorationView
 import com.discord.views.FailedUploadList
+import com.discord.views.GuildTagView
 import com.discord.views.ThemedColor
 import com.discord.views.typing.TypingDots
 import com.discord.widgets.chat.list.entries.ChatListEntry
@@ -92,6 +93,8 @@ class WidgetChatListAdapterItemMessage(
     private val itemRoleIcon: RoleIconView? =
         itemView.findViewById(R.id.chat_list_adapter_item_text_role_icon)
     private val itemTag: TextView? = itemView.findViewById(R.id.chat_list_adapter_item_text_tag)
+    private val itemGuildTag: GuildTagView? =
+        itemView.findViewById(R.id.chat_list_adapter_item_text_guild_tag)
     private val replyHolder: View? =
         itemView.findViewById(R.id.chat_list_adapter_item_text_decorator)
     private val replyLinkItem: View? =
@@ -100,6 +103,8 @@ class WidgetChatListAdapterItemMessage(
         itemView.findViewById(R.id.chat_list_adapter_item_reply_leading_views)
     private val replyName: TextView? =
         itemView.findViewById(R.id.chat_list_adapter_item_text_decorator_reply_name)
+    private val replyGuildTag: GuildTagView? =
+        itemView.findViewById<GuildTagView>(R.id.chat_list_adapter_item_text_reply_guild_tag)?.apply { setSize(10f) }
     private val replyIcon: ImageView? =
         itemView.findViewById(R.id.chat_list_adapter_item_text_decorator_reply_icon)
     private val replyAvatar: ImageView? =
@@ -139,6 +144,7 @@ class WidgetChatListAdapterItemMessage(
         val isThreadStarterMessage = entry.isThreadStarterMessage
 
         configureItemTag(message, entry.isGuildForumPostAuthor)
+        itemGuildTag?.bind(message.author?.primaryGuild)
         if (backgroundHighlight != null && gutterHighlight != null) {
             configureCellHighlight(message, backgroundHighlight, gutterHighlight, entry.isPendingReply)
         }
@@ -561,6 +567,7 @@ class WidgetChatListAdapterItemMessage(
     private fun configureReplyPreview(entry: MessageEntry) {
         val replyHolder = replyHolder ?: return
         val replyLinkItem = replyLinkItem ?: return
+        replyGuildTag?.bind(null)
 
         val replyData = entry.replyData
         val isInteraction = entry.message.isInteraction()
@@ -609,6 +616,7 @@ class WidgetChatListAdapterItemMessage(
         }
 
         val author = repliedMessage.author ?: return
+        replyGuildTag?.bind(author.primaryGuild)
         configureReplyAuthor(
             CoreUser(author),
             repliedEntry.author,
@@ -700,6 +708,7 @@ class WidgetChatListAdapterItemMessage(
         val interaction = message.interaction ?: return
         val interactionUser = interaction.user ?: return
         val user = CoreUser(interactionUser)
+        replyGuildTag?.bind(interactionUser.primaryGuild)
 
         configureReplyAvatar(user, entry.author)
         configureReplyAuthor(user, entry.interactionAuthor, entry)

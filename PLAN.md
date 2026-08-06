@@ -1170,7 +1170,8 @@ or observable behavior. Small implementation details do not belong here.
 | 2026-07-23 | Allow scoped JitPack access for recovered uCrop and FlexInput artifacts | Reference-compatible versions are unavailable from Google and Maven Central | Repository content filtering permits only `com.github.yalantis` and `com.github.lytefast` |
 | 2026-07-31 | Replace FlexInput's unavailable CameraKit `1.0.0-beta3.10` transitive with upstream JitPack `v1.0.0-beta3.11` | The original Bintray artifact is absent from Google and Maven Central and beta3.10 does not build on JitPack; beta3.11 preserves the `CameraKitView.ErrorListener` signature, camera APIs used by FlexInput, and resource attrs | Keep the unavailable CameraKit/JPEGKit transitives excluded, install CameraKit explicitly, and admit `com.github.CameraKit` through the scoped JitPack filter |
 | 2026-07-31 | Port Aliucord `DefaultStickers` behavior natively | The user explicitly requested default sticker access beyond stock 126.21 behavior | Standard packs/categories are shown to non-Nitro users, standard stickers are sendable, and only non-premium `sticker_ids` sends use a dedicated RN-metadata REST client; no Aliucord API or dependency is included |
-| 2026-08-05 | Port Aliucord poll behavior natively with XML-backed views and current RN transport | The user requested modern poll creation, rendering, voting, results, and closure on the 126.21 shell | Poll endpoints use only `RestAPI.reactNativeApiOrNull`; `MESSAGE_POLL_VOTE_*` updates the existing message store; no Aliucord runtime dependency or programmatic view hierarchy is included |
+| 2026-08-05 | Port Aliucord poll behavior natively with XML-backed views and current transport | The user requested modern poll creation, rendering, voting, results, and closure on the 126.21 shell | Poll endpoints use `RestAPI.api`; `MESSAGE_POLL_VOTE_*` updates the existing message store; no Aliucord runtime dependency or programmatic view hierarchy is included |
+| 2026-08-07 | Use one default `RestAPIInterface` transport | The user confirmed the former legacy/RN split has been retired and every API call is routed through the same client metadata | `RestAPI.api` is the sole default client; the redundant RN alias/interceptor is removed and the null-serializing variant uses the same metadata headers |
 | 2026-07-31 | Use 12 Gradle workers with parallel execution and build cache | The host has 12 physical/24 logical CPUs; 24 workers would worsen the compiler heap/disk contention already observed | Builds use physical-core parallelism while Kotlin/Gradle daemons retain 4 GB heap ceilings |
 | 2026-07-23 | Install upstream SimpleAST 2.8.0 with the reference 2.6.0 rule surface | Recovered behavior uniquely matches 2.6.0, but JitPack no longer serves that artifact; 2.8.0 is the available API-compatible upstream AAR | Public source is not reconstructed; Discord rules must omit post-2.6 diff behavior |
 | 2026-07-23 | Use JADX MCP for decompiled reference inspection | The connected JADX server provides direct class, method, field, and cross-reference evidence | Exported Java/DEX file inspection is fallback-only when MCP lacks a body |
@@ -2917,6 +2918,38 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   onboarding/rules/invite tests and `assembleDebug` pass; APK installed on A65.
 - Added a `master` push workflow that builds the debug APK with Java 17 and creates a numbered GitHub release using
   the standard release action. The first server-side run remains verification.
+- Backported guild-tag display from Aliucord PR #594: the exact four-field `primary_guild` payload now survives API
+  parsing and user-store merges, and one reusable `GuildTagView` renders its CDN badge/tag beside message and reply
+  authors, member-list names, profile names and one-to-one DMs. Tags open the existing guild-profile sheet instead of
+  duplicating Aliucord's 448-line sheet. The sheet now fetches the typed current `/guilds/{id}/profile` contract through
+  the single default client instead of dismissing after a failed legacy preview. Focused model/transport tests and
+  `assembleDebug` pass; three existing member-list tests still fail because they access `StoreStream` without
+  initialization. Tag adoption remains outside this display slice and requires `/users/@me/clan` before enabling UI.
+- Guild-tag profile HTTP 403 is now an explicit successful private state: the sheet stays open, shows "Private Server"
+  and the visibility explanation, and exposes no join/view actions. Focused store/profile/transport tests and
+  `assembleDebug` pass; APK installed on WSA.
+- Guild-profile Join now waits for success, selects the joined guild, and restores the button with an error toast on
+  failure. View Server routes known guilds directly and unknown profiles through lurking. `WidgetGuildProfileSheet`
+  now uses generated binding for its static layout, with
+  lookup retained only inside dynamically inflated action layouts. Focused profile tests and `assembleDebug` pass;
+  APK installed on WSA.
+- Hermes module 5942 and a captured desktop request confirm guild-tag profiles enter through View Server using
+  `PUT /guilds/{id}/members/@me?lurker=true&session_id=...`. The sheet now exposes only that preview action; it no
+  longer attempts `lurker=false` membership conversion. Focused profile/lurking/transport tests and `assembleDebug`
+  pass; APK installed on WSA.
+- Lurk hydration now matches RN `LurkingStore`: READY guilds with no `joined_at` repopulate the lurked-ID set, reopening
+  an existing preview navigates without another PUT, and a successful lurk response immediately hydrates guild/channel
+  stores instead of waiting for Gateway ordering. Empty welcome screens are suppressed and a per-ViewModel gate stops
+  duplicate welcome sheets before the store's seen update propagates. Focused lurking/profile tests and `assembleDebug`
+  pass; APK installed on WSA.
+- Guild-profile CTA gating now follows Hermes `getGuildProfileCTAType`: View Server is exposed only for
+  `DISCOVERABLE` profiles, and current-user `GUILD_MEMBER_ADD` clears lurk state so joined guilds lose the Join prompt.
+  Lurk requests send RN's Base64 `{}` `X-Context-Properties` header through the shared context helper. Focused
+  lurking/profile/transport tests and `assembleDebug` pass; APK installed on A65 (`188b1209`).
+- Guild profile sheets no longer render or observe the emoji grid/upsell, and the obsolete Join Server button is
+  removed from the action layout. The remaining upload/view controls bind through generated
+  `WidgetGuildProfileActionsBinding`; View Server drops its 8dp leading gap when it is the sole action. Focused profile
+  tests and `assembleDebug` pass; APK installed on A65.
 
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/applauncher/**` | Android 340.12
 Hermes `out.js` Apps launcher modules | log in on WSA and verify HOME/search/application/command/list

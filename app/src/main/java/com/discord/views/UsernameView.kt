@@ -6,11 +6,12 @@ import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
-import android.widget.TextView
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.widget.TextViewCompat
 import com.discord.R
+import com.discord.api.user.PrimaryGuild
+import com.discord.databinding.ViewUsernameBinding
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.icon.IconUtils
 import com.facebook.drawee.backends.pipeline.Fresco
@@ -18,7 +19,6 @@ import com.facebook.drawee.drawable.ScalingUtils
 import com.facebook.drawee.generic.GenericDraweeHierarchyBuilder
 import com.facebook.drawee.generic.RoundingParams
 import com.facebook.drawee.span.DraweeSpanStringBuilder
-import com.facebook.drawee.span.SimpleDraweeSpanTextView
 import com.facebook.imagepipeline.common.ResizeOptions
 import com.facebook.imagepipeline.request.ImageRequestBuilder
 
@@ -26,29 +26,25 @@ class UsernameView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : ConstraintLayout(context, attrs) {
-    private val tag: TextView
-    private val usernameText: SimpleDraweeSpanTextView
+    private val binding = ViewUsernameBinding.inflate(LayoutInflater.from(context), this)
 
     init {
-        LayoutInflater.from(context).inflate(R.layout.view_username, this)
-        tag = requireNotNull(findViewById(R.id.username_tag))
-        usernameText = requireNotNull(findViewById(R.id.username_text))
         if (attrs != null) {
             context.obtainStyledAttributes(attrs, R.styleable.UsernameView, 0, 0).run {
                 try {
-                    usernameText.text = getText(R.styleable.UsernameView_username)
-                    usernameText.isSingleLine = getBoolean(R.styleable.UsernameView_username_singleline, true)
+                    binding.usernameText.text = getText(R.styleable.UsernameView_username)
+                    binding.usernameText.isSingleLine = getBoolean(R.styleable.UsernameView_username_singleline, true)
                     getResourceId(R.styleable.UsernameView_username_text_appearance, 0).takeIf { it != 0 }
-                        ?.let { TextViewCompat.setTextAppearance(usernameText, it) }
+                        ?.let { TextViewCompat.setTextAppearance(binding.usernameText, it) }
                     val sizeResource = getResourceId(
                         R.styleable.UsernameView_username_text_size,
                         R.dimen.uikit_textsize_medium,
                     )
-                    usernameText.setTextSize(TypedValue.COMPLEX_UNIT_PX, resources.getDimension(sizeResource))
-                    tag.text = getText(R.styleable.UsernameView_android_text)
+                    binding.usernameText.setTextSize(TypedValue.COMPLEX_UNIT_PX, resources.getDimension(sizeResource))
+                    binding.usernameTag.text = getText(R.styleable.UsernameView_android_text)
                     val spacing = getFloat(R.styleable.UsernameView_username_line_spacing_multiplier, 0f)
-                    if (spacing > 0f) usernameText.setLineSpacing(0f, spacing)
-                    usernameText.setTextColor(
+                    if (spacing > 0f) binding.usernameText.setLineSpacing(0f, spacing)
+                    binding.usernameText.setTextColor(
                         getColor(
                             R.styleable.UsernameView_username_text_color,
                             ColorCompat.getThemedColor(context, R.attr.colorInteractiveActive),
@@ -72,26 +68,31 @@ class UsernameView @JvmOverloads constructor(
         val builder = DraweeSpanStringBuilder()
         builder.setAvatar(context, avatarUrl, animateAvatar, avatarSizePx, roundingOverlayColor)
         builder.append(username)
-        usernameText.setDraweeSpanStringBuilder(builder)
+        binding.usernameText.setDraweeSpanStringBuilder(builder)
     }
 
     fun configureTag(visible: Boolean, tagText: Int, isVerified: Boolean) {
         if (visible) {
-            tag.visibility = View.VISIBLE
-            tag.setText(tagText)
-            tag.setCompoundDrawablesWithIntrinsicBounds(
+            binding.usernameTag.visibility = View.VISIBLE
+            binding.usernameTag.setText(tagText)
+            binding.usernameTag.setCompoundDrawablesWithIntrinsicBounds(
                 if (isVerified) R.drawable.ic_verified_10dp else 0,
                 0,
                 0,
                 0,
             )
         } else {
-            tag.visibility = View.GONE
+            binding.usernameTag.visibility = View.GONE
         }
     }
 
+    fun configureGuildTag(primaryGuild: PrimaryGuild?, textSizeSp: Float = 12f) {
+        binding.usernameGuildTag.setSize(textSizeSp)
+        binding.usernameGuildTag.bind(primaryGuild)
+    }
+
     fun setUsernameColor(color: Int) {
-        usernameText.setTextColor(color)
+        binding.usernameText.setTextColor(color)
     }
 
     private fun DraweeSpanStringBuilder.setAvatar(

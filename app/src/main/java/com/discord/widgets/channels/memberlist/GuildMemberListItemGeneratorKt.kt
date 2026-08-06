@@ -91,6 +91,7 @@ internal fun ChannelMemberListRow.toAdapterItem(guildId: Long? = null): ChannelM
         user.flags or user.publicFlags,
         nameplate,
         avatarDecoration,
+        user.primaryGuild,
     )
     is ChannelMemberListRow.PlaceholderHeader -> ChannelMembersListAdapter.Item.PlaceholderHeader(key)
     is ChannelMemberListRow.PlaceholderMember -> PLACEHOLDER_INSTANCES[(key.hashCode() and Int.MAX_VALUE) % PLACEHOLDER_INSTANCES.size]

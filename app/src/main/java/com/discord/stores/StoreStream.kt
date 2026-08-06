@@ -1904,6 +1904,7 @@ class StoreStream private constructor(
 
     @StoreThread
     private fun handleGuildMemberAddInternal(member: GuildMember) {
+        if (member.user.id == users.getMeInternal().id) lurking.handleCurrentUserJoined(member.guildId)
         users.handleGuildMemberAdd(member)
         guilds.handleGuildMember(member, preserveProfile = true)
         permissions.handleGuildMemberAdd(member)

@@ -47,7 +47,7 @@ class StoreGuildOnboarding(
         val current = get(guildId)
         if (current.loading || (!force && current.onboarding != null)) return@schedule
         publish(guildId, current.copy(loading = true, error = false))
-        val service = RestAPI.reactNativeApiOrNull
+        val service = RestAPI.apiOrNull
         if (service == null) {
             publish(guildId, current.copy(error = true))
             return@schedule
@@ -80,7 +80,7 @@ class StoreGuildOnboarding(
             onboardingPromptsSeen = prompts.associate { it.id.toString() to now },
             onboardingResponsesSeen = prompts.flatMap { it.options }.associate { it.id.toString() to now },
         )
-        val service = RestAPI.reactNativeApiOrNull
+        val service = RestAPI.apiOrNull
         if (service == null) {
             publish(guildId, current.copy(error = true))
             return@schedule

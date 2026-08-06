@@ -4,14 +4,11 @@ import androidx.annotation.StringRes
 import com.discord.R
 import com.discord.api.guild.GuildFeature
 import com.discord.api.guild.preview.GuildPreview
-import com.discord.models.domain.emoji.Emoji
-import com.discord.models.domain.emoji.ModelEmojiCustom
 import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
 import com.discord.models.user.MeUser
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
-import com.discord.stores.StoreEmoji
 import com.discord.stores.StoreGuildProfiles
 import com.discord.stores.StoreStream
 import com.discord.utilities.channel.GuildChannelsInfo
@@ -19,7 +16,6 @@ import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
-import com.discord.utilities.user.UserUtils.isPremium
 import rx.Observable
 import rx.subjects.PublishSubject
 
@@ -30,7 +26,6 @@ class WidgetGuildProfileSheetViewModel(
     storeObservable: Observable<StoreState> = observeStores(guildId),
 ) : com.discord.app.AppViewModel<WidgetGuildProfileSheetViewModel.ViewState>(ViewState.Loading) {
     private val eventSubject = PublishSubject.create<Event>()
-    private var isEmojiSectionExpanded = false
 
     init {
         storeObservable.ui(this).appSubscribe(WidgetGuildProfileSheetViewModel::class.java) {
@@ -45,6 +40,7 @@ class WidgetGuildProfileSheetViewModel(
         val profile = state.guildProfile?.data
         when {
             guild != null -> updateViewState(loadedGuild(state, guild, profile))
+            state.guildProfile?.isPrivate == true -> updateViewState(loadedPrivate(guildId, state.me))
             state.guildProfile?.fetchState == StoreGuildProfiles.FetchStates.SUCCEEDED && profile != null ->
                 updateViewState(loadedPreview(profile, state.me))
             state.guildProfile?.fetchState == StoreGuildProfiles.FetchStates.FAILED ||
@@ -69,7 +65,6 @@ class WidgetGuildProfileSheetViewModel(
             isDeveloper = state.isDeveloper,
             username = state.me.username,
         )
-        val emojis = if (state.isLurking) preview?.emojis?.map { ModelEmojiCustom(it, guild.id) } else state.emojis
         return ViewState.Loaded(
             guildId = guild.id,
             guildName = guild.name,
@@ -84,11 +79,9 @@ class WidgetGuildProfileSheetViewModel(
                 manage.canManage(), state.guildChannelsInfo.ableToInstantInvite, guild.premiumSubscriptionCount,
             ),
             actions = actions,
-            emojisData = EmojisData(state.me.isPremium, isEmojiSectionExpanded, emojis.orEmpty()),
             bottomActions = BottomActions(
                 showUploadEmoji = !state.isLurking && manage.canManageEmojisAndStickers,
-                showJoinServer = state.isLurking,
-                showViewServer = !viewingGuild,
+                showViewServer = !viewingGuild || state.isLurking,
             ),
             isGuildHub = guild.isHub(),
             meUser = state.me,
@@ -107,22 +100,38 @@ class WidgetGuildProfileSheetViewModel(
         memberCount = preview.approximateMemberCount,
         tabItems = null,
         actions = null,
-        emojisData = EmojisData(me.isPremium, isEmojiSectionExpanded, preview.emojis.map { ModelEmojiCustom(it, preview.id) }),
-        bottomActions = BottomActions(false, true, !viewingGuild),
+        bottomActions = BottomActions(false, GuildFeature.DISCOVERABLE in preview.features),
         isGuildHub = GuildFeature.HUB in preview.features,
         meUser = me,
     )
 
-    fun onClickEmoji() {
-        val state = viewState as? ViewState.Loaded ?: return
-        if (isEmojiSectionExpanded) return
-        isEmojiSectionExpanded = true
-        updateViewState(state.copy(emojisData = state.emojisData.copy(isExpanded = true)))
-    }
+    private fun loadedPrivate(guildId: Long, me: MeUser) = ViewState.Loaded(
+        guildId = guildId,
+        guildName = "",
+        guildShortName = "?",
+        guildIcon = null,
+        guildDescription = null,
+        verifiedPartneredIconRes = null,
+        banner = Banner(guildId, null, Banner.Type.SPLASH),
+        onlineCount = null,
+        memberCount = null,
+        tabItems = null,
+        actions = null,
+        bottomActions = BottomActions(false, false),
+        isGuildHub = false,
+        meUser = me,
+        isPrivate = true,
+    )
 
-    fun onClickJoinServer(guildId: Long) = StoreStream.getLurking().postJoinGuildAsMember(guildId)
-    fun onClickViewServer(guildId: Long, channelId: Long?) =
-        StoreStream.getLurking().startLurkingAndNavigate(guildId, channelId)
+    fun onClickViewServer(guildId: Long, channelId: Long?) {
+        if (StoreStream.getGuilds().getGuild(guildId) == null) {
+            StoreStream.getLurking().startLurkingAndNavigate(guildId, channelId)
+        } else if (channelId == null) {
+            StoreStream.selectGuild(guildId)
+        } else {
+            StoreStream.selectChannel(guildId, channelId)
+        }
+    }
 
     fun onClickLeaveServer(guildId: Long, onSuccess: () -> Unit) =
         api.leaveGuild(guildId).restSubscribeOn().ui(this)
@@ -166,8 +175,7 @@ class WidgetGuildProfileSheetViewModel(
     data class Banner(val guildId: Long, val hash: String?, val type: Type) {
         enum class Type { BANNER, SPLASH }
     }
-    data class BottomActions(val showUploadEmoji: Boolean, val showJoinServer: Boolean, val showViewServer: Boolean)
-    data class EmojisData(val isPremium: Boolean, val isExpanded: Boolean, val emojis: List<Emoji>)
+    data class BottomActions(val showUploadEmoji: Boolean, val showViewServer: Boolean)
     data class TabItems(val canAccessSettings: Boolean, val ableToInstantInvite: Boolean, val premiumSubscriptionCount: Int)
     sealed class Event { data class DismissAndShowToast(@StringRes val stringRes: Int) : Event() }
 
@@ -179,7 +187,6 @@ class WidgetGuildProfileSheetViewModel(
         val computedMe: GuildMember?,
         val restrictedGuildIds: List<Long>,
         val isDeveloper: Boolean,
-        val emojis: List<Emoji>,
         val isLurking: Boolean,
         val isUnread: Boolean,
     )
@@ -199,10 +206,10 @@ class WidgetGuildProfileSheetViewModel(
             val memberCount: Int?,
             val tabItems: TabItems?,
             val actions: Actions?,
-            val emojisData: EmojisData,
             val bottomActions: BottomActions,
             val isGuildHub: Boolean,
             val meUser: MeUser,
+            val isPrivate: Boolean = false,
         ) : ViewState()
     }
 
@@ -220,12 +227,10 @@ class WidgetGuildProfileSheetViewModel(
             StoreStream.getUsers().observeMe(),
             StoreStream.getUsers().observeMe().flatMap { me -> StoreStream.getGuilds().observeComputedMember(guildId, me.id) },
             StoreStream.getUserSettings().observeRestrictedGuildIds(),
-            StoreStream.getEmojis().getEmojiSet(StoreEmoji.EmojiContext.GuildProfile(guildId), true, false)
-                .map { it.customEmojis[guildId].orEmpty() },
             StoreStream.getLurking().isLurkingObs(guildId),
             GuildChannelsInfo.get(guildId),
-        ) { guild, profile, unread, me, member, restricted, emojis, lurking, info ->
-            StoreState(guild, profile, info, me, member, restricted, StoreStream.getUserSettings().getIsDeveloperMode(), emojis, lurking, unread)
+        ) { guild, profile, unread, me, member, restricted, lurking, info ->
+            StoreState(guild, profile, info, me, member, restricted, StoreStream.getUserSettings().getIsDeveloperMode(), lurking, unread)
         }
     }
 }

@@ -139,6 +139,7 @@ data class ForwardedMessageEntry(
             globalName = globalName,
             collectibles = collectibles,
             avatarDecorationData = avatarDecorationData,
+            primaryGuild = primaryGuild,
         )
 
         private const val FORWARD_REFERENCE_TYPE = 1

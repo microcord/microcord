@@ -1,6 +1,7 @@
 package com.discord.widgets.guilds.profile
 
 import com.discord.api.guild.GuildFeature
+import com.discord.api.guild.preview.GuildPreview
 import com.discord.api.premium.PremiumTier
 import com.discord.api.user.NsfwAllowance
 import com.discord.models.domain.ModelNotificationSettings
@@ -8,6 +9,7 @@ import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
 import com.discord.models.user.MeUser
 import com.discord.restapi.RestAPIInterface
+import com.discord.stores.StoreGuildProfiles
 import com.discord.utilities.channel.GuildChannelsInfo
 import com.discord.utilities.permissions.ManageGuildContext
 import java.lang.reflect.Proxy
@@ -57,7 +59,6 @@ class GuildProfileViewModelsTest {
 
         assertFalse(memberLoaded.actions!!.canLeaveGuild)
         assertTrue(memberLoaded.tabItems != null)
-        assertFalse(memberLoaded.bottomActions.showJoinServer)
 
         val lurkerViewModel = WidgetGuildProfileSheetViewModel(
             viewingGuild = false,
@@ -68,8 +69,73 @@ class GuildProfileViewModelsTest {
         val lurkerLoaded = lurkerViewModel.requireViewState() as WidgetGuildProfileSheetViewModel.ViewState.Loaded
         assertTrue(lurkerLoaded.actions == null)
         assertTrue(lurkerLoaded.tabItems == null)
-        assertTrue(lurkerLoaded.bottomActions.showJoinServer)
         assertTrue(lurkerLoaded.bottomActions.showViewServer)
+    }
+
+    @Test fun `private guild profile remains open without actions`() {
+        val privateState = state(guild(), lurking = false).copy(
+            guild = null,
+            guildProfile = StoreGuildProfiles.GuildProfileData(
+                StoreGuildProfiles.FetchStates.SUCCEEDED,
+                data = null,
+                isPrivate = true,
+            ),
+        )
+        val viewModel = WidgetGuildProfileSheetViewModel(
+            viewingGuild = false,
+            guildId = 1,
+            api = noCallsApi(),
+            storeObservable = Observable.just(privateState),
+        )
+
+        val loaded = viewModel.requireViewState() as WidgetGuildProfileSheetViewModel.ViewState.Loaded
+        assertTrue(loaded.isPrivate)
+        assertFalse(loaded.bottomActions.showViewServer)
+    }
+
+    @Test fun `public tag profile enters through server preview`() {
+        val preview = GuildPreview(
+            id = 1,
+            name = "Guild",
+            description = null,
+            splash = null,
+            banner = null,
+            icon = null,
+            approximatePresenceCount = 2,
+            approximateMemberCount = 10,
+            emojis = emptyList(),
+            features = listOf(GuildFeature.DISCOVERABLE),
+            featurableInDirectory = true,
+        )
+        val previewState = state(guild(), lurking = false).copy(
+            guild = null,
+            guildProfile = StoreGuildProfiles.GuildProfileData(
+                StoreGuildProfiles.FetchStates.SUCCEEDED,
+                preview,
+            ),
+        )
+        val viewModel = WidgetGuildProfileSheetViewModel(
+            viewingGuild = false,
+            guildId = 1,
+            api = noCallsApi(),
+            storeObservable = Observable.just(previewState),
+        )
+
+        val loaded = viewModel.requireViewState() as WidgetGuildProfileSheetViewModel.ViewState.Loaded
+        assertTrue(loaded.bottomActions.showViewServer)
+
+        val restricted = WidgetGuildProfileSheetViewModel(
+            viewingGuild = false,
+            guildId = 1,
+            api = noCallsApi(),
+            storeObservable = Observable.just(previewState.copy(
+                guildProfile = StoreGuildProfiles.GuildProfileData(
+                    StoreGuildProfiles.FetchStates.SUCCEEDED,
+                    preview.copy(features = emptyList()),
+                ),
+            )),
+        ).requireViewState() as WidgetGuildProfileSheetViewModel.ViewState.Loaded
+        assertFalse(restricted.bottomActions.showViewServer)
     }
 
     private fun state(guild: Guild, lurking: Boolean) = WidgetGuildProfileSheetViewModel.StoreState(
@@ -80,7 +146,6 @@ class GuildProfileViewModelsTest {
         computedMe = member(),
         restrictedGuildIds = emptyList(),
         isDeveloper = false,
-        emojis = emptyList(),
         isLurking = lurking,
         isUnread = true,
     )

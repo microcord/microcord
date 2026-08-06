@@ -5,6 +5,7 @@ import com.discord.api.user.AvatarDecorationData
 import com.discord.api.user.Collectibles
 import com.discord.api.user.NsfwAllowance
 import com.discord.api.user.Phone
+import com.discord.api.user.PrimaryGuild
 import com.discord.api.user.UserStoreCountry
 
 data class MeUser(
@@ -30,6 +31,7 @@ data class MeUser(
     override val collectibles: Collectibles? = null,
     override val avatarDecoration: AvatarDecorationData? = null,
     val storeCountry: UserStoreCountry? = null,
+    override val primaryGuild: PrimaryGuild? = null,
 ) : User {
     constructor(user: com.discord.api.user.User) : this(
         id = user.id,
@@ -54,6 +56,7 @@ data class MeUser(
         collectibles = user.collectibles?.value,
         avatarDecoration = user.avatarDecorationData?.value,
         storeCountry = user.storeCountry,
+        primaryGuild = user.primaryGuild,
     )
 
     val hasBirthday = nsfwAllowance != NsfwAllowance.UNKNOWN
@@ -63,5 +66,5 @@ data class MeUser(
             "email=<redacted>, isVerified=$isVerified, mfaEnabled=$mfaEnabled, token=<redacted>, " +
             "flags=$flags, publicFlags=$publicFlags, phoneNumber=<redacted>, nsfwAllowance=$nsfwAllowance, " +
             "bio=$bio, bannerColor=$bannerColor, globalName=$globalName, collectibles=$collectibles, " +
-            "hasBirthday=$hasBirthday)"
+            "hasBirthday=$hasBirthday, primaryGuild=$primaryGuild)"
 }

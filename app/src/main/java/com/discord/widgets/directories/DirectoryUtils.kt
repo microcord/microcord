@@ -2,7 +2,6 @@ package com.discord.widgets.directories
 
 import android.content.Context
 import android.os.Bundle
-import android.util.Base64
 import android.view.View
 import android.widget.TextView
 import androidx.activity.result.ActivityResultLauncher
@@ -28,7 +27,6 @@ import com.discord.widgets.mobile_reports.WidgetMobileReports
 import com.discord.utilities.view.recycler.MaxHeightRecyclerView
 import com.discord.utilities.views.SimpleRecyclerAdapter
 import com.facebook.drawee.view.SimpleDraweeView
-import org.json.JSONObject
 
 /** Analytics source recorded on a join started from a directory row. */
 const val DIRECTORY_JOIN_GUILD_SOURCE: String = "Directory Channel Entry"
@@ -238,15 +236,3 @@ internal fun computeShortName(name: String): String {
 private val POSSESSIVE = Regex("'s ")
 private val WORD = Regex("(\\w)(\\w*)")
 private val WHITESPACE = Regex("\\s")
-
-/**
- * Builds an `X-Context-Properties` header value: base64 (no wrap) of a flat JSON object.
- *
- * Port of the reference's `RestAPI.jsonObjectOf`. It belongs on `utilities/rest/RestAPI`, which is
- * currently only a publication point for the Retrofit interface — see the handoff report.
- */
-internal fun contextPropertiesOf(vararg properties: Pair<String, Any?>): String {
-    val json = JSONObject()
-    properties.forEach { (key, value) -> json.put(key, value) }
-    return Base64.encodeToString(json.toString().toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-}

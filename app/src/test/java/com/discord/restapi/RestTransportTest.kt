@@ -34,6 +34,20 @@ class RestTransportTest {
         server.shutdown()
     }
 
+    private fun installDefaultApi() {
+        val headers = object : RequiredHeadersInterceptor.HeadersProvider {
+            override fun getAuthToken() = "fixture-token"
+            override fun getFingerprint() = "fixture-fingerprint"
+            override fun getLocale() = "en-US"
+            override fun getAcceptLanguages() = "en-US"
+            override fun getSpotifyToken(): String? = null
+        }
+        RestAPI.install(
+            RestAPIBuilder(server.url("/api/").toString(), MemoryCookieJar()),
+            listOf(RequiredHeadersInterceptor(headers)),
+        )
+    }
+
     @Test
     fun builderAddsVersionHeadersAndPersistsCookies() {
         server.enqueue(MockResponse().setBody("{\"value\":\"first\"}").addHeader("Set-Cookie", "session=abc; Path=/"))
@@ -165,22 +179,10 @@ class RestTransportTest {
         val response = """{"guild_id":"1","prompts":[],"default_channel_ids":[],"responses":[],"mode":0,"enabled":true,"onboarding_prompts_seen":{},"onboarding_responses_seen":{},"below_requirements":false,"connections":[]}"""
         server.enqueue(MockResponse().setBody(response))
         server.enqueue(MockResponse().setResponseCode(204))
-        val headers = object : RequiredHeadersInterceptor.HeadersProvider {
-            override fun getAuthToken() = "fixture-token"
-            override fun getFingerprint() = "fixture-fingerprint"
-            override fun getLocale() = "en-US"
-            override fun getAcceptLanguages() = "en-US"
-            override fun getSpotifyToken(): String? = null
-        }
-        RestAPI.install(
-            RestAPIBuilder(server.url("/api/").toString(), MemoryCookieJar()),
-            listOf(RequiredHeadersInterceptor(headers)),
-        )
+        installDefaultApi()
 
-        val rnApi = RestAPI.reactNativeApiOrNull!!
-        assertFalse(rnApi === RestAPI.api)
-        rnApi.getGuildOnboarding(1).toBlocking().single()
-        rnApi.completeGuildOnboarding(
+        RestAPI.api.getGuildOnboarding(1).toBlocking().single()
+        RestAPI.api.completeGuildOnboarding(
             1,
             GuildOnboardingResponses(listOf(10), mapOf("2" to 3), mapOf("10" to 3)),
         ).toBlocking().single()
@@ -207,6 +209,21 @@ class RestTransportTest {
             assertEquals("guilds/{guildId}/onboarding", get.getAnnotation(retrofit2.http.GET::class.java).value)
             assertEquals("guilds/{guildId}/onboarding-responses", post.getAnnotation(retrofit2.http.POST::class.java).value)
         }
+    }
+
+    @Test
+    fun guildTagProfileUsesReactNativeTransportHeaders() {
+        server.enqueue(MockResponse().setBody(
+            """{"id":"1","name":"Guild","icon_hash":"icon","member_count":10,"online_count":2,"description":"Profile","brand_color_primary":"#000000","game_application_ids":[],"game_activity":{},"tag":"TAG","badge":1,"badge_color_primary":"#000000","badge_color_secondary":"#000000","badge_hash":"badge","traits":[],"features":[],"visibility":1,"custom_banner_hash":null,"premium_subscription_count":0,"premium_tier":0}""",
+        ))
+        installDefaultApi()
+
+        RestAPI.api.getGuildProfile(1).toBlocking().single()
+        val request = server.takeRequest()
+        assertEquals("/api/v9/guilds/1/profile", request.path)
+        assertEquals("fixture-token", request.getHeader("Authorization"))
+        assertFalse(request.getHeader("X-Super-Properties").isNullOrBlank())
+        assertFalse(request.getHeader("X-Discord-Timezone").isNullOrBlank())
     }
 
     @Test

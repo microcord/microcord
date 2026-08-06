@@ -162,14 +162,10 @@ invalid decompiler constructs into the target.
 
 ## API Transport Rules
 
-- Every endpoint or behavior sourced from the modern React Native client,
-  Hermes bundle, or RN Userdoccers contract must use the RNAPI service/client
-  with `ReactNativeHeadersInterceptor`. Never add a modern endpoint to the
-  legacy `RestAPI.api` transport.
-- Keep reconstructed 126.21 legacy endpoints on the legacy client unless
-  runtime evidence shows that Discord moved them to the RN transport.
-- Add a transport test proving every new RN endpoint receives the RN headers
-  and does not silently fall back to the legacy client.
+- All endpoints use the single default `RestAPI.api` transport with
+  `ClientMetadataInterceptor`; do not recreate a parallel RN/legacy client split.
+- Add a transport test proving every new endpoint receives the default client
+  metadata headers.
 
 ## Resource Rules
 

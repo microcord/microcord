@@ -120,6 +120,7 @@ class WidgetHomeViewModel(
     }
 
     private val eventSubject: PublishSubject<Event> = PublishSubject.create()
+    private val requestedWelcomeSheetGuildIds = HashSet<Long>()
 
     private var previousLeftPanelState: PanelState? = null
     private var wasThreadPeek = false
@@ -181,7 +182,13 @@ class WidgetHomeViewModel(
         // the fetch and a later emission shows the sheet.
         if (storeState.guildInfo.isLurking && !storeGuildWelcomeScreens.hasWelcomeScreenBeenSeen(guildId)) {
             when (welcomeScreenState) {
-                is StoreGuildWelcomeScreens.State.Loaded -> eventSubject.onNext(Event.ShowGuildWelcomeSheet(guildId))
+                is StoreGuildWelcomeScreens.State.Loaded -> {
+                    if (welcomeScreenState.data?.welcomeChannels.orEmpty().isEmpty()) {
+                        storeGuildWelcomeScreens.markWelcomeScreenShown(guildId)
+                    } else if (requestedWelcomeSheetGuildIds.add(guildId)) {
+                        eventSubject.onNext(Event.ShowGuildWelcomeSheet(guildId))
+                    }
+                }
                 null -> storeGuildWelcomeScreens.fetchIfNonexisting(guildId)
                 else -> Unit
             }

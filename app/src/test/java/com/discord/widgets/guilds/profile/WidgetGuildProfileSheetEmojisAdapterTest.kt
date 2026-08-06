@@ -20,7 +20,7 @@ class WidgetGuildProfileSheetEmojisAdapterTest {
         assertFalse(source.contains("setBottomSheetCollapsedStateDisabled()"))
         assertTrue(layout.contains("<androidx.core.widget.NestedScrollView"))
         assertTrue(layout.contains("android:layout_height=\"wrap_content\""))
-        assertTrue(source.contains("if (url == null) constrainIconToParent(root) else constrainIconToBanner(root)"))
+        assertTrue(source.contains("if (url == null) constrainIconToParent() else constrainIconToBanner()"))
         assertTrue(source.contains("connect(icon.id, ConstraintSet.TOP, layout.id, ConstraintSet.TOP, topMargin)"))
         assertTrue(source.contains("connect(icon.id, ConstraintSet.BOTTOM, banner.id, ConstraintSet.BOTTOM)"))
     }

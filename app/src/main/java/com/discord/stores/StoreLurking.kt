@@ -10,6 +10,7 @@ import com.discord.restapi.RestAPIParams
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
+import com.discord.utilities.rest.contextPropertiesOf
 import rx.Observable
 import rx.subjects.BehaviorSubject
 
@@ -91,6 +92,14 @@ class StoreLurking(
     @StoreThread
     internal fun handleConnectionOpen(payload: ModelPayload) {
         sessionId = payload.sessionId
+        val readyLurkIds = payload.guilds.orEmpty()
+            .filter { it.joinedAt == null && !it.unavailable }
+            .mapTo(LinkedHashSet(), ApiGuild::id)
+        if (lurkedGuilds.keys != readyLurkIds) {
+            lurkedGuilds.clear()
+            readyLurkIds.forEach { lurkedGuilds[it] = LurkContext(it, shouldNavigate = false) }
+            lurkedGuildsSubject.onNext(lurkedGuilds)
+        }
         val queued = lurkRequest
         if (queued != null) {
             AppLog.i("Processing lurk request from app link")
@@ -118,6 +127,9 @@ class StoreLurking(
 
     @StoreThread
     internal fun handleGuildRemove(guild: ApiGuild) = stopLurkingInternal(guild.id)
+
+    @StoreThread
+    internal fun handleCurrentUserJoined(guildId: Long) = stopLurkingInternal(guildId)
 
     @StoreThread
     internal fun handleGuildSelected(guildId: Long) {
@@ -178,6 +190,10 @@ class StoreLurking(
             lurkRequest = LurkRequest(guildId, channelId)
             return@schedule
         }
+        if (isLurking(guildId)) {
+            navigate(guildId, channelId)
+            return@schedule
+        }
         startLurkingInternal(
             guildId = guildId,
             channelId = channelId,
@@ -198,7 +214,7 @@ class StoreLurking(
     /** Converts an active preview into a real membership. */
     fun postJoinGuildAsMember(guildId: Long, onSuccess: (ApiGuild) -> Unit = {}, onFailure: () -> Unit = {}) {
         val api = api ?: return onFailure()
-        api.joinGuild(guildId, false, sessionId, null, RestAPIParams.InviteCode(), null)
+        api.joinGuild(guildId, false, sessionId, null, RestAPIParams.InviteCode(), contextPropertiesOf())
             .restSubscribeOn()
             .ui()
             .appSubscribe(
@@ -236,7 +252,7 @@ class StoreLurking(
         lurkedGuildsSubject.onNext(lurkedGuilds)
 
         val api = api ?: return onErrorLurking()
-        api.joinGuild(guildId, true, sessionId, null, RestAPIParams.InviteCode(), null)
+        api.joinGuild(guildId, true, sessionId, null, RestAPIParams.InviteCode(), contextPropertiesOf())
             .restSubscribeOn()
             .ui()
             .appSubscribe(
@@ -245,10 +261,13 @@ class StoreLurking(
                     dispatcher.schedule {
                         lurkedGuilds.remove(guildId)
                         lurkedGuildsSubject.onNext(lurkedGuilds)
+                        onErrorLurking()
                     }
                 },
             ) { guild ->
                 dispatcher.schedule {
+                    guildsStore.handleGuildAdd(guild)
+                    channelsStore.handleGuildAdd(guild)
                     if (!isLurking(guild)) {
                         lurkedGuilds.remove(guildId)
                         lurkedGuildsSubject.onNext(lurkedGuilds)

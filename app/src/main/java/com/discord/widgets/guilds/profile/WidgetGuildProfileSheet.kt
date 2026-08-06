@@ -3,22 +3,18 @@ package com.discord.widgets.guilds.profile
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
-import android.view.ViewStub
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.cardview.widget.CardView
-import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.fragment.app.FragmentManager
-import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppToast
-import com.discord.app.AppViewFlipper
 import com.discord.app.appViewModels
+import com.discord.databinding.WidgetGuildProfileSheetBinding
+import com.discord.databinding.WidgetGuildProfileActionsBinding
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.appSubscribe
@@ -36,18 +32,30 @@ import com.facebook.drawee.view.SimpleDraweeView
 import rx.subscriptions.CompositeSubscription
 
 class WidgetGuildProfileSheet : AppBottomSheet() {
+    private var _binding: WidgetGuildProfileSheetBinding? = null
+    private val binding get() = requireNotNull(_binding)
     private val guildId get() = argumentsOrDefault.getLong(EXTRA_GUILD_ID)
     private val viewingGuild get() = argumentsOrDefault.getBoolean(EXTRA_VIEWING_GUILD)
     private val channelId get() = argumentsOrDefault.getLong(EXTRA_CHANNEL_ID).takeIf { it != 0L }
     private val viewModel: WidgetGuildProfileSheetViewModel by appViewModels {
         WidgetGuildProfileSheetViewModel(viewingGuild, guildId)
     }
-    private val emojisAdapter = WidgetGuildProfileSheetEmojisAdapter().apply {
-        onClickEmoji = { viewModel.onClickEmoji() }
-    }
     private var actionsRoot: View? = null
+    private var profileActionsBinding: WidgetGuildProfileActionsBinding? = null
 
     override fun getContentViewResId() = R.layout.widget_guild_profile_sheet
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        _binding = WidgetGuildProfileSheetBinding.bind(view)
+    }
+
+    override fun onDestroyView() {
+        actionsRoot = null
+        profileActionsBinding = null
+        _binding = null
+        super.onDestroyView()
+    }
 
     override fun bindSubscriptions(compositeSubscription: CompositeSubscription) {
         viewModel.observeViewState().ui(this)
@@ -64,45 +72,45 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
     }
 
     private fun configureUI(state: WidgetGuildProfileSheetViewModel.ViewState) {
-        val root = view ?: return
-        val flipper = root.findViewById<AppViewFlipper>(R.id.guild_profile_sheet_flipper)
+        if (_binding == null) return
         when (state) {
-            WidgetGuildProfileSheetViewModel.ViewState.Loading -> flipper.displayedChild = 0
+            WidgetGuildProfileSheetViewModel.ViewState.Loading -> binding.guildProfileSheetFlipper.displayedChild = 0
             WidgetGuildProfileSheetViewModel.ViewState.Invalid -> dismiss()
             is WidgetGuildProfileSheetViewModel.ViewState.Loaded -> {
-                flipper.displayedChild = 1
-                bindHeader(root, state)
-                bindTabs(root, state)
-                bindActions(root, state)
+                binding.guildProfileSheetFlipper.displayedChild = 1
+                bindHeader(state)
+                bindTabs(state)
+                bindActions(state)
             }
         }
     }
 
-    private fun bindHeader(root: View, state: WidgetGuildProfileSheetViewModel.ViewState.Loaded) {
-        root.findViewById<TextView>(R.id.guild_profile_sheet_name).text = state.guildName
-        root.findViewById<TextView>(R.id.guild_profile_sheet_icon_name).apply {
+    private fun bindHeader(state: WidgetGuildProfileSheetViewModel.ViewState.Loaded) {
+        binding.guildProfileSheetName.text =
+            if (state.isPrivate) getString(R.string.guild_profile_private_name) else state.guildName
+        binding.guildProfileSheetIconName.apply {
             text = state.guildShortName
             visibility = if (state.guildIcon == null) View.VISIBLE else View.GONE
         }
         IconUtils.setIcon(
-            root.findViewById(R.id.guild_profile_sheet_icon),
+            binding.guildProfileSheetIcon,
             IconUtils.getForGuild(state.guildId, state.guildIcon, "asset://asset/images/default_icon_selected.jpg", true),
         )
-        root.findViewById<TextView>(R.id.guild_profile_sheet_description).apply {
-            text = state.guildDescription
-            visibility = if (state.guildDescription.isNullOrBlank()) View.GONE else View.VISIBLE
+        binding.guildProfileSheetDescription.apply {
+            text = if (state.isPrivate) getString(R.string.guild_profile_private_description) else state.guildDescription
+            visibility = if (text.isNullOrBlank()) View.GONE else View.VISIBLE
         }
-        root.findViewById<ImageView>(R.id.guild_profile_sheet_guild_verified_premium_icon).apply {
+        binding.guildProfileSheetGuildVerifiedPremiumIcon.apply {
             state.verifiedPartneredIconRes?.let(::setImageResource)
             visibility = if (state.verifiedPartneredIconRes == null) View.GONE else View.VISIBLE
         }
-        root.findViewById<LinearLayout>(R.id.guild_profile_sheet_online_count).visibility =
+        binding.guildProfileSheetOnlineCount.visibility =
             if (state.onlineCount == null) View.GONE else View.VISIBLE
-        root.findViewById<TextView>(R.id.guild_profile_sheet_online_count_text).text = state.onlineCount?.toString()
-        root.findViewById<LinearLayout>(R.id.guild_profile_sheet_member_count).visibility =
+        binding.guildProfileSheetOnlineCountText.text = state.onlineCount?.toString()
+        binding.guildProfileSheetMemberCount.visibility =
             if (state.memberCount == null) View.GONE else View.VISIBLE
-        root.findViewById<TextView>(R.id.guild_profile_sheet_member_count_text).text = state.memberCount?.toString()
-        root.findViewById<SimpleDraweeView>(R.id.guild_profile_sheet_banner).apply {
+        binding.guildProfileSheetMemberCountText.text = state.memberCount?.toString()
+        binding.guildProfileSheetBanner.apply {
             val url = when (state.banner.type) {
                 WidgetGuildProfileSheetViewModel.Banner.Type.BANNER ->
                     IconUtils.getBannerForGuild(state.banner.guildId, state.banner.hash)
@@ -111,14 +119,14 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
             }
             visibility = if (url == null) View.GONE else View.VISIBLE
             if (url != null) MGImages.setImage(this, url)
-            if (url == null) constrainIconToParent(root) else constrainIconToBanner(root)
+            if (url == null) constrainIconToParent() else constrainIconToBanner()
         }
     }
 
-    private fun constrainIconToBanner(root: View) {
-        val layout = root.findViewById<ConstraintLayout>(R.id.guild_profile_sheet_constraint_layout)
-        val icon = root.findViewById<CardView>(R.id.guild_profile_sheet_icon_card)
-        val banner = root.findViewById<View>(R.id.guild_profile_sheet_banner)
+    private fun constrainIconToBanner() {
+        val layout = binding.guildProfileSheetConstraintLayout
+        val icon = binding.guildProfileSheetIconCard
+        val banner = binding.guildProfileSheetBanner
         ConstraintSet().apply {
             clone(layout)
             clear(icon.id, ConstraintSet.TOP)
@@ -129,9 +137,9 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
         }
     }
 
-    private fun constrainIconToParent(root: View) {
-        val layout = root.findViewById<ConstraintLayout>(R.id.guild_profile_sheet_constraint_layout)
-        val icon = root.findViewById<CardView>(R.id.guild_profile_sheet_icon_card)
+    private fun constrainIconToParent() {
+        val layout = binding.guildProfileSheetConstraintLayout
+        val icon = binding.guildProfileSheetIconCard
         val topMargin = (icon.layoutParams as? ViewGroup.MarginLayoutParams)?.topMargin ?: 0
         ConstraintSet().apply {
             clone(layout)
@@ -142,19 +150,19 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
         }
     }
 
-    private fun bindTabs(root: View, state: WidgetGuildProfileSheetViewModel.ViewState.Loaded) {
+    private fun bindTabs(state: WidgetGuildProfileSheetViewModel.ViewState.Loaded) {
         val tabs = state.tabItems
-        root.findViewById<LinearLayout>(R.id.guild_profile_sheet_tab_items).visibility =
+        binding.guildProfileSheetTabItems.visibility =
             if (tabs == null || state.isGuildHub) View.GONE else View.VISIBLE
         if (tabs == null || state.isGuildHub) return
-        root.findViewById<View>(R.id.guild_profile_sheet_notifications).setOnClickAndDismissListener {
+        binding.guildProfileSheetNotifications.setOnClickAndDismissListener {
             WidgetServerNotifications.launch(requireContext(), state.guildId)
         }
-        root.findViewById<View>(R.id.guild_profile_sheet_settings).apply {
+        binding.guildProfileSheetSettings.apply {
             visibility = if (tabs.canAccessSettings) View.VISIBLE else View.GONE
             setOnClickAndDismissListener { WidgetServerSettings.launch(requireContext(), state.guildId) }
         }
-        root.findViewById<View>(R.id.guild_profile_sheet_invite).apply {
+        binding.guildProfileSheetInvite.apply {
             visibility = if (tabs.ableToInstantInvite) View.VISIBLE else View.GONE
             setOnClickAndDismissListener {
                 WidgetGuildInviteShare.launch(
@@ -165,41 +173,38 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
                 )
             }
         }
-        root.findViewById<TextView>(R.id.guild_profile_sheet_boosts).text = tabs.premiumSubscriptionCount.toString()
+        binding.guildProfileSheetBoosts.text = tabs.premiumSubscriptionCount.toString()
     }
 
-    private fun bindActions(root: View, state: WidgetGuildProfileSheetViewModel.ViewState.Loaded) {
-        val expectedLayout = if (state.isGuildHub) R.id.widget_guild_hub_profile_actions else R.id.widget_guild_profile_actions
-        if (actionsRoot == null) actionsRoot = root.findViewById<ViewStub>(expectedLayout)?.inflate()
+    private fun bindActions(state: WidgetGuildProfileSheetViewModel.ViewState.Loaded) {
+        if (actionsRoot == null) {
+            actionsRoot = if (state.isGuildHub) {
+                binding.widgetGuildHubProfileActions.inflate()
+            } else {
+                binding.widgetGuildProfileActions.inflate().also {
+                    profileActionsBinding = WidgetGuildProfileActionsBinding.bind(it)
+                }
+            }
+        }
         val actionsRoot = actionsRoot ?: return
         val actions = state.actions
         actionsRoot.findViewById<View>(R.id.guild_profile_sheet_actions)?.visibility =
             if (actions == null) View.GONE else View.VISIBLE
         actions?.let { bindMemberActions(actionsRoot, state, it) }
 
-        actionsRoot.findViewById<RecyclerView>(R.id.guild_profile_sheet_emojis)?.apply {
-            if (adapter !== emojisAdapter) adapter = emojisAdapter
-            val columns = (resources.displayMetrics.widthPixels / (48 * resources.displayMetrics.density)).toInt().coerceAtLeast(1)
-            (layoutManager as? GridLayoutManager)?.spanCount = columns
-            emojisAdapter.setData(state.emojisData.emojis, if (state.emojisData.isExpanded) Int.MAX_VALUE else columns * 2)
-        }
-        actionsRoot.findViewById<CardView>(R.id.guild_profile_sheet_emojis_card)?.visibility =
-            if (state.emojisData.emojis.isEmpty()) View.GONE else View.VISIBLE
-        actionsRoot.findViewById<TextView>(R.id.guild_profile_sheet_emojis_count)?.text = state.emojisData.emojis.size.toString()
-
         val bottom = state.bottomActions
-        actionsRoot.findViewById<LinearLayout>(R.id.guild_profile_sheet_bottom_actions)?.visibility =
-            if (bottom.showUploadEmoji || bottom.showJoinServer || bottom.showViewServer) View.VISIBLE else View.GONE
-        actionsRoot.findViewById<View>(R.id.guild_profile_sheet_upload_emoji)?.apply {
+        profileActionsBinding?.guildProfileSheetBottomActions?.visibility =
+            if (bottom.showUploadEmoji || bottom.showViewServer) View.VISIBLE else View.GONE
+        profileActionsBinding?.guildProfileSheetUploadEmoji?.apply {
             visibility = if (bottom.showUploadEmoji) View.VISIBLE else View.GONE
             setOnClickAndDismissListener { WidgetServerSettingsEmojis.launch(requireContext(), state.guildId) }
         }
-        actionsRoot.findViewById<View>(R.id.guild_profile_sheet_join_server)?.apply {
-            visibility = if (bottom.showJoinServer) View.VISIBLE else View.GONE
-            setOnClickAndDismissListener { viewModel.onClickJoinServer(state.guildId) }
-        }
-        actionsRoot.findViewById<View>(R.id.guild_profile_sheet_view_server)?.apply {
+        profileActionsBinding?.guildProfileSheetViewServer?.apply {
             visibility = if (bottom.showViewServer) View.VISIBLE else View.GONE
+            (layoutParams as? ViewGroup.MarginLayoutParams)?.let { params ->
+                params.marginStart = if (bottom.showUploadEmoji) (8 * resources.displayMetrics.density).toInt() else 0
+                layoutParams = params
+            }
             setOnClickAndDismissListener { viewModel.onClickViewServer(state.guildId, channelId) }
         }
     }

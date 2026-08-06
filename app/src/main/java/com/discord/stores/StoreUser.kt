@@ -197,6 +197,7 @@ class StoreUser(
         globalName = new.globalName,
         collectibles = merge(old.collectibles, new.collectibles),
         avatarDecoration = merge(old.avatarDecoration, new.avatarDecorationData),
+        primaryGuild = new.primaryGuild ?: old.primaryGuild,
     )
 
     private fun mergeMe(old: MeUser, new: ApiUser) = old.copy(
@@ -220,6 +221,7 @@ class StoreUser(
         globalName = new.globalName,
         collectibles = merge(old.collectibles, new.collectibles),
         avatarDecoration = merge(old.avatarDecoration, new.avatarDecorationData),
+        primaryGuild = new.primaryGuild ?: old.primaryGuild,
     )
 
     private fun <T> merge(old: T?, new: NullSerializable<T>?): T? = when (new) {

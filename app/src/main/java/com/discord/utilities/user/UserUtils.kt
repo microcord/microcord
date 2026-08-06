@@ -282,6 +282,7 @@ object UserUtils {
         globalName = globalName,
         collectibles = collectibles?.let { NullSerializable.Value(it) },
         avatarDecorationData = avatarDecoration?.let { NullSerializable.Value(it) },
+        primaryGuild = primaryGuild,
     )
 
     /**
