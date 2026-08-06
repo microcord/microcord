@@ -31,11 +31,7 @@ import com.discord.widgets.search.WidgetSearch
 import com.discord.api.channel.Channel
 import com.discord.api.guild.GuildFeature
 import com.discord.api.channel.getDisplayNameOrDefault
-import com.discord.api.channel.getDisplayName
-import com.discord.api.channel.isAnnouncementChannel
-import com.discord.api.channel.isDM
 import com.discord.api.channel.isThreadOnlyChannel
-import com.discord.api.channel.isGuildTextChannel
 import com.discord.api.channel.isGuildForumPost
 import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isPendingMessageRequestChannel
@@ -47,6 +43,7 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.rx.ui
 import com.discord.utilities.channel.ChannelSelector
+import com.discord.utilities.channel.guildChannelIcon
 import com.discord.utilities.toolbar.positionUnreadCountView
 import com.discord.utilities.user.UserUtils.hasUnreadUrgentMessages
 import com.discord.widgets.chat.input.AppFlexInputViewModel
@@ -321,12 +318,17 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         val title = when {
             isForumDraft -> getString(R.string.new_forum_post_new)
             threadDraft != null -> getString(R.string.create_thread)
-            channel.isDM() -> "@ ${channel.getDisplayName()}"
-            channel.isGuildTextChannel() || channel.isAnnouncementChannel() -> "# ${channel.getDisplayName()}"
             else -> channel.getDisplayNameOrDefault(requireContext(), includePrefix = false)
         }
+        val titleIcon = when {
+            isForumPost || isForumDraft -> R.drawable.ic_discord_chat_filled_tinted
+            threadDraft != null -> null
+            channel.type == Channel.DM -> R.drawable.ic_direct_message_header
+            channel.type == Channel.GROUP_DM -> R.drawable.ic_group_message_header
+            else -> guildChannelIcon(channel)
+        }
         toolbar.title = null
-        setActionBarTitle(title, if (isForumPost || isForumDraft) R.drawable.ic_discord_chat_filled_tinted else null)
+        setActionBarTitle(title, titleIcon)
         setActionBarSubtitle(
             when {
                 threadDraft != null -> threadDraft.parentChannel.getDisplayNameOrDefault(requireContext(), false)
