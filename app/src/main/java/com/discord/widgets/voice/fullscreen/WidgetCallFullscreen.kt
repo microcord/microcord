@@ -74,6 +74,7 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
     private lateinit var privateCallGrid: com.discord.widgets.voice.fullscreen.grid.PrivateCallGridView
     private lateinit var privateCallBlurredGrid: com.discord.widgets.voice.fullscreen.grid.PrivateCallBlurredGridView
     private lateinit var streamingActive: View
+    private lateinit var audioShareWarning: View
     private lateinit var pip: VideoCallParticipantView
     private lateinit var floatingPtt: View
     private lateinit var controls: VoiceControlsSheetView
@@ -116,6 +117,11 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
         privateCallGrid = view.findViewById(R.id.private_call_grid_view)
         privateCallBlurredGrid = view.findViewById(R.id.private_call_blurred_grid_view)
         streamingActive = view.findViewById(R.id.call_streaming_active)
+        audioShareWarning = view.findViewById(R.id.call_streaming_audio_share_warning)
+        // Capturing another app's audio needs `AudioPlaybackCaptureConfiguration`, which arrived in
+        // Android 10. The warning is part of the streaming layout, so without this it greeted every
+        // viewer regardless of what they are running.
+        audioShareWarning.isVisible = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
         pip = view.findViewById(R.id.call_pip)
         floatingPtt = view.findViewById(R.id.call_floating_push_to_talk)
         controls = view.findViewById(R.id.voice_controls_sheet_view)

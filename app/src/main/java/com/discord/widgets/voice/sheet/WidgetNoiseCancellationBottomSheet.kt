@@ -9,7 +9,7 @@ import com.discord.R
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppToast
 import com.discord.app.appViewModels
-import com.discord.i18n.i18nFormat
+import com.discord.i18n.i18nRender
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.google.android.material.button.MaterialButton
 
@@ -44,9 +44,10 @@ class WidgetNoiseCancellationBottomSheet : AppBottomSheet() {
     }
 
     private fun configureUI() {
-        // `learn_more_link` is "[Learn More]({helpdeskArticle})" — a markdown link whose target is
-        // substituted, so the movement method is what makes it tappable.
-        learnMore.text = learnMore.i18nFormat(
+        // `learn_more_link` is "[Learn More]({helpdeskArticle})". `i18nFormat` returns plain text,
+        // which leaves the markdown on screen verbatim; the span renderer is what turns it into the
+        // labelled link the movement method can then open.
+        learnMore.text = learnMore.context.i18nRender(
             R.string.learn_more_link,
             "helpdeskArticle" to HELPDESK_ARTICLE_URL,
         )
