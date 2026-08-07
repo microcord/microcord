@@ -986,6 +986,8 @@ object RestAPIParams {
         override fun toString(): String = "UserEmailConfirmCode(code=<redacted>)"
     }
 
+    data class AccountNotificationSettings(val flags: Int)
+
     class UserGuildSettings(
         val suppressEveryone: Boolean? = null,
         val suppressRoles: Boolean? = null,

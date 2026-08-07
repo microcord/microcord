@@ -3,9 +3,12 @@ package com.discord.widgets.settings
 import android.view.View
 import android.widget.LinearLayout
 import com.discord.R
+import com.discord.api.notification.AccountNotificationFlags
+import com.discord.api.notification.AccountNotificationSettings
 import com.discord.app.AppFragment
 import com.discord.models.notification.NotificationSettingsV2
 import com.discord.stores.StoreNotifications
+import com.discord.stores.StoreStream
 import com.discord.utilities.rx.ui
 import com.discord.views.CheckedSetting
 import rx.Observable
@@ -36,6 +39,7 @@ class WidgetSettingsNotifications : AppFragment(R.layout.widget_settings_notific
         setActionBarSubtitle(R.string.user_settings)
         setActionBarDisplayHomeAsUpEnabled()
         SettingsNavigation.bindBack(this)
+        bindAccountFlags(view)
 
         val store = notificationStore
         if (store == null) {
@@ -67,10 +71,58 @@ class WidgetSettingsNotifications : AppFragment(R.layout.widget_settings_notific
         // never binds it, so it stays inert here too rather than gaining invented behaviour.
     }
 
+    /**
+     * The two account-level notification flags, which live on the server rather than in
+     * [StoreNotifications] and so stay usable when system notifications are off.
+     */
+    private fun bindAccountFlags(view: View) {
+        val settings = StoreStream.getUserGuildSettings()
+        view.findViewById<CheckedSetting>(R.id.settings_notifications_experimental_unreads).apply {
+            setSubtext(getString(R.string.experimental_unreads_description))
+            setLabelTagText(R.string.beta)
+            setLabelTagVisibility(true)
+            setOnCheckedListener(
+                Action1 {
+                    settings.setAccountNotificationFlag(
+                        requireContext(),
+                        AccountNotificationFlags.USE_NEW_NOTIFICATIONS,
+                        it,
+                    )
+                },
+            )
+        }
+        view.findViewById<CheckedSetting>(R.id.settings_notifications_mention_on_all_messages).apply {
+            setSubtext(SettingsStrings.render(context, R.string.user_settings_mention_on_all_messages_body))
+            setLabelTagText(R.string.beta)
+            setLabelTagVisibility(true)
+            setOnCheckedListener(
+                Action1 {
+                    settings.setAccountNotificationFlag(
+                        requireContext(),
+                        AccountNotificationFlags.MENTION_ON_ALL_MESSAGES,
+                        it,
+                    )
+                },
+            )
+        }
+    }
+
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
         val settings = notificationStore?.observeSettings() ?: Observable.just(NotificationSettingsV2())
         settings.ui(this).subscribe(::configureUI)
+        StoreStream.getUserGuildSettings()
+            .observeAccountNotificationSettings()
+            .ui(this)
+            .subscribe(::configureAccountFlags)
+    }
+
+    private fun configureAccountFlags(settings: AccountNotificationSettings) {
+        val root = view ?: return
+        root.findViewById<CheckedSetting>(R.id.settings_notifications_experimental_unreads)
+            .setChecked(settings.useNewNotifications, false)
+        root.findViewById<CheckedSetting>(R.id.settings_notifications_mention_on_all_messages)
+            .setChecked(settings.mentionOnAllMessages, false)
     }
 
     private fun configureUI(settings: NotificationSettingsV2) {

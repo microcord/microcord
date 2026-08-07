@@ -409,6 +409,11 @@ interface RestAPIInterface {
         @Body userNoteUpdate: RestAPIParams.UserNoteUpdate,
     ): Observable<Void>
 
+    @PATCH("users/@me/notification-settings")
+    fun updateAccountNotificationSettings(
+        @Body settings: RestAPIParams.AccountNotificationSettings,
+    ): Observable<Void>
+
     @PATCH("users/@me/guilds/{guildId}/settings")
     fun updateUserGuildSettings(
         @Path("guildId") guildId: Long,

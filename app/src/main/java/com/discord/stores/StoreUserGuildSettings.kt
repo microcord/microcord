@@ -5,6 +5,7 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isTextChannel
 import com.discord.api.channel.isThread
+import com.discord.api.notification.AccountNotificationFlags
 import com.discord.api.notification.AccountNotificationSettings
 import com.discord.api.notification.ChannelNotificationSettingsFlags
 import com.discord.api.notification.GuildNotificationSettingsFlags
@@ -228,6 +229,22 @@ class StoreUserGuildSettings(
     }
 
     // -- Setters --------------------------------------------------------------------------------
+
+    /**
+     * Flips one [AccountNotificationFlags] bit.
+     *
+     * The endpoint returns no body; the new flags arrive as `NOTIFICATION_SETTINGS_UPDATE`.
+     */
+    fun setAccountNotificationFlag(context: Context, flag: Int, enabled: Boolean) = dispatcher.schedule {
+        val api = restApi ?: return@schedule
+        val flags = accountSettings.flags
+        val updated = if (enabled) flags or flag else flags and flag.inv()
+        if (updated == flags) return@schedule
+        api.updateAccountNotificationSettings(RestAPIParams.AccountNotificationSettings(updated))
+            .restSubscribeOn()
+            .ui()
+            .appSubscribe(StoreUserGuildSettings::class.java, context) { }
+    }
 
     fun setHideMutedChannels(guildId: Long, hide: Boolean) = dispatcher.schedule {
         if (if (hide) guildsToHideMutedChannelsIn.add(guildId) else guildsToHideMutedChannelsIn.remove(guildId)) {
