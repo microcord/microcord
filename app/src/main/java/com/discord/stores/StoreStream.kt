@@ -271,6 +271,7 @@ class StoreStream private constructor(
         getChannel = channels::findChannelById,
         getJoinedThreadFlags = { threadsJoined.getJoinedThread(it)?.flags ?: 0 },
     )
+    private val debugOptions = StoreDebugOptions()
     private val guildMemberCounts = StoreGuildMemberCounts(observationDeck)
     private val guildRoleMemberCounts = StoreGuildRoleMemberCounts(dispatcher, clock, observationDeck)
     private val experiments = StoreExperiments(
@@ -3055,6 +3056,7 @@ class StoreStream private constructor(
             override fun getLocale() = userSettingsSystem.getLocale()
             override fun getAcceptLanguages() = acceptLanguages()
             override fun getSpotifyToken(): String? = null
+            override fun getDebugOptions(): String? = debugOptions.getDebugOptionsHeaderValue()
         }
         val builder = RestAPIBuilder(API_BASE_URL, CookieJars.persistent(context))
         // Ahead of the header interceptor so a 429 parks every later request on the same route
@@ -3172,6 +3174,7 @@ class StoreStream private constructor(
 
         @JvmStatic fun getAccessibility() = requireInstance().accessibility
         @JvmStatic fun getAuthentication() = requireInstance().authentication
+        @JvmStatic fun getDebugOptions() = requireInstance().debugOptions
         @JvmStatic fun getUserSettings() = requireInstance().userSettings
         @JvmStatic fun getUserSettingsSystem() = requireInstance().userSettingsSystem
         @JvmStatic fun getUsers() = requireInstance().users

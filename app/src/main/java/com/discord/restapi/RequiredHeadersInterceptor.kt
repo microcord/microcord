@@ -10,6 +10,9 @@ class RequiredHeadersInterceptor(private val headersProvider: HeadersProvider) :
         fun getLocale(): String?
         fun getAcceptLanguages(): String?
         fun getSpotifyToken(): String?
+
+        /** Comma-separated debug switches, or null when none are on. */
+        fun getDebugOptions(): String? = null
     }
 
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -19,6 +22,7 @@ class RequiredHeadersInterceptor(private val headersProvider: HeadersProvider) :
                 headersProvider.getFingerprint()?.let { header("X-Fingerprint", it) }
                 headersProvider.getLocale()?.let { header("X-Discord-Locale", it) }
                 headersProvider.getAcceptLanguages()?.let { header("Accept-Language", it) }
+                headersProvider.getDebugOptions()?.let { header("X-Debug-Options", it) }
             }
             .build()
         return chain.proceed(request)
