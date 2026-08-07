@@ -77,6 +77,8 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
     private var draftArchiveDuration = DEFAULT_ARCHIVE_DURATION
     private var savedVisibility = ContentVisibility.DEFAULT
     private var draftVisibility = ContentVisibility.DEFAULT
+    private var savedIsAnnouncement = false
+    private var draftIsAnnouncement = false
     private var bindingState = false
 
     override fun onViewBound(view: View) {
@@ -164,6 +166,8 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         draftArchiveDuration = savedArchiveDuration
         savedVisibility = ContentVisibility.of(channel)
         draftVisibility = savedVisibility
+        savedIsAnnouncement = channel.isAnnouncementChannel()
+        draftIsAnnouncement = savedIsAnnouncement
         bindingState = false
 
         val isThreadOnly = channel.isThreadOnlyChannel()
@@ -208,8 +212,11 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
                 )
             }
             setOnCheckedListener(null)
-            isChecked = channel.isAnnouncementChannel()
-            setOnCheckedListener { checked -> saveImmediate(type = if (checked) Channel.GUILD_ANNOUNCEMENT else Channel.GUILD_TEXT) }
+            isChecked = draftIsAnnouncement
+            setOnCheckedListener { checked ->
+                draftIsAnnouncement = checked
+                updateSaveVisibility()
+            }
         }
         root.findViewById<LinearLayout>(R.id.channel_settings_section_privacy_safety).isVisible =
             next.canManageChannel && !category
@@ -229,6 +236,9 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
 
         val archiveSection = root.findViewById<LinearLayout>(R.id.channel_settings_section_default_auto_archive_duration)
         archiveSection.isVisible = next.canManageChannel && channel.isThreaded()
+        // The section above already ends in one when slow mode is hidden, as it is on announcements.
+        root.findViewById<View>(R.id.channel_settings_auto_archive_divider).isVisible =
+            root.findViewById<LinearLayout>(R.id.channel_settings_section_slow_mode).isVisible
         bindArchiveOption(R.id.option_one_hour, R.id.option_one_hour_radio, 60)
         bindArchiveOption(R.id.option_twenty_four_hours, R.id.option_twenty_four_hours_radio, 1_440)
         bindArchiveOption(R.id.option_three_days, R.id.option_three_days_radio, 4_320)
@@ -371,7 +381,8 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
             channel.id,
             RestAPIParams.TextChannel(
                 name = currentName.takeIf { it != savedName },
-                type = null,
+                type = (if (draftIsAnnouncement) Channel.GUILD_ANNOUNCEMENT else Channel.GUILD_TEXT)
+                    .takeIf { draftIsAnnouncement != savedIsAnnouncement },
                 topic = currentTopic.takeIf { it != savedTopic },
                 nsfw = (draftVisibility == ContentVisibility.AGE_RESTRICTED)
                     .takeIf { draftVisibility != savedVisibility },
@@ -388,8 +399,6 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
     }
 
     private fun saveImmediate(
-        type: Int? = null,
-        nsfw: Boolean? = null,
         flags: Long? = null,
         defaultForumLayout: Int? = null,
         defaultSortOrder: Int? = null,
@@ -400,9 +409,9 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
             channel.id,
             RestAPIParams.TextChannel(
                 name = null,
-                type = type,
+                type = null,
                 topic = null,
-                nsfw = nsfw,
+                nsfw = null,
                 rateLimitPerUser = null,
                 defaultAutoArchiveDuration = null,
                 flags = flags,
@@ -451,7 +460,8 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
             SLOWMODE_COOLDOWN_VALUES[slowMode.progress] != savedSlowMode ||
             SLOWMODE_COOLDOWN_VALUES[messageSlowMode.progress] != savedMessageSlowMode ||
             draftArchiveDuration != savedArchiveDuration ||
-            draftVisibility != savedVisibility
+            draftVisibility != savedVisibility ||
+            draftIsAnnouncement != savedIsAnnouncement
     }
 
     private fun channelId() = mostRecentIntent.getLongExtra(ARG_CHANNEL_ID, -1L)
