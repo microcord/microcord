@@ -13,6 +13,10 @@ internal fun unreadCountText(count: Int?): String? = when {
     else -> "10+"
 }
 
+internal fun mentionedChannelIds(content: String?): Set<Long> = CHANNEL_MENTION.findAll(content.orEmpty())
+    .mapNotNull { it.groupValues[1].toLongOrNull() }
+    .toSet()
+
 /** The reference shows the first [limit] tags and counts the rest into an overflow pill. */
 internal fun resolvePostTags(
     parent: Channel,
@@ -31,5 +35,7 @@ internal fun resolvePostTags(
 }
 
 internal const val MAX_VISIBLE_POST_TAGS = 2
+
+private val CHANNEL_MENTION = Regex("<#(\\d+)>")
 
 data class PostTagsData(val visible: List<PostTagData> = emptyList(), val overflow: Int = 0)

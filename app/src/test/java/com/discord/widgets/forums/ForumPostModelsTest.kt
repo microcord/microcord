@@ -23,6 +23,12 @@ class ForumPostModelsTest {
     }
 
     @Test
+    fun extractsOnlyReferencedChannelIds() {
+        assertEquals(setOf(12L, 34L), mentionedChannelIds("See <#12>, <#34>, and <#12>"))
+        assertTrue(mentionedChannelIds("No channel mentions").isEmpty())
+    }
+
+    @Test
     fun classifiesAttachmentPreviewState() {
         val attachment = MessageAttachment(
             "https://cdn.example/image.BMP?x=1",

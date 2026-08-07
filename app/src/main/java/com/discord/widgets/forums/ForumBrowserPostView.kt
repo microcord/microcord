@@ -354,7 +354,7 @@ class ForumBrowserPostView @JvmOverloads constructor(
             val params = com.google.android.flexbox.FlexboxLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-            )
+            ).apply { flexShrink = 0f }
             // Set on the params rather than the view: a child has no layoutParams until it is added.
             if (container.childCount > 0) params.marginStart = dpToPixels(4)
             container.addView(ForumPostTagView(context), params)

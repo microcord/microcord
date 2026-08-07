@@ -9,46 +9,51 @@ import androidx.fragment.app.setFragmentResult
 import androidx.fragment.app.setFragmentResultListener
 import com.discord.R
 import com.discord.app.AppBottomSheet
+import com.discord.databinding.WidgetForumGuidelinesBottomSheetBinding
 import com.discord.models.message.Message
 import com.discord.utilities.textprocessing.DiscordParser
 import com.discord.utilities.textprocessing.MessageTextRenderer
-import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.stores.StoreStream
 import com.discord.utilities.rx.filterNull
 import com.discord.utilities.rx.ui
-import com.google.android.material.button.MaterialButton
 import rx.subscriptions.CompositeSubscription
 
 class WidgetForumGuidelinesBottomSheet : AppBottomSheet() {
     private val channelId get() = argumentsOrDefault.getLong(EXTRA_CHANNEL_ID)
     private val guildId get() = argumentsOrDefault.getLong(EXTRA_GUILD_ID)
     private val requestKey get() = argumentsOrDefault.getString(EXTRA_REQUEST_KEY).orEmpty()
-    private lateinit var topic: SimpleDraweeSpanTextView
-    private lateinit var gotIt: MaterialButton
+    private var _binding: WidgetForumGuidelinesBottomSheetBinding? = null
+    private val binding get() = requireNotNull(_binding)
 
     override fun getContentViewResId() = R.layout.widget_forum_guidelines_bottom_sheet
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        topic = view.findViewById(R.id.channel_topic)
-        gotIt = view.findViewById(R.id.got_it)
+        _binding = WidgetForumGuidelinesBottomSheetBinding.bind(view)
     }
 
     override fun bindSubscriptions(compositeSubscription: CompositeSubscription) {
         compositeSubscription.add(
             StoreStream.getChannels().observeChannel(channelId).filterNull().ui(this).subscribe { channel ->
                 // The reference parses guidelines as markdown, headings and lists included.
-                MessageTextRenderer.render(
+                val rendered = MessageTextRenderer.render(
                     Message(id = channel.id, channelId = channel.id, content = channel.topic),
-                    topic,
+                    binding.channelTopic,
                     parserOptions = DiscordParser.ParserOptions.FORUM_POST_FIRST_MESSAGE,
                 )
-                gotIt.setOnClickListener {
+                binding.channelTopic.setDraweeSpanStringBuilder(rendered.text)
+                binding.channelTopic.contentDescription = rendered.plainText
+                binding.gotIt.setOnClickListener {
                     setFragmentResult(requestKey, bundleOf(EXTRA_GUILD_ID to guildId, EXTRA_CHANNEL_ID to channelId))
                     dismiss()
                 }
             },
         )
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     companion object {

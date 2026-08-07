@@ -88,18 +88,17 @@ class WidgetForumBrowserViewModel(
         val listing = state.archivedThreadsState
         canFetchMoreOlderPosts = listing is ArchivedThreadsStore.ThreadListingState.Listing &&
             listing.hasMore && !listing.isLoadingMore
-        updateViewState(
-            ViewState.Loaded(
-                nsfwPanelState = nsfw,
-                listItems = items,
-                canCreateForumChannelPosts = state.canCreateForumChannelPosts,
-                channelTopic = state.channel.topic.orEmpty(),
-                channelName = state.channel.name.orEmpty(),
-                channelId = state.channel.id,
-                guildId = state.channel.guildId,
-                isMediaChannel = state.channel.isGuildMediaChannel(),
-            ),
+        val next = ViewState.Loaded(
+            nsfwPanelState = nsfw,
+            listItems = items,
+            canCreateForumChannelPosts = state.canCreateForumChannelPosts,
+            channelTopic = state.channel.topic.orEmpty(),
+            channelName = state.channel.name.orEmpty(),
+            channelId = state.channel.id,
+            guildId = state.channel.guildId,
+            isMediaChannel = state.channel.isGuildMediaChannel(),
         )
+        if (viewState != next) updateViewState(next)
     }
 
     internal fun buildItems(state: StoreState.Loaded): List<ForumBrowserItem> {
@@ -142,6 +141,17 @@ class WidgetForumBrowserViewModel(
         val message = state.forumPostFirstMessages[channel.id]
         val reaction = ForumUtils.run { message?.mostCommonReaction(StoreStream.getEmojis()) }
         val tags = resolvePostTags(state.channel, channel, state.guildEmojis)
+        val memberIds = buildSet {
+            add(channel.ownerId)
+            message?.mentions.orEmpty().mapTo(this) { it.id }
+        }
+        val members = memberIds.mapNotNull { id -> state.guildMembers[id]?.let { id to it } }.toMap()
+        val roles = message?.mentionRoles.orEmpty()
+            .mapNotNull { id -> state.guildRoles[id]?.let { id to it } }
+            .toMap()
+        val channelNames = mentionedChannelIds(message?.content)
+            .mapNotNull { id -> state.channelNames[id]?.let { id to it } }
+            .toMap()
         val typingUsers = state.typingUsers[channel.id].orEmpty().mapNotNull { userId ->
             val user = state.users[userId] ?: return@mapNotNull null
             val member = state.guildMembers[userId] ?: return@mapNotNull null
@@ -151,9 +161,9 @@ class WidgetForumBrowserViewModel(
             channel = channel,
             owner = state.users[channel.ownerId],
             myUserId = state.meUser.id,
-            guildMembers = state.guildMembers,
-            guildRoles = state.guildRoles,
-            channelNames = state.channelNames,
+            guildMembers = members,
+            guildRoles = roles,
+            channelNames = channelNames,
             firstMessage = message,
             isFirstMessageBlocked = message?.author?.id in state.myBlockedUserIds,
             mostRecentMessageTimestamp = state.mostRecentMessageIds[channel.id]?.let(SnowflakeUtils::toTimestamp),
