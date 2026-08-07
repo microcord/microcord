@@ -14,14 +14,10 @@ import rx.Observable
 /**
  * `:emoji:` candidates for a channel.
  *
- * The reference reads its [EmojiSet] from `StoreEmoji`, which this project does not have yet. The
- * store is therefore injected as [emojiSetSource] rather than reached for statically: when
- * `StoreEmoji` lands, `ChatInputAutocompletables` passes
- * `storeEmoji.getEmojiSet(guildId, channelId, …)` and nothing else changes. Until then the default
- * yields an empty set, so emoji autocomplete offers nothing rather than crashing.
+ * The source is injected so the caller owns the store dependency.
  *
- * Unavailable custom emoji (a guild that lost its boost level) are dropped; locked-but-available
- * ones are kept, because typing them is how the Nitro upsell is reached.
+ * Unavailable and unusable custom emoji are dropped. The picker may show locked emoji dimmed,
+ * but autocomplete must not offer text the current user cannot send.
  */
 class EmojiAutocompletableSource(
     private val userSettingsStore: StoreUserSettings,
@@ -51,7 +47,7 @@ class EmojiAutocompletableSource(
         }
         for (guildEmojis in emojiSet.customEmojis.values) {
             for (emoji in guildEmojis) {
-                if (!emoji.isAvailable()) continue
+                if (!emoji.isAvailable() || !emoji.isUsable()) continue
                 result.add(EmojiAutocompletable(emoji, animationsEnabled))
             }
         }

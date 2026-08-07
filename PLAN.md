@@ -2972,6 +2972,25 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
 - Simplification removed obsolete public-application game fallbacks/override DTOs, deferred Wishlist DTOs, a redundant
   recolor pass, and write-side serialization for the read-only application-identity response. `ViewPager2` was not used:
   bridging the existing bound views and dynamic page height inside `NestedScrollView` would add more code than the pager.
+- Emoji autocomplete now inserts the readable `:name:` composer form, immediately rebuilds the mention map after the
+  programmatic edit, and converts custom emoji to `<:name:id>` only at send time. The emoji search sheet creates its picker
+  in `BOTTOM_SHEET` mode, restores the real search input/app bar, and focuses it with the keyboard after child-fragment
+  commit. Known source guilds now remain visible in emoji details even when they are the current guild. Both touched sheets
+  use generated bindings, with lookup retained only for the dynamically mounted child search input. Focused autocomplete/
+  model/picker/guild-info tests pass; `installDebug` installed on WSA and A65.
+- Chat message and reply render contexts now route emoji spans to `WidgetEmojiSheet`. Emoji pickers request unusable custom
+  emoji so joined-guild/Nitro-locked sections remain visible and dim those rows while disabling selection; autocomplete
+  independently filters unavailable or unusable emoji through the live `StoreEmoji` source, so non-Nitro users are not
+  offered emoji they cannot send. Locked picker rows open a themed Nitro notice instead of inserting, and the Nitro/favorite
+  action gap is reduced. `WidgetEmojiPicker` and both emoji sheets use generated bindings. Focused picker/store/autocomplete/
+  detail tests pass; `installDebug` installed on WSA and A65.
+- Emoji-picker backspace now edits the composer selection directly, deleting one Unicode code point when there is no
+  selection instead of dispatching ignored key events to an unfocused input. The sole attachment caller supplies that
+  callback directly; the unused fallback and bottom-sheet callback plumbing were removed. The backspace control remains
+  available only in the inline composer tray; holding it repeats after Android's long-press timeout until release. Favorite
+  emoji are excluded from Recent and their ordinary guild/
+  Unicode sections so each favorite appears once. Focused surrogate-deletion and favorite-projection tests pass;
+  the obsolete pre-`StoreEmoji` local set and source-installation seam were deleted; `installDebug` installed on WSA and A65.
 
 Resumable task: `app/src/main/java/com/discord/widgets/user/profile/UserProfileWidgetsView.kt` | RN
 `modules/user_profile/native/UserProfileApplicationWidgetCard.tsx` and `modules/application_widget/**` | add typed

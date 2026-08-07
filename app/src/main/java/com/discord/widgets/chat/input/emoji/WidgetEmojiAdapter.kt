@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.models.domain.emoji.Emoji
 import com.discord.models.domain.emoji.EmojiCategory
+import com.discord.models.domain.emoji.ModelEmojiCustom
 import com.discord.models.guild.Guild
 import com.facebook.drawee.view.SimpleDraweeView
 
@@ -146,6 +147,7 @@ class WidgetEmojiAdapter(
             } else {
                 item.emojiName
             }
+            image.alpha = if (item.emoji.isUsable()) 1f else ModelEmojiCustom.DISABLED_ALPHA / 255f
             image.setOnClickListener { onEmojiSelected.onEmojiSelected(item.emoji) }
             image.setOnLongClickListener {
                 onEmojiSelected.onEmojiLongPressed(item.emoji)

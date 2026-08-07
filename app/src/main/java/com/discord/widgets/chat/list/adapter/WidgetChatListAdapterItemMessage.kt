@@ -60,6 +60,7 @@ import com.discord.widgets.chat.list.ChatAttachmentView
 import com.discord.widgets.chat.list.entries.AttachmentEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
 import com.discord.widgets.chat.list.utils.didReplyMention
+import com.discord.widgets.emoji.WidgetEmojiSheet
 import com.discord.widgets.roles.RoleIconView
 import com.facebook.drawee.span.DraweeSpanStringBuilder
 import kotlin.math.max
@@ -422,6 +423,7 @@ class WidgetChatListAdapterItemMessage(
             )
         },
         channelMentionOnClick = ::selectChannel,
+        emojiClickHandler = { emoji -> WidgetEmojiSheet.show(adapter.fragmentManager, emoji) },
     )
 
     private fun selectChannel(channelId: Long) {
@@ -721,6 +723,7 @@ class WidgetChatListAdapterItemMessage(
                 )
             },
             channelMentionOnClick = ::selectChannel,
+            emojiClickHandler = { emoji -> WidgetEmojiSheet.show(adapter.fragmentManager, emoji) },
         )
         val singleLine = repliedMessage.content.orEmpty().replace(LINE_SEPARATOR, " ")
         return DiscordParser.parseChannelMessage(

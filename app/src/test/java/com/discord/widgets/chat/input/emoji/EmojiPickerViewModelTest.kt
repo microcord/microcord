@@ -4,6 +4,7 @@ import com.discord.api.emoji.GuildEmoji
 import com.discord.models.domain.emoji.Emoji
 import com.discord.models.domain.emoji.EmojiCategory
 import com.discord.models.domain.emoji.EmojiSet
+import com.discord.models.domain.emoji.ModelEmojiCustom
 import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.models.guild.Guild
 import com.discord.widgets.chat.input.emoji.WidgetEmojiAdapter.Item
@@ -141,6 +142,33 @@ class EmojiPickerViewModelTest {
             listOf(EmojiCategory.FAVORITE, EmojiCategory.RECENT, EmojiCategory.PEOPLE, EmojiCategory.NATURE),
             headers.map(Item.HeaderItem.StandardHeaderItem::emojiCategory),
         )
+    }
+
+    @Test
+    fun pickerKeepsLockedCustomEmojiVisible() {
+        val locked = ModelEmojiCustom(
+            42L, "locked", emptyList(), true, false, 0, null,
+            animated = true, usable = false, available = true, guildId = 10L,
+        )
+        val set = EmojiSet(emptyMap(), mapOf(10L to listOf(locked)), mapOf("42" to locked), emptyList(), emptySet())
+
+        val items = EmojiPickerViewModel.buildItems(set, guilds, true, EmojiPickerContextType.Chat)
+        assertTrue(items.filterIsInstance<Item.EmojiItem>().any { it.emoji == locked })
+    }
+
+    @Test
+    fun favoritesAreNotRepeatedInRecent() {
+        val favorite = unicodeEmoji("favorite")
+        val set = EmojiSet(
+            unicodeEmojis = mapOf(EmojiCategory.PEOPLE to listOf(favorite)),
+            customEmojis = emptyMap(),
+            emojiIndex = mapOf(favorite.getUniqueId() to favorite),
+            recentEmojis = listOf(favorite),
+            favoriteEmoji = setOf(favorite),
+        )
+
+        val items = EmojiPickerViewModel.buildItems(set, emptyMap(), true, EmojiPickerContextType.Chat)
+        assertEquals(1, items.filterIsInstance<Item.EmojiItem>().count { it.emoji == favorite })
     }
 
     private fun unicodeEmoji(name: String) = ModelEmojiUnicode(names = listOf(name), surrogates = name)

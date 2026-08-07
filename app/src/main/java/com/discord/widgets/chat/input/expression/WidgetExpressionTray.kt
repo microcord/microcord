@@ -267,7 +267,6 @@ class WidgetExpressionTray : AppFragment(R.layout.widget_expression_tray), Widge
     private fun bindEmojiPickerSheet(sheet: WidgetEmojiPickerChatSheet) {
         sheet.bindCallbacks(
             listener = emojiPickerListener,
-            onBackspace = { onBackspacePressedListener?.onBackspacePressed() },
             onCancel = { if (isAdded) flexInputViewModel.showKeyboardAndHideExpressionTray() },
         )
     }

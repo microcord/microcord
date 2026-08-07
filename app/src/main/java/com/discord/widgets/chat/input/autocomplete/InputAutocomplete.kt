@@ -282,6 +282,7 @@ class InputAutocomplete(
         } finally {
             applyingSelection = false
         }
+        resyncAfterEdit()
         if (selectedOption != null) viewModel.completeSelectedCommandOption()
         if (autocompletable is ApplicationCommandAutocompletable && autocompletable.command.options.size == 1) {
             focusCommandOption(autocompletable.command.options.single())

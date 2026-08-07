@@ -1,6 +1,8 @@
 package com.discord.widgets.chat.input.autocomplete
 
 import com.discord.api.channel.Channel
+import com.discord.api.emoji.GuildEmoji
+import com.discord.models.domain.emoji.ModelEmojiCustom
 import com.discord.models.user.CoreUser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -96,6 +98,21 @@ class AutocompleteTextTest {
         assertEquals(2, flattened.size)
         assertEquals("<#1>", flattened[0].getInputReplacement())
         assertEquals("@everyone", flattened[1].getInputReplacement())
+    }
+
+    @Test
+    fun customEmojiStaysReadableUntilSendRewritesIt() {
+        val emoji = ModelEmojiCustom(
+            GuildEmoji(42L, "party", emptyList(), true, false, false, true),
+            guildId = 7L,
+        )
+        val candidate = EmojiAutocompletable(emoji, animationsEnabled = true)
+
+        assertEquals(":party:", candidate.getInputReplacement())
+        assertEquals(
+            "hello <:party:42>",
+            "hello :party:".replaceAutocompleteDataWithServerValues(mapOf(IntRange(6, 13) to candidate)),
+        )
     }
 
     @Test

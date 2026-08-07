@@ -14,7 +14,6 @@ import android.text.TextPaint
 import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.GestureDetector
-import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -89,7 +88,7 @@ class WidgetChatInputAttachments(
     /** Overrides the default "append to the end of the composer" behaviour with cursor insertion. */
     private val emojiPickerListener: EmojiPickerListener? = null,
     /** Overrides the default synthetic `KEYCODE_DEL` with the host's own deletion. */
-    private val onBackspacePressed: (() -> Unit)? = null,
+    private val onBackspacePressed: () -> Unit,
     private val onAttachmentsChanged: (Boolean) -> Unit = {},
 ) {
 
@@ -298,13 +297,7 @@ class WidgetChatInputAttachments(
             StickerPickerListener { _: Sticker -> flexInputViewModel.hideExpressionTray() },
         )
         tray.setOnBackspacePressedListener {
-            val onBackspace = onBackspacePressed
-            if (onBackspace != null) {
-                onBackspace()
-            } else {
-                chatInput.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL))
-                chatInput.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL))
-            }
+            onBackspacePressed()
         }
         tray.setOnEmojiSearchOpenedListener { flexInputViewModel.hideExpressionTray() }
 
@@ -722,6 +715,18 @@ class WidgetChatInputAttachments(
         val R_STRING_FILES = com.lytefast.flexinput.R.string.attachment_files
         val R_STRING_CAMERA = com.lytefast.flexinput.R.string.attachment_camera
     }
+}
+
+internal fun deletionRangeBeforeCursor(text: CharSequence, selectionStart: Int, selectionEnd: Int): IntRange? {
+    if (selectionStart !in 0..text.length || selectionEnd !in 0..text.length) return null
+    val from = if (selectionStart == selectionEnd) {
+        if (selectionStart == 0) return null
+        Character.offsetByCodePoints(text, selectionStart, -1)
+    } else {
+        minOf(selectionStart, selectionEnd)
+    }
+    val to = if (selectionStart == selectionEnd) selectionStart else maxOf(selectionStart, selectionEnd)
+    return IntRange(from, to)
 }
 
 private fun Fragment.appFragment(): AppFragment? =

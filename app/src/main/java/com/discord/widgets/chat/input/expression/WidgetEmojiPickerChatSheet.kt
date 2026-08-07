@@ -4,11 +4,14 @@ import android.os.Bundle
 import android.view.View
 import androidx.fragment.app.FragmentManager
 import com.discord.R
+import com.discord.databinding.WidgetEmojiPickerSheetBinding
 import com.discord.models.domain.emoji.Emoji
 import com.discord.widgets.chat.input.emoji.EmojiPickerContextType
 import com.discord.widgets.chat.input.emoji.EmojiPickerListener
+import com.discord.widgets.chat.input.emoji.EmojiPickerMode
 import com.discord.widgets.chat.input.emoji.EmojiPickerNavigator
 import com.discord.widgets.chat.input.emoji.WidgetEmojiPicker
+import com.google.android.material.textfield.TextInputEditText
 
 /**
  * The emoji picker as a search-first bottom sheet, opened by the expression tray's search field.
@@ -22,8 +25,9 @@ import com.discord.widgets.chat.input.emoji.WidgetEmojiPicker
  */
 class WidgetEmojiPickerChatSheet : WidgetExpressionPickerSheet(), WidgetEmojiPicker.Host {
 
+    private var _binding: WidgetEmojiPickerSheetBinding? = null
+    private val binding get() = requireNotNull(_binding)
     private var listener: EmojiPickerListener? = null
-    private var onBackspace: (() -> Unit)? = null
     private val emojiPickerContextType: EmojiPickerContextType
         get() = arguments?.getSerializable(EmojiPickerNavigator.ARG_EMOJI_PICKER_CONTEXT_TYPE)
             as? EmojiPickerContextType ?: EmojiPickerContextType.Chat
@@ -32,17 +36,30 @@ class WidgetEmojiPickerChatSheet : WidgetExpressionPickerSheet(), WidgetEmojiPic
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        _binding = WidgetEmojiPickerSheetBinding.bind(view)
         childFragmentManager.beginTransaction()
             .replace(
-                R.id.emoji_sheet_emoji_picker_content,
-                WidgetEmojiPicker.create(emojiPickerContextType),
+                binding.emojiSheetEmojiPickerContent.id,
+                WidgetEmojiPicker.create(emojiPickerContextType, EmojiPickerMode.BOTTOM_SHEET),
             )
             .runOnCommit {
-                view.layoutParams = view.layoutParams?.apply {
+                binding.root.layoutParams = binding.root.layoutParams?.apply {
                     height = (resources.displayMetrics.heightPixels * SHEET_HEIGHT_FRACTION).toInt()
+                }
+                binding.root.findViewById<TextInputEditText>(R.id.emoji_search_input)?.let { input ->
+                    input.post {
+                        if (_binding == null) return@post
+                        input.requestFocus()
+                        showKeyboard(input)
+                    }
                 }
             }
             .commit()
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun onEmojiPicked(emoji: Emoji) {
@@ -50,17 +67,13 @@ class WidgetEmojiPickerChatSheet : WidgetExpressionPickerSheet(), WidgetEmojiPic
         dismiss()
     }
 
-    override fun onEmojiBackspace() {
-        onBackspace?.invoke()
-    }
+    override fun onEmojiBackspace() = Unit
 
     internal fun bindCallbacks(
         listener: EmojiPickerListener?,
-        onBackspace: (() -> Unit)?,
         onCancel: (() -> Unit)?,
     ) {
         this.listener = listener
-        this.onBackspace = onBackspace
         setOnCancel(onCancel)
     }
 
@@ -71,13 +84,12 @@ class WidgetEmojiPickerChatSheet : WidgetExpressionPickerSheet(), WidgetEmojiPic
             fragmentManager: FragmentManager,
             listener: EmojiPickerListener?,
             emojiPickerContextType: EmojiPickerContextType = EmojiPickerContextType.Chat,
-            onBackspace: (() -> Unit)? = null,
             onCancel: (() -> Unit)? = null,
         ): WidgetEmojiPickerChatSheet = WidgetEmojiPickerChatSheet().apply {
             arguments = Bundle().apply {
                 putSerializable(EmojiPickerNavigator.ARG_EMOJI_PICKER_CONTEXT_TYPE, emojiPickerContextType)
             }
-            bindCallbacks(listener, onBackspace, onCancel)
+            bindCallbacks(listener, onCancel)
             show(fragmentManager, WidgetEmojiPickerChatSheet::class.java.simpleName)
         }
     }

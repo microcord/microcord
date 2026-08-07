@@ -139,16 +139,15 @@ class EmojiPickerViewModel(
                 EmojiPickerContextType.Chat ->
                     StoreStream.getChannelsSelected().observeSelectedChannel().switchMap { channel ->
                         if (channel == null) {
-                            store.getEmojiSet(StoreEmoji.EmojiContext.Global, false, false)
+                            store.getEmojiSet(StoreEmoji.EmojiContext.Global, true, false)
                         } else {
-                            store.getEmojiSet(channel.guildId, channel.id)
+                            store.getEmojiSet(channel.guildId, channel.id, includeUnusableEmojis = true)
                         }
                     }
                 EmojiPickerContextType.Global ->
-                    store.getEmojiSet(StoreEmoji.EmojiContext.Global, false, false)
+                    store.getEmojiSet(StoreEmoji.EmojiContext.Global, true, false)
                 is EmojiPickerContextType.Guild ->
-                    store.getEmojiSet(StoreEmoji.EmojiContext.Guild(contextType.guildId), false, false)
-                else -> store.getEmojiSet(StoreEmoji.EmojiContext.Global, false, false)
+                    store.getEmojiSet(StoreEmoji.EmojiContext.Guild(contextType.guildId), true, false)
             }
         }
 
@@ -168,19 +167,23 @@ class EmojiPickerViewModel(
             }
 
             addSection(EmojiCategory.FAVORITE, emojiSet.favoriteEmoji)
-            addSection(EmojiCategory.RECENT, emojiSet.recentEmojis)
+            val favoriteIds = emojiSet.favoriteEmoji.mapTo(HashSet(), Emoji::getUniqueId)
+            addSection(EmojiCategory.RECENT, emojiSet.recentEmojis.filterNot { it.getUniqueId() in favoriteIds })
 
             for ((guildId, emojis) in emojiSet.customEmojis) {
                 val guild = guilds[guildId] ?: continue
-                if (emojis.isEmpty()) continue
+                val nonFavorites = emojis.filterNot { it.getUniqueId() in favoriteIds }
+                if (nonFavorites.isEmpty()) continue
                 add(Item.HeaderItem.GuildHeaderItem(guild))
-                addAll(emojis.map { emoji ->
+                addAll(nonFavorites.map { emoji ->
                     Item.EmojiItem(guild.name, emoji, emoji.firstName, allowEmojisToAnimate)
                 })
             }
 
             if (contextType !is EmojiPickerContextType.Guild) {
-                for ((category, emojis) in emojiSet.unicodeEmojis) addSection(category, emojis)
+                for ((category, emojis) in emojiSet.unicodeEmojis) {
+                    addSection(category, emojis.filterNot { it.getUniqueId() in favoriteIds })
+                }
             }
         }
 

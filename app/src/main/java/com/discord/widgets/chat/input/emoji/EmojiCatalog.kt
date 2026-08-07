@@ -22,9 +22,7 @@ import rx.schedulers.Schedulers
  *   empty catalogue silently, which presents as "the emoji picker is just blank" with nothing in
  *   the log to explain it.
  *
- * In the reference this data is owned by `StoreEmoji`. When that store lands, this object becomes
- * its loader rather than the picker's — see [com.discord.widgets.chat.input.autocomplete.ChatInputAutocompletables.emojiSetSource],
- * which is the matching seam on the autocomplete side.
+ * This parser remains available for rendering tests that use the bundled catalog directly.
  */
 object EmojiCatalog {
 

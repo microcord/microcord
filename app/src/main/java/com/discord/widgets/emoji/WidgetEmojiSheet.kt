@@ -6,16 +6,13 @@ import android.transition.TransitionManager
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
-import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.annotation.StringRes
 import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.api.guild.GuildFeature
 import com.discord.app.AppBottomSheet
+import com.discord.databinding.WidgetEmojiSheetBinding
 import com.discord.widgets.settings.premium.WidgetSettingsPremium
-import com.discord.app.AppViewFlipper
 import com.discord.app.appViewModels
 import com.discord.i18n.i18nFormat
 import com.discord.models.domain.emoji.ModelEmojiCustom
@@ -31,8 +28,6 @@ import com.discord.utilities.locale.LocaleManager
 import com.discord.utilities.rx.ui
 import com.discord.utilities.textprocessing.node.EmojiNode
 import com.discord.utilities.view.extensions.fadeBy
-import com.facebook.drawee.view.SimpleDraweeView
-import com.google.android.material.button.MaterialButton
 import java.text.NumberFormat
 import rx.subscriptions.CompositeSubscription
 
@@ -58,44 +53,19 @@ class WidgetEmojiSheet : AppBottomSheet() {
 
     private val emojiSizePx: Int = IconUtils.getMediaProxySize(dpToPixels(48))
     private val imageChangeDetector = MGImages.DistinctChangeDetector()
-
-    private lateinit var flipper: AppViewFlipper
-    private lateinit var emojiIv: SimpleDraweeView
-    private lateinit var nameTv: TextView
-    private lateinit var emojiInfoTv: TextView
-    private lateinit var buttonContainer: FrameLayout
-    private lateinit var joinBtn: MaterialButton
-    private lateinit var premiumBtn: MaterialButton
-    private lateinit var favoriteContainer: FrameLayout
-    private lateinit var favoriteAddButton: MaterialButton
-    private lateinit var favoriteRemoveButton: MaterialButton
-    private lateinit var guildContainer: LinearLayout
-    private lateinit var guildAvatarWrap: FrameLayout
-    private lateinit var guildAvatarText: TextView
-    private lateinit var guildIv: SimpleDraweeView
-    private lateinit var guildNameTv: TextView
-    private lateinit var guildInfoTv: TextView
+    private var _binding: WidgetEmojiSheetBinding? = null
+    private val binding get() = requireNotNull(_binding)
 
     override fun getContentViewResId(): Int = R.layout.widget_emoji_sheet
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        flipper = view.findViewById(R.id.emoji_sheet_flipper)
-        emojiIv = view.findViewById(R.id.emoji_iv)
-        nameTv = view.findViewById(R.id.name_tv)
-        emojiInfoTv = view.findViewById(R.id.emoji_info_tv)
-        buttonContainer = view.findViewById(R.id.button_container)
-        joinBtn = view.findViewById(R.id.join_btn)
-        premiumBtn = view.findViewById(R.id.premium_btn)
-        favoriteContainer = view.findViewById(R.id.favorite_container)
-        favoriteAddButton = view.findViewById(R.id.favorite_add_button)
-        favoriteRemoveButton = view.findViewById(R.id.favorite_remove_button)
-        guildContainer = view.findViewById(R.id.guild_container)
-        guildAvatarWrap = view.findViewById(R.id.guildAvatarWrap)
-        guildAvatarText = view.findViewById(R.id.guildAvatarText)
-        guildIv = view.findViewById(R.id.guild_iv)
-        guildNameTv = view.findViewById(R.id.guild_name_tv)
-        guildInfoTv = view.findViewById(R.id.guild_info_tv)
+        _binding = WidgetEmojiSheetBinding.bind(view)
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun bindSubscriptions(compositeSubscription: CompositeSubscription) {
@@ -104,7 +74,7 @@ class WidgetEmojiSheet : AppBottomSheet() {
             .subscribe { viewState ->
                 when (viewState) {
                     is EmojiSheetViewModel.ViewState.Loading ->
-                        flipper.displayedChild = FLIPPER_INDEX_LOADING
+                        binding.emojiSheetFlipper.displayedChild = FLIPPER_INDEX_LOADING
 
                     is EmojiSheetViewModel.ViewState.EmojiCustom -> configureCustomEmoji(viewState)
                     is EmojiSheetViewModel.ViewState.EmojiUnicode -> configureUnicodeEmoji(viewState)
@@ -127,12 +97,12 @@ class WidgetEmojiSheet : AppBottomSheet() {
         val emoji = viewState.emojiCustom
 
         MGImages.setImage(
-            view = emojiIv,
+            view = binding.emojiIv,
             url = ModelEmojiCustom.getImageUri(emoji.id, emoji.isAnimated, emojiSizePx),
             changeDetector = imageChangeDetector,
         )
-        nameTv.text = ":${emoji.name}:"
-        emojiInfoTv.setText(
+        binding.nameTv.text = ":${emoji.name}:"
+        binding.emojiInfoTv.setText(
             getCustomEmojiInfoText(
                 isCurrentGuild = viewState.isCurrentGuild,
                 isUserInGuild = viewState.emojiGuildInfo.isUserInGuild,
@@ -148,26 +118,25 @@ class WidgetEmojiSheet : AppBottomSheet() {
         )
         configureGuildSection(
             guild = known?.guild,
-            isCurrent = viewState.isCurrentGuild,
             isPublic = viewState.emojiGuildInfo.isPublic,
             approximateOnline = known?.approximateOnline,
         )
         configureFavorite(viewState.canFavorite, viewState.isFavorite)
-        flipper.displayedChild = FLIPPER_INDEX_CONTENT
+        binding.emojiSheetFlipper.displayedChild = FLIPPER_INDEX_CONTENT
     }
 
     private fun configureUnicodeEmoji(viewState: EmojiSheetViewModel.ViewState.EmojiUnicode) {
         MGImages.setImage(
-            view = emojiIv,
+            view = binding.emojiIv,
             url = viewState.emojiUnicode.getImageUri(true, emojiSizePx, requireContext()),
             changeDetector = imageChangeDetector,
         )
-        nameTv.text = ":${viewState.emojiUnicode.firstName}:"
-        emojiInfoTv.setText(R.string.emoji_popout_standard_emoji_description)
-        buttonContainer.visibility = View.GONE
-        guildContainer.visibility = View.GONE
+        binding.nameTv.text = ":${viewState.emojiUnicode.firstName}:"
+        binding.emojiInfoTv.setText(R.string.emoji_popout_standard_emoji_description)
+        binding.buttonContainer.visibility = View.GONE
+        binding.guildContainer.visibility = View.GONE
         configureFavorite(viewState.canFavorite, viewState.isFavorite)
-        flipper.displayedChild = FLIPPER_INDEX_CONTENT
+        binding.emojiSheetFlipper.displayedChild = FLIPPER_INDEX_CONTENT
     }
 
     /**
@@ -176,13 +145,13 @@ class WidgetEmojiSheet : AppBottomSheet() {
      */
     private fun configureButtons(isUserPremium: Boolean, isUserInGuild: Boolean, guild: Guild?) {
         when {
-            guild == null -> buttonContainer.visibility = View.GONE
+            guild == null -> binding.buttonContainer.visibility = View.GONE
 
             !isUserPremium -> {
-                buttonContainer.visibility = View.VISIBLE
-                premiumBtn.visibility = View.VISIBLE
-                joinBtn.visibility = View.GONE
-                premiumBtn.setOnClickListener {
+                binding.buttonContainer.visibility = View.VISIBLE
+                binding.premiumBtn.visibility = View.VISIBLE
+                binding.joinBtn.visibility = View.GONE
+                binding.premiumBtn.setOnClickListener {
                     val context = requireContext()
                     dismiss()
                     WidgetSettingsPremium.launch(context, locationSection = PREMIUM_UPSELL_LOCATION)
@@ -190,56 +159,55 @@ class WidgetEmojiSheet : AppBottomSheet() {
             }
 
             !isUserInGuild -> {
-                buttonContainer.visibility = View.VISIBLE
-                premiumBtn.visibility = View.GONE
-                joinBtn.visibility = View.VISIBLE
-                joinBtn.setOnClickListener { viewModel.joinGuild(requireContext(), guild) }
+                binding.buttonContainer.visibility = View.VISIBLE
+                binding.premiumBtn.visibility = View.GONE
+                binding.joinBtn.visibility = View.VISIBLE
+                binding.joinBtn.setOnClickListener { viewModel.joinGuild(requireContext(), guild) }
             }
 
-            else -> buttonContainer.visibility = View.GONE
+            else -> binding.buttonContainer.visibility = View.GONE
         }
     }
 
     private fun configureFavorite(canFavorite: Boolean, isFavorite: Boolean) {
-        favoriteContainer.visibility = if (canFavorite) View.VISIBLE else View.GONE
+        binding.favoriteContainer.visibility = if (canFavorite) View.VISIBLE else View.GONE
         // The two buttons are stacked; cross-fading keeps the row from resizing on toggle.
-        favoriteAddButton.fadeBy(!isFavorite, FAVORITE_FADE_MS)
-        favoriteAddButton.setOnClickListener { viewModel.setFavorite(true) }
-        favoriteRemoveButton.fadeBy(isFavorite, FAVORITE_FADE_MS)
-        favoriteRemoveButton.setOnClickListener { viewModel.setFavorite(false) }
+        binding.favoriteAddButton.fadeBy(!isFavorite, FAVORITE_FADE_MS)
+        binding.favoriteAddButton.setOnClickListener { viewModel.setFavorite(true) }
+        binding.favoriteRemoveButton.fadeBy(isFavorite, FAVORITE_FADE_MS)
+        binding.favoriteRemoveButton.setOnClickListener { viewModel.setFavorite(false) }
     }
 
-    /** The source-server card, hidden when the emoji is from the server we are already looking at. */
+    /** The source-server card; a known guild is always shown so the emoji's origin is explicit. */
     private fun configureGuildSection(
         guild: Guild?,
-        isCurrent: Boolean,
         isPublic: Boolean,
         approximateOnline: Int?,
     ) {
-        if (guild == null || isCurrent) {
-            guildContainer.visibility = View.GONE
+        if (guild == null) {
+            binding.guildContainer.visibility = View.GONE
             return
         }
-        guildContainer.visibility = View.VISIBLE
+        binding.guildContainer.visibility = View.VISIBLE
 
         if (guild.hasIcon()) {
-            IconUtils.setIcon(guildIv, guild, changeDetector = imageChangeDetector, allowAnimation = true)
+            IconUtils.setIcon(binding.guildIv, guild, changeDetector = imageChangeDetector, allowAnimation = true)
         } else {
-            guildAvatarWrap.setBackgroundResource(R.drawable.drawable_circle_black)
-            guildAvatarWrap.backgroundTintList = ColorStateList.valueOf(
+            binding.guildAvatarWrap.setBackgroundResource(R.drawable.drawable_circle_black)
+            binding.guildAvatarWrap.backgroundTintList = ColorStateList.valueOf(
                 ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundSecondary),
             )
-            guildAvatarText.text = guild.shortName
+            binding.guildAvatarText.text = guild.shortName
         }
 
-        guildNameTv.setCompoundDrawablesCompat(
+        binding.guildNameTv.setCompoundDrawablesCompat(
             start = when {
                 guild.hasFeature(GuildFeature.PARTNERED) -> R.drawable.ic_partnered_badge_banner
                 guild.hasFeature(GuildFeature.VERIFIED) -> R.drawable.ic_verified_badge_banner
                 else -> 0
             },
         )
-        guildNameTv.text = guild.name
+        binding.guildNameTv.text = guild.name
 
         val visibility = getString(
             if (isPublic) R.string.emoji_popout_public_server else R.string.emoji_popout_private_server,
@@ -253,7 +221,7 @@ class WidgetEmojiSheet : AppBottomSheet() {
                 "membersOnline" to formatted,
             ) + " • "
         }.orEmpty()
-        guildInfoTv.text = onlinePrefix + visibility
+        binding.guildInfoTv.text = onlinePrefix + visibility
     }
 
     /**

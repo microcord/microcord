@@ -8,7 +8,6 @@ import android.text.Spanned
 import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
-import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
@@ -152,7 +151,6 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         // Stopgap until StoreEmoji exists; see ChatInputAutocompletables.installDefaultEmojiSetSource.
-        ChatInputAutocompletables.installDefaultEmojiSetSource(requireContext())
         viewModel = ViewModelProvider(this).get(ChatInputViewModel::class.java)
         autocompleteViewModel = ViewModelProvider(this).get(AutocompleteViewModel::class.java)
         childFragmentManager.setFragmentResultListener(
@@ -419,8 +417,11 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     }
 
     override fun onEmojiBackspace() {
-        input?.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL))
-        input?.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL))
+        val editor = input ?: return
+        val text = editor.editableText ?: return
+        val range = deletionRangeBeforeCursor(text, editor.selectionStart, editor.selectionEnd) ?: return
+        text.delete(range.first, range.last)
+        android.text.Selection.setSelection(text, range.first)
     }
 
     /**

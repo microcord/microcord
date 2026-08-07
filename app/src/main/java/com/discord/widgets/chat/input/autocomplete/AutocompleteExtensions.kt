@@ -29,7 +29,10 @@ fun String.replaceAutocompleteDataWithServerValues(
     var result = this
     for (range in inputMentionsMap.keys.sortedByDescending { it.first }) {
         val autocompletable = inputMentionsMap[range] ?: continue
-        val replacement = autocompletable.getInputReplacement()
+        val replacement = when (autocompletable) {
+            is EmojiAutocompletable -> autocompletable.emoji.getMessageContentReplacement()
+            else -> autocompletable.getInputReplacement()
+        }
         if (range.first <= result.length && range.last <= result.length) {
             result = result.replaceRange(range.first, range.last, replacement)
         } else {
