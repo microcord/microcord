@@ -19,7 +19,7 @@ class StoreRtcRegionTest {
             dispatcher = Dispatcher(TestScheduler()),
             clock = Clock { now },
             fetchRegionsWithIps = { Observable.just(emptyList()) },
-            hasNativeEngineEverInitialized = { true },
+            isNativeEngineInitialized = { true },
             rankRegionsByLatency = { _, _ -> },
         )
         val shouldTest = StoreRtcRegion::class.java.getDeclaredMethod(

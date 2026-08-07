@@ -1,19 +1,13 @@
 package com.discord.stores
 
-import android.content.Context
 import co.discord.media_engine.VideoInputDeviceDescription
 import co.discord.media_engine.VideoInputDeviceFacing
 import co.discord.media_engine.VideoFrameCallback
 import co.discord.media_engine.VideoOutputSink
 import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelRtcLatencyRegion
-import com.discord.native.engine.NativeConnection
-import com.discord.native.engine.NativeEngine
-import com.discord.app.AppLog
 import com.discord.rtcconnection.mediaengine.MediaEngineThreadExecutor
 import com.discord.utilities.persister.Persister
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import org.webrtc.VideoCapturer
 import rx.Observable
 import rx.subjects.BehaviorSubject
@@ -172,179 +166,6 @@ class StoreMediaEngine(
         }
     }
 
-    private class NativeMediaEngineController(context: Context) : MediaEngineController {
-        private val gson = Gson()
-        private val engine = NativeEngine(context.applicationContext, NativeEngine.LOGLEVEL_DEFAULT)
-        override val executor = MediaEngineThreadExecutor.create()
-        override val maxDaveProtocolVersion: Int get() = engine.maxSupportedProtocolVersion
-        private var disposed = false
-        private val connections = linkedSetOf<NativeConnectionAdapter>()
-
-        override fun getVideoInputDevices(callback: (List<VideoInputDeviceDescription>) -> Unit) {
-            if (disposed) return callback(emptyList())
-            engine.getVideoInputDevices { devices ->
-                callback(devices.filterNotNull().map { device ->
-                    VideoInputDeviceDescription(
-                        device.name,
-                        device.guid,
-                        when (device.facing) {
-                            com.discord.native.engine.VideoInputDeviceFacing.Front -> VideoInputDeviceFacing.Front
-                            com.discord.native.engine.VideoInputDeviceFacing.Back -> VideoInputDeviceFacing.Back
-                            else -> VideoInputDeviceFacing.Unknown
-                        },
-                    )
-                })
-            }
-        }
-
-        override fun setVideoInputDevice(index: Int) {
-            if (!disposed) engine.setVideoInputDeviceIndex(index)
-        }
-
-        override fun setVideoInputDevice(deviceGuid: String) {
-            if (!disposed) engine.setVideoInputDevice(deviceGuid)
-        }
-
-        override fun setVideoInputEnabled(enabled: Boolean) =
-            connections.toList().forEach { it.setVideoBroadcast(enabled) }
-
-        override fun setAudioInputEnabled(enabled: Boolean) {
-            if (!disposed) engine.setAudioInputEnabled(enabled)
-        }
-
-        override fun setPttActive(active: Boolean) =
-            connections.toList().forEach { it.setPTTActive(active, false, false) }
-
-        override fun getCodecCapabilities(callback: (List<MediaEngineController.CodecCapability>) -> Unit) {
-            if (disposed) return callback(emptyList())
-            engine.getCodecCapabilities { json ->
-                val capabilities = runCatching {
-                    gson.fromJson<List<MediaEngineController.CodecCapability>>(json, CODEC_CAPABILITIES_TYPE)
-                }.onFailure { AppLog.e("StoreMediaEngine", "Unable to parse native codec capabilities", it) }
-                    .getOrDefault(emptyList())
-                callback(capabilities)
-            }
-        }
-
-        override fun rankRtcRegions(
-            regions: List<ModelRtcLatencyRegion>,
-            callback: (List<String>) -> Unit,
-        ) {
-            if (disposed) return callback(emptyList())
-            engine.rankRtcRegions(gson.toJson(regions)) { callback(it.toList()) }
-        }
-
-        override fun createVoiceConnection(
-            userId: Long,
-            options: MediaEngineController.ConnectionOptions,
-            callback: (MediaEngineController.ConnectionInfo, String) -> Unit,
-        ): MediaEngineController.Connection? {
-            if (disposed) return null
-            val adapter = NativeConnectionAdapter(
-                engine.createVoiceConnection(userId.toString(), gson.toJson(options)) { info, error ->
-                    callback(
-                        MediaEngineController.ConnectionInfo(
-                            info.isConnected,
-                            info.protocol,
-                            info.localAddress,
-                            info.localPort,
-                        ),
-                        error,
-                    )
-                },
-            ) { connections -= it }
-            connections += adapter
-            return adapter
-        }
-
-        override fun setVideoOutputSink(streamId: String, callback: VideoFrameCallback?) {
-            if (!disposed) {
-                engine.setVideoOutputSink(
-                    streamId,
-                    callback?.let { sink -> NativeEngine.VideoFrameCallback { frame, _ -> sink.onFrame(frame) } },
-                )
-            }
-        }
-
-        override fun dispose() {
-            if (disposed) return
-            disposed = true
-            connections.toList().forEach(MediaEngineController.Connection::dispose)
-            connections.clear()
-            engine.dispose()
-        }
-    }
-
-    private class NativeConnectionAdapter(
-        private val native: NativeConnection,
-        private val onDisposed: (NativeConnectionAdapter) -> Unit,
-    ) : MediaEngineController.Connection {
-        private var disposed = false
-
-        override fun dispose() {
-            if (disposed) return
-            disposed = true
-            onDisposed(this)
-            native.dispose()
-        }
-
-        override fun getEncryptionModes(callback: (List<String>) -> Unit) =
-            unlessDisposed { native.getEncryptionModes { callback(it.filterNotNull()) } }
-        override fun mergeUsers(usersJson: String) = unlessDisposed { native.mergeUsers(usersJson) }
-        override fun destroyUser(userId: String) = unlessDisposed { native.destroyUser(userId) }
-        override fun setVideoBroadcast(enabled: Boolean) = unlessDisposed { native.setVideoBroadcast(enabled) }
-        override fun setLocalVolume(userId: String, volume: Float) = unlessDisposed { native.setLocalVolume(userId, volume) }
-        override fun setLocalMute(userId: String, muted: Boolean) = unlessDisposed { native.setLocalMute(userId, muted) }
-        override fun setSelfMute(muted: Boolean) = unlessDisposed { native.setSelfMute(muted) }
-        override fun setSelfDeafen(deafened: Boolean) = unlessDisposed { native.setSelfDeafen(deafened) }
-        override fun setPTTActive(active: Boolean, priority: Boolean, muteOverride: Boolean) =
-            unlessDisposed { native.setPTTActive(active, priority, muteOverride) }
-        override fun setOnSpeaking(callback: (String, Int, Float) -> Unit) =
-            unlessDisposed { native.setOnSpeakingCallback(callback) }
-        override fun setOnPing(callback: (Int, String, Int, Int) -> Unit) =
-            unlessDisposed { native.setOnPingCallback(callback) }
-        override fun setOnPingTimeout(callback: (String, Int, Int, Int) -> Unit) =
-            unlessDisposed { native.setOnPingTimeoutCallback(callback) }
-        override fun fastUdpReconnect() = unlessDisposed(native::fastUdpReconnect)
-        override fun setOnVideo(callback: (String, Long, String, String) -> Unit) =
-            unlessDisposed { native.setOnVideoCallback(callback) }
-        override fun setOnFirstFrame(callback: (String, Long, String) -> Unit) =
-            unlessDisposed { native.setOnFirstFrameCallback(callback) }
-        override fun startBroadcast(capturer: VideoCapturer, soundshareNativeInstance: Long) =
-            unlessDisposed { native.startBroadcast(capturer, soundshareNativeInstance) }
-        override fun stopBroadcast() = unlessDisposed(native::stopBroadcast)
-        override fun prepareSecureFramesTransition(transitionId: Int, protocolVersion: Int, callback: () -> Unit) =
-            unlessDisposed { native.prepareSecureFramesTransition(transitionId, protocolVersion) { callback() } }
-        override fun executeSecureFramesTransition(transitionId: Int) =
-            unlessDisposed { native.executeSecureFramesTransition(transitionId) }
-        override fun prepareSecureFramesEpoch(epoch: String, transitionId: Int, groupId: String) =
-            unlessDisposed { native.prepareSecureFramesEpoch(epoch, transitionId, groupId) }
-        override fun getMLSKeyPackageB64(callback: (String) -> Unit) =
-            unlessDisposed { native.getMLSKeyPackageB64(callback) }
-        override fun updateMLSExternalSenderB64(externalSenderB64: String) =
-            unlessDisposed { native.updateMLSExternalSenderB64(externalSenderB64) }
-        override fun processMLSProposalsB64(proposals: String, callback: (String) -> Unit) =
-            unlessDisposed { native.processMLSProposalsB64(proposals, callback) }
-        override fun prepareMLSCommitTransitionB64(
-            transitionId: Int,
-            commit: String,
-            callback: (Boolean, Int, String) -> Unit,
-        ) = unlessDisposed { native.prepareMLSCommitTransitionB64(transitionId, commit, callback) }
-        override fun processMLSWelcomeB64(
-            transitionId: Int,
-            welcome: String,
-            callback: (Boolean, Int, String) -> Unit,
-        ) = unlessDisposed { native.processMLSWelcomeB64(transitionId, welcome, callback) }
-        override fun setOnMLSFailure(callback: (String, String) -> Unit) =
-            unlessDisposed { native.setOnMLSFailureCallback(callback) }
-        override fun setSecureFramesStateUpdate(callback: (String) -> Unit) =
-            unlessDisposed { native.setSecureFramesStateUpdateCallback(callback) }
-
-        private inline fun unlessDisposed(action: () -> Unit) {
-            if (!disposed) action()
-        }
-    }
-
     private val hasNativeEngineEverInitializedCache =
         Persister(NATIVE_ENGINE_EVER_INITIALIZED_CACHE_KEY, false)
     private var hasNativeEngineEverInitialized = false
@@ -373,17 +194,6 @@ class StoreMediaEngine(
         hasNativeEngineEverInitialized = hasNativeEngineEverInitializedCache.get()
         preferredVideoInputDeviceGUID = preferredVideoInputDeviceGuidCache.get()
     }
-
-    @Synchronized
-    internal fun useModernNativeEngine(context: Context): MediaEngineController {
-        if (mediaEngineController !is NativeMediaEngineController) {
-            mediaEngineController = NativeMediaEngineController(context)
-        }
-        return mediaEngineController
-    }
-
-    @Synchronized
-    internal fun controller(): MediaEngineController = mediaEngineController
 
     @Synchronized
     fun handleConnectionOpen(payload: ModelPayload) {
@@ -527,8 +337,6 @@ class StoreMediaEngine(
         }
 
     private companion object {
-        val CODEC_CAPABILITIES_TYPE =
-            object : TypeToken<List<MediaEngineController.CodecCapability>>() {}.type
         private const val NATIVE_ENGINE_EVER_INITIALIZED_CACHE_KEY =
             "CACHE_KEY_NATIVE_ENGINE_EVER_INITIALIZED"
         private const val PREFERRED_VIDEO_INPUT_DEVICE_GUID_CACHE_KEY =

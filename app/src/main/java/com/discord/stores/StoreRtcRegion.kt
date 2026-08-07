@@ -34,8 +34,8 @@ class StoreRtcRegion(
     private val clock: Clock,
     /** `GET` the region/IP list used for probing. `RestAPI.getRtcLatencyTestRegionsIps`. */
     private val fetchRegionsWithIps: () -> Observable<List<ModelRtcLatencyRegion>>,
-    /** `StoreMediaEngine.hasNativeEngineEverInitialized()`; no engine means no way to probe. */
-    private val hasNativeEngineEverInitialized: () -> Boolean,
+    /** A current native engine is required because constructing one also initializes device audio. */
+    private val isNativeEngineInitialized: () -> Boolean,
     /** `StoreMediaEngine.getRankedRtcRegions(regions, callback)`. */
     private val rankRegionsByLatency: (
         regions: List<ModelRtcLatencyRegion>,
@@ -62,7 +62,7 @@ class StoreRtcRegion(
     }
 
     private fun fetchRtcLatencyTestRegionsIps() {
-        if (!hasNativeEngineEverInitialized()) return
+        if (!isNativeEngineInitialized()) return
         fetchRegionsWithIps().subscribe(::maybePerformLatencyTest, {})
     }
 

@@ -987,8 +987,8 @@ class StoreStream private constructor(
             dispatcher = dispatcher,
             clock = clock,
             fetchRegionsWithIps = { rtcLatencyApi.get(RTC_LATENCY_URL) },
-            hasNativeEngineEverInitialized = {
-                voiceTransport.storeMediaEngine.hasNativeEngineEverInitialized()
+            isNativeEngineInitialized = {
+                voiceTransport.mediaEngine.getNativeEngine() != null
             },
             rankRegionsByLatency = { regions, callback ->
                 voiceTransport.storeMediaEngine.getRankedRtcRegions(regions, callback)
