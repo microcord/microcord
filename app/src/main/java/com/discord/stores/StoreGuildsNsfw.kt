@@ -2,6 +2,7 @@ package com.discord.stores
 
 import android.content.Context
 import com.discord.stores.updates.ObservationDeck
+import com.discord.utilities.channel.ChannelGating
 import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.takeSingleUntilTimeout
@@ -50,7 +51,7 @@ class StoreGuildsNsfw(
         storeChannels.observeDefaultChannel(guildId)
             .takeSingleUntilTimeout()
             .appSubscribe(StoreGuildsNsfw::class.java) { channel ->
-                if (channel != null && !channel.nsfw) {
+                if (channel != null && !channel.nsfw && !ChannelGating.isChannelSpoilerGated(channel)) {
                     ChannelSelector.getInstance().selectChannel(channel)
                 } else {
                     ChannelSelector.getInstance().selectChannel(0L, 0L)

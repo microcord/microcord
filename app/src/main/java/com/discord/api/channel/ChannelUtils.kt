@@ -76,6 +76,9 @@ fun Channel.isThreadOnlyChannel(): Boolean = isGuildForumChannel() || isGuildMed
 
 fun Channel.isDirectory(): Boolean = type == Channel.DIRECTORY
 
+fun Channel.isSpoilerChannel(): Boolean =
+    (flags ?: 0L) and Channel.FLAG_IS_SPOILER_CHANNEL != 0L
+
 /** A plain guild text channel or a thread-only channel. */
 fun Channel.isGuildTextChannel(): Boolean =
     type == Channel.GUILD_TEXT || isThreadOnlyChannel()

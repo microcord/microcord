@@ -28,6 +28,7 @@ import com.discord.stores.SelectedChannelAnalyticsLocation
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
 import com.discord.utilities.channel.ChannelSelector
+import com.discord.widgets.channels.SpoilerChannelGate
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
@@ -240,6 +241,12 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
             ChannelSelector.getInstance().selectChannel(0L, 0L)
             return
         }
+        if (channel.isGuildVocalChannel() && SpoilerChannelGate.maybeShowForVoiceChannel(
+                requireContext(),
+                parentFragmentManager,
+                channel.id,
+            ) { selectChannel(channel) }
+        ) return
         ChannelSelector.getInstance().selectChannel(
             channel,
             analyticsLocation = SelectedChannelAnalyticsLocation.CHANNEL_LIST,

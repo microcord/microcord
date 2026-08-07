@@ -107,6 +107,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
         ChatListEntry.TIMESTAMP -> WidgetChatListAdapterItemTimestamp(this)
         ChatListEntry.BLOCKED_MESSAGES -> WidgetChatListAdapterItemBlocked(this)
         ChatListEntry.SEARCH_RESULT_COUNT -> WidgetChatListAdapterItemSearchResultCount(this)
+        ChatListEntry.SEARCH_SPOILER_RESULT -> WidgetChatListAdapterItemSearchSpoiler(this)
         ChatListEntry.SEARCH_INDEXING ->
             MGRecyclerViewHolder(R.layout.widget_chat_list_adapter_item_search_indexing, this)
         ChatListEntry.SEARCH_EMPTY ->

@@ -19,6 +19,7 @@ import com.discord.api.channel.isAnnouncementChannel
 import com.discord.api.channel.isCategory
 import com.discord.api.channel.isGuildForumChannel
 import com.discord.api.channel.isGuildTextyChannel
+import com.discord.api.channel.isSpoilerChannel
 import com.discord.api.channel.isThread
 import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isThreaded
@@ -31,7 +32,10 @@ import com.discord.models.guild.Guild
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
 import com.discord.utilities.dimen.dpToPixels
+import com.discord.utilities.channel.ChannelGating
 import com.discord.utilities.permissions.PermissionUtils
+import com.discord.utilities.resources.DurationUnit
+import com.discord.utilities.resources.formatDuration
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
@@ -71,6 +75,8 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
     private var savedMessageSlowMode = 0
     private var savedArchiveDuration = DEFAULT_ARCHIVE_DURATION
     private var draftArchiveDuration = DEFAULT_ARCHIVE_DURATION
+    private var savedVisibility = ContentVisibility.DEFAULT
+    private var draftVisibility = ContentVisibility.DEFAULT
     private var bindingState = false
 
     override fun onViewBound(view: View) {
@@ -156,6 +162,8 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         setSliderValueLabel(messageSlowMode, messageSlowModeLabel, savedMessageSlowMode)
         savedArchiveDuration = channel.defaultAutoArchiveDuration ?: DEFAULT_ARCHIVE_DURATION
         draftArchiveDuration = savedArchiveDuration
+        savedVisibility = ContentVisibility.of(channel)
+        draftVisibility = savedVisibility
         bindingState = false
 
         val isThreadOnly = channel.isThreadOnlyChannel()
@@ -205,11 +213,7 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         }
         root.findViewById<LinearLayout>(R.id.channel_settings_section_privacy_safety).isVisible =
             next.canManageChannel && !category
-        root.findViewById<CheckedSetting>(R.id.channel_settings_nsfw).apply {
-            setOnCheckedListener(null)
-            isChecked = channel.nsfw
-            setOnCheckedListener { checked -> saveImmediate(nsfw = checked) }
-        }
+        configureContentVisibility(root)
         root.findViewById<LinearLayout>(R.id.channel_settings_section_slow_mode).isVisible =
             next.canManageChannel && !category && !channel.isAnnouncementChannel()
         root.findViewById<TextView>(R.id.channel_settings_slowmode_label).setText(
@@ -277,6 +281,25 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
                 val flags = (channel.flags ?: 0L)
                 saveImmediate(flags = if (checked) flags or Channel.FLAG_REQUIRE_TAG else flags and Channel.FLAG_REQUIRE_TAG.inv())
             }
+        }
+    }
+
+    /** Default / Spoiler / Age-Restricted are one choice: a channel cannot be two of them at once. */
+    private fun configureContentVisibility(root: View) {
+        VISIBILITY_ROWS.forEach { (id, visibility) ->
+            root.findViewById<CheckedSetting>(id).setContainerClickListener {
+                draftVisibility = visibility
+                updateContentVisibilityRadios()
+                updateSaveVisibility()
+            }
+        }
+        updateContentVisibilityRadios()
+    }
+
+    private fun updateContentVisibilityRadios() {
+        val root = view ?: return
+        VISIBILITY_ROWS.forEach { (id, visibility) ->
+            root.findViewById<CheckedSetting>(id)?.isChecked = draftVisibility == visibility
         }
     }
 
@@ -350,10 +373,13 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
                 name = currentName.takeIf { it != savedName },
                 type = null,
                 topic = currentTopic.takeIf { it != savedTopic },
-                nsfw = null,
+                nsfw = (draftVisibility == ContentVisibility.AGE_RESTRICTED)
+                    .takeIf { draftVisibility != savedVisibility },
                 rateLimitPerUser = currentSlowMode.takeIf { it != savedSlowMode },
                 defaultAutoArchiveDuration = draftArchiveDuration.takeIf { it != savedArchiveDuration },
                 defaultThreadRateLimitPerUser = currentMessageSlowMode.takeIf { it != savedMessageSlowMode },
+                flags = draftVisibility.flags(channel.flags ?: Channel.FLAGS_NONE)
+                    .takeIf { draftVisibility != savedVisibility },
             ),
         ).restSubscribeOn().ui(this).appSubscribe(WidgetTextChannelSettings::class.java, context = context) {
             AppToast.show(context, if (it.isCategory()) R.string.category_settings else R.string.channel_settings)
@@ -424,7 +450,8 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
             topic.editText?.text?.toString().orEmpty() != savedTopic ||
             SLOWMODE_COOLDOWN_VALUES[slowMode.progress] != savedSlowMode ||
             SLOWMODE_COOLDOWN_VALUES[messageSlowMode.progress] != savedMessageSlowMode ||
-            draftArchiveDuration != savedArchiveDuration
+            draftArchiveDuration != savedArchiveDuration ||
+            draftVisibility != savedVisibility
     }
 
     private fun channelId() = mostRecentIntent.getLongExtra(ARG_CHANNEL_ID, -1L)
@@ -461,7 +488,7 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
                                     channel,
                                     PermissionUtils.canAndIsElevated(Permission.MANAGE_CHANNELS, permissions, me.mfaEnabled, it.mfaLevel),
                                     PermissionUtils.canAndIsElevated(Permission.MANAGE_ROLES, permissions, me.mfaEnabled, it.mfaLevel),
-                                    !channel.nsfw,
+                                    !ChannelGating.isChannelContentGated(channel, me),
                                     protected,
                                 )
                             }
@@ -477,6 +504,11 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         private const val ANNOUNCEMENT_ARTICLE_URL = "https://support.discord.com/hc/en-us/articles/360032008192"
         private const val MAX_TOPIC_LENGTH = 1_024
         private const val MAX_FORUM_TOPIC_LENGTH = 4_096
+        private val VISIBILITY_ROWS = listOf(
+            R.id.channel_settings_visibility_default to ContentVisibility.DEFAULT,
+            R.id.channel_settings_spoiler to ContentVisibility.SPOILER,
+            R.id.channel_settings_nsfw to ContentVisibility.AGE_RESTRICTED,
+        )
         val SLOWMODE_COOLDOWN_VALUES = listOf(0, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1_800, 3_600, 7_200, 21_600)
 
         @JvmStatic
@@ -491,10 +523,32 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
 
         internal fun durationLabel(context: Context, seconds: Int): CharSequence = when {
             seconds == 0 -> context.getString(R.string.form_label_slowmode_off)
-            seconds < 60 -> SettingsStrings.render(context, R.string.duration_seconds, "seconds" to seconds)
-            seconds < 3_600 -> SettingsStrings.render(context, R.string.duration_minutes, "minutes" to seconds / 60)
-            seconds < 86_400 -> SettingsStrings.render(context, R.string.duration_hours, "hours" to seconds / 3_600)
-            else -> SettingsStrings.render(context, R.string.duration_days, "days" to seconds / 86_400)
+            seconds < 60 -> context.formatDuration(DurationUnit.SECONDS, seconds)
+            seconds < 3_600 -> context.formatDuration(DurationUnit.MINUTES, seconds / 60)
+            seconds < 86_400 -> context.formatDuration(DurationUnit.HOURS, seconds / 3_600)
+            else -> context.formatDuration(DurationUnit.DAYS, seconds / 86_400)
+        }
+    }
+}
+
+/** The one content gate a channel can carry; the three are mutually exclusive. */
+internal enum class ContentVisibility {
+    DEFAULT,
+    SPOILER,
+    AGE_RESTRICTED,
+    ;
+
+    fun flags(existing: Long): Long = if (this == SPOILER) {
+        existing or Channel.FLAG_IS_SPOILER_CHANNEL
+    } else {
+        existing and Channel.FLAG_IS_SPOILER_CHANNEL.inv()
+    }
+
+    companion object {
+        fun of(channel: Channel): ContentVisibility = when {
+            channel.isSpoilerChannel() -> SPOILER
+            channel.nsfw -> AGE_RESTRICTED
+            else -> DEFAULT
         }
     }
 }

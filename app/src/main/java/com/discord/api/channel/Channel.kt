@@ -68,6 +68,7 @@ data class Channel(
         const val FLAGS_NONE = 0L
         const val FLAG_PINNED = 2L
         const val FLAG_REQUIRE_TAG = 16L
+        const val FLAG_IS_SPOILER_CHANNEL = 2097152L
     }
 }
 

@@ -5,17 +5,18 @@ import androidx.annotation.StringRes
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDeletedMessage
+import com.discord.api.channel.isSpoilerChannel
 import com.discord.api.channel.isThread
 import com.discord.app.AppViewModel
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreChannels
-import com.discord.stores.StoreGuildsNsfw
 import com.discord.stores.StorePermissions
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUser
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
+import com.discord.utilities.channel.ChannelGating
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
@@ -65,10 +66,11 @@ class WidgetThreadSettingsViewModel(
             val slowModeCooldownDraft: Int,
             /** Only a private thread can restrict who adds members; absent means anyone may. */
             val invitableDraft: Boolean,
+            val spoilerDraft: Boolean,
             val isPrivateThread: Boolean,
             val hasUnsavedChanges: Boolean,
             val canManageThread: Boolean,
-            /** Pins are hidden behind an un-agreed NSFW gate. */
+            /** Pins are hidden while an un-agreed age gate stands in front of the channel. */
             val isPinsEnabled: Boolean,
         ) : ViewState()
     }
@@ -82,7 +84,7 @@ class WidgetThreadSettingsViewModel(
             updateViewState(ViewState.Invalid)
             return
         }
-        val isPinsEnabled = !channel.nsfw || isGuildNsfwGateAgreed(channel.guildId)
+        val isPinsEnabled = !ChannelGating.isChannelContentGated(channel)
         val current = viewState as? ViewState.Valid
         updateViewState(
             if (current?.channelNameDraft != null) {
@@ -93,6 +95,7 @@ class WidgetThreadSettingsViewModel(
                     channelNameDraft = channel.name,
                     slowModeCooldownDraft = channel.rateLimitPerUser,
                     invitableDraft = channel.threadMetadata?.invitable != false,
+                    spoilerDraft = channel.isSpoilerChannel(),
                     isPrivateThread = channel.type == Channel.PRIVATE_THREAD,
                     hasUnsavedChanges = false,
                     canManageThread = storeState.canManageThread,
@@ -112,6 +115,12 @@ class WidgetThreadSettingsViewModel(
     fun onInvitableChanged(invitable: Boolean) {
         val current = viewState as? ViewState.Valid ?: return
         updateViewState(current.copy(invitableDraft = invitable, hasUnsavedChanges = true))
+    }
+
+    @MainThread
+    fun onSpoilerChanged(spoiler: Boolean) {
+        val current = viewState as? ViewState.Valid ?: return
+        updateViewState(current.copy(spoilerDraft = spoiler, hasUnsavedChanges = true))
     }
 
     fun onSlowModeInputChanged(cooldown: Int) {
@@ -142,6 +151,14 @@ class WidgetThreadSettingsViewModel(
         val rateLimit = current.slowModeCooldownDraft.takeIf { it != current.channel.rateLimitPerUser }
         val invitable = current.invitableDraft
             .takeIf { current.isPrivateThread && it != (current.channel.threadMetadata?.invitable != false) }
+        val existingFlags = current.channel.flags ?: Channel.FLAGS_NONE
+        val flags = (
+            if (current.spoilerDraft) {
+                existingFlags or Channel.FLAG_IS_SPOILER_CHANNEL
+            } else {
+                existingFlags and Channel.FLAG_IS_SPOILER_CHANNEL.inv()
+            }
+            ).takeIf { it != existingFlags }
         restApi.editTextChannel(
             channelId,
             RestAPIParams.TextChannel(
@@ -152,6 +169,7 @@ class WidgetThreadSettingsViewModel(
                 rateLimitPerUser = rateLimit,
                 defaultAutoArchiveDuration = null,
                 invitable = invitable,
+                flags = flags,
             ),
         )
             .restSubscribeOn()
@@ -166,7 +184,8 @@ class WidgetThreadSettingsViewModel(
                     val latest = viewState as? ViewState.Valid ?: return@appSubscribe
                     val unchangedSinceSubmit = latest.channelNameDraft == current.channelNameDraft &&
                         latest.slowModeCooldownDraft == current.slowModeCooldownDraft &&
-                        latest.invitableDraft == current.invitableDraft
+                        latest.invitableDraft == current.invitableDraft &&
+                        latest.spoilerDraft == current.spoilerDraft
                     updateViewState(
                         latest.copy(
                             channel = channel,
@@ -185,12 +204,6 @@ class WidgetThreadSettingsViewModel(
     }
 
     companion object {
-        /**
-         * `StoreStream` publishes no accessor for [StoreGuildsNsfw] yet, so the gate reads as
-         * agreed and pins stay reachable on an NSFW thread the viewer has not gated through.
-         */
-        private fun isGuildNsfwGateAgreed(@Suppress("UNUSED_PARAMETER") guildId: Long): Boolean = true
-
         fun observeStoreState(
             channelId: Long,
             observationDeck: ObservationDeck = ObservationDeckProvider.get(),

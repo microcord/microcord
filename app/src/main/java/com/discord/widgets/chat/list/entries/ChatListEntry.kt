@@ -92,6 +92,7 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
         const val FORWARDED_MESSAGE = 46
         const val ACTIVITY_MESSAGE = 47
         const val POLL = 48
+        const val SEARCH_SPOILER_RESULT = 49
 
         /** `MessageTypes.AUTO_MODERATION_ACTION`; its single embed gets a dedicated row. */
         private const val AUTO_MOD_SYSTEM_MESSAGE_TYPE = 24

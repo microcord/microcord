@@ -39,6 +39,7 @@ class WidgetThreadSettings : AppFragment(R.layout.widget_thread_settings) {
     private lateinit var slowMode: SeekBar
     private lateinit var slowModeLabel: TextView
     private lateinit var invitable: CheckedSetting
+    private lateinit var spoiler: CheckedSetting
     private lateinit var save: FloatingActionButton
     private var bindingState = false
 
@@ -48,6 +49,7 @@ class WidgetThreadSettings : AppFragment(R.layout.widget_thread_settings) {
         slowMode = view.findViewById(R.id.thread_settings_slow_mode_cooldown_slider)
         slowModeLabel = view.findViewById(R.id.thread_settings_slow_mode_cooldown_label)
         invitable = view.findViewById(R.id.thread_settings_invitable)
+        spoiler = view.findViewById(R.id.thread_settings_spoiler)
         save = view.findViewById(R.id.thread_settings_save)
         parentFragmentManager.setFragmentResultListener(ThreadDeleteDialog.REQUEST_KEY, this) { _, result ->
             viewModel.onThreadDeleted(result.getLong(ThreadDeleteDialog.RESULT_CHANNEL_ID))
@@ -71,6 +73,7 @@ class WidgetThreadSettings : AppFragment(R.layout.widget_thread_settings) {
             override fun onStopTrackingTouch(seekBar: SeekBar) = Unit
         })
         invitable.setOnCheckedListener { if (!bindingState) viewModel.onInvitableChanged(it) }
+        spoiler.setOnCheckedListener { if (!bindingState) viewModel.onSpoilerChanged(it) }
         save.setOnClickListener { viewModel.saveThread() }
     }
 
@@ -110,9 +113,11 @@ class WidgetThreadSettings : AppFragment(R.layout.widget_thread_settings) {
         requireView().findViewById<LinearLayout>(R.id.thread_settings_section_invitable).isVisible =
             state.isPrivateThread
         invitable.isEnabled = state.canManageThread
+        spoiler.isEnabled = state.canManageThread
         bindingState = true
         if (name.getTextOrEmpty() != state.channelNameDraft.orEmpty()) name.setText(state.channelNameDraft.orEmpty())
         invitable.isChecked = state.invitableDraft
+        spoiler.isChecked = state.spoilerDraft
         val progress = WidgetTextChannelSettings.slowModeProgress(state.slowModeCooldownDraft)
         slowMode.progress = progress
         slowModeLabel.text = WidgetTextChannelSettings.durationLabel(requireContext(), state.slowModeCooldownDraft)

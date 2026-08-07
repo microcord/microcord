@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="vertical" android:visibility="gone" android:baselineAligned="false" style="@style/UiKit.ViewGroup.Page.LinearLayout">
+    <ScrollView android:layout_height="0dp" android:layout_weight="1" style="@style/UiKit.ViewGroup.ScrollView">
+        <LinearLayout style="@style/UiKit.Copy.Container">
+            <LinearLayout style="@style/UiKit.Copy">
+                <TextView android:textSize="@dimen/uikit_textsize_xxlarge" android:gravity="center" android:layout_gravity="center" android:id="@+id/home_panel_center_spoiler_title" android:text="@string/spoiler_channel_gate_header" style="@style/UiKit.TextView.H1.Bold"/>
+                <com.discord.utilities.view.text.LinkifiedTextView android:gravity="center" android:id="@+id/home_panel_center_spoiler_topic" android:layout_marginTop="8dp" android:maxLines="3" android:ellipsize="end" android:visibility="gone" android:textColor="?attr/colorHeaderSecondary" style="@style/UiKit.TextView"/>
+                <View android:id="@+id/home_panel_center_spoiler_divider" android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="16dp" android:layout_marginBottom="16dp" android:background="?attr/colorBackgroundModifierAccent" android:visibility="gone"/>
+                <TextView android:gravity="center" android:id="@+id/home_panel_center_spoiler_description" android:layout_marginTop="8dp" android:text="@string/spoiler_channel_gate_cta_description_full" style="@style/UiKit.TextView"/>
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+    <LinearLayout style="@style/UiKit.Copy.Anchor">
+        <FrameLayout style="@style/UiKit.Copy.Anchor.Item.Rotatable">
+            <com.google.android.material.button.MaterialButton android:id="@+id/home_panel_center_spoiler_confirm" android:text="@string/spoiler_channel_continue" style="@style/UiKit.Material.Button"/>
+        </FrameLayout>
+        <FrameLayout style="@style/UiKit.Copy.Anchor.Item.Rotatable">
+            <com.google.android.material.button.MaterialButton android:id="@+id/home_panel_center_spoiler_deny" android:text="@string/go_back" style="@style/UiKit.Material.Button.Secondary"/>
+        </FrameLayout>
+    </LinearLayout>
+</LinearLayout>

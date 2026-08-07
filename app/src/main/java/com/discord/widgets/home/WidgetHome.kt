@@ -67,6 +67,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private lateinit var panels: HomePanelsLayout
     private var navigationSubscription: Subscription? = null
     private var selectedChannelSubscription: Subscription? = null
+    private var spoilerGateSubscription: Subscription? = null
+    private val spoilerPanel = WidgetHomePanelSpoiler()
     private var activeThreadsSubscription: Subscription? = null
     private var voiceChannelSubscription: Subscription? = null
     private var mentionSubscription: Subscription? = null
@@ -197,6 +199,33 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                 updateUnreadCount()
             }
         }
+        val spoilerAgree = StoreStream.getChannelSpoilerAgree()
+        spoilerGateSubscription = Observable.combineLatest(
+            StoreStream.getChannelsSelected().observeResolvedSelectedChannel(),
+            spoilerAgree.observeAnyAgreementChange(),
+        ) { selected, _ -> selected }
+            .subscribe { selected ->
+                activity?.runOnUiThread { configureSpoilerGate(selected) }
+            }
+    }
+
+    private fun configureSpoilerGate(selected: StoreChannelsSelected.ResolvedSelectedChannel) {
+        val root = view ?: return
+        val channel = selected.channelOrParent?.takeIf { centerSurface(selected) == CenterSurface.CHAT }
+        val spoilerAgree = StoreStream.getChannelSpoilerAgree()
+        val gatingChannel = spoilerAgree.getSpoilerGatingChannelId(channel)
+            ?.let { StoreStream.getChannels().getChannel(it) }
+        spoilerPanel.configureUI(
+            channel = channel,
+            gatingChannel = gatingChannel,
+            viewStub = root.findViewById(R.id.home_panel_center_spoiler),
+            onToggleGate = { gated ->
+                root.findViewById<View>(R.id.widget_chat_list)?.visibility = if (gated) View.GONE else View.VISIBLE
+                root.findViewById<View>(R.id.widget_chat_input)?.visibility = if (gated) View.GONE else View.VISIBLE
+            },
+            onAgree = spoilerAgree::agree,
+            onDeny = { ChannelSelector.getInstance().selectChannel(0L, 0L) },
+        )
     }
 
     override fun onStop() {
@@ -204,6 +233,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         navigationSubscription = null
         selectedChannelSubscription?.unsubscribe()
         selectedChannelSubscription = null
+        spoilerGateSubscription?.unsubscribe()
+        spoilerGateSubscription = null
         activeThreadsSubscription?.unsubscribe()
         activeThreadsSubscription = null
         voiceChannelSubscription?.unsubscribe()

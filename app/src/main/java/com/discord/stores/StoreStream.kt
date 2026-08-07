@@ -236,6 +236,7 @@ class StoreStream private constructor(
         channels, permissions, guildSelected, dispatcher, observationDeck,
     )
     private val guildsNsfw = StoreGuildsNsfw(dispatcher, channels, observationDeck)
+    private val channelSpoilerAgree = StoreChannelSpoilerAgree(dispatcher, channels, users, observationDeck)
     private val search = StoreSearch(this, dispatcher, guildsNsfw, users, observationDeck, channels, guilds)
     private val mediaFavorites = StoreMediaFavorites(observationDeck, dispatcher)
     private val gifPicker = StoreGifPicker(
@@ -864,6 +865,7 @@ class StoreStream private constructor(
         // Cross-cutting
         experiments,
         guildsNsfw,
+        channelSpoilerAgree,
         gifPicker,
         expressionPickerNavigation,
         expressionSuggestions,
@@ -1124,6 +1126,7 @@ class StoreStream private constructor(
         dispatcher.schedule {
             experiments.init(context)
             guildsNsfw.init(context)
+            channelSpoilerAgree.init(context)
             maskedLinks.init(context)
             userConnections.init(context)
             spotify.init(context)
@@ -3126,6 +3129,7 @@ class StoreStream private constructor(
         @JvmStatic fun getExperiments() = requireInstance().experiments
         @JvmStatic fun getAnalytics() = requireInstance().analytics
         @JvmStatic fun getGuildsNsfw() = requireInstance().guildsNsfw
+        @JvmStatic fun getChannelSpoilerAgree() = requireInstance().channelSpoilerAgree
         @JvmStatic fun getSearch() = requireInstance().search
         @JvmStatic fun getGifPicker() = requireInstance().gifPicker
         @JvmStatic fun getExpressionPickerNavigation() = requireInstance().expressionPickerNavigation

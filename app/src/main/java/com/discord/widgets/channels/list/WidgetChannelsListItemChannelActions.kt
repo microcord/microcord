@@ -11,6 +11,7 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.getDMRecipient
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isCategory
+import com.discord.api.channel.isSpoilerChannel
 import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isGuildTextChannel
 import com.discord.api.channel.isGuildVocalChannel
@@ -55,6 +56,7 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
     private lateinit var channelSettings: TextView
     private lateinit var notifications: TextView
     private lateinit var invite: TextView
+    private lateinit var rehideSpoiler: TextView
     private lateinit var developerDivider: View
     private lateinit var copyId: TextView
 
@@ -69,6 +71,7 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
         channelSettings = view.findViewById(R.id.action_channel_settings)
         notifications = view.findViewById(R.id.action_channel_notifications)
         invite = view.findViewById(R.id.action_invite)
+        rehideSpoiler = view.findViewById(R.id.action_rehide_spoiler)
         developerDivider = view.findViewById(R.id.developer_divider)
         copyId = view.findViewById(R.id.action_copy_id)
     }
@@ -172,6 +175,11 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
         markAsRead.setOnClickAndDismissListener {
             StoreStream.getMessageAck().ack(channel.id, isLockedAck = false, clearLock = true)
         }
+
+        val spoilerAgree = StoreStream.getChannelSpoilerAgree()
+        rehideSpoiler.visibility =
+            if (channel.isSpoilerChannel() && spoilerAgree.didAgree(channel.id)) View.VISIBLE else View.GONE
+        rehideSpoiler.setOnClickAndDismissListener { spoilerAgree.clearAgreement(channel.id) }
 
         developerDivider.visibility = if (model.isDeveloper) View.VISIBLE else View.GONE
         copyId.visibility = if (model.isDeveloper) View.VISIBLE else View.GONE

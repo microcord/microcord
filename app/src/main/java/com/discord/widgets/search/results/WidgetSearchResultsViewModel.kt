@@ -10,7 +10,9 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.search.network.state.QueryFetchState
 import com.discord.utilities.search.network.state.SearchState
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapter
+import com.discord.utilities.channel.ChannelGating
 import com.discord.widgets.chat.list.entries.ChatListEntry
+import com.discord.widgets.chat.list.entries.SearchSpoilerResultEntry
 import com.discord.widgets.chat.list.entries.LoadingEntry
 import com.discord.widgets.chat.list.entries.SearchEmptyEntry
 import com.discord.widgets.chat.list.entries.SearchErrorEntry
@@ -83,6 +85,12 @@ class WidgetSearchResultsViewModel(
 
                 hits.forEach { message ->
                     val channel = channels[message.channelId] ?: return@forEach
+                    // A hit from a channel still behind its spoiler gate names the channel but
+                    // withholds the message that matched.
+                    if (ChannelGating.isChannelSpoilerGated(channel)) {
+                        rows += SearchSpoilerResultEntry(channel.id, message.id)
+                        return@forEach
+                    }
                     val guildMembers = members[channel.guildId].orEmpty()
                     // The viewer's own roles decide which role mentions highlight; collected across
                     // every guild the results span, because one list can cross guilds.
