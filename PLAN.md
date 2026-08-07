@@ -3013,6 +3013,10 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   inactive mic/camera background at runtime. Fullscreen primary controls horizontally scroll instead of compressing.
   Focused tests pass and `installDebug` installed on
   WSA/A65.
+- Appearance now offers a local-only Material You theme. Android 12+ resolves the system accent and neutral palettes;
+  older versions use the matching Discord dark palette fallback. The selection persists locally, survives incoming account
+  theme snapshots, and never calls Discord's user-settings endpoint. The Appearance screen was migrated to generated binding.
+  Its focused persistence/API-isolation test and `assembleDebug` pass; device visual verification remains open.
 
 Resumable task: `app/src/main/java/com/discord/widgets/user/profile/UserProfileWidgetsView.kt` | RN
 `modules/user_profile/native/UserProfileApplicationWidgetCard.tsx` and `modules/application_widget/**` | add typed

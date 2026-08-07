@@ -4,21 +4,19 @@ import android.content.Context
 import android.hardware.camera2.CameraManager
 import android.os.Build
 import android.view.View
-import android.widget.ImageView
 import android.widget.SeekBar
-import android.widget.TextView
 import android.widget.Toast
 import androidx.core.view.ViewCompat
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.AppLog
 import com.discord.app.appViewModels
+import com.discord.databinding.WidgetSettingsAppearanceBinding
 import com.discord.models.domain.ModelUserSettings
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.rx.ui
 import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.time.TimeUtils
-import com.discord.views.CheckedSetting
 import com.discord.views.RadioManager
 import java.util.concurrent.TimeUnit
 import rx.Observable
@@ -39,62 +37,43 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
         SettingsAppearanceViewModel()
     }
 
-    private lateinit var lightRadio: CheckedSetting
-    private lateinit var darkRadio: CheckedSetting
-    private lateinit var pureEvilSwitch: CheckedSetting
+    private var _binding: WidgetSettingsAppearanceBinding? = null
+    private val binding get() = requireNotNull(_binding)
     private lateinit var themeRadioManager: RadioManager
-    private lateinit var syncSwitch: CheckedSetting
-    private lateinit var fontScalePlatform: TextView
-    private lateinit var fontScaleSeekBar: SeekBar
-    private lateinit var fontScaleReset: TextView
-    private lateinit var holyLight: View
-    private lateinit var previewAvatar: ImageView
-    private lateinit var previewName: TextView
-    private lateinit var previewTag: TextView
-    private lateinit var previewTimestamp: TextView
-    private lateinit var previewText: TextView
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        _binding = WidgetSettingsAppearanceBinding.bind(view)
         setActionBarTitle(R.string.appearance)
         setActionBarSubtitle(R.string.user_settings)
         setActionBarDisplayHomeAsUpEnabled()
         SettingsNavigation.bindBack(this)
 
-        lightRadio = view.findViewById(R.id.settings_appearance_theme_light_radio)
-        darkRadio = view.findViewById(R.id.settings_appearance_theme_dark_radio)
-        pureEvilSwitch = view.findViewById(R.id.settings_appearance_theme_pure_evil_switch)
-        syncSwitch = view.findViewById(R.id.settings_appearance_sync_switch)
-        fontScalePlatform = view.findViewById(R.id.settings_appearance_font_scale_platform)
-        fontScaleSeekBar = view.findViewById(R.id.settings_appearance_font_scaling_seekbar)
-        fontScaleReset = view.findViewById(R.id.settings_appearance_font_scaling_reset)
-        holyLight = view.findViewById(R.id.settings_appearance_holy_light)
+        themeRadioManager = RadioManager(
+            listOf(
+                binding.settingsAppearanceThemeLightRadio,
+                binding.settingsAppearanceThemeDarkRadio,
+                binding.settingsAppearanceThemeMaterialYouRadio,
+            ),
+        )
 
-        val chatItem = view.findViewById<View>(R.id.chat_item)
-        previewAvatar = chatItem.findViewById(R.id.chat_list_adapter_item_text_avatar)
-        previewName = chatItem.findViewById(R.id.chat_list_adapter_item_text_name)
-        previewTag = chatItem.findViewById(R.id.chat_list_adapter_item_text_tag)
-        previewTimestamp = chatItem.findViewById(R.id.chat_list_adapter_item_text_timestamp)
-        previewText = chatItem.findViewById(R.id.chat_list_adapter_item_text)
-
-        themeRadioManager = RadioManager(listOf(lightRadio, darkRadio))
-
-        fontScaleSeekBar.max = SettingsAppearanceViewModel.MAX_FONT_SCALING -
+        binding.settingsAppearanceFontScalingSeekbar.max = SettingsAppearanceViewModel.MAX_FONT_SCALING -
             SettingsAppearanceViewModel.MIN_FONT_SCALING
-        fontScaleSeekBar.setOnSeekBarChangeListener(
+        binding.settingsAppearanceFontScalingSeekbar.setOnSeekBarChangeListener(
             object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                     if (!fromUser) return
                     val fontScale = progress + SettingsAppearanceViewModel.MIN_FONT_SCALING
                     viewModel.onFontScaleChanged(fontScale)
-                    fontScalePlatform.text = fontScaleString(fontScale, useSystemFontScale = false)
+                    binding.settingsAppearanceFontScalePlatform.text =
+                        fontScaleString(fontScale, useSystemFontScale = false)
                 }
 
                 override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
                 override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
             },
         )
-        fontScaleReset.setOnClickListener { viewModel.resetFontScale() }
+        binding.settingsAppearanceFontScalingReset.setOnClickListener { viewModel.resetFontScale() }
 
         listOf(
             R.id.settings_appearance_theme_header,
@@ -112,28 +91,37 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
     private fun configureUI(viewState: SettingsAppearanceViewModel.ViewState) {
         if (viewState !is SettingsAppearanceViewModel.ViewState.Loaded) return
 
-        val isDark = viewState.currentTheme != ModelUserSettings.THEME_LIGHT
-        themeRadioManager.setChecked(if (isDark) darkRadio else lightRadio)
-        lightRadio.setContainerClickListener { viewModel.onLightThemeTapped() }
-        darkRadio.setContainerClickListener {
+        themeRadioManager.setChecked(
+            when (viewState.currentTheme) {
+                ModelUserSettings.THEME_LIGHT -> binding.settingsAppearanceThemeLightRadio
+                ModelUserSettings.THEME_MATERIAL_YOU -> binding.settingsAppearanceThemeMaterialYouRadio
+                else -> binding.settingsAppearanceThemeDarkRadio
+            },
+        )
+        binding.settingsAppearanceThemeLightRadio.setContainerClickListener { viewModel.onLightThemeTapped() }
+        binding.settingsAppearanceThemeDarkRadio.setContainerClickListener {
             viewModel.onDarkThemeTapped(viewState.canSeePureEvil)
+        }
+        binding.settingsAppearanceThemeMaterialYouRadio.setContainerClickListener {
+            viewModel.onMaterialYouThemeTapped()
         }
 
         val isPureEvil = viewState.currentTheme == ModelUserSettings.THEME_PURE_EVIL
         // Reference quirk, reproduced: once the hidden theme is on, the row is dimmed and its
         // container stops responding. The switch itself still toggles, because
         // `setDisabledTooltip` only replaces the container's click listener.
-        if (isPureEvil) pureEvilSwitch.setDisabledTooltip(null)
-        pureEvilSwitch.setOnCheckedListener(null)
-        pureEvilSwitch.isChecked = isPureEvil
-        pureEvilSwitch.visibility = if (viewState.canSeePureEvil) View.VISIBLE else View.GONE
-        pureEvilSwitch.setOnCheckedListener(
+        if (isPureEvil) binding.settingsAppearanceThemePureEvilSwitch.setDisabledTooltip(null)
+        binding.settingsAppearanceThemePureEvilSwitch.setOnCheckedListener(null)
+        binding.settingsAppearanceThemePureEvilSwitch.isChecked = isPureEvil
+        binding.settingsAppearanceThemePureEvilSwitch.visibility =
+            if (viewState.canSeePureEvil) View.VISIBLE else View.GONE
+        binding.settingsAppearanceThemePureEvilSwitch.setOnCheckedListener(
             Action1 { checked -> viewModel.setPureEvilEnabled(checked, viewState.currentTheme) },
         )
 
-        syncSwitch.setOnCheckedListener(null)
-        syncSwitch.isChecked = viewState.isThemeSyncEnabled
-        syncSwitch.setOnCheckedListener(Action1 { viewModel.setThemeSyncEnabled(it) })
+        binding.settingsAppearanceSyncSwitch.setOnCheckedListener(null)
+        binding.settingsAppearanceSyncSwitch.isChecked = viewState.isThemeSyncEnabled
+        binding.settingsAppearanceSyncSwitch.setOnCheckedListener(Action1 { viewModel.setThemeSyncEnabled(it) })
 
         configureFontScalingUI(viewState.fontScale)
         setupPreviewMessage(viewState)
@@ -146,8 +134,9 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
         } else {
             fontScale
         }
-        fontScalePlatform.text = fontScaleString(effectiveScale, useSystemFontScale)
-        fontScaleSeekBar.progress = effectiveScale - SettingsAppearanceViewModel.MIN_FONT_SCALING
+        binding.settingsAppearanceFontScalePlatform.text = fontScaleString(effectiveScale, useSystemFontScale)
+        binding.settingsAppearanceFontScalingSeekbar.progress =
+            effectiveScale - SettingsAppearanceViewModel.MIN_FONT_SCALING
     }
 
     private fun fontScaleString(fontScale: Int, useSystemFontScale: Boolean): String {
@@ -162,14 +151,15 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
     }
 
     private fun setupPreviewMessage(viewState: SettingsAppearanceViewModel.ViewState.Loaded) {
-        IconUtils.setIcon(previewAvatar, viewState.meUser, R.dimen.avatar_size_standard)
-        previewTag.visibility = View.GONE
-        previewName.text = viewState.meUser.username
-        previewTimestamp.text = TimeUtils.toReadableTimeString(
+        val preview = binding.chatItem
+        IconUtils.setIcon(preview.chatListAdapterItemTextAvatar, viewState.meUser, R.dimen.avatar_size_standard)
+        preview.chatListAdapterItemTextTag.visibility = View.GONE
+        preview.chatListAdapterItemTextName.text = viewState.meUser.username
+        preview.chatListAdapterItemTextTimestamp.text = TimeUtils.toReadableTimeString(
             requireContext(),
             ClockFactory.get().currentTimeMillis(),
         )
-        previewText.text = getString(R.string.user_settings_appearance_preview_message_1)
+        preview.chatListAdapterItemText.text = getString(R.string.user_settings_appearance_preview_message_1)
     }
 
     private fun handleEvent(event: SettingsAppearanceViewModel.Event) = when (event) {
@@ -193,13 +183,18 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
     private fun showHolyLight() {
         toast(getString(R.string.theme_holy_light_reveal))
         setTorchMode(true)
-        holyLight.visibility = View.VISIBLE
+        binding.settingsAppearanceHolyLight.visibility = View.VISIBLE
         Observable.timer(HOLY_LIGHT_DURATION_SECONDS, TimeUnit.SECONDS)
             .ui(this)
             .subscribe {
-                holyLight.visibility = View.GONE
+                _binding?.settingsAppearanceHolyLight?.visibility = View.GONE
                 setTorchMode(false)
             }
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     /** Best effort: a device with no camera, or one whose torch is in use, simply does not flash. */

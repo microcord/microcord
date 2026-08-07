@@ -186,6 +186,7 @@ class ModelUserSettings(
         const val STICKER_ANIMATION_NEVER_ANIMATE = 2
         const val THEME_DARK = "dark"
         const val THEME_LIGHT = "light"
+        const val THEME_MATERIAL_YOU = "materialYou"
         const val THEME_PURE_EVIL = "pureEvil"
 
         @JvmStatic fun getDefaultLocale(): String = localeString(Locale.getDefault())

@@ -91,7 +91,9 @@ class StoreUserSettingsSystem(
         StoreThreadScheduler.assertCurrentThread()
         val bootstrap = loginResult.userSettings ?: return
         var updated = settings
-        if (getIsThemeSyncEnabled()) bootstrap.theme?.let { updated = updated.copy(theme = it) }
+        if (getIsThemeSyncEnabled() && settings.theme != ModelUserSettings.THEME_MATERIAL_YOU) {
+            bootstrap.theme?.let { updated = updated.copy(theme = it) }
+        }
         if (getIsLocaleSyncEnabled()) bootstrap.locale?.let { updated = updated.copy(_locale = it) }
         if (updated != settings) {
             settings = updated
@@ -124,7 +126,9 @@ class StoreUserSettingsSystem(
     private fun handleUserSettings(userSettings: ModelUserSettings) {
         StoreThreadScheduler.assertCurrentThread()
         var updated = settings
-        if (getIsThemeSyncEnabled()) userSettings.theme?.let { updated = updated.copy(theme = it) }
+        if (getIsThemeSyncEnabled() && settings.theme != ModelUserSettings.THEME_MATERIAL_YOU) {
+            userSettings.theme?.let { updated = updated.copy(theme = it) }
+        }
         if (getIsLocaleSyncEnabled()) userSettings.locale?.let { updated = updated.copy(_locale = it) }
         if (updated != settings) {
             settings = updated

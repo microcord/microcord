@@ -132,6 +132,11 @@ class SettingsAppearanceViewModel(
         }
     }
 
+    @MainThread
+    fun onMaterialYouThemeTapped() {
+        userSettingsSystem.setTheme(ModelUserSettings.THEME_MATERIAL_YOU, apiSync = false)
+    }
+
     /** A run of taps has to be a run: pausing for [EASTER_EGG_UNLOCK_TIMEOUT_SECONDS] starts over. */
     private fun resetAfterTimeout(reset: () -> Unit) {
         Observable.timer(EASTER_EGG_UNLOCK_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -163,7 +168,7 @@ class SettingsAppearanceViewModel(
     fun resetFontScale() = userSettingsSystem.setFontScale(USE_SYSTEM_FONT_SCALE)
 
     /**
-     * Applies [theme] locally, then mirrors it to the account.
+     * Applies a Discord-supported [theme] locally, then mirrors it to the account.
      *
      * `pureEvil` is a client-only variant of `dark`, so the server is told `dark` — which is why
      * `StoreUserSettingsSystem.setTheme` keeps the local `pureEvil` when the incoming value is

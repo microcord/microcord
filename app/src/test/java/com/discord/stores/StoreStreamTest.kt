@@ -205,6 +205,19 @@ class StoreStreamTest {
     }
 
     @Test
+    fun materialYouThemeIsLocalAndPersists() {
+        var apiSyncRequests = 0
+        val store = StoreStream.getUserSettingsSystem()
+
+        store.setTheme(ModelUserSettings.THEME_MATERIAL_YOU, apiSync = false) { apiSyncRequests++ }
+
+        val restored = StoreUserSettingsSystem({}, stream.dispatcher, stream.observationDeck, prefs, durablePrefs)
+        restored.restore()
+        assertEquals(ModelUserSettings.THEME_MATERIAL_YOU, restored.getTheme())
+        assertEquals(0, apiSyncRequests)
+    }
+
+    @Test
     fun singletonInitializesCompleteSliceOnce() {
         val again = StoreStream.initializeForTesting(directory.toFile(), memoryPreferences(), memoryPreferences(), scheduler)
         assertSame(stream, again)

@@ -177,6 +177,7 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
         setTheme(
             when (theme) {
                 ModelUserSettings.THEME_LIGHT -> R.style.AppTheme_Light
+                ModelUserSettings.THEME_MATERIAL_YOU -> R.style.AppTheme_MaterialYou
                 ModelUserSettings.THEME_PURE_EVIL -> R.style.AppTheme_Dark_Evil
                 else -> R.style.AppTheme_Dark
             }
