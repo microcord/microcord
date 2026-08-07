@@ -1,6 +1,7 @@
 package com.discord.widgets.guilds.list
 
 import com.discord.api.channel.Channel
+import com.discord.api.notification.AccountNotificationSettings
 import com.discord.api.permission.Permission
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.guild.Guild
@@ -10,6 +11,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.discord.api.notification.AccountNotificationFlags
+import com.discord.api.notification.ChannelNotificationSettingsFlags
+import com.discord.api.notification.GuildNotificationSettingsFlags
 
 class GuildListItemBuilderTest {
 
@@ -86,7 +90,12 @@ class GuildListItemBuilderTest {
                 sortedGuilds = listOf(folder(id = 100, guildIds = listOf(1, 2))),
                 selectedGuildId = 2L,
                 unreadGuildIds = setOf(1L),
+                unreadChannelIds = setOf(11L),
                 channelIds = mapOf(1L to listOf(11L), 2L to listOf(22L)),
+                channels = mapOf(
+                    11L to channel(11L, 1L, Channel.GUILD_TEXT),
+                    22L to channel(22L, 2L, Channel.GUILD_TEXT),
+                ),
                 mentionCounts = mapOf(11L to 3, 22L to 4),
             ),
         )
@@ -126,7 +135,13 @@ class GuildListItemBuilderTest {
 
     @Test fun mutedGuildsAreNeverUnread() {
         val items = GuildListItemBuilder.buildItems(
-            storeState(sortedGuilds = listOf(singleton(1)), unreadGuildIds = setOf(1L)),
+            storeState(
+                sortedGuilds = listOf(singleton(1)),
+                unreadGuildIds = setOf(1L),
+                unreadChannelIds = setOf(11L),
+                channelIds = mapOf(1L to listOf(11L)),
+                channels = mapOf(11L to channel(11L, 1L, Channel.GUILD_TEXT)),
+            ),
         )
         assertTrue(items.filterIsInstance<GuildListItem.GuildItem>().single().isUnread)
 
@@ -134,6 +149,9 @@ class GuildListItemBuilderTest {
             storeState(
                 sortedGuilds = listOf(singleton(1)),
                 unreadGuildIds = setOf(1L),
+                unreadChannelIds = setOf(11L),
+                channelIds = mapOf(1L to listOf(11L)),
+                channels = mapOf(11L to channel(11L, 1L, Channel.GUILD_TEXT)),
                 guildSettings = mapOf(1L to mutedSettings()),
             ),
         )
@@ -181,6 +199,119 @@ class GuildListItemBuilderTest {
         assertTrue(indicators.getValue(1L).hasOngoingApplicationStream)
     }
 
+    @Test fun mentionOnlyChannelWithoutMentionsDoesNotLightTheGuild() {
+        val settings = ModelNotificationSettings(
+            guildId = 1L,
+            channelOverrides = listOf(
+                ModelNotificationSettings.ChannelOverride(
+                    channelId = 11L,
+                    flags = ChannelNotificationSettingsFlags.UNREADS_ONLY_MENTIONS,
+                ),
+            ),
+        )
+
+        val items = GuildListItemBuilder.buildItems(
+            storeState(
+                sortedGuilds = listOf(singleton(1)),
+                unreadGuildIds = setOf(1L),
+                unreadChannelIds = setOf(11L),
+                channelIds = mapOf(1L to listOf(11L)),
+                channels = mapOf(11L to channel(11L, 1L, Channel.GUILD_TEXT)),
+                guildSettings = mapOf(1L to settings),
+                accountNotificationSettings = AccountNotificationSettings(
+                    AccountNotificationFlags.USE_NEW_NOTIFICATIONS,
+                ),
+            ),
+        )
+
+        val guild = items.filterIsInstance<GuildListItem.GuildItem>().single()
+        assertFalse(guild.isUnread)
+    }
+
+    @Test fun mentionOnlyNotificationLevelAlsoStopsLightingTheGuild() {
+        val settings = ModelNotificationSettings(
+            guildId = 1L,
+            messageNotifications = ModelNotificationSettings.FREQUENCY_MENTIONS,
+        )
+
+        val items = GuildListItemBuilder.buildItems(
+            storeState(
+                sortedGuilds = listOf(singleton(1)),
+                unreadGuildIds = setOf(1L),
+                unreadChannelIds = setOf(11L),
+                channelIds = mapOf(1L to listOf(11L)),
+                channels = mapOf(11L to channel(11L, 1L, Channel.GUILD_TEXT)),
+                guildSettings = mapOf(1L to settings),
+                accountNotificationSettings = AccountNotificationSettings(
+                    AccountNotificationFlags.USE_NEW_NOTIFICATIONS,
+                ),
+            ),
+        )
+
+        assertFalse(items.filterIsInstance<GuildListItem.GuildItem>().single().isUnread)
+    }
+
+    @Test fun lowImportanceMentionsDoNotOverrideAMentionOnlyChannel() {
+        val settings = ModelNotificationSettings(
+            guildId = 1L,
+            channelOverrides = listOf(
+                ModelNotificationSettings.ChannelOverride(
+                    channelId = 11L,
+                    flags = ChannelNotificationSettingsFlags.UNREADS_ONLY_MENTIONS,
+                ),
+            ),
+        )
+
+        val items = GuildListItemBuilder.buildItems(
+            storeState(
+                sortedGuilds = listOf(singleton(1)),
+                unreadGuildIds = setOf(1L),
+                unreadChannelIds = setOf(11L),
+                mentionCounts = mapOf(11L to 7),
+                lowImportanceMentionChannels = setOf(11L),
+                channelIds = mapOf(1L to listOf(11L)),
+                channels = mapOf(11L to channel(11L, 1L, Channel.GUILD_TEXT)),
+                guildSettings = mapOf(1L to settings),
+                accountNotificationSettings = AccountNotificationSettings(
+                    AccountNotificationFlags.USE_NEW_NOTIFICATIONS,
+                ),
+            ),
+        )
+
+        assertFalse(items.filterIsInstance<GuildListItem.GuildItem>().single().isUnread)
+    }
+
+    @Test fun unreadInAMutedCategoryDoesNotLightTheGuild() {
+        val announcements = channel(11L, 1L, Channel.GUILD_ANNOUNCEMENT).copy(parentId = 99L)
+        val settings = ModelNotificationSettings(
+            guildId = 1L,
+            flags = GuildNotificationSettingsFlags.UNREADS_ALL_MESSAGES,
+            channelOverrides = listOf(
+                ModelNotificationSettings.ChannelOverride(muted = true, channelId = 99L),
+                ModelNotificationSettings.ChannelOverride(
+                    channelId = 12L,
+                    flags = ChannelNotificationSettingsFlags.UNREADS_ONLY_MENTIONS,
+                ),
+            ),
+        )
+
+        val items = GuildListItemBuilder.buildItems(
+            storeState(
+                sortedGuilds = listOf(singleton(1)),
+                unreadGuildIds = setOf(1L),
+                unreadChannelIds = setOf(11L, 12L),
+                channelIds = mapOf(1L to listOf(11L, 12L)),
+                channels = mapOf(11L to announcements, 12L to channel(12L, 1L, Channel.GUILD_TEXT)),
+                guildSettings = mapOf(1L to settings),
+                accountNotificationSettings = AccountNotificationSettings(
+                    AccountNotificationFlags.USE_NEW_NOTIFICATIONS,
+                ),
+            ),
+        )
+
+        assertFalse(items.filterIsInstance<GuildListItem.GuildItem>().single().isUnread)
+    }
+
     private fun singleton(guildId: Long) = StoreGuildsSorted.Entry.SingletonGuild(guild(guildId))
 
     private fun folder(id: Long, guildIds: List<Long>) =
@@ -206,7 +337,9 @@ class GuildListItemBuilderTest {
         selectedGuildId: Long = 0L,
         openFolderIds: Set<Long> = emptySet(),
         unreadGuildIds: Set<Long> = emptySet(),
+        unreadChannelIds: Set<Long> = emptySet(),
         mentionCounts: Map<Long, Int> = emptyMap(),
+        lowImportanceMentionChannels: Set<Long> = emptySet(),
         channelIds: Map<Long, List<Long>> = emptyMap(),
         unavailableGuilds: Set<Long> = emptySet(),
         lurkingGuildIds: Set<Long> = emptySet(),
@@ -215,12 +348,16 @@ class GuildListItemBuilderTest {
         privateChannels: Map<Long, Channel> = emptyMap(),
         isNewUser: Boolean = false,
         showHubSparkle: Boolean = false,
+        accountNotificationSettings: AccountNotificationSettings = AccountNotificationSettings(),
     ) = WidgetGuildsListViewModel.StoreState(
         selectedGuildId = selectedGuildId,
         selectedVoiceChannelId = 0L,
         guildSettings = guildSettings,
         unreadGuildIds = unreadGuildIds,
+        unreadChannelIds = unreadChannelIds,
         mentionCounts = mentionCounts,
+        lowImportanceMentionChannels = lowImportanceMentionChannels,
+        accountNotificationSettings = accountNotificationSettings,
         channelIds = channelIds,
         unavailableGuilds = unavailableGuilds,
         privateChannels = privateChannels,

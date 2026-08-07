@@ -753,7 +753,7 @@ interface RestAPIInterface {
         @Path("channelId") channelId: Long,
         @Path("messageId") messageId: Long?,
         @Body body: RestAPIParams.ChannelMessagesAck,
-    ): Observable<Void>
+    ): Observable<ChannelMessagesAckResponse>
 
     @POST("guilds/{guildId}/ack/{ackType}/{ackedId}")
     fun postGuildFeatureAck(
@@ -884,6 +884,9 @@ interface RestAPIInterface {
     ): Observable<Void>
 
     // -- Pins and reactions -----------------------------------------------------------------------
+
+    @POST("channels/{channelId}/pins/ack")
+    fun ackPins(@Path("channelId") channelId: Long): Observable<Void>
 
     @GET("channels/{channelId}/pins")
     fun getChannelPins(@Path("channelId") channelId: Long): Observable<List<Message>>
@@ -1082,6 +1085,9 @@ interface RestAPIInterface {
 
     @POST("guilds/{guildId}/ack")
     fun ackGuild(@Path("guildId") guildId: Long): Observable<Void>
+
+    @POST("read-states/ack-bulk")
+    fun bulkAck(@Body body: RestAPIParams.BulkAck): Observable<Void>
 
     @POST("guilds/{guildId}/channels")
     fun createGuildChannel(

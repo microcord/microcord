@@ -266,10 +266,15 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
      * shares the channel sheet. A voice channel opens its settings screen directly, because its
      * actions are settings rather than list actions.
      */
+    /**
+     * A long press opens the channel's actions, never a settings screen directly.
+     *
+     * Voice used to jump straight to its settings, which put an editing screen behind a gesture
+     * that everywhere else means "show me what I can do here" — and hid the rest of the actions
+     * from anyone without permission to manage the channel.
+     */
     private fun showChannelOptions(channel: Channel) {
         when (channel.type) {
-            Channel.GUILD_VOICE ->
-                ChannelListNavigation.showVoiceChannelSettings(this, channel.id)
             Channel.ANNOUNCEMENT_THREAD, Channel.PUBLIC_THREAD, Channel.PRIVATE_THREAD ->
                 WidgetChannelsListItemThreadActions.show(parentFragmentManager, channel.id)
             Channel.GUILD_TEXT,
@@ -279,6 +284,7 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
             Channel.GUILD_ANNOUNCEMENT,
             Channel.GUILD_FORUM,
             Channel.GUILD_MEDIA,
+            Channel.GUILD_VOICE,
             Channel.GUILD_STAGE_VOICE,
             ->
                 WidgetChannelsListItemChannelActions.show(parentFragmentManager, channel.id)

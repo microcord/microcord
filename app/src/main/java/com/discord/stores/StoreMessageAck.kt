@@ -7,6 +7,8 @@ import com.discord.api.channel.isTextOrVoiceChannel
 import com.discord.api.channel.isThread
 import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.models.domain.ModelPayload
+import com.discord.api.channel.ChannelPinsUpdate
+import com.discord.api.notification.ReadStateFlags
 import com.discord.models.domain.ModelReadState
 import com.discord.models.message.Message
 import com.discord.stores.updates.ObservationDeck
@@ -19,6 +21,7 @@ import com.discord.utilities.rx.takeSingleUntilTimeout
 import com.discord.utilities.time.Clock
 import com.discord.utilities.time.TimeUtils
 import java.util.concurrent.TimeUnit
+import kotlin.math.ceil
 import rx.Observable
 import rx.Subscription
 
@@ -52,13 +55,19 @@ class StoreMessageAck @JvmOverloads constructor(
     private val clock: Clock,
     private val meId: () -> Long,
     /** Posts the ack. `StoreStream` owns the REST client, so the call is injected. */
-    private val ackRequest: (channelId: Long, messageId: Long, isLockedAck: Boolean, mentionCount: Int) -> Unit,
+    private val ackRequest: (AckRequest) -> Unit,
     /**
      * Folds newly-unread messages into the mention counter and returns the resulting count.
      *
      * Wired to `StoreMentions.processMarkUnread`; defaulted so this store is usable standalone.
      */
     private val processMarkUnread: (channelId: Long, messagesAfter: List<Message>) -> Int = { _, _ -> 0 },
+    /** Mentions currently badged for a channel. Wired to `StoreMentions.getMentionCounts`. */
+    private val getMentionCount: (channelId: Long) -> Int = { 0 },
+    /** Posts the pin ack. Injected for the same reason as [ackRequest]. */
+    private val pinAckRequest: (channelId: Long) -> Unit = {},
+    /** Posts a bulk ack, already split into endpoint-sized chunks. */
+    private val bulkAckRequest: (List<List<Pair<Long, Long>>>) -> Unit = {},
 ) : StoreV2() {
 
     /**
@@ -67,10 +76,39 @@ class StoreMessageAck @JvmOverloads constructor(
      * [viewed] distinguishes "the user actually looked at this" from a marker written by
      * hydration or by sending a message; [isLockedAck] is the mark-unread flag described above.
      */
-    data class Ack(val messageId: Long, val viewed: Boolean, val isLockedAck: Boolean) {
+    data class Ack(
+        val messageId: Long,
+        val viewed: Boolean,
+        val isLockedAck: Boolean,
+        /** Last classification bits the server is known to hold, so they are only resent on change. */
+        val flags: Int = 0,
+        /** Days since the Discord epoch, echoed back so the server can age out read states. */
+        val lastViewed: Int = 0,
+        val ackPinTimestampMs: Long = 0L,
+    ) {
         constructor(readState: ModelReadState?, viewed: Boolean, isLockedAck: Boolean) :
-            this(readState?.lastMessageId ?: 0L, viewed, isLockedAck)
+            this(
+                readState?.lastMessageId ?: 0L,
+                viewed,
+                isLockedAck,
+                readState?.flags ?: 0,
+                readState?.lastViewed ?: 0,
+                readState?.lastPinTimestamp?.dateTimeMillis ?: 0L,
+            )
     }
+
+    /**
+     * One ack, as the endpoint wants it. [flags] is null unless the classification changed, which
+     * is the only time the reference sends it.
+     */
+    data class AckRequest(
+        val channelId: Long,
+        val messageId: Long,
+        val isLockedAck: Boolean,
+        val mentionCount: Int,
+        val lastViewed: Int,
+        val flags: Int?,
+    )
 
     /** Whether a channel is a thread, and whether that thread accepts acks. */
     sealed class ThreadAckState {
@@ -90,6 +128,14 @@ class StoreMessageAck @JvmOverloads constructor(
     private val acks: MutableMap<Long, Ack> = HashMap(acksSnapshot)
 
     private var threadSyncSubscription: Subscription? = null
+
+    /** Newest pin per channel, against which [Ack.ackPinTimestampMs] decides the pin badge. */
+    private val lastPinTimestamps = HashMap<Long, Long>()
+    private var lastPinTimestampsSnapshot: Map<Long, Long> = emptyMap()
+
+    /** Latest un-posted ack per channel, and the timer that will post it. */
+    private val outgoingAcks = HashMap<Long, AckRequest>()
+    private val outgoingAckTimers = HashMap<Long, Subscription>()
 
     fun getAll(): Map<Long, Ack> = acksSnapshot
 
@@ -190,7 +236,10 @@ class StoreMessageAck @JvmOverloads constructor(
                 }
             }
         }
-        postPendingAck(getPendingAck(candidates.computationLatest().debounce(AUTO_ACK_DEBOUNCE_MS, TimeUnit.MILLISECONDS)))
+        postPendingAck(
+            getPendingAck(candidates.computationLatest().debounce(AUTO_ACK_DEBOUNCE_MS, TimeUnit.MILLISECONDS)),
+            immediate = false,
+        )
     }
 
     @StoreThread
@@ -198,7 +247,9 @@ class StoreMessageAck @JvmOverloads constructor(
         val readState = requireNotNull(payload.readState)
         if (!readState.isPartial) acks.clear()
 
-        readState.entries.orEmpty().forEach { entry ->
+        // Guild-event and onboarding read states key on the guild id, so they would otherwise be
+        // filed as acks for channels that do not exist.
+        readState.entries.orEmpty().filter { it.isChannelReadState }.forEach { entry ->
             acks[entry.channelId] = Ack(entry, false, false)
         }
 
@@ -256,12 +307,122 @@ class StoreMessageAck @JvmOverloads constructor(
      * A selection transition releases mark-unread locks without moving the cursor or changing
      * whether that cursor was viewed.
      */
+    /**
+     * Marks every readable channel of [guildIds] read in as few requests as the endpoint allows.
+     *
+     * The ledger is written locally first so the badges clear at once, then the ids go out in
+     * chunks; a forum is acked by "now" rather than by its last message, because its unread state
+     * is really about posts that may not exist yet.
+     */
+    fun bulkAck(guildIds: Collection<Long>, isForumLike: (Long) -> Boolean) = dispatcher.schedule {
+        val now = SnowflakeUtils.fromTimestamp(clock.currentTimeMillis())
+        val entries = mutableListOf<Pair<Long, Long>>()
+        guildIds.forEach { guildId ->
+            storeChannels.getChannelsForGuildInternal(guildId).orEmpty().keys.forEach { channelId ->
+                if (threadAckState(channelId).isThreadAndUnableToAck()) return@forEach
+                val messageId = if (isForumLike(channelId)) {
+                    now
+                } else {
+                    storeMessagesMostRecent.getMostRecentIdsInternal()[channelId] ?: return@forEach
+                }
+                val existing = acks[channelId]
+                if (existing != null && !MessageUtils.isNewer(existing.messageId, messageId)) return@forEach
+                updateAcks(channelId, Ack(messageId, viewed = true, isLockedAck = false))
+                cancelOutgoingAck(channelId)
+                entries += channelId to messageId
+            }
+        }
+        if (entries.isEmpty()) return@schedule
+        markChanged()
+        bulkAckRequest(entries.chunked(BULK_ACK_CHUNK))
+    }
+
     @StoreThread
-    fun handleChannelSelected() {
-        acks.keys.toList().forEach { channelId ->
-            acks[channelId]?.let { acks[channelId] = it.copy(isLockedAck = false) }
+    fun handleChannelCreateOrUpdate(channel: Channel) {
+        val pinnedAt = channel.lastPinTimestamp?.dateTimeMillis ?: return
+        if (lastPinTimestamps.put(channel.id, pinnedAt) != pinnedAt) markChanged()
+    }
+
+    @StoreThread
+    fun handlePinsUpdate(update: ChannelPinsUpdate) {
+        val pinnedAt = update.lastPinTimestamp?.dateTimeMillis ?: 0L
+        if (lastPinTimestamps.put(update.channelId, pinnedAt) != pinnedAt) markChanged()
+    }
+
+    /**
+     * Clears the pin badge for [channelId].
+     *
+     * The local marker moves to the newest pin rather than to now, so a pin added between the read
+     * and the request is still reported as unseen.
+     */
+    fun ackPins(channelId: Long) = dispatcher.schedule {
+        val seenUpTo = lastPinTimestamps[channelId] ?: return@schedule
+        val ack = acks[channelId] ?: return@schedule
+        if (ack.ackPinTimestampMs >= seenUpTo) return@schedule
+        acks[channelId] = ack.copy(ackPinTimestampMs = seenUpTo)
+        markChanged()
+        pinAckRequest(channelId)
+    }
+
+    fun getHasUnreadPins(): Map<Long, Boolean> = lastPinTimestampsSnapshot.mapValues { (channelId, pinnedAt) ->
+        pinnedAt > (acksSnapshot[channelId]?.ackPinTimestampMs ?: 0L)
+    }
+
+    fun observeHasUnreadPins(channelId: Long): Observable<Boolean> =
+        observationDeck.connectRx(this) { getHasUnreadPins()[channelId] == true }.distinctUntilChanged()
+
+    @StoreThread
+    @JvmOverloads
+    fun handleChannelSelected(channelId: Long = 0L) {
+        acks.keys.toList().forEach { id ->
+            acks[id]?.let { acks[id] = it.copy(isLockedAck = false) }
         }
         markChanged()
+        if (channelId > 0L) recordLastViewed(channelId)
+    }
+
+    /**
+     * Records that the viewer opened [channelId] today.
+     *
+     * An already-read channel produces no ack of its own, so without this the server never learns
+     * the channel is still being visited and eventually ages its read state out. The write only
+     * happens on the first visit of each day, and only when there is nothing to ack anyway.
+     */
+    @StoreThread
+    private fun recordLastViewed(channelId: Long) {
+        val ack = acks[channelId] ?: return
+        val today = daysSinceDiscordEpoch()
+        if (ack.lastViewed == today) return
+        if (threadAckState(channelId).isThreadAndUnableToAck()) return
+
+        val mostRecentMessageId = storeMessagesMostRecent.getMostRecentIdsInternal()[channelId] ?: 0L
+        if (MessageUtils.isNewer(ack.messageId, mostRecentMessageId)) return
+
+        acks[channelId] = ack.copy(lastViewed = today)
+        markChanged()
+        ackRequest(
+            AckRequest(
+                channelId = channelId,
+                messageId = ack.messageId,
+                isLockedAck = false,
+                mentionCount = 0,
+                lastViewed = today,
+                flags = null,
+            ),
+        )
+    }
+
+    /**
+     * Acks the channel the viewer is looking at when the app comes back to the foreground.
+     *
+     * Messages that arrive while backgrounded leave the channel unread even though it is on
+     * screen; the reference acks on the same transition.
+     */
+    fun handleAppForegrounded(channelId: Long) {
+        if (channelId <= 0L) return
+        postPendingAck(
+            getPendingAck(Observable.just(channelId)).takeSingleUntilTimeout(emitError = false),
+        )
     }
 
     @StoreThread
@@ -283,6 +444,7 @@ class StoreMessageAck @JvmOverloads constructor(
     override fun snapshotData() {
         val snapshot = HashMap(acks)
         acksSnapshot = snapshot
+        lastPinTimestampsSnapshot = HashMap(lastPinTimestamps)
         acksPersister.set(snapshot)
     }
 
@@ -342,16 +504,73 @@ class StoreMessageAck @JvmOverloads constructor(
     private fun postPendingAck(
         pendingAcks: Observable<PendingAck>,
         mentionCount: Int = 0,
+        immediate: Boolean = true,
     ) {
         pendingAcks
             .filter { it != PendingAck.EMPTY }
             .computationLatest()
             .subscribe({ (channelId, ack) ->
                 dispatcher.schedule {
-                    updateAcks(channelId, ack)
-                    ackRequest(channelId, ack.messageId, ack.isLockedAck, mentionCount)
+                    val previousFlags = acks[channelId]?.flags ?: 0
+                    val hadMentions = getMentionCount(channelId) > 0
+                    val flags = classifyReadState(channelId)
+                    val lastViewed = daysSinceDiscordEpoch()
+                    updateAcks(channelId, ack.copy(flags = flags, lastViewed = lastViewed))
+                    postOrQueue(
+                        AckRequest(
+                            channelId = channelId,
+                            messageId = ack.messageId,
+                            isLockedAck = ack.isLockedAck,
+                            mentionCount = mentionCount,
+                            lastViewed = lastViewed,
+                            flags = flags.takeIf { it != previousFlags },
+                        ),
+                        immediate = immediate || hadMentions,
+                    )
                 }
             }, { })
+    }
+
+    @StoreThread
+    private fun classifyReadState(channelId: Long): Int {
+        val channel = storeChannels.findChannelByIdInternal(channelId) ?: return 0
+        return ReadStateFlags.classify(channel.isThread(), channel.guildId != 0L)
+    }
+
+    private fun daysSinceDiscordEpoch(): Int {
+        val elapsed = clock.currentTimeMillis() - SnowflakeUtils.DISCORD_EPOCH
+        return ceil(elapsed.toDouble() / DAY_MS).toInt()
+    }
+
+    /**
+     * Queues [request] behind the outgoing debounce, or posts it now.
+     *
+     * The timer is not restarted while one is already pending — the payload is simply replaced, so
+     * a channel being scrolled continuously still reports in at a steady rate instead of never.
+     */
+    @StoreThread
+    private fun postOrQueue(request: AckRequest, immediate: Boolean) {
+        if (immediate) {
+            cancelOutgoingAck(request.channelId)
+            ackRequest(request)
+            return
+        }
+        val alreadyQueued = outgoingAcks.put(request.channelId, request) != null
+        if (alreadyQueued) return
+        outgoingAckTimers[request.channelId] = Observable
+            .timer(OUTGOING_ACK_DEBOUNCE_MS, TimeUnit.MILLISECONDS)
+            .subscribe({
+                dispatcher.schedule {
+                    outgoingAckTimers.remove(request.channelId)
+                    outgoingAcks.remove(request.channelId)?.let(ackRequest)
+                }
+            }, {})
+    }
+
+    @StoreThread
+    private fun cancelOutgoingAck(channelId: Long) {
+        outgoingAckTimers.remove(channelId)?.unsubscribe()
+        outgoingAcks.remove(channelId)
     }
 
     private fun observeThreadAckState(channelId: Long): Observable<ThreadAckState?> =
@@ -443,6 +662,16 @@ class StoreMessageAck @JvmOverloads constructor(
         /** Persistence key; a version bump discards incompatible ledgers. */
         const val ACKS_CACHE_KEY = "MOST_RECENT_ACKS_V3"
 
+        private const val DAY_MS = 86_400_000L
+
+        /** The endpoint's per-request limit. */
+        private const val BULK_ACK_CHUNK = 100
+
+        /**
+         * How long an ack sits before it is posted. The reference waits the same three seconds so
+         * a scroll produces one request rather than one per settled position.
+         */
+        private const val OUTGOING_ACK_DEBOUNCE_MS = 3_000L
         private const val AUTO_ACK_DEBOUNCE_MS = 500L
         private const val MARK_UNREAD_TIMEOUT_MS = 10L
 

@@ -3,6 +3,7 @@ package com.discord.stores
 import com.discord.api.activity.Activity
 import com.discord.api.auth.AuthSessionChange
 import com.discord.api.channel.Channel
+import com.discord.api.channel.ChannelPinsUpdate
 import com.discord.api.channel.ChannelRecipient
 import com.discord.api.commands.ApplicationCommandAutocompleteResult
 import com.discord.api.commands.GuildApplicationCommands
@@ -56,6 +57,7 @@ import com.discord.models.domain.ModelChannelUnreadUpdate
 import com.discord.models.domain.ModelGuildIntegration
 import com.discord.models.domain.ModelGuildMemberListUpdate
 import com.discord.models.domain.ModelMessageDelete
+import com.discord.api.notification.AccountNotificationSettings
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelReadState
@@ -158,6 +160,7 @@ class StoreGatewayConnection(
     val userSettingsUpdate = behavior<ModelUserSettings>()
     val userSettingsProtoUpdate = behavior<UserSettingsProtoUpdate>()
     val userGuildSettingsUpdate = behavior<ModelNotificationSettings>()
+    val notificationSettingsUpdate = behavior<AccountNotificationSettings>()
     val userNoteUpdate = behavior<ModelUserNote.Update>()
     val userRequiredActionUpdate = behavior<UserRequiredActionUpdate>()
     val authSessionChange = behavior<AuthSessionChange>()
@@ -211,6 +214,7 @@ class StoreGatewayConnection(
     // Channels and threads
     val channelCreateOrUpdate = behavior<Channel>()
     val channelDeleted = behavior<Channel>()
+    val channelPinsUpdate = behavior<ChannelPinsUpdate>()
     val channelRecipientAdd = behavior<ChannelRecipient>()
     val channelRecipientRemove = behavior<ChannelRecipient>()
     val channelUnreadUpdate = behavior<ModelChannelUnreadUpdate>()
@@ -475,6 +479,7 @@ class StoreGatewayConnection(
             "USER_SETTINGS_UPDATE" -> userSettingsUpdate.emit(data)
             "USER_SETTINGS_PROTO_UPDATE" -> userSettingsProtoUpdate.emit(data)
             "USER_GUILD_SETTINGS_UPDATE" -> userGuildSettingsUpdate.emit(data)
+            "NOTIFICATION_SETTINGS_UPDATE" -> notificationSettingsUpdate.emit(data)
             "USER_NOTE_UPDATE" -> userNoteUpdate.emit(data)
             "USER_REQUIRED_ACTION_UPDATE" -> userRequiredActionUpdate.emit(data)
             "AUTH_SESSION_CHANGE" -> authSessionChange.emit(data)
@@ -527,6 +532,7 @@ class StoreGatewayConnection(
             // Channels and threads
             "CHANNEL_CREATE", "CHANNEL_UPDATE" -> channelCreateOrUpdate.emit(data)
             "CHANNEL_DELETE" -> channelDeleted.emit(data)
+            "CHANNEL_PINS_UPDATE" -> channelPinsUpdate.emit(data)
             "CHANNEL_RECIPIENT_ADD" -> channelRecipientAdd.emit(data)
             "CHANNEL_RECIPIENT_REMOVE" -> channelRecipientRemove.emit(data)
             "CHANNEL_UNREAD_UPDATE" -> channelUnreadUpdate.emit(data)

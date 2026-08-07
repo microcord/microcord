@@ -79,6 +79,14 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
     private var draftVisibility = ContentVisibility.DEFAULT
     private var savedIsAnnouncement = false
     private var draftIsAnnouncement = false
+    private var savedRequireTag = false
+    private var draftRequireTag = false
+    private var savedForumLayout = ForumLayout.LIST
+    private var draftForumLayout = ForumLayout.LIST
+    private var savedSortOrder = ForumSortOrder.LATEST_ACTIVITY
+    private var draftSortOrder = ForumSortOrder.LATEST_ACTIVITY
+    private var savedTagSetting = ForumTagSetting.MATCH_SOME
+    private var draftTagSetting = ForumTagSetting.MATCH_SOME
     private var bindingState = false
 
     override fun onViewBound(view: View) {
@@ -168,6 +176,15 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         draftVisibility = savedVisibility
         savedIsAnnouncement = channel.isAnnouncementChannel()
         draftIsAnnouncement = savedIsAnnouncement
+        savedRequireTag = (channel.flags ?: Channel.FLAGS_NONE) and Channel.FLAG_REQUIRE_TAG != 0L
+        draftRequireTag = savedRequireTag
+        savedForumLayout = ForumLayout.fromApiValue(channel.defaultForumLayout) ?: ForumLayout.LIST
+        draftForumLayout = savedForumLayout
+        savedSortOrder = ForumSortOrder.entries.getOrNull(channel.defaultSortOrder ?: 0)
+            ?: ForumSortOrder.LATEST_ACTIVITY
+        draftSortOrder = savedSortOrder
+        savedTagSetting = ForumTagSetting.fromApiValue(channel.defaultTagSetting)
+        draftTagSetting = savedTagSetting
         bindingState = false
 
         val isThreadOnly = channel.isThreadOnlyChannel()
@@ -285,11 +302,11 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
 
         root.findViewById<CheckedSetting>(R.id.channel_settings_forum_require_tag).apply {
             setOnCheckedListener(null)
-            isChecked = (channel.flags ?: 0L) and Channel.FLAG_REQUIRE_TAG != 0L
+            isChecked = draftRequireTag
             isEnabled = model.canManageChannel && !(tags.isNotEmpty() && tags.all { it.moderated })
             setOnCheckedListener { checked ->
-                val flags = (channel.flags ?: 0L)
-                saveImmediate(flags = if (checked) flags or Channel.FLAG_REQUIRE_TAG else flags and Channel.FLAG_REQUIRE_TAG.inv())
+                draftRequireTag = checked
+                updateSaveVisibility()
             }
         }
     }
@@ -333,24 +350,33 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
             layoutList,
             layoutGallery,
         ).forEach { it.isVisible = showLayout }
-        layoutList.isChecked = channel.defaultForumLayout != ForumLayout.GALLERY.apiValue
-        layoutGallery.isChecked = channel.defaultForumLayout == ForumLayout.GALLERY.apiValue
-        layoutList.setContainerClickListener { saveImmediate(defaultForumLayout = ForumLayout.LIST.apiValue) }
-        layoutGallery.setContainerClickListener { saveImmediate(defaultForumLayout = ForumLayout.GALLERY.apiValue) }
-
         val sortActivity = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_sort_activity)
         val sortCreation = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_sort_creation)
-        sortCreation.isChecked = channel.defaultSortOrder == ForumSortOrder.CREATION_DATE.ordinal
-        sortActivity.isChecked = !sortCreation.isChecked
-        sortActivity.setContainerClickListener { saveImmediate(defaultSortOrder = ForumSortOrder.LATEST_ACTIVITY.ordinal) }
-        sortCreation.setContainerClickListener { saveImmediate(defaultSortOrder = ForumSortOrder.CREATION_DATE.ordinal) }
-
-        val matchAll = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_tag_match_all)
         val matchSome = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_tag_match_some)
-        matchAll.isChecked = channel.defaultTagSetting == ForumTagSetting.MATCH_ALL.apiValue
-        matchSome.isChecked = !matchAll.isChecked
-        matchSome.setContainerClickListener { saveImmediate(defaultTagSetting = ForumTagSetting.MATCH_SOME.apiValue) }
-        matchAll.setContainerClickListener { saveImmediate(defaultTagSetting = ForumTagSetting.MATCH_ALL.apiValue) }
+        val matchAll = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_tag_match_all)
+
+        fun renderForumRadios() {
+            layoutList.isChecked = draftForumLayout == ForumLayout.LIST
+            layoutGallery.isChecked = draftForumLayout == ForumLayout.GALLERY
+            sortActivity.isChecked = draftSortOrder == ForumSortOrder.LATEST_ACTIVITY
+            sortCreation.isChecked = draftSortOrder == ForumSortOrder.CREATION_DATE
+            matchSome.isChecked = draftTagSetting == ForumTagSetting.MATCH_SOME
+            matchAll.isChecked = draftTagSetting == ForumTagSetting.MATCH_ALL
+        }
+
+        fun stage(change: () -> Unit) {
+            change()
+            renderForumRadios()
+            updateSaveVisibility()
+        }
+
+        renderForumRadios()
+        layoutList.setContainerClickListener { stage { draftForumLayout = ForumLayout.LIST } }
+        layoutGallery.setContainerClickListener { stage { draftForumLayout = ForumLayout.GALLERY } }
+        sortActivity.setContainerClickListener { stage { draftSortOrder = ForumSortOrder.LATEST_ACTIVITY } }
+        sortCreation.setContainerClickListener { stage { draftSortOrder = ForumSortOrder.CREATION_DATE } }
+        matchSome.setContainerClickListener { stage { draftTagSetting = ForumTagSetting.MATCH_SOME } }
+        matchAll.setContainerClickListener { stage { draftTagSetting = ForumTagSetting.MATCH_ALL } }
     }
 
     private fun bindArchiveOption(rowId: Int, radioId: Int, minutes: Int) {
@@ -389,8 +415,10 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
                 rateLimitPerUser = currentSlowMode.takeIf { it != savedSlowMode },
                 defaultAutoArchiveDuration = draftArchiveDuration.takeIf { it != savedArchiveDuration },
                 defaultThreadRateLimitPerUser = currentMessageSlowMode.takeIf { it != savedMessageSlowMode },
-                flags = draftVisibility.flags(channel.flags ?: Channel.FLAGS_NONE)
-                    .takeIf { draftVisibility != savedVisibility },
+                flags = draftFlags(channel).takeIf { it != (channel.flags ?: Channel.FLAGS_NONE) },
+                defaultForumLayout = draftForumLayout.apiValue.takeIf { draftForumLayout != savedForumLayout },
+                defaultSortOrder = draftSortOrder.ordinal.takeIf { draftSortOrder != savedSortOrder },
+                defaultTagSetting = draftTagSetting.apiValue.takeIf { draftTagSetting != savedTagSetting },
             ),
         ).restSubscribeOn().ui(this).appSubscribe(WidgetTextChannelSettings::class.java, context = context) {
             AppToast.show(context, if (it.isCategory()) R.string.category_settings else R.string.channel_settings)
@@ -398,28 +426,14 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         }
     }
 
-    private fun saveImmediate(
-        flags: Long? = null,
-        defaultForumLayout: Int? = null,
-        defaultSortOrder: Int? = null,
-        defaultTagSetting: String? = null,
-    ) {
-        val channel = model?.channel ?: return
-        RestAPI.api.editTextChannel(
-            channel.id,
-            RestAPIParams.TextChannel(
-                name = null,
-                type = null,
-                topic = null,
-                nsfw = null,
-                rateLimitPerUser = null,
-                defaultAutoArchiveDuration = null,
-                flags = flags,
-                defaultForumLayout = defaultForumLayout,
-                defaultSortOrder = defaultSortOrder,
-                defaultTagSetting = defaultTagSetting,
-            ),
-        ).restSubscribeOn().ui(this).appSubscribe(WidgetTextChannelSettings::class.java, context = context) { }
+    /** The spoiler bit and the require-tag bit share one field, so both drafts fold in together. */
+    private fun draftFlags(channel: Channel): Long {
+        val base = draftVisibility.flags(channel.flags ?: Channel.FLAGS_NONE)
+        return if (draftRequireTag) {
+            base or Channel.FLAG_REQUIRE_TAG
+        } else {
+            base and Channel.FLAG_REQUIRE_TAG.inv()
+        }
     }
 
     private fun deleteChannel(model: Model) {
@@ -461,7 +475,11 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
             SLOWMODE_COOLDOWN_VALUES[messageSlowMode.progress] != savedMessageSlowMode ||
             draftArchiveDuration != savedArchiveDuration ||
             draftVisibility != savedVisibility ||
-            draftIsAnnouncement != savedIsAnnouncement
+            draftIsAnnouncement != savedIsAnnouncement ||
+            draftRequireTag != savedRequireTag ||
+            draftForumLayout != savedForumLayout ||
+            draftSortOrder != savedSortOrder ||
+            draftTagSetting != savedTagSetting
     }
 
     private fun channelId() = mostRecentIntent.getLongExtra(ARG_CHANNEL_ID, -1L)

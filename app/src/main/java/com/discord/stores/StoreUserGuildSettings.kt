@@ -5,6 +5,11 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isTextChannel
 import com.discord.api.channel.isThread
+import com.discord.api.notification.AccountNotificationSettings
+import com.discord.api.notification.ChannelNotificationSettingsFlags
+import com.discord.api.notification.GuildNotificationSettingsFlags
+import com.discord.api.notification.UnreadSetting
+import com.discord.utilities.channel.ChannelNotificationSettingsUtils
 import com.discord.models.domain.ModelMuteConfig
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.domain.ModelPayload
@@ -48,6 +53,8 @@ class StoreUserGuildSettings(
         Persister(GUILD_SETTINGS_CACHE_KEY, emptyMap()),
     private val hiddenMutedChannelsCache: Persister<Set<Long>> =
         Persister(HIDDEN_MUTED_CHANNELS_CACHE_KEY, emptySet()),
+    /** Cached so the new-unread behaviour is known before READY, rather than flipping on connect. */
+    private val notificationFlagsCache: Persister<Int> = Persister(NOTIFICATION_FLAGS_CACHE_KEY, 0),
 ) : StoreV2() {
 
     enum class SettingsUpdateType { GUILD, CHANNEL, THREAD, CATEGORY }
@@ -81,6 +88,8 @@ class StoreUserGuildSettings(
     private val guildsToHideMutedChannelsIn = HashSet<Long>()
     private var guildSettingsSnapshot: Map<Long, ModelNotificationSettings> = emptyMap()
     private var guildsToHideMutedChannelsInSnapshot: Set<Long> = emptySet()
+    private var accountSettings = AccountNotificationSettings()
+    private var accountSettingsSnapshot = AccountNotificationSettings()
     private val eventSubject = PublishSubject.create<Event>()
     private var recomputeSettingsSubscription: Subscription? = null
     private val pendingPrivateWriteRevisions = HashMap<Long, Long>()
@@ -102,6 +111,7 @@ class StoreUserGuildSettings(
     internal fun restore() {
         guildSettings.putAll(guildSettingsCache.get())
         guildsToHideMutedChannelsIn.addAll(hiddenMutedChannelsCache.get())
+        accountSettings = AccountNotificationSettings(notificationFlagsCache.get())
         markChanged()
         scheduleMuteRecompute()
     }
@@ -114,8 +124,10 @@ class StoreUserGuildSettings(
         guildSettings.clear()
         guildsToHideMutedChannelsIn.clear()
         pendingPrivateWriteRevisions.clear()
+        accountSettings = AccountNotificationSettings()
         guildSettingsCache.clear(persist = true)
         hiddenMutedChannelsCache.clear(persist = true)
+        notificationFlagsCache.clear(persist = true)
         markChanged()
     }
 
@@ -123,8 +135,10 @@ class StoreUserGuildSettings(
     override fun snapshotData() {
         guildSettingsSnapshot = guildSettings.toMap()
         guildsToHideMutedChannelsInSnapshot = guildsToHideMutedChannelsIn.toSet()
+        accountSettingsSnapshot = accountSettings
         guildSettingsCache.set(guildSettingsSnapshot)
         hiddenMutedChannelsCache.set(guildsToHideMutedChannelsInSnapshot, persist = true)
+        notificationFlagsCache.set(accountSettings.flags, persist = true)
     }
 
     // -- Reads ----------------------------------------------------------------------------------
@@ -135,6 +149,26 @@ class StoreUserGuildSettings(
     internal fun getGuildSettingsInternal(): Map<Long, ModelNotificationSettings> = guildSettings
 
     fun getGuildsToHideMutedChannelsIn(): Set<Long> = guildsToHideMutedChannelsInSnapshot
+
+    fun getAccountNotificationSettings(): AccountNotificationSettings = accountSettingsSnapshot
+
+    @StoreThread
+    internal fun getAccountNotificationSettingsInternal(): AccountNotificationSettings = accountSettings
+
+    fun observeAccountNotificationSettings(): Observable<AccountNotificationSettings> =
+        observationDeck.connectRx(this, generator = ::getAccountNotificationSettings).distinctUntilChanged()
+
+    /**
+     * What marks [channel] unread. [guildDefaultMessageNotifications] is the guild's own default,
+     * which the resolution falls back to when nothing overrides it.
+     */
+    fun resolveUnreadSetting(channel: Channel, guildDefaultMessageNotifications: Int): UnreadSetting =
+        ChannelNotificationSettingsUtils.resolveUnreadSetting(
+            channel,
+            guildSettingsSnapshot[channel.guildId],
+            guildDefaultMessageNotifications,
+            accountSettingsSnapshot.useNewNotifications,
+        )
 
     fun observeEvents(): Observable<Event> = eventSubject
     fun observeGuildSettings(): Observable<Map<Long, ModelNotificationSettings>> =
@@ -159,6 +193,8 @@ class StoreUserGuildSettings(
 
     @StoreThread
     fun handleConnectionOpen(payload: ModelPayload) {
+        payload.notificationSettings?.let { accountSettings = it }
+        markChanged()
         val versioned = payload.userGuildSettings ?: return
         if (!versioned.isPartial) guildSettings.clear()
         handleGuildSettings(versioned.entries.orEmpty())
@@ -167,6 +203,14 @@ class StoreUserGuildSettings(
 
     @StoreThread
     fun handleGuildSettingUpdated(settings: List<ModelNotificationSettings>) = handleGuildSettings(settings)
+
+    @StoreThread
+    fun handleNotificationSettingsUpdate(settings: AccountNotificationSettings) {
+        StoreThreadScheduler.assertCurrentThread()
+        if (accountSettings == settings) return
+        accountSettings = settings
+        markChanged()
+    }
 
     @StoreThread
     private fun handleGuildSettings(settings: List<ModelNotificationSettings>) {
@@ -247,6 +291,157 @@ class StoreUserGuildSettings(
         )
     }
 
+    /**
+     * Sets what marks [channel] unread, independently of its notification level.
+     *
+     * The two unread bits are mutually exclusive, so the write is built from the override's
+     * current flags rather than sent bare: anything else would clear the forum and opt-in bits
+     * that share the field.
+     */
+    fun setChannelUnreadSetting(context: Context, channel: Channel, setting: UnreadSetting) {
+        val current = getGuildSettings()[channel.guildId]?.getChannelOverride(channel.id)?.flags ?: 0
+        updateUserGuildSettings(
+            context,
+            channel.guildId,
+            RestAPIParams.UserGuildSettings(
+                channel.id,
+                RestAPIParams.UserGuildSettings.ChannelOverride(
+                    messageNotifications = null,
+                    flags = ChannelNotificationSettingsFlags.withUnreadSetting(current, setting),
+                ),
+            ),
+            settingsUpdateType(channel),
+        )
+    }
+
+    /**
+     * Sets a channel's notification level and unread badge together.
+     *
+     * One request rather than two so the pair can never be observed half-applied, which would
+     * briefly resolve to a combination the viewer never chose.
+     */
+    fun setChannelPreset(
+        context: Context,
+        channel: Channel,
+        messageNotifications: Int,
+        unreadSetting: UnreadSetting,
+    ) {
+        val current = getGuildSettings()[channel.guildId]?.getChannelOverride(channel.id)?.flags ?: 0
+        updateUserGuildSettings(
+            context,
+            channel.guildId,
+            RestAPIParams.UserGuildSettings(
+                channel.id,
+                RestAPIParams.UserGuildSettings.ChannelOverride(
+                    messageNotifications = messageNotifications,
+                    flags = ChannelNotificationSettingsFlags.withUnreadSetting(current, unreadSetting),
+                ),
+            ),
+            settingsUpdateType(channel),
+        )
+    }
+
+    /**
+     * Pins [channel] to the top of the channel list.
+     *
+     * Pinning also opts the channel in, because a pinned channel the viewer cannot see would be a
+     * setting with no effect.
+     */
+    fun setChannelFavorite(context: Context, channel: Channel, favorite: Boolean) {
+        val current = getGuildSettings()[channel.guildId]?.getChannelOverride(channel.id)?.flags ?: 0
+        var flags = ChannelNotificationSettingsFlags.withFlag(
+            current,
+            ChannelNotificationSettingsFlags.FAVORITED,
+            favorite,
+        )
+        if (favorite) {
+            flags = ChannelNotificationSettingsFlags.withFlag(
+                flags,
+                ChannelNotificationSettingsFlags.OPT_IN_ENABLED,
+                true,
+            )
+        }
+        updateUserGuildSettings(
+            context,
+            channel.guildId,
+            RestAPIParams.UserGuildSettings(
+                channel.id,
+                RestAPIParams.UserGuildSettings.ChannelOverride(messageNotifications = null, flags = flags),
+            ),
+            settingsUpdateType(channel),
+        )
+    }
+
+    /** Adds or removes [channel] from the viewer's channel list under guild opt-in. */
+    fun setChannelOptedIn(context: Context, channel: Channel, optedIn: Boolean) {
+        val current = getGuildSettings()[channel.guildId]?.getChannelOverride(channel.id)?.flags ?: 0
+        updateUserGuildSettings(
+            context,
+            channel.guildId,
+            RestAPIParams.UserGuildSettings(
+                channel.id,
+                RestAPIParams.UserGuildSettings.ChannelOverride(
+                    messageNotifications = null,
+                    flags = ChannelNotificationSettingsFlags.withFlag(
+                        current,
+                        ChannelNotificationSettingsFlags.OPT_IN_ENABLED,
+                        optedIn,
+                    ),
+                ),
+            ),
+            settingsUpdateType(channel),
+        )
+    }
+
+    /** Hides channels the viewer has not opted into, across the whole guild. */
+    fun setGuildOptInChannels(context: Context, guildId: Long, optInOnly: Boolean) {
+        val current = getGuildSettings()[guildId]?.flags ?: 0
+        updateUserGuildSettings(
+            context,
+            guildId,
+            RestAPIParams.UserGuildSettings(
+                flags = GuildNotificationSettingsFlags.withFlag(
+                    current,
+                    GuildNotificationSettingsFlags.OPT_IN_CHANNELS_ON,
+                    optInOnly,
+                ),
+            ),
+            SettingsUpdateType.GUILD,
+        )
+    }
+
+    /** As [setChannelPreset], for the guild's own defaults. */
+    fun setGuildPreset(
+        context: Context,
+        guildId: Long,
+        messageNotifications: Int,
+        unreadSetting: UnreadSetting,
+    ) {
+        val current = getGuildSettings()[guildId]?.flags ?: 0
+        updateUserGuildSettings(
+            context,
+            guildId,
+            RestAPIParams.UserGuildSettings(
+                messageNotifications = messageNotifications,
+                flags = GuildNotificationSettingsFlags.withUnreadSetting(current, unreadSetting),
+            ),
+            SettingsUpdateType.GUILD,
+        )
+    }
+
+    /** As [setChannelUnreadSetting], for the guild's own default. */
+    fun setGuildUnreadSetting(context: Context, guildId: Long, setting: UnreadSetting) {
+        val current = getGuildSettings()[guildId]?.flags ?: 0
+        updateUserGuildSettings(
+            context,
+            guildId,
+            RestAPIParams.UserGuildSettings(
+                flags = GuildNotificationSettingsFlags.withUnreadSetting(current, setting),
+            ),
+            SettingsUpdateType.GUILD,
+        )
+    }
+
     fun setChannelNotificationsDefault(context: Context, channel: Channel) {
         if (channel.isThread()) return
         updateUserGuildSettings(
@@ -287,6 +482,7 @@ class StoreUserGuildSettings(
         suppressRoles: Boolean? = null,
         mobilePush: Boolean? = null,
         muted: Boolean? = null,
+        muteScheduledEvents: Boolean? = null,
     ) = updateUserGuildSettings(
         context,
         guild.id,
@@ -295,6 +491,7 @@ class StoreUserGuildSettings(
             suppressRoles = suppressRoles,
             muted = muted,
             mobilePush = mobilePush,
+            muteScheduledEvents = muteScheduledEvents,
         ),
         SettingsUpdateType.GUILD,
     )
@@ -442,6 +639,7 @@ class StoreUserGuildSettings(
         private const val PRIVATE_CHANNELS_GUILD_ID = 0L
         const val GUILD_SETTINGS_CACHE_KEY = "STORE_SETTINGS_USER_GUILD_V6"
         const val HIDDEN_MUTED_CHANNELS_CACHE_KEY = "STORE_SHOW_HIDE_MUTED_CHANNELS_V2"
+        const val NOTIFICATION_FLAGS_CACHE_KEY = "STORE_ACCOUNT_NOTIFICATION_FLAGS_V1"
 
         private const val THREAD_FLAG_ALL_MESSAGES = 2
         private const val THREAD_FLAG_ONLY_MENTIONS = 4

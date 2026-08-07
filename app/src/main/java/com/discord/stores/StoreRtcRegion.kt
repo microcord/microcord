@@ -1,6 +1,7 @@
 package com.discord.stores
 
 import com.discord.models.domain.ModelRtcLatencyRegion
+import com.discord.app.AppLog
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.time.Clock
 import java.util.Random
@@ -63,11 +64,17 @@ class StoreRtcRegion(
 
     private fun fetchRtcLatencyTestRegionsIps() {
         if (!isNativeEngineInitialized()) return
-        fetchRegionsWithIps().subscribe(::maybePerformLatencyTest, {})
+        fetchRegionsWithIps().subscribe(
+            ::maybePerformLatencyTest,
+            { AppLog.e(TAG, "Unable to fetch RTC latency test regions", it) },
+        )
     }
 
     private fun maybePerformLatencyTest(regionsWithIps: List<ModelRtcLatencyRegion>) =
         dispatcher.schedule {
+            // The probe list comes from outside the versioned API; an empty or ip-less response is a
+            // failed fetch rather than a reason to re-rank against nothing.
+            if (regionsWithIps.none { !it.ips.isNullOrEmpty() }) return@schedule
             val newGeoRankedRegions = regionsWithIps.map(ModelRtcLatencyRegion::region)
             val timeNowMs = clock.currentTimeMillis()
             if (!shouldPerformLatencyTest(newGeoRankedRegions, timeNowMs)) return@schedule
@@ -104,6 +111,7 @@ class StoreRtcRegion(
     fun shouldIncludePreferredRegion(guildId: Long?): Boolean = getPreferredRegion() != null
 
     private companion object {
+        private const val TAG = "StoreRtcRegion"
         private const val CACHE_KEY_LATENCY_TEST_RESULT = "CACHE_KEY_LATENCY_TEST_RESULT"
         private const val LATENCY_TEST_CACHE_TTL_MS = 86_400_000L
         private const val MIN_LATENCY_TEST_CONN_OPEN_JITTER_MS = 1_000

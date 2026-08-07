@@ -11,6 +11,7 @@ import com.google.gson.GsonBuilder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import com.discord.api.channel.ChannelPinsUpdate
 import org.junit.Test
 
 class MessageGatewayContractTest {
@@ -89,17 +90,14 @@ class MessageGatewayContractTest {
         assertEquals(404L, typing.member?.user?.id)
     }
 
-    /**
-     * `CHANNEL_PINS_UPDATE` is not one of the 83 dispatch types the reference client routes, so the
-     * parser must not manufacture a payload for it.
-     */
     @Test
-    fun leavesChannelPinsUpdateUnparsed() {
+    fun parsesChannelPinsUpdate() {
         val parsed = parser.parse(
-            """{"op":0,"s":7,"t":"CHANNEL_PINS_UPDATE","d":{"guild_id":303,"channel_id":202}}""",
-        ).data
+            """{"op":0,"s":7,"t":"CHANNEL_PINS_UPDATE","d":{"guild_id":303,"channel_id":202,"last_pin_timestamp":"2024-01-02T03:04:05.000000+00:00"}}""",
+        ).data as ChannelPinsUpdate
 
-        assertTrue(parsed === IncomingParser.DISPATCH_UNPARSED)
+        assertEquals(202L, parsed.channelId)
+        assertEquals(303L, parsed.guildId)
     }
 
     private fun parse(type: String, data: String): Any =

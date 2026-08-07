@@ -1,5 +1,6 @@
 package com.discord.widgets.channels.list
 
+import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDMRecipient
 import com.discord.api.channel.getSortByMostRecent
@@ -15,6 +16,7 @@ import com.discord.api.guildjoinrequest.GuildJoinRequest
 import com.discord.api.guildscheduledevent.GuildScheduledEvent
 import com.discord.api.guildscheduledevent.GuildScheduledEventEntityType
 import com.discord.api.guildscheduledevent.GuildScheduledEventStatus
+import com.discord.api.notification.UnreadSetting
 import com.discord.api.permission.Permission
 import com.discord.api.role.GuildRole
 import com.discord.api.stageinstance.StageInstance
@@ -27,6 +29,7 @@ import com.discord.stores.StoreStream
 import com.discord.stores.StoreThreadsActiveJoined.ActiveJoinedThread
 import com.discord.stores.StoreThreadsJoined.JoinedThread
 import com.discord.models.user.User
+import com.discord.utilities.channel.ChannelNotificationSettingsUtils
 import com.discord.utilities.deniesAccessTo
 import com.discord.utilities.grantsAccessTo
 import com.discord.utilities.guilds.RoleUtils
@@ -40,6 +43,7 @@ import com.discord.widgets.channels.list.items.ChannelListItemActiveEvent
 import com.discord.widgets.channels.list.items.ChannelListItemActiveEventData
 import com.discord.widgets.channels.list.items.ChannelListItemAddServer
 import com.discord.widgets.channels.list.items.ChannelListItemCategory
+import com.discord.widgets.channels.list.items.ChannelListItemHeader
 import com.discord.widgets.channels.list.items.ChannelListItemDirectory
 import com.discord.widgets.channels.list.items.ChannelListItemEventsSeparator
 import com.discord.widgets.channels.list.items.ChannelListItemGuildJoinRequest
@@ -115,6 +119,8 @@ data class WidgetChannelListModel(
         val unread: Boolean,
         val locked: Boolean,
         val hide: Boolean,
+        val unreadImportant: Boolean = true,
+        val mentionLowImportance: Boolean = false,
     )
 
     /** Selection / unread state shared by voice and stage channels. */
@@ -163,6 +169,8 @@ data class WidgetChannelListModel(
         val mentionCounts: Map<Long, Int>,
         val unreadChannelIds: Set<Long>,
         val collapsedCategories: Set<Long>,
+        val lowImportanceMentionChannels: Set<Long>,
+        val useNewNotifications: Boolean,
     )
 
     private data class StageState(
@@ -370,6 +378,8 @@ data class WidgetChannelListModel(
                     mentionCounts = selection.mentionCounts,
                     unreadChannelIds = selection.unreadChannelIds,
                     collapsedCategories = selection.collapsedCategories,
+                    lowImportanceMentionChannels = selection.lowImportanceMentionChannels,
+                    useNewNotifications = selection.useNewNotifications,
                     stageChannels = events.stageChannels,
                     stageInstances = events.stageInstances,
                     guildScheduledEvents = events.guildScheduledEvents,
@@ -440,8 +450,19 @@ data class WidgetChannelListModel(
                 StoreStream.getMentions().observeMentionCounts(),
                 StoreStream.getReadStates().getUnreadChannelIds(),
                 StoreStream.getCollapsedChannelCategories().observeCollapsedCategories(guildId),
-            ) { selectedChannel, voiceChannelId, mentionCounts, unreadIds, collapsed ->
-                SelectionState(selectedChannel, voiceChannelId, mentionCounts, unreadIds, collapsed)
+                StoreStream.getMentions().observeLowImportanceMentionChannels(),
+                StoreStream.getUserGuildSettings().observeAccountNotificationSettings(),
+            ) { selectedChannel, voiceChannelId, mentionCounts, unreadIds, collapsed, lowImportance,
+                accountSettings ->
+                SelectionState(
+                    selectedChannel = selectedChannel,
+                    selectedVoiceChannelId = voiceChannelId,
+                    mentionCounts = mentionCounts,
+                    unreadChannelIds = unreadIds,
+                    collapsedCategories = collapsed,
+                    lowImportanceMentionChannels = lowImportance,
+                    useNewNotifications = accountSettings.useNewNotifications,
+                )
             }
 
         private fun eventState(guildId: Long): Observable<EventState> {
@@ -569,6 +590,8 @@ data class WidgetChannelListModel(
             mentionCounts: Map<Long, Int>,
             unreadChannelIds: Set<Long>,
             collapsedCategories: Set<Long>,
+            lowImportanceMentionChannels: Set<Long> = emptySet(),
+            useNewNotifications: Boolean = false,
             stageChannels: Map<Long, StageChannel> = emptyMap(),
             stageInstances: Map<Long, StageInstance> = emptyMap(),
             guildScheduledEvents: List<GuildScheduledEvent> = emptyList(),
@@ -583,6 +606,8 @@ data class WidgetChannelListModel(
         ): List<ChannelListItem> {
             val items = ArrayList<ChannelListItem>(guildChannels.size + joinedThreads.size)
             val isHub = guild.guild?.isHub() == true
+            val guildDefaultMessageNotifications =
+                guild.guild?.defaultMessageNotifications ?: ModelNotificationSettings.FREQUENCY_ALL
 
             fun isGuildRoleSubscriptionChannel(channel: Channel): Boolean {
                 val model = guild.guild ?: return false
@@ -727,13 +752,33 @@ data class WidgetChannelListModel(
                                 mentionCount <= 0 &&
                                 !(!isCategoryMuted && !isMuted && unread)
                             val mutedAway = isMuted && guild.hideMutedChannels
+                            // Under opt-in the list is only what the viewer asked for, so a
+                            // channel they never opted into is hidden however loud it is.
+                            val notOptedIn = isOptInEnabled(guild) && !isOptedIn(textChannel, guild)
                             val result = !inFocus &&
                                 areAllChildThreadsRead(id) &&
-                                (collapsedAway || mutedAway)
+                                (collapsedAway || mutedAway || notOptedIn)
                             if (result) hiddenChannelIds.add(id)
                             result
                         }
-                        return TextLikeChannelData(channelSelected, mentionCount, unread, locked, hide)
+
+                        val unreadImportant = !unread ||
+                            ChannelNotificationSettingsUtils.resolveUnreadSetting(
+                                textChannel,
+                                guild.notificationSettings,
+                                guildDefaultMessageNotifications,
+                                useNewNotifications,
+                            ) == UnreadSetting.ALL_MESSAGES
+                        return TextLikeChannelData(
+                            selected = channelSelected,
+                            mentionCount = mentionCount,
+                            unread = unread,
+                            locked = locked,
+                            hide = hide,
+                            unreadImportant = unreadImportant,
+                            mentionLowImportance = mentionCount > 0 &&
+                                id in lowImportanceMentionChannels,
+                        )
                     }
 
                     fun getVocalChannelData(vocalChannel: Channel): VocalChannelData? {
@@ -788,6 +833,8 @@ data class WidgetChannelListModel(
                             selected = data.selected,
                             mentionCount = data.mentionCount,
                             isUnread = data.unread,
+                            isUnreadImportant = data.unreadImportant,
+                            isMentionLowImportance = data.mentionLowImportance,
                             muted = muted,
                             isLocked = data.locked,
                             hasActiveThreads = channel.id in channelsWithActiveThreads,
@@ -810,6 +857,8 @@ data class WidgetChannelListModel(
                             selected = data.selected,
                             mentionCount = data.mentionCount,
                             isUnread = data.unread,
+                            isUnreadImportant = data.unreadImportant,
+                            isMentionLowImportance = data.mentionLowImportance,
                             isLocked = data.locked,
                             muted = threadMuted,
                         )
@@ -950,7 +999,53 @@ data class WidgetChannelListModel(
             }
 
             removeTrailingEmptyCategory()
-            return items
+            return hoistPinnedChannels(items, guild, selectedGuildId)
+        }
+
+        /**
+         * Lifts the viewer's pinned channels into their own section at the top.
+         *
+         * Done after the list is assembled rather than during, so a pinned channel keeps the exact
+         * row the normal path would have produced — unread state, threads and all. Categories left
+         * empty by the move are dropped, since their contents are now above.
+         */
+        private fun hoistPinnedChannels(
+            items: MutableList<ChannelListItem>,
+            guild: GuildInfo,
+            selectedGuildId: Long,
+        ): List<ChannelListItem> {
+            val settings = guild.notificationSettings
+            val pinnedIds = settings.channelOverrides
+                .filter { it.isFavorite }
+                .map { it.channelId }
+                .toSet()
+            if (pinnedIds.isEmpty()) return items
+
+            val pinned = items.filter { it is ChannelListItemTextChannel && it.channel.id in pinnedIds }
+            if (pinned.isEmpty()) return items
+
+            items.removeAll(pinned)
+            dropEmptyCategories(items)
+            val header = ChannelListItemHeader(
+                id = PINNED_CHANNELS_HEADER_ID,
+                textResId = R.string.pinned_channels,
+                ableToManageChannel = false,
+                selectedGuildId = selectedGuildId,
+            )
+            return listOf(header) + pinned + items
+        }
+
+        /** A category header with no rows between it and the next header is now noise. */
+        private fun dropEmptyCategories(items: MutableList<ChannelListItem>) {
+            var index = items.size - 1
+            while (index >= 0) {
+                val item = items[index]
+                if (item is ChannelListItemCategory) {
+                    val next = items.getOrNull(index + 1)
+                    if (next == null || next is ChannelListItemCategory) items.removeAt(index)
+                }
+                index--
+            }
         }
 
         /**
@@ -1095,6 +1190,7 @@ data class WidgetChannelListModel(
         }
 
         /** The reference hub row shows at most five new servers. */
+        private const val PINNED_CHANNELS_HEADER_ID = -2L
         private const val MAX_DIRECTORY_UNREADS = 5
 
         /** Discord's own seeded directory channel, which never gets the events row. */
@@ -1105,4 +1201,19 @@ data class WidgetChannelListModel(
         /** The MFA notice occupies index 0 when present, so inserts go after it. */
         private fun Boolean.toIndex() = if (this) 1 else 0
     }
+}
+
+/**
+ * Opt-in only applies to community guilds, matching the reference gate; elsewhere the flag is
+ * ignored rather than hiding a whole server's channel list.
+ */
+private fun isOptInEnabled(guild: WidgetChannelListModel.GuildInfo): Boolean =
+    guild.notificationSettings.isOptInChannelsEnabled &&
+        guild.guild?.features?.contains(GuildFeature.COMMUNITY) == true
+
+/** A category the viewer opted into carries its channels with it. */
+private fun isOptedIn(channel: Channel, guild: WidgetChannelListModel.GuildInfo): Boolean {
+    val settings = guild.notificationSettings
+    if (settings.getChannelOverride(channel.id)?.isOptedIn == true) return true
+    return channel.parentId != 0L && settings.getChannelOverride(channel.parentId)?.isOptedIn == true
 }

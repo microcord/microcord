@@ -34,8 +34,6 @@ class NotificationHighlightsSettingsView(context: Context, attrs: AttributeSet) 
     }
 
     fun updateView(viewState: ViewState, onToggled: (Int) -> Unit) {
-        highlightsSwitch.setLabelTagText(R.string.beta)
-        highlightsSwitch.setLabelTagVisibility(true)
         highlightsSwitch.isChecked =
             viewState.notifyHighlights != HIGHLIGHTS_DISABLED && !viewState.isMuted
         if (viewState.isMuted) {

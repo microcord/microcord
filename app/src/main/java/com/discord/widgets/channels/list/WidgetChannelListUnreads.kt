@@ -167,6 +167,9 @@ class WidgetChannelListUnreads @JvmOverloads constructor(
     interface UnreadItem {
         val mentionCount: Int
         val isUnread: Boolean
+
+        /** A mentions-only channel still reads as unread, but must not raise a jump bar. */
+        val isUnreadImportant: Boolean get() = true
     }
 
     /**
@@ -236,7 +239,7 @@ class WidgetChannelListUnreads @JvmOverloads constructor(
                     val item = items[index] as? UnreadItem ?: continue
                     if (item.mentionCount > 0) return Indicator(TYPE_MENTION, index)
                     if (unreadsEnabled && !visibleHasUnread &&
-                        unreadIndex == INVALID_INDEX && item.isUnread
+                        unreadIndex == INVALID_INDEX && item.isUnread && item.isUnreadImportant
                     ) {
                         unreadIndex = index
                     }
@@ -245,7 +248,7 @@ class WidgetChannelListUnreads @JvmOverloads constructor(
             }
 
             private fun hasUnread(items: List<Any>, range: IntRange): Boolean =
-                items.slice(range).any { it is UnreadItem && it.isUnread }
+                items.slice(range).any { it is UnreadItem && it.isUnread && it.isUnreadImportant }
         }
     }
 

@@ -34,12 +34,23 @@ import com.facebook.drawee.view.SimpleDraweeView
  */
 sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
 
-    protected fun configureMentionsCount(textView: TextView, count: Int) {
+    protected fun configureMentionsCount(
+        textView: TextView,
+        count: Int,
+        isLowImportance: Boolean = false,
+    ) {
         if (count < 1) {
             textView.visibility = View.GONE
         } else {
             textView.visibility = View.VISIBLE
             textView.text = count.toString()
+            textView.backgroundTintList = if (isLowImportance) {
+                ColorStateList.valueOf(
+                    ColorCompat.getThemedColor(textView.context, R.attr.colorMentionBadgeMuted),
+                )
+            } else {
+                null
+            }
         }
     }
 
@@ -197,7 +208,11 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
             )
             itemView.setOnLongClickListenerConsumeClick { onLongPressed(data) }
             // An expanded folder shows its children's badges instead of an aggregate one.
-            configureMentionsCount(mentions, if (data.isOpen) 0 else data.mentionCount)
+            configureMentionsCount(
+                mentions,
+                if (data.isOpen) 0 else data.mentionCount,
+                data.isMentionLowImportance,
+            )
         }
 
         /**
@@ -336,7 +351,7 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
                 )
             }
 
-            configureMentionsCount(mentions, data.mentionCount)
+            configureMentionsCount(mentions, data.mentionCount, data.isMentionLowImportance)
             val mentionText = if (data.mentionCount > 0) {
                 itemView.i18nPlural(
                     R.plurals.guild_tooltip_a11y_label_mentions,

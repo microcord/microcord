@@ -2,6 +2,7 @@ package com.discord.stores
 
 import com.discord.api.message.Message
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
+import com.discord.api.notification.ReadStateFlags
 import com.discord.models.domain.ModelPayload
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.persister.Persister
@@ -83,7 +84,16 @@ class StoreMessageAckTest {
         fixture.ackStore.ack(10, isLockedAck = false)
         fixture.await { fixture.ackStore.getForChannel(10)?.messageId == 300L }
 
-        assertEquals(StoreMessageAck.Ack(300, viewed = true, isLockedAck = false), fixture.ackStore.getForChannel(10))
+        assertEquals(
+            StoreMessageAck.Ack(
+                300,
+                viewed = true,
+                isLockedAck = false,
+                flags = ReadStateFlags.IS_GUILD_CHANNEL,
+                lastViewed = DAYS_SINCE_EPOCH_AT_NOW,
+            ),
+            fixture.ackStore.getForChannel(10),
+        )
         assertEquals(listOf(AckRequest(10, 300, manual = false, mentionCount = 0)), fixture.requests)
     }
 
@@ -155,8 +165,13 @@ class StoreMessageAckTest {
             guilds,
             Clock { NOW },
             meId = { ME_ID },
-            ackRequest = { channelId, messageId, manual, mentionCount ->
-                requests += AckRequest(channelId, messageId, manual, mentionCount)
+            ackRequest = { request ->
+                requests += AckRequest(
+                    request.channelId,
+                    request.messageId,
+                    request.isLockedAck,
+                    request.mentionCount,
+                )
             },
             processMarkUnread = { _, _ -> markUnreadMentionCount },
         )
@@ -201,6 +216,7 @@ class StoreMessageAckTest {
         private const val ME_ID = 7L
         private const val DM_ID = 50L
         private const val NOW = 1_700_000_000_000L
+        private const val DAYS_SINCE_EPOCH_AT_NOW = 3240
         private val directory = Files.createTempDirectory("message-ack")
         private val gson = GsonBuilder()
             .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)

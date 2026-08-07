@@ -359,7 +359,7 @@ class WidgetChannelsListAdapter(
             name.text = item.channel.getDisplayName()
             name.setTextColor(textColor(item))
             name.typeface = root.context.themedFont(
-                if (!item.isUnread && !item.selected) {
+                if (!(item.isUnread && item.isUnreadImportant) && !item.selected) {
                     R.attr.font_primary_normal
                 } else {
                     R.attr.font_primary_semibold
@@ -378,8 +378,19 @@ class WidgetChannelsListAdapter(
 
             mentions.visibility = if (item.mentionCount > 0) View.VISIBLE else View.GONE
             mentions.text = minOf(MAX_MENTION_COUNT, item.mentionCount).toString()
+            mentions.backgroundTintList = if (item.isMentionLowImportance) {
+                ColorStateList.valueOf(ThemedColor.resolve(root.context, R.attr.colorMentionBadgeMuted))
+            } else {
+                null
+            }
             unread.visibility =
                 if (item.isUnread && !item.selected && !item.muted) View.VISIBLE else View.GONE
+            unread.imageTintList = ColorStateList.valueOf(
+                ThemedColor.resolve(
+                    root.context,
+                    if (item.isUnreadImportant) R.attr.colorInteractiveActive else R.attr.colorMentionBadgeMuted,
+                ),
+            )
 
             roleSubscriptionIcon.visibility =
                 if (item.isGuildRoleSubscriptionChannel) View.VISIBLE else View.GONE
@@ -467,7 +478,7 @@ class WidgetChannelsListAdapter(
             root.context,
             when {
                 item.muted -> R.attr.colorInteractiveMuted
-                item.isUnread -> R.attr.colorInteractiveActive
+                item.isUnread && item.isUnreadImportant -> R.attr.colorInteractiveActive
                 else -> R.attr.colorChannelDefault
             },
         )
@@ -478,7 +489,7 @@ class WidgetChannelsListAdapter(
             when {
                 item.selected -> R.attr.colorInteractiveActive
                 item.muted -> R.attr.colorInteractiveMuted
-                item.isUnread -> R.attr.colorInteractiveActive
+                item.isUnread && item.isUnreadImportant -> R.attr.colorInteractiveActive
                 else -> R.attr.colorChannelDefault
             },
         )
@@ -511,7 +522,7 @@ class WidgetChannelsListAdapter(
             name.text = item.channel.name
             name.setTextColor(textColor(item))
             name.typeface = root.context.themedFont(
-                if (!item.isUnread && !item.selected) {
+                if (!(item.isUnread && item.isUnreadImportant) && !item.selected) {
                     R.attr.font_primary_normal
                 } else {
                     R.attr.font_primary_semibold
@@ -520,8 +531,19 @@ class WidgetChannelsListAdapter(
 
             mentions.visibility = if (item.mentionCount > 0) View.VISIBLE else View.GONE
             mentions.text = minOf(MAX_MENTION_COUNT, item.mentionCount).toString()
+            mentions.backgroundTintList = if (item.isMentionLowImportance) {
+                ColorStateList.valueOf(ThemedColor.resolve(root.context, R.attr.colorMentionBadgeMuted))
+            } else {
+                null
+            }
             unread.visibility =
                 if (item.isUnread && !item.selected && !item.muted) View.VISIBLE else View.GONE
+            unread.imageTintList = ColorStateList.valueOf(
+                ThemedColor.resolve(
+                    root.context,
+                    if (item.isUnreadImportant) R.attr.colorInteractiveActive else R.attr.colorMentionBadgeMuted,
+                ),
+            )
 
             spine.setImageResource(spineResourceId(item.spineType))
         }
@@ -562,7 +584,7 @@ class WidgetChannelsListAdapter(
             when {
                 item.selected -> R.attr.colorInteractiveActive
                 item.muted -> R.attr.colorInteractiveMuted
-                item.isUnread -> R.attr.colorInteractiveActive
+                item.isUnread && item.isUnreadImportant -> R.attr.colorInteractiveActive
                 else -> R.attr.colorChannelDefault
             },
         )
@@ -635,13 +657,12 @@ class WidgetChannelsListAdapter(
 
             configureUserLimit(item, canConnect)
 
-            if (PermissionUtils.can(Permission.MANAGE_CHANNELS, item.permission)) {
-                root.setOnLongClickListenerConsumeClick {
-                    adapter.onSelectChannelOptions(item.channel)
-                }
-            } else {
-                // Still consumed, so a long press never falls through to the row click.
-                root.setOnLongClickListenerConsumeClick { }
+            // Not gated on MANAGE_CHANNELS: the sheet is mostly things any member can do — mute,
+            // mark as read, notification overrides, invite — and it hides the manage-only entries
+            // by itself. Requiring the permission left everyone else with a long press that ate
+            // the gesture and showed nothing.
+            root.setOnLongClickListenerConsumeClick {
+                adapter.onSelectChannelOptions(item.channel)
             }
         }
 

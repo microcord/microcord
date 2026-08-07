@@ -11,6 +11,7 @@ import com.discord.api.user.UserSurvey
 import com.discord.models.experiments.dto.GuildExperimentDto
 import com.discord.models.experiments.dto.GuildExperimentDtoTypeAdapter
 import com.discord.models.experiments.dto.UserExperimentDto
+import com.discord.api.notification.AccountNotificationSettings
 import com.google.gson.Gson
 import com.google.gson.TypeAdapter
 import com.google.gson.TypeAdapterFactory
@@ -28,6 +29,8 @@ class ModelPayload() {
     var userSettings: ModelUserSettings? = null
         internal set
     var userGuildSettings: VersionedUserGuildSettings? = null
+        internal set
+    var notificationSettings: AccountNotificationSettings? = null
         internal set
     var sessionId: String? = null
         internal set
@@ -80,6 +83,7 @@ class ModelPayload() {
         me = other.me
         userSettings = other.userSettings
         userGuildSettings = other.userGuildSettings
+        notificationSettings = other.notificationSettings
         sessionId = other.sessionId
         relationships = other.relationships
         readState = other.readState
@@ -124,6 +128,7 @@ class ModelPayload() {
 
     override fun toString() = "ModelPayload(" +
         "v=$v, me=$me, userSettings=$userSettings, userGuildSettings=$userGuildSettings, " +
+        "notificationSettings=$notificationSettings, " +
         "sessionId=$sessionId, relationships=$relationships, readState=$readState, " +
         "privateChannels=$privateChannels, guilds=$guilds, guildJoinRequests=$guildJoinRequests, " +
         "presences=$presences, analyticsToken=<redacted>, authToken=<redacted>, " +
@@ -133,7 +138,8 @@ class ModelPayload() {
         "trace=$trace, userSurvey=$userSurvey, friendSuggestionCount=$friendSuggestionCount)"
 
     private fun fields() = listOf(
-        v, me, userSettings, userGuildSettings, sessionId, relationships, readState, privateChannels,
+        v, me, userSettings, userGuildSettings, notificationSettings, sessionId, relationships,
+        readState, privateChannels,
         guilds, guildJoinRequests, presences, analyticsToken, authToken, requiredAction, experiments,
         guildExperiments, connectedAccounts, sessions, users, guildPresences, guildMembers, countryCode,
         trace, userSurvey, friendSuggestionCount,
@@ -234,6 +240,8 @@ private class ModelPayloadAdapter(private val gson: Gson) : TypeAdapter<ModelPay
                 "user" -> payload.me = gson.fromJson(value, User::class.java)
                 "user_settings" -> payload.userSettings = gson.fromJson(value, ModelUserSettings::class.java)
                 "user_guild_settings" -> payload.userGuildSettings = versionedSettings(value.asJsonObject)
+                "notification_settings" ->
+                    payload.notificationSettings = gson.fromJson(value, AccountNotificationSettings::class.java)
                 "session_id" -> payload.sessionId = value.asString
                 "relationships" -> payload.relationships = gson.fromJson(value, type<List<ModelUserRelationship>>())
                 "read_state" -> payload.readState = versionedReadStates(value.asJsonObject)

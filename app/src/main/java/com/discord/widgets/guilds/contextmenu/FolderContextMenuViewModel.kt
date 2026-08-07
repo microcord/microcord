@@ -9,6 +9,7 @@ import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import rx.Observable
 import rx.subjects.PublishSubject
+import com.discord.api.channel.isThreadOnlyChannel
 
 /**
  * State for the folder long-press menu.
@@ -52,13 +53,12 @@ class FolderContextMenuViewModel(
         }
     }
 
-    /** Acknowledges every unread guild in the folder, then dismisses once they have all landed. */
+    /** Acknowledges every unread guild in the folder in one batch. */
     fun onMarkAsReadClicked() {
-        val calls = guildIds.intersect(unreadGuildIds).map { RestAPI.api.ackGuild(it).restSubscribeOn() }
-        Observable.merge(Observable.from(calls))
-            .toList()
-            .ui(this)
-            .appSubscribe(FolderContextMenuViewModel::class.java) { eventSubject.onNext(Event.Dismiss) }
+        StoreStream.getMessageAck().bulkAck(guildIds.intersect(unreadGuildIds)) {
+            StoreStream.getChannels().getChannel(it)?.isThreadOnlyChannel() == true
+        }
+        eventSubject.onNext(Event.Dismiss)
     }
 
     fun onSettingsClicked() {

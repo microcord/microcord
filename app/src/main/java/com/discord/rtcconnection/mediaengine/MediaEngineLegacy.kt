@@ -90,9 +90,15 @@ class MediaEngineLegacy(
                 )
             }
 
+    @AnyThread
     override fun rankRtcRegions(regionsWithIps: Array<RtcRegion>, callback: (Array<String>) -> Unit) {
-        ensureNativeEngine()
-        nativeEngine?.getRankedRtcRegions(regionsWithIps) { regions -> callback(regions) }
+        val probeable = regionsWithIps.filter { it.ips.isNotEmpty() }.toTypedArray()
+        if (probeable.isEmpty()) return callback(emptyArray())
+        mediaEngineThreadExecutor.run {
+            ensureNativeEngine()
+            nativeEngine?.getRankedRtcRegions(probeable) { regions -> callback(regions) }
+                ?: callback(emptyArray())
+        }
     }
 
     @AnyThread

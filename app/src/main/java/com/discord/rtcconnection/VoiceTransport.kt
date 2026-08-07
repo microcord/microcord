@@ -242,7 +242,7 @@ class VoiceTransport(
             regions: List<ModelRtcLatencyRegion>,
             callback: (List<String>) -> Unit,
         ) {
-            val probes = regions.map { RtcRegion(it.region, it.ips.toTypedArray()) }.toTypedArray()
+            val probes = regions.map { RtcRegion(it.region, it.ips.orEmpty().toTypedArray()) }.toTypedArray()
             mediaEngine.rankRtcRegions(probes) { ranked -> callback(ranked.toList()) }
         }
     }

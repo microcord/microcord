@@ -4,6 +4,7 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.getDMRecipient
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isGuildForumPost
+import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isSystemDM
 import com.discord.api.channel.isThread
@@ -304,9 +305,9 @@ object ChatListRows {
             // Only the guild nickname is reachable here; the account username would need
             // `StoreUser`, which this builder does not take.
             threadCreatorName = creator?.nick.orEmpty(),
-            // Text-in-voice is behind an experiment `StoreExperiments` would resolve; it
-            // defaults off until it exists.
-            isTextInVoice = false,
+            // Every voice and stage channel carries a chat; the guild feature that used to gate
+            // this is inert on current Discord.
+            isTextInVoice = channel.isGuildVocalChannel(),
             // A forum *post* is a thread whose parent is a forum channel; the parent is not part
             // of this state, so it is resolved by the caller when it can be.
             isGuildForumPost = channel.isGuildForumPost(state.parentChannel),

@@ -3,10 +3,13 @@ package com.discord.widgets.guilds.list
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getSortByNameAndType
 import com.discord.api.channel.isStageVoiceChannel
+import com.discord.api.notification.UnreadSetting
 import com.discord.api.permission.Permission
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.guild.Guild
 import com.discord.stores.StoreGuildsSorted
+import com.discord.utilities.channel.ChannelNotificationSettingsUtils
+import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.widgets.guilds.list.GuildsListStoreHooks.GuildStream
 import com.discord.widgets.guilds.list.WidgetGuildsListViewModel.StoreState
@@ -149,7 +152,7 @@ internal object GuildListItemBuilder {
         val isUnread = if (notificationSettings?.isMuted == true) {
             false
         } else {
-            storeState.unreadGuildIds.contains(guildId)
+            storeState.unreadGuildIds.contains(guildId) && hasCountableUnread(guild, storeState)
         }
         val isConnectedToVoice = storeState.selectedVoiceChannelId > 0 &&
             guildChannelIds?.contains(storeState.selectedVoiceChannelId) == true
@@ -158,6 +161,7 @@ internal object GuildListItemBuilder {
         return GuildListItem.GuildItem(
             guild = guild,
             mentionCount = numMentions,
+            isMentionLowImportance = numMentions > 0 && hasOnlyLowImportanceMentions(guildId, storeState),
             isLurkingGuild = storeState.lurkingGuildIds.contains(guildId),
             isUnread = isUnread,
             isSelected = guildId == storeState.selectedGuildId,
@@ -194,6 +198,7 @@ internal object GuildListItemBuilder {
         var isAnyGuildConnectedToStageChannel = false
         var isUnread = false
         var mentionCount = 0
+        var isMentionLowImportance = true
         if (!isOpen) {
             for (guild in folder.guilds) {
                 isAnyGuildSelected = isAnyGuildSelected || guild.id == storeState.selectedGuildId
@@ -204,9 +209,12 @@ internal object GuildListItemBuilder {
                     storeState.channels[storeState.selectedVoiceChannelId]?.isStageVoiceChannel() == true
                 isUnread = isUnread || (
                     storeState.unreadGuildIds.contains(guild.id) &&
-                        storeState.guildSettings[guild.id]?.isMuted != true
+                        storeState.guildSettings[guild.id]?.isMuted != true &&
+                        hasCountableUnread(guild, storeState)
                     )
                 mentionCount += mentionCountsByGuild[guild.id] ?: 0
+                isMentionLowImportance =
+                    isMentionLowImportance && hasOnlyLowImportanceMentions(guild.id, storeState)
             }
         }
 
@@ -220,6 +228,7 @@ internal object GuildListItemBuilder {
             isAnyGuildConnectedToVoice = isAnyGuildConnectedToVoice,
             isAnyGuildConnectedToStageChannel = isAnyGuildConnectedToStageChannel,
             mentionCount = mentionCount,
+            isMentionLowImportance = mentionCount > 0 && isMentionLowImportance,
             isUnread = isUnread,
         )
         if (!isOpen) return listOf(folderItem)
@@ -269,6 +278,7 @@ internal object GuildListItemBuilder {
             isAnyGuildConnectedToVoice = false,
             isAnyGuildConnectedToStageChannel = false,
             mentionCount = 0,
+            isMentionLowImportance = false,
             isUnread = false,
         )
         if (!folderItem.isOpen) return listOf(folderItem)
@@ -291,6 +301,54 @@ internal object GuildListItemBuilder {
         }
     }
 
+    /**
+     * Whether an unread channel of [guild] counts towards its dot: a mention always does, an
+     * ordinary message only in a channel that tracks every message. Without `useNewNotifications`
+     * everything resolves to [UnreadSetting.ALL_MESSAGES], leaving this a no-op.
+     */
+    private fun hasCountableUnread(guild: Guild, storeState: StoreState): Boolean {
+        val guildChannelIds = storeState.channelIds[guild.id] ?: return false
+        val settings = storeState.guildSettings[guild.id]
+        val optInEnabled = settings?.isOptInChannelsEnabled == true
+        return guildChannelIds.any { channelId ->
+            if (channelId !in storeState.unreadChannelIds) return@any false
+            val channel = storeState.channels[channelId] ?: return@any false
+            // Only a real ping overrides the channel's unread setting. A low-importance mention is
+            // ordinary traffic that `MENTION_ON_ALL_MESSAGES` counted, so letting it through here
+            // would keep the dot lit on exactly the channels set to mentions-only.
+            val mentioned = (storeState.mentionCounts[channelId] ?: 0) > 0 &&
+                channelId !in storeState.lowImportanceMentionChannels
+            if (mentioned) return@any true
+            // A mention is the only thing that survives a mute, and the category counts: silencing
+            // one is meant to take its channels off the server's dot with it.
+            if (ChannelNotificationSettingsUtils.isGuildCategoryOrChannelMuted(channel, settings)) {
+                return@any false
+            }
+            // Under opt-in a stale channel stops counting: the list is meant to be what the
+            // viewer chose, and week-old traffic in everything else would keep the dot lit.
+            if (optInEnabled && isDecayed(channel)) return@any false
+            ChannelNotificationSettingsUtils.resolveUnreadSetting(
+                channel,
+                settings,
+                guild.defaultMessageNotifications,
+                storeState.accountNotificationSettings.useNewNotifications,
+            ) == UnreadSetting.ALL_MESSAGES
+        }
+    }
+
+    /** Matches the reference's seven-day `decayedReadStateCutoff`. */
+    private fun isDecayed(channel: Channel?): Boolean {
+        val lastMessageId = channel?.lastMessageId ?: return false
+        if (lastMessageId == 0L) return false
+        return SnowflakeUtils.toTimestamp(lastMessageId) < System.currentTimeMillis() - DECAY_CUTOFF_MS
+    }
+
+    private fun hasOnlyLowImportanceMentions(guildId: Long, storeState: StoreState): Boolean =
+        storeState.channelIds[guildId].orEmpty().none { channelId ->
+            (storeState.mentionCounts[channelId] ?: 0) > 0 &&
+                channelId !in storeState.lowImportanceMentionChannels
+        }
+
     private fun sumMentionCountsForGuild(
         guildId: Long,
         guildChannels: Map<Long, Collection<Long>>,
@@ -311,3 +369,5 @@ internal object GuildListItemBuilder {
         }
     }
 }
+
+private const val DECAY_CUTOFF_MS = 7L * 24 * 60 * 60 * 1000

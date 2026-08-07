@@ -8,6 +8,8 @@ data class ChannelListItemTextChannel(
     val selected: Boolean,
     override val mentionCount: Int,
     override val isUnread: Boolean,
+    override val isUnreadImportant: Boolean,
+    val isMentionLowImportance: Boolean,
     val muted: Boolean,
     val isLocked: Boolean,
     val hasActiveThreads: Boolean,

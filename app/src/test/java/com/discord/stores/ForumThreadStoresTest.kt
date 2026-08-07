@@ -207,7 +207,7 @@ class ForumThreadStoresTest {
         val messageAck = StoreMessageAck(
             dispatcher, deck, channels, messages, messagesMostRecent, threadsActiveJoined,
             threadsActive, guilds, Clock { 1_700_000_000_000L }, { users.getMeInternal().id },
-            { _, _, _, _ -> },
+            { _ -> },
         )
         val forumPostMessages = StoreForumPostMessages(dispatcher, users, deck) { null }
         val forumPostReadStates = StoreForumPostReadStates(

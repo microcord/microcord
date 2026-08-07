@@ -9,6 +9,7 @@ import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import rx.Observable
 import rx.subjects.PublishSubject
+import com.discord.api.channel.isThreadOnlyChannel
 
 /**
  * State for the guild long-press menu.
@@ -48,10 +49,10 @@ class GuildContextMenuViewModel(
     }
 
     fun onMarkAsReadClicked() {
-        RestAPI.api.ackGuild(guildId)
-            .restSubscribeOn()
-            .ui(this)
-            .appSubscribe(GuildContextMenuViewModel::class.java) { eventSubject.onNext(Event.Dismiss) }
+        StoreStream.getMessageAck().bulkAck(listOf(guildId)) {
+            StoreStream.getChannels().getChannel(it)?.isThreadOnlyChannel() == true
+        }
+        eventSubject.onNext(Event.Dismiss)
     }
 
     sealed class Event {

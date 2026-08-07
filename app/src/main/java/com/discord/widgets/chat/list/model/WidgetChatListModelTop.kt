@@ -5,6 +5,7 @@ import com.discord.api.channel.getDMRecipient
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isGuildForumPost
 import com.discord.api.channel.isGuildTextyChannel
+import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isSystemDM
 import com.discord.api.channel.isThread
@@ -112,7 +113,7 @@ data class WidgetChatListModelTop(val item: ChatListEntry) {
                 threadCreatorName = inputs.channelOwnerUser?.let {
                     GuildMember.getNickOrUsername(inputs.channelOwnerMember, it)
                 }.orEmpty(),
-                isTextInVoice = channel.isVoiceChannel(),
+                isTextInVoice = channel.isGuildVocalChannel(),
                 isGuildForumPost = channel.isGuildForumPost(inputs.parentChannel),
                 availableTags = inputs.parentChannel?.availableTags,
                 appliedTags = channel.appliedTags,

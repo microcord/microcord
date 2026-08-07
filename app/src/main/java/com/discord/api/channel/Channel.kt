@@ -5,6 +5,7 @@ import com.discord.api.permission.PermissionOverwrite
 import com.discord.api.thread.ThreadMember
 import com.discord.api.thread.ThreadMetadata
 import com.discord.api.user.User
+import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.primitives.ForumTagId
 
 data class Channel(
@@ -49,6 +50,7 @@ data class Channel(
     val isSpam: Boolean = false,
     /** Copied into each new post as its own `rateLimitPerUser`; existing posts keep theirs. */
     val defaultThreadRateLimitPerUser: Int? = null,
+    val lastPinTimestamp: UtcDateTime? = null,
 ) {
     companion object {
         const val GUILD_TEXT = 0

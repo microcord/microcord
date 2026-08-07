@@ -18,6 +18,9 @@ import com.discord.databinding.WidgetServerNotificationsBinding
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.utilities.rx.ui
 import com.discord.views.CheckedSetting
+import androidx.core.view.isVisible
+import com.discord.api.notification.UnreadSetting
+import com.discord.stores.StoreStream
 import com.discord.views.RadioManager
 import com.discord.widgets.channels.settings.WidgetChannelNotificationSettings
 import com.discord.widgets.settings.SettingsNavigation
@@ -55,6 +58,11 @@ class WidgetServerNotifications : AppFragment(R.layout.widget_server_notificatio
 
     private var frequencyRadios: List<CheckedSetting> = emptyList()
     private var radioManager: RadioManager? = null
+    private var unreadRadioManager: RadioManager? = null
+    private var presetRadioManager: RadioManager? = null
+
+    /** Set once the viewer opens Custom, so the detail sections stay put while they use them. */
+    private var customExpanded = false
     private var overrideAdapter: NotificationsOverridesAdapter? = null
 
     override fun onViewBound(view: View) {
@@ -66,6 +74,20 @@ class WidgetServerNotifications : AppFragment(R.layout.widget_server_notificatio
             binding.serverNotificationsFrequency2Radio,
         )
         radioManager = RadioManager(frequencyRadios)
+        presetRadioManager = RadioManager(
+            listOf(
+                binding.serverNotificationsPresetAllRadio,
+                binding.serverNotificationsPresetMentionsRadio,
+                binding.serverNotificationsPresetNothingRadio,
+                binding.serverNotificationsPresetCustomRadio,
+            ),
+        )
+        unreadRadioManager = RadioManager(
+            listOf(
+                binding.serverNotificationsUnreadAllRadio,
+                binding.serverNotificationsUnreadMentionsRadio,
+            ),
+        )
 
         overrideAdapter = NotificationsOverridesAdapter { itemView, item ->
             SettingsNavigation.launch(
@@ -126,6 +148,10 @@ class WidgetServerNotifications : AppFragment(R.layout.widget_server_notificatio
         configureHighlights(model)
         configureToggles(model)
         configureRadios(model)
+        configureShowAllChannels(model)
+        configurePresetRadios(model)
+        configureUnreadRadios(model)
+        configureDetailVisibility(model)
         configureOverrides(model)
     }
 
@@ -195,6 +221,13 @@ class WidgetServerNotifications : AppFragment(R.layout.widget_server_notificatio
             Action1 { viewModel.toggleSuppressRoles(rolesSwitch.context.applicationContext) },
         )
 
+        val muteEventsSwitch = binding.serverNotificationsMuteEventsSwitch
+        muteEventsSwitch.setOnCheckedListener(null)
+        muteEventsSwitch.setChecked(model.guildSettings.isMuteScheduledEvents, false)
+        muteEventsSwitch.setOnCheckedListener(
+            Action1 { viewModel.toggleMuteScheduledEvents(muteEventsSwitch.context.applicationContext) },
+        )
+
         pushSwitch.setChecked(model.guildSettings.isMobilePush && !model.isMuted, false)
         if (model.isMuted) {
             // Muted means no push regardless, so the row is greyed out and inert. The reference
@@ -236,6 +269,117 @@ class WidgetServerNotifications : AppFragment(R.layout.widget_server_notificatio
         radio.setContainerClickListener { view ->
             viewModel.setFrequency(view.context.applicationContext, frequency)
         }
+    }
+
+    private fun configureShowAllChannels(model: WidgetServerNotificationsViewModel.ViewState.Loaded) {
+        val switch = binding.serverNotificationsShowAllChannelsSwitch
+        switch.isVisible = model.supportsChannelOptIn
+        if (!model.supportsChannelOptIn) return
+        switch.setOnCheckedListener(null)
+        switch.setChecked(model.showAllChannels, false)
+        switch.setOnCheckedListener(
+            Action1<Boolean> { showAll ->
+                StoreStream.getUserGuildSettings().setGuildOptInChannels(
+                    switch.context.applicationContext,
+                    viewModel.guildId,
+                    optInOnly = !showAll,
+                )
+            },
+        )
+    }
+
+    private fun configurePresetRadios(model: WidgetServerNotificationsViewModel.ViewState.Loaded) {
+        binding.serverNotificationsPresetsWrap.isVisible = model.useNewNotifications
+        if (!model.useNewNotifications) return
+        configurePresetRadio(binding.serverNotificationsPresetAllRadio, model, Preset.ALL_MESSAGES)
+        configurePresetRadio(binding.serverNotificationsPresetMentionsRadio, model, Preset.MENTIONS)
+        configurePresetRadio(binding.serverNotificationsPresetNothingRadio, model, Preset.NOTHING)
+        binding.serverNotificationsPresetMentionsRadio.setText(
+            SettingsStrings.render(requireContext(), R.string.form_label_only_mentions),
+        )
+        binding.serverNotificationsPresetCustomRadio.apply {
+            setContainerClickListener {
+                customExpanded = true
+                presetRadioManager?.setChecked(this)
+                configureDetailVisibility(model)
+            }
+            if (isCustom(model)) presetRadioManager?.setChecked(this)
+        }
+    }
+
+    /**
+     * The notification and unread sections are the contents of Custom. Without
+     * `USE_NEW_NOTIFICATIONS` there are no presets, so the notification section stays put.
+     */
+    private fun configureDetailVisibility(model: WidgetServerNotificationsViewModel.ViewState.Loaded) {
+        val expanded = !model.useNewNotifications || isCustom(model)
+        binding.serverNotificationsFrequencyWrap.isVisible = expanded
+        binding.serverNotificationsUnreadWrap.isVisible = model.useNewNotifications && isCustom(model)
+    }
+
+    private fun isCustom(model: WidgetServerNotificationsViewModel.ViewState.Loaded) =
+        presetOf(model) == null || customExpanded
+
+    private fun configurePresetRadio(
+        radio: CheckedSetting,
+        model: WidgetServerNotificationsViewModel.ViewState.Loaded,
+        preset: Preset,
+    ) {
+        radio.setContainerClickListener { view ->
+            customExpanded = false
+            StoreStream.getUserGuildSettings().setGuildPreset(
+                view.context.applicationContext,
+                viewModel.guildId,
+                preset.notifications,
+                preset.unread,
+            )
+        }
+        if (presetOf(model) == preset) presetRadioManager?.setChecked(radio)
+    }
+
+    private fun presetOf(model: WidgetServerNotificationsViewModel.ViewState.Loaded): Preset? =
+        Preset.entries.firstOrNull {
+            it.notifications == model.notificationsSetting && it.unread == model.unreadSetting
+        }
+
+    private enum class Preset(val notifications: Int, val unread: UnreadSetting) {
+        ALL_MESSAGES(ModelNotificationSettings.FREQUENCY_ALL, UnreadSetting.ALL_MESSAGES),
+        MENTIONS(ModelNotificationSettings.FREQUENCY_MENTIONS, UnreadSetting.ONLY_MENTIONS),
+        NOTHING(ModelNotificationSettings.FREQUENCY_NOTHING, UnreadSetting.ONLY_MENTIONS),
+    }
+
+    private fun configureUnreadRadios(model: WidgetServerNotificationsViewModel.ViewState.Loaded) {
+        binding.serverNotificationsUnreadWrap.isVisible = model.useNewNotifications
+        if (!model.useNewNotifications) return
+        configureUnreadRadio(binding.serverNotificationsUnreadAllRadio, UnreadSetting.ALL_MESSAGES, model, false)
+        configureUnreadRadio(
+            binding.serverNotificationsUnreadMentionsRadio,
+            UnreadSetting.ONLY_MENTIONS,
+            model,
+            model.notificationsSetting == ModelNotificationSettings.FREQUENCY_ALL,
+        )
+        binding.serverNotificationsUnreadMentionsRadio.setText(
+            SettingsStrings.render(requireContext(), R.string.form_label_only_mentions),
+        )
+    }
+
+    private fun configureUnreadRadio(
+        radio: CheckedSetting,
+        setting: UnreadSetting,
+        model: WidgetServerNotificationsViewModel.ViewState.Loaded,
+        disabled: Boolean,
+    ) {
+        radio.setContainerClickListener(null)
+        radio.setDisabledTooltip(null)
+        if (disabled) {
+            radio.setDisabledTooltip(R.string.notification_settings_unread_mention_only_disabled)
+        } else {
+            radio.setContainerClickListener { view ->
+                StoreStream.getUserGuildSettings()
+                    .setGuildUnreadSetting(view.context.applicationContext, viewModel.guildId, setting)
+            }
+        }
+        if (model.unreadSetting == setting) unreadRadioManager?.setChecked(radio)
     }
 
     private fun configureOverrides(model: WidgetServerNotificationsViewModel.ViewState.Loaded) {

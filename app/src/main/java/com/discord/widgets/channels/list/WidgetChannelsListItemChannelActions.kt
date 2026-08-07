@@ -12,11 +12,15 @@ import com.discord.api.channel.getDMRecipient
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isCategory
 import com.discord.api.channel.isSpoilerChannel
+import com.discord.api.channel.isThread
 import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isGuildTextChannel
 import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.channel.isMultiUserDM
 import com.discord.api.channel.isStageVoiceChannel
+import com.discord.api.channel.hasMessages
+import com.discord.stores.SelectedChannelAnalyticsLocation
+import com.discord.utilities.channel.ChannelSelector
 import com.discord.api.channel.isTextChannel
 import com.discord.api.channel.isThreaded
 import com.discord.api.guild.GuildFeature
@@ -51,11 +55,14 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
     private lateinit var title: TextView
     private lateinit var profile: TextView
     private lateinit var markAsRead: TextView
+    private lateinit var optIn: TextView
+    private lateinit var pinChannel: TextView
     private lateinit var mute: TextView
     private lateinit var threadBrowser: TextView
     private lateinit var channelSettings: TextView
     private lateinit var notifications: TextView
     private lateinit var invite: TextView
+    private lateinit var openChat: TextView
     private lateinit var rehideSpoiler: TextView
     private lateinit var developerDivider: View
     private lateinit var copyId: TextView
@@ -65,7 +72,10 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
         icon = view.findViewById(R.id.channels_list_item_text_actions_icon)
         title = view.findViewById(R.id.channels_list_item_text_actions_title)
         profile = view.findViewById(R.id.dm_action_profile)
+        openChat = view.findViewById(R.id.action_open_chat)
         markAsRead = view.findViewById(R.id.text_action_mark_as_read)
+        optIn = view.findViewById(R.id.text_action_opt_in)
+        pinChannel = view.findViewById(R.id.text_action_pin_channel)
         mute = view.findViewById(R.id.text_action_mute)
         threadBrowser = view.findViewById(R.id.text_action_thread_browser)
         channelSettings = view.findViewById(R.id.action_channel_settings)
@@ -89,6 +99,51 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
     override fun onPause() {
         super.onPause()
         dismiss()
+    }
+
+    /** The reference calls the `FAVORITED` flag a pin in the UI, so this row does too. */
+    private fun configurePinChannel(channel: Channel) {
+        val settings = StoreStream.getUserGuildSettings().getGuildSettings()[channel.guildId]
+        val pinned = settings?.getChannelOverride(channel.id)?.isFavorite == true
+        val supported = channel.guildId != 0L && !channel.isThread() && !channel.isCategory()
+
+        pinChannel.visibility = if (supported) View.VISIBLE else View.GONE
+        pinChannel.setText(if (pinned) R.string.unpin_channel else R.string.pin_channel_to_top)
+        pinChannel.setOnClickAndDismissListener {
+            StoreStream.getUserGuildSettings().setChannelFavorite(requireContext(), channel, !pinned)
+        }
+    }
+
+    /**
+     * Adds or removes the channel from the viewer's list, but only while the guild has opt-in on;
+     * otherwise every channel is already shown and the row would do nothing visible.
+     */
+    private fun configureOptIn(channel: Channel) {
+        val settings = StoreStream.getUserGuildSettings().getGuildSettings()[channel.guildId]
+        val guild = StoreStream.getGuilds().getGuild(channel.guildId)
+        val enabled = settings?.isOptInChannelsEnabled == true &&
+            guild?.features?.contains(GuildFeature.COMMUNITY) == true
+        val parentOptedIn = channel.parentId != 0L &&
+            settings?.getChannelOverride(channel.parentId)?.isOptedIn == true
+        val optedIn = settings?.getChannelOverride(channel.id)?.isOptedIn == true
+
+        optIn.visibility = if (enabled && !channel.isThread()) View.VISIBLE else View.GONE
+        optIn.setText(
+            when {
+                parentOptedIn -> R.string.channel_opt_out_parent_category
+                optedIn -> R.string.channel_opt_out
+                else -> R.string.channel_opt_in
+            },
+        )
+        optIn.setOnClickAndDismissListener {
+            val target = if (parentOptedIn) {
+                StoreStream.getChannels().getChannel(channel.parentId) ?: channel
+            } else {
+                channel
+            }
+            StoreStream.getUserGuildSettings()
+                .setChannelOptedIn(requireContext(), target, !(optedIn || parentOptedIn))
+        }
     }
 
     private fun configureUI(model: Model?) {
@@ -157,6 +212,8 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
 
         // Per-channel notification overrides exist for guild text channels and categories, and for
         // stage channels only in a community guild.
+        // Per-channel notification overrides exist for guild text channels and categories, and for
+        // stage channels only in a community guild. A plain voice channel has no override.
         notifications.visibility = if (
             channel.isGuildTextChannel() ||
             channel.isCategory() ||
@@ -170,11 +227,24 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
             ChannelListNavigation.showChannelNotificationSettings(this, channel.id)
         }
 
+        // A vocal channel's chat is reachable without joining the call, which is the only way in
+        // for someone who wants to read it without connecting.
+        openChat.visibility = if (channel.isGuildVocalChannel()) View.VISIBLE else View.GONE
+        openChat.setOnClickAndDismissListener {
+            ChannelSelector.getInstance().openVocalChannelChat(
+                channel,
+                SelectedChannelAnalyticsLocation.TEXT_IN_VOICE,
+            )
+        }
+
         markAsRead.visibility =
-            if (channel.isTextChannel() || channel.isCategory()) View.VISIBLE else View.GONE
+            if (channel.hasMessages() || channel.isCategory()) View.VISIBLE else View.GONE
         markAsRead.setOnClickAndDismissListener {
             StoreStream.getMessageAck().ack(channel.id, isLockedAck = false, clearLock = true)
         }
+
+        configureOptIn(channel)
+        configurePinChannel(channel)
 
         val spoilerAgree = StoreStream.getChannelSpoilerAgree()
         rehideSpoiler.visibility =

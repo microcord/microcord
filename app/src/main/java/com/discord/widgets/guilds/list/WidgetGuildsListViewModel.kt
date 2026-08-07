@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.fragment.app.FragmentManager
 import com.discord.api.channel.Channel
 import com.discord.api.guildjoinrequest.GuildJoinRequest
+import com.discord.api.notification.AccountNotificationSettings
 import com.discord.app.AppViewModel
 import com.discord.models.domain.ModelApplicationStream
 import com.discord.models.domain.ModelNotificationSettings
@@ -319,6 +320,7 @@ class WidgetGuildsListViewModel(
                     target.isConnectedToStageChannel || source.isConnectedToStageChannel,
                     mentionCount = source.mentionCount + target.mentionCount,
                     isUnread = target.isUnread || source.isUnread,
+                    isMentionLowImportance = target.isMentionLowImportance && source.isMentionLowImportance,
                 )
                 editingList.removeAt(fromPosition)
             }
@@ -380,7 +382,10 @@ class WidgetGuildsListViewModel(
         val selectedVoiceChannelId: Long,
         val guildSettings: Map<Long, ModelNotificationSettings>,
         val unreadGuildIds: Set<Long>,
+        val unreadChannelIds: Set<Long>,
         val mentionCounts: Map<Long, Int>,
+        val lowImportanceMentionChannels: Set<Long>,
+        val accountNotificationSettings: AccountNotificationSettings,
         val channelIds: Map<Long, List<Long>>,
         val unavailableGuilds: Set<Long>,
         val privateChannels: Map<Long, Channel>,
@@ -433,7 +438,10 @@ class WidgetGuildsListViewModel(
                 selectedVoiceChannelId = first.selectedVoiceChannelId,
                 guildSettings = first.guildSettings,
                 unreadGuildIds = first.unreadGuildIds,
+                unreadChannelIds = second.unreadChannelIds,
                 mentionCounts = first.mentionCounts,
+                lowImportanceMentionChannels = second.lowImportanceMentionChannels,
+                accountNotificationSettings = second.accountNotificationSettings,
                 channelIds = first.channelIds,
                 unavailableGuilds = first.unavailableGuilds,
                 privateChannels = first.privateChannels,
@@ -489,9 +497,15 @@ class WidgetGuildsListViewModel(
             StoreStream.getGuilds().observeGuildIds(),
             GuildIdsWithVisibleStageInstanceModel.observe(),
             GuildIdsWithActiveEventsModel.observe(),
-            StoreStream.getChannels().observeGuildAndPrivateChannels(),
+            StoreStream.getChannels().observeAllChannels(),
             GuildsListStoreHooks.discordHubClicked(),
-        ) { guildJoinRequests, pendingGuilds, guildIds, stageEvents, scheduledEvents, channels, hubClicked ->
+            StoreStream.getReadStates().getUnreadChannelIds(),
+            Observable.combineLatest(
+                StoreStream.getUserGuildSettings().observeAccountNotificationSettings(),
+                StoreStream.getMentions().observeLowImportanceMentionChannels(),
+            ) { accountSettings, lowImportanceChannels -> accountSettings to lowImportanceChannels },
+        ) { guildJoinRequests, pendingGuilds, guildIds, stageEvents, scheduledEvents, channels, hubClicked,
+            unreadChannelIds, notifications ->
             SecondChunk(
                 guildJoinRequests = guildJoinRequests,
                 pendingGuilds = pendingGuilds,
@@ -500,6 +514,9 @@ class WidgetGuildsListViewModel(
                 guildIdsWithActiveScheduledEvents = scheduledEvents,
                 channels = channels,
                 showHubSparkle = !hubClicked,
+                unreadChannelIds = unreadChannelIds,
+                accountNotificationSettings = notifications.first,
+                lowImportanceMentionChannels = notifications.second,
             )
         }
 
@@ -523,6 +540,9 @@ class WidgetGuildsListViewModel(
             val guildIdsWithActiveScheduledEvents: Set<Long>,
             val channels: Map<Long, Channel>,
             val showHubSparkle: Boolean,
+            val unreadChannelIds: Set<Long>,
+            val accountNotificationSettings: AccountNotificationSettings,
+            val lowImportanceMentionChannels: Set<Long>,
         )
     }
 }

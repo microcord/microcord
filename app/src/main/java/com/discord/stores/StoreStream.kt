@@ -47,6 +47,7 @@ import com.discord.models.domain.ModelUserRelationship
 import com.discord.models.domain.ModelUserSettings
 import com.discord.models.domain.auth.ModelLoginResult
 import com.discord.restapi.RequiredHeadersInterceptor
+import com.discord.restapi.http.RateLimitInterceptor
 import com.discord.restapi.RestAPIBuilder
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
@@ -112,6 +113,7 @@ import com.discord.utilities.attachments.UploadAttachmentPreprocessor
 import com.discord.utilities.attachments.toUploadAttachment
 import com.discord.api.message.MessageReference
 import com.discord.utilities.rest.MessageUploadPayloadBuilder
+import com.discord.utilities.rest.AckToken
 import com.discord.utilities.rest.RestAPI
 import com.discord.widgets.guild_role_subscriptions.GuildRoleSubscriptionsFeatureFlag
 import com.discord.utilities.textprocessing.Rules
@@ -433,18 +435,50 @@ class StoreStream private constructor(
         guilds,
         clock,
         meId = { users.getMeInternal().id },
-        ackRequest = { channelId, messageId, manual, mentionCount ->
+        ackRequest = { request ->
             if (::restApi.isInitialized) {
+                val sentToken = AckToken.get()
                 restApi.postChannelMessagesAck(
-                    channelId,
-                    messageId,
-                    RestAPIParams.ChannelMessagesAck(manual, mentionCount),
+                    request.channelId,
+                    request.messageId,
+                    RestAPIParams.ChannelMessagesAck(
+                        manual = request.isLockedAck,
+                        mentionCount = request.mentionCount,
+                        token = sentToken,
+                        lastViewed = request.lastViewed,
+                        flags = request.flags,
+                    ),
                 ).subscribeOn(Schedulers.io())
-                    .doOnCompleted { analytics.ackMessage(channelId) }
+                    .doOnNext { AckToken.update(sentToken, it.token) }
+                    .doOnCompleted { analytics.ackMessage(request.channelId) }
                     .subscribe({}, {})
             }
         },
         processMarkUnread = { channelId, messagesAfter -> mentions.processMarkUnread(channelId, messagesAfter) },
+        getMentionCount = { mentions.getMentionCounts()[it] ?: 0 },
+        bulkAckRequest = { chunks ->
+            if (::restApi.isInitialized) {
+                // Sequential, so a rate limit parks the remaining chunks rather than every chunk
+                // racing into the same 429. RateLimitInterceptor does the waiting and retrying.
+                Observable.from(chunks)
+                    .concatMap { chunk ->
+                        restApi.bulkAck(
+                            RestAPIParams.BulkAck(
+                                chunk.map { (channelId, messageId) ->
+                                    RestAPIParams.BulkAck.ReadState(channelId, messageId)
+                                },
+                            ),
+                        )
+                    }
+                    .subscribeOn(Schedulers.io())
+                    .subscribe({}, {})
+            }
+        },
+        pinAckRequest = { channelId ->
+            if (::restApi.isInitialized) {
+                restApi.ackPins(channelId).subscribeOn(Schedulers.io()).subscribe({}, {})
+            }
+        },
     )
     private val mentions: StoreMentions = StoreMentions(
         userRelationships,
@@ -454,6 +488,8 @@ class StoreStream private constructor(
         channels,
         observationDeck,
         hasJoinedThread = threadsJoined::hasJoinedInternal,
+        getJoinedThreadFlags = { threadsJoined.getJoinedThread(it)?.flags ?: 0 },
+        getGuildDefaultMessageNotifications = { guilds.getGuildsInternal()[it]?.defaultMessageNotifications ?: 0 },
     )
     private val slowMode = StoreSlowMode(clock, channels, permissions)
     private val messagesLoader = StoreMessagesLoader(loader = { request, callback ->
@@ -472,6 +508,7 @@ class StoreStream private constructor(
         )
     })
     private val pendingReplies = StorePendingReplies(dispatcher, observationDeck)
+    private val unreadSettingNotice = StoreUnreadSettingNotice(dispatcher, observationDeck, clock)
     private val pinnedMessages = StorePinnedMessages(dispatcher, observationDeck) { channelId, callback ->
         val generation = authGeneration
         restApi.getChannelPins(channelId).subscribeOn(Schedulers.io()).map { it.map(::DomainMessage) }.subscribe(
@@ -832,6 +869,7 @@ class StoreStream private constructor(
         messagesMostRecent,
         pendingReplies,
         pinnedMessages,
+        unreadSettingNotice,
         messageUploads,
         tabsNavigation,
         clientDataState,
@@ -1174,9 +1212,51 @@ class StoreStream private constructor(
             {},
         )
         com.discord.utilities.lifecycle.Backgrounded.observe().subscribe(
-            { backgrounded -> isBackgrounded = backgrounded },
+            { backgrounded ->
+                val returnedToForeground = isBackgrounded && !backgrounded
+                isBackgrounded = backgrounded
+                if (returnedToForeground) {
+                    messageAck.handleAppForegrounded(channelsSelected.getId())
+                }
+            },
             {},
         )
+        Observable.interval(
+            StoreUnreadSettingNotice.VIEW_TICK_MS,
+            StoreUnreadSettingNotice.VIEW_TICK_MS,
+            TimeUnit.MILLISECONDS,
+            Schedulers.computation(),
+        ).subscribe({
+            if (!isBackgrounded) unreadSettingNotice.handleChannelViewed(channelsSelected.getId())
+        }, {})
+        unreadSettingNotice.getChannel = channels::findChannelByIdInternal
+        unreadSettingNotice.useNewNotifications = {
+            guildSettings.getAccountNotificationSettingsInternal().useNewNotifications
+        }
+        unreadSettingNotice.isMuted = { channel ->
+            com.discord.utilities.channel.ChannelNotificationSettingsUtils.isGuildCategoryOrChannelMuted(
+                channel,
+                guildSettings.getGuildSettingsInternal()[channel.guildId],
+            )
+        }
+        unreadSettingNotice.hasNoOverride = { channel ->
+            val settings = guildSettings.getGuildSettingsInternal()[channel.guildId]
+            val own = settings?.getChannelOverride(channel.id)
+            val parent = settings?.getChannelOverride(channel.parentId)
+            own == null && parent == null
+        }
+        unreadSettingNotice.resolvedUnreadSetting = { channel ->
+            com.discord.utilities.channel.ChannelNotificationSettingsUtils.resolveUnreadSetting(
+                channel,
+                guildSettings.getGuildSettingsInternal()[channel.guildId],
+                guilds.getGuildsInternal()[channel.guildId]?.defaultMessageNotifications ?: 0,
+                guildSettings.getAccountNotificationSettingsInternal().useNewNotifications,
+            )
+        }
+        unreadSettingNotice.guildJoinedAtMs = { guilds.getGuildsJoinedAtInternal()[it] }
+        unreadSettingNotice.applyUpgrade = { channel ->
+            guildSettings.setChannelUnreadSetting(context, channel, com.discord.api.notification.UnreadSetting.ALL_MESSAGES)
+        }
         WidgetChatList.installStores(messages, messagesLoader)
         // Private-channel titles are built in the api layer, which cannot reach this store.
         com.discord.api.channel.friendNicknameResolver = userRelationships::getNickname
@@ -1313,6 +1393,7 @@ class StoreStream private constructor(
             expandedGuildFolders.restore()
             collapsedChannelCategories.restore()
             guildSettings.restore()
+            unreadSettingNotice.restore()
             messages.restore()
             guildFolders = userSettings.getGuildFolders()
             updateSortedGuilds()
@@ -1661,6 +1742,10 @@ class StoreStream private constructor(
         dispatchSubscribe(events.channelUnreadUpdate, "streamChannelUnreadUpdate") { update ->
             messagesMostRecent.handleChannelUnreadUpdate(update)
         }
+        dispatchSubscribe(events.channelPinsUpdate, "streamChannelPinsUpdate") { update ->
+            pinnedMessages.handlePinsUpdate(update.channelId)
+            messageAck.handlePinsUpdate(update)
+        }
         dispatchSubscribe(events.channelRecipientAdd, "streamGroupDMRecipientAdd") { recipient ->
             users.handleUserUpdated(recipient.user)
             channels.handleGroupDMRecipient(recipient.channelId, recipient.user, recipient.nick, added = true)
@@ -1883,6 +1968,9 @@ class StoreStream private constructor(
             clientDataState.handleGuildSettingUpdated(settings)
             updateSortedGuilds()
         }
+        dispatchSubscribe(events.notificationSettingsUpdate, "notificationSettingsUpdate") { settings ->
+            guildSettings.handleNotificationSettingsUpdate(settings)
+        }
 
         // Stage instances
         dispatchSubscribe(events.stageInstanceCreate, "stageInstanceCreate") { instance ->
@@ -1953,6 +2041,9 @@ class StoreStream private constructor(
         messages.handleMessageCreate(domain)
         messagesMostRecent.handleMessageCreate(domain)
         messageAck.handleMessageCreate(message)
+        if (message.author?.id == users.getMeInternal().id) {
+            unreadSettingNotice.handleMessageSent(message.channelId)
+        }
         messageReplies.handleMessageCreate(message)
         maybeNotify(domain)
         clientDataState.handleMessageCreate(message)
@@ -2491,7 +2582,7 @@ class StoreStream private constructor(
         messages.handleChannelSelected(channelId)
         messagesLoader.handleChannelSelected(selected.maybeChannel)
         messageState.handleChannelSelected()
-        messageAck.handleChannelSelected()
+        messageAck.handleChannelSelected(channelId)
         notifications.handleChannelSelected(channelId)
         expressionSuggestions.handleChannelSelected()
         applicationInteractions.handleChannelSelected()
@@ -2661,7 +2752,9 @@ class StoreStream private constructor(
         messageReactions.handlePreLogout()
         messageAck.handlePreLogout()
         messageAck.clearForAccountIsolation()
+        AckToken.clear()
         mentions.handlePreLogout()
+        unreadSettingNotice.handlePreLogout()
         spotify.handlePreLogout()
         embeddedActivities.handlePreLogout()
         applications.handlePreLogout()
@@ -2771,6 +2864,7 @@ class StoreStream private constructor(
         userRelationships.handleConnectionOpen(payload)
         guilds.handleConnectionOpen(payload)
         guildSettings.handleConnectionOpen(payload)
+        unreadSettingNotice.handleConnectionOpen()
         lurking.handleConnectionOpen(payload)
         channels.handleConnectionOpen(payload)
         threadsActive.handleConnectionOpen()
@@ -2785,6 +2879,7 @@ class StoreStream private constructor(
         mentions.handleConnectionOpen(payload)
         messages.handleConnectionOpen(payload)
         messagesMostRecent.handleConnectionOpen(payload)
+        AckToken.clear()
         messageAck.handleConnectionOpen(payload)
         userNotes.handleConnectionOpen()
         friendSuggestions.handleConnectionOpen(payload)
@@ -2910,6 +3005,7 @@ class StoreStream private constructor(
         permissions.handleChannelOrThreadCreateOrUpdate(channel)
         voiceChannelSelected.handleChannelOrThreadCreateOrUpdate()
         mentions.handleChannelOrThreadCreateOrUpdate(channel)
+        messageAck.handleChannelCreateOrUpdate(channel)
         messagesMostRecent.handleChannelCreateOrUpdate(channel)
         clientDataState.handleChannelCreateOrUpdateOrDelete(channel)
         threadsActive.handleChannelCreateOrUpdate(channel)
@@ -2961,7 +3057,12 @@ class StoreStream private constructor(
             override fun getSpotifyToken(): String? = null
         }
         val builder = RestAPIBuilder(API_BASE_URL, CookieJars.persistent(context))
-        val interceptors = listOf(RequiredHeadersInterceptor(headers))
+        // Ahead of the header interceptor so a 429 parks every later request on the same route
+        // until it clears, instead of each caller discovering the limit for itself.
+        val interceptors = listOf(
+            RateLimitInterceptor(maxRetries = RATE_LIMIT_MAX_RETRIES),
+            RequiredHeadersInterceptor(headers),
+        )
         val api = RestAPI.install(builder, interceptors)
         guildRoleMemberCounts.bindApi(api)
         restApi = api
@@ -2969,8 +3070,15 @@ class StoreStream private constructor(
     }
 
     companion object {
-        private const val API_BASE_URL = "https://discord.com/api/"
-        private const val RTC_LATENCY_URL = "https://latency.discord.media/rtc"
+        /** Enough to ride out a burst; the interceptor caps each wait at a minute. */
+    private const val RATE_LIMIT_MAX_RETRIES = 3
+
+    private const val API_BASE_URL = "https://discord.com/api/"
+        /**
+         * `v=2` is the port-aware probe list; v1 may answer without ips, which the media engine
+         * cannot rank against.
+         */
+        private const val RTC_LATENCY_URL = "https://latency.discord.media/rtc?v=2"
         private const val GATEWAY_INIT_TIMEOUT_MS = 10_000L
         private const val GATEWAY_TAG = "ManticordGateway"
         @Volatile private var instance: StoreStream? = null
@@ -3137,6 +3245,7 @@ class StoreStream private constructor(
         @JvmStatic fun getMessageReplies() = requireInstance().messageReplies
         @JvmStatic fun getMessageReactions() = requireInstance().messageReactions
         @JvmStatic fun getMessageAck() = requireInstance().messageAck
+        @JvmStatic fun getUnreadSettingNotice() = requireInstance().unreadSettingNotice
         @JvmStatic fun getMentions() = requireInstance().mentions
         @JvmStatic fun getSlowMode() = requireInstance().slowMode
 

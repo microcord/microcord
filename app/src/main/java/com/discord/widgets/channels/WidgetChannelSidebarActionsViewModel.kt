@@ -12,6 +12,7 @@ import com.discord.panels.PanelState
 import com.discord.stores.StoreChannels
 import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreGuildsNsfw
+import com.discord.stores.StoreMessageAck
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUser
@@ -55,6 +56,7 @@ class WidgetChannelSidebarActionsViewModel(
             val parentChannel: Channel?,
             val guildNotificationSettings: ModelNotificationSettings?,
             val disablePins: Boolean,
+            val hasUnreadPins: Boolean,
         ) : StoreState()
     }
 
@@ -99,7 +101,7 @@ class WidgetChannelSidebarActionsViewModel(
                         channelId = channel.id,
                         guildId = channel.guildId,
                         isMuted = override?.isMuted == true,
-                        hasUnreadPins = false,
+                        hasUnreadPins = storeState.hasUnreadPins,
                         disablePins = storeState.disablePins,
                         isThread = channel.isThread(),
                         isGuildForumPost = storeState.parentChannel?.isThreadOnlyChannel() == true,
@@ -119,6 +121,7 @@ class WidgetChannelSidebarActionsViewModel(
             storeUserGuildSettings: StoreUserGuildSettings = StoreStream.getUserGuildSettings(),
             storeUser: StoreUser = StoreStream.getUsers(),
             storeGuildsNsfw: StoreGuildsNsfw = StoreStream.getGuildsNsfw(),
+            storeMessageAck: StoreMessageAck = StoreStream.getMessageAck(),
         ): Observable<StoreState> = storeNavigation.observeRightPanelState().switchMap { panelState ->
             val storeState = storeChannelsSelected.observeSelectedChannel().switchMap { channel ->
                 if (channel == null) {
@@ -128,7 +131,8 @@ class WidgetChannelSidebarActionsViewModel(
                         storeUserGuildSettings.observeGuildSettings(),
                         storeUser.observeMe(),
                         storeChannels.observeChannel(channel.parentId),
-                    ) { guildSettings, meUser, parentChannel ->
+                        storeMessageAck.observeHasUnreadPins(channel.id),
+                    ) { guildSettings, meUser, parentChannel, hasUnreadPins ->
                         val gateAgreed = storeGuildsNsfw.isGuildNsfwGateAgreed(channel.guildId)
                         StoreState.ChannelFound(
                             channel = channel,
@@ -136,6 +140,7 @@ class WidgetChannelSidebarActionsViewModel(
                             guildNotificationSettings = guildSettings[channel.guildId],
                             disablePins = channel.nsfw &&
                                 (!gateAgreed || meUser.nsfwAllowance == NsfwAllowance.DISALLOWED),
+                            hasUnreadPins = hasUnreadPins,
                         )
                     }
                 }

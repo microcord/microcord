@@ -20,6 +20,7 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.time.Clock
 import rx.Observable
+import com.discord.api.notification.ReadStateTypes
 
 /**
  * One person who has RSVP'd to a guild scheduled event.
@@ -305,6 +306,12 @@ class StoreGuildScheduledEvents(
         payload.guilds?.forEach { guild ->
             guild.guildScheduledEvents?.forEach(::processGuildScheduledEventCreateOrUpdate)
         }
+        // Guild-event read states key on the guild id, not a channel; without seeding these the
+        // events row starts every launch looking unread.
+        lastAckedGuildScheduledEventIds.clear()
+        payload.readState?.entries.orEmpty()
+            .filter { it.readStateType == ReadStateTypes.GUILD_EVENT }
+            .forEach { lastAckedGuildScheduledEventIds[it.channelId] = it.lastMessageId }
         markChanged()
     }
 

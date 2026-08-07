@@ -3,7 +3,10 @@ package com.discord.stores
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isManaged
 import com.discord.api.channel.isPrivate
+import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.channel.isThread
+import com.discord.api.notification.ReadStateFlags
+import com.discord.api.thread.ThreadMemberFlags
 import com.discord.api.guild.Guild
 import com.discord.api.guildmember.GuildMember
 import com.discord.api.permission.Permission
@@ -11,12 +14,14 @@ import com.discord.api.thread.ThreadMembersUpdate
 import com.discord.api.user.User
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.domain.ModelMessageDelete
+import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelReadState
 import com.discord.models.domain.ModelUserRelationship
 import com.discord.models.message.Message
 import com.discord.models.thread.dto.ModelThreadListSync
 import com.discord.stores.updates.ObservationDeck
+import com.discord.utilities.channel.ChannelNotificationSettingsUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.persister.Persister
 import rx.Observable
@@ -51,6 +56,11 @@ class StoreMentions @JvmOverloads constructor(
      * but it also means threads contribute no mentions until this is bound. See the handoff notes.
      */
     private val hasJoinedThread: (channelId: Long) -> Boolean = { false },
+    /** Notification flags for a joined thread. Wired from `StoreThreadsJoined`. */
+    private val getJoinedThreadFlags: (channelId: Long) -> Int = { 0 },
+    /** A guild's own `default_message_notifications`. Wired from `StoreGuilds`. */
+    private val getGuildDefaultMessageNotifications: (guildId: Long) -> Int =
+        { ModelNotificationSettings.FREQUENCY_ALL },
 ) : StoreV2() {
 
     private val countsEmpty: Map<Long, Int> = HashMap()
@@ -63,6 +73,11 @@ class StoreMentions @JvmOverloads constructor(
     /** Mentions observed live this session, by message id. */
     private val mentionedMessages = HashMap<Long, Message>()
 
+    /** Of [mentionedMessages], the ones that only count because of `MENTION_ON_ALL_MESSAGES`. */
+    private val lowImportanceMessageIds = HashSet<Long>()
+
+    private var lowImportanceChannelsSnapshot: Set<Long> = emptySet()
+
     private val privateChannels = HashSet<Long>()
     private val myRoleIds = HashMap<Long, List<Long>>()
     private val channelGuildIds = HashMap<Long, Long>()
@@ -74,12 +89,26 @@ class StoreMentions @JvmOverloads constructor(
     fun observeMentionCounts(): Observable<Map<Long, Int>> =
         observationDeck.connectRx(this) { getMentionCounts() }.distinctUntilChanged()
 
-    fun observeTotalMentions(): Observable<Int> = observeMentionCounts().map { it.values.sum() }
+    /**
+     * Channels whose every mention came from an all-messages channel rather than a real ping.
+     * Their badge is drawn muted, and they are left out of the total.
+     */
+    fun getLowImportanceMentionChannels(): Set<Long> = lowImportanceChannelsSnapshot
+
+    fun observeLowImportanceMentionChannels(): Observable<Set<Long>> =
+        observationDeck.connectRx(this) { getLowImportanceMentionChannels() }.distinctUntilChanged()
+
+    /** Excludes low-importance mentions, so ordinary traffic never inflates the app badge. */
+    fun observeTotalMentions(): Observable<Int> =
+        observationDeck.connectRx(this) { getMentionCounts() to getLowImportanceMentionChannels() }
+            .map { (counts, low) -> counts.entries.filterNot { it.key in low }.sumOf { it.value } }
+            .distinctUntilChanged()
 
     @StoreThread
     fun handleConnectionOpen(payload: ModelPayload) {
         privateChannels.clear()
         mentionedMessages.clear()
+        lowImportanceMessageIds.clear()
         channelGuildIds.clear()
         myRoleIds.clear()
         myId = payload.me?.id ?: 0L
@@ -99,7 +128,8 @@ class StoreMentions @JvmOverloads constructor(
             val replaced = readState.entries.orEmpty().map { it.channelId }.toSet()
             serverInitReadStates.removeAll { it.channelId in replaced }
         }
-        serverInitReadStates += readState?.entries.orEmpty().filter { it.isMentioned }
+        serverInitReadStates += readState?.entries.orEmpty()
+            .filter { it.isChannelReadState && it.isMentioned }
 
         // Read states for channels the client cannot see would otherwise pin an unclearable badge.
         val knownChannels = storeChannels.getChannelNamesInternal()
@@ -163,6 +193,11 @@ class StoreMentions @JvmOverloads constructor(
     fun handleMessageCreateOrUpdate(message: com.discord.api.message.Message) {
         if (hasMention(message)) {
             mentionedMessages[message.id] = Message(message)
+            lowImportanceMessageIds.remove(message.id)
+            markChanged()
+        } else if (isLowImportanceMention(message.channelId, message.author)) {
+            mentionedMessages[message.id] = Message(message)
+            lowImportanceMessageIds += message.id
             markChanged()
         }
     }
@@ -176,7 +211,10 @@ class StoreMentions @JvmOverloads constructor(
     @StoreThread
     fun handleMessageDeleted(messageDeleteBulk: ModelMessageDelete) {
         if (messageDeleteBulk.channelId !in privateChannels) return
-        messageDeleteBulk.messageIds.orEmpty().forEach(mentionedMessages::remove)
+        messageDeleteBulk.messageIds.orEmpty().forEach {
+            mentionedMessages.remove(it)
+            lowImportanceMessageIds.remove(it)
+        }
         markChanged()
     }
 
@@ -184,6 +222,7 @@ class StoreMentions @JvmOverloads constructor(
     fun handlePreLogout() {
         serverInitReadStates.clear()
         mentionedMessages.clear()
+        lowImportanceMessageIds.clear()
         privateChannels.clear()
         myRoleIds.clear()
         channelGuildIds.clear()
@@ -214,6 +253,7 @@ class StoreMentions @JvmOverloads constructor(
         val counts = computeMentionCounts()
         countsCache.set(counts)
         countsSnapshot = counts
+        lowImportanceChannelsSnapshot = computeLowImportanceChannels(counts.keys)
     }
 
     /**
@@ -322,8 +362,7 @@ class StoreMentions @JvmOverloads constructor(
 
         if (guildSettings[guildId]?.isSuppressRoles != true) {
             val roles = myRoleIds[guildId]
-            val firstMentionedRole = mentionRoles?.firstOrNull()
-            if (roles != null && firstMentionedRole != null) return firstMentionedRole in roles
+            if (roles != null && mentionRoles != null && mentionRoles.any { it in roles }) return true
         }
 
         if (mentionEveryone == true) return guildSettings[guildId]?.isSuppressEveryone != true
@@ -332,11 +371,73 @@ class StoreMentions @JvmOverloads constructor(
 
     @StoreThread
     private fun removeAllMessagesForChannel(channelId: Long) {
-        val removable = mentionedMessages.filterValues { it.channelId == channelId }.keys
+        val removable = mentionedMessages.filterValues { it.channelId == channelId }.keys.toList()
         removable.forEach {
             mentionedMessages.remove(it)
+            lowImportanceMessageIds.remove(it)
             markChanged()
         }
+    }
+
+    /**
+     * A channel is low importance only while every mention it holds is, matching the reference
+     * latch: one real ping promotes the badge until the channel is acked.
+     */
+    @StoreThread
+    private fun computeLowImportanceChannels(channelsWithCounts: Set<Long>): Set<Long> {
+        if (channelsWithCounts.isEmpty()) return emptySet()
+        val highImportance = HashSet<Long>()
+        val lowImportance = HashSet<Long>()
+        mentionedMessages.values.forEach { message ->
+            if (message.id in lowImportanceMessageIds) {
+                lowImportance += message.channelId
+            } else {
+                highImportance += message.channelId
+            }
+        }
+        serverInitReadStates.forEach { readState ->
+            if (!readState.isMentioned) return@forEach
+            if (readState.isMentionLowImportance) {
+                lowImportance += readState.channelId
+            } else {
+                highImportance += readState.channelId
+            }
+        }
+        return channelsWithCounts.filterTo(HashSet()) { it in lowImportance && it !in highImportance }
+    }
+
+    /**
+     * Whether `MENTION_ON_ALL_MESSAGES` turns an ordinary message into a badge.
+     *
+     * Only consulted for messages that are not already mentions: an unmuted all-messages channel
+     * badges everything, but as a lesser badge than a real ping.
+     */
+    @StoreThread
+    private fun isLowImportanceMention(channelId: Long, author: User?): Boolean {
+        if (author != null && author.id == myId) return false
+        if (!storeUserGuildSettings.getAccountNotificationSettingsInternal().mentionOnAllMessages) return false
+        val channel = storeChannels.getChannel(channelId) ?: return false
+        if (channel.isPrivate()) return false
+
+        if (channel.isThread()) {
+            if (!hasJoinedThread(channelId)) return false
+            val flags = getJoinedThreadFlags(channelId)
+            return flags and ThreadMemberFlags.ALL_MESSAGES == ThreadMemberFlags.ALL_MESSAGES
+        }
+
+        if (channel.isGuildVocalChannel()) return false
+        val guildSettings = storeUserGuildSettings.getGuildSettingsInternal()[channel.guildId]
+        // The channel's own override only. The reference deliberately does not consult the guild
+        // or the category here, unlike the DM branch above it, and the counts are filtered again
+        // at guild-rollup time.
+        if (guildSettings?.getChannelOverride(channelId)?.isMuted == true) return false
+
+        val resolved = ChannelNotificationSettingsUtils.resolveMessageNotifications(
+            channel,
+            guildSettings,
+            getGuildDefaultMessageNotifications(channel.guildId),
+        )
+        return resolved == ModelNotificationSettings.FREQUENCY_ALL
     }
 
     companion object {

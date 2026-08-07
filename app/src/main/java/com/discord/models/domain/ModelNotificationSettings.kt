@@ -1,5 +1,8 @@
 package com.discord.models.domain
 
+import com.discord.api.notification.ChannelNotificationSettingsFlags
+import com.discord.api.notification.GuildNotificationSettingsFlags
+import com.discord.api.notification.UnreadSetting
 import com.discord.utilities.time.Clock
 import com.google.gson.Gson
 import com.google.gson.TypeAdapter
@@ -24,9 +27,18 @@ class ModelNotificationSettings(
     val channelOverrides: List<ChannelOverride> = emptyList(),
     val version: Int = 0,
     val notifyHighlights: Int = HIGHLIGHTS_NULL,
+    val flags: Int = 0,
+    @SerializedName("mute_scheduled_events") val isMuteScheduledEvents: Boolean = false,
 ) {
     val isMuted: Boolean get() = derivedMute
     val muteEndTime: String? get() = muteConfig?.endTime
+
+    /** The guild's own unread default, before the channel and category overrides are applied. */
+    val unreadSetting: UnreadSetting get() = GuildNotificationSettingsFlags.unreadSetting(flags)
+
+    val isOptInChannelsEnabled: Boolean
+        get() = flags and GuildNotificationSettingsFlags.OPT_IN_CHANNELS_ON ==
+            GuildNotificationSettingsFlags.OPT_IN_CHANNELS_ON
 
     fun getChannelOverride(channelId: Long) = channelOverrides.firstOrNull { it.channelId == channelId }
 
@@ -65,6 +77,8 @@ class ModelNotificationSettings(
             channelOverrides.filterNot { it.channelId == channelId } + replacement,
             version,
             notifyHighlights,
+            this.flags,
+            isMuteScheduledEvents,
         )
     }
 
@@ -87,6 +101,8 @@ class ModelNotificationSettings(
         channelOverrides.map { it.copyAndRecomputeTransientFields(clock) },
         version,
         notifyHighlights,
+        flags,
+        isMuteScheduledEvents,
     )
 
     class ChannelOverride(
@@ -100,6 +116,17 @@ class ModelNotificationSettings(
         val isMuted: Boolean get() = derivedMute
         val muteEndTime: String? get() = muteConfig?.endTime
         internal val rawMuted: Boolean get() = muted
+
+        /** This channel's own unread override, ignoring the category and guild it inherits from. */
+        val unreadSetting: UnreadSetting get() = ChannelNotificationSettingsFlags.unreadSetting(flags)
+
+        val isOptedIn: Boolean
+            get() = flags and ChannelNotificationSettingsFlags.OPT_IN_ENABLED ==
+                ChannelNotificationSettingsFlags.OPT_IN_ENABLED
+
+        val isFavorite: Boolean
+            get() = flags and ChannelNotificationSettingsFlags.FAVORITED ==
+                ChannelNotificationSettingsFlags.FAVORITED
 
         fun getForumPostNotificationSetting(): Int = when {
             flags and FORUM_THREAD_CREATED_OFF == FORUM_THREAD_CREATED_OFF -> FORUM_THREAD_CREATED_OFF
@@ -140,7 +167,8 @@ class ModelNotificationSettings(
         muted == other.muted && muteConfig == other.muteConfig && derivedMute == other.derivedMute &&
         isMobilePush == other.isMobilePush && messageNotifications == other.messageNotifications &&
         guildId == other.guildId && channelOverrides == other.channelOverrides &&
-        version == other.version && notifyHighlights == other.notifyHighlights
+        version == other.version && notifyHighlights == other.notifyHighlights &&
+        flags == other.flags && isMuteScheduledEvents == other.isMuteScheduledEvents
 
     override fun hashCode() = arrayOf(
         isSuppressEveryone,
@@ -154,13 +182,16 @@ class ModelNotificationSettings(
         channelOverrides,
         version,
         notifyHighlights,
+        flags,
+        isMuteScheduledEvents,
     ).contentHashCode()
 
     override fun toString() = "ModelNotificationSettings(" +
         "suppressEveryone=$isSuppressEveryone, suppressRoles=$isSuppressRoles, muted=$isMuted, " +
         "muteConfig=$muteConfig, derivedMute=$derivedMute, mobilePush=$isMobilePush, " +
         "messageNotifications=$messageNotifications, guildId=$guildId, channelOverrides=$channelOverrides, " +
-        "version=$version, notifyHighlights=$notifyHighlights)"
+        "version=$version, notifyHighlights=$notifyHighlights, flags=$flags, " +
+        "muteScheduledEvents=$isMuteScheduledEvents)"
 
     companion object {
         const val FREQUENCY_ALL = 0
@@ -171,8 +202,8 @@ class ModelNotificationSettings(
         const val HIGHLIGHTS_DISABLED = 1
         const val HIGHLIGHTS_ENABLED = 2
         const val NEW_FORUM_POSTS_UNSET = 0
-        const val FORUM_THREAD_CREATED_OFF = 8192
-        const val FORUM_THREAD_CREATED_ON = 16384
+        const val FORUM_THREAD_CREATED_OFF = ChannelNotificationSettingsFlags.NEW_FORUM_THREADS_OFF
+        const val FORUM_THREAD_CREATED_ON = ChannelNotificationSettingsFlags.NEW_FORUM_THREADS_ON
         const val FORUM_THREAD_CREATED_MASK = FORUM_THREAD_CREATED_OFF or FORUM_THREAD_CREATED_ON
 
         private fun isMuted(muted: Boolean, config: ModelMuteConfig?, now: Long) =
@@ -226,6 +257,8 @@ private class ModelNotificationSettingsTypeAdapter(private val gson: Gson) : Typ
             json["version"]?.takeUnless { it.isJsonNull }?.asInt ?: 0,
             json["notify_highlights"]?.takeUnless { it.isJsonNull }?.asInt
                 ?: ModelNotificationSettings.HIGHLIGHTS_NULL,
+            json["flags"]?.takeUnless { it.isJsonNull }?.asInt ?: 0,
+            json["mute_scheduled_events"]?.takeUnless { it.isJsonNull }?.asBoolean ?: false,
         )
     }
 

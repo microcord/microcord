@@ -316,7 +316,7 @@ class GatewaySocket(
         token = data.token
         send(
             Opcode.IDENTIFY,
-            Identify(data.token, 100, true, 351, identifyProperties(), data.clientState),
+            Identify(data.token, 100, true, CAPABILITIES, identifyProperties(), data.clientState),
         )
     }
 
@@ -492,6 +492,12 @@ class GatewaySocket(
     private fun logError(message: String, error: Throwable) { runCatching { Log.e(TAG, message, error) } }
 
     private companion object {
+
+        /**
+         * Identify capabilities. `NON_CHANNEL_READ_STATES` (1 shl 7) is what makes READY
+         * carry guild-event and onboarding read states; without it they never arrive.
+         */
+        private const val CAPABILITIES = 479L
         const val TAG = "ManticordGateway"
         const val HELLO_TIMEOUT_MS = 20_000L
         const val RESUME_WINDOW_MS = 180_000L

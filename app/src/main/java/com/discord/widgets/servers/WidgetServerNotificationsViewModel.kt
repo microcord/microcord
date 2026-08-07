@@ -5,6 +5,10 @@ import androidx.annotation.MainThread
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isCategory
 import com.discord.api.channel.isTextChannel
+import com.discord.api.guild.GuildFeature
+import com.discord.api.notification.AccountNotificationSettings
+import com.discord.api.notification.GuildNotificationSettingsFlags
+import com.discord.api.notification.UnreadSetting
 import com.discord.app.AppViewModel
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.guild.Guild
@@ -44,6 +48,7 @@ class WidgetServerNotificationsViewModel(
         val guildChannels: Map<Long, Channel>,
         val channelPermissions: Map<Long, Long>,
         val highlightsEnabled: Boolean,
+        val accountSettings: AccountNotificationSettings,
     )
 
     sealed class ViewState {
@@ -59,7 +64,28 @@ class WidgetServerNotificationsViewModel(
             val highlightsEnabled: Boolean,
             val isAboveNotifyAllSize: Boolean,
             val isAboveHighlightsSize: Boolean,
+            val useNewNotifications: Boolean,
+            val supportsChannelOptIn: Boolean,
         ) : ViewState() {
+
+            /**
+             * The switch reads "Show All Channels", so it is on when opt-in is *off*. Inverted in
+             * the reference too; the stored flag is the restrictive one.
+             */
+            val showAllChannels: Boolean get() = !guildSettings.isOptInChannelsEnabled
+
+            /**
+             * The guild's own unread default. Unlike the channel screen this is not resolved
+             * further: there is nothing above a guild to inherit from.
+             */
+            val unreadSetting: UnreadSetting
+                get() = GuildNotificationSettingsFlags.unreadSetting(guildSettings.flags).takeIf {
+                    it != UnreadSetting.UNSET
+                } ?: if (notificationsSetting == ModelNotificationSettings.FREQUENCY_ALL) {
+                    UnreadSetting.ALL_MESSAGES
+                } else {
+                    UnreadSetting.ONLY_MENTIONS
+                }
             /** A guild with no explicit frequency inherits the guild's own default. */
             val notificationsSetting: Int
                 get() = if (guildSettings.messageNotifications != ModelNotificationSettings.FREQUENCY_UNSET) {
@@ -99,6 +125,15 @@ class WidgetServerNotificationsViewModel(
             context,
             loaded.guild,
             suppressRoles = !loaded.guildSettings.isSuppressRoles,
+        )
+    }
+
+    @MainThread
+    fun toggleMuteScheduledEvents(context: Context) = withLoaded { loaded ->
+        guildSettingsStore.setGuildToggles(
+            context,
+            loaded.guild,
+            muteScheduledEvents = !loaded.guildSettings.isMuteScheduledEvents,
         )
     }
 
@@ -160,6 +195,8 @@ class WidgetServerNotificationsViewModel(
                 highlightsEnabled = storeState.highlightsEnabled,
                 isAboveNotifyAllSize = isAboveNotifyAllSize,
                 isAboveHighlightsSize = storeState.highlightsEnabled && isAboveNotifyAllSize,
+                useNewNotifications = storeState.accountSettings.useNewNotifications,
+                supportsChannelOptIn = guild.features.contains(GuildFeature.COMMUNITY),
             ),
         )
     }
@@ -213,7 +250,8 @@ class WidgetServerNotificationsViewModel(
             StoreStream.getChannels().observeChannelsForGuild(guildId),
             StoreStream.getPermissions().observeChannelPermissionsForGuild(guildId),
             highlightsEnabledSource,
-        ) { guild, guildSettings, guildProfile, channels, permissions, highlightsEnabled ->
+            StoreStream.getUserGuildSettings().observeAccountNotificationSettings(),
+        ) { guild, guildSettings, guildProfile, channels, permissions, highlightsEnabled, account ->
             StoreState(
                 guild = guild,
                 guildSettings = guildSettings,
@@ -221,6 +259,7 @@ class WidgetServerNotificationsViewModel(
                 guildChannels = channels,
                 channelPermissions = permissions,
                 highlightsEnabled = highlightsEnabled,
+                accountSettings = account,
             )
         }.distinctUntilChanged()
     }

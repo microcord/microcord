@@ -79,6 +79,7 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
         val channel = channel ?: return
         val boundView = view ?: return
         val channelId = channel.id
+        StoreStream.getMessageAck().ackPins(channelId)
         subscription?.unsubscribe()
         subscription = observeModel(requireContext(), channelId, channel, StoreStream.getPinnedMessages()).subscribe { (messages, data) ->
             boundView.post {

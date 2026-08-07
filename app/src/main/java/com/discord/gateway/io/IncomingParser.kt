@@ -2,6 +2,7 @@ package com.discord.gateway.io
 
 import com.discord.api.auth.AuthSessionChange
 import com.discord.api.channel.Channel
+import com.discord.api.channel.ChannelPinsUpdate
 import com.discord.api.channel.ChannelRecipient
 import com.discord.api.commands.ApplicationCommandAutocompleteResult
 import com.discord.api.commands.GuildApplicationCommands
@@ -46,6 +47,7 @@ import com.discord.models.domain.ModelChannelUnreadUpdate
 import com.discord.models.domain.ModelGuildIntegration
 import com.discord.models.domain.ModelGuildMemberListUpdate
 import com.discord.models.domain.ModelMessageDelete
+import com.discord.api.notification.AccountNotificationSettings
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelReadState
@@ -118,6 +120,7 @@ class IncomingParser(private val gson: Gson) {
         "USER_SETTINGS_UPDATE" -> gson.fromJson(data, ModelUserSettings::class.java)
         "USER_SETTINGS_PROTO_UPDATE" -> gson.fromJson(data, UserSettingsProtoUpdate::class.java)
         "USER_GUILD_SETTINGS_UPDATE" -> gson.fromJson(data, ModelNotificationSettings::class.java)
+        "NOTIFICATION_SETTINGS_UPDATE" -> gson.fromJson(data, AccountNotificationSettings::class.java)
         "USER_NOTE_UPDATE" -> gson.fromJson(data, ModelUserNote.Update::class.java)
         "USER_REQUIRED_ACTION_UPDATE" -> gson.fromJson(data, UserRequiredActionUpdate::class.java)
         "AUTH_SESSION_CHANGE" -> gson.fromJson(data, AuthSessionChange::class.java)
@@ -166,6 +169,7 @@ class IncomingParser(private val gson: Gson) {
         "THREAD_CREATE", "THREAD_UPDATE", "THREAD_DELETE" -> gson.fromJson(data, Channel::class.java)
         "CHANNEL_RECIPIENT_ADD", "CHANNEL_RECIPIENT_REMOVE" -> gson.fromJson(data, ChannelRecipient::class.java)
         "CHANNEL_UNREAD_UPDATE" -> gson.fromJson(data, ModelChannelUnreadUpdate::class.java)
+        "CHANNEL_PINS_UPDATE" -> gson.fromJson(data, ChannelPinsUpdate::class.java)
         "THREAD_LIST_SYNC" -> gson.fromJson(data, ModelThreadListSync::class.java)
         "THREAD_MEMBER_UPDATE" -> gson.fromJson(data, ThreadMemberUpdate::class.java)
         "THREAD_MEMBERS_UPDATE" -> gson.fromJson(data, ThreadMembersUpdate::class.java)

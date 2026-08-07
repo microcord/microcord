@@ -18,8 +18,14 @@ data class ModelRemoteAuthHandshake(val handshakeToken: String) {
 /** Preview thumbnail for a live application stream. */
 data class ModelApplicationStreamPreview(val url: String)
 
-/** One RTC region plus the endpoint IPs used to measure latency against it. */
+/**
+ * One RTC region plus the endpoint IPs used to measure latency against it.
+ *
+ * [ips] is nullable because the probe list is fetched from `latency.discord.media`, which is outside
+ * the versioned API and has been seen to return entries without one; Gson would otherwise write a
+ * null through the non-null type and the media engine would walk a missing array.
+ */
 data class ModelRtcLatencyRegion(
     val region: String,
-    val ips: List<String>,
+    val ips: List<String>? = null,
 )

@@ -83,7 +83,9 @@ class GatewaySocketTest {
         val identify = harness.socket.lastPayload()
         assertEquals(2, identify["op"].asInt)
         assertEquals(100, identify["d"].asJsonObject["large_threshold"].asInt)
-        assertEquals(351, identify["d"].asJsonObject["capabilities"].asInt)
+        // 479 = 351 plus NON_CHANNEL_READ_STATES (1 shl 7), which READY needs to send
+        // guild-event and onboarding read states.
+        assertEquals(479, identify["d"].asJsonObject["capabilities"].asInt)
         assertFalse(harness.handler.readyStates.last())
     }
 

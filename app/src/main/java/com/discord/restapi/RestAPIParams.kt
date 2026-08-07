@@ -124,9 +124,26 @@ object RestAPIParams {
 
     class ChannelFollowerPost(val webhookChannelId: Long)
 
+    /**
+     * `POST read-states/ack-bulk`. `read_state_type` is omitted for ordinary channels, which the
+     * server then reads from the channel itself.
+     */
+    data class BulkAck(@SerializedName("read_states") val readStates: List<ReadState>) {
+        data class ReadState(
+            @SerializedName("channel_id") val channelId: Long,
+            @SerializedName("message_id") val messageId: Long,
+            @SerializedName("read_state_type") val readStateType: Int? = null,
+        )
+    }
+
     data class ChannelMessagesAck(
         val manual: Boolean?,
         val mentionCount: Int?,
+        /** The rolling token from the previous ack; omitted on the first of a session. */
+        val token: String? = null,
+        @SerializedName("last_viewed") val lastViewed: Int? = null,
+        /** Only sent when the classification bits changed, per the reference. */
+        val flags: Int? = null,
     )
 
     /**
@@ -973,6 +990,8 @@ object RestAPIParams {
         val messageNotifications: Int? = null,
         val channelOverrides: Map<Long, ChannelOverride>? = null,
         val notifyHighlights: Int? = null,
+        val flags: Int? = null,
+        val muteScheduledEvents: Boolean? = null,
     ) {
         constructor(channelId: Long, channelOverride: ChannelOverride) :
             this(channelOverrides = mapOf(channelId to channelOverride))

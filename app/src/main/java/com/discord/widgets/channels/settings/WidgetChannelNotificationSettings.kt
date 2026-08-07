@@ -17,6 +17,7 @@ import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isStageVoiceChannel
 import com.discord.api.channel.isTextChannel
 import com.discord.api.channel.isThread
+import com.discord.api.notification.UnreadSetting
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.models.domain.ModelNotificationSettings
@@ -36,6 +37,11 @@ import rx.Observable
 class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_notification_settings) {
 
     private lateinit var radioManager: RadioManager
+    private lateinit var unreadRadioManager: RadioManager
+    private lateinit var presetRadioManager: RadioManager
+
+    /** Set once the viewer opens Custom, so the detail sections stay put while they use them. */
+    private var customExpanded = false
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -46,6 +52,20 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
                 view.findViewById<CheckedSetting>(R.id.frequency_radio_all),
                 view.findViewById<CheckedSetting>(R.id.frequency_radio_mentions),
                 view.findViewById<CheckedSetting>(R.id.frequency_radio_nothing),
+            ),
+        )
+        presetRadioManager = RadioManager(
+            listOf(
+                view.findViewById<CheckedSetting>(R.id.preset_radio_all),
+                view.findViewById<CheckedSetting>(R.id.preset_radio_mentions),
+                view.findViewById<CheckedSetting>(R.id.preset_radio_nothing),
+                view.findViewById<CheckedSetting>(R.id.preset_radio_custom),
+            ),
+        )
+        unreadRadioManager = RadioManager(
+            listOf(
+                view.findViewById<CheckedSetting>(R.id.unread_radio_all),
+                view.findViewById<CheckedSetting>(R.id.unread_radio_mentions),
             ),
         )
         view.findViewById<View>(R.id.channel_notification_settings_system).apply {
@@ -132,6 +152,8 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
             !isPrivate && root.findViewById<View>(R.id.channel_notification_settings_system).isVisible
         if (isPrivate) {
             root.findViewById<LinearLayout>(R.id.forum_channel_notification_settings).isVisible = false
+            root.findViewById<LinearLayout>(R.id.channel_settings_presets_wrap).isVisible = false
+            root.findViewById<LinearLayout>(R.id.channel_settings_unread_wrap).isVisible = false
             return
         }
 
@@ -148,6 +170,10 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
                 },
             ),
         )
+
+        configurePresets(root, model)
+        configureUnreads(root, model)
+        configureDetailVisibility(root, model)
 
         if (channel.isThreadOnlyChannel()) {
             configureForum(root, model)
@@ -177,6 +203,120 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
         val selected = model.notificationSetting == frequency
         radio.setButtonAlpha(if (selected && model.notificationSettingIsInherited) RADIO_DIMMED_ALPHA else 1f)
         if (selected) radioManager.setChecked(radio)
+    }
+
+    /**
+     * Presets set the notification level and the unread badge together; the sections below stay
+     * visible so either half can still be changed on its own, which is what puts the row on
+     * "Custom".
+     */
+    private fun configurePresets(root: View, model: Model) {
+        val eligible = model.useNewNotifications && isEligibleForUnreadSetting(model.channel)
+        root.findViewById<LinearLayout>(R.id.channel_settings_presets_wrap).isVisible = eligible
+        if (!eligible) return
+
+        configurePresetRadio(root.findViewById(R.id.preset_radio_all), model, Preset.ALL_MESSAGES)
+        configurePresetRadio(root.findViewById(R.id.preset_radio_mentions), model, Preset.MENTIONS)
+        configurePresetRadio(root.findViewById(R.id.preset_radio_nothing), model, Preset.NOTHING)
+        root.findViewById<CheckedSetting>(R.id.preset_radio_mentions).setText(
+            SettingsStrings.render(requireContext(), R.string.form_label_only_mentions),
+        )
+        root.findViewById<CheckedSetting>(R.id.preset_radio_custom).apply {
+            setContainerClickListener {
+                customExpanded = true
+                presetRadioManager.setChecked(this)
+                view?.let { configureDetailVisibility(it, model) }
+            }
+            if (isCustom(model)) presetRadioManager.setChecked(this)
+        }
+    }
+
+    /**
+     * The notification and unread sections are the contents of Custom, so they travel with it.
+     *
+     * Without `USE_NEW_NOTIFICATIONS` there are no presets to hide behind, so the notification
+     * section stays where it has always been.
+     */
+    private fun configureDetailVisibility(root: View, model: Model) {
+        val isPrivate = model.channel.isPrivate()
+        val presetsShown = model.useNewNotifications && isEligibleForUnreadSetting(model.channel)
+        val expanded = !presetsShown || isCustom(model)
+        root.findViewById<View>(R.id.channel_settings_notifications_frequency_wrap).isVisible =
+            expanded && !isPrivate
+        root.findViewById<LinearLayout>(R.id.channel_settings_unread_wrap).isVisible =
+            presetsShown && isCustom(model)
+    }
+
+    /** Custom is on when the pair matches no preset, or the viewer opened it themselves. */
+    private fun isCustom(model: Model) = presetOf(model) == null || customExpanded
+
+    private fun configurePresetRadio(radio: CheckedSetting, model: Model, preset: Preset) {
+        radio.setContainerClickListener {
+            customExpanded = false
+            StoreStream.getUserGuildSettings()
+                .setChannelPreset(it.context, model.channel, preset.notifications, preset.unread)
+        }
+        if (presetOf(model) == preset) presetRadioManager.setChecked(radio)
+    }
+
+    private fun presetOf(model: Model): Preset? = Preset.entries.firstOrNull {
+        it.notifications == model.notificationSetting && it.unread == model.resolvedUnreadSetting
+    }
+
+    private enum class Preset(val notifications: Int, val unread: UnreadSetting) {
+        ALL_MESSAGES(ModelNotificationSettings.FREQUENCY_ALL, UnreadSetting.ALL_MESSAGES),
+        MENTIONS(ModelNotificationSettings.FREQUENCY_MENTIONS, UnreadSetting.ONLY_MENTIONS),
+        NOTHING(ModelNotificationSettings.FREQUENCY_NOTHING, UnreadSetting.ONLY_MENTIONS),
+    }
+
+    /**
+     * The unread section only exists for accounts carrying `USE_NEW_NOTIFICATIONS`; without it the
+     * server ignores the flags and unreads follow the notification level as before.
+     */
+    private fun configureUnreads(root: View, model: Model) {
+        val eligible = model.useNewNotifications && isEligibleForUnreadSetting(model.channel)
+        root.findViewById<LinearLayout>(R.id.channel_settings_unread_wrap).isVisible = eligible
+        if (!eligible) return
+
+        val notifiesOnEveryMessage = model.notificationSetting == ModelNotificationSettings.FREQUENCY_ALL
+        configureUnreadRadio(
+            root.findViewById(R.id.unread_radio_all),
+            model,
+            UnreadSetting.ALL_MESSAGES,
+            disabled = false,
+        )
+        configureUnreadRadio(
+            root.findViewById(R.id.unread_radio_mentions),
+            model,
+            UnreadSetting.ONLY_MENTIONS,
+            disabled = notifiesOnEveryMessage,
+        )
+        root.findViewById<CheckedSetting>(R.id.unread_radio_mentions).setText(
+            SettingsStrings.render(requireContext(), R.string.form_label_only_mentions),
+        )
+    }
+
+    private fun configureUnreadRadio(
+        radio: CheckedSetting,
+        model: Model,
+        setting: UnreadSetting,
+        disabled: Boolean,
+    ) {
+        radio.setContainerClickListener(null)
+        radio.setDisabledTooltip(null)
+        if (disabled) {
+            radio.setDisabledTooltip(R.string.notification_settings_unread_mention_only_disabled)
+        } else {
+            radio.setContainerClickListener {
+                StoreStream.getUserGuildSettings().setChannelUnreadSetting(it.context, model.channel, setting)
+            }
+        }
+        if (model.resolvedUnreadSetting == setting) unreadRadioManager.setChecked(radio)
+    }
+
+    private fun isEligibleForUnreadSetting(channel: Channel) = when (channel.type) {
+        Channel.GUILD_TEXT, Channel.CATEGORY, Channel.GUILD_FORUM, Channel.GUILD_ANNOUNCEMENT -> true
+        else -> false
     }
 
     private fun configureForum(root: View, model: Model) {
@@ -230,6 +370,8 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
         val parentNotificationSetting: Int?,
         val notificationSettingIsInherited: Boolean,
         val isAboveNotifyAllSize: Boolean,
+        val useNewNotifications: Boolean,
+        val resolvedUnreadSetting: UnreadSetting,
     ) {
         companion object {
             fun observe(channelId: Long): Observable<Model?> =
@@ -246,7 +388,8 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
                         StoreStream.getGuilds().observeGuild(channel.guildId),
                         StoreStream.getUserGuildSettings().observeGuildSettings(channel.guildId),
                         StoreStream.getGuildProfiles().observeGuildProfile(channel.guildId),
-                    ) { joinedThread, parent, guild, settings, profile ->
+                        StoreStream.getUserGuildSettings().observeAccountNotificationSettings(),
+                    ) { joinedThread, parent, guild, settings, profile, account ->
                         guild?.let {
                             create(
                                 channel,
@@ -255,6 +398,7 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
                                 settings,
                                 joinedThread,
                                 profile?.data?.approximateMemberCount,
+                                account.useNewNotifications,
                             )
                         }
                     }
@@ -282,6 +426,8 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
                     parentNotificationSetting = settings.messageNotifications,
                     notificationSettingIsInherited = overrideFrequency == null,
                     isAboveNotifyAllSize = false,
+                    useNewNotifications = false,
+                    resolvedUnreadSetting = UnreadSetting.ALL_MESSAGES,
                 )
             }
 
@@ -292,6 +438,7 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
                 guildSettings: ModelNotificationSettings,
                 joinedThread: StoreThreadsJoined.JoinedThread?,
                 approximateMemberCount: Int?,
+                useNewNotifications: Boolean = false,
             ): Model {
                 val override = guildSettings.getChannelOverride(channel.id)
                 val parentNotificationSetting = notificationLevel(guildSettings, parentChannel, guild)
@@ -325,6 +472,13 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
                     parentNotificationSetting = parentNotificationSetting,
                     notificationSettingIsInherited = notificationSetting == ModelNotificationSettings.FREQUENCY_UNSET,
                     isAboveNotifyAllSize = (approximateMemberCount ?: 0) > 2_500,
+                    useNewNotifications = useNewNotifications,
+                    resolvedUnreadSetting = ChannelNotificationSettingsUtils.resolveUnreadSetting(
+                        channel,
+                        guildSettings,
+                        guild.defaultMessageNotifications,
+                        useNewNotifications,
+                    ),
                 )
             }
 

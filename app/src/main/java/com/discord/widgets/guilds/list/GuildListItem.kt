@@ -34,6 +34,8 @@ sealed class GuildListItem(val itemId: Long) {
     data class GuildItem(
         val guild: Guild,
         override val mentionCount: Int,
+        /** Every mention here came from an all-messages channel, so the badge is drawn muted. */
+        val isMentionLowImportance: Boolean,
         val isLurkingGuild: Boolean,
         override val isUnread: Boolean,
         val isSelected: Boolean,
@@ -68,6 +70,7 @@ sealed class GuildListItem(val itemId: Long) {
         val isAnyGuildConnectedToVoice: Boolean,
         val isAnyGuildConnectedToStageChannel: Boolean,
         override val mentionCount: Int,
+        val isMentionLowImportance: Boolean,
         override val isUnread: Boolean,
         /** True while a drag hovers this folder and dropping would add the guild to it. */
         val isTargetedForFolderAddition: Boolean = false,

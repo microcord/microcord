@@ -255,6 +255,22 @@ class ChannelSelector(
             }
     }
 
+    /**
+     * Opens a vocal channel's chat without joining the call.
+     *
+     * [selectChannel] cannot do this for a stage: it treats selecting one as "join the stage" and
+     * deliberately leaves the text area on the guild's default channel, which is what a stage meant
+     * before it had a chat of its own. Reading the chat is now a separate intent from being on
+     * stage, so this selects the channel itself and connects nothing.
+     */
+    fun openVocalChannelChat(
+        channel: Channel,
+        analyticsLocation: SelectedChannelAnalyticsLocation? = null,
+    ) {
+        StoreStream.getNavigation().setNavigationPanelAction(StoreNavigation.PanelAction.CLOSE)
+        gotoChannel(channel.guildId, channel.id, null, analyticsLocation)
+    }
+
     /** [selectChannel] for a channel that is already in hand. A `null` channel is a no-op. */
     @JvmOverloads
     fun selectChannel(

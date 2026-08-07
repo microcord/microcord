@@ -5,6 +5,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.annotation.MainThread
 import com.discord.R
+import com.discord.api.notification.UnreadSetting
 import com.discord.app.AppFragment
 import com.discord.i18n.i18nFormat
 import com.discord.i18n.i18nPlural
@@ -35,6 +36,34 @@ class WidgetChatStatus : AppFragment(R.layout.widget_chat_status) {
         Model.get()
             .ui(this)
             .appSubscribe(WidgetChatStatus::class.java) { configureUI(it) }
+        StoreStream.getUnreadSettingNotice().observeNotices()
+            .ui(this)
+            .appSubscribe(WidgetChatStatus::class.java) { showUnreadSettingNotice(it) }
+        StoreStream.getChannelsSelected().observeId()
+            .distinctUntilChanged()
+            .ui(this)
+            .appSubscribe(WidgetChatStatus::class.java) { hideUnreadSettingNotice() }
+    }
+
+    /**
+     * Offers to undo an automatic promotion to full unread badges. Dismissed on the next selection
+     * rather than on a timer, so it cannot vanish while it is being read.
+     */
+    @MainThread
+    private fun hideUnreadSettingNotice() {
+        view?.findViewById<LinearLayout>(R.id.chat_status_unread_setting_notice)?.visibility = View.GONE
+    }
+
+    @MainThread
+    private fun showUnreadSettingNotice(channelId: Long) {
+        val view = view ?: return
+        val channel = StoreStream.getChannels().getChannel(channelId) ?: return
+        view.findViewById<LinearLayout>(R.id.chat_status_unread_setting_notice).visibility = View.VISIBLE
+        view.findViewById<View>(R.id.chat_status_unread_setting_undo).setOnClickListener {
+            StoreStream.getUserGuildSettings()
+                .setChannelUnreadSetting(it.context, channel, UnreadSetting.ONLY_MENTIONS)
+            view.findViewById<LinearLayout>(R.id.chat_status_unread_setting_notice).visibility = View.GONE
+        }
     }
 
     @MainThread
@@ -139,7 +168,7 @@ class WidgetChatStatus : AppFragment(R.layout.widget_chat_status) {
                     unreadMessageId = marker.messageId ?: 0L,
                     unreadChannelId = marker.channelId,
                     unreadCount = unread.count.coerceIn(0, cap),
-                    isUnreadEstimate = unread.count >= cap,
+                    isUnreadEstimate = unread.estimated || unread.count >= cap,
                 )
             }
         }

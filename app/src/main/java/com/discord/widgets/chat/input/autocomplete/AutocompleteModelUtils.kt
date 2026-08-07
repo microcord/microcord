@@ -1,6 +1,7 @@
 package com.discord.widgets.chat.input.autocomplete
 
 import com.discord.api.channel.isGuildTextyChannel
+import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.commands.ApplicationCommandType
 import com.discord.api.commands.CommandChoice
 import com.discord.models.commands.ApplicationCommandOption
@@ -168,7 +169,9 @@ object AutocompleteModelUtils {
         autocompletables: List<Autocompletable>,
     ): List<Autocompletable> = autocompletables.filter {
         when (it) {
-            is ChannelAutocompletable -> it.channel.isGuildTextyChannel()
+            // Vocal channels carry a chat, so a mention of one resolves to a real link.
+            is ChannelAutocompletable ->
+                it.channel.isGuildTextyChannel() || it.channel.isGuildVocalChannel()
             is UserAutocompletable -> it.canUserReadChannel
             is RoleAutocompletable -> it.canMention
             else -> true

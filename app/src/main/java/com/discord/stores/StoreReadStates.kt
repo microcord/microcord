@@ -5,7 +5,7 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.isGuildForumPost
 import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isThread
-import com.discord.api.channel.isVoiceChannel
+import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.application.Unread
 import com.discord.models.domain.ModelNotificationSettings
@@ -168,8 +168,10 @@ class StoreReadStates(private val clock: Clock) : Store() {
             if (channel.isThread() && forumPost && activeForumThread == null) continue
             if (!PermissionUtils.hasAccess(channel, permissions[channelId])) continue
             if (isChannelMuted(channel, guildSettings, joinedThread)) continue
-            if (channel.isVoiceChannel() && channel.id != selectedVoiceChannelId) continue
-            if (channel.isVoiceChannel() && !wasMessageSentAfterTimestamp(
+            // A vocal channel's chat only shows a dot while you are in it: the row is otherwise
+            // showing who is connected, and a permanent dot there reads as activity in the call.
+            if (channel.isGuildVocalChannel() && channel.id != selectedVoiceChannelId) continue
+            if (channel.isGuildVocalChannel() && !wasMessageSentAfterTimestamp(
                     UtcDateTime(StoreStream.getVoiceChannelSelected().getTimeSelectedMs()),
                     mostRecentMessageId,
                 )
@@ -181,6 +183,10 @@ class StoreReadStates(private val clock: Clock) : Store() {
             if (!MessageUtils.isNewer(ackMessageId, mostRecentMessageId)) continue
 
             unreadChannels += channelId
+            // A plain unread in a vocal channel never reaches the guild pill — only a mention
+            // does, and mentions are counted separately. Chat in a call is constant and would
+            // otherwise leave every server the viewer talks in permanently marked unread.
+            if (channel.isGuildVocalChannel()) continue
             var parentMuted = isChannelMuted(parent, guildSettings, joinedThread)
             if (!parentMuted && channel.isThread() && parent != null) {
                 parentMuted = isChannelMuted(channels[parent.parentId], guildSettings, joinedThread)

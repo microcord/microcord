@@ -11,8 +11,14 @@ import com.discord.models.message.Message
 data class Unread(
     val marker: Marker = Marker(),
     val count: Int = 0,
+    /** True when [count] is a floor rather than the real number. See [isEstimated]. */
+    val estimated: Boolean = false,
 ) {
-    constructor(marker: Marker, messages: List<Message>) : this(marker, getTotalMessages(marker, messages))
+    constructor(marker: Marker, messages: List<Message>) : this(
+        marker,
+        getTotalMessages(marker, messages),
+        isEstimated(marker, messages),
+    )
 
     fun createWithEmptyCount(): Unread = Unread(marker, 0)
 
@@ -28,6 +34,17 @@ data class Unread(
     }
 
     companion object {
+        /**
+         * Whether the acked message is missing from the window we hold.
+         *
+         * When it is, every loaded message counts as unread and the true number is however many
+         * more the client has not fetched, so the count is only a lower bound.
+         */
+        private fun isEstimated(marker: Marker, messages: List<Message>): Boolean {
+            if (messages.isEmpty() || marker.messageId == null) return false
+            return messages.none { it.id == marker.messageId }
+        }
+
         private fun getTotalMessages(marker: Marker, messages: List<Message>): Int {
             if (messages.isEmpty() || marker.messageId == null) return 0
             var count = 0

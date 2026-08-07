@@ -9,6 +9,8 @@ data class ChannelListItemThread(
     val selected: Boolean,
     override val mentionCount: Int,
     override val isUnread: Boolean,
+    override val isUnreadImportant: Boolean,
+    val isMentionLowImportance: Boolean,
     val isLocked: Boolean,
     val muted: Boolean,
 ) : ChannelListItem, WidgetChannelListUnreads.UnreadItem {

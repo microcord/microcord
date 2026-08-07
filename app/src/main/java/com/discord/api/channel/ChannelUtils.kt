@@ -98,6 +98,16 @@ fun Channel.isStageVoiceChannel(): Boolean = type == Channel.GUILD_STAGE_VOICE
 /** A private channel or any guild channel that renders a message list. */
 fun Channel.isTextChannel(): Boolean = isPrivate() || isGuildTextyChannel()
 
+/**
+ * Whether the channel carries a message history.
+ *
+ * Voice and stage channels have their own chat, so they hold messages, unread state and
+ * notification overrides like any text channel. This is deliberately *not* [isGuildTextyChannel]:
+ * that one answers "does this present as a text channel" and drives the `#` prefix, the channel
+ * icon, settings grouping and which channel a guild opens on — none of which voice should join.
+ */
+fun Channel.hasMessages(): Boolean = isTextChannel() || isGuildVocalChannel()
+
 /** Anything the user can be "in": a text-like channel or a voice channel. */
 fun Channel.isTextOrVoiceChannel(): Boolean = isTextChannel() || isVoiceChannel()
 
