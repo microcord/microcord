@@ -290,31 +290,14 @@ class MessageQueue @JvmOverloads constructor(
         if (attachments.isNullOrEmpty() || contentResolver == null) {
             return client.sendMessage(channelId, ready.message, captchaPolicy)
         }
-        val staged = mutableListOf<String>()
-        // Claimed by a message that was actually sent, so it must survive the unsubscribe that
-        // follows completion. `settled` also keeps the error and unsubscribe paths from each
-        // releasing the same files.
-        var settled = false
-        fun release() {
-            if (settled) return
-            settled = true
-            if (staged.isNotEmpty()) CloudUploader.discard(staged)
-        }
-        return CloudUploader.stage(
+        return CloudUploader.stageAndSend(
             channelId,
             contentResolver,
             attachments,
             onProgress = { upload -> onProgress(listOf(upload)) },
-        )
-            .doOnNext { uploads -> staged += uploads.map { it.uploadedFilename } }
-            .flatMap { uploads ->
-                client.sendMessage(channelId, claimUploads(ready.message, uploads), captchaPolicy)
-            }
-            .doOnNext { settled = true }
-            .doOnError { release() }
-            // `doOnUnsubscribe` also runs on normal completion, so releasing unconditionally here
-            // would delete the very files the sent message just claimed.
-            .doOnUnsubscribe { release() }
+        ) { uploads ->
+            client.sendMessage(channelId, claimUploads(ready.message, uploads), captchaPolicy)
+        }
     }
 
     private fun doSendApplicationCommand(

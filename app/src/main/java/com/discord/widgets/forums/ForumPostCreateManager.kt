@@ -8,11 +8,12 @@ import com.discord.app.AppToast
 import com.discord.models.domain.NonceGenerator
 import com.discord.restapi.RestAPIParams
 import com.discord.utilities.attachments.AttachmentLimits
-import com.discord.restapi.PayloadJSON
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreSlowMode
 import com.discord.stores.StoreThreadDraft.ThreadDraftState
+import com.discord.utilities.attachments.CloudUploader
 import com.discord.utilities.attachments.UploadAttachment
+import com.discord.utilities.messagesend.claimUploads
 import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rest.SendUtils
@@ -162,17 +163,23 @@ object ForumPostCreateManager {
             nonce = NonceGenerator.computeNonce().toString(),
             stickerIds = emptyList(),
         )
-        return SendUtils.getSendPayload(context.contentResolver, message, attachments)
+        return SendUtils.getSendPayload(context.contentResolver, message, attachments, inlineFileBodies = false)
             .filterIs<SendUtils.SendPayload.ReadyToSend>()
             .take(1)
             .flatMap { payload ->
                 val api = RestAPI.apiOrNull
                     ?: return@flatMap Observable.error<Channel>(IllegalStateException("API unavailable"))
-                api.createForumPost(
-                    channelId,
-                    PayloadJSON(forumPostBody(name, autoArchiveDuration, payload.message, appliedTags)),
-                    payload.uploads.mapNotNull { it.part }.toTypedArray(),
-                )
+                fun post(body: RestAPIParams.Message) =
+                    api.createForumPost(channelId, forumPostBody(name, autoArchiveDuration, body, appliedTags))
+                if (attachments.isNullOrEmpty()) {
+                    post(payload.message)
+                } else {
+                    // The slots are reserved against the forum, not the post: the post does not
+                    // exist until this request creates it.
+                    CloudUploader.stageAndSend(channelId, context.contentResolver, attachments) { uploads ->
+                        post(claimUploads(payload.message, uploads))
+                    }
+                }
             }
     }
 
@@ -196,18 +203,15 @@ object ForumPostCreateManager {
             nonce = NonceGenerator.computeNonce().toString(),
             stickerIds = emptyList(),
         )
-        SendUtils.getSendPayload(context.contentResolver, message, attachments)
+        SendUtils.getSendPayload(context.contentResolver, message, attachments, inlineFileBodies = false)
             .filterIs<SendUtils.SendPayload.ReadyToSend>()
             .take(1)
             .flatMap { payload ->
                 val api = RestAPI.apiOrNull
                     ?: return@flatMap Observable.error<com.discord.api.message.Message>(IllegalStateException("API unavailable"))
-                api.editMessageWithAttachments(
-                    channelId,
-                    firstMessageId,
-                    PayloadJSON(payload.message),
-                    payload.uploads.mapNotNull { it.part }.toTypedArray(),
-                )
+                CloudUploader.stageAndSend(channelId, context.contentResolver, attachments) { uploads ->
+                    api.editMessage(channelId, firstMessageId, claimUploads(payload.message, uploads))
+                }
             }
             .restSubscribeOn()
             .ui()

@@ -978,22 +978,11 @@ interface RestAPIInterface {
         @Part files: Array<MultipartBody.Part>,
     ): Observable<Channel>
 
-    /** Adding media to a forum post's opening message, which the JSON edit cannot carry. */
-    @Multipart
-    @PATCH("channels/{channelId}/messages/{messageId}")
-    fun editMessageWithAttachments(
-        @Path("channelId") channelId: Long,
-        @Path("messageId") messageId: Long,
-        @Part("payload_json") payloadJson: PayloadJSON<RestAPIParams.Message>,
-        @Part files: Array<MultipartBody.Part>,
-    ): Observable<Message>
-
-    @Multipart
+    /** `use_nested_fields` is what makes the server read the nested `message` object. */
     @POST("channels/{channelId}/threads?use_nested_fields=true")
     fun createForumPost(
         @Path("channelId") channelId: Long,
-        @Part("payload_json") payloadJson: PayloadJSON<RestAPIParams.ForumThreadCreation>,
-        @Part files: Array<MultipartBody.Part>,
+        @Body body: RestAPIParams.ForumThreadCreation,
     ): Observable<Channel>
 
     @POST("channels/{channelId}/messages/{messageId}/threads")

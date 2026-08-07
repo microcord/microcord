@@ -69,6 +69,35 @@ object CloudUploader {
             .toList()
     }
 
+    /**
+     * Stages [attachments] and hands what landed to [send], releasing anything it never claimed.
+     *
+     * `settled` is what keeps the error and unsubscribe paths from each releasing the same files,
+     * and keeps normal completion — which also unsubscribes — from deleting the very files the
+     * request just claimed.
+     */
+    fun <T> stageAndSend(
+        channelId: Long,
+        resolver: ContentResolver,
+        attachments: List<UploadAttachment>,
+        onProgress: (FileUpload) -> Unit = {},
+        send: (List<StagedUpload>) -> Observable<T>,
+    ): Observable<T> {
+        val staged = mutableListOf<String>()
+        var settled = false
+        fun release() {
+            if (settled) return
+            settled = true
+            if (staged.isNotEmpty()) discard(staged)
+        }
+        return stage(channelId, resolver, attachments, onProgress = onProgress)
+            .doOnNext { uploads -> staged += uploads.map { it.uploadedFilename } }
+            .flatMap { uploads -> send(uploads) }
+            .doOnNext { settled = true }
+            .doOnError { release() }
+            .doOnUnsubscribe { release() }
+    }
+
     private fun stageOne(
         api: RestAPIInterface,
         channelId: Long,
