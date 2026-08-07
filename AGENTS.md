@@ -137,6 +137,11 @@ invalid decompiler constructs into the target.
   and styles. Do not introduce stock Android dialogs, buttons, text fields,
   progress indicators, or pickers when a Discord component exists; when none
   exists, create the smallest first-party Discord-themed view.
+- Every view created or inflated inside a themed user profile must consume the
+  resolved profile palette for surfaces, borders, primary/muted text, icons,
+  and controls. Never fall back to global theme attributes for dynamic profile
+  children; pass the profile colors into them and restore defaults when the
+  profile has no custom theme.
 - Match view state, visibility, interaction, scrolling, animation, lifecycle,
   restoration, accessibility, loading, empty, and error behavior.
 - Preserve the reference navigation chrome and exit behavior on every screen.

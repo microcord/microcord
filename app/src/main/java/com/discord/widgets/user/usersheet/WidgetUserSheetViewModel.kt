@@ -5,12 +5,15 @@ import android.util.Base64
 import androidx.annotation.StringRes
 import com.discord.R
 import com.discord.api.channel.Channel
+import com.discord.api.application.Application
+import com.discord.api.game.Game
 import com.discord.api.channel.isDM
 import com.discord.api.channel.isMultiUserDM
 import com.discord.api.channel.isStageVoiceChannel
 import com.discord.api.permission.Permission
 import com.discord.api.role.GuildRole
 import com.discord.api.user.UserProfile
+import com.discord.api.user.UserApplicationIdentity
 import com.discord.api.voice.state.StageRequestToSpeakState
 import com.discord.api.voice.state.VoiceState
 import com.discord.app.AppViewModel
@@ -116,6 +119,9 @@ class WidgetUserSheetViewModel(
         val permissions: Long?,
         val streamContext: StreamContext?,
         val userProfile: UserProfile,
+        val applications: Map<Long, Application> = emptyMap(),
+        val applicationIdentities: Map<Long, UserApplicationIdentity> = emptyMap(),
+        val games: Map<Long, Game> = emptyMap(),
         val userRelationshipType: Int?,
         val userNoteFetchState: StoreUserNotes.UserNoteState,
         /** The stage I am connected to, if my selected voice channel happens to be one. */
@@ -155,6 +161,9 @@ class WidgetUserSheetViewModel(
             val guildId: Long?,
             val guildMember: GuildMember?,
             val userProfile: UserProfile,
+            val applications: Map<Long, Application> = emptyMap(),
+            val applicationIdentities: Map<Long, UserApplicationIdentity> = emptyMap(),
+            val games: Map<Long, Game> = emptyMap(),
         ) : ViewState() {
 
             val actionVisibility: ActionVisibility = Companion.actionVisibility(
@@ -341,6 +350,9 @@ class WidgetUserSheetViewModel(
                 guildId = storeState.guild?.id,
                 guildMember = guildMember,
                 userProfile = storeState.userProfile,
+                applications = storeState.applications,
+                applicationIdentities = storeState.applicationIdentities,
+                games = storeState.games,
             ),
         )
     }

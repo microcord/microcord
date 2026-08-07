@@ -2950,6 +2950,32 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   removed from the action layout. The remaining upload/view controls bind through generated
   `WidgetGuildProfileActionsBinding`; View Server drops its 8dp leading gap when it is the sole action. Focused profile
   tests and `assembleDebug` pass; APK installed on A65.
+- Backported RN profile Boards from Hermes modules 4559-4573 and current `UserProfileContent`/`UserProfileWidgetsBoard`:
+  profile responses now retain typed widget payloads, widget application records are fetched through
+  `StoreApplication`, and user sheets expose conditional Main/Board tabs. Board cards preserve server order and render
+  RN's detailed favorite-game, compact rotation, and three-column played/want-to-play layouts with comments and tags;
+  application widgets fetch typed user application identities and render usernames, metadata, hero media, primary stats,
+  and discriminated dynamic text/number/image fields. Raw identity metadata JSON is not displayed. Tabs reset scroll to
+  their anchor without an intermediate smooth-scroll frame. Main/Board are overlaid pages that track horizontal drag
+  live and settle over 180ms without consuming vertical scroll; the tab indicator tracks the same fractional offset.
+  Drag frames move only the indicator; selected-tab text changes once after settlement to avoid midpoint flicker.
+  Indicator tracking starts at normal touch-slop and represents the Board edge as tab 1/offset 0, avoiding start/end jumps.
+  Swipe-driven tab selection preserves vertical scroll position; only direct tab taps anchor to the tab strip.
+  Rotation covers use fit-center and explicit row spacing;
+  game-data override cover/icon hashes and legacy `cover_image` use Discord's game `app-icons` CDN contract; splash hashes
+  retain app-assets. Rounded placeholder backgrounds replace square fills, and icon-only fallbacks remain inset and
+  uncropped. Tags use subtle translucent outlined chips and collapse to three plus an expandable `+N`, and
+  tapping a game reports its resolved name. Missing wire collections are nullable
+  and normalized because Gson bypasses Kotlin defaults. Focused profile/user-sheet/transport tests pass; `installDebug`
+  installed on WSA and A65. Clean-log public-profile launches returned profile HTTP 200 on both devices with no Discord or
+  AndroidRuntime error. Exact app-config-driven hero/contained/stats/progress/collection layouts and Wishlist remain open.
+- Simplification removed obsolete public-application game fallbacks/override DTOs, deferred Wishlist DTOs, a redundant
+  recolor pass, and write-side serialization for the read-only application-identity response. `ViewPager2` was not used:
+  bridging the existing bound views and dynamic page height inside `NestedScrollView` would add more code than the pager.
+
+Resumable task: `app/src/main/java/com/discord/widgets/user/profile/UserProfileWidgetsView.kt` | RN
+`modules/user_profile/native/UserProfileApplicationWidgetCard.tsx` and `modules/application_widget/**` | add typed
+application config surfaces for exact hero/contained plus stats/progress/collection ordering, then add Wishlist.
 
 Resumable task: `app/src/main/java/com/discord/widgets/chat/input/applauncher/**` | Android 340.12
 Hermes `out.js` Apps launcher modules | log in on WSA and verify HOME/search/application/command/list

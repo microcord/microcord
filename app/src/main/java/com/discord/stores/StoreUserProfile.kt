@@ -4,6 +4,7 @@ import com.discord.api.collectibles.ProfileFrameItem
 import com.discord.api.collectibles.ProfileFrameProduct
 import com.discord.api.guildmember.GuildMember
 import com.discord.api.user.User
+import com.discord.api.user.UserApplicationIdentity
 import com.discord.api.user.UserProfile
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
@@ -30,6 +31,11 @@ class StoreUserProfile(
         onSuccess: (ProfileFrameProduct) -> Unit,
         onFailure: () -> Unit,
     ) -> Unit = { _, _, failure -> failure() },
+    private val fetchApplicationIdentities: (
+        userId: Long,
+        onSuccess: (List<UserApplicationIdentity>) -> Unit,
+        onFailure: () -> Unit,
+    ) -> Unit = { _, _, failure -> failure() },
 ) : StoreV2() {
     private val profiles = HashMap<Long, UserProfile>()
     /**
@@ -48,6 +54,9 @@ class StoreUserProfile(
     private val profileFrames = HashMap<Long, ProfileFrameItem>()
     private val profileFramesLoading = HashSet<Long>()
     private var profileFramesSnapshot: Map<Long, ProfileFrameItem> = emptyMap()
+    private val applicationIdentities = HashMap<Long, List<UserApplicationIdentity>>()
+    private val applicationIdentitiesLoading = HashSet<Long>()
+    private var applicationIdentitiesSnapshot: Map<Long, List<UserApplicationIdentity>> = emptyMap()
     private var profilesSnapshot: Map<Long, UserProfile> = emptyMap()
     private var profilesLoadingSnapshot: Set<Long> = emptySet()
     private var profileErrorsSnapshot: Set<Long> = emptySet()
@@ -75,6 +84,26 @@ class StoreUserProfile(
     /** Frame artwork keyed by SKU, for the same reason [observeProfileEffectProducts] is exposed. */
     fun observeProfileFrames(): Observable<Map<Long, ProfileFrameItem>> =
         observationDeck.connectRx(this) { profileFramesSnapshot }.distinctUntilChanged()
+
+    fun observeApplicationIdentities(userId: Long): Observable<List<UserApplicationIdentity>> =
+        observationDeck.connectRx(this) { applicationIdentitiesSnapshot[userId].orEmpty() }.distinctUntilChanged()
+
+    fun fetchApplicationIdentitiesIfMissing(userId: Long) = dispatcher.schedule {
+        if (userId in applicationIdentities || !applicationIdentitiesLoading.add(userId)) return@schedule
+        fetchApplicationIdentities(
+            userId,
+            { identities -> dispatcher.schedule {
+                applicationIdentitiesLoading.remove(userId)
+                applicationIdentities[userId] = identities
+                markChanged()
+            } },
+            { dispatcher.schedule {
+                applicationIdentitiesLoading.remove(userId)
+                applicationIdentities[userId] = emptyList()
+                markChanged()
+            } },
+        )
+    }
 
     fun fetchProfileFrameIfMissing(skuId: Long) = dispatcher.schedule {
         if (skuId in profileFrames || !profileFramesLoading.add(skuId)) return@schedule
@@ -204,6 +233,8 @@ class StoreUserProfile(
         profileEffectsLoading.clear()
         profileFrames.clear()
         profileFramesLoading.clear()
+        applicationIdentities.clear()
+        applicationIdentitiesLoading.clear()
         profileEffectGeneration++
         markChanged()
     }
@@ -214,6 +245,7 @@ class StoreUserProfile(
         profileErrorsSnapshot = HashSet(profileErrors)
         profileEffectProductsSnapshot = HashMap(profileEffectProducts)
         profileFramesSnapshot = HashMap(profileFrames)
+        applicationIdentitiesSnapshot = HashMap(applicationIdentities)
     }
 
     @StoreThread

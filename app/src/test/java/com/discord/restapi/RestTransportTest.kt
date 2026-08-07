@@ -227,6 +227,32 @@ class RestTransportTest {
     }
 
     @Test
+    fun profileApplicationIdentitiesUseDefaultTransportHeaders() {
+        server.enqueue(MockResponse().setBody("""{"identities":[]}"""))
+        installDefaultApi()
+
+        RestAPI.api.userApplicationIdentitiesGet(2).toBlocking().single()
+        val request = server.takeRequest()
+        assertEquals("/api/v9/users/2/application-identities?with_profiles=true", request.path)
+        assertEquals("fixture-token", request.getHeader("Authorization"))
+        assertFalse(request.getHeader("X-Super-Properties").isNullOrBlank())
+        assertFalse(request.getHeader("X-Discord-Timezone").isNullOrBlank())
+    }
+
+    @Test
+    fun gameMetadataUsesDefaultTransportHeaders() {
+        server.enqueue(MockResponse().setBody("[]"))
+        installDefaultApi()
+
+        RestAPI.api.getGames(listOf(1L, 2L)).toBlocking().single()
+        val request = server.takeRequest()
+        assertEquals("/api/v9/games?game_ids=1&game_ids=2", request.path)
+        assertEquals("fixture-token", request.getHeader("Authorization"))
+        assertFalse(request.getHeader("X-Super-Properties").isNullOrBlank())
+        assertFalse(request.getHeader("X-Discord-Timezone").isNullOrBlank())
+    }
+
+    @Test
     fun superPropertiesRideAlongAsBase64() {
         server.enqueue(MockResponse().setBody("ok"))
         val client = OkHttpClient.Builder().addInterceptor(ClientMetadataInterceptor).build()

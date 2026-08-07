@@ -38,6 +38,7 @@ import com.discord.api.friendsuggestions.BulkAddFriendsResponse
 import com.discord.api.friendsuggestions.BulkFriendSuggestions
 import com.discord.api.friendsuggestions.FriendSuggestion
 import com.discord.api.guild.Guild
+import com.discord.api.game.Game
 import com.discord.api.guild.GuildOnboarding
 import com.discord.api.guild.GuildOnboardingResponses
 import com.discord.api.guild.PruneCountResponse
@@ -77,6 +78,7 @@ import com.discord.api.thread.ThreadMember
 import com.discord.api.user.PatchUserBody
 import com.discord.api.user.PatchUserProfileBody
 import com.discord.api.user.User
+import com.discord.api.user.UserApplicationIdentities
 import com.discord.api.user.UserProfile
 import com.discord.api.user.UserSurveyFetchResponse
 import com.discord.models.domain.Consents
@@ -375,6 +377,15 @@ interface RestAPIInterface {
         @Query("with_mutual_guilds") withMutualGuilds: Boolean = false,
         @Query("guild_id") guildId: Long? = null,
     ): Observable<UserProfile>
+
+    @GET("users/{userId}/application-identities")
+    fun userApplicationIdentitiesGet(
+        @Path("userId") userId: Long,
+        @Query("with_profiles") withProfiles: Boolean = true,
+    ): Observable<UserApplicationIdentities>
+
+    @GET("games")
+    fun getGames(@Query("game_ids") gameIds: List<Long>): Observable<List<Game>>
 
     @PATCH("users/@me/agreements")
     fun userAgreements(@Body body: RestAPIParams.UserAgreements): Observable<Void>

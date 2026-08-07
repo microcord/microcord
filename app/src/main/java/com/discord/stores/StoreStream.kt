@@ -354,6 +354,13 @@ class StoreStream private constructor(
                 restApi.getProfileFrameProduct(skuId, userSettingsSystem.getLocale())
                     .subscribeOn(Schedulers.io()).subscribe(success, { failure() })
         },
+        fetchApplicationIdentities = { userId, success, failure ->
+            if (!::restApi.isInitialized) failure() else
+                restApi.userApplicationIdentitiesGet(userId).subscribeOn(Schedulers.io()).subscribe(
+                    { response -> success(response.identities.orEmpty()) },
+                    { failure() },
+                )
+        },
     )
     private val guildProfiles = StoreGuildProfiles(dispatcher, observationDeck)
     private val guildWelcomeScreens = StoreGuildWelcomeScreens(dispatcher, observationDeck)
@@ -516,6 +523,11 @@ class StoreStream private constructor(
     private val applicationStreamPreviews = StoreApplicationStreamPreviews(dispatcher, clock)
     private val embeddedActivities = StoreEmbeddedActivities(observationDeck, dispatcher = dispatcher)
     private val applications = StoreApplication(
+        dispatcher,
+        observationDeck,
+        restApi = { if (::restApi.isInitialized) restApi else null },
+    )
+    private val games = StoreGame(
         dispatcher,
         observationDeck,
         restApi = { if (::restApi.isInitialized) restApi else null },
@@ -832,6 +844,7 @@ class StoreStream private constructor(
         applicationDirectory,
         embeddedActivities,
         applications,
+        games,
         applicationAssets,
         applicationStreamPreviews,
         entitlements,
@@ -2652,6 +2665,7 @@ class StoreStream private constructor(
         spotify.handlePreLogout()
         embeddedActivities.handlePreLogout()
         applications.handlePreLogout()
+        games.handlePreLogout()
         applicationAssets.handlePreLogout()
         subscriptions.handlePreLogout()
         paymentSources.handlePreLogout()
@@ -3095,6 +3109,7 @@ class StoreStream private constructor(
         @JvmStatic fun getLocalActionComponentState() = requireInstance().localActionComponentState
         @JvmStatic fun getEmbeddedActivities() = requireInstance().embeddedActivities
         @JvmStatic fun getApplication() = requireInstance().applications
+        @JvmStatic fun getGames() = requireInstance().games
         @JvmStatic fun getApplicationAssets() = requireInstance().applicationAssets
         @JvmStatic fun getApplicationStreamPreviews() = requireInstance().applicationStreamPreviews
         @JvmStatic fun getEntitlements() = requireInstance().entitlements

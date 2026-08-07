@@ -2,8 +2,11 @@ package com.discord.widgets.user.usersheet
 
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isStageVoiceChannel
+import com.discord.api.application.Application
+import com.discord.api.game.Game
 import com.discord.api.role.GuildRole
 import com.discord.api.user.UserProfile
+import com.discord.api.user.UserApplicationIdentity
 import com.discord.api.voice.state.StageRequestToSpeakState
 import com.discord.api.voice.state.VoiceState
 import com.discord.models.guild.Guild
@@ -11,7 +14,9 @@ import com.discord.models.member.GuildMember
 import com.discord.models.user.MeUser
 import com.discord.models.user.User
 import com.discord.stores.StoreChannels
+import com.discord.stores.StoreApplication
 import com.discord.stores.StoreGuilds
+import com.discord.stores.StoreGame
 import com.discord.stores.StoreMediaSettings
 import com.discord.stores.StorePermissions
 import com.discord.stores.StoreStageChannels
@@ -80,6 +85,8 @@ object WidgetUserSheetViewModelStoreState {
         storePermissions: StorePermissions = StoreStream.getPermissions(),
         storeUserNotes: StoreUserNotes = StoreStream.getUserNotes(),
         storeStageChannels: StoreStageChannels = StoreStream.getStageChannels(),
+        storeApplication: StoreApplication = StoreStream.getApplication(),
+        storeGame: StoreGame = StoreStream.getGames(),
         streamContextService: (Long) -> Observable<StreamContext?> = { Observable.just(null) },
     ): Observable<WidgetUserSheetViewModel.StoreState?> {
         val channelObservable: Observable<Channel?> =
@@ -141,6 +148,30 @@ object WidgetUserSheetViewModelStoreState {
                 val myStageRoles: Observable<StageRoles?> = stageChannel
                     ?.let { storeStageChannels.observeMyRoles(it.id) }
                     ?: Observable.just(null)
+                val profileData = storeUserProfile.observeUserProfile(user.id).switchMap { profile ->
+                    val gameIds = profile.widgets.orEmpty().flatMapTo(linkedSetOf()) { widget ->
+                        widget.data.games.orEmpty().map(UserProfile.ProfileWidgetGame::gameId)
+                    }
+                    val applicationIds = profile.widgets.orEmpty().mapNotNullTo(linkedSetOf()) { it.data.applicationId }
+                    applicationIds.forEach(storeApplication::fetchIfNonexisting)
+                    storeGame.fetchIfMissing(gameIds)
+                    if (profile.widgets.orEmpty().any { it.data.applicationId != null }) {
+                        storeUserProfile.fetchApplicationIdentitiesIfMissing(user.id)
+                    }
+                    Observable.combineLatest(
+                        storeApplication.observeApplications(applicationIds),
+                        storeUserProfile.observeApplicationIdentities(user.id),
+                        storeGame.observeGames(gameIds),
+                    ) { applications, identities, games -> ProfileData(profile, applications, identities, games) }
+                        .startWith(
+                            ProfileData(
+                                profile,
+                                storeApplication.getApplications().filterKeys(applicationIds::contains),
+                                emptyList(),
+                                storeGame.getGames().filterKeys(gameIds::contains),
+                            ),
+                        )
+                }
 
                 combineInputs(
                     computedMembers,
@@ -152,7 +183,7 @@ object WidgetUserSheetViewModelStoreState {
                     guild,
                     permissions,
                     streamContextService(user.id),
-                    storeUserProfile.observeUserProfile(user.id),
+                    profileData,
                     storeUserRelationships.observe(user.id),
                     storeUserNotes.observeUserNote(user.id),
                     userStageRoles,
@@ -189,6 +220,13 @@ object WidgetUserSheetViewModelStoreState {
         val selectedVoiceChannel: Channel?,
     )
 
+    private data class ProfileData(
+        val profile: UserProfile,
+        val applications: Map<Long, Application>,
+        val applicationIdentities: List<UserApplicationIdentity>,
+        val games: Map<Long, Game>,
+    )
+
     /**
      * The sixteen second-stage sources, carried as one value.
      *
@@ -206,7 +244,7 @@ object WidgetUserSheetViewModelStoreState {
         val guild: Guild?,
         val permissions: Long?,
         val streamContext: StreamContext?,
-        val userProfile: UserProfile,
+        val profileData: ProfileData,
         val userRelationshipType: Int?,
         val userNote: StoreUserNotes.UserNoteState,
         val userStageRoles: StageRoles?,
@@ -235,7 +273,10 @@ object WidgetUserSheetViewModelStoreState {
         guild = guild,
         permissions = permissions,
         streamContext = streamContext,
-        userProfile = userProfile,
+        userProfile = profileData.profile,
+        applications = profileData.applications,
+        applicationIdentities = profileData.applicationIdentities.associateBy(UserApplicationIdentity::applicationId),
+        games = profileData.games,
         userRelationshipType = userRelationshipType,
         userNoteFetchState = userNote,
         stageChannel = stageChannel,
@@ -256,7 +297,7 @@ object WidgetUserSheetViewModelStoreState {
         guild: Observable<Guild?>,
         permissions: Observable<Long?>,
         streamContext: Observable<StreamContext?>,
-        userProfile: Observable<UserProfile>,
+        profileData: Observable<ProfileData>,
         userRelationshipType: Observable<Int?>,
         userNote: Observable<StoreUserNotes.UserNoteState>,
         userStageRoles: Observable<StageRoles?>,
@@ -274,7 +315,7 @@ object WidgetUserSheetViewModelStoreState {
             guild,
             permissions,
             streamContext,
-            userProfile,
+            profileData,
             userRelationshipType,
             userNote,
             userStageRoles,
@@ -293,7 +334,7 @@ object WidgetUserSheetViewModelStoreState {
                 guild = values[6] as Guild?,
                 permissions = values[7] as Long?,
                 streamContext = values[8] as StreamContext?,
-                userProfile = values[9] as UserProfile,
+                profileData = values[9] as ProfileData,
                 userRelationshipType = values[10] as Int?,
                 userNote = values[11] as StoreUserNotes.UserNoteState,
                 userStageRoles = values[12] as StageRoles?,

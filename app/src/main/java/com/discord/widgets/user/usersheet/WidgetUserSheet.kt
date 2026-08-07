@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.animation.ValueAnimator
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
@@ -63,6 +64,7 @@ import com.discord.widgets.user.profile.UserProfileHeaderViewModel
 import com.discord.widgets.user.profile.ProfileThemeColors
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
+import com.google.android.material.tabs.TabLayout
 
 /**
  * The user sheet: the bottom sheet that opens whenever an avatar or a name is tapped.
@@ -121,6 +123,11 @@ class WidgetUserSheet : AppBottomSheet() {
     private var profileFrames: Map<Long, ProfileFrameItem> = emptyMap()
     private var equippedFrameSkuId: Long? = null
     private var frameViews: FrameViews? = null
+    private var showingWidgets = false
+    private var tabSwipeOffset = 0f
+    private var tabSwipeAnimator: ValueAnimator? = null
+    private var selectingTabFromSwipe = false
+    private var settlingProfilePage = false
     private val frameAnchorListener = ViewTreeObserver.OnPreDrawListener { anchorProfileFrame() }
 
     private val messageNavigator by lazy(LazyThreadSafetyMode.NONE) {
@@ -168,6 +175,7 @@ class WidgetUserSheet : AppBottomSheet() {
         bindAdminView()
         bindStageActions()
         bindVoiceSettings()
+        bindProfileTabs()
         markAccessibilityHeadings()
 
         viewModel.observeViewState()
@@ -198,6 +206,8 @@ class WidgetUserSheet : AppBottomSheet() {
             }
         }
         frameViews = null
+        tabSwipeAnimator?.cancel()
+        tabSwipeAnimator = null
         _binding?.userSheetProfileEffect?.clear()
         defaultButtonBackgroundTints = emptyMap()
         defaultButtonTextColors = emptyMap()
@@ -251,6 +261,7 @@ class WidgetUserSheet : AppBottomSheet() {
         configureConnectionsSection(loaded)
         configureNote(loaded)
         configureDeveloperSection(loaded)
+        configureWidgets(loaded)
 
         if (!viewModel.openPopoutLogged && loaded.profileLoaded) {
             val activity = loaded.richPresence?.primaryActivity
@@ -312,6 +323,20 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetProfileAddToServerContainer.setBackgroundColor(header)
         binding.userSheetProfileEditContainer.setBackgroundColor(header)
         binding.userSheetProfileActionsContainer.setBackgroundColor(header)
+        binding.userSheetProfileTabs.setBackgroundColor(header)
+        val tabText = colors?.textDefault
+            ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorHeaderPrimary)
+        val tabMuted = colors?.textMuted
+            ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorTextMuted)
+        binding.userSheetWidgetsView.setProfileColors(
+            card = card,
+            text = tabText,
+            mutedText = tabMuted,
+            border = colors?.borderOverlay
+                ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundAccent),
+        )
+        binding.userSheetProfileTabs.setTabTextColors(tabMuted, tabText)
+        binding.userSheetProfileTabs.setSelectedTabIndicatorColor(tabText)
         profileCards().forEach { it.setCardBackgroundColor(card) }
         binding.userSheetProfileHeaderView.badgeRowColor = card
         profileTextViews().forEach { text ->
@@ -392,6 +417,113 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetAddFriendActionButton,
         binding.userSheetPendingFriendRequestActionButton,
     )
+
+    private fun bindProfileTabs() {
+        binding.root.onHorizontalDrag = ::dragProfilePages
+        binding.root.onHorizontalRelease = ::releaseProfilePages
+        binding.userSheetProfileTabs.apply {
+            removeAllTabs()
+            addTab(newTab().setText(R.string.profile_tab_main))
+            addTab(newTab().setText(R.string.profile_tab_board))
+            addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+                override fun onTabSelected(tab: TabLayout.Tab) {
+                    if (selectingTabFromSwipe) return
+                    settlingProfilePage = false
+                    tabSwipeAnimator?.cancel()
+                    showingWidgets = tab.position == BOARD_TAB
+                    tabSwipeOffset = if (showingWidgets) 1f else 0f
+                    showSelectedProfileTab()
+                    if (!selectingTabFromSwipe) {
+                        binding.root.scrollTo(0, binding.userSheetProfileTabs.top)
+                    }
+                }
+
+                override fun onTabUnselected(tab: TabLayout.Tab) = Unit
+                override fun onTabReselected(tab: TabLayout.Tab) = Unit
+            })
+        }
+    }
+
+    private fun configureWidgets(state: WidgetUserSheetViewModel.ViewState.Loaded) {
+        val widgets = state.userProfile.widgets.orEmpty().filter { widget ->
+            widget.data.applicationId != null || widget.data.games.orEmpty().isNotEmpty()
+        }
+        binding.userSheetWidgetsView.bind(widgets, state.applications, state.applicationIdentities, state.games)
+        val hasBoard = widgets.isNotEmpty()
+        binding.userSheetProfileTabs.visibility = if (hasBoard) View.VISIBLE else View.GONE
+        if (!hasBoard && showingWidgets) {
+            settlingProfilePage = false
+            showingWidgets = false
+            binding.userSheetProfileTabs.getTabAt(MAIN_TAB)?.select()
+        }
+        if (!settlingProfilePage) showSelectedProfileTab()
+    }
+
+    private fun showSelectedProfileTab() {
+        binding.userSheetMainTabContent.animate().cancel()
+        binding.userSheetWidgetsView.animate().cancel()
+        binding.userSheetMainTabContent.translationX = 0f
+        binding.userSheetWidgetsView.translationX = 0f
+        binding.userSheetMainTabContent.visibility = if (showingWidgets) View.GONE else View.VISIBLE
+        binding.userSheetWidgetsView.visibility = if (showingWidgets) View.VISIBLE else View.GONE
+    }
+
+    private fun dragProfilePages(distance: Float) {
+        if (binding.userSheetProfileTabs.visibility != View.VISIBLE) return
+        val width = binding.userSheetProfilePages.width.toFloat().takeIf { it > 0f } ?: return
+        val allowed = if (showingWidgets) distance.coerceAtLeast(0f) else distance.coerceAtMost(0f)
+        if (allowed == 0f) return
+        binding.userSheetMainTabContent.visibility = View.VISIBLE
+        binding.userSheetWidgetsView.visibility = View.VISIBLE
+        if (showingWidgets) {
+            binding.userSheetMainTabContent.translationX = -width + allowed
+            binding.userSheetWidgetsView.translationX = allowed
+            tabSwipeOffset = (1f - allowed / width).coerceIn(0f, 1f)
+        } else {
+            binding.userSheetMainTabContent.translationX = allowed
+            binding.userSheetWidgetsView.translationX = width + allowed
+            tabSwipeOffset = (-allowed / width).coerceIn(0f, 1f)
+        }
+        updateTabIndicator(tabSwipeOffset)
+    }
+
+    private fun releaseProfilePages(distance: Float, commit: Boolean) {
+        if (binding.userSheetProfileTabs.visibility != View.VISIBLE) return
+        val width = binding.userSheetProfilePages.width.toFloat().takeIf { it > 0f } ?: return
+        val wasShowingWidgets = showingWidgets
+        val validDirection = if (wasShowingWidgets) distance > 0f else distance < 0f
+        val targetShowsWidgets = if (commit && validDirection) !wasShowingWidgets else wasShowingWidgets
+        showingWidgets = targetShowsWidgets
+        settlingProfilePage = true
+        val mainTarget = if (targetShowsWidgets) -width else 0f
+        val widgetsTarget = if (targetShowsWidgets) 0f else width
+        val targetOffset = if (targetShowsWidgets) 1f else 0f
+        tabSwipeAnimator?.cancel()
+        tabSwipeAnimator = ValueAnimator.ofFloat(tabSwipeOffset, targetOffset).apply {
+            duration = PAGE_SETTLE_MS
+            addUpdateListener { animator ->
+                tabSwipeOffset = animator.animatedValue as Float
+                updateTabIndicator(tabSwipeOffset)
+            }
+            start()
+        }
+        binding.userSheetMainTabContent.animate().translationX(mainTarget).setDuration(PAGE_SETTLE_MS).start()
+        binding.userSheetWidgetsView.animate().translationX(widgetsTarget).setDuration(PAGE_SETTLE_MS).withEndAction {
+            settlingProfilePage = false
+            selectingTabFromSwipe = true
+            binding.userSheetProfileTabs.getTabAt(if (showingWidgets) BOARD_TAB else MAIN_TAB)?.select()
+            selectingTabFromSwipe = false
+            showSelectedProfileTab()
+        }.start()
+    }
+
+    private fun updateTabIndicator(offset: Float) {
+        if (offset >= 1f) {
+            binding.userSheetProfileTabs.setScrollPosition(BOARD_TAB, 0f, false)
+        } else {
+            binding.userSheetProfileTabs.setScrollPosition(MAIN_TAB, offset.coerceAtLeast(0f), false)
+        }
+    }
 
     private fun sectionHeaders(): List<TextView> = listOf(
         binding.aboutMeHeader,
@@ -866,6 +998,9 @@ class WidgetUserSheet : AppBottomSheet() {
         private const val ARG_IS_VOICE_CONTEXT = "ARG_IS_VOICE_CONTEXT"
         private const val ARG_STREAM_PREVIEW_CLICK_BEHAVIOR = "ARG_STREAM_PREVIEW_CLICK_BEHAVIOR"
         private const val ARG_FRIEND_TOKEN = "ARG_FRIEND_TOKEN"
+        private const val MAIN_TAB = 0
+        private const val BOARD_TAB = 1
+        private const val PAGE_SETTLE_MS = 180L
 
         /**
          * Navigation the sheet cannot perform itself because the destination lives outside

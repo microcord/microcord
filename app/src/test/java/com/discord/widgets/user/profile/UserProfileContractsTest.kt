@@ -1,9 +1,12 @@
 package com.discord.widgets.user.profile
 
 import com.discord.api.connectedaccounts.ConnectedAccount
+import com.discord.api.game.Game
 import com.discord.api.premium.PremiumTier
 import com.discord.api.user.NsfwAllowance
 import com.discord.api.user.UserProfile
+import com.discord.api.user.UserApplicationDynamicField
+import com.discord.api.user.UserApplicationIdentities
 import com.discord.api.voice.state.StageRequestToSpeakState
 import com.discord.models.member.GuildMember
 import com.discord.models.domain.emoji.toCodePoints
@@ -55,6 +58,7 @@ class UserProfileContractsTest {
         assertEquals(1740124800L, profile.guildMemberProfile?.profileEffect?.expiresAt)
         assertEquals("a_global", profile.user.avatarDecorationData?.value?.asset)
         assertEquals("a_guild", profile.guildMember?.avatarDecorationData?.asset)
+        assertTrue(profile.widgets.orEmpty().isEmpty())
         // The fixture's decoration expired in 2025, so it resolves to nothing to render.
         assertEquals(
             emptyList<String>(),
@@ -64,6 +68,75 @@ class UserProfileContractsTest {
             emptyList<String>(),
             loaded(null, false).copy(userProfile = profile).avatarDecoration?.imageUrls(animate = true).orEmpty(),
         )
+    }
+
+    @Test
+    fun parsesProfileBoardWidgetsInServerOrder() {
+        val profile = GsonBuilder()
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .registerDiscordApiTypeAdapters()
+            .create()
+            .fromJson(
+                """{
+                    "user":{"id":"2","username":"target"},
+                    "widgets":[
+                        {"id":"10","updated_at":"2026-05-14T00:00:00Z","data":{"type":"favorite_games","games":[{"game_id":"20","comment":"Best game","tags":["expert","open_to_teach"]}]}},
+                        {"id":"11","data":{"type":"application","application_id":"30"}}
+                    ]
+                }""".trimIndent(),
+                UserProfile::class.java,
+            )
+
+        assertEquals(listOf("favorite_games", "application"), profile.widgets.orEmpty().map { it.data.type })
+        assertEquals(20L, profile.widgets.orEmpty().first().data.games.orEmpty().single().gameId)
+        assertEquals(listOf("expert", "open_to_teach"), profile.widgets.orEmpty().first().data.games.orEmpty().single().tags)
+        assertTrue(profile.widgets.orEmpty().last().data.games.orEmpty().isEmpty())
+        assertEquals(30L, profile.widgets.orEmpty().last().data.applicationId)
+    }
+
+    @Test
+    fun parsesApplicationWidgetIdentityFieldsWithoutUntypedValues() {
+        val response = GsonBuilder()
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .registerDiscordApiTypeAdapters()
+            .create()
+            .fromJson(
+                """{"identities":[{"application_id":"30","provider_issued_user_id":"steam-id","profile":{"username":"Player","data":{"primary":{"playtime_hours":66.8,"total_wins":401},"dynamic":[{"type":1,"name":"favorite_game","value":"Portal 2"},{"type":2,"name":"albums","value":14000},{"type":3,"name":"hero","value":{"url":"https://example.com/hero.png","width":300,"height":450}}]}}}]}""",
+                UserApplicationIdentities::class.java,
+            )
+
+        val profile = requireNotNull(response.identities.orEmpty().single().displayProfile())
+        assertEquals("Player", profile.username)
+        assertEquals(66.8, profile.data?.primary?.playtimeHours)
+        assertEquals("Portal 2", (profile.data?.dynamic?.get(0) as UserApplicationDynamicField.Text).value)
+        assertEquals(14000.0, (profile.data?.dynamic?.get(1) as UserApplicationDynamicField.Number).value, 0.0)
+        assertEquals("https://example.com/hero.png", (profile.data?.dynamic?.get(2) as UserApplicationDynamicField.Image).value.url)
+    }
+
+    @Test
+    fun profileWidgetTagsCollapseIntoOverflowChip() {
+        assertEquals(listOf("expert", "obsessed", "open_to_play", "+2"), visibleWidgetTags(
+            listOf("expert", "obsessed", "open_to_play", "lfg", "casual"),
+        ))
+        assertEquals(listOf("expert"), visibleWidgetTags(listOf("expert")))
+        assertEquals(
+            listOf("expert", "obsessed", "open_to_play", "lfg", "casual"),
+            visibleWidgetTags(listOf("expert", "obsessed", "open_to_play", "lfg", "casual"), expanded = true),
+        )
+    }
+
+    @Test
+    fun parsesRnGameMediaCoverReference() {
+        val game = GsonBuilder()
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .create()
+            .fromJson(
+                """{"id":"700136079562375258","name":"VALORANT","media":{"cover":{"type":"hash","value":"9c55c3dbef3b1621d17ee32dc7765dcc"}}}""",
+                Game::class.java,
+            )
+
+        assertEquals(Game.TYPE_HASH, game.cover()?.type)
+        assertEquals("9c55c3dbef3b1621d17ee32dc7765dcc", game.cover()?.value)
     }
 
     @Test

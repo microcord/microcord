@@ -42,6 +42,7 @@ data class UserProfile(
     val guildMemberProfile: ProfileMetadata? = null,
     val badges: List<ProfileBadge>? = null,
     val guildBadges: List<ProfileBadge>? = null,
+    val widgets: List<ProfileWidget>? = null,
 ) {
     /**
      * The frame this profile is wearing, if any.
@@ -61,6 +62,24 @@ data class UserProfile(
         val description: String,
         val icon: String,
         val link: String? = null,
+    )
+
+    data class ProfileWidget(
+        val id: Long,
+        val updatedAt: String? = null,
+        val data: ProfileWidgetData,
+    )
+
+    data class ProfileWidgetData(
+        val type: String,
+        val games: List<ProfileWidgetGame>? = null,
+        val applicationId: Long? = null,
+    )
+
+    data class ProfileWidgetGame(
+        val gameId: Long,
+        val comment: String? = null,
+        val tags: List<String>? = null,
     )
 
     data class ProfileMetadata(
@@ -151,7 +170,12 @@ data class UserProfile(
 
     data class ProfileEffectSource(val src: String)
 
-    private companion object {
-        const val PROFILE_FRAME_TYPE = 3
+    companion object {
+        private const val PROFILE_FRAME_TYPE = 3
+        const val WIDGET_FAVORITE_GAMES = "favorite_games"
+        const val WIDGET_CURRENT_GAMES = "current_games"
+        const val WIDGET_WANT_TO_PLAY_GAMES = "want_to_play_games"
+        const val WIDGET_PLAYED_GAMES = "played_games"
+        const val WIDGET_APPLICATION = "application"
     }
 }
