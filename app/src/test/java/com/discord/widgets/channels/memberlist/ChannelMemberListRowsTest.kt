@@ -6,6 +6,7 @@ import com.discord.api.role.GuildRole
 import com.discord.models.member.GuildMember
 import com.discord.models.presence.Presence
 import com.discord.models.user.CoreUser
+import com.discord.widgets.channels.memberlist.adapter.ChannelMembersListAdapter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -82,6 +83,28 @@ class ChannelMemberListRowsTest {
         val members = ChannelMemberListRows.privateChannel(channel, emptyMap(), emptyMap())
             .filterIsInstance<ChannelMemberListRow.Member>()
         assertEquals(listOf("Embedded"), members.map { it.displayName })
+    }
+
+    @Test fun groupDmGeneratorIncludesCurrentUserOutsideRecipientArray() {
+        val me = CoreUser(1, "me")
+        val recipient = CoreUser(2, "recipient")
+        val list = generateGroupDmMemberListItems(
+            channel(
+                recipientIds = listOf(recipient.id),
+                nicks = listOf(
+                    com.discord.api.channel.ChannelRecipientNick(me.id, "me"),
+                    com.discord.api.channel.ChannelRecipientNick(recipient.id, "recipient"),
+                ),
+            ),
+            mapOf(me.id to me, recipient.id to recipient),
+            emptyMap(),
+            emptyMap(),
+            canInvite = true,
+            currentUser = me,
+        )
+
+        val ids = (0 until list.size).mapNotNull { (list[it] as? ChannelMembersListAdapter.Item.Member)?.userId }
+        assertEquals(setOf(me.id, recipient.id), ids.toSet())
     }
 
     @Test fun actionRowsOnlyAppearWhenSupported() {

@@ -11,12 +11,14 @@ fun generateGroupDmMemberListItems(
     presences: Map<Long, Presence>,
     applicationStreams: Map<Long, ModelApplicationStream>,
     canInvite: Boolean,
+    currentUser: User?,
 ): WidgetChannelMembersListViewModel.MemberList {
     val items = ChannelMemberListRows.privateChannel(
         channel,
         users,
         presences,
         canAddMembers = canInvite,
+        currentUser = currentUser,
         streamingUserIds = applicationStreams.keys,
     ).map(ChannelMemberListRow::toAdapterItem)
     return PrivateChannelMemberListItems(channel.id.toString(), items)

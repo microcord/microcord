@@ -190,6 +190,7 @@ class WidgetChannelMembersList : AppFragment(R.layout.widget_channel_members_lis
                             presences,
                             streams,
                             canInvite = channel.type == Channel.GROUP_DM,
+                            currentUser = me,
                         ),
                     )
                 }
