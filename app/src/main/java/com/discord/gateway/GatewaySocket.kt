@@ -19,6 +19,7 @@ import com.discord.gateway.io.IncomingParser
 import com.discord.gateway.io.Outgoing
 import com.discord.gateway.io.PresenceUpdate
 import com.discord.gateway.io.Resume
+import com.discord.gateway.io.SoundboardSoundsRequest
 import com.discord.gateway.io.StreamPing
 import com.discord.gateway.io.VoiceStateUpdate
 import com.discord.gateway.io.VoiceStateUpdateNoPreferredRegion
@@ -214,6 +215,10 @@ class GatewaySocket(
 
     fun requestForumUnreads(request: ForumUnreadsRequest) = scheduleSend {
         send(Opcode.REQUEST_FORUM_UNREADS, request, omitNulls = true)
+    }
+
+    fun requestSoundboardSounds(guildIds: List<Long>) = scheduleSend {
+        send(Opcode.REQUEST_SOUNDBOARD_SOUNDS, SoundboardSoundsRequest(guildIds))
     }
 
     fun resetOnError() {

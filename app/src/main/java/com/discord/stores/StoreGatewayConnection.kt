@@ -35,6 +35,7 @@ import com.discord.api.role.GuildRoleDelete
 import com.discord.api.role.GuildRoleUpdate
 import com.discord.api.stageinstance.StageInstance
 import com.discord.api.sticker.GuildStickersUpdate
+import com.discord.api.soundboard.SoundboardSounds
 import com.discord.api.thread.ThreadMemberListUpdate
 import com.discord.api.thread.ThreadMemberUpdate
 import com.discord.api.thread.ThreadMembersUpdate
@@ -182,6 +183,7 @@ class StoreGatewayConnection(
     val guildDeleted = behavior<Guild>()
     val guildEmojisUpdate = behavior<GuildEmojisUpdate>()
     val guildStickersUpdate = behavior<GuildStickersUpdate>()
+    val soundboardSounds = publish<SoundboardSounds>()
     val guildApplicationCommands = behavior<GuildApplicationCommands>()
     val guildApplicationCommandIndexUpdate = behavior<GuildApplicationCommandIndexUpdate>()
     val applicationCommandAutocompleteResult = behavior<ApplicationCommandAutocompleteResult>()
@@ -336,6 +338,10 @@ class StoreGatewayConnection(
         afk: Boolean? = null,
     ): Boolean = requestIfSessionEstablished {
         it.presenceUpdate(status, since, activities.orEmpty(), afk)
+    }
+
+    fun requestSoundboardSounds(guildIds: List<Long>): Boolean = requestIfSessionEstablished {
+        it.requestSoundboardSounds(guildIds)
     }
 
     fun voiceStateUpdate(
@@ -503,6 +509,7 @@ class StoreGatewayConnection(
             "GUILD_BAN_REMOVE" -> guildBanRemove.emit(data)
             "GUILD_EMOJIS_UPDATE" -> guildEmojisUpdate.emit(data)
             "GUILD_STICKERS_UPDATE" -> guildStickersUpdate.emit(data)
+            "SOUNDBOARD_SOUNDS" -> soundboardSounds.emit(data)
             "GUILD_INTEGRATIONS_UPDATE" -> guildIntegrationsUpdate.emit(data)
             "GUILD_APPLICATION_COMMANDS_UPDATE" -> guildApplicationCommands.emit(data)
             "GUILD_APPLICATION_COMMAND_INDEX_UPDATE" -> guildApplicationCommandIndexUpdate.emit(data)

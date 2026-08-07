@@ -9,17 +9,22 @@ import android.widget.TextView
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.api.premium.PremiumTier
 import com.discord.app.AppFragment
 import com.discord.app.AppLog
 import com.discord.app.AppScreenRouter
 import com.discord.databinding.WidgetSettingsDeveloperBinding
 import com.discord.stores.StoreStream
 import com.discord.utilities.cache.SharedPreferencesProvider
+import com.discord.utilities.developer.DeveloperSettings
 import com.discord.utilities.experiments.ExperimentRegistry
 import com.discord.utilities.logging.AppGatewaySocketLogger
 import com.discord.utilities.logging.AppRestRequestLogger
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
+import com.discord.widgets.hubs.RadioSelectorItem
+import com.discord.widgets.hubs.RadioSelectorItems
+import com.discord.widgets.hubs.WidgetRadioSelectorBottomSheet
 import com.hammerandchisel.libdiscord.Discord
 import java.text.DateFormat
 import java.util.Date
@@ -60,6 +65,10 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
             isChecked = AppRestRequestLogger.isEnabled()
             setOnCheckedListener(AppRestRequestLogger::setEnabled)
         }
+        binding.settingsDeveloperNitroOverride.apply {
+            text = premiumTierLabel(DeveloperSettings.premiumTierOverride())
+            setOnClickListener { showPremiumTierSelector() }
+        }
         binding.developerSettingsCrashKotlin.setOnClickListener {
             throw RuntimeException("This is a developer triggered crash.")
         }
@@ -78,6 +87,32 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
     override fun onDestroyView() {
         _binding = null
         super.onDestroyView()
+    }
+
+    private fun showPremiumTierSelector() {
+        val current = DeveloperSettings.premiumTierOverride()
+        val items = listOf(RadioSelectorItem(DeveloperSettings.ACTUAL_TIER, "Actual account tier", current == null)) +
+            PremiumTier.entries.map { tier -> RadioSelectorItem(tier.ordinal, premiumTierLabel(tier), tier == current) }
+        WidgetRadioSelectorBottomSheet.show(
+            parentFragmentManager,
+            RadioSelectorItems("Premium tier override", items),
+        ) { id ->
+            val tier = PremiumTier.entries.getOrNull(id)
+            DeveloperSettings.setPremiumTierOverride(tier)
+            StoreStream.getUsers().refreshDeveloperOverrides()
+            if (_binding != null) binding.settingsDeveloperNitroOverride.text = premiumTierLabel(tier)
+            (parentFragmentManager.findFragmentByTag(WidgetRadioSelectorBottomSheet::class.java.name)
+                as? WidgetRadioSelectorBottomSheet)?.dismiss()
+        }
+    }
+
+    private fun premiumTierLabel(tier: PremiumTier?): String = "Premium tier: " + when (tier) {
+        null -> "Actual account tier"
+        PremiumTier.NONE -> "No Nitro"
+        PremiumTier.PREMIUM_GUILD_SUBSCRIPTION_ONLY -> "Guild subscription only"
+        PremiumTier.TIER_0 -> "Nitro Basic"
+        PremiumTier.TIER_1 -> "Nitro Classic"
+        PremiumTier.TIER_2 -> "Nitro"
     }
 
     override fun onViewBoundOrOnResume() {

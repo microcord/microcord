@@ -37,7 +37,6 @@ import com.discord.widgets.guildscheduledevent.toModel
 import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.notice.WidgetNoticeNuxOverlay
-import com.discord.widgets.settings.WidgetSettingsVoice
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.widgets.voice.controls.AnchoredVoiceControlsView
 import com.discord.widgets.voice.model.CameraState
@@ -218,7 +217,9 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
             launchChannelInvite(this, viewState.channel, INVITE_ANALYTICS_SOURCE)
         }
 
-        headerSettings.setOnClickListener { WidgetSettingsVoice.launch(requireContext()) }
+        headerSettings.setOnClickListener {
+            WidgetVoiceSettingsBottomSheet.show(parentFragmentManager, viewState.channel.id)
+        }
 
         headerNoiseCancellation.setOnClickListener { viewModel.onNoiseCancellationPressed() }
         val noiseCancellationActive = viewState.isNoiseCancellationActive
@@ -292,6 +293,9 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
                     onScreenSharePressed = viewModel::onScreenSharePressed,
                     onSpeakerButtonPressed = ::onSpeakerButtonPressed,
                     onCameraButtonPressed = viewModel::onCameraButtonPressed,
+                    onSoundboardPressed = {
+                        WidgetSoundboardBottomSheet.show(parentFragmentManager, channel.id, channel.guildId)
+                    },
                     onDisconnectPressed = viewModel::onDisconnectPressed,
                     appComponent = this,
                     fragmentManager = parentFragmentManager,

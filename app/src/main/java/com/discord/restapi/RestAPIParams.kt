@@ -418,6 +418,11 @@ object RestAPIParams {
         override fun toString(): String = "EmptyBody"
     }
 
+    data class SendSoundboardSound(
+        val soundId: Long,
+        val sourceGuildId: Long? = null,
+    )
+
     class EnableIntegration(
         val type: String?,
         val id: String?,

@@ -136,7 +136,7 @@ class EmojiPickerViewModel(
         private fun observeEmojiSet(contextType: EmojiPickerContextType): Observable<EmojiSet> {
             val store = StoreStream.getEmojis()
             return when (contextType) {
-                EmojiPickerContextType.Chat ->
+                is EmojiPickerContextType.Chat ->
                     StoreStream.getChannelsSelected().observeSelectedChannel().switchMap { channel ->
                         if (channel == null) {
                             store.getEmojiSet(StoreEmoji.EmojiContext.Global, true, false)
@@ -144,7 +144,7 @@ class EmojiPickerViewModel(
                             store.getEmojiSet(channel.guildId, channel.id, includeUnusableEmojis = true)
                         }
                     }
-                EmojiPickerContextType.Global ->
+                is EmojiPickerContextType.Global ->
                     store.getEmojiSet(StoreEmoji.EmojiContext.Global, true, false)
                 is EmojiPickerContextType.Guild ->
                     store.getEmojiSet(StoreEmoji.EmojiContext.Guild(contextType.guildId), true, false)

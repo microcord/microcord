@@ -16,6 +16,7 @@ import com.discord.models.user.User
 import com.discord.nullserializable.NullSerializable
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.persister.Persister
+import com.discord.utilities.developer.DeveloperSettings
 import rx.Observable
 
 class StoreUser(
@@ -107,6 +108,8 @@ class StoreUser(
         fetchMissing(userIds, users.keys)
     }
 
+    fun refreshDeveloperOverrides() = dispatcher.schedule { markChanged(MeUpdate, UsersUpdate) }
+
     fun getMe(): MeUser = meSnapshot
     @StoreThread fun getMeInternal(): MeUser = me
     fun getUsers(): Map<Long, User> = usersSnapshot
@@ -144,9 +147,14 @@ class StoreUser(
     override fun snapshotData() {
         // Only the specific update sources gate these copies. `this` is always present once
         // markChanged() ran, so testing for it would copy the whole user map every dispatch.
-        if (UsersUpdate in updateSources) usersSnapshot = LinkedHashMap(users)
+        val displayedMe = DeveloperSettings.premiumTierOverride()?.let { me.copy(premiumTier = it) } ?: me
+        if (UsersUpdate in updateSources) {
+            usersSnapshot = LinkedHashMap(users).apply {
+                if (displayedMe.id in this) put(displayedMe.id, displayedMe)
+            }
+        }
         if (MeUpdate in updateSources) {
-            meSnapshot = me
+            meSnapshot = displayedMe
             meCache.set(me)
         }
     }

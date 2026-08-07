@@ -159,6 +159,8 @@ sealed class OutgoingPayload private constructor() {
         val preferredRegion: String? = null,
     ) : OutgoingPayload()
 
+    data class SoundboardSoundsRequest(val guildIds: List<Long>) : OutgoingPayload()
+
     data class VoiceStateUpdateNoPreferredRegion(
         val guildId: Long?,
         val channelId: Long?,
@@ -183,6 +185,7 @@ typealias Identify = OutgoingPayload.Identify
 typealias IdentifyClientState = OutgoingPayload.IdentifyClientState
 typealias PresenceUpdate = OutgoingPayload.PresenceUpdate
 typealias Resume = OutgoingPayload.Resume
+typealias SoundboardSoundsRequest = OutgoingPayload.SoundboardSoundsRequest
 typealias StreamPing = OutgoingPayload.StreamPing
 typealias VoiceStateUpdate = OutgoingPayload.VoiceStateUpdate
 typealias VoiceStateUpdateNoPreferredRegion = OutgoingPayload.VoiceStateUpdateNoPreferredRegion

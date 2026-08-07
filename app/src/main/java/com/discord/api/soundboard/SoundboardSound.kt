@@ -13,3 +13,8 @@ data class SoundboardSound(
     val user: User? = null,
     val userId: Long? = null,
 )
+
+data class SoundboardSounds(
+    val guildId: Long,
+    val soundboardSounds: List<SoundboardSound> = emptyList(),
+)

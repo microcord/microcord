@@ -339,6 +339,13 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
                     WidgetScreenShareNfxSheet.show(parentFragmentManager, channelId, state.callModel.channel.guildId)
                 } else viewModel.onScreenShareClick()
             },
+            onSoundboardClick = {
+                com.discord.widgets.voice.sheet.WidgetSoundboardBottomSheet.show(
+                    parentFragmentManager,
+                    state.callModel.channel.id,
+                    state.callModel.channel.guildId,
+                )
+            },
             showStreamVolume = state.showStreamVolume,
             streamVolume = state.perceptualStreamVolume,
             onStreamVolumeChange = viewModel::onStreamPerceptualVolumeChanged,

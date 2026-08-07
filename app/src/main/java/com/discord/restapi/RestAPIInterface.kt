@@ -73,6 +73,7 @@ import com.discord.api.science.Science
 import com.discord.api.stageinstance.RecommendedStageInstance
 import com.discord.api.stageinstance.StageInstance
 import com.discord.api.sticker.Sticker
+import com.discord.api.soundboard.SoundboardSound
 import com.discord.api.thread.ThreadListing
 import com.discord.api.thread.ThreadMember
 import com.discord.api.user.PatchUserBody
@@ -792,6 +793,15 @@ interface RestAPIInterface {
 
     @GET("channels/{channelId}")
     fun getChannel(@Path("channelId") channelId: Long): Observable<Channel>
+
+    @GET("soundboard-default-sounds")
+    fun getDefaultSoundboardSounds(): Observable<List<SoundboardSound>>
+
+    @POST("channels/{channelId}/send-soundboard-sound")
+    fun sendSoundboardSound(
+        @Path("channelId") channelId: Long,
+        @Body body: RestAPIParams.SendSoundboardSound,
+    ): Observable<Unit>
 
     @PATCH("channels/{channelId}")
     fun editTextChannel(

@@ -33,6 +33,7 @@ class AnchoredVoiceControlsView @JvmOverloads constructor(
     private val mute: ImageView
     private val ptt: View
     private val screenShare: ImageView
+    private val soundboard: ImageView
     private val speaker: ImageView
     private var sparkle: SparkleView? = null
     private val tooltipManager: TooltipManager =
@@ -46,6 +47,7 @@ class AnchoredVoiceControlsView @JvmOverloads constructor(
         mute = requireNotNull(findViewById(R.id.voice_fullscreen_controls_mute_state))
         ptt = requireNotNull(findViewById(R.id.voice_fullscreen_controls_ptt))
         screenShare = requireNotNull(findViewById(R.id.voice_fullscreen_controls_screenshare))
+        soundboard = requireNotNull(findViewById(R.id.voice_fullscreen_controls_soundboard))
         speaker = requireNotNull(findViewById(R.id.voice_fullscreen_controls_speaker))
     }
 
@@ -61,6 +63,7 @@ class AnchoredVoiceControlsView @JvmOverloads constructor(
         onScreenSharePressed: () -> Unit,
         onSpeakerButtonPressed: () -> Unit,
         onCameraButtonPressed: () -> Unit,
+        onSoundboardPressed: () -> Unit,
         onDisconnectPressed: () -> Unit,
         appComponent: AppComponent,
         fragmentManager: FragmentManager,
@@ -92,6 +95,9 @@ class AnchoredVoiceControlsView @JvmOverloads constructor(
         mute.isActivated = isMuted
         mute.setContentDescription(if (isMuted) R.string.unmute else R.string.mute)
         mute.setOnClickListener { onMutePressed() }
+
+        soundboard.visibility = if (guildId != 0L) VISIBLE else GONE
+        soundboard.setOnClickListener { onSoundboardPressed() }
 
         screenShare.isActivated = isScreensharing
         screenShare.setImageResource(state.screenShareIcon)

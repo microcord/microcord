@@ -2991,6 +2991,28 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   emoji are excluded from Recent and their ordinary guild/
   Unicode sections so each favorite appears once. Focused surrogate-deletion and favorite-projection tests pass;
   the obsolete pre-`StoreEmoji` local set and source-installation seam were deleted; `installDebug` installed on WSA and A65.
+- Soundboard sending is implemented as a modern extension beyond the 126.21 reference. An equal-weight in-call control beside
+  camera/mic opens a rounded three-column sound tile grid. Default sounds load over REST; custom sounds from every joined
+  server are requested in one Gateway opcode 31 payload and merged from `SOUNDBOARD_SOUNDS` responses before selection posts to
+  `POST /channels/{channelId}/send-soundboard-sound` with `sound_id` and optional `source_guild_id`. Unavailable sounds and
+  duplicate IDs are excluded. The endpoint uses the default metadata-bearing REST transport; its focused path/body/header
+  contract test passes. The launcher is present in bottom-sheet and fullscreen voice controls. Gateway response bursts are
+  buffered before the main-thread boundary, fixing the A65 `MissingBackpressureException`; restored emoji singleton contexts
+  are matched by type, fixing the follow-on process-restart crash. Control icons use explicit themed/white tint. The picker
+  groups default and custom sounds under full-width server headers and filters names locally through its search field.
+  Both voice surfaces now use Discord RN's exact `SoundboardIcon` megaphone path resolved to the same strong white as neighboring controls; fullscreen uses the camera's
+  runtime `buttonBackground(false)` (`white_alpha_24`) rather than the inherited black circle. Sending keeps the sheet open. Since the Android native
+  bridge lacks RN/desktop's sample-playback completion callback, the Android UI mirrors Discord's web fallback with the
+  existing asynchronous ExoPlayer stack: playing state begins on actual playback and clears on ended/error without blocking UI.
+  ExoPlayer does not request audio focus because the voice session already owns it; this fixes the A65 click crash. Unicode sound emoji render from bundled
+  Twemoji resources and custom emoji from Discord's CDN. The sheet uses the RN primary surface with secondary tiles; its RecyclerView owns the
+  scrolling viewport, reuses one adapter without animations, and batches bursty guild responses to avoid remeasure stutter.
+  Sections order current guild first, remaining guilds by `StoreGuildsSorted`, then defaults. Developer settings expose an
+  Actual/None/Guild-only/Basic/Classic/Nitro tier selector that overrides shared client UI snapshots only and resnapshots immediately.
+  The compact-sheet launcher alone uses themed interactive tint; fullscreen remains strong white and applies the exact
+  inactive mic/camera background at runtime. Fullscreen primary controls horizontally scroll instead of compressing.
+  Focused tests pass and `installDebug` installed on
+  WSA/A65.
 
 Resumable task: `app/src/main/java/com/discord/widgets/user/profile/UserProfileWidgetsView.kt` | RN
 `modules/user_profile/native/UserProfileApplicationWidgetCard.tsx` and `modules/application_widget/**` | add typed

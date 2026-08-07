@@ -33,6 +33,7 @@ import com.discord.api.role.GuildRoleDelete
 import com.discord.api.role.GuildRoleUpdate
 import com.discord.api.stageinstance.StageInstance
 import com.discord.api.sticker.GuildStickersUpdate
+import com.discord.api.soundboard.SoundboardSounds
 import com.discord.api.thread.ThreadMemberListUpdate
 import com.discord.api.thread.ThreadMemberUpdate
 import com.discord.api.thread.ThreadMembersUpdate
@@ -137,6 +138,7 @@ class IncomingParser(private val gson: Gson) {
         "GUILD_BAN_ADD", "GUILD_BAN_REMOVE" -> gson.fromJson(data, ModelBan::class.java)
         "GUILD_EMOJIS_UPDATE" -> gson.fromJson(data, GuildEmojisUpdate::class.java)
         "GUILD_STICKERS_UPDATE" -> gson.fromJson(data, GuildStickersUpdate::class.java)
+        "SOUNDBOARD_SOUNDS" -> gson.fromJson(data, SoundboardSounds::class.java)
         "GUILD_INTEGRATIONS_UPDATE" -> gson.fromJson(data, ModelGuildIntegration.Update::class.java)
         "GUILD_APPLICATION_COMMANDS_UPDATE" -> gson.fromJson(data, GuildApplicationCommands::class.java)
         "GUILD_APPLICATION_COMMAND_INDEX_UPDATE" ->
