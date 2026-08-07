@@ -47,6 +47,8 @@ data class Channel(
     val isMessageRequest: Boolean = false,
     val isMessageRequestTimestamp: String? = null,
     val isSpam: Boolean = false,
+    /** Copied into each new post as its own `rateLimitPerUser`; existing posts keep theirs. */
+    val defaultThreadRateLimitPerUser: Int? = null,
 ) {
     companion object {
         const val GUILD_TEXT = 0

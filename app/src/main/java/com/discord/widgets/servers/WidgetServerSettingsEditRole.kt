@@ -435,6 +435,7 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
             R.id.role_settings_send_messages to Permission.SEND_MESSAGES,
             R.id.role_settings_send_tts_messages to Permission.SEND_TTS_MESSAGES,
             R.id.role_settings_manage_messages to Permission.MANAGE_MESSAGES,
+            R.id.role_settings_bypass_slowmode to Permission.BYPASS_SLOWMODE,
             R.id.role_settings_embed_links to Permission.EMBED_LINKS,
             R.id.role_settings_attach_files to Permission.ATTACH_FILES,
             R.id.role_settings_read_message_history to Permission.READ_MESSAGE_HISTORY,

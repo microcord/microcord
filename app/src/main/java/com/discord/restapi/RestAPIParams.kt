@@ -798,6 +798,7 @@ object RestAPIParams {
         val defaultForumLayout: Int? = null,
         val defaultSortOrder: Int? = null,
         val defaultTagSetting: String? = null,
+        val defaultThreadRateLimitPerUser: Int? = null,
     )
 
     /** A forum tag being created or edited; [emojiName] and [emojiId] are mutually exclusive. */

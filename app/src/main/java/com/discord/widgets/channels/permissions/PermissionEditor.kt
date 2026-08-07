@@ -34,6 +34,7 @@ internal object PermissionEditor {
         R.id.channel_permission_text_use_external_stickers to Permission.USE_EXTERNAL_STICKERS,
         R.id.channel_permission_text_mention_everyone to Permission.MENTION_EVERYONE,
         R.id.channel_permission_text_manage_messages to Permission.MANAGE_MESSAGES,
+        R.id.channel_permission_text_bypass_slowmode to Permission.BYPASS_SLOWMODE,
         R.id.channel_permission_text_read_message_history to Permission.READ_MESSAGE_HISTORY,
         R.id.channel_permission_text_send_tts_messages to Permission.SEND_TTS_MESSAGES,
         R.id.channel_permission_use_application_commands to Permission.USE_APPLICATION_COMMANDS,

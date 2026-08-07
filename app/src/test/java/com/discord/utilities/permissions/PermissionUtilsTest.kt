@@ -294,22 +294,10 @@ class PermissionUtilsTest {
         assertTrue(PermissionUtils.hasAccessWrite(channel(id = CHANNEL, type = Channel.DM), null))
     }
 
-    @Test fun `slow mode bypass differs between sending and thread creation`() {
-        assertTrue(
-            PermissionUtils.hasBypassSlowmodePermissions(
-                Permission.MANAGE_MESSAGES, SlowModeType.MESSAGE_SEND,
-            ),
-        )
-        assertFalse(
-            PermissionUtils.hasBypassSlowmodePermissions(
-                Permission.MANAGE_MESSAGES, SlowModeType.THREAD_CREATE,
-            ),
-        )
-        assertTrue(
-            PermissionUtils.hasBypassSlowmodePermissions(
-                Permission.MANAGE_THREADS, SlowModeType.THREAD_CREATE,
-            ),
-        )
+    @Test fun `slow mode bypass takes only the bypass permission`() {
+        assertTrue(PermissionUtils.hasBypassSlowmodePermissions(Permission.BYPASS_SLOWMODE))
+        assertFalse(PermissionUtils.hasBypassSlowmodePermissions(Permission.MANAGE_MESSAGES))
+        assertFalse(PermissionUtils.hasBypassSlowmodePermissions(Permission.MANAGE_THREADS))
     }
 
     // endregion

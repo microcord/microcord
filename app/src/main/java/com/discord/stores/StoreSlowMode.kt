@@ -1,7 +1,6 @@
 package com.discord.stores
 
 import com.discord.utilities.permissions.PermissionUtils
-import com.discord.utilities.permissions.SlowModeType
 import com.discord.utilities.time.Clock
 import java.util.concurrent.TimeUnit
 import rx.Observable
@@ -103,7 +102,7 @@ class StoreSlowMode(
         }
 
         val cooldown = storePermissions.observePermissionsForChannel(channelId)
-            .map { permissions -> PermissionUtils.hasBypassSlowmodePermissions(permissions, type.toPermissionType()) }
+            .map { permissions -> PermissionUtils.hasBypassSlowmodePermissions(permissions) }
             .distinctUntilChanged()
             .switchMap { canBypass ->
                 if (canBypass) {
@@ -152,16 +151,4 @@ class StoreSlowMode(
          */
         const val COOLDOWN_BUFFER_MS = 1_000L
     }
-}
-
-/**
- * Bridges to `PermissionUtils`' stand-in enum.
- *
- * `utilities/permissions/SlowModeType` was introduced while this store did not exist. It is
- * owned by another slice, so the mapping lives here; delete both once that enum is replaced by
- * [StoreSlowMode.Type].
- */
-private fun StoreSlowMode.Type.toPermissionType() = when (this) {
-    StoreSlowMode.Type.MessageSend -> SlowModeType.MESSAGE_SEND
-    StoreSlowMode.Type.ThreadCreate -> SlowModeType.THREAD_CREATE
 }

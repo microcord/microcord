@@ -61,11 +61,14 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
     private lateinit var topic: TextInputLayout
     private lateinit var slowMode: SeekBar
     private lateinit var slowModeLabel: TextView
+    private lateinit var messageSlowMode: SeekBar
+    private lateinit var messageSlowModeLabel: TextView
     private lateinit var save: FloatingActionButton
     private var model: Model? = null
     private var savedName = ""
     private var savedTopic = ""
     private var savedSlowMode = 0
+    private var savedMessageSlowMode = 0
     private var savedArchiveDuration = DEFAULT_ARCHIVE_DURATION
     private var draftArchiveDuration = DEFAULT_ARCHIVE_DURATION
     private var bindingState = false
@@ -76,6 +79,8 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         topic = view.findViewById(R.id.channel_settings_edit_topic)
         slowMode = view.findViewById(R.id.channel_settings_slow_mode_cooldown_slider)
         slowModeLabel = view.findViewById(R.id.channel_settings_slow_mode_cooldown_label)
+        messageSlowMode = view.findViewById(R.id.channel_settings_message_slow_mode_slider)
+        messageSlowModeLabel = view.findViewById(R.id.channel_settings_message_slow_mode_value)
         save = view.findViewById(R.id.channel_settings_save)
 
         val watcher = object : TextWatcher {
@@ -85,17 +90,24 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         }
         name.editText?.addTextChangedListener(watcher)
         topic.editText?.addTextChangedListener(watcher)
-        slowMode.max = SLOWMODE_COOLDOWN_VALUES.lastIndex
-        slowMode.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+        bindSlider(slowMode, slowModeLabel)
+        bindSlider(messageSlowMode, messageSlowModeLabel)
+        save.setOnClickListener { saveChanges() }
+    }
+
+    private fun bindSlider(slider: SeekBar, valueLabel: TextView) {
+        slider.max = SLOWMODE_COOLDOWN_VALUES.lastIndex
+        slider.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                if (!bindingState && fromUser) updateSlowModeLabel(SLOWMODE_COOLDOWN_VALUES[progress])
+                if (!bindingState && fromUser) {
+                    setSliderValueLabel(slider, valueLabel, SLOWMODE_COOLDOWN_VALUES[progress])
+                }
                 updateSaveVisibility()
             }
 
             override fun onStartTrackingTouch(seekBar: SeekBar) = Unit
             override fun onStopTrackingTouch(seekBar: SeekBar) = Unit
         })
-        save.setOnClickListener { saveChanges() }
     }
 
     override fun onViewBoundOrOnResume() {
@@ -138,7 +150,10 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         }
         savedSlowMode = channel.rateLimitPerUser
         slowMode.progress = slowModeProgress(savedSlowMode)
-        updateSlowModeLabel(savedSlowMode)
+        setSliderValueLabel(slowMode, slowModeLabel, savedSlowMode)
+        savedMessageSlowMode = channel.defaultThreadRateLimitPerUser ?: 0
+        messageSlowMode.progress = slowModeProgress(savedMessageSlowMode)
+        setSliderValueLabel(messageSlowMode, messageSlowModeLabel, savedMessageSlowMode)
         savedArchiveDuration = channel.defaultAutoArchiveDuration ?: DEFAULT_ARCHIVE_DURATION
         draftArchiveDuration = savedArchiveDuration
         bindingState = false
@@ -152,7 +167,6 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         topic.editText?.filters = arrayOf(
             InputFilter.LengthFilter(if (isThreadOnly) MAX_FORUM_TOPIC_LENGTH else MAX_TOPIC_LENGTH),
         )
-        // Only a channel that holds messages itself has pins; a forum's posts carry their own.
         root.findViewById<LinearLayout>(R.id.channel_settings_pinned_messages_container).isVisible =
             channel.type == Channel.GUILD_TEXT || channel.isAnnouncementChannel()
         root.findViewById<TextView>(R.id.channel_settings_pinned_messages).apply {
@@ -198,6 +212,13 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         }
         root.findViewById<LinearLayout>(R.id.channel_settings_section_slow_mode).isVisible =
             next.canManageChannel && !category && !channel.isAnnouncementChannel()
+        root.findViewById<TextView>(R.id.channel_settings_slowmode_label).setText(
+            if (isThreadOnly) R.string.forum_setting_slow_mode_posts else R.string.form_label_slowmode_cooldown,
+        )
+        root.findViewById<TextView>(R.id.channel_settings_slow_mode_help).setText(
+            if (isThreadOnly) R.string.form_help_slowmode_forum else R.string.form_help_slowmode,
+        )
+        root.findViewById<LinearLayout>(R.id.channel_settings_section_message_slow_mode).isVisible = isThreadOnly
 
         configureForumTags(root, next)
         configureForumDefaults(root, next)
@@ -251,7 +272,6 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         root.findViewById<CheckedSetting>(R.id.channel_settings_forum_require_tag).apply {
             setOnCheckedListener(null)
             isChecked = (channel.flags ?: 0L) and Channel.FLAG_REQUIRE_TAG != 0L
-            // Nothing but moderator tags leaves a member with no way to satisfy the requirement.
             isEnabled = model.canManageChannel && !(tags.isNotEmpty() && tags.all { it.moderated })
             setOnCheckedListener { checked ->
                 val flags = (channel.flags ?: 0L)
@@ -271,7 +291,6 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         section.isVisible = channel.isThreadOnlyChannel() && model.canManageChannel
         if (!section.isVisible) return
 
-        // A media channel is always a gallery, so it has no layout to choose.
         val showLayout = channel.isGuildForumChannel()
         val layoutList = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_layout_list)
         val layoutGallery = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_layout_gallery)
@@ -324,6 +343,7 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         val currentName = name.editText?.text?.toString().orEmpty()
         val currentTopic = topic.editText?.text?.toString().orEmpty()
         val currentSlowMode = SLOWMODE_COOLDOWN_VALUES[slowMode.progress]
+        val currentMessageSlowMode = SLOWMODE_COOLDOWN_VALUES[messageSlowMode.progress]
         RestAPI.api.editTextChannel(
             channel.id,
             RestAPIParams.TextChannel(
@@ -333,6 +353,7 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
                 nsfw = null,
                 rateLimitPerUser = currentSlowMode.takeIf { it != savedSlowMode },
                 defaultAutoArchiveDuration = draftArchiveDuration.takeIf { it != savedArchiveDuration },
+                defaultThreadRateLimitPerUser = currentMessageSlowMode.takeIf { it != savedMessageSlowMode },
             ),
         ).restSubscribeOn().ui(this).appSubscribe(WidgetTextChannelSettings::class.java, context = context) {
             AppToast.show(context, if (it.isCategory()) R.string.category_settings else R.string.channel_settings)
@@ -392,9 +413,9 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         )
     }
 
-    private fun updateSlowModeLabel(seconds: Int) {
-        slowModeLabel.text = durationLabel(requireContext(), seconds)
-        slowMode.contentDescription = slowModeLabel.text
+    private fun setSliderValueLabel(slider: SeekBar, valueLabel: TextView, seconds: Int) {
+        valueLabel.text = durationLabel(requireContext(), seconds)
+        slider.contentDescription = valueLabel.text
     }
 
     private fun updateSaveVisibility() {
@@ -402,6 +423,7 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         save.isVisible = name.editText?.text?.toString().orEmpty() != savedName ||
             topic.editText?.text?.toString().orEmpty() != savedTopic ||
             SLOWMODE_COOLDOWN_VALUES[slowMode.progress] != savedSlowMode ||
+            SLOWMODE_COOLDOWN_VALUES[messageSlowMode.progress] != savedMessageSlowMode ||
             draftArchiveDuration != savedArchiveDuration
     }
 

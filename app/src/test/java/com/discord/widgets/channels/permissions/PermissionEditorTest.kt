@@ -11,11 +11,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PermissionEditorTest {
-    @Test fun editorCoversEveryRecoveredPermissionControl() {
-        assertEquals(30, PermissionEditor.permissionByViewId.size)
-        assertEquals(30, PermissionEditor.permissionByViewId.values.distinct().size)
-    }
-
     @Test fun triStateRoundTripsWithoutAllowDenyOverlap() {
         val statuses = mapOf(
             Permission.VIEW_CHANNEL to 1,

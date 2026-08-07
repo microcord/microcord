@@ -180,14 +180,9 @@ object PermissionUtils {
         channel.isPrivate() ||
             can(Permission.VIEW_CHANNEL or Permission.SEND_MESSAGES, channelPermissions)
 
-    /** Whether the user is exempt from the channel's slow mode for [type]. */
-    fun hasBypassSlowmodePermissions(channelPermissions: Long?, type: SlowModeType): Boolean =
-        when (type) {
-            SlowModeType.MESSAGE_SEND ->
-                can(Permission.MANAGE_CHANNELS, channelPermissions) ||
-                    can(Permission.MANAGE_MESSAGES, channelPermissions)
-            SlowModeType.THREAD_CREATE -> can(Permission.MANAGE_THREADS, channelPermissions)
-        }
+    /** Whether the user is exempt from the channel's slow mode. */
+    fun hasBypassSlowmodePermissions(channelPermissions: Long?): Boolean =
+        can(Permission.BYPASS_SLOWMODE, channelPermissions)
 
     // endregion
 
