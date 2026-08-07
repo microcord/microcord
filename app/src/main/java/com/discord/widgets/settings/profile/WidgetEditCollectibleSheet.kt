@@ -203,7 +203,9 @@ class WidgetEditCollectibleSheet : AppBottomSheet() {
         loading.visibility = if (state.isFetching && !state.hasFetched) View.VISIBLE else View.GONE
         empty.visibility = if (state.hasFetched && owned.isEmpty()) View.VISIBLE else View.GONE
         error.visibility = if (state.failed && !state.hasFetched) View.VISIBLE else View.GONE
-        grid.visibility = if (owned.isEmpty()) View.GONE else View.VISIBLE
+        // The grid still holds the "none" tile when nothing is owned, and that is the only way to
+        // clear a collectible already applied — hiding it stranded anyone whose inventory lapsed.
+        grid.visibility = if (state.hasFetched) View.VISIBLE else View.GONE
         renderSelection()
     }
 
