@@ -4,11 +4,11 @@ import java.io.ByteArrayOutputStream
 import java.util.zip.DataFormatException
 import java.util.zip.Inflater
 
-class ZlibStreamDecoder {
+class ZlibStreamDecoder : GatewayStreamDecoder {
     private val inflater = Inflater()
     private val compressed = ByteArrayOutputStream()
 
-    fun decode(bytes: ByteArray): List<String> {
+    override fun decode(bytes: ByteArray): List<String> {
         compressed.write(bytes)
         val input = compressed.toByteArray()
         val messages = mutableListOf<String>()
@@ -30,10 +30,12 @@ class ZlibStreamDecoder {
         return messages
     }
 
-    fun reset() {
+    override fun reset() {
         inflater.reset()
         compressed.reset()
     }
+
+    override fun close() = inflater.end()
 
     private fun inflate(frame: ByteArray): String {
         inflater.setInput(frame)

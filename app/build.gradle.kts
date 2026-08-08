@@ -116,6 +116,7 @@ dependencies {
     implementation(libs.zxing.scanner) {
         exclude(group = "com.android.support")
     }
+    implementation(variantOf(libs.zstd) { artifactType("aar") })
     testImplementation(libs.junit)
     testImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -126,4 +127,5 @@ dependencies {
     androidTestImplementation(libs.androidx.work.testing)
     androidTestImplementation(libs.okhttp.mockwebserver)
     androidTestUtil(libs.androidx.test.orchestrator)
+    //debugImplementation(libs.leakcanary)
 }

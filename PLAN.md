@@ -1160,6 +1160,7 @@ or observable behavior. Small implementation details do not belong here.
 
 | Date | Decision | Reason | Consequence |
 | --- | --- | --- | --- |
+| 2026-08-08 | Use Gateway `zstd-stream` with zstd-jni `1.5.7-12` and pre-HELLO zlib fallback | Discord documents zstd transport and clean A65 tracing showed Gateway as 7.62% of cold-launch CPU; `1.5.7-13` requires compile SDK 37 | One persistent native decoder context is scoped to each connection; JSON remains unchanged for isolated A/B measurement |
 | 2026-07-22 | Rebuild in existing Android boilerplate | Project already exists at target path | Convert template rather than create another project |
 | 2026-07-22 | Use Kotlin + XML | Closest to original architecture and recovered layouts | Remove Compose |
 | 2026-07-22 | Use `dev.mantikafasi.manticord` application ID | Official signing identity cannot be reproduced | External integrations need new configuration |
@@ -3017,6 +3018,18 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   older versions use the matching Discord dark palette fallback. The selection persists locally, survives incoming account
   theme snapshots, and never calls Discord's user-settings endpoint. The Appearance screen was migrated to generated binding.
   Its focused persistence/API-isolation test and `assembleDebug` pass; device visual verification remains open.
+- Removed the unused Android Studio LeakCanary auto-installer after it crashed non-debuggable benchmark APKs before
+  `Application.onCreate`. Memory and Gateway performance measurements use Perfetto without an auto-start provider.
+- Gateway transport now defaults to `zstd-stream` through zstd-jni `1.5.7-12`, with reusable direct buffers, a persistent
+  per-connection context, 16 MiB compressed/64 MiB decompressed guards, trace slices, and one pre-HELLO zlib fallback. A65
+  loaded the ARM64 library and completed HELLO/IDENTIFY/READY plus live dispatches without fallback. Matching 35-second cold
+  traces measured Gateway CPU at 2.668 s/7.62% for zlib and 2.519 s/7.20% for zstd (5.6% lower in this single run). Zstd
+  decoding itself took 87.7 ms across 124 payloads (0.707 ms average; 50.98 ms READY), while unchanged JSON parsing took
+  2.329 s total and 2.034 s for READY. Peak ART heap was 284,222 KiB versus 282,309 KiB for zlib; GC count was 9 versus 10.
+  Heapprofd attributed 26.1 MiB of sampled startup Java allocation to persisted Kryo reads and 3.4 MiB to Unicode emoji
+  loading; the observed Gson allocation belonged primarily to that emoji load, not Gateway JSON. Focused Gateway JVM tests,
+  debug assembly/install, and live ARM64 transport pass. The zstd device test is added but the whole Android-test source set
+  remains blocked by unrelated stale native-engine, SendUtils, and FlexInput test APIs.
 
 Resumable task: `app/src/main/java/com/discord/widgets/user/profile/UserProfileWidgetsView.kt` | RN
 `modules/user_profile/native/UserProfileApplicationWidgetCard.tsx` and `modules/application_widget/**` | add typed

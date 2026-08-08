@@ -70,6 +70,7 @@ import com.discord.utilities.logging.BootLogEvent
 import com.discord.utilities.logging.AppGatewaySocketLogger
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.time.Clock
+import com.discord.utilities.websocket.GatewayCompression
 import com.discord.utilities.websocket.OkHttpGatewayWebSocketFactory
 import com.discord.models.message.Message as DomainMessage
 import com.discord.utilities.messagesend.MessageSendCoordinator
@@ -1394,6 +1395,7 @@ class StoreStream private constructor(
             discovery = GatewayDiscovery(preferences) { api.getGateway().toBlocking().single() },
             webSocketFactory = OkHttpGatewayWebSocketFactory(),
             gatewaySocketLogger = AppGatewaySocketLogger.INSTANCE,
+            initialCompression = GatewayCompression.ZSTD,
         ).also { socket ->
             gatewayConnection.init(socket, voiceChannelSelected.observeSelectedVoiceChannelId())
             initGatewaySocketListeners()

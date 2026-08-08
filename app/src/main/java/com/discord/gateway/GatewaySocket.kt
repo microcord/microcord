@@ -1,5 +1,6 @@
 package com.discord.gateway
 
+import android.os.Trace
 import android.util.Log
 import com.discord.api.activity.Activity
 import com.discord.api.presence.ClientStatus
@@ -25,21 +26,22 @@ import com.discord.gateway.io.VoiceStateUpdate
 import com.discord.gateway.io.VoiceStateUpdateNoPreferredRegion
 import com.discord.gateway.io.WatchStream
 import com.discord.gateway.opcodes.Opcode
+import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.models.domain.ModelPayload
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
+import com.discord.utilities.websocket.GatewayCompression
+import com.discord.utilities.websocket.GatewayStreamDecoder
 import com.discord.utilities.websocket.GatewayWebSocket
 import com.discord.utilities.websocket.GatewayWebSocketFactory
 import com.discord.utilities.websocket.GatewayWebSocketListener
-import com.discord.utilities.websocket.ZlibStreamDecoder
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
-import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
+import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
-import java.util.Locale
 
 interface GatewayEventHandler {
     fun handleConnected(connected: Boolean)
@@ -86,6 +88,7 @@ class GatewaySocket(
     private val webSocketFactory: GatewayWebSocketFactory,
     private val gatewaySocketLogger: GatewaySocketLogger = NoopGatewaySocketLogger,
     private val jitter: () -> Double = Math::random,
+    initialCompression: GatewayCompression = GatewayCompression.ZLIB,
 ) {
     private enum class State { DISCONNECTED, DISCOVERING, CONNECTING, IDENTIFYING, RESUMING, CONNECTED }
 
@@ -99,7 +102,8 @@ class GatewaySocket(
         .registerDiscordApiTypeAdapters()
         .create()
     private val incomingParser = IncomingParser(gson)
-    private val decoder = ZlibStreamDecoder()
+    private var compression = initialCompression
+    private var decoder: GatewayStreamDecoder = compression.createDecoder()
     private var state = State.DISCONNECTED
     private var socket: GatewayWebSocket? = null
     private var generation = 0
@@ -248,7 +252,7 @@ class GatewaySocket(
         state = State.CONNECTING
         decoder.reset()
         val currentGeneration = ++generation
-        val endpoint = url.trimEnd('/') + "/?encoding=json&v=9&compress=zlib-stream"
+        val endpoint = url.trimEnd('/') + "/?encoding=json&v=9&compress=${compression.queryValue}"
         logInfo("connecting host=${runCatching { java.net.URI(url).host }.getOrNull().orEmpty()}")
         helloTimeoutTask = scheduler.schedule(HELLO_TIMEOUT_MS) {
             if (currentGeneration == generation && state == State.CONNECTING) {
@@ -264,7 +268,13 @@ class GatewaySocket(
 
                 override fun onBinaryMessage(bytes: ByteArray) = serialized(currentGeneration) {
                     try {
-                        decoder.decode(bytes).forEach(::handleMessage)
+                        Trace.beginSection("Gateway ${compression.queryValue} decode")
+                        val messages = try {
+                            decoder.decode(bytes)
+                        } finally {
+                            Trace.endSection()
+                        }
+                        messages.forEach(::handleMessage)
                     } catch (error: Throwable) {
                         if (gatewaySocketLogger.logLevel == GatewaySocketLogger.LogLevel.VERBOSE) {
                             runCatching { gatewaySocketLogger.logMessageInflateFailed(error) }
@@ -273,6 +283,14 @@ class GatewaySocket(
                             "inflate/parse failure: ${error.javaClass.simpleName}: ${error.message}",
                             error,
                         )
+                        if (state == State.CONNECTING && compression == GatewayCompression.ZSTD) {
+                            logWarn("zstd failed before HELLO; retrying with zlib")
+                            decoder.close()
+                            compression = GatewayCompression.ZLIB
+                            decoder = compression.createDecoder()
+                            reconnect("Gateway zstd unavailable", immediate = true)
+                            return@serialized
+                        }
                         reconnect("Gateway inflate/parse failure: ${error.javaClass.simpleName}", immediate = false)
                     }
                 }
@@ -329,7 +347,12 @@ class GatewaySocket(
         if (gatewaySocketLogger.logLevel == GatewaySocketLogger.LogLevel.VERBOSE) {
             runCatching { gatewaySocketLogger.logInboundMessage(GatewayLogRedactor.redact(json)) }
         }
-        val incoming = incomingParser.parse(json)
+        Trace.beginSection("Gateway JSON parse")
+        val incoming = try {
+            incomingParser.parse(json)
+        } finally {
+            Trace.endSection()
+        }
         incoming.seq?.let { sequence = it }
         when (incoming.opcode) {
             Opcode.DISPATCH -> handleDispatch(incoming)
