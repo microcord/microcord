@@ -10,7 +10,7 @@ import com.discord.app.AppScreenRouter
 import com.discord.databinding.WidgetManageReactionsBinding
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rx.appSubscribe
-import com.discord.utilities.rx.bindToComponentLifecycle
+import com.discord.utilities.rx.ui
 
 class WidgetManageReactions : AppFragment(R.layout.widget_manage_reactions) {
     private var _binding: WidgetManageReactionsBinding? = null
@@ -55,7 +55,7 @@ class WidgetManageReactions : AppFragment(R.layout.widget_manage_reactions) {
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
         modelProvider.get()
-            .bindToComponentLifecycle(this)
+            .ui(this)
             .appSubscribe(WidgetManageReactions::class.java, context = context, onNext = ::configureUI)
     }
 

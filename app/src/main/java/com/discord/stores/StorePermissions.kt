@@ -84,6 +84,7 @@ class StorePermissions(
         observationDeck.connectRx(this) { permissionsForChannelsFlattenedSnapshot }.distinctUntilChanged()
     fun observePermissionsForChannel(channelId: Long): Observable<Long?> =
         observationDeck.connectRx(this) { permissionsForChannelsFlattenedSnapshot[channelId] }
+            .distinctUntilChanged()
     fun observePermissionsForGuild(guildId: Long): Observable<Long?> =
         observationDeck.connectRx(this) { permissionsForGuildsSnapshot[guildId] }.distinctUntilChanged()
 

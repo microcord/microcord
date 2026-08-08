@@ -10,6 +10,7 @@ import com.discord.models.message.Message
 import com.discord.models.user.MeUser
 import com.discord.stores.StoreStream
 import com.discord.utilities.permissions.ManageMessageContext
+import com.discord.utilities.rx.computationLatest
 import rx.Observable
 import rx.subjects.BehaviorSubject
 
@@ -40,7 +41,7 @@ class ManageReactionsModelProvider(
                     .map { results -> createModel(context, reactions, selected, results) }
             }
         }
-    }.distinctUntilChanged()
+    }.computationLatest().distinctUntilChanged()
 
     fun onEmojiTargeted(emojiKey: String) = targetedEmojiKey.onNext(emojiKey)
 
