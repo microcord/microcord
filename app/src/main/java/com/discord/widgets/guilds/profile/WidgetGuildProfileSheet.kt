@@ -17,6 +17,7 @@ import com.discord.databinding.WidgetGuildProfileSheetBinding
 import com.discord.databinding.WidgetGuildProfileActionsBinding
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
+import com.discord.utilities.resources.getQuantityString
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.views.CheckedSetting
@@ -173,7 +174,12 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
                 )
             }
         }
-        binding.guildProfileSheetBoosts.text = tabs.premiumSubscriptionCount.toString()
+        binding.guildProfileSheetBoosts.text = resources.getQuantityString(
+            R.plurals.premium_guild_subscription_num_subscriptions_numSubscriptions,
+            R.string.premium_guild_subscription,
+            tabs.premiumSubscriptionCount,
+            "#" to tabs.premiumSubscriptionCount,
+        )
     }
 
     private fun bindActions(state: WidgetGuildProfileSheetViewModel.ViewState.Loaded) {
