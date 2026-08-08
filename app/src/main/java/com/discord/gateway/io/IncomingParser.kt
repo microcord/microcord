@@ -62,10 +62,12 @@ import com.discord.models.domain.StreamServerUpdate
 import com.discord.models.domain.UserSettingsProtoUpdate
 import com.discord.models.thread.dto.ModelThreadListSync
 import com.google.gson.Gson
-import com.google.gson.JsonElement
 import com.google.gson.JsonParseException
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
+import java.io.StringReader
 
 /**
  * Turns a gateway frame into a typed payload.
@@ -80,30 +82,60 @@ class IncomingParser(private val gson: Gson) {
     object DISPATCH_UNPARSED
 
     fun parse(json: String): Incoming {
-        val envelope = JsonParser.parseString(json).asJsonObject
-        val type = envelope["t"]?.takeUnless(JsonElement::isJsonNull)?.asString
-        val seq = envelope["s"]?.takeUnless(JsonElement::isJsonNull)?.asInt
-        val opcode = Opcode.fromApiInt(envelope["op"]?.asInt ?: -1)
-        val rawData = envelope["d"]
-        val body = rawData?.takeUnless(JsonElement::isJsonNull)
-        val data = when {
-            opcode == Opcode.DISPATCH -> parseDispatch(type, body)
-            body == null -> null
-            opcode == Opcode.HELLO -> gson.fromJson(body, Hello::class.java)
-            opcode == Opcode.INVALID_SESSION -> body.asBoolean
-            else -> body.deepCopy()
+        val metadata = readMetadata(json)
+        val data = if (metadata.opcode == Opcode.DISPATCH && metadata.type in BODYLESS_EVENTS) {
+            Unit
+        } else {
+            readData(json, metadata)
         }
-        return Incoming(type, seq, opcode, data)
+        return Incoming(metadata.type, metadata.sequence, metadata.opcode, data)
+    }
+
+    /** Reads the small envelope fields without materialising the potentially huge `d` tree. */
+    private fun readMetadata(json: String): Metadata = JsonReader(StringReader(json)).use { reader ->
+        var type: String? = null
+        var sequence: Int? = null
+        var opcode = -1
+        reader.beginObject()
+        while (reader.hasNext()) {
+            when (reader.nextName()) {
+                "t" -> type = reader.nextStringOrNull()
+                "s" -> sequence = reader.nextIntOrNull()
+                "op" -> opcode = reader.nextIntOrNull() ?: -1
+                else -> reader.skipValue()
+            }
+        }
+        reader.endObject()
+        Metadata(type, sequence, Opcode.fromApiInt(opcode))
+    }
+
+    /** Replays the envelope and streams only `d` into the adapter selected by [metadata]. */
+    private fun readData(json: String, metadata: Metadata): Any? = JsonReader(StringReader(json)).use { reader ->
+        reader.beginObject()
+        while (reader.hasNext()) {
+            if (reader.nextName() != "d") {
+                reader.skipValue()
+                continue
+            }
+            if (reader.peek() == JsonToken.NULL) {
+                reader.nextNull()
+                return@use null
+            }
+            return@use when (metadata.opcode) {
+                Opcode.DISPATCH -> parseDispatch(metadata.type, reader)
+                Opcode.HELLO -> gson.fromJson(reader, Hello::class.java)
+                Opcode.INVALID_SESSION -> reader.nextBoolean()
+                else -> JsonParser.parseReader(reader)
+            }
+        }
+        null
     }
 
     /**
      * @param data null when the frame carried no `d`. Only the bodyless "refetch me" events tolerate
      *   that; everything else yields null so the socket does not publish an empty payload.
      */
-    private fun parseDispatch(type: String?, data: JsonElement?): Any? {
-        // Pure "refetch me" nudges: whatever body they carry is discarded.
-        if (type in BODYLESS_EVENTS) return Unit
-        if (data == null) return null
+    private fun parseDispatch(type: String?, data: JsonReader): Any? {
         return try {
             parseDispatchBody(type, data)
         } catch (error: JsonParseException) {
@@ -113,7 +145,7 @@ class IncomingParser(private val gson: Gson) {
         }
     }
 
-    private fun parseDispatchBody(type: String?, data: JsonElement): Any? = when (type) {
+    private fun parseDispatchBody(type: String?, data: JsonReader): Any? = when (type) {
         "READY" -> gson.fromJson(data, ModelPayload::class.java)
 
         // Current user
@@ -214,6 +246,24 @@ class IncomingParser(private val gson: Gson) {
 
         else -> DISPATCH_UNPARSED
     }
+
+    private fun JsonReader.nextStringOrNull(): String? {
+        if (peek() != JsonToken.NULL) return nextString()
+        nextNull()
+        return null
+    }
+
+    private fun JsonReader.nextIntOrNull(): Int? {
+        if (peek() != JsonToken.NULL) return nextInt()
+        nextNull()
+        return null
+    }
+
+    private data class Metadata(
+        val type: String?,
+        val sequence: Int?,
+        val opcode: Opcode,
+    )
 
     companion object {
         /**

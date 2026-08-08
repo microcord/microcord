@@ -3030,6 +3030,14 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   loading; the observed Gson allocation belonged primarily to that emoji load, not Gateway JSON. Focused Gateway JVM tests,
   debug assembly/install, and live ARM64 transport pass. The zstd device test is added but the whole Android-test source set
   remains blocked by unrelated stale native-engine, SendUtils, and FlexInput test APIs.
+- Gateway envelopes and every typed dispatch body now stream through `JsonReader`: an order-independent metadata pass skips
+  `d`, then a second pass feeds only `d` directly into its existing type adapter. Unicode emoji assets use the same direct
+  recursive streaming approach. Persister eager reads run on one named preload lane instead of unbounded Rx IO workers, and
+  `ObservationDeck` snapshots matching observers under its monitor but invokes callbacks after releasing it. Gateway fixtures,
+  reordered-envelope coverage, emoji/persistence/observer tests, debug assembly/install, and live A65 READY traffic pass.
+  Against the pre-stream zstd trace, READY parsing fell from 2.034 s to 1.787 s, Gateway CPU from 2.519 s to 2.071 s, peak ART
+  heap from 284,222 KiB to about 200,046 KiB, and cold activity start from 1.519 s to 0.926 s. GC count varies by run (9 before,
+  6 after streaming alone, 7 after all startup changes), so only repeated medians should be treated as release evidence.
 
 Resumable task: `app/src/main/java/com/discord/widgets/user/profile/UserProfileWidgetsView.kt` | RN
 `modules/user_profile/native/UserProfileApplicationWidgetCard.tsx` and `modules/application_widget/**` | add typed

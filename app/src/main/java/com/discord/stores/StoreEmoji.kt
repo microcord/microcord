@@ -13,8 +13,8 @@ import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.textprocessing.Rules
 import com.discord.utilities.user.UserUtils.isPremium
-import com.google.gson.JsonElement
-import com.google.gson.JsonParser
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
 import java.util.Locale
 import java.util.regex.Pattern
 import rx.Observable
@@ -343,13 +343,24 @@ class StoreEmoji(
     }
 
     private fun loadUnicodeEmojisFromDisk(context: Context): Map<EmojiCategory, List<ModelEmojiUnicode>> {
-        val root = context.assets.open(EMOJI_ASSET_PATH).reader(Charsets.UTF_8).use { reader ->
-            JsonParser.parseReader(reader).asJsonObject
-        }
         val bundle = LinkedHashMap<EmojiCategory, List<ModelEmojiUnicode>>()
-        for ((key, value) in root.entrySet()) {
-            val category = EmojiCategory.getByString(key) ?: continue
-            bundle[category] = value.asJsonArray.map { parseUnicodeEmoji(it) }
+        context.assets.open(EMOJI_ASSET_PATH).reader(Charsets.UTF_8).use { input ->
+            JsonReader(input).use { reader ->
+                reader.beginObject()
+                while (reader.hasNext()) {
+                    val category = EmojiCategory.getByString(reader.nextName())
+                    if (category == null || reader.peek() == JsonToken.NULL) {
+                        reader.skipValue()
+                        continue
+                    }
+                    val emojis = ArrayList<ModelEmojiUnicode>()
+                    reader.beginArray()
+                    while (reader.hasNext()) emojis += parseUnicodeEmoji(reader)
+                    reader.endArray()
+                    bundle[category] = emojis
+                }
+                reader.endObject()
+            }
         }
         return bundle
     }
@@ -360,19 +371,67 @@ class StoreEmoji(
      * model does not model. The reference streams the same shape through its own
      * `ModelEmojiUnicode.Bundle`, which this project has not reconstructed.
      */
-    private fun parseUnicodeEmoji(element: JsonElement): ModelEmojiUnicode {
-        val json = element.asJsonObject
-        fun flag(name: String): Boolean =
-            json.get(name)?.takeUnless(JsonElement::isJsonNull)?.asBoolean ?: false
+    private fun parseUnicodeEmoji(reader: JsonReader): ModelEmojiUnicode {
+        var names = emptyList<String>()
+        var surrogates = ""
+        var hasDiversity = false
+        var hasMultiDiversity = false
+        var hasDiversityParent = false
+        var hasMultiDiversityParent = false
+        var diversityChildren: List<ModelEmojiUnicode>? = null
+        reader.beginObject()
+        while (reader.hasNext()) {
+            when (reader.nextName()) {
+                "names" -> {
+                    val parsed = ArrayList<String>()
+                    if (reader.peek() == JsonToken.NULL) {
+                        reader.nextNull()
+                    } else {
+                        reader.beginArray()
+                        while (reader.hasNext()) parsed += reader.nextString()
+                        reader.endArray()
+                    }
+                    names = parsed
+                }
+                "surrogates" -> surrogates = if (reader.peek() == JsonToken.NULL) {
+                    reader.nextNull()
+                    ""
+                } else {
+                    reader.nextString()
+                }
+                "hasDiversity" -> hasDiversity = reader.nextBooleanOrFalse()
+                "hasMultiDiversity" -> hasMultiDiversity = reader.nextBooleanOrFalse()
+                "hasDiversityParent" -> hasDiversityParent = reader.nextBooleanOrFalse()
+                "hasMultiDiversityParent" -> hasMultiDiversityParent = reader.nextBooleanOrFalse()
+                "diversityChildren" -> diversityChildren = if (reader.peek() == JsonToken.NULL) {
+                    reader.nextNull()
+                    null
+                } else {
+                    val children = ArrayList<ModelEmojiUnicode>()
+                    reader.beginArray()
+                    while (reader.hasNext()) children += parseUnicodeEmoji(reader)
+                    reader.endArray()
+                    children
+                }
+                else -> reader.skipValue()
+            }
+        }
+        reader.endObject()
         return ModelEmojiUnicode(
-            names = json.getAsJsonArray("names")?.map { it.asString }.orEmpty(),
-            surrogates = json.get("surrogates")?.takeUnless(JsonElement::isJsonNull)?.asString.orEmpty(),
-            hasDiversity = flag("hasDiversity"),
-            hasMultiDiversity = flag("hasMultiDiversity"),
-            hasDiversityParent = flag("hasDiversityParent"),
-            hasMultiDiversityParent = flag("hasMultiDiversityParent"),
-            diversityChildren = json.getAsJsonArray("diversityChildren")?.map { parseUnicodeEmoji(it) },
+            names = names,
+            surrogates = surrogates,
+            hasDiversity = hasDiversity,
+            hasMultiDiversity = hasMultiDiversity,
+            hasDiversityParent = hasDiversityParent,
+            hasMultiDiversityParent = hasMultiDiversityParent,
+            diversityChildren = diversityChildren,
         )
+    }
+
+    private fun JsonReader.nextBooleanOrFalse(): Boolean {
+        if (peek() != JsonToken.NULL) return nextBoolean()
+        nextNull()
+        return false
     }
 
     private fun <K> MutableMap<K, Int>.increment(key: K) {

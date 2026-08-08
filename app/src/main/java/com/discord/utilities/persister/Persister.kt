@@ -9,6 +9,7 @@ import com.esotericsoftware.kryo.io.Output
 import java.io.File
 import java.lang.ref.WeakReference
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
 import org.objenesis.strategy.StdInstantiatorStrategy
 import rx.Observable
 import rx.Subscription
@@ -118,12 +119,16 @@ class Persister<T : Any>(val key: String, private val defaultValue: T) {
     private class Preloader {
         private val active = java.util.concurrent.atomic.AtomicInteger()
         private val state = BehaviorSubject.create(true)
+        private val executor = Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "PersisterPreload").apply { isDaemon = true }
+        }
+        private val scheduler = Schedulers.from(executor)
 
         fun preload(persister: Persister<*>) {
             active.incrementAndGet()
             state.onNext(false)
             Observable.fromCallable { persister.get() }
-                .subscribeOn(Schedulers.io())
+                .subscribeOn(scheduler)
                 .subscribe(
                     { finish() },
                     { finish() },
@@ -131,6 +136,8 @@ class Persister<T : Any>(val key: String, private val defaultValue: T) {
         }
 
         fun isPreloaded(): Observable<Boolean> = state.distinctUntilChanged()
+
+        fun close() = executor.shutdownNow()
 
         private fun finish() {
             if (active.decrementAndGet() == 0) state.onNext(true)
@@ -176,6 +183,7 @@ class Persister<T : Any>(val key: String, private val defaultValue: T) {
             filesDir = directory
             this.clock = clock
             initialized = true
+            preloader.close()
             preloader = Preloader()
             persistenceSubscription?.unsubscribe()
             persistenceSubscription = persistenceStrategy

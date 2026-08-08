@@ -146,6 +146,11 @@ class GatewayContractTest {
         val update = parser.parse(stageEvent("STAGE_INSTANCE_UPDATE", "updated"))
         val delete = parser.parse(stageEvent("STAGE_INSTANCE_DELETE", "updated"))
         assertEquals("sanitized-session", (ready.data as ModelPayload).sessionId)
+        val reorderedReady = parser.parse(
+            """{"d":{"session_id":"reordered-session"},"s":42,"t":"READY","op":0}""",
+        )
+        assertEquals("reordered-session", (reorderedReady.data as ModelPayload).sessionId)
+        assertEquals(42, reorderedReady.seq)
         assertEquals(StageInstancePrivacyLevel.GUILD_ONLY, (create.data as StageInstance).privacyLevel)
         assertEquals("updated", (update.data as StageInstance).topic)
         assertEquals(3L, (delete.data as StageInstance).channelId)

@@ -21,9 +21,15 @@ class ObservationDeck(
         var isStale: Boolean = false
             private set
 
+        @Synchronized
         fun markStale() {
             isStale = true
             onUpdate = {}
+        }
+
+        @Synchronized
+        fun notifyIfActive() {
+            if (!isStale) onUpdate()
         }
 
         fun toDebugLogString() =
@@ -95,22 +101,23 @@ class ObservationDeck(
         logBreadcrumb("disconnect END. observer: ${observer.name}")
     }
 
-    @Synchronized
     fun notify(updates: Set<UpdateSource>) {
         logBreadcrumb("notify START")
         try {
-            var index = 0
-            while (index < observers.size) {
-                val observer = observers[index]
-                if (observer.isStale) {
-                    logBreadcrumb("removing observer: ${observer.name}")
-                    observers.removeAt(index)
-                    index--
-                } else if (updates.any(observer.observingUpdates::contains)) {
-                    observer.onUpdate()
+            val affected = synchronized(this) {
+                var index = 0
+                while (index < observers.size) {
+                    val observer = observers[index]
+                    if (observer.isStale) {
+                        logBreadcrumb("removing observer: ${observer.name}")
+                        observers.removeAt(index)
+                    } else {
+                        index++
+                    }
                 }
-                index++
+                observers.filter { observer -> updates.any(observer.observingUpdates::contains) }
             }
+            affected.forEach(Observer::notifyIfActive)
         } catch (throwable: Throwable) {
             // Only a deck configured to report errors absorbs them; otherwise the failing
             // observer must surface to the caller instead of being silently dropped.
