@@ -5,6 +5,8 @@ import com.discord.api.guild.GuildExplicitContentFilter
 import com.discord.api.guild.GuildFeature
 import com.discord.api.guild.GuildHubType
 import com.discord.api.guild.GuildMaxVideoChannelUsers
+import com.discord.api.guild.GuildIncidentsData
+import com.discord.api.guild.GuildNsfwLevel
 import com.discord.api.guild.GuildVerificationLevel
 import com.discord.api.guild.welcome.GuildWelcomeScreen
 import com.discord.api.role.GuildRole
@@ -45,6 +47,12 @@ data class Guild(
     val approximatePresenceCount: Int = 0,
     val nsfw: Boolean = false,
     val hubType: GuildHubType? = null,
+    val safetyAlertsChannelId: Long? = null,
+    val premiumProgressBarEnabled: Boolean = false,
+    val nsfwLevel: GuildNsfwLevel = GuildNsfwLevel.DEFAULT,
+    val ownerConfiguredContentLevel: GuildNsfwLevel? = null,
+    val incidentsData: GuildIncidentsData? = null,
+    val officialMessageColor: Int? = null,
 ) {
     val shortName: String = name.replace(Regex("'s "), " ")
         .replace(Regex("(\\w)(\\w*)"), "$1")

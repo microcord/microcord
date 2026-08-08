@@ -53,8 +53,7 @@ import com.google.android.material.textfield.TextInputLayout
  *
  * Two behaviours worth naming:
  * - **System-channel flags are stored inverted.** `systemChannelFlags` is a *suppression* bitmask, so
- *   a checked "send join messages" switch means the bit is **clear**. The save path rebuilds the
- *   mask from the three switches.
+ *   a checked "send join messages" switch means the bit is **clear**.
  * - **"All messages" is disabled on a large guild.** Above Discord's member threshold the default
  *   notification level is forced to mentions-only, and the radio carries a tooltip saying why.
  *
@@ -79,6 +78,12 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
         R.id.system_channel_join,
         R.id.system_channel_join_replies,
         R.id.system_channel_boost,
+        R.id.system_channel_guild_reminders,
+        R.id.system_channel_role_subscription_purchase,
+        R.id.system_channel_role_subscription_purchase_replies,
+        R.id.system_channel_voice_hangout,
+        R.id.premium_progress_bar,
+        R.id.overview_description,
         R.id.upload_banner,
         R.id.upload_splash,
         STATE_ID_NOTIFICATION_DEFAULT,
@@ -101,9 +106,10 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
     private lateinit var afkTimeoutWrap: View
     private lateinit var systemChannel: TextView
     private lateinit var systemChannelWrap: View
-    private lateinit var systemChannelJoin: CheckedSetting
-    private lateinit var systemChannelJoinReplies: CheckedSetting
-    private lateinit var systemChannelBoost: CheckedSetting
+    private lateinit var systemChannelRoleSubscriptionPurchase: CheckedSetting
+    private lateinit var systemChannelRoleSubscriptionPurchaseReplies: CheckedSetting
+    private lateinit var premiumProgressBar: CheckedSetting
+    private lateinit var descriptionInput: TextInputLayout
     private lateinit var notificationAll: CheckedSetting
     private lateinit var notificationOnlyMentions: CheckedSetting
     private lateinit var notificationRadios: RadioManager
@@ -128,9 +134,11 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
         afkTimeoutWrap = binding.afk.afkTimeoutWrap
         systemChannel = binding.systemChannel.systemChannel
         systemChannelWrap = binding.systemChannel.systemChannelWrap
-        systemChannelJoin = binding.systemChannel.systemChannelJoin
-        systemChannelJoinReplies = binding.systemChannel.systemChannelJoinReplies
-        systemChannelBoost = binding.systemChannel.systemChannelBoost
+        systemChannelRoleSubscriptionPurchase = binding.systemChannel.systemChannelRoleSubscriptionPurchase
+        systemChannelRoleSubscriptionPurchaseReplies =
+            binding.systemChannel.systemChannelRoleSubscriptionPurchaseReplies
+        premiumProgressBar = binding.premiumProgressBar.premiumProgressBar
+        descriptionInput = binding.description.overviewDescription
         notificationAll = binding.notifications.serverSettingsOverviewNotificationAll
         notificationOnlyMentions = binding.notifications.serverSettingsOverviewNotificationOnlyMentions
         save = binding.save
@@ -144,10 +152,10 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
 
         save.hide()
         state.setupUnsavedChangesConfirmation(this)
-        state.setupTextWatcherWithSaveAction(this, save, nameInput)
+        state.setupTextWatcherWithSaveAction(this, save, nameInput, descriptionInput)
         // The two channel rows and the timeout row are set by a picker, not typed into, so they are
         // registered as optional: a guild legitimately has no AFK or system channel.
-        state.addOptionalFields(afkChannel, systemChannel)
+        state.addOptionalFields(afkChannel, systemChannel, descriptionInput)
         WidgetChannelSelector.registerForResult(this, REQUEST_KEY_AFK_CHANNEL, allowNullChannel = true) { id, _ ->
             val channel = StoreStream.getChannels().getChannel(id)
             state.put(afkChannel.id, channel)
@@ -186,6 +194,8 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
         configureSplash(guild)
         configureBanner(guild)
         nameInput.setText(state.get(nameInput.id, guild.name))
+        descriptionInput.setText(state.get(descriptionInput.id, guild.description.orEmpty()))
+        configurePremiumProgressBar(guild)
 
         configureAfkChannel(state.get(afkChannel.id, viewState.afkChannel))
         afkChannelWrap.setOnClickListener {
@@ -216,7 +226,7 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
                 noChannelStringId = R.string.no_system_channel,
             )
         }
-        configureSystemChannelToggles(guild, currentSystemChannel != null)
+        configureSystemChannelToggles(guild, currentSystemChannel != null, viewState.isCreatorMonetizable)
 
         configureNotificationRadios(
             selected = state.get(STATE_ID_NOTIFICATION_DEFAULT, guild.defaultMessageNotifications),
@@ -253,97 +263,67 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
         state.configureSaveActionView(save)
     }
 
+    /** iOS drops the whole section on an ineligible guild rather than showing a locked tile. */
     private fun configureSplash(guild: Guild) {
+        val section = binding.uploadSplash.root
+        if (!guild.canHaveSplash()) {
+            section.visibility = View.GONE
+            return
+        }
+        section.visibility = View.VISIBLE
         val image = requireView().findViewById<SimpleDraweeView>(R.id.upload_splash)
         val container = requireView().findViewById<View>(R.id.server_settings_overview_upload_splash_container)
         val remove = requireView().findViewById<TextView>(R.id.server_settings_overview_upload_splash_remove)
-        val unlock = requireView().findViewById<TextView>(R.id.upload_splash_unlock)
-        val nitroTier = requireView().findViewById<TextView>(R.id.upload_splash_nitro_tier)
         val current = state.get(image.id, IconUtils.getGuildSplashUrl(guild, resources.displayMetrics.widthPixels))
         IconUtils.setIcon(image, current)
-        val enabled = guild.canHaveSplash()
-        container.isEnabled = enabled
-        container.setOnClickListener(if (enabled) View.OnClickListener {
+        container.setOnClickListener {
             openImagePicker { value ->
                 state.put(image.id, value)
                 configureSplash(guild)
                 state.configureSaveActionView(save)
             }
-        } else null)
-        remove.visibility = if (enabled && !current.isNullOrBlank()) View.VISIBLE else View.GONE
+        }
+        remove.visibility = if (current.isNullOrBlank()) View.GONE else View.VISIBLE
         remove.setOnClickListener {
             state.put(image.id, "")
             configureSplash(guild)
             state.configureSaveActionView(save)
         }
-        unlock.text = SettingsStrings.render(
-            requireContext(),
-            if (enabled) R.string.guild_settings_overview_boost_unlocked else R.string.guild_settings_overview_tier_info,
-            "tier" to 1,
-            "tierStatusUrl" to "",
-        )
-        unlock.visibility = if (current.isNullOrBlank()) View.VISIBLE else View.GONE
-        image.alpha = if (enabled) 1f else 0.3f
-        nitroTier.visibility = if (enabled) View.GONE else View.VISIBLE
-        nitroTier.text = SettingsStrings.render(
-            requireContext(),
-            R.string.guild_settings_overview_tier_info,
-            "tier" to 1,
-            "tierStatusUrl" to "",
-        )
+        requireView().findViewById<View>(R.id.upload_splash_unlock).visibility = View.GONE
+        requireView().findViewById<View>(R.id.upload_splash_nitro_tier).visibility = View.GONE
     }
 
     private fun configureBanner(guild: Guild) {
+        val section = binding.uploadBanner.root
+        if (!guild.canHaveBanner()) {
+            section.visibility = View.GONE
+            return
+        }
+        section.visibility = View.VISIBLE
         val image = requireView().findViewById<SimpleDraweeView>(R.id.upload_banner)
         val container = requireView().findViewById<View>(R.id.server_settings_overview_upload_banner_container)
         val remove = requireView().findViewById<TextView>(R.id.server_settings_overview_upload_banner_remove)
-        val unlock = requireView().findViewById<TextView>(R.id.upload_banner_unlock)
-        val nitroTier = requireView().findViewById<TextView>(R.id.upload_banner_nitro_tier)
         val current = state.get(
             image.id,
             IconUtils.getBannerForGuild(guild, resources.displayMetrics.widthPixels, false),
         )
         IconUtils.setIcon(image, current)
-        val enabled = guild.canHaveBanner()
-        container.isEnabled = enabled
-        container.setOnClickListener(if (enabled) View.OnClickListener {
+        container.setOnClickListener {
             openImagePicker { value ->
                 state.put(image.id, value)
                 configureBanner(guild)
                 state.configureSaveActionView(save)
             }
-        } else null)
-        remove.visibility = if (enabled && !current.isNullOrBlank()) View.VISIBLE else View.GONE
+        }
+        remove.visibility = if (current.isNullOrBlank()) View.GONE else View.VISIBLE
         remove.setOnClickListener {
             state.put(image.id, "")
             configureBanner(guild)
             state.configureSaveActionView(save)
         }
-        unlock.text = SettingsStrings.render(
-            requireContext(),
-            if (enabled) R.string.guild_settings_overview_boost_unlocked else R.string.guild_settings_overview_tier_info,
-            "tier" to 2,
-            "tierStatusUrl" to "",
-        )
-        unlock.visibility = if (current.isNullOrBlank()) View.VISIBLE else View.GONE
-        image.alpha = if (enabled) 1f else 0.3f
-        nitroTier.visibility = if (enabled) View.GONE else View.VISIBLE
-        nitroTier.text = SettingsStrings.render(
-            requireContext(),
-            R.string.guild_settings_overview_tier_info,
-            "tier" to 2,
-            "tierStatusUrl" to "",
-        )
-
-        val animatedUpsell = requireView().findViewById<View>(R.id.animated_banner_upsell)
-        animatedUpsell.visibility =
-            if (guild.canHaveAnimatedBanner()) View.VISIBLE else View.GONE
-        requireView().findViewById<TextView>(R.id.animated_banner_upsell_text).setText(
-            if (guild.canHaveAnimatedBanner()) {
-                R.string.guild_settings_animated_banner_try_it_mobile
-            } else R.string.guild_settings_animated_banner_upsell,
-        )
-        requireView().findViewById<View>(R.id.animated_banner_upsell_button).visibility = View.GONE
+        requireView().findViewById<View>(R.id.upload_banner_unlock).visibility = View.GONE
+        requireView().findViewById<View>(R.id.upload_banner_nitro_tier).visibility = View.GONE
+        requireView().findViewById<View>(R.id.animated_banner_upsell).visibility = View.GONE
     }
 
     private fun openImagePicker(onSelected: (String) -> Unit) {
@@ -386,31 +366,56 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
     }
 
     /**
-     * Binds the three system-channel switches.
+     * Binds the system-channel switches.
      *
      * `systemChannelFlags` suppresses messages, so each switch shows the **inverse** of its bit.
-     * With no system channel there is nowhere to send them, and the reference disables all three.
+     * With no system channel there is nowhere to send them, and the reference disables all of them.
+     * The two role-subscription rows only appear on a monetizable guild, or on one that already has
+     * the bit set.
      */
-    private fun configureSystemChannelToggles(guild: Guild, hasSystemChannel: Boolean) {
-        val toggles = listOf(
-            systemChannelJoin to SYSTEM_CHANNEL_SUPPRESS_JOIN_NOTIFICATIONS,
-            systemChannelJoinReplies to SYSTEM_CHANNEL_SUPPRESS_JOIN_NOTIFICATION_REPLIES,
-            systemChannelBoost to SYSTEM_CHANNEL_SUPPRESS_PREMIUM_SUBSCRIPTIONS,
+    private fun configureSystemChannelToggles(
+        guild: Guild,
+        hasSystemChannel: Boolean,
+        isCreatorMonetizable: Boolean,
+    ) {
+        fun show(toggle: CheckedSetting, flag: Int) {
+            toggle.visibility =
+                if (isCreatorMonetizable || (guild.systemChannelFlags and flag) != 0) View.VISIBLE
+                else View.GONE
+        }
+        show(systemChannelRoleSubscriptionPurchase, SYSTEM_CHANNEL_SUPPRESS_ROLE_SUBSCRIPTION_PURCHASE)
+        show(
+            systemChannelRoleSubscriptionPurchaseReplies,
+            SYSTEM_CHANNEL_SUPPRESS_ROLE_SUBSCRIPTION_PURCHASE_REPLIES,
         )
-        toggles.forEach { (toggle, flag) ->
+
+        SYSTEM_CHANNEL_TOGGLES.forEach { (viewId, flag) ->
+            val toggle = requireView().findViewById<CheckedSetting>(viewId)
             val enabledOnServer = (guild.systemChannelFlags and flag) == 0
-            toggle.setChecked(state.get(toggle.id, enabledOnServer), false)
+            toggle.setChecked(state.get(viewId, enabledOnServer), false)
             if (hasSystemChannel) {
                 toggle.alpha = 1f
                 toggle.setContainerClickListener {
                     toggle.toggle()
-                    state.put(toggle.id, toggle.isChecked())
+                    state.put(viewId, toggle.isChecked())
                     state.configureSaveActionView(save)
                 }
             } else {
                 toggle.setContainerClickListener(null)
                 toggle.setDisabledTooltip(null)
             }
+        }
+    }
+
+    private fun configurePremiumProgressBar(guild: Guild) {
+        premiumProgressBar.setChecked(
+            state.get(premiumProgressBar.id, guild.premiumProgressBarEnabled),
+            false,
+        )
+        premiumProgressBar.setContainerClickListener {
+            premiumProgressBar.toggle()
+            state.put(premiumProgressBar.id, premiumProgressBar.isChecked())
+            state.configureSaveActionView(save)
         }
     }
 
@@ -447,16 +452,16 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
         val guild = viewState.guild
         val api = RestAPI.apiSerializeNulls
 
-        var systemChannelFlags = 0
-        if (!state.get(systemChannelJoin.id, systemChannelJoin.isChecked())) {
-            systemChannelFlags = systemChannelFlags or SYSTEM_CHANNEL_SUPPRESS_JOIN_NOTIFICATIONS
-        }
-        if (!state.get(systemChannelJoinReplies.id, systemChannelJoinReplies.isChecked())) {
-            systemChannelFlags =
-                systemChannelFlags or SYSTEM_CHANNEL_SUPPRESS_JOIN_NOTIFICATION_REPLIES
-        }
-        if (!state.get(systemChannelBoost.id, systemChannelBoost.isChecked())) {
-            systemChannelFlags = systemChannelFlags or SYSTEM_CHANNEL_SUPPRESS_PREMIUM_SUBSCRIPTIONS
+        // Only the bits this screen renders are rewritten; anything else the server set stays as it
+        // was, which a rebuild-from-zero would silently clear.
+        var systemChannelFlags = guild.systemChannelFlags
+        SYSTEM_CHANNEL_TOGGLES.forEach { (viewId, flag) ->
+            val toggle = requireView().findViewById<CheckedSetting>(viewId)
+            systemChannelFlags = if (state.get(viewId, toggle.isChecked())) {
+                systemChannelFlags and flag.inv()
+            } else {
+                systemChannelFlags or flag
+            }
         }
 
         api.updateGuild(
@@ -486,6 +491,11 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
                 rulesChannelId = guild.rulesChannelId,
                 publicUpdatesChannelId = guild.publicUpdatesChannelId,
                 preferredLocale = guild.preferredLocale,
+                description = descriptionInput.getTextOrEmpty().trim(),
+                premiumProgressBarEnabled = state.get(
+                    premiumProgressBar.id,
+                    guild.premiumProgressBarEnabled,
+                ),
             ),
         )
             .restSubscribeOn()
@@ -584,7 +594,23 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
         /** `systemChannelFlags` bits — each one *suppresses* a kind of system message. */
         private const val SYSTEM_CHANNEL_SUPPRESS_JOIN_NOTIFICATIONS = 1
         private const val SYSTEM_CHANNEL_SUPPRESS_PREMIUM_SUBSCRIPTIONS = 2
+        private const val SYSTEM_CHANNEL_SUPPRESS_GUILD_REMINDERS = 4
         private const val SYSTEM_CHANNEL_SUPPRESS_JOIN_NOTIFICATION_REPLIES = 8
+        private const val SYSTEM_CHANNEL_SUPPRESS_ROLE_SUBSCRIPTION_PURCHASE = 16
+        private const val SYSTEM_CHANNEL_SUPPRESS_ROLE_SUBSCRIPTION_PURCHASE_REPLIES = 32
+        private const val SYSTEM_CHANNEL_SUPPRESS_VOICE_SESSION = 512
+
+        private val SYSTEM_CHANNEL_TOGGLES = listOf(
+            R.id.system_channel_join to SYSTEM_CHANNEL_SUPPRESS_JOIN_NOTIFICATIONS,
+            R.id.system_channel_join_replies to SYSTEM_CHANNEL_SUPPRESS_JOIN_NOTIFICATION_REPLIES,
+            R.id.system_channel_boost to SYSTEM_CHANNEL_SUPPRESS_PREMIUM_SUBSCRIPTIONS,
+            R.id.system_channel_guild_reminders to SYSTEM_CHANNEL_SUPPRESS_GUILD_REMINDERS,
+            R.id.system_channel_role_subscription_purchase to
+                SYSTEM_CHANNEL_SUPPRESS_ROLE_SUBSCRIPTION_PURCHASE,
+            R.id.system_channel_role_subscription_purchase_replies to
+                SYSTEM_CHANNEL_SUPPRESS_ROLE_SUBSCRIPTION_PURCHASE_REPLIES,
+            R.id.system_channel_voice_hangout to SYSTEM_CHANNEL_SUPPRESS_VOICE_SESSION,
+        )
 
         private const val NOTIFICATION_ALL_MESSAGES = 0
         private const val NOTIFICATION_ONLY_MENTIONS = 1

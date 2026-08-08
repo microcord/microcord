@@ -8,6 +8,7 @@ import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.ProgressBar
 import android.widget.TextView
 import com.discord.R
+import com.discord.api.guild.GuildFeature
 import com.discord.api.guild.VanityUrlResponse
 import com.discord.api.permission.Permission
 import com.discord.app.AppFragment
@@ -66,6 +67,7 @@ class WidgetServerSettingsVanityUrl : AppFragment(R.layout.widget_server_setting
     private lateinit var loadingIndicator: ProgressBar
     private lateinit var errorText: TextView
     private lateinit var currentUrl: TextView
+    private lateinit var webPageNotice: TextView
     private lateinit var header: TextView
     private lateinit var remove: TextView
     private lateinit var save: FloatingActionButton
@@ -80,6 +82,7 @@ class WidgetServerSettingsVanityUrl : AppFragment(R.layout.widget_server_setting
         loadingIndicator = view.findViewById(R.id.server_settings_vanity_url_loading_indicator)
         errorText = view.findViewById(R.id.server_settings_vanity_url_error_text)
         currentUrl = view.findViewById(R.id.server_settings_vanity_url_current_url)
+        webPageNotice = view.findViewById(R.id.server_settings_vanity_url_web_page_notice)
         header = view.findViewById(R.id.server_settings_vanity_url_header)
         remove = view.findViewById(R.id.server_settings_vanity_url_remove)
         save = view.findViewById(R.id.server_settings_vanity_url_save)
@@ -118,6 +121,8 @@ class WidgetServerSettingsVanityUrl : AppFragment(R.layout.widget_server_setting
                 setActionBarTitle(R.string.vanity_url)
                 setActionBarSubtitle(viewState.guildName)
                 configureInviteCode(viewState.vanityUrl, viewState.vanityUrlUses)
+                webPageNotice.visibility = if (viewState.isReadOnly) View.VISIBLE else View.GONE
+                input.isEnabled = !viewState.isReadOnly
                 state.configureSaveActionView(save)
                 save.setOnClickListener {
                     updateVanityUrl(viewState.guildId, input.getTextOrEmpty().trim())
@@ -175,11 +180,8 @@ class WidgetServerSettingsVanityUrl : AppFragment(R.layout.widget_server_setting
                 context = null,
                 errorHandler = { error ->
                     showLoadingUI(false)
-                    if (error.code == VANITY_URL_UNAVAILABLE) {
-                        errorText.visibility = View.VISIBLE
-                    } else {
-                        error.showToasts(context)
-                    }
+                    errorText.setText(errorMessageFor(error.code))
+                    errorText.visibility = View.VISIBLE
                 },
             ) { response: VanityUrlResponse ->
                 showLoadingUI(false)
@@ -211,7 +213,24 @@ class WidgetServerSettingsVanityUrl : AppFragment(R.layout.widget_server_setting
         private const val VANITY_URL_PREFIX = "https://discord.gg/"
 
         /** API error for "that vanity code is already taken". */
-        private const val VANITY_URL_UNAVAILABLE = 50020
+        /** Every rejection is rendered inline; the API code decides which line to show. */
+        internal fun errorMessageFor(code: Int): Int = when (code) {
+            UNKNOWN_CHANNEL -> R.string.set_vanity_url_error_message_unknown_channel
+            VANITY_URL_REQUIRED_FOR_PUBLISHED_GUILDS ->
+                R.string.set_vanity_url_error_message_required_for_published_guilds
+            VANITY_URL_EMPLOYEE_ONLY_GUILD_DISABLED -> R.string.vanity_url_employee_only_guild_disabled
+            VANITY_URL_REQUIREMENTS_NOT_MET -> R.string.set_vanity_url_error_message_requirements_not_met
+            INVALID_ACCESS -> R.string.set_vanity_url_error_message_invalid_access
+            INVALID_PERMISSIONS -> R.string.set_vanity_url_error_message_invalid_permissions
+            else -> R.string.change_vanity_url_error
+        }
+
+        private const val UNKNOWN_CHANNEL = 10003
+        private const val VANITY_URL_REQUIRED_FOR_PUBLISHED_GUILDS = 20040
+        private const val VANITY_URL_EMPLOYEE_ONLY_GUILD_DISABLED = 20044
+        private const val VANITY_URL_REQUIREMENTS_NOT_MET = 20045
+        private const val INVALID_ACCESS = 50001
+        private const val INVALID_PERMISSIONS = 50013
 
         fun newInstance(guildId: Long) = WidgetServerSettingsVanityUrl().apply {
             arguments = Bundle().apply { putLong(INTENT_EXTRA_GUILD_ID, guildId) }
@@ -246,6 +265,7 @@ class ServerSettingsVanityUrlViewModel(
         val vanityUrlUses: Int,
         val canManage: Boolean,
         val canHaveVanityUrl: Boolean,
+        val isReadOnly: Boolean = false,
     )
 
     sealed class ViewState {
@@ -259,6 +279,8 @@ class ServerSettingsVanityUrlViewModel(
             val guildName: String?,
             val vanityUrl: String?,
             val vanityUrlUses: Int,
+            /** A published server web page pins the code: it may be removed but not changed. */
+            val isReadOnly: Boolean,
         ) : ViewState()
     }
 
@@ -278,6 +300,7 @@ class ServerSettingsVanityUrlViewModel(
                     guildName = storeState.guildName,
                     vanityUrl = storeState.vanityUrlCode,
                     vanityUrlUses = storeState.vanityUrlUses,
+                    isReadOnly = storeState.isReadOnly,
                 )
             }
 
@@ -303,6 +326,8 @@ class ServerSettingsVanityUrlViewModel(
                             PermissionUtils.can(Permission.MANAGE_GUILD, guildPermissions)
                         ),
                     canHaveVanityUrl = guild?.canHaveVanityURL() == true,
+                    isReadOnly = guild?.hasFeature(GuildFeature.GUILD_WEB_PAGE_VANITY_URL) == true &&
+                        guild.hasFeature(GuildFeature.VANITY_URL).not(),
                 )
             }
         }

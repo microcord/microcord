@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" style="@style/UiKit.ViewGroup.LinearLayout">
+    <TextView android:text="@string/guild_sticker_upload_title" style="@style/UiKit.Settings.Item.Header"/>
+    <TextView android:id="@+id/widget_server_settings_stickers_requirements" style="@style/UiKit.Settings.Item.SubText.Attached"/>
+    <com.google.android.material.button.MaterialButton android:id="@+id/widget_server_settings_stickers_upload" android:layout_marginLeft="16dp" android:layout_marginTop="8dp" android:layout_marginRight="16dp" android:text="@string/sticker_picker_create_sticker" style="@style/UiKit.Material.Button"/>
+    <TextView android:id="@+id/widget_server_settings_stickers_slots" style="@style/UiKit.Settings.Item.SubText.Attached"/>
+</LinearLayout>

@@ -27,6 +27,7 @@ import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.takeSingleUntilTimeout
 import com.discord.utilities.rx.ui
+import com.discord.views.SearchInputView
 import com.discord.widgets.settings.SettingsNavigation
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import rx.Observable
@@ -38,15 +39,23 @@ class WidgetServerSettingsRoles : AppFragment(R.layout.widget_server_settings_ro
             ?: mostRecentIntent.getLongExtra(INTENT_EXTRA_GUILD_ID, INVALID_ID)
 
     private var adapter: WidgetServerSettingsRolesAdapter? = null
+    private var latestModel: Model? = null
     private var itemTouchHelper: ItemTouchHelper? = null
     private lateinit var addRole: FloatingActionButton
     private lateinit var dimmer: DimmerView
+    private lateinit var search: SearchInputView
+    private var query: String = ""
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         setActionBarDisplayHomeAsUpEnabled()
         addRole = view.findViewById(R.id.roles_list_add_role_fab)
         dimmer = view.findViewById(R.id.dimmer_view)
+        search = view.findViewById(R.id.server_settings_roles_search)
+        search.bindTextWatcher(this) { typed ->
+            query = typed
+            latestModel?.let(::configureUI)
+        }
         val recycler = view.findViewById<RecyclerView>(R.id.server_settings_roles_recycler)
         adapter = MGRecyclerAdapter.configure(WidgetServerSettingsRolesAdapter(recycler))
         itemTouchHelper?.attachToRecyclerView(null)
@@ -57,6 +66,7 @@ class WidgetServerSettingsRoles : AppFragment(R.layout.widget_server_settings_ro
 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
+        StoreStream.getGuildRoleMemberCounts().fetchGuildRoleMemberCounts(guildId)
         Model.observe(guildId).computationLatest().ui(this).appSubscribe(javaClass) { configureUI(it) }
     }
 
@@ -65,10 +75,16 @@ class WidgetServerSettingsRoles : AppFragment(R.layout.widget_server_settings_ro
             appActivity?.onBackPressed()
             return
         }
+        latestModel = model
         setActionBarTitle(R.string.roles)
         setActionBarSubtitle(model.guildName)
+        // Reordering by drag is meaningless over a filtered list, so searching only appears once
+        // the list is long enough to be worth scanning.
+        val searchable = model.roleItems.count { it is WidgetServerSettingsRolesAdapter.RoleItem } >=
+            MIN_ROLES_FOR_SEARCH
+        search.visibility = if (searchable) View.VISIBLE else View.GONE
         adapter?.configure(
-            model.roleItems,
+            model.roleItems.filtered(),
             roleSelected = { WidgetServerSettingsEditRole.launch(model.guildId, it.id, requireContext()) },
             rolesMoved = { processRoleDrop(it, model) },
         )
@@ -79,6 +95,13 @@ class WidgetServerSettingsRoles : AppFragment(R.layout.widget_server_settings_ro
             addRole.hide()
             addRole.setOnClickListener(null)
         }
+    }
+
+    /** The help row has nothing to match on, so a search drops it along with the misses. */
+    private fun List<Payload>.filtered(): List<Payload> {
+        if (query.isBlank()) return this
+        return filterIsInstance<WidgetServerSettingsRolesAdapter.RoleItem>()
+            .filter { it.role.name.contains(query, ignoreCase = true) }
     }
 
     private fun createRole(snapshot: Model) {
@@ -141,8 +164,9 @@ class WidgetServerSettingsRoles : AppFragment(R.layout.widget_server_settings_ro
                     StoreStream.getGuilds().observeComputed(guildId).map { it[me.id] },
                     StoreStream.getPermissions().observePermissionsForGuild(guildId),
                     StoreStream.getGuilds().observeRoles(guildId),
-                ) { guild, member, permissions, roles ->
-                    create(guildId, me, guild, member, permissions, roles)
+                    StoreStream.getGuildRoleMemberCounts().observeGuildRoleMemberCounts(guildId),
+                ) { guild, member, permissions, roles, memberCounts ->
+                    create(guildId, me, guild, member, permissions, roles, memberCounts)
                 }
             }.distinctUntilChanged()
 
@@ -153,6 +177,7 @@ class WidgetServerSettingsRoles : AppFragment(R.layout.widget_server_settings_ro
                 member: GuildMember?,
                 permissions: Long?,
                 roles: Map<Long, GuildRole>,
+                memberCounts: Map<Long, Int>? = null,
             ): Model? {
                 if (guild == null || member == null || permissions == null) return null
                 val canManage = PermissionUtils.can(Permission.MANAGE_ROLES, permissions)
@@ -168,6 +193,7 @@ class WidgetServerSettingsRoles : AppFragment(R.layout.widget_server_settings_ro
                         userAbleToManageRoles = canManage,
                         elevated = elevated,
                         guildId = guildId,
+                        memberCount = memberCounts?.get(role.id),
                     )
                 }
                 return Model(guildId, guild.name, canManage, elevated, items)
@@ -178,6 +204,7 @@ class WidgetServerSettingsRoles : AppFragment(R.layout.widget_server_settings_ro
     companion object {
         private const val INTENT_EXTRA_GUILD_ID = "INTENT_EXTRA_GUILD_ID"
         private const val INVALID_ID = -1L
+        private const val MIN_ROLES_FOR_SEARCH = 10
 
         fun create(context: Context, guildId: Long) {
             StoreStream.getAnalytics().onGuildSettingsPaneViewed("ROLES", guildId)

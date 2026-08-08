@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout style="@style/UiKit.ViewGroup.LinearLayout">
+            <TextView android:text="@string/guild_settings_official_messages_color" style="@style/UiKit.Settings.Item.Header"/>
+            <RelativeLayout android:id="@+id/official_messages_color_container" android:background="?attr/selectableItemBackground" android:focusable="true" android:clickable="true" style="@style/UiKit.ViewGroup.RelativeLayout">
+                <TextView android:id="@+id/official_messages_color_value" android:layout_centerVertical="true" style="@style/UiKit.Settings.Item.Addition"/>
+                <View android:id="@+id/official_messages_color_swatch" android:layout_width="24dp" android:layout_height="24dp" android:layout_marginEnd="16dp" android:layout_centerVertical="true" android:layout_alignParentEnd="true" android:background="@drawable/drawable_uikit_white_circle"/>
+            </RelativeLayout>
+            <TextView android:text="@string/guild_settings_official_messages_description" style="@style/UiKit.Settings.Item.SubText.Attached"/>
+            <View style="@style/UiKit.Settings.Divider"/>
+            <TextView android:text="@string/guild_settings_official_messages_preview" style="@style/UiKit.Settings.Item.Header"/>
+            <LinearLayout android:id="@+id/official_messages_preview" android:padding="16dp" android:layout_margin="16dp" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:id="@+id/official_messages_preview_author" android:text="@string/wumpus" style="@style/UiKit.TextView.Large.SingleLine"/>
+                <TextView android:id="@+id/official_messages_preview_body" android:layout_marginTop="4dp" android:text="@string/role_sample_message" style="@style/UiKit.TextView"/>
+            </LinearLayout>
+            <View android:layout_width="match_parent" android:layout_height="64dp"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+    <com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@+id/official_messages_save" android:contentDescription="@string/save" style="@style/Settings.FloatingActionButton.Save"/>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

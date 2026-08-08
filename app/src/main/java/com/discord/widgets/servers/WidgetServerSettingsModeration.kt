@@ -7,6 +7,7 @@ import android.view.View
 import android.widget.TextView
 import com.discord.R
 import com.discord.api.guild.GuildExplicitContentFilter
+import com.discord.api.guild.GuildNsfwLevel
 import com.discord.api.guild.GuildVerificationLevel
 import com.discord.app.AppFragment
 import com.discord.app.AppToast
@@ -51,6 +52,8 @@ class WidgetServerSettingsModeration : AppFragment(R.layout.widget_server_settin
     private lateinit var explicitContentRows: List<CheckedSetting>
     private lateinit var verificationRadios: RadioManager
     private lateinit var explicitContentRadios: RadioManager
+    private lateinit var accessSection: View
+    private lateinit var ageRestricted: CheckedSetting
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -74,6 +77,15 @@ class WidgetServerSettingsModeration : AppFragment(R.layout.widget_server_settin
             SettingsStrings.render(view.context, R.string.form_help_verification_level)
         view.findViewById<TextView>(R.id.server_settings_moderation_explicit_help).text =
             SettingsStrings.render(view.context, R.string.form_help_explicit_content_filter)
+
+        accessSection = view.findViewById(R.id.server_settings_moderation_access_section)
+        ageRestricted = view.findViewById(R.id.server_settings_moderation_age_restricted)
+        view.findViewById<TextView>(R.id.server_settings_moderation_age_restricted_help).text =
+            SettingsStrings.render(
+                view.context,
+                R.string.form_help_nsfw_server,
+                "helpArticleLink" to AGE_RESTRICTION_HELP_URL,
+            )
 
         verificationRadios = RadioManager(verificationRows)
         explicitContentRadios = RadioManager(explicitContentRows)
@@ -114,6 +126,7 @@ class WidgetServerSettingsModeration : AppFragment(R.layout.widget_server_settin
                 EXPLICIT_CONTENT_FILTERS.forEachIndexed { index, filter ->
                     configureExplicitContentRow(viewState, explicitContentRows[index], filter)
                 }
+                configureAgeRestricted(viewState)
             }
         }
     }
@@ -150,6 +163,27 @@ class WidgetServerSettingsModeration : AppFragment(R.layout.widget_server_settin
         if (viewState.guild.explicitContentFilter == filter) explicitContentRadios.setChecked(row)
     }
 
+    private fun configureAgeRestricted(viewState: ServerSettingsModerationViewModel.ViewState.Loaded) {
+        accessSection.visibility = if (viewState.isNsfwAllowed) View.VISIBLE else View.GONE
+        ageRestricted.setChecked(viewState.isAgeRestricted, false)
+        if (viewState.isAgeRestrictedByDiscord) {
+            ageRestricted.setDisabledTooltip(R.string.form_help_nsfw_server)
+            return
+        }
+        ageRestricted.alpha = 1f
+        ageRestricted.setContainerClickListener {
+            update(
+                RestAPIParams.UpdateGuild(
+                    ownerConfiguredContentLevel = if (viewState.isAgeRestricted) {
+                        GuildNsfwLevel.DEFAULT
+                    } else {
+                        GuildNsfwLevel.AGE_RESTRICTED
+                    },
+                ),
+            )
+        }
+    }
+
     /**
      * The radio does not move on tap: the guild store's own update moves it, so a rejected change
      * simply leaves the previous row selected instead of snapping back.
@@ -172,6 +206,9 @@ class WidgetServerSettingsModeration : AppFragment(R.layout.widget_server_settin
     companion object {
         private const val INTENT_EXTRA_GUILD_ID = "INTENT_EXTRA_GUILD_ID"
         private const val INVALID_GUILD_ID = -1L
+
+        private const val AGE_RESTRICTION_HELP_URL =
+            "https://support.discord.com/hc/en-us/articles/1500005292701"
 
         private const val VERIFICATION_LEVEL_MEDIUM_MINUTES = "5"
         private const val VERIFICATION_LEVEL_HIGH_MINUTES = "10"

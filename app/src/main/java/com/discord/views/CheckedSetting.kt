@@ -23,6 +23,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.core.widget.ImageViewCompat
 import com.discord.R
+import com.discord.widgets.settings.SettingsStrings
 import com.discord.utilities.view.text.LinkifiedTextView
 import rx.functions.Action0
 import rx.functions.Action1
@@ -113,14 +114,14 @@ class CheckedSetting(context: Context, attrs: AttributeSet?) : RelativeLayout(co
                 getColorStateList(R.styleable.CheckedSetting_cs_drawable_left_tint)?.let {
                     ImageViewCompat.setImageTintList(leftDrawable, it)
                 }
-                label.text = getText(R.styleable.CheckedSetting_cs_text)
+                label.text = renderMarkup(getText(R.styleable.CheckedSetting_cs_text))
                 getColorStateList(R.styleable.CheckedSetting_cs_text_color)?.let(label::setTextColor)
                 val labelSize = getDimension(R.styleable.CheckedSetting_cs_text_size, 0f)
                 if (labelSize > 0f) label.setTextSize(TypedValue.COMPLEX_UNIT_PX, labelSize)
                 val font = getResourceId(R.styleable.CheckedSetting_cs_text_fontpath, 0)
                 if (font != 0) ResourcesCompat.getFont(context, font)?.let { label.typeface = it }
 
-                setSubtext(getText(R.styleable.CheckedSetting_cs_subtext))
+                setSubtext(renderMarkup(getText(R.styleable.CheckedSetting_cs_subtext)))
                 getColorStateList(R.styleable.CheckedSetting_cs_subtext_color)?.let(subtext::setTextColor)
                 val subtextSize = getDimension(R.styleable.CheckedSetting_cs_subtext_size, 0f)
                 if (subtextSize > 0f) subtext.setTextSize(TypedValue.COMPLEX_UNIT_PX, subtextSize)
@@ -167,6 +168,16 @@ class CheckedSetting(context: Context, attrs: AttributeSet?) : RelativeLayout(co
     fun setLabelTagVisibility(visible: Boolean) {
         tag.visibility = if (visible) View.VISIBLE else View.GONE
     }
+
+    /**
+     * Renders the `**bold**` / `[label](url)` markup the recovered strings carry. Only the value
+     * that came out of the XML attribute goes through here — text assigned later is left as given,
+     * matching [com.discord.app.DiscordViewInflater].
+     */
+    private fun renderMarkup(text: CharSequence?): CharSequence? =
+        text?.takeIf { it.contains("**") || it.contains("](") }
+            ?.let { SettingsStrings.render(context, it) }
+            ?: text
 
     fun setSubtext(text: CharSequence?) {
         subtext.text = text

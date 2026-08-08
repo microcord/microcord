@@ -7,6 +7,7 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
+import com.discord.utilities.channel.guildChannelIcon
 import com.discord.api.channel.getDisplayName
 import com.discord.utilities.mg_recycler.CategoricalDragAndDropAdapter
 import com.discord.utilities.mg_recycler.DragAndDropHelper
@@ -176,16 +177,9 @@ class SettingsChannelListAdapter(
             adapter.onClickListener?.let { onClick ->
                 itemView.setOnClickListener { onClick(item.channel.id) }
             }
-            hash.setImageResource(iconFor(item.channel.type))
+            hash.setImageResource(guildChannelIcon(item.channel))
             name.text = item.channel.getDisplayName()
             drag.visibility = if (canDrag()) View.VISIBLE else View.GONE
-        }
-
-        private fun iconFor(channelType: Int): Int = when (channelType) {
-            Channel.GUILD_VOICE -> R.drawable.ic_channel_voice
-            Channel.GUILD_ANNOUNCEMENT -> R.drawable.ic_channel_announcements
-            Channel.GUILD_STAGE_VOICE -> R.drawable.ic_channel_stage_24dp
-            else -> R.drawable.ic_channel_text
         }
     }
 

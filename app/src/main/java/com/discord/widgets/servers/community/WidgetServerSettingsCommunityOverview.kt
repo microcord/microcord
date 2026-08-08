@@ -31,6 +31,7 @@ class WidgetServerSettingsCommunityOverview :
     private lateinit var rulesChannel: CommunitySelectorView
     private lateinit var updatesChannel: CommunitySelectorView
     private lateinit var locale: CommunitySelectorView
+    private lateinit var disableSection: CommunitySelectorView
     private lateinit var disableButton: LoadingButton
 
     override fun onViewBound(view: View) {
@@ -38,6 +39,7 @@ class WidgetServerSettingsCommunityOverview :
         rulesChannel = view.findViewById(R.id.community_rules_channel)
         updatesChannel = view.findViewById(R.id.community_updates_channel)
         locale = view.findViewById(R.id.server_settings_community_locale)
+        disableSection = view.findViewById(R.id.server_settings_disable_community_message)
         disableButton = view.findViewById(R.id.server_settings_disable_community_button)
 
         WidgetSettingsLanguageSelect.registerForResult(this, viewModel::saveLocale)
@@ -90,6 +92,11 @@ class WidgetServerSettingsCommunityOverview :
                     WidgetChannelSelector.launchForText(this, viewState.guild.id, REQUEST_KEY_UPDATES_CHANNEL)
                 }
                 locale.setOnClickListener { WidgetSettingsLanguageSelect.show(this) }
+                // Both the updates channel and leaving Community are admin-only, not Manage Server.
+                updatesChannel.isEnabled = viewState.isAdmin
+                updatesChannel.alpha = if (viewState.isAdmin) 1f else DISABLED_ALPHA
+                disableSection.visibility = if (viewState.isAdmin) View.VISIBLE else View.GONE
+                disableButton.visibility = if (viewState.isAdmin) View.VISIBLE else View.GONE
                 disableButton.setOnClickListener {
                     WidgetConfirmRemoveCommunityDialog.show(parentFragmentManager, viewState.guild.id)
                 }
@@ -102,6 +109,7 @@ class WidgetServerSettingsCommunityOverview :
         private const val REQUEST_KEY_RULES_CHANNEL = "REQUEST_KEY_RULES_CHANNEL"
         private const val REQUEST_KEY_UPDATES_CHANNEL = "REQUEST_KEY_UPDATES_CHANNEL"
         private const val INVALID_ID = -1L
+        private const val DISABLED_ALPHA = 0.3f
 
         fun newInstance(guildId: Long) = WidgetServerSettingsCommunityOverview().apply {
             arguments = Bundle().apply { putLong(INTENT_EXTRA_GUILD_ID, guildId) }

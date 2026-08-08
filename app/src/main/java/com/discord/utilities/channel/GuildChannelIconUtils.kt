@@ -24,6 +24,7 @@ sealed class GuildChannelIconType {
     object Forum : GuildChannelIconType()
     object Media : GuildChannelIconType()
     object ForumPost : GuildChannelIconType()
+    object Stage : GuildChannelIconType()
     object Directory : GuildChannelIconType()
 
     sealed class NSFW {
@@ -41,6 +42,7 @@ sealed class GuildChannelIconType {
         object Announcements : GuildChannelIconType()
         object Forum : GuildChannelIconType()
         object ForumPost : GuildChannelIconType()
+        object Stage : GuildChannelIconType()
     }
 }
 
@@ -89,6 +91,10 @@ fun getChannelType(channel: Channel?): GuildChannelIconType {
 
         Channel.GUILD_MEDIA -> GuildChannelIconType.Media
 
+        Channel.GUILD_STAGE_VOICE ->
+            if (channel.isEveryoneDeniedView()) GuildChannelIconType.Locked.Stage
+            else GuildChannelIconType.Stage
+
         Channel.ANNOUNCEMENT_THREAD, Channel.PUBLIC_THREAD ->
             if (channel.nsfw) GuildChannelIconType.NSFW.Thread else GuildChannelIconType.Thread
 
@@ -127,6 +133,9 @@ fun mapGuildChannelTypeToIcon(guildChannelIconType: GuildChannelIconType): Int =
         GuildChannelIconType.Locked.Thread -> R.drawable.ic_thread_locked
         GuildChannelIconType.Locked.Forum -> R.drawable.ic_channel_forum_locked
         GuildChannelIconType.Locked.ForumPost -> R.drawable.ic_channel_forum_post
+
+        GuildChannelIconType.Stage -> R.drawable.ic_channel_stage_24dp
+        GuildChannelIconType.Locked.Stage -> R.drawable.ic_channel_stage_locked
 
         GuildChannelIconType.Directory -> R.drawable.ic_hub_24dp
         GuildChannelIconType.Voice -> R.drawable.ic_channel_voice_grey_header_24dp

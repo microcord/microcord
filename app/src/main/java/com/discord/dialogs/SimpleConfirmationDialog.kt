@@ -19,6 +19,7 @@ import com.google.android.material.button.MaterialButton
 class SimpleConfirmationDialog : AppDialog(R.layout.simple_confirmation_dialog) {
 
     var positiveClickListener: View.OnClickListener? = null
+    var negativeClickListener: View.OnClickListener? = null
 
     private val args: SimpleConfirmationDialogArgs
         get() = requireNotNull(argumentsOrDefault.getParcelable(ARG_KEY)) {
@@ -39,7 +40,10 @@ class SimpleConfirmationDialog : AppDialog(R.layout.simple_confirmation_dialog) 
 
         val negative = view.findViewById<MaterialButton>(R.id.simple_confirmation_dialog_negative)
         negative.text = args.negativeButtonText
-        negative.setOnClickListener { dismiss() }
+        negative.setOnClickListener {
+            negativeClickListener?.onClick(it)
+            dismiss()
+        }
 
         view.findViewById<TextView>(R.id.simple_confirmation_dialog_title)
             .setTextAndVisibilityBy(args.title)
@@ -50,13 +54,16 @@ class SimpleConfirmationDialog : AppDialog(R.layout.simple_confirmation_dialog) 
     companion object {
         private const val ARG_KEY = "intent_args_key"
 
+        @JvmOverloads
         fun show(
             fragmentManager: FragmentManager,
             args: SimpleConfirmationDialogArgs,
+            negativeClickListener: View.OnClickListener? = null,
             positiveClickListener: View.OnClickListener,
         ): SimpleConfirmationDialog = SimpleConfirmationDialog().apply {
             arguments = Bundle().apply { putParcelable(ARG_KEY, args) }
             this.positiveClickListener = positiveClickListener
+            this.negativeClickListener = negativeClickListener
             show(fragmentManager, SimpleConfirmationDialog::class.java.name)
         }
     }

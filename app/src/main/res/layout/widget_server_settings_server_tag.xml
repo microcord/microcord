@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout android:paddingTop="16dp" android:focusableInTouchMode="true" style="@style/UiKit.ViewGroup.LinearLayout">
+            <TextView android:text="@string/guild_settings_tag_description" style="@style/UiKit.Settings.Item.SubText.Attached"/>
+            <com.discord.views.CheckedSetting android:id="@+id/server_tag_enable" app:cs_text="@string/guild_settings_tag_enable" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+            <LinearLayout android:id="@+id/server_tag_customize" style="@style/UiKit.ViewGroup.LinearLayout">
+                <View style="@style/UiKit.Settings.Divider"/>
+                <com.google.android.material.textfield.TextInputLayout android:id="@+id/server_tag_name" android:layout_marginLeft="16dp" android:layout_marginTop="16dp" android:layout_marginRight="16dp" android:hint="@string/guild_settings_tag_name_label" style="@style/UiKit.TextInputLayout.Primary">
+                    <com.google.android.material.textfield.TextInputEditText android:maxLength="4" android:inputType="textCapCharacters|textNoSuggestions" android:imeOptions="actionDone" style="@style/UiKit.TextInputLayout.EditText.SingleLine"/>
+                </com.google.android.material.textfield.TextInputLayout>
+                <TextView android:id="@+id/server_tag_rename_warning" android:visibility="gone" android:text="@string/guild_settings_tag_change_clear_warning" style="@style/UiKit.Settings.Item.SubText"/>
+                <TextView android:text="@string/guild_settings_tag_choose_badge" style="@style/UiKit.Settings.Item.Header"/>
+                <GridLayout android:id="@+id/server_tag_badges" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="16dp" android:layout_marginRight="16dp" android:columnCount="5"/>
+                <TextView android:text="@string/guild_settings_tag_choose_color" style="@style/UiKit.Settings.Item.Header"/>
+                <GridLayout android:id="@+id/server_tag_colors" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="16dp" android:layout_marginRight="16dp" android:columnCount="5"/>
+                <TextView android:text="@string/guild_sticker_upload_preview_title" style="@style/UiKit.Settings.Item.Header"/>
+                <LinearLayout android:gravity="center_vertical" android:id="@+id/server_tag_preview" android:background="?attr/colorBackgroundSecondary" android:padding="4dp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="16dp" android:layout_marginBottom="16dp" android:orientation="horizontal">
+                    <ImageView android:id="@+id/server_tag_preview_badge" android:layout_width="16dp" android:layout_height="16dp" android:importantForAccessibility="no" style="@style/UiKit.ImageView"/>
+                    <TextView android:textStyle="bold" android:id="@+id/server_tag_preview_label" android:layout_marginStart="2dp" style="@style/UiKit.TextView"/>
+                </LinearLayout>
+            </LinearLayout>
+            <View android:layout_width="match_parent" android:layout_height="64dp"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+    <com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@+id/server_tag_save" android:contentDescription="@string/save" style="@style/Settings.FloatingActionButton.Save"/>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

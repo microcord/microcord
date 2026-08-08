@@ -1,6 +1,7 @@
 package com.discord.widgets.servers.settings.members
 
 import com.discord.api.role.GuildRole
+import com.discord.api.guild.GuildFeature
 import com.discord.api.permission.Permission
 import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
@@ -153,14 +154,7 @@ data class WidgetServerSettingsMembersModel(
                 memberItems = items.toList(),
                 myHighestRole = RoleUtils.getHighestRole(roles, myMember),
                 meUser = meUser,
-                // Prune is a bulk kick, so it needs Kick Members with MFA elevation — the owner is
-                // exempt from the permission but not from the screen.
-                canKick = guild.isOwner(meUser.id) || PermissionUtils.canAndIsElevated(
-                    Permission.KICK_MEMBERS,
-                    myPermissions,
-                    meUser.mfaEnabled,
-                    guild.mfaLevel,
-                ),
+                canKick = canPrune(guild, meUser, myPermissions),
                 canManageMembers = PermissionUtils.canManageGuildMembers(
                     guild.isOwner(meUser.id),
                     meUser.mfaEnabled,
@@ -168,6 +162,28 @@ data class WidgetServerSettingsMembersModel(
                     myPermissions,
                 ),
             )
+        }
+
+        /**
+         * Whether the acting user may bulk-prune.
+         *
+         * Normally this is Manage Server **and** Kick Members together — prune is a bulk kick that
+         * also reshapes the guild, so neither alone is enough. A guild carrying
+         * [GuildFeature.PRUNE_REQUIRES_ADMIN] has opted into a stricter rule and only lets the
+         * owner or an administrator do it. The owner bypasses the permission check either way.
+         */
+        internal fun canPrune(guild: Guild, meUser: MeUser, myPermissions: Long?): Boolean {
+            val isOwner = guild.isOwner(meUser.id)
+            fun has(permission: Long) = PermissionUtils.canAndIsElevated(
+                permission,
+                myPermissions,
+                meUser.mfaEnabled,
+                guild.mfaLevel,
+            )
+            if (guild.hasFeature(GuildFeature.PRUNE_REQUIRES_ADMIN)) {
+                return isOwner || has(Permission.ADMINISTRATOR)
+            }
+            return isOwner || (has(Permission.MANAGE_GUILD) && has(Permission.KICK_MEMBERS))
         }
 
         /** Roles in hierarchy order, so the spinner reads top-down like the roles screen. */

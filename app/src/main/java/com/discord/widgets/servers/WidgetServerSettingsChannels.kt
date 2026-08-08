@@ -31,7 +31,10 @@ import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.rx.withDimmer
+import com.discord.dialogs.SimpleConfirmationDialog
+import com.discord.dialogs.SimpleConfirmationDialogArgs
 import com.discord.widgets.channels.settings.WidgetTextChannelSettings
+import com.discord.widgets.settings.SettingsStrings
 import com.discord.widgets.voice.settings.WidgetVoiceChannelSettings
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import rx.Observable
@@ -42,10 +45,16 @@ import java.util.LinkedHashMap
 internal fun submitChannelReorder(
     guildId: Long,
     newPositions: Map<Long, SettingsChannelListAdapter.UpdatedPosition>,
+    lockPermissionsFor: Long? = null,
 ): Observable<Void?> = RestAPI.apiSerializeNulls.reorderChannels(
     guildId,
     newPositions.map { (channelId, update) ->
-        RestAPIParams.ChannelPosition(channelId, update.position, update.parentId)
+        RestAPIParams.ChannelPosition(
+            channelId,
+            update.position,
+            update.parentId,
+            lockPermissions = true.takeIf { channelId == lockPermissionsFor },
+        )
     },
 ).doOnNext { ChannelReorderDiagnostics.recordSuccess() }
     .doOnError(ChannelReorderDiagnostics::recordFailure)
@@ -134,9 +143,45 @@ class WidgetServerSettingsChannels : AppFragment(R.layout.widget_server_settings
         }
     }
 
+    /**
+     * A channel dragged into a category is offered its overwrites; anything else commits straight
+     * away. Only the moved channel gets `lock_permissions`, never the rest of the reshuffle.
+     */
     private fun reorderChannels(
         model: Model,
         newPositions: Map<Long, SettingsChannelListAdapter.UpdatedPosition>,
+    ) {
+        val entered = newPositions.entries.firstOrNull { (channelId, update) ->
+            val parentId = update.parentId?.takeIf { it != RestAPIParams.ChannelPosition.PARENT_ID_NONE }
+            parentId != null && model.channels[channelId]?.parentId != parentId
+        }
+        if (entered == null) {
+            submitReorder(model, newPositions, null)
+            return
+        }
+        val category = model.allChannels[entered.value.parentId]
+        SimpleConfirmationDialog.show(
+            parentFragmentManager,
+            SimpleConfirmationDialogArgs(
+                title = getString(R.string.confirm_channel_drag_title),
+                description = SettingsStrings.render(
+                    requireContext(),
+                    R.string.sync_permissions_explanation,
+                    "channelName" to model.channels[entered.key]?.name.orEmpty(),
+                    "categoryName" to category?.name.orEmpty(),
+                ).toString(),
+                positiveButtonText = getString(R.string.sync_permissions),
+                negativeButtonText = getString(R.string.keep_permissions),
+            ),
+            negativeClickListener = { submitReorder(model, newPositions, null) },
+            positiveClickListener = { submitReorder(model, newPositions, entered.key) },
+        )
+    }
+
+    private fun submitReorder(
+        model: Model,
+        newPositions: Map<Long, SettingsChannelListAdapter.UpdatedPosition>,
+        lockPermissionsFor: Long?,
     ) {
         if (newPositions.isEmpty()) return
         val updates = newPositions.mapValues { (_, update) ->
@@ -144,7 +189,7 @@ class WidgetServerSettingsChannels : AppFragment(R.layout.widget_server_settings
         }
         val serverChannels = latestServerModel?.allChannels ?: model.allChannels
         val revision = orderWrites.begin(orderWrites.apply(serverChannels), updates)
-        submitChannelReorder(model.guild.id, newPositions)
+        submitChannelReorder(model.guild.id, newPositions, lockPermissionsFor)
             .restSubscribeOn()
             .withDimmer(dimmer, 0L)
             .ui(this)

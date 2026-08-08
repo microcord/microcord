@@ -32,6 +32,18 @@ class SettingsMemberView constructor(
     private val memberSubtitle: SimpleDraweeSpanTextView
     private val memberTitle: UsernameView
     private var avatarBackgroundColor = ThemedColor.resolve(context, R.attr.colorBackgroundPrimary)
+    /**
+     * Whether to show the global identity under the display name. The member list wants it — a
+     * per-guild avatar or nickname hides who someone actually is — but a list that only ever
+     * identifies one person, like instant invites, reads as a duplicate avatar.
+     */
+    var showIdentitySubtitle: Boolean = true
+        set(value) {
+            field = value
+            val configuredUser = user ?: return
+            configure(configuredUser, guildMember)
+        }
+
     private var user: User? = null
     private var guildMember: GuildMember? = null
 
@@ -86,7 +98,8 @@ class SettingsMemberView constructor(
         }
         subtitle.append(formatUsername(user))
         memberSubtitle.setDraweeSpanStringBuilder(subtitle)
-        memberSubtitle.visibility = if (hasGuildAvatar || hasNickname) View.VISIBLE else View.GONE
+        memberSubtitle.visibility =
+            if (showIdentitySubtitle && (hasGuildAvatar || hasNickname)) View.VISIBLE else View.GONE
     }
 
     fun setAvatarBackgroundColor(backgroundColor: Int) {

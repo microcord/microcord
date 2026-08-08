@@ -13,6 +13,7 @@ import com.discord.app.AppDialog
 import com.discord.app.AppFragment
 import com.discord.app.AppViewModel
 import com.discord.app.appViewModels
+import com.discord.api.guild.GuildFeature
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
 import com.discord.utilities.color.ColorCompat
@@ -49,12 +50,14 @@ class WidgetServerSettingsSecurity : AppFragment(R.layout.widget_server_settings
     }
 
     private lateinit var toggleButton: MaterialButton
+    private lateinit var discoverableWarning: TextView
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         setActionBarDisplayHomeAsUpEnabled()
         setActionBarTitle(R.string.security)
         toggleButton = view.findViewById(R.id.server_settings_security_toggle_mfa_button)
+        discoverableWarning = view.findViewById(R.id.server_settings_security_discoverable_warning)
 
         // A dialog restored from saved state has no guild bound to it yet; the reference drops it
         // and lets the next state emission put a correctly configured one back.
@@ -96,6 +99,7 @@ class WidgetServerSettingsSecurity : AppFragment(R.layout.widget_server_settings
                 // state, otherwise its confirm button would send the stale level.
                 (parentFragmentManager.findFragmentByTag(TAG_TOGGLE_MFA_DIALOG) as? ToggleMfaDialog)
                     ?.configure(viewState.guildId, viewState.isMfaEnabled)
+                toggleButton.isEnabled = viewState.canToggle
                 toggleButton.setOnClickListener {
                     ToggleMfaDialog.show(
                         parentFragmentManager,
@@ -103,6 +107,8 @@ class WidgetServerSettingsSecurity : AppFragment(R.layout.widget_server_settings
                         viewState.isMfaEnabled,
                     )
                 }
+                discoverableWarning.visibility =
+                    if (viewState.isDiscoverable) View.VISIBLE else View.GONE
             }
         }
     }
@@ -220,7 +226,13 @@ class ServerSettingsSecurityViewModel(
     storeStateObservable: Observable<StoreState> = observeStoreState(guildId),
 ) : AppViewModel<ServerSettingsSecurityViewModel.ViewState>(ViewState.Uninitialized) {
 
-    data class StoreState(val guildId: Long, val guildName: String?, val isOwner: Boolean, val mfaLevel: Int)
+    data class StoreState(
+        val guildId: Long,
+        val guildName: String?,
+        val isOwner: Boolean,
+        val mfaLevel: Int,
+        val isDiscoverable: Boolean = false,
+    )
 
     sealed class ViewState {
         object Uninitialized : ViewState()
@@ -232,7 +244,11 @@ class ServerSettingsSecurityViewModel(
             val guildId: Long,
             val guildName: String?,
             val isMfaEnabled: Boolean,
-        ) : ViewState()
+            val isDiscoverable: Boolean,
+        ) : ViewState() {
+            /** A guild in Server Discovery has to keep the requirement on. */
+            val canToggle: Boolean get() = !(isMfaEnabled && isDiscoverable)
+        }
     }
 
     init {
@@ -250,6 +266,7 @@ class ServerSettingsSecurityViewModel(
                     guildId = storeState.guildId,
                     guildName = storeState.guildName,
                     isMfaEnabled = storeState.mfaLevel > 0,
+                    isDiscoverable = storeState.isDiscoverable,
                 )
             }
 
@@ -262,6 +279,7 @@ class ServerSettingsSecurityViewModel(
                 guildName = guild?.name,
                 isOwner = guild != null && guild.ownerId == meUser.id,
                 mfaLevel = guild?.mfaLevel ?: 0,
+                isDiscoverable = guild?.hasFeature(GuildFeature.DISCOVERABLE) == true,
             )
         }
     }

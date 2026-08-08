@@ -46,13 +46,14 @@ class CommunityOverviewViewModelTest {
     }
 
     @Test
-    fun `disable removes only the community feature`() {
+    fun `disable drops community and discovery`() {
         val params = WidgetServerSettingsCommunityOverviewViewModel.disableCommunityParams(
-            Guild(features = setOf(GuildFeature.COMMUNITY, GuildFeature.NEWS)),
+            Guild(
+                features = setOf(GuildFeature.COMMUNITY, GuildFeature.DISCOVERABLE, GuildFeature.NEWS),
+            ),
         )
 
         assertEquals(listOf(GuildFeature.NEWS), params.features)
-        assertFalse(params.features.orEmpty().contains(GuildFeature.COMMUNITY))
     }
 
     private fun me(id: Long) = MeUser(

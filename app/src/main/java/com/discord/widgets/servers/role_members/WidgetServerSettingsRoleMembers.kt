@@ -1,5 +1,7 @@
 package com.discord.widgets.servers.role_members
 
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.recyclerview.widget.RecyclerView
@@ -13,13 +15,18 @@ import com.discord.dialogs.SimpleConfirmationDialogArgs
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rx.ui
 import com.discord.views.SearchInputView
+import com.discord.widgets.settings.SettingsNavigation
 import com.discord.widgets.settings.SettingsStrings
 
 class WidgetServerSettingsRoleMembers : AppFragment(R.layout.widget_server_settings_role_members) {
 
-    private val guildId: Long get() = arguments?.getLong(INTENT_EXTRA_GUILD_ID, INVALID_ID) ?: INVALID_ID
-    private val guildRoleId: Long get() =
-        arguments?.getLong(INTENT_EXTRA_GUILD_ROLE_ID, INVALID_ID) ?: INVALID_ID
+    private val guildId: Long
+        get() = arguments?.getLong(INTENT_EXTRA_GUILD_ID, INVALID_ID)?.takeIf { it != INVALID_ID }
+            ?: mostRecentIntent.getLongExtra(INTENT_EXTRA_GUILD_ID, INVALID_ID)
+
+    private val guildRoleId: Long
+        get() = arguments?.getLong(INTENT_EXTRA_GUILD_ROLE_ID, INVALID_ID)?.takeIf { it != INVALID_ID }
+            ?: mostRecentIntent.getLongExtra(INTENT_EXTRA_GUILD_ROLE_ID, INVALID_ID)
 
     private val viewModel: ServerSettingsRoleMembersViewModel by appViewModels {
         ServerSettingsRoleMembersViewModel(guildId, guildRoleId)
@@ -86,6 +93,16 @@ class WidgetServerSettingsRoleMembers : AppFragment(R.layout.widget_server_setti
                 putLong(INTENT_EXTRA_GUILD_ROLE_ID, guildRoleId)
                 putLong(INTENT_EXTRA_GUILD_ID, guildId)
             }
+        }
+
+        fun launch(context: Context, guildId: Long, guildRoleId: Long) {
+            SettingsNavigation.launch(
+                context,
+                WidgetServerSettingsRoleMembers::class.java,
+                Intent()
+                    .putExtra(INTENT_EXTRA_GUILD_ID, guildId)
+                    .putExtra(INTENT_EXTRA_GUILD_ROLE_ID, guildRoleId),
+            )
         }
     }
 }

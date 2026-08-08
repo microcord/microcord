@@ -1,6 +1,7 @@
 package com.discord.widgets.servers
 
 import com.discord.api.channel.Channel
+import com.discord.api.guild.GuildFeature
 import com.discord.api.permission.Permission
 import com.discord.app.AppViewModel
 import com.discord.models.guild.Guild
@@ -32,6 +33,7 @@ class ServerSettingsOverviewViewModel(
             val afkChannel: Channel?,
             val systemChannel: Channel?,
             val isAboveNotifyAllSize: Boolean,
+            val isCreatorMonetizable: Boolean,
         ) : ViewState()
     }
 
@@ -54,6 +56,9 @@ class ServerSettingsOverviewViewModel(
                 systemChannel = guild.systemChannelId?.let(byId::get),
                 isAboveNotifyAllSize =
                     (storeState.approximateMemberCount ?: 0) > NOTIFY_ALL_MEMBER_LIMIT,
+                isCreatorMonetizable = !guild.hasFeature(GuildFeature.CREATOR_MONETIZABLE_DISABLED) &&
+                    (guild.hasFeature(GuildFeature.CREATOR_MONETIZABLE) ||
+                        guild.hasFeature(GuildFeature.CREATOR_MONETIZABLE_PROVISIONAL)),
             )
         }
 

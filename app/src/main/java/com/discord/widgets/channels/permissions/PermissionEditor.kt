@@ -48,6 +48,16 @@ internal object PermissionEditor {
         R.id.channel_permission_voice_move_members to Permission.MOVE_MEMBERS,
         R.id.channel_permission_stage_request_to_speak to Permission.REQUEST_TO_SPEAK,
         R.id.channel_permission_events_manage_events to Permission.MANAGE_EVENTS,
+        R.id.channel_permission_text_pin_messages to Permission.PIN_MESSAGES,
+        R.id.channel_permission_text_manage_official_messages to Permission.MANAGE_OFFICIAL_MESSAGES,
+        R.id.channel_permission_text_send_voice_messages to Permission.SEND_VOICE_MESSAGES,
+        R.id.channel_permission_text_send_polls to Permission.SEND_POLLS,
+        R.id.channel_permission_apps_use_embedded_activities to Permission.USE_EMBEDDED_ACTIVITIES,
+        R.id.channel_permission_apps_use_external_apps to Permission.USE_EXTERNAL_APPS,
+        R.id.channel_permission_voice_use_soundboard to Permission.USE_SOUNDBOARD,
+        R.id.channel_permission_voice_use_external_sounds to Permission.USE_EXTERNAL_SOUNDS,
+        R.id.channel_permission_voice_set_channel_status to Permission.SET_VOICE_CHANNEL_STATUS,
+        R.id.channel_permission_events_create_events to Permission.CREATE_EVENTS,
     )
 
     fun status(overwrite: PermissionOverwrite?, permission: PermissionBit): Int = when {

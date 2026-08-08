@@ -7,11 +7,13 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.getDisplayName
+import com.discord.api.guild.GuildFeature
 import com.discord.app.AppFragment
 import com.discord.app.AppViewFlipper
 import com.discord.models.domain.ModelInvite
 import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
+import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreGuilds
 import com.discord.stores.StoreInstantInvites
 import com.discord.stores.StoreStream
@@ -19,11 +21,16 @@ import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
+import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
+import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.user.UserUtils
+import com.discord.views.CheckedSetting
 import com.discord.widgets.servers.WidgetServerSettingsInstantInvitesActions
 import com.discord.widgets.settings.SettingsNavigation
+import com.discord.widgets.settings.SettingsStrings
 import rx.Observable
 
 class WidgetServerSettingsInstantInvites :
@@ -34,12 +41,16 @@ class WidgetServerSettingsInstantInvites :
     }
     private val storeInstantInvites: StoreInstantInvites = StoreStream.getInstantInvites()
     private lateinit var viewFlipper: AppViewFlipper
+    private lateinit var pauseContainer: View
+    private lateinit var pauseInvites: CheckedSetting
     private var adapter: Adapter? = null
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         setActionBarDisplayHomeAsUpEnabled()
         viewFlipper = view.findViewById(R.id.server_settings_instant_invites_view_flipper)
+        pauseContainer = view.findViewById(R.id.server_settings_instant_invites_pause_container)
+        pauseInvites = view.findViewById(R.id.server_settings_instant_invites_pause)
         adapter = MGRecyclerAdapter.configure(
             Adapter(view.findViewById(R.id.server_settings_instant_invites_recycler)),
         )
@@ -76,8 +87,50 @@ class WidgetServerSettingsInstantInvites :
                 onInviteExpiredListener = storeInstantInvites::onInviteRemoved,
             )
         }
+        configurePauseInvites(model.guild)
         setActionBarTitle(R.string.instant_invites)
         setActionBarSubtitle(model.guild.name)
+    }
+
+    /**
+     * Pausing invites is the `INVITES_DISABLED` guild feature, toggled through the guild PATCH.
+     * Only a Community server may hold it, so elsewhere the row shows why it cannot be used
+     * rather than disappearing.
+     */
+    private fun configurePauseInvites(guild: Guild) {
+        pauseContainer.visibility = View.VISIBLE
+        val disabled = guild.hasFeature(GuildFeature.INVITES_DISABLED)
+        pauseInvites.setChecked(disabled, false)
+        if (!guild.hasFeature(GuildFeature.COMMUNITY)) {
+            pauseInvites.setSubtext(getString(R.string.tooltip_community_feature_required))
+            pauseInvites.setDisabledTooltip(R.string.tooltip_community_feature_required)
+            return
+        }
+        pauseInvites.setSubtext(
+            if (disabled) {
+                getString(R.string.invites_disabled_tip)
+            } else {
+                SettingsStrings.render(
+                    requireContext(),
+                    R.string.invites_disabled_description_mobile,
+                    "helpArticleUrl" to INVITES_DISABLED_HELP_URL,
+                )
+            },
+        )
+        pauseInvites.alpha = 1f
+        pauseInvites.setContainerClickListener { setInvitesPaused(guild, !disabled) }
+    }
+
+    private fun setInvitesPaused(guild: Guild, paused: Boolean) {
+        val features = if (paused) {
+            guild.features + GuildFeature.INVITES_DISABLED
+        } else {
+            guild.features - GuildFeature.INVITES_DISABLED
+        }
+        RestAPI.api.updateGuild(guildId, RestAPIParams.UpdateGuild(features = features.toList()))
+            .restSubscribeOn()
+            .ui(this)
+            .appSubscribe(WidgetServerSettingsInstantInvites::class.java, context) { }
     }
 
     class Adapter(recycler: RecyclerView) :
@@ -188,6 +241,10 @@ class WidgetServerSettingsInstantInvites :
         private const val VIEW_INDEX_INVITES_LOADING = 0
         private const val VIEW_INDEX_INVITES_LIST = 1
         private const val VIEW_INDEX_NO_INVITES = 2
+
+
+        private const val INVITES_DISABLED_HELP_URL =
+            "https://support.discord.com/hc/en-us/articles/13497892127383"
 
         fun create(context: Context, guildId: Long) {
             StoreStream.getAnalytics().onGuildSettingsPaneViewed("INSTANT_INVITES", guildId)

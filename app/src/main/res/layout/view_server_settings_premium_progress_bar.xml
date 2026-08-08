@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:id="@+id/server_settings_premium_progress_bar_wrap" style="@style/UiKit.ViewGroup.LinearLayout">
+    <TextView android:text="@string/guild_settings_premium_progress_bar_section_title" style="@style/UiKit.Settings.Item.Header"/>
+    <TextView android:text="@string/guild_settings_premium_progress_bar_description" style="@style/UiKit.Settings.Item.SubText.Attached"/>
+    <com.discord.views.CheckedSetting android:id="@+id/premium_progress_bar" app:cs_text="@string/guild_settings_premium_progress_bar_title" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+</LinearLayout>

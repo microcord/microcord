@@ -73,7 +73,10 @@ data class ManageGuildContext(
                 canManageRoles = can(Permission.MANAGE_ROLES),
                 canManageBans = can(Permission.BAN_MEMBERS),
                 canManageNicknames = can(Permission.MANAGE_NICKNAMES),
-                canManageEmojisAndStickers = can(Permission.MANAGE_EMOJIS_AND_STICKERS),
+                // Creating is its own bit now, and a creator still needs the settings screen to
+                // edit what they uploaded.
+                canManageEmojisAndStickers = can(Permission.MANAGE_GUILD_EXPRESSIONS) ||
+                    can(Permission.CREATE_GUILD_EXPRESSIONS),
                 canViewAuditLogs = can(Permission.VIEW_AUDIT_LOG),
                 canManageEvents = can(Permission.MANAGE_EVENTS),
                 isOwnerWithRequiredMFALevel = isOwner &&
@@ -135,7 +138,13 @@ data class ManageMessageContext(
                     (isOwnPrivateChannel ||
                         PermissionUtils.can(Permission.ADD_REACTIONS, myPermissions)) &&
                     !isArchivedThread,
-                canTogglePinned = canModerate && isUserMessage && !isSystemDM && !isArchivedThread,
+                // Pinning moved off MANAGE_MESSAGES onto its own bit, which the reference pairs
+                // with READ_MESSAGE_HISTORY: you may not pin what you cannot scroll back to.
+                canTogglePinned = (
+                    isOwnPrivateChannel ||
+                        PermissionUtils.can(Permission.PIN_MESSAGES, myPermissions) &&
+                        PermissionUtils.can(Permission.READ_MESSAGE_HISTORY, myPermissions)
+                    ) && isUserMessage && !isSystemDM && !isArchivedThread,
                 canMarkUnread = !isArchivedThread,
             )
         }

@@ -33,6 +33,8 @@ import com.discord.api.guild.GuildExplicitContentFilter
 import com.discord.api.guild.GuildExplicitContentFilterTypeAdapter
 import com.discord.api.guild.GuildHubType
 import com.discord.api.guild.GuildHubTypeTypeAdapter
+import com.discord.api.guild.GuildNsfwLevel
+import com.discord.api.guild.GuildNsfwLevelTypeAdapter
 import com.discord.api.guild.GuildMaxVideoChannelUsers
 import com.discord.api.guild.GuildMaxVideoChannelUsersTypeAdapter
 import com.discord.api.guild.GuildVerificationLevel
@@ -106,6 +108,7 @@ fun GsonBuilder.registerDiscordApiTypeAdapters(): GsonBuilder =
         .registerTypeAdapter(GuildVerificationLevel::class.java, GuildVerificationLevelTypeAdapter())
         .registerTypeAdapter(GuildExplicitContentFilter::class.java, GuildExplicitContentFilterTypeAdapter())
         .registerTypeAdapter(GuildHubType::class.java, GuildHubTypeTypeAdapter())
+        .registerTypeAdapter(GuildNsfwLevel::class.java, GuildNsfwLevelTypeAdapter())
         .registerTypeAdapter(GuildMaxVideoChannelUsers::class.java, GuildMaxVideoChannelUsersTypeAdapter())
         .registerTypeAdapter(GuildScheduledEventStatus::class.java, GuildScheduledEventStatusTypeAdapter())
         .registerTypeAdapter(GuildScheduledEventEntityType::class.java, GuildScheduledEventEntityTypeTypeAdapter())

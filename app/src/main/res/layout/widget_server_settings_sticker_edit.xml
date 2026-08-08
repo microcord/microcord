@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout style="@style/UiKit.ViewGroup.LinearLayout">
+            <TextView android:text="@string/guild_sticker_upload_preview_title" style="@style/UiKit.Settings.Item.Header"/>
+            <FrameLayout android:layout_gravity="center_horizontal" android:layout_width="128dp" android:layout_height="128dp" android:layout_marginTop="8dp" android:background="?attr/primary_600" android:foreground="?attr/selectableItemBackground" android:id="@+id/sticker_edit_preview_container">
+                <com.discord.views.sticker.StickerView android:id="@+id/sticker_edit_preview" android:layout_gravity="center" android:layout_width="96dp" android:layout_height="96dp"/>
+                <ImageView android:id="@+id/sticker_edit_preview_image" android:layout_gravity="center" android:layout_width="96dp" android:layout_height="96dp" android:scaleType="fitCenter" android:visibility="gone" android:importantForAccessibility="no" style="@style/UiKit.ImageView"/>
+                <ImageView android:id="@+id/sticker_edit_preview_placeholder" android:layout_gravity="center" android:layout_width="40dp" android:layout_height="40dp" android:src="@drawable/ic_upload_image_40dp" android:contentDescription="@string/guild_sticker_grid_upload_label" style="@style/UiKit.ImageView"/>
+            </FrameLayout>
+            <TextView android:id="@+id/sticker_edit_requirements" android:layout_marginTop="8dp" style="@style/UiKit.Settings.Item.SubText"/>
+            <TextView android:text="@string/guild_sticker_upload_related_emoji_title" style="@style/UiKit.Settings.Item.Header"/>
+            <TextView android:id="@+id/sticker_edit_related_emoji" android:text="@string/guild_sticker_upload_related_emoji_placeholder" style="@style/UiKit.Settings.Item.Addition"/>
+            <com.google.android.material.textfield.TextInputLayout android:id="@+id/sticker_edit_name" android:layout_marginLeft="16dp" android:layout_marginTop="16dp" android:layout_marginRight="16dp" android:hint="@string/guild_sticker_upload_name_title" style="@style/UiKit.TextInputLayout.Primary">
+                <com.google.android.material.textfield.TextInputEditText android:maxLength="30" android:imeOptions="actionNext" style="@style/UiKit.TextInputLayout.EditText.SingleLine"/>
+            </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputLayout android:id="@+id/sticker_edit_description" android:layout_marginLeft="16dp" android:layout_marginTop="16dp" android:layout_marginRight="16dp" android:hint="@string/guild_sticker_upload_description_title" app:counterEnabled="true" app:counterMaxLength="100" style="@style/UiKit.TextInputLayout.Primary">
+                <com.google.android.material.textfield.TextInputEditText android:maxLength="100" android:maxLines="3" style="@style/UiKit.TextInputLayout.EditText.MultiLine"/>
+            </com.google.android.material.textfield.TextInputLayout>
+            <View android:layout_width="match_parent" android:layout_height="64dp"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+    <com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@+id/sticker_edit_save" android:contentDescription="@string/save" style="@style/Settings.FloatingActionButton.Save"/>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

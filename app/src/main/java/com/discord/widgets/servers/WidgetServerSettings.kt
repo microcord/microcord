@@ -114,6 +114,15 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
             permissions.canManageServer && model.hasVanityUrl,
         )
         bindOption(R.id.server_settings_emojis_option, permissions.canManageEmojisAndStickers)
+        bindOption(R.id.server_settings_stickers_option, permissions.canManageEmojisAndStickers)
+        bindOption(
+            R.id.server_settings_official_messages_option,
+            permissions.canManageServer && model.isVerified,
+        )
+        bindOption(
+            R.id.server_settings_server_tag_option,
+            permissions.canManageServer && model.hasGuildTags,
+        )
 
         // The community section as a whole needs Manage Server; inside it, exactly one of
         // "Overview" and "Enable Community" is shown, depending on whether the guild is one.
@@ -180,6 +189,15 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
         }
         bindDestination(R.id.server_settings_emojis_option) {
             WidgetServerSettingsEmojis.launch(it.context, guildId)
+        }
+        bindDestination(R.id.server_settings_stickers_option) {
+            WidgetServerSettingsStickers.launch(it.context, guildId)
+        }
+        bindDestination(R.id.server_settings_official_messages_option) {
+            WidgetServerSettingsOfficialMessages.launch(it.context, guildId)
+        }
+        bindDestination(R.id.server_settings_server_tag_option) {
+            WidgetServerSettingsServerTag.launch(it.context, guildId)
         }
         bindDestination(R.id.server_settings_community_overview_option) {
             WidgetServerSettingsCommunityOverview.launch(it.context, guildId)
@@ -255,6 +273,9 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
             R.id.server_settings_option_integrations,
             R.id.server_settings_instant_invites_option,
             R.id.server_settings_emojis_option,
+            R.id.server_settings_stickers_option,
+            R.id.server_settings_official_messages_option,
+            R.id.server_settings_server_tag_option,
             R.id.server_settings_community_overview_option,
             R.id.server_settings_enable_community_option,
             R.id.server_settings_guild_role_subscription_get_started,
@@ -274,6 +295,9 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
                 R.id.server_settings_option_security,
                 R.id.server_settings_option_vanity_url,
                 R.id.server_settings_emojis_option,
+                R.id.server_settings_stickers_option,
+                R.id.server_settings_official_messages_option,
+                R.id.server_settings_server_tag_option,
             ),
             R.id.server_settings_section_community to listOf(
                 R.id.server_settings_community_overview_option,

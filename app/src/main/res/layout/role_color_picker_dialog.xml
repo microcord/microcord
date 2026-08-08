@@ -2,15 +2,16 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:minWidth="280dp"
-    android:paddingTop="16dp"
     style="@style/UiKit.ViewGroup.Page.LinearLayout">
 
     <TextView
+        android:id="@+id/role_color_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingLeft="16dp"
+        android:paddingTop="20dp"
         android:paddingRight="16dp"
-        android:paddingBottom="12dp"
+        android:paddingBottom="16dp"
         android:text="@string/role_color"
         style="@style/UiKit.TextView.H1.Bold" />
 
@@ -22,6 +23,20 @@
             android:layout_height="wrap_content"
             android:padding="16dp"
             style="@style/UiKit.ViewGroup.LinearLayout">
+
+            <com.google.android.material.tabs.TabLayout
+                android:id="@+id/role_color_slot"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:visibility="gone"
+                app:tabGravity="fill"
+                app:tabIndicatorHeight="2dp"
+                app:tabMaxWidth="0dp"
+                app:tabMode="fixed"
+                app:tabSelectedTextColor="?attr/tabSelectedTextColor"
+                app:tabTextAppearance="@style/App.TabLayout.Text"
+                app:tabTextColor="?attr/tabTextColor" />
 
             <GridLayout
                 android:id="@+id/role_color_presets"

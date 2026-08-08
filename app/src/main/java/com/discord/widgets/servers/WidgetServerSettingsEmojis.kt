@@ -14,6 +14,7 @@ import com.discord.api.permission.Permission as DiscordPermission
 import com.discord.app.AppFragment
 import com.discord.app.AppViewFlipper
 import com.discord.dialogs.ImageUploadDialog
+import com.discord.dialogs.SelectorDialog
 import com.discord.i18n.i18nPlural
 import com.discord.media_picker.MediaPicker
 import com.discord.models.domain.emoji.ModelEmojiCustom
@@ -102,6 +103,30 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
         adapter.onEmojiItemClicked = { view, emoji ->
             WidgetServerSettingsEmojisEdit.launch(view.context, guildId, emoji.id, emoji.name)
         }
+        adapter.onEmojiOverflowClicked = { view, emoji -> showEmojiOverflow(view, emoji) }
+    }
+
+    private fun showEmojiOverflow(view: View, emoji: ModelEmojiGuild) {
+        SelectorDialog.show(
+            parentFragmentManager,
+            emoji.name,
+            arrayOf(getString(R.string.edit), getString(R.string.delete)),
+        ) { index ->
+            when (index) {
+                0 -> WidgetServerSettingsEmojisEdit.launch(view.context, guildId, emoji.id, emoji.name)
+                1 -> deleteEmoji(emoji)
+            }
+        }
+    }
+
+    private fun deleteEmoji(emoji: ModelEmojiGuild) {
+        val api = RestAPI.apiOrNull ?: return
+        api.deleteGuildEmoji(guildId, emoji.id)
+            .restSubscribeOn()
+            .ui(this)
+            .appSubscribe(WidgetServerSettingsEmojis::class.java, context) {
+                StoreStream.getGuildEmojis().deleteEmoji(guildId, emoji.id)
+            }
     }
 
     override fun onImageChosen(uri: Uri, mimeType: String) {
@@ -140,7 +165,8 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
 
         data class EmojiSection(
             val emojiMax: Int,
-            val emojiLength: Int,
+            /** Static and animated emoji draw on one pool, so both sections count every emoji. */
+            val emojiUsed: Int,
             val titleId: Int,
         ) : Item() {
             override val type = TYPE_SECTION
@@ -178,6 +204,7 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
 
     class Adapter(recycler: RecyclerView) : MGRecyclerAdapterSimple<Item>(recycler) {
         var onEmojiItemClicked: (View, ModelEmojiGuild) -> Unit = { _, _ -> }
+        var onEmojiOverflowClicked: (View, ModelEmojiGuild) -> Unit = { _, _ -> }
         var onUploadEmoji: () -> Unit = {}
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MGRecyclerViewHolder<Adapter, Item> =
@@ -197,6 +224,8 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
             private val upload: MaterialButton = itemView.findViewById(R.id.widget_server_settings_emojis_upload)
             private val description: TextView =
                 itemView.findViewById(R.id.widget_server_settings_emojis_upload_description)
+            private val requirements: TextView =
+                itemView.findViewById(R.id.widget_server_settings_emojis_requirements)
 
             override fun onConfigure(position: Int, data: Item) {
                 val header = data as Item.EmojiHeader
@@ -206,6 +235,16 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
                     "count" to header.emojiMax,
                     "maxSize" to EMOJI_MAX_FILESIZE_KB,
                 )
+                requirements.text = listOf(
+                    itemView.context.getString(R.string.guild_settings_emoji_upload_requirements_1),
+                    SettingsStrings.render(
+                        itemView.context,
+                        R.string.guild_settings_emoji_upload_requirements_2,
+                        "maxSize" to EMOJI_MAX_FILESIZE_KB,
+                    ),
+                    itemView.context.getString(R.string.guild_settings_emoji_upload_requirements_3),
+                    itemView.context.getString(R.string.guild_settings_emoji_upload_requirements_4),
+                ).joinToString(separator = System.lineSeparator()) { "• $it" }
                 upload.setOnClickListener { upload.post { adapter.onUploadEmoji() } }
             }
         }
@@ -217,7 +256,7 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
             override fun onConfigure(position: Int, data: Item) {
                 super.onConfigure(position, data)
                 val item = data as Item.EmojiSection
-                val remaining = item.emojiMax - item.emojiLength
+                val remaining = (item.emojiMax - item.emojiUsed).coerceAtLeast(0)
                 val available = SettingsStrings.render(
                     itemView.context,
                     R.string.emoji_slots_available,
@@ -268,7 +307,7 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
                 emojiImage.setGrayscale(!item.emoji.available)
                 emojiImage.imageAlpha = if (item.emoji.available) 255 else 100
                 container.setOnClickListener { adapter.onEmojiItemClicked(it, item.emoji) }
-                overflow.isClickable = false
+                overflow.setOnClickListener { adapter.onEmojiOverflowClicked(it, item.emoji) }
             }
         }
     }
@@ -294,12 +333,14 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
                     StoreStream.getUsers().observeMe(),
                 ) { permissions: Long?, guild: Guild?, meUser: MeUser ->
                     if (guild == null || permissions == null) null else Permission(
-                        PermissionUtils.canAndIsElevated(
-                            DiscordPermission.MANAGE_EMOJIS_AND_STICKERS,
-                            permissions,
-                            meUser.mfaEnabled,
-                            guild.mfaLevel,
-                        ),
+                        // Uploading is CREATE_GUILD_EXPRESSIONS; editing anyone else's is
+                        // MANAGE_GUILD_EXPRESSIONS. This screen offers both, so either opens it.
+                        listOf(
+                            DiscordPermission.MANAGE_GUILD_EXPRESSIONS,
+                            DiscordPermission.CREATE_GUILD_EXPRESSIONS,
+                        ).any {
+                            PermissionUtils.canAndIsElevated(it, permissions, meUser.mfaEnabled, guild.mfaLevel)
+                        },
                         guild,
                     )
                 }.computationLatest()
@@ -326,12 +367,13 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
                     .map { Item.EmojiItem.from(it, members) }
                     .reversed()
                 val items = mutableListOf<Item>(Item.EmojiHeader(emojiMax))
+                val used = static.size + animated.size
                 if (static.isNotEmpty()) {
-                    items += Item.EmojiSection(emojiMax, static.size, R.string.emoji)
+                    items += Item.EmojiSection(emojiMax, used, R.string.emoji)
                     items += static
                 }
                 if (animated.isNotEmpty()) {
-                    items += Item.EmojiSection(emojiMax, animated.size, R.string.animated_emoji)
+                    items += Item.EmojiSection(emojiMax, used, R.string.animated_emoji)
                     items += animated
                 }
                 if (static.isEmpty() && animated.isEmpty()) items += Item.EmojiEmpty

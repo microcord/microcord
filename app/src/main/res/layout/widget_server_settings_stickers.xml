@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" style="@style/UiKit.ViewGroup.CoordinatorLayout.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <com.discord.app.AppViewFlipper android:id="@+id/widget_server_settings_stickers_view_flipper" android:layout_width="match_parent" android:layout_height="match_parent" android:inAnimation="@android:anim/fade_in" android:outAnimation="@android:anim/fade_out" style="@style/UiKit.ViewGroup.AppViewFlipper.InCoordinatorLayout">
+        <ProgressBar android:layout_gravity="center" android:layout_width="wrap_content" android:layout_height="wrap_content" android:indeterminate="true" style="@style/Widget.AppCompat.ProgressBar"/>
+        <androidx.recyclerview.widget.RecyclerView android:id="@+id/widget_server_settings_stickers_recycler" android:scrollbars="vertical" android:layout_height="match_parent" style="@style/UiKit.ViewGroup.RecyclerView"/>
+    </com.discord.app.AppViewFlipper>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

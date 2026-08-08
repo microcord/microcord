@@ -36,7 +36,8 @@ object AuditLogUtils {
      * The action-filter list depends on both the order and exact membership. Future server actions
      * are intentionally absent from the filter but remain visible in the log as "Unknown action".
      *
-     * Recovered from `AuditLogUtils$ALL_ACTION_TYPES$2` at bytecode level (48 entries).
+     * Recovered from `AuditLogUtils$ALL_ACTION_TYPES$2` at bytecode level, then extended with the
+     * action types Discord has added since.
      */
     val ALL_ACTION_TYPES: List<Int> = listOf(
         ACTION_ALL,
@@ -54,6 +55,13 @@ object AuditLogUtils {
         83, 84, 85, // stage instance create/update/delete
         90, 91, 92, // sticker create/update/delete
         100, 101, 102, // guild scheduled event create/update/delete
+        121, // application command permission update
+        130, 131, 132, // soundboard sound create/update/delete
+        140, 141, 142, 143, // automod rule create/update/delete, blocked message
+        163, 164, 165, // onboarding prompt create/update/delete
+        166, 167, // onboarding create/update
+        190, 191, // server guide create/update
+        192, 193, // voice channel status set/removed
     )
 
     /**
@@ -142,6 +150,29 @@ object AuditLogUtils {
             111 -> R.string.guild_settings_audit_log_thread_update
             112 -> R.string.guild_settings_audit_log_thread_delete
 
+            121 -> R.string.guild_settings_audit_log_command_permission_update
+
+            130 -> R.string.guild_settings_audit_log_guild_soundboard_sound_created
+            131 -> R.string.guild_settings_audit_log_guild_soundboard_sound_updated
+            132 -> R.string.guild_settings_audit_log_guild_soundboard_sound_deleted
+
+            140 -> R.string.guild_settings_audit_log_automod_rule_create
+            141 -> R.string.guild_settings_audit_log_automod_rule_update
+            142 -> R.string.guild_settings_audit_log_automod_rule_delete
+            143 -> R.string.guild_settings_audit_log_auto_moderation_block_message
+
+            163 -> R.string.guild_settings_audit_log_role_prompt_create
+            164 -> R.string.guild_settings_audit_log_role_prompt_update
+            165 -> R.string.guild_settings_audit_log_role_prompt_delete
+            166 -> R.string.guild_settings_audit_log_onboarding_create
+            167 -> R.string.guild_settings_audit_log_onboarding_update
+
+            190 -> R.string.guild_settings_audit_log_home_settings_create
+            191 -> R.string.guild_settings_audit_log_home_settings_update
+
+            192 -> R.string.guild_settings_audit_log_voice_channel_status_created
+            193 -> R.string.guild_settings_audit_log_voice_channel_status_deleted
+
             else -> {
                 AppLog.e("Unknown audit log action type: $actionTypeId")
                 R.string.guild_settings_audit_log_unknown_action
@@ -210,6 +241,29 @@ object AuditLogUtils {
         110 -> R.string.guild_settings_action_filter_thread_create
         111 -> R.string.guild_settings_action_filter_thread_update
         112 -> R.string.guild_settings_action_filter_thread_delete
+
+        121 -> R.string.guild_settings_action_filter_application_command_permission_update
+
+        130 -> R.string.guild_settings_action_filter_soundboard_sound_create
+        131 -> R.string.guild_settings_action_filter_soundboard_sound_update
+        132 -> R.string.guild_settings_action_filter_soundboard_sound_delete
+
+        140 -> R.string.guild_settings_action_filter_automod_rule_create
+        141 -> R.string.guild_settings_action_filter_automod_rule_update
+        142 -> R.string.guild_settings_action_filter_automod_rule_delete
+        143 -> R.string.guild_settings_action_filter_auto_moderation_block_message
+
+        163 -> R.string.guild_settings_action_filter_role_prompt_create
+        164 -> R.string.guild_settings_action_filter_role_prompt_update
+        165 -> R.string.guild_settings_action_filter_role_prompt_delete
+        166 -> R.string.guild_settings_action_filter_onboarding_create
+        167 -> R.string.guild_settings_action_filter_onboarding_update
+
+        190 -> R.string.guild_settings_action_filter_home_settings_create
+        191 -> R.string.guild_settings_action_filter_home_settings_update
+
+        192 -> R.string.guild_settings_action_filter_voice_channel_status_create
+        193 -> R.string.guild_settings_action_filter_voice_channel_status_delete
 
         else -> 0
     }

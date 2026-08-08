@@ -72,6 +72,7 @@ import com.discord.api.role.GuildRole
 import com.discord.api.science.Science
 import com.discord.api.stageinstance.RecommendedStageInstance
 import com.discord.api.stageinstance.StageInstance
+import com.discord.api.guild.GuildIncidentsData
 import com.discord.api.sticker.Sticker
 import com.discord.api.soundboard.SoundboardSound
 import com.discord.api.thread.ThreadListing
@@ -1168,6 +1169,44 @@ interface RestAPIInterface {
     fun getEmojiGuild(@Path("emojiId") emojiId: Long): Observable<Guild>
 
     @PATCH("guilds/{guildId}")
+    fun disableCommunity(
+        @Path("guildId") guildId: Long,
+        @Body body: RestAPIParams.DisableCommunity,
+    ): Observable<Guild>
+
+    @PUT("guilds/{guildId}/incident-actions")
+    fun setGuildIncidentActions(
+        @Path("guildId") guildId: Long,
+        @Body body: RestAPIParams.GuildIncidentActions,
+    ): Observable<GuildIncidentsData>
+
+    @GET("guilds/{guildId}/stickers")
+    fun getGuildStickers(@Path("guildId") guildId: Long): Observable<List<Sticker>>
+
+    @Multipart
+    @POST("guilds/{guildId}/stickers")
+    fun postGuildSticker(
+        @Path("guildId") guildId: Long,
+        @Part("name") name: String,
+        @Part("description") description: String,
+        @Part("tags") tags: String,
+        @Part file: MultipartBody.Part,
+    ): Observable<Sticker>
+
+    @PATCH("guilds/{guildId}/stickers/{stickerId}")
+    fun patchGuildSticker(
+        @Path("guildId") guildId: Long,
+        @Path("stickerId") stickerId: Long,
+        @Body body: RestAPIParams.PatchGuildSticker,
+    ): Observable<Sticker>
+
+    @DELETE("guilds/{guildId}/stickers/{stickerId}")
+    fun deleteGuildSticker(
+        @Path("guildId") guildId: Long,
+        @Path("stickerId") stickerId: Long,
+    ): Observable<Void>
+
+    @PATCH("guilds/{guildId}")
     fun updateGuild(
         @Path("guildId") guildId: Long,
         @Body body: RestAPIParams.UpdateGuild,
@@ -1381,6 +1420,12 @@ interface RestAPIInterface {
 
     @GET("guilds/{guildId}/profile")
     fun getGuildProfile(@Path("guildId") guildId: Long): Observable<GuildProfile>
+
+    @PATCH("guilds/{guildId}/profile")
+    fun updateGuildProfile(
+        @Path("guildId") guildId: Long,
+        @Body body: RestAPIParams.UpdateGuildProfile,
+    ): Observable<GuildProfile>
 
     @GET("guilds/{guildId}/welcome-screen")
     fun getGuildWelcomeScreen(@Path("guildId") guildId: Long): Observable<GuildWelcomeScreen>

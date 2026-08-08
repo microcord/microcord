@@ -27,6 +27,17 @@ class GuildExplicitContentFilterTypeAdapter : TypeAdapter<GuildExplicitContentFi
     }
 }
 
+class GuildNsfwLevelTypeAdapter : TypeAdapter<GuildNsfwLevel>() {
+    override fun read(input: JsonReader): GuildNsfwLevel? {
+        if (input.peek() == JsonToken.NULL) return input.nextNull().let { null }
+        return GuildNsfwLevel.fromApiValue(input.nextInt())
+    }
+
+    override fun write(output: JsonWriter, value: GuildNsfwLevel?) {
+        if (value == null) output.nullValue() else output.value(value.apiValue)
+    }
+}
+
 class GuildHubTypeTypeAdapter : TypeAdapter<GuildHubType>() {
     override fun read(input: JsonReader): GuildHubType? {
         if (input.peek() == JsonToken.NULL) return input.nextNull().let { null }

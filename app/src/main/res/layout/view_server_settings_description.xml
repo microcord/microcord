@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:id="@+id/server_settings_description_wrap" style="@style/UiKit.ViewGroup.LinearLayout">
+    <TextView android:text="@string/form_label_server_description" style="@style/UiKit.Settings.Item.Header"/>
+    <TextView android:text="@string/form_help_server_description" style="@style/UiKit.Settings.Item.SubText.Attached"/>
+    <com.google.android.material.textfield.TextInputLayout android:id="@+id/overview_description" android:layout_marginLeft="16dp" android:layout_marginRight="16dp" android:layout_marginBottom="16dp" app:counterEnabled="true" app:counterMaxLength="300" style="@style/UiKit.TextInputLayout.Primary">
+        <com.google.android.material.textfield.TextInputEditText android:hint="@string/server_desciption_empty" android:maxLines="5" android:maxLength="300" style="@style/UiKit.TextInputLayout.EditText.MultiLine"/>
+    </com.google.android.material.textfield.TextInputLayout>
+</LinearLayout>

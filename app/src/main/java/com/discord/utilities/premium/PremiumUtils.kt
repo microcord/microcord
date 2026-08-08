@@ -127,18 +127,18 @@ object PremiumUtils {
         getGuildEmojiMaxCount(guild.premiumTier, guild.hasFeature(GuildFeature.MORE_EMOJI))
 
     /**
-     * Sticker slots a guild has.
-     *
-     * Unlike emoji, an unboosted guild gets **zero** sticker slots — stickers are entirely a boost
-     * perk. The `MORE_STICKERS` grant raises it to 60, again capped at tier 2.
+     * Sticker slots a guild has. The `MORE_STICKERS` grant raises it to 60, capped at tier 2.
      */
     fun getGuildStickerMaxCount(guildPremiumTier: Int, hasMoreSticker: Boolean): Int = when {
         hasMoreSticker && guildPremiumTier <= 2 -> 60
         guildPremiumTier == 1 -> 15
         guildPremiumTier == 2 -> 30
         guildPremiumTier == 3 -> 60
-        else -> 0
+        else -> 5
     }
+
+    fun getGuildStickerMaxCount(guild: Guild): Int =
+        getGuildStickerMaxCount(guild.premiumTier, guild.hasFeature(GuildFeature.MORE_STICKERS))
 
     /** Upload ceiling the guild's powerups grant, in bytes. */
     fun getGuildMaxFileSize(guild: Guild?): Long = AttachmentLimits.guildMaxFileSize(guild)

@@ -3,13 +3,11 @@ package com.discord.widgets.servers.settings.invites
 import android.os.CountDownTimer
 import android.view.View
 import android.widget.TextView
-import androidx.core.view.doOnPreDraw
 import com.discord.R
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.models.domain.ModelInvite
 import com.discord.models.user.CoreUser
 import com.discord.utilities.color.ColorCompat
-import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.views.user.SettingsMemberView
@@ -44,9 +42,9 @@ class WidgetServerSettingsInstantInvitesListItem(
             invite.channel?.getDisplayNameOrDefault(channelName.context, includePrefix = true),
         )
         member.visibility = if (inviter == null) View.GONE else View.VISIBLE
+        member.showIdentitySubtitle = false
         if (inviter != null) member.configure(CoreUser(inviter), data.guildMember)
         setupExpirationTime(invite)
-        expirationTime.doOnPreDraw { it.minimumWidth = it.width + dpToPixels(4) }
     }
 
     private fun getUsesText(invite: ModelInvite): String = if (invite.getMaxUses() > 0) {

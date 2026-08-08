@@ -3,6 +3,7 @@ package com.discord.restapi
 import com.discord.api.botuikit.ComponentType
 import com.discord.api.guild.GuildExplicitContentFilter
 import com.discord.api.guild.GuildFeature
+import com.discord.api.guild.GuildNsfwLevel
 import com.discord.api.guild.GuildVerificationLevel
 import com.discord.api.guildscheduledevent.GuildScheduledEventEntityMetadata
 import com.discord.api.guildscheduledevent.GuildScheduledEventEntityType
@@ -191,6 +192,8 @@ object RestAPIParams {
         val id: Long,
         val position: Int,
         val parentId: Long?,
+        /** Set only when a channel enters a category and the user chose to inherit its overwrites. */
+        val lockPermissions: Boolean? = null,
     ) {
         companion object {
             const val PARENT_ID_NONE = -1L
@@ -216,6 +219,7 @@ object RestAPIParams {
                         writer.value(parentId)
                     }
                 }
+                value.lockPermissions?.let { writer.name("lock_permissions").value(it) }
                 writer.endObject()
             }
 
@@ -739,6 +743,39 @@ object RestAPIParams {
 
     class PatchGuildEmoji(val name: String)
 
+    /**
+     * Leaving Community. Separate from [UpdateGuild] because the two channels have to be written as
+     * explicit JSON nulls, which a plain `Long?` would omit instead.
+     */
+    class DisableCommunity(
+        val features: List<GuildFeature>,
+        val rulesChannelId: NullSerializable<Long> = NullSerializable.Null(),
+        val publicUpdatesChannelId: NullSerializable<Long> = NullSerializable.Null(),
+    )
+
+    /**
+     * Guild tag settings. [tag] is nullable because clearing it is how the tag is turned off, and
+     * the badge fields are nullable because "default colours" is expressed as an explicit null.
+     */
+    class UpdateGuildProfile(
+        val tag: NullSerializable<String>,
+        val badge: Int? = null,
+        val badgeColorPrimary: NullSerializable<String>? = null,
+        val badgeColorSecondary: NullSerializable<String>? = null,
+    )
+
+    /** `null` lifts the pause; the API caps the deadline at 24 hours out. */
+    class GuildIncidentActions(
+        val invitesDisabledUntil: NullSerializable<String>? = null,
+        val dmsDisabledUntil: NullSerializable<String>? = null,
+    )
+
+    class PatchGuildSticker(
+        val name: String,
+        val description: String,
+        val tags: String,
+    )
+
     class Phone(
         val phone: String?,
         val source: String?,
@@ -902,6 +939,11 @@ object RestAPIParams {
         val rulesChannelId: Long? = null,
         val publicUpdatesChannelId: Long? = null,
         val preferredLocale: String? = null,
+        val description: String? = null,
+        val premiumProgressBarEnabled: Boolean? = null,
+        val safetyAlertsChannelId: Long? = null,
+        val ownerConfiguredContentLevel: GuildNsfwLevel? = null,
+        val officialMessageColor: Int? = null,
     ) {
         companion object {
             fun createForVerificationLevel(verificationLevel: GuildVerificationLevel) =

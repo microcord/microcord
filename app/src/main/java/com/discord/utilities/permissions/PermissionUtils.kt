@@ -74,6 +74,21 @@ object PermissionUtils {
     fun isElevated(userMfaEnabled: Boolean, guildMfaLevel: Int): Boolean =
         guildMfaLevel == 0 || userMfaEnabled
 
+    /**
+     * Whether sounds may be played into [channel].
+     *
+     * A call among friends is always allowed. In a guild the reference requires [Permission.SPEAK]
+     * alongside [Permission.USE_SOUNDBOARD], so a listener cannot make noise a speaker could not.
+     */
+    @JvmStatic
+    fun canUseSoundboard(channel: Channel?, channelPermissions: Long?): Boolean {
+        channel ?: return false
+        if (channel.isPrivate()) return true
+        return channel.isGuildVocalChannel() &&
+            can(Permission.USE_SOUNDBOARD, channelPermissions) &&
+            can(Permission.SPEAK, channelPermissions)
+    }
+
     /** [can] and [isElevated] together. Use this for every destructive moderation action. */
     @JvmStatic
     fun canAndIsElevated(

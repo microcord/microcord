@@ -852,7 +852,7 @@ object AuditLogChangeUtils {
             Permission.MANAGE_NICKNAMES -> R.string.manage_nicknames
             Permission.MANAGE_ROLES -> R.string.manage_roles
             Permission.MANAGE_WEBHOOKS -> R.string.manage_webhooks
-            Permission.MANAGE_EMOJIS_AND_STICKERS -> R.string.manage_emojis_and_stickers
+            Permission.MANAGE_GUILD_EXPRESSIONS -> R.string.manage_expressions
             Permission.USE_APPLICATION_COMMANDS -> R.string.use_application_commands
             Permission.REQUEST_TO_SPEAK -> R.string.request_to_speak
             Permission.MANAGE_EVENTS -> R.string.manage_events
@@ -862,6 +862,19 @@ object AuditLogChangeUtils {
             Permission.USE_EXTERNAL_STICKERS -> R.string.role_permissions_use_external_stickers
             Permission.SEND_MESSAGES_IN_THREADS -> R.string.send_messages_in_threads
             Permission.MODERATE_MEMBERS -> R.string.moderate_member
+            Permission.BYPASS_SLOWMODE -> R.string.bypass_slowmode
+            Permission.USE_EMBEDDED_ACTIVITIES -> R.string.use_embedded_activities
+            Permission.SEND_POLLS -> R.string.role_permissions_send_polls
+            Permission.VIEW_CREATOR_MONETIZATION_ANALYTICS -> R.string.view_creator_monetization_analytics
+            Permission.USE_SOUNDBOARD -> R.string.use_soundboard
+            Permission.CREATE_GUILD_EXPRESSIONS -> R.string.create_expressions
+            Permission.CREATE_EVENTS -> R.string.create_events
+            Permission.USE_EXTERNAL_SOUNDS -> R.string.use_external_sounds
+            Permission.SEND_VOICE_MESSAGES -> R.string.role_permissions_send_voice_message
+            Permission.SET_VOICE_CHANNEL_STATUS -> R.string.voice_channel_status_permission_title
+            Permission.USE_EXTERNAL_APPS -> R.string.role_permissions_use_external_apps
+            Permission.PIN_MESSAGES -> R.string.pin_messages
+            Permission.MANAGE_OFFICIAL_MESSAGES -> R.string.role_permissions_manage_official_messages
             else -> 0
         }
 

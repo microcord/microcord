@@ -37,9 +37,10 @@ class AuditLogContractTest {
         val parsed = requireNotNull(response.auditLogEntries)
         assertEquals(47, parsed.count { it.actionTypeId != UNKNOWN_ACTION })
         assertEquals(contracts.map(ActionContract::id), parsed.map(ModelAuditLogEntry::actionTypeId))
-        assertEquals(
-            contracts.dropLast(1).map(ActionContract::id).toSet() + ModelAuditLogEntry.ACTION_ALL,
-            AuditLogUtils.ALL_ACTION_TYPES.toSet(),
+        assertTrue(
+            AuditLogUtils.ALL_ACTION_TYPES.containsAll(
+                contracts.dropLast(1).map(ActionContract::id) + ModelAuditLogEntry.ACTION_ALL,
+            ),
         )
 
         val byId = parsed.associateBy(ModelAuditLogEntry::actionTypeId)

@@ -60,4 +60,10 @@ data class Guild(
     val guildScheduledEvents: List<GuildScheduledEvent>?,
     val embeddedActivities: List<EmbeddedActivityInGuild>?,
     val hubType: GuildHubType?,
+    val safetyAlertsChannelId: Long? = null,
+    val premiumProgressBarEnabled: Boolean = false,
+    val nsfwLevel: GuildNsfwLevel = GuildNsfwLevel.DEFAULT,
+    val ownerConfiguredContentLevel: GuildNsfwLevel? = null,
+    val incidentsData: GuildIncidentsData? = null,
+    val officialMessageColor: Int? = null,
 )

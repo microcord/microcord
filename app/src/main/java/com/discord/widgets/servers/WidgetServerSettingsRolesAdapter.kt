@@ -66,6 +66,7 @@ class WidgetServerSettingsRolesAdapter(
         val userAbleToManageRoles: Boolean,
         val elevated: Boolean,
         val guildId: Long,
+        val memberCount: Int? = null,
     ) : Payload {
         override val key = role.id.toString()
         override val type = TYPE_ROLE
@@ -104,6 +105,8 @@ class WidgetServerSettingsRolesAdapter(
         private val lock: ImageView = itemView.findViewById(R.id.server_settings_role_item_lock_indicator)
         private val icon: RoleIconView = itemView.findViewById(R.id.server_settings_role_item_role_icon)
         private val dragOverlay: View = itemView.findViewById(R.id.server_settings_role_item_drag_overlay)
+        private val memberCount: TextView =
+            itemView.findViewById(R.id.server_settings_role_item_member_count)
         private var draggable = false
 
         override fun canDrag() = draggable
@@ -115,6 +118,7 @@ class WidgetServerSettingsRolesAdapter(
             name.setTextColor(RoleUtils.getRoleColor(item.role, itemView.context))
             lock.visibility = if (item.locked) View.VISIBLE else View.GONE
             icon.setRole(item.role, item.guildId)
+            memberCount.text = item.memberCount?.toString().orEmpty()
             itemView.setOnClickListener { adapter.roleSelected(item.role) }
             itemView.setOnLongClickListener {
                 val message = when {

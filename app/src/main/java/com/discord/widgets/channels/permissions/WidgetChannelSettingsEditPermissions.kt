@@ -77,6 +77,9 @@ class WidgetChannelSettingsEditPermissions : AppFragment(R.layout.widget_channel
             if (model.channel.isGuildVocalChannel() || model.channel.isCategory()) View.VISIBLE else View.GONE
         view?.findViewById<LinearLayout>(R.id.channel_permissions_stage_container)?.visibility =
             if (model.channel.isStageVoiceChannel() || model.channel.isCategory()) View.VISIBLE else View.GONE
+        // Events can only be scheduled against a voice, stage or category channel.
+        view?.findViewById<LinearLayout>(R.id.channel_permissions_events_container)?.visibility =
+            if (model.channel.isGuildVocalChannel() || model.channel.isCategory()) View.VISIBLE else View.GONE
         baseline = boxes.mapValues { (permission, _) -> PermissionEditor.status(overwrite, permission) }
         boxes.forEach { (permission, box) ->
             box.onSwitchStatusChangedListener = null
@@ -161,7 +164,16 @@ class WidgetChannelSettingsEditPermissions : AppFragment(R.layout.widget_channel
         private const val EXTRA_TARGET_ID = "INTENT_EXTRA_TARGET_ID"
         private const val EXTRA_TYPE = "INTENT_EXTRA_TYPE"
         private const val DISCARD_REQUEST_KEY = "CHANNEL_PERMISSION_DISCARD_RESULT"
-        private val STAGE_DISABLED = setOf(com.discord.api.permission.Permission.MUTE_MEMBERS, com.discord.api.permission.Permission.DEAFEN_MEMBERS, com.discord.api.permission.Permission.MOVE_MEMBERS)
+        // A stage has no soundboard and no channel status, and its speaker list is managed
+        // through the stage itself rather than by muting or moving members.
+        private val STAGE_DISABLED = setOf(
+            com.discord.api.permission.Permission.MUTE_MEMBERS,
+            com.discord.api.permission.Permission.DEAFEN_MEMBERS,
+            com.discord.api.permission.Permission.MOVE_MEMBERS,
+            com.discord.api.permission.Permission.USE_SOUNDBOARD,
+            com.discord.api.permission.Permission.USE_EXTERNAL_SOUNDS,
+            com.discord.api.permission.Permission.SET_VOICE_CHANNEL_STATUS,
+        )
 
         private fun create(context: Context, guildId: Long, channelId: Long, targetId: Long, type: Int) = SettingsNavigation.launch(
             context,

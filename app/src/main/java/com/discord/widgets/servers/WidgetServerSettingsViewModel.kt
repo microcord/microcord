@@ -48,6 +48,8 @@ class WidgetServerSettingsViewModel(
             val isCommunity: Boolean get() = guild.hasFeature(GuildFeature.COMMUNITY)
             val hasVanityUrl: Boolean get() = guild.hasFeature(GuildFeature.VANITY_URL)
             val isCreatorMonetizable: Boolean get() = guild.hasFeature(GuildFeature.CREATOR_MONETIZABLE)
+            val isVerified: Boolean get() = guild.hasFeature(GuildFeature.VERIFIED)
+            val hasGuildTags: Boolean get() = guild.hasFeature(GuildFeature.GUILD_TAGS)
 
             /** The delete entry only exists for an owner who satisfies the guild's MFA requirement. */
             val canDeleteGuild: Boolean get() = manageGuildContext.isOwnerWithRequiredMFALevel

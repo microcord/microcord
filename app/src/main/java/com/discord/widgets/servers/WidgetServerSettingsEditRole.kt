@@ -31,6 +31,7 @@ import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.views.CheckedSetting
 import com.discord.widgets.roles.RoleIconView
+import com.discord.widgets.servers.role_members.WidgetServerSettingsRoleMembers
 import com.discord.widgets.settings.SettingsNavigation
 import com.discord.widgets.settings.StatefulViews
 import com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -94,6 +95,7 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
         setupColor(model)
         setupRoleIcon(model)
         setupBooleanSettings(model)
+        setupMembers(model)
         setupPermissions(model)
         state.configureSaveActionView(save)
     }
@@ -202,6 +204,16 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
             .setRole(model.role, model.guildId)
     }
 
+    /** `@everyone` holds every member implicitly, so it has no membership to manage. */
+    private fun setupMembers(model: Model) {
+        val row = requireView().findViewById<View>(R.id.role_settings_members)
+        val isEveryone = model.role.id == model.guildId
+        row.visibility = if (isEveryone) View.GONE else View.VISIBLE
+        row.setOnClickListener {
+            WidgetServerSettingsRoleMembers.launch(requireContext(), model.guildId, model.role.id)
+        }
+    }
+
     private fun setupBooleanSettings(model: Model) {
         bindBooleanSetting(
             R.id.role_settings_hoist_checkedsetting,
@@ -255,6 +267,11 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
             }
             if (permission == Permission.VIEW_GUILD_ANALYTICS) {
                 setting.visibility = model.isCommunityServer.visibility
+            }
+            // Official messages only exist on a verified guild, so the permission is meaningless
+            // anywhere else.
+            if (permission == Permission.MANAGE_OFFICIAL_MESSAGES) {
+                setting.visibility = model.isVerifiedServer.visibility
             }
         }
     }
@@ -313,6 +330,7 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
         val myPermissions: Long?,
         val myPermissionsFromOtherRoles: Long,
         val isCommunityServer: Boolean,
+        val isVerifiedServer: Boolean,
     ) {
         val isEveryoneRole get() = role.id == guildId
         fun canManage() = manageStatus == ManageStatus.CAN_MANAGE_CONDITIONAL ||
@@ -372,6 +390,7 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
                     permissions,
                     permissionsWithoutRole(member.getRoles(), roles, roleId, guildId),
                     GuildFeature.COMMUNITY in guild.features,
+                    GuildFeature.VERIFIED in guild.features,
                 )
             }
 
@@ -452,7 +471,7 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
             R.id.role_settings_manage_nicknames to Permission.MANAGE_NICKNAMES,
             R.id.role_settings_manage_roles to Permission.MANAGE_ROLES,
             R.id.role_settings_manage_webhooks to Permission.MANAGE_WEBHOOKS,
-            R.id.role_settings_manage_emojis_and_stickers to Permission.MANAGE_EMOJIS_AND_STICKERS,
+            R.id.role_settings_manage_expressions to Permission.MANAGE_GUILD_EXPRESSIONS,
             R.id.role_settings_use_application_commands to Permission.USE_APPLICATION_COMMANDS,
             R.id.role_settings_request_to_speak to Permission.REQUEST_TO_SPEAK,
             R.id.role_settings_manage_events to Permission.MANAGE_EVENTS,
@@ -462,6 +481,19 @@ class WidgetServerSettingsEditRole : AppFragment(R.layout.widget_edit_role) {
             R.id.role_settings_use_external_stickers to Permission.USE_EXTERNAL_STICKERS,
             R.id.role_settings_send_messages_in_threads to Permission.SEND_MESSAGES_IN_THREADS,
             R.id.role_settings_moderate_member to Permission.MODERATE_MEMBERS,
+            R.id.role_settings_view_creator_monetization_analytics to
+                Permission.VIEW_CREATOR_MONETIZATION_ANALYTICS,
+            R.id.role_settings_use_soundboard to Permission.USE_SOUNDBOARD,
+            R.id.role_settings_create_expressions to Permission.CREATE_GUILD_EXPRESSIONS,
+            R.id.role_settings_create_events to Permission.CREATE_EVENTS,
+            R.id.role_settings_use_external_sounds to Permission.USE_EXTERNAL_SOUNDS,
+            R.id.role_settings_send_voice_messages to Permission.SEND_VOICE_MESSAGES,
+            R.id.role_settings_set_voice_channel_status to Permission.SET_VOICE_CHANNEL_STATUS,
+            R.id.role_settings_send_polls to Permission.SEND_POLLS,
+            R.id.role_settings_use_embedded_activities to Permission.USE_EMBEDDED_ACTIVITIES,
+            R.id.role_settings_use_external_apps to Permission.USE_EXTERNAL_APPS,
+            R.id.role_settings_pin_messages to Permission.PIN_MESSAGES,
+            R.id.role_settings_manage_official_messages to Permission.MANAGE_OFFICIAL_MESSAGES,
         )
 
         fun launch(guildId: Long, roleId: Long, context: Context) {

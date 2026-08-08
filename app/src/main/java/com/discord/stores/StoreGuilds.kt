@@ -468,6 +468,12 @@ class StoreGuilds(
         approximatePresenceCount = api.approximatePresenceCount.takeUnless { it == 0 } ?: approximatePresenceCount,
         nsfw = api.nsfw,
         hubType = api.hubType,
+        safetyAlertsChannelId = api.safetyAlertsChannelId,
+        premiumProgressBarEnabled = api.premiumProgressBarEnabled,
+        nsfwLevel = api.nsfwLevel,
+        ownerConfiguredContentLevel = api.ownerConfiguredContentLevel,
+        incidentsData = api.incidentsData ?: incidentsData,
+        officialMessageColor = api.officialMessageColor ?: officialMessageColor,
     )
 
     /**

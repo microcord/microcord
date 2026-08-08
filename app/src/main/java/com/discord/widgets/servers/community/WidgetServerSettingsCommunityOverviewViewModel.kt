@@ -26,6 +26,8 @@ class WidgetServerSettingsCommunityOverviewViewModel(
     storeStateObservable: Observable<StoreState> = observeStoreState(guildId),
     private val updateGuild: (Long, RestAPIParams.UpdateGuild) -> Observable<com.discord.api.guild.Guild>? =
         { id, params -> RestAPI.apiOrNull?.updateGuild(id, params) },
+    private val disableCommunityRequest: (Long, RestAPIParams.DisableCommunity) ->
+    Observable<com.discord.api.guild.Guild>? = { id, params -> RestAPI.apiOrNull?.disableCommunity(id, params) },
 ) : AppViewModel<WidgetServerSettingsCommunityOverviewViewModel.ViewState>(ViewState.Uninitialized) {
 
     sealed class StoreState {
@@ -43,7 +45,12 @@ class WidgetServerSettingsCommunityOverviewViewModel(
     sealed class ViewState {
         object Uninitialized : ViewState()
         object Invalid : ViewState()
-        data class Loaded(val guild: Guild, val rulesChannel: Channel?, val updatesChannel: Channel?) : ViewState()
+        data class Loaded(
+            val guild: Guild,
+            val rulesChannel: Channel?,
+            val updatesChannel: Channel?,
+            val isAdmin: Boolean = false,
+        ) : ViewState()
         data class DisableCommunityLoading(val isLoading: Boolean) : ViewState()
     }
 
@@ -73,14 +80,25 @@ class WidgetServerSettingsCommunityOverviewViewModel(
         RestAPIParams.UpdateGuild(preferredLocale = locale),
     )
 
+    /** Leaving Community also gives up Discovery and the two channels it required. */
     fun disableCommunity() {
         val loaded = viewState as? ViewState.Loaded ?: return
-        saveCommunityGuildSettings(disableCommunityParams(loaded.guild))
+        updateViewState(ViewState.DisableCommunityLoading(true))
+        val request = disableCommunityRequest(guildId, disableCommunityParams(loaded.guild))
+        if (request == null) {
+            handleGuildUpdateError()
+            return
+        }
+        request.restSubscribeOn().ui(this).appSubscribe(
+            errorClass = WidgetServerSettingsCommunityOverviewViewModel::class.java,
+            errorHandler = { handleGuildUpdateError() },
+        ) {
+            updateViewState(ViewState.DisableCommunityLoading(false))
+            eventSubject.onNext(Event.DisableCommunitySuccess)
+        }
     }
 
     private fun saveCommunityGuildSettings(params: RestAPIParams.UpdateGuild) {
-        val disabling = isDisableCommunity(params)
-        if (disabling) updateViewState(ViewState.DisableCommunityLoading(true))
         val request = updateGuild(guildId, params)
         if (request == null) {
             handleGuildUpdateError()
@@ -90,12 +108,7 @@ class WidgetServerSettingsCommunityOverviewViewModel(
             errorClass = WidgetServerSettingsCommunityOverviewViewModel::class.java,
             errorHandler = { handleGuildUpdateError() },
         ) {
-            if (disabling) {
-                updateViewState(ViewState.DisableCommunityLoading(false))
-                eventSubject.onNext(Event.DisableCommunitySuccess)
-            } else {
-                eventSubject.onNext(Event.SaveSuccess)
-            }
+            eventSubject.onNext(Event.SaveSuccess)
         }
     }
 
@@ -114,18 +127,21 @@ class WidgetServerSettingsCommunityOverviewViewModel(
                 valid.guild.mfaLevel,
             )
             return if (canManage) {
-                ViewState.Loaded(valid.guild, valid.rulesChannel, valid.updatesChannel)
+                ViewState.Loaded(
+                    valid.guild,
+                    valid.rulesChannel,
+                    valid.updatesChannel,
+                    isAdmin = valid.guild.isOwner(valid.me.id) ||
+                        PermissionUtils.can(Permission.ADMINISTRATOR, valid.permissions),
+                )
             } else {
                 ViewState.Invalid
             }
         }
 
-        internal fun disableCommunityParams(guild: Guild) = RestAPIParams.UpdateGuild(
-            features = (guild.features - GuildFeature.COMMUNITY).toList(),
+        internal fun disableCommunityParams(guild: Guild) = RestAPIParams.DisableCommunity(
+            features = (guild.features - GuildFeature.COMMUNITY - GuildFeature.DISCOVERABLE).toList(),
         )
-
-        internal fun isDisableCommunity(params: RestAPIParams.UpdateGuild) =
-            params.features?.contains(GuildFeature.COMMUNITY) == false
 
         fun observeStoreState(
             guildId: Long,

@@ -50,7 +50,11 @@ object Permission {
     const val MANAGE_NICKNAMES: PermissionBit = 134217728L
     const val MANAGE_ROLES: PermissionBit = 268435456L
     const val MANAGE_WEBHOOKS: PermissionBit = 536870912L
-    const val MANAGE_EMOJIS_AND_STICKERS: PermissionBit = 1073741824L
+    /**
+     * Edit or remove *any* expression. Named `MANAGE_GUILD_EXPRESSIONS` in the reference, which
+     * split creation out into [CREATE_GUILD_EXPRESSIONS]; this bit no longer grants it.
+     */
+    const val MANAGE_GUILD_EXPRESSIONS: PermissionBit = 1073741824L
     const val USE_APPLICATION_COMMANDS: PermissionBit = 2147483648L
     const val REQUEST_TO_SPEAK: PermissionBit = 4294967296L
     const val MANAGE_EVENTS: PermissionBit = 8589934592L
@@ -61,8 +65,22 @@ object Permission {
     const val SEND_MESSAGES_IN_THREADS: PermissionBit = 274877906944L
     const val USE_EMBEDDED_ACTIVITIES: PermissionBit = 549755813888L
     const val MODERATE_MEMBERS: PermissionBit = 1099511627776L
+    const val VIEW_CREATOR_MONETIZATION_ANALYTICS: PermissionBit = 2199023255552L
+    const val USE_SOUNDBOARD: PermissionBit = 4398046511104L
+    const val CREATE_GUILD_EXPRESSIONS: PermissionBit = 8796093022208L
+    const val CREATE_EVENTS: PermissionBit = 17592186044416L
+    const val USE_EXTERNAL_SOUNDS: PermissionBit = 35184372088832L
+    const val SEND_VOICE_MESSAGES: PermissionBit = 70368744177664L
+
+    // Bit 47 was USE_CLYDE_AI. It stays reserved: the value survives in persisted role data, so
+    // reusing it would silently grant whatever replaced it.
+
+    const val SET_VOICE_CHANNEL_STATUS: PermissionBit = 281474976710656L
     const val SEND_POLLS: PermissionBit = 562949953421312L
+    const val USE_EXTERNAL_APPS: PermissionBit = 1125899906842624L
+    const val PIN_MESSAGES: PermissionBit = 2251799813685248L
     const val BYPASS_SLOWMODE: PermissionBit = 4503599627370496L
+    const val MANAGE_OFFICIAL_MESSAGES: PermissionBit = 9007199254740992L
 
     /**
      * The permissions granted to a freshly created @everyone role.
@@ -72,12 +90,19 @@ object Permission {
      * MENTION_EVERYONE | USE_EXTERNAL_EMOJIS | CONNECT | SPEAK | USE_VAD |
      * CHANGE_NICKNAME | USE_APPLICATION_COMMANDS | REQUEST_TO_SPEAK |
      * CREATE_PUBLIC_THREADS | CREATE_PRIVATE_THREADS | USE_EXTERNAL_STICKERS |
-     * SEND_MESSAGES_IN_THREADS`
+     * SEND_MESSAGES_IN_THREADS | USE_SOUNDBOARD | CREATE_GUILD_EXPRESSIONS |
+     * CREATE_EVENTS | USE_EXTERNAL_APPS`
      */
-    const val DEFAULT: PermissionBit = 521942851137L
+    const val DEFAULT: PermissionBit = 1157208175271489L
 
-    /** Every bit above. Granted to guild owners and to administrators. */
-    const val ALL: PermissionBit = 5068748603522815L
+    /**
+     * Every bit above, i.e. bits 0..53 except the reserved 47. Granted to guild owners and to
+     * administrators.
+     *
+     * The 126.21 value omitted [PRIORITY_SPEAKER] and [VIEW_GUILD_ANALYTICS], which meant an owner
+     * tested negative for both; they are included here.
+     */
+    const val ALL: PermissionBit = 17873661021126655L
 
     /**
      * Permissions that require an elevated (MFA-verified) session when the guild has
@@ -93,7 +118,7 @@ object Permission {
      *
      * `KICK_MEMBERS | BAN_MEMBERS | ADMINISTRATOR | MANAGE_CHANNELS | MANAGE_GUILD |
      * MUTE_MEMBERS | DEAFEN_MEMBERS | MANAGE_NICKNAMES | MANAGE_ROLES | MANAGE_WEBHOOKS |
-     * MANAGE_EMOJIS_AND_STICKERS | MANAGE_EVENTS | MODERATE_MEMBERS`
+     * MANAGE_GUILD_EXPRESSIONS | MANAGE_EVENTS | MODERATE_MEMBERS`
      */
     const val MANAGEMENT_PERMISSIONS: PermissionBit = 1110127411262L
 
