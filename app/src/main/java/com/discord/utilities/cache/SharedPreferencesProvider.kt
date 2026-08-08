@@ -17,6 +17,9 @@ object SharedPreferencesProvider {
     fun get(): SharedPreferences =
         checkNotNull(sharedPreferences) { "You must call init() before accessing prefs" }
 
+    /** For callers whose setting is optional enough that missing prefs are not worth crashing over. */
+    fun getOrNull(): SharedPreferences? = sharedPreferences
+
     fun getPrefsSessionDurable(): SharedPreferences =
         checkNotNull(prefsSessionDurable) { "You must call init() before accessing prefsSessionDurable" }
 

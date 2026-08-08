@@ -7,9 +7,9 @@ object DeveloperSettings {
     private const val PREMIUM_TIER_OVERRIDE = "developer_premium_tier_override"
     const val ACTUAL_TIER = -1
 
-    fun premiumTierOverride(): PremiumTier? = SharedPreferencesProvider.get()
-        .getInt(PREMIUM_TIER_OVERRIDE, ACTUAL_TIER)
-        .takeIf { it in PremiumTier.entries.indices }
+    fun premiumTierOverride(): PremiumTier? = SharedPreferencesProvider.getOrNull()
+        ?.getInt(PREMIUM_TIER_OVERRIDE, ACTUAL_TIER)
+        ?.takeIf { it in PremiumTier.entries.indices }
         ?.let(PremiumTier.entries::get)
 
     fun setPremiumTierOverride(tier: PremiumTier?) {

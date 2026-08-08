@@ -17,6 +17,7 @@ import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isGuildTextChannel
 import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.channel.isMultiUserDM
+import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isStageVoiceChannel
 import com.discord.api.channel.hasMessages
 import com.discord.stores.SelectedChannelAnalyticsLocation
@@ -105,10 +106,18 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
     private fun configurePinChannel(channel: Channel) {
         val settings = StoreStream.getUserGuildSettings().getGuildSettings()[channel.guildId]
         val pinned = settings?.getChannelOverride(channel.id)?.isFavorite == true
-        val supported = channel.guildId != 0L && !channel.isThread() && !channel.isCategory()
+        val supported = !channel.isThread() && !channel.isCategory()
 
         pinChannel.visibility = if (supported) View.VISIBLE else View.GONE
-        pinChannel.setText(if (pinned) R.string.unpin_channel else R.string.pin_channel_to_top)
+        pinChannel.setText(
+            // A DM is pinned within the DM list, so the reference drops "Channel to Top" there.
+            when {
+                channel.isPrivate() && pinned -> R.string.unpin
+                channel.isPrivate() -> R.string.pin
+                pinned -> R.string.unpin_channel
+                else -> R.string.pin_channel_to_top
+            },
+        )
         pinChannel.setOnClickAndDismissListener {
             StoreStream.getUserGuildSettings().setChannelFavorite(requireContext(), channel, !pinned)
         }

@@ -13,6 +13,7 @@ data class ChannelListItemPrivate(
     override val mentionCount: Int,
     val isApplicationStreaming: Boolean,
     val muted: Boolean,
+    val pinned: Boolean = false,
     val nameplate: Nameplate? = null,
     val avatarDecoration: AvatarDecorationData? = null,
     val displayName: String? = null,

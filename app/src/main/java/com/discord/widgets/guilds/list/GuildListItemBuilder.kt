@@ -120,10 +120,10 @@ internal object GuildListItemBuilder {
     }
 
     /**
-     * The DMs that currently have a mention and are not individually muted.
+     * The DMs that currently have a mention and are not individually muted, pinned ones first.
      *
-     * Sorted with the channel-list comparator (`ChannelUtils.h`, confirmed by disassembly) rather
-     * than by recency — surprising, but that is what the reference does.
+     * The rail takes the DM list's own order and keeps only the head of it, so a viewer with more
+     * unread DMs than fit still sees the ones they pinned.
      */
     private fun createDirectMessageItems(
         privateChannels: Map<Long, Channel>,
@@ -135,7 +135,11 @@ internal object GuildListItemBuilder {
             mentionCounts.containsKey(channel.id) &&
                 dmSettings?.getChannelOverride(channel.id)?.isMuted != true
         }
-        .sortedWith(Channel.getSortByNameAndType())
+        .sortedWith(
+            compareBy<Channel> { dmSettings?.getChannelOverride(it.id)?.isFavorite != true }
+                .thenByDescending { it.lastMessageId.takeIf { id -> id != 0L } ?: it.id },
+        )
+        .take(MAX_UNREAD_DIRECT_MESSAGES)
         .map { GuildListItem.PrivateChannelItem(it, mentionCounts[it.id] ?: 0) }
 
     private fun createGuildItem(
@@ -371,3 +375,5 @@ internal object GuildListItemBuilder {
 }
 
 private const val DECAY_CUTOFF_MS = 7L * 24 * 60 * 60 * 1000
+
+private const val MAX_UNREAD_DIRECT_MESSAGES = 20

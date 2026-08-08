@@ -342,9 +342,14 @@ data class WidgetChannelListModel(
                 StoreStream.getUserRelationships().observeNicknames(),
             ) { channels, selectedChannelId, presences, mentionCounts, streamingUserIds, settings,
                 mostRecentIds, users, friendNicknames ->
+                val pinnedIds = settings.channelOverrides.filter { it.isFavorite }
+                    .map { it.channelId }
+                    .toSet()
                 privateListBuilder(
                     channels = channels.values.sortedWith(
-                        Channel.getSortByMostRecent(mostRecentIds),
+                        // Pinned DMs are their own bucket above the rest, each ordered by recency.
+                        compareBy<Channel> { it.id !in pinnedIds }
+                            .then(Channel.getSortByMostRecent(mostRecentIds)),
                     ),
                     selectedChannelId = selectedChannelId,
                     presences = presences,
@@ -539,6 +544,7 @@ data class WidgetChannelListModel(
                     mentionCount = mentionCounts[channel.id] ?: 0,
                     isApplicationStreaming = recipientId != null && recipientId in streamingUserIds,
                     muted = notificationSettings.getChannelOverride(channel.id)?.isMuted == true,
+                    pinned = notificationSettings.getChannelOverride(channel.id)?.isFavorite == true,
                     nameplate = if (recipientId != null && recipientId in users) {
                         users[recipientId]?.collectibles?.nameplate
                     } else {

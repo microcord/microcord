@@ -915,6 +915,7 @@ class WidgetChannelsListAdapter(
         private val avatarDecoration: AvatarDecorationView =
             itemView.findViewById(R.id.channels_list_item_private_avatar_decoration)
         private val content: View = itemView.findViewById(R.id.channels_list_item_private_content)
+        private val pin: ImageView = itemView.findViewById(R.id.channels_list_item_private_pin)
 
         override fun onConfigure(position: Int, data: ChannelListItem) {
             super.onConfigure(position, data)
@@ -945,6 +946,7 @@ class WidgetChannelsListAdapter(
 
             name.text = channelName
             name.setTextColor(textColor(item))
+            pin.setColorFilter(textColor(item))
             guildTag.bind(channel.getDMRecipient()?.primaryGuild)
             tag.visibility = if (channel.isSystemDM()) View.VISIBLE else View.GONE
 
@@ -970,12 +972,23 @@ class WidgetChannelsListAdapter(
 
             mentions.text = minOf(MAX_MENTION_COUNT, item.mentionCount).toString()
             mentions.visibility = if (item.mentionCount > 0) View.VISIBLE else View.GONE
+            pin.visibility = if (item.pinned) View.VISIBLE else View.GONE
 
             root.isSelected = item.selected
             root.setChannelBackground(item.selected, channel)
         }
 
+        /** The reference appends its hints to the label, pinned ahead of anything else. */
         private fun contentDescription(
+            item: ChannelListItemPrivate,
+            channelName: CharSequence?,
+        ): CharSequence {
+            val label = channelLabel(item, channelName)
+            if (!item.pinned) return label
+            return "$label, ${itemView.context.getString(R.string.channel_pinned_a11y_hint)}"
+        }
+
+        private fun channelLabel(
             item: ChannelListItemPrivate,
             channelName: CharSequence?,
         ): CharSequence = when {

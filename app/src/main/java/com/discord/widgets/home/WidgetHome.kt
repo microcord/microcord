@@ -17,10 +17,12 @@ import com.discord.stores.StoreNotices
 import com.discord.stores.StoreStream
 import com.discord.dialogs.WidgetUrgentMessageDialog
 import com.discord.widgets.channels.list.WidgetChannelsList
+import com.discord.widgets.channels.list.WidgetChannelsListItemChannelActions
 import com.discord.widgets.channels.memberlist.WidgetChannelMembersList
 import com.discord.widgets.channels.WidgetChannelOnboarding
 import com.discord.widgets.channels.WidgetChannelTopic
 import com.discord.widgets.channels.WidgetChannelSidebarActions
+import com.discord.widgets.guilds.list.GuildsListNavigation
 import com.discord.widgets.guilds.list.WidgetGuildsList
 import com.discord.widgets.guilds.join.WidgetGuildWelcomeSheet
 import com.discord.widgets.chat.list.WidgetChatList
@@ -105,6 +107,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                 StoreStream.getNavigation().setRightPanelState(it)
             },
         )
+        // Closed here rather than in the guild list so that panel keeps out of `channels/list`.
+        GuildsListNavigation.showChannelActions = WidgetChannelsListItemChannelActions::show
         if (childFragmentManager.findFragmentByTag(GUILDS_TAG) == null) {
             childFragmentManager.commitNow { replace(R.id.widget_guilds, WidgetGuildsList(), GUILDS_TAG) }
         }

@@ -359,10 +359,10 @@ class StoreUserGuildSettings(
     }
 
     /**
-     * Pins [channel] to the top of the channel list.
+     * Pins [channel] to the top of the channel list, or of the DM list for a private channel.
      *
-     * Pinning also opts the channel in, because a pinned channel the viewer cannot see would be a
-     * setting with no effect.
+     * A guild channel is also opted in, because a pinned channel the viewer cannot see would be a
+     * setting with no effect. Opt-in does not apply to DMs.
      */
     fun setChannelFavorite(context: Context, channel: Channel, favorite: Boolean) {
         val current = getGuildSettings()[channel.guildId]?.getChannelOverride(channel.id)?.flags ?: 0
@@ -371,7 +371,7 @@ class StoreUserGuildSettings(
             ChannelNotificationSettingsFlags.FAVORITED,
             favorite,
         )
-        if (favorite) {
+        if (favorite && channel.guildId != PRIVATE_CHANNELS_GUILD_ID) {
             flags = ChannelNotificationSettingsFlags.withFlag(
                 flags,
                 ChannelNotificationSettingsFlags.OPT_IN_ENABLED,
