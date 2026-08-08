@@ -26,7 +26,6 @@ class MediaEngineLegacy(
     private val context: Context,
     private val listener: MediaEngine.Listener,
     override val mediaEngineThreadExecutor: MediaEngineThreadExecutor,
-    private val openSLESConfig: MediaEngine.OpenSLESConfig,
     private val echoCancellation: EchoCancellationConfig,
     private val echoCancellationCallback: MediaEngine.EchoCancellationCallback,
 ) : MediaEngine {
@@ -40,7 +39,6 @@ class MediaEngineLegacy(
     private var nativeEngine: Discord? = null
     private var audioInputEnabled: Boolean = false
     private var localVoiceStatusListener: ((MediaEngine.LocalVoiceStatus) -> Unit)? = null
-    private var openSLUsageMode: MediaEngine.OpenSLUsageMode = MediaEngine.OpenSLUsageMode.ALLOW_LIST
 
     /** `null` until the device's video codecs have been enumerated; that is what "prepared" means. */
     private var supportedVideoCodecs: List<Codec>? = null
@@ -138,6 +136,7 @@ class MediaEngineLegacy(
         noiseCancellationConfig.enabled = voiceConfig.noiseCancellation
         engine?.setNoiseCancellation(voiceConfig.noiseCancellation)
         engine?.setAutomaticGainControl(voiceConfig.automaticGainControl)
+        engine?.setSidechainCompression(voiceConfig.sidechainCompression)
 
         getConnections().forEach { connection ->
             connection.setInputMode(voiceConfig.inputMode, voiceConfig.inputModeOptions)
@@ -196,13 +195,6 @@ class MediaEngineLegacy(
     override fun setLocalVoiceStatusListener(voiceStatusListener: ((MediaEngine.LocalVoiceStatus) -> Unit)?) {
         localVoiceStatusListener = voiceStatusListener
         nativeEngine?.applyLocalVoiceStatusListener()
-    }
-
-    override fun setOpenSLUsageMode(openSLUsageMode: MediaEngine.OpenSLUsageMode) {
-        if (nativeEngine != null) {
-            AppLog.e(TAG, "setting openSLUsageMode too late")
-        }
-        this.openSLUsageMode = openSLUsageMode
     }
 
     @Synchronized
@@ -303,7 +295,7 @@ class MediaEngineLegacy(
     private fun ensureNativeEngine() {
         if (nativeEngine != null) return
 
-        AppLog.i(TAG, "initializing voice engine. OpenSL ES: $openSLESConfig, OpenSL usage mode: $openSLUsageMode")
+        AppLog.i(TAG, "initializing voice engine")
         // Modern WebRTC selects its audio backend internally and no longer exposes an OpenSL override.
         Logging.externalReporter = Logging.ExternalReporter { tag, message, throwable ->
             AppLog.e(tag, message, throwable)

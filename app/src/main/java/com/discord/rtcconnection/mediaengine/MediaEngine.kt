@@ -55,7 +55,6 @@ interface MediaEngine {
     fun setLocalVoiceStatusListener(voiceStatusListener: ((LocalVoiceStatus) -> Unit)?)
 
     /** Chooses how the OpenSL ES device list is interpreted; must be set before the engine starts. */
-    fun setOpenSLUsageMode(openSLUsageMode: OpenSLUsageMode)
 
     /**
      * Opens a media session to the server described by [options].
@@ -99,6 +98,7 @@ interface MediaEngine {
         val noiseSuppression: Boolean,
         val noiseCancellation: Boolean,
         val automaticGainControl: Boolean,
+        val sidechainCompression: Boolean,
         val inputMode: MediaEngineConnection.InputMode,
         val inputModeOptions: MediaEngineConnection.InputModeOptions,
         val isSelfDeafened: Boolean,
@@ -122,10 +122,8 @@ interface MediaEngine {
     )
 
     /** Experiment override for the OpenSL ES audio path. */
-    enum class OpenSLESConfig { DEFAULT, FORCE_ENABLED, FORCE_DISABLED }
 
     /** Whether the packaged device list is an allow list or an exclude list. */
-    enum class OpenSLUsageMode { ALLOW_LIST, EXCLUDE_LIST }
 
     fun interface EchoCancellationCallback {
         fun onEchoCancellationUpdated(info: EchoCancellationInfo)

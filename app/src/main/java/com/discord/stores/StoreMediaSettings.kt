@@ -60,6 +60,7 @@ class StoreMediaSettings(
         val automaticVad: Boolean = true,
         val vadUseKrisp: VadUseKrisp = VadUseKrisp.Enabled,
         val automaticGainControl: Boolean = true,
+        val sidechainCompression: Boolean = true,
         val echoCancellation: Boolean = true,
         val noiseProcessing: NoiseProcessing = NoiseProcessing.Cancellation,
         val sensitivity: Float = DEFAULT_SENSITIVITY,
@@ -68,7 +69,6 @@ class StoreMediaSettings(
         val mutedUsers: Map<Long, Boolean> = emptyMap(),
         val userOutputVolumes: Map<Long, Float> = emptyMap(),
         val offScreenUsers: Map<Long, Boolean> = emptyMap(),
-        val enableVideoHardwareScaling: Boolean = false,
         val voiceParticipantsHidden: Boolean = false,
     ) {
         /**
@@ -168,9 +168,6 @@ class StoreMediaSettings(
 
     @Synchronized
     fun getMutedUsers(): Map<Long, Boolean> = voiceConfiguration.mutedUsers
-
-    @Synchronized
-    fun getVideoHardwareScalingBlocking(): Boolean = voiceConfiguration.enableVideoHardwareScaling
 
     // endregion
 
@@ -338,10 +335,9 @@ class StoreMediaSettings(
     }
 
     @Synchronized
-    fun toggleEnableVideoHardwareScaling() {
-        voiceConfiguration = voiceConfiguration.copy(
-            enableVideoHardwareScaling = !voiceConfiguration.enableVideoHardwareScaling,
-        )
+    fun toggleSidechainCompression() {
+        voiceConfiguration =
+            voiceConfiguration.copy(sidechainCompression = !voiceConfiguration.sidechainCompression)
     }
 
     @Synchronized
@@ -422,8 +418,8 @@ class VoiceConfigurationCache(private val sharedPreferences: SharedPreferences) 
                 KEY_USER_OUTPUT_VOLUMES,
                 ENTRY_DELIMITER,
             ) { key, value -> key.toLong() to value.toFloat() },
-            enableVideoHardwareScaling =
-            sharedPreferences.getBoolean(KEY_VIDEO_HARDWARE_SCALING, defaults.enableVideoHardwareScaling),
+            sidechainCompression =
+            sharedPreferences.getBoolean(KEY_SIDECHAIN_COMPRESSION, defaults.sidechainCompression),
             voiceParticipantsHidden =
             sharedPreferences.getBoolean(KEY_HIDE_VOICE_PARTICIPANTS, defaults.voiceParticipantsHidden),
         )
@@ -451,7 +447,7 @@ class VoiceConfigurationCache(private val sharedPreferences: SharedPreferences) 
             voiceConfiguration.userOutputVolumes,
             ENTRY_DELIMITER,
         ) { it.toString() }
-        editor.putBoolean(KEY_VIDEO_HARDWARE_SCALING, voiceConfiguration.enableVideoHardwareScaling)
+        editor.putBoolean(KEY_SIDECHAIN_COMPRESSION, voiceConfiguration.sidechainCompression)
         editor.putBoolean(KEY_HIDE_VOICE_PARTICIPANTS, voiceConfiguration.voiceParticipantsHidden)
         editor.apply()
     }
@@ -470,7 +466,7 @@ class VoiceConfigurationCache(private val sharedPreferences: SharedPreferences) 
         private const val KEY_OUTPUT_VOLUME = "CACHE_KEY_VOICE_SETTINGS_OUTPUT_VOLUME"
         private const val KEY_MUTED_USERS = "MUTED_USERS_V2"
         private const val KEY_USER_OUTPUT_VOLUMES = "USER_OUTPUT_VOLUMES_V2"
-        private const val KEY_VIDEO_HARDWARE_SCALING = "VIDEO_ENABLE_HARDWARE_SCALING"
+        private const val KEY_SIDECHAIN_COMPRESSION = "CACHE_KEY_VOICE_SETTINGS_SIDECHAIN_COMPRESSION"
         private const val KEY_HIDE_VOICE_PARTICIPANTS = "CACHE_KEY_HIDE_VOICE_PARTICIPANTS"
     }
 }

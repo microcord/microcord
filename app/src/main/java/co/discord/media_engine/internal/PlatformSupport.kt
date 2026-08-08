@@ -1,10 +1,6 @@
 package co.discord.media_engine.internal
 
-import android.content.Context
 import co.discord.media_engine.CameraEnumeratorProvider
-import com.discord.R
-import com.discord.app.AppLog
-import java.io.File
 import java.util.Locale
 
 class DeviceInfo {
@@ -22,40 +18,4 @@ class DeviceInfo {
             else -> "unknown"
         },
     )
-}
-
-class AssetManagement(val ctx: Context) {
-    fun ensureKrispModelsCopied(enabled: Boolean) {
-        if (!enabled) {
-            cleanup()
-            return
-        }
-        try {
-            val root = File(ctx.filesDir, "thz")
-            val versionDir = File(root, ctx.getString(R.string.krisp_model_version))
-            if (versionDir.exists()) return
-            cleanup()
-            versionDir.mkdirs()
-            ctx.assets.list("thz").orEmpty().forEach { name ->
-                ctx.assets.open("thz/$name").use { input ->
-                    File(versionDir, name).outputStream().use { output -> input.copyTo(output) }
-                }
-            }
-        } catch (e: Exception) {
-            AppLog.e(TAG, "Failed copying krisp model files", e)
-            cleanup()
-        }
-    }
-
-    private fun cleanup() {
-        try {
-            File(ctx.filesDir, "thz").deleteRecursively()
-        } catch (e: Exception) {
-            AppLog.e(TAG, "Failed removing krisp model files", e)
-        }
-    }
-
-    private companion object {
-        const val TAG = "DiscordKrisp"
-    }
 }

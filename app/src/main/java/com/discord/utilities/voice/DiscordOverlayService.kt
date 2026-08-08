@@ -4,12 +4,14 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.discord.R
 import com.discord.app.AppLog
 import com.discord.overlay.OverlayService
@@ -89,11 +91,16 @@ class DiscordOverlayService : OverlayService() {
 
     override fun createOverlayBubble(intent: Intent): OverlayBubbleWrap? = when (intent.action) {
         ACTION_VOICE -> if (voiceBubble() == null) createVoiceBubble() else null
-        ACTION_OPEN -> voiceBubble()?.let { existing ->
-            existing.performClick()
-            null
-        } ?: createVoiceBubble()
-        ACTION_SELECTOR -> createVoiceSelector()
+        // Not `?.let { … ; null } ?: create()`: the let returns null, so the elvis fires even when a
+        // bubble was found and the tap both opens the menu and spawns a duplicate.
+        ACTION_OPEN -> when (val existing = voiceBubble()) {
+            null -> createVoiceBubble()
+            else -> {
+                existing.performClick()
+                null
+            }
+        }
+        ACTION_SELECTOR -> if (selectorBubble() == null) createVoiceSelector() else null
         else -> null
     }
 
@@ -104,13 +111,19 @@ class DiscordOverlayService : OverlayService() {
             if (view is OverlayVoiceBubble) StoreStream.getAnalytics().onOverlayVoiceEvent(true)
         }
         overlayManager.onOverlayBubbleRemoved = { view ->
-            if (view is OverlayVoiceBubble) StoreStream.getAnalytics().onOverlayVoiceEvent(false)
+            if (view is OverlayVoiceBubble) {
+                StoreStream.getAnalytics().onOverlayVoiceEvent(false)
+                dismissedThisCall = true
+            }
             if (overlayManager.activeBubbles.isEmpty()) launchForClose(this)
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         AppLog.v(LOG_TAG, "onStartCommand: ${intent?.action}")
+        // A startForegroundService start must be promoted before anything else, including every
+        // path that bails out below; the system kills the process otherwise.
+        promoteToForeground(intent ?: Intent())
         if (intent?.action == ACTION_CLOSE || !canDrawOverlays()) {
             stopForeground(true)
             stopSelf(startId)
@@ -123,6 +136,10 @@ class DiscordOverlayService : OverlayService() {
         }
         try {
             handleStart(intent)
+            if (overlayManager.activeBubbles.isEmpty()) {
+                stopForeground(true)
+                stopSelf(startId)
+            }
         } catch (failure: Exception) {
             AppLog.e(LOG_TAG, "Overlay failed to handle a request.", failure)
             launchForClose(this)
@@ -130,8 +147,20 @@ class DiscordOverlayService : OverlayService() {
         return START_REDELIVER_INTENT
     }
 
+    private fun promoteToForeground(intent: Intent) {
+        val notification = createNotification(intent)
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+    }
+
     private fun voiceBubble(): OverlayVoiceBubble? =
         overlayManager.activeBubbles.filterIsInstance<OverlayVoiceBubble>().firstOrNull()
+
+    private fun selectorBubble(): OverlayVoiceSelectorBubbleDialog? =
+        overlayManager.activeBubbles.filterIsInstance<OverlayVoiceSelectorBubbleDialog>().firstOrNull()
 
     private fun canDrawOverlays(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
@@ -145,24 +174,35 @@ class DiscordOverlayService : OverlayService() {
         private const val LOG_TAG = "OverlayService"
         private const val VOICE_BUBBLE_ANCHOR_TAG = "Active Voice Bubble"
 
+        @Volatile
+        private var dismissedThisCall = false
+
         private fun createOverlayIntent(context: Context, action: String) =
             Intent(action, null, context, DiscordOverlayService::class.java)
 
         private fun tryStartOverlayService(context: Context, action: String, checkEnabled: Boolean = true) {
             if (checkEnabled && !StoreStream.getUserSettings().getIsMobileOverlayEnabled()) return
             try {
-                context.startService(createOverlayIntent(context, action))
+                // startService is refused once the app is backgrounded, which is exactly when the
+                // bubble is wanted; the service promotes itself in handleStart.
+                ContextCompat.startForegroundService(context, createOverlayIntent(context, action))
             } catch (failure: Exception) {
                 AppLog.v(LOG_TAG, "Overlay request failed.", failure)
             }
         }
 
         @JvmStatic
-        fun launchForClose(context: Context) =
-            tryStartOverlayService(context, ACTION_CLOSE, checkEnabled = false)
+        fun launchForClose(context: Context) {
+            try {
+                context.stopService(createOverlayIntent(context, ACTION_CLOSE))
+            } catch (failure: Exception) {
+                AppLog.v(LOG_TAG, "Overlay close failed.", failure)
+            }
+        }
 
         @JvmStatic
         fun launchForConnect(context: Context) {
+            dismissedThisCall = false
             if (!StoreStream.getUserSettings().getIsMobileOverlayEnabled()) {
                 Toast.makeText(context, R.string.overlay_mobile_required, Toast.LENGTH_SHORT).show()
                 return
@@ -177,8 +217,21 @@ class DiscordOverlayService : OverlayService() {
                 }
         }
 
+        /** Dismissing the bubble applies to the whole call; only [resetDismissal] brings it back. */
         @JvmStatic
-        fun launchForVoice(context: Context) = tryStartOverlayService(context, ACTION_VOICE)
+        fun launchForVoice(context: Context) {
+            if (dismissedThisCall) {
+                AppLog.v(LOG_TAG, "Overlay suppressed: dismissed for this call.")
+                return
+            }
+            tryStartOverlayService(context, ACTION_VOICE)
+        }
+
+        /** Clears the dismissal, so the next call starts with the bubble available again. */
+        @JvmStatic
+        fun resetDismissal() {
+            dismissedThisCall = false
+        }
 
         @JvmStatic
         fun launchForVoiceChannelSelect(context: Context) =

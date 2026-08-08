@@ -31,6 +31,7 @@ class CallSoundManager(
     private var activeStreamUserId: Long? = null
     private var activeStreamViewerCount = 0
     private var numConnectedParticipants = 0
+    private var numConnectedOthers = 0
     private var storeStateSubscription: Subscription? = null
     private var streamingUserIds: List<Long> = emptyList()
     private var voiceChannelId: Long? = null
@@ -42,7 +43,7 @@ class CallSoundManager(
         val previousActiveStreamViewerCount = activeStreamViewerCount
         val previousActiveStreamKey = activeStreamKey
         val previousActiveStreamUserId = activeStreamUserId
-        val previousConnectedParticipants = numConnectedParticipants
+        val previousConnectedOthers = numConnectedOthers
 
         voiceChannelId = channelId
         streamingUserIds = storeState.streamsByUser.values
@@ -87,17 +88,22 @@ class CallSoundManager(
 
         val rtcConnected = storeState.rtcConnectionState == RtcConnection.State.RtcConnected
         numConnectedParticipants = storeState.voiceParticipants.values.count { it.isConnected }
+        // Counted without the viewer: joining a channel already plays this from
+        // StoreVoiceChannelSelected, and their own arrival in the participant list would sound it a
+        // second time once RTC finished connecting.
+        numConnectedOthers = storeState.voiceParticipants.values
+            .count { it.isConnected && it.user.id != storeState.me.id }
         val ringingParticipants = storeState.voiceParticipants.values.count { it.isRinging }
 
         if (
             rtcConnected &&
             storeState.selectedVoiceChannel?.shouldPlayJoinLeaveSounds() == true &&
-            previousConnectedParticipants <= JOIN_LEAVE_USER_LIMIT
+            previousConnectedOthers <= JOIN_LEAVE_USER_LIMIT
         ) {
             when {
-                numConnectedParticipants > previousConnectedParticipants ->
+                numConnectedOthers > previousConnectedOthers ->
                     appSoundManager.play(AppSound.SOUND_USER_JOINED)
-                numConnectedParticipants < previousConnectedParticipants ->
+                numConnectedOthers < previousConnectedOthers ->
                     appSoundManager.play(AppSound.SOUND_USER_LEFT)
             }
         }

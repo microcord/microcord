@@ -268,7 +268,7 @@ class WidgetCallFullscreenViewModel constructor(
             ViewState.Valid(
                 callModel = callModel,
                 stageCallModel = state.stageCallModel,
-                overlayStatus = if (userSettingsStore.getIsMobileOverlayEnabled()) {
+                overlayStatus = if (state.overlayEnabled) {
                     OverlayStatus.ENABLED
                 } else OverlayStatus.DISABLED,
                 visibleVideoParticipants = visibleParticipants,
@@ -720,7 +720,10 @@ class WidgetCallFullscreenViewModel constructor(
                         UtcDateTime(callModel.timeConnectedMs),
                     ),
                     applicationAssetsStore.observeEmbeddedAppBackgrounds(),
-                ) { unreadCount, backgrounds -> ObservationThird(unreadCount, backgrounds) }
+                    userSettingsStore.observeIsMobileOverlayEnabled(),
+                ) { unreadCount, backgrounds, overlayEnabled ->
+                    ObservationThird(unreadCount, backgrounds, overlayEnabled)
+                }
 
                 Observable.combineLatest(
                     StageCallModel.observeStageCallModel(channelId),
@@ -748,6 +751,7 @@ class WidgetCallFullscreenViewModel constructor(
                         channelMentionsCount = b.mentionCounts[channelId] ?: 0,
                         unreadsCount = c.unreadCount,
                         embeddedAppBackgrounds = c.backgrounds,
+                        overlayEnabled = c.overlayEnabled,
                     )
                 }
             }
@@ -1170,6 +1174,7 @@ class WidgetCallFullscreenViewModel constructor(
             val channelMentionsCount: Int,
             val unreadsCount: Int,
             val embeddedAppBackgrounds: Map<Long, ApplicationAsset>,
+            val overlayEnabled: Boolean,
         ) : StoreState()
     }
 
@@ -1264,6 +1269,7 @@ class WidgetCallFullscreenViewModel constructor(
     private data class ObservationThird(
         val unreadCount: Int,
         val backgrounds: Map<Long, ApplicationAsset>,
+        val overlayEnabled: Boolean,
     )
 
     private companion object {

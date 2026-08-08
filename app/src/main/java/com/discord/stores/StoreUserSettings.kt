@@ -59,6 +59,7 @@ class StoreUserSettings(
     }
 
     private val shouldRenderEmbedsSubject = subject<Boolean>()
+    private val mobileOverlaySubject = subject<Boolean>()
     private val explicitContentFilterSubject = subject(ModelUserSettings.EXPLICIT_CONTENT_FILTER_DISABLED)
     private val defaultGuildsRestrictedSubject = subject(false)
     private val friendSourceFlagsSubject = subject(ModelUserSettings.FriendSourceFlags())
@@ -87,6 +88,7 @@ class StoreUserSettings(
 
     internal fun initForTesting() {
         shouldRenderEmbedsSubject.onNext(getIsRenderEmbedsEnabled())
+        mobileOverlaySubject.onNext(getIsMobileOverlayEnabled())
         updateAllowAccessibilityDetectionInternal(allowAccessibilityDetectionPublisher.get())
     }
 
@@ -164,6 +166,9 @@ class StoreUserSettings(
 
     fun observeIsRenderEmbedsEnabled(): Observable<Boolean> =
         shouldRenderEmbedsSubject.computationLatest().distinctUntilChanged()
+
+    fun observeIsMobileOverlayEnabled(): Observable<Boolean> =
+        mobileOverlaySubject.computationLatest().distinctUntilChanged()
 
     fun observeIsShowCurrentGameEnabled(): Observable<Boolean> = showCurrentGame.getObservable()
     fun observeIsStickerSuggestionsEnabled(): Observable<Boolean> = stickerSuggestionsPublisher.getObservable()
@@ -246,6 +251,7 @@ class StoreUserSettings(
     fun setIsMobileOverlayEnabled(enabled: Boolean) {
         if (getIsMobileOverlayEnabled() == enabled) return
         putBoolean(KEY_MOBILE_OVERLAY, enabled)
+        mobileOverlaySubject.onNext(enabled)
         // TODO(analytics): reference also fires AnalyticsTracker.overlayToggled(enabled).
     }
 

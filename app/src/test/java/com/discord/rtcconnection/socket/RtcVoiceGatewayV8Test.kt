@@ -4,10 +4,8 @@ import com.discord.rtcconnection.dave.ByteReader
 import com.discord.rtcconnection.dave.DaveSession
 import com.discord.rtcconnection.dave.VoiceGatewayFrameCodec
 import com.discord.rtcconnection.dave.formatFingerprint
-import com.discord.rtcconnection.RtcConnection
 import com.discord.rtcconnection.socket.io.Opcodes
 import com.discord.rtcconnection.socket.io.Payloads
-import com.discord.stores.StoreMediaEngine
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import okio.ByteString.Companion.toByteString
@@ -68,31 +66,6 @@ class RtcVoiceGatewayV8Test {
             RtcControlSocket.traceText(Opcodes.SELECT_PROTOCOL_ACK, secret),
         )
         assertEquals("{\"op\":8}", RtcControlSocket.traceText(Opcodes.HELLO, "{\"op\":8}"))
-    }
-
-    @Test
-    fun nativeCodecCapabilitiesBecomeSelectProtocolCodecs() {
-        val capabilities = Gson().fromJson(
-            """[{"codec":"AV1","decode":true,"encode":true},{"codec":"H265","decode":true,"encode":false},{"codec":"VP9","decode":false,"encode":true}]""",
-            Array<StoreMediaEngine.MediaEngineController.CodecCapability>::class.java,
-        ).toList()
-
-        assertEquals(
-            listOf(
-                Payloads.Protocol.CodecInfo("opus", 1, "audio", 120, null),
-                Payloads.Protocol.CodecInfo("AV1", 1, "video", 101, 102, true, true),
-                Payloads.Protocol.CodecInfo("H265", 2, "video", 103, 104, false, true),
-            ),
-            RtcConnection.protocolCodecs(capabilities),
-        )
-    }
-
-    @Test
-    fun speakingFrameHydratesNativeAudioUser() {
-        assertEquals(
-            """[{"id":"42","audioSsrc":1234,"ssrc":1234,"videoSsrcs":[],"rtxSsrcs":[],"volume":1.0,"mute":false}]""",
-            RtcConnection.nativeAudioUserPayload(42L, 1234, 3f, false),
-        )
     }
 
     @Test

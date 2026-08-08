@@ -157,7 +157,6 @@ class Discord @JvmOverloads constructor(
     }
 
     init {
-        krispVersion = context.getString(R.string.krisp_model_version)
         nativeEngine = NativeEngine(context, logLevel)
         setTransportOptions(
             EngineTransportOptions(
@@ -166,7 +165,6 @@ class Discord @JvmOverloads constructor(
                 idleJitterBufferFlush = true,
             ),
         )
-        nativeEngine.setSidechainCompression(true)
         nativeEngine.setInputDevice("default")
         nativeEngine.setOutputDevice("default")
         nativeEngine.setInputVolume(1f)
@@ -326,6 +324,8 @@ class Discord @JvmOverloads constructor(
         if (!disposed) nativeEngine.setAudioInputEnabled(enabled)
     }
 
+    fun setSidechainCompression(enabled: Boolean) = nativeEngine.setSidechainCompression(enabled)
+
     fun setAutomaticGainControl(enabled: Boolean) =
         setTransportOptions(EngineTransportOptions(automaticGainControl = enabled))
 
@@ -337,7 +337,6 @@ class Discord @JvmOverloads constructor(
         callback?.onConfigureAEC(true, mobileMode, enabled, !enabled, true)
     }
 
-    fun setKeepAliveChannel(enabled: Boolean) = Unit
 
     fun setMicVolume(volume: Float) {
         if (!disposed) nativeEngine.setInputVolume(volume)
@@ -433,8 +432,5 @@ class Discord @JvmOverloads constructor(
         @Volatile
         var codecCapabilities: Map<String, CodecCapability> = emptyMap()
             private set
-
-        @JvmStatic
-        private var krispVersion = ""
     }
 }

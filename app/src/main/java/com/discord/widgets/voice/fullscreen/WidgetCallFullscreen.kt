@@ -36,7 +36,6 @@ import com.discord.utilities.time.TimeUtils
 import com.discord.utilities.voice.DiscordOverlayService
 import com.discord.views.calls.VideoCallParticipantView
 import com.discord.widgets.notice.WidgetNoticeDialog
-import com.discord.widgets.settings.WidgetSettingsVoice
 import com.discord.widgets.settings.premium.WidgetSettingsPremium
 import com.discord.widgets.stage.model.StageCallModel
 import com.discord.widgets.stage.sheet.WidgetStageRaisedHandsBottomSheet
@@ -52,6 +51,7 @@ import com.discord.widgets.voice.fullscreen.stage.StageCallAdapter
 import com.discord.widgets.voice.fullscreen.stage.StageCallBottomSheetManager
 import com.discord.widgets.voice.fullscreen.stage.StageCallItem
 import com.discord.widgets.voice.model.CallModel
+import com.discord.widgets.voice.sheet.WidgetVoiceSettingsBottomSheet
 import com.discord.widgets.voice.stream.StreamNavigator
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 
@@ -117,7 +117,9 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
         privateCallGrid = view.findViewById(R.id.private_call_grid_view)
         privateCallBlurredGrid = view.findViewById(R.id.private_call_blurred_grid_view)
         streamingActive = view.findViewById(R.id.call_streaming_active)
-        audioShareWarning = view.findViewById(R.id.call_streaming_audio_share_warning)
+        // The <include> carries its own id, which replaces the included root's, and the streaming
+        // barrier constrains against that one.
+        audioShareWarning = view.findViewById(R.id.audio_share)
         // Capturing another app's audio needs `AudioPlaybackCaptureConfiguration`, which arrived in
         // Android 10. The warning is part of the streaming layout, so without this it greeted every
         // viewer regardless of what they are running.
@@ -473,7 +475,8 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
                         false,
                         com.discord.widgets.voice.sheet.WidgetVoiceBottomSheet.FeatureContext.FULLSCREEN_CALL,
                     ).onStreamPreviewClickedListener = { viewModel.targetAndFocusStream(it.stream.encodedStreamKey) }
-                    R.id.menu_call_voice_settings -> WidgetSettingsVoice.launch(requireContext())
+                    R.id.menu_call_voice_settings ->
+                        WidgetVoiceSettingsBottomSheet.show(parentFragmentManager, channelId)
                     R.id.menu_text_in_voice -> openTextInVoice()
                 }
             },
@@ -486,8 +489,12 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
                     WidgetCallFullscreenViewModel.MenuItem.SHOW_PARTICIPANT_LIST in state.menuItems
                 menu.findItem(R.id.menu_call_voice_settings).isVisible =
                     WidgetCallFullscreenViewModel.MenuItem.VOICE_SETTINGS in state.menuItems
-                menu.findItem(R.id.menu_text_in_voice).isVisible =
-                    WidgetCallFullscreenViewModel.MenuItem.TEXT_IN_VOICE in state.menuItems
+                menu.findItem(R.id.menu_text_in_voice).apply {
+                    isVisible = WidgetCallFullscreenViewModel.MenuItem.TEXT_IN_VOICE in state.menuItems
+                    // An item with an actionLayout swallows the touch itself, so onSelected never
+                    // sees it and the action view has to carry the click.
+                    actionView?.setOnClickListener { openTextInVoice() }
+                }
             },
         )
     }

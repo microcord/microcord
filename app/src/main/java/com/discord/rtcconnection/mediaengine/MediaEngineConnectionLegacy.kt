@@ -209,7 +209,6 @@ internal class MediaEngineConnectionLegacy(
 
     override fun setUserVideoDisabled(userId: Long, disabled: Boolean) {
         if (disabled) videoDisabledUsers += userId else videoDisabledUsers -= userId
-        withConnection { it.disableVideo(userId, disabled) }
     }
 
     override fun isUserVideoDisabled(userId: Long): Boolean = userId in videoDisabledUsers
@@ -245,7 +244,6 @@ internal class MediaEngineConnectionLegacy(
         it.setVADAutoThreshold(if (inputModeOptions.vadAutoThreshold) VAD_AUTO_THRESHOLD else VAD_FIXED_THRESHOLD)
         it.setVADUseKrisp(inputModeOptions.vadUseKrisp)
         it.setAudioInputMode(inputMode.numeral)
-        it.enableForwardErrorCorrection(true)
         it.setExpectedPacketLossRate(EXPECTED_PACKET_LOSS_RATE)
     }
 

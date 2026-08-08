@@ -7,7 +7,6 @@ import android.content.pm.PackageManager
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import com.discord.R
-import com.discord.app.AppLog
 import com.discord.api.channel.getDisplayName
 import com.discord.rtcconnection.RtcConnection
 import com.discord.rtcconnection.VoiceTransport
@@ -116,6 +115,7 @@ class VoiceEngineServiceController(
         ) { data ->
             if (data.rtcConnectionState is RtcConnection.State.Disconnected) {
                 permissionDisconnectRequested = false
+                DiscordOverlayService.resetDismissal()
                 DiscordOverlayService.launchForClose(appContext)
                 VoiceEngineForegroundService.stopForegroundAndUnbind(binding)
             } else if (!canRecordAudio()) {

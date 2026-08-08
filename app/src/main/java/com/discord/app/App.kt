@@ -22,6 +22,7 @@ import com.discord.utilities.logging.BootLogEvent
 import com.discord.utilities.notices.NoticeBuilders
 import com.discord.utilities.persister.PersisterConfig
 import com.discord.utilities.time.ClockFactory
+import com.discord.rtcconnection.mediaengine.KrispAssetPack
 import com.discord.utilities.voice.VoiceEngineServiceController
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -38,6 +39,7 @@ class App : Application() {
         }
         SharedPreferencesProvider.init(this)
         ApplicationProvider.init(this)
+        KrispAssetPack.install(this)
         ActivityProvider.init(this)
         // Must precede StoreStream.initialize, which builds the REST clients.
         CaptchaSolver.install(ActivityCaptchaSolver())

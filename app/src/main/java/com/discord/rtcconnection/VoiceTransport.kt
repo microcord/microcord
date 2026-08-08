@@ -13,6 +13,7 @@ import com.discord.app.AppLog
 import com.discord.models.domain.ModelRtcLatencyRegion
 import com.discord.rtcconnection.audio.DiscordAudioManager
 import com.discord.rtcconnection.mediaengine.EchoCancellationConfig
+import com.discord.rtcconnection.mediaengine.KrispAvailability
 import com.discord.rtcconnection.mediaengine.MediaEngine
 import com.discord.rtcconnection.mediaengine.MediaEngineConnection
 import com.discord.rtcconnection.mediaengine.MediaEngineLegacy
@@ -74,7 +75,6 @@ class VoiceTransport(
     ) -> Unit,
     /** `StoreVoiceChannelSelected.getSelectedVoiceChannelId()`. */
     getSelectedVoiceChannelId: () -> Long = { 0L },
-    private val openSLESConfig: MediaEngine.OpenSLESConfig = MediaEngine.OpenSLESConfig.DEFAULT,
     private val echoCancellation: EchoCancellationConfig = EchoCancellationConfig(),
 ) {
 
@@ -97,7 +97,6 @@ class VoiceTransport(
         context = appContext,
         listener = mediaEngineListener,
         mediaEngineThreadExecutor = engineExecutor,
-        openSLESConfig = openSLESConfig,
         echoCancellation = echoCancellation,
         echoCancellationCallback = { info -> AppLog.i(TAG, "echo cancellation: $info") },
     )
@@ -634,15 +633,17 @@ internal fun StoreMediaSettings.VoiceConfiguration.toMediaEngineVoiceConfig(): M
     MediaEngine.VoiceConfig(
         outputVolume = outputVolume,
         echoCancellation = echoCancellation,
-        // PR 752 disables Krisp because its Play Asset Delivery model is unavailable in a rebuilt app.
         noiseSuppression = noiseProcessing != StoreMediaSettings.NoiseProcessing.None,
-        noiseCancellation = false,
+        noiseCancellation = KrispAvailability.isAvailable &&
+            noiseProcessing == StoreMediaSettings.NoiseProcessing.Cancellation,
         automaticGainControl = automaticGainControl,
+        sidechainCompression = sidechainCompression,
         inputMode = inputMode,
         inputModeOptions = MediaEngineConnection.InputModeOptions(
             vadThreshold = sensitivity.toInt(),
             vadAutoThreshold = automaticVad,
-            vadUseKrisp = false,
+            vadUseKrisp = KrispAvailability.isAvailable &&
+                vadUseKrisp == StoreMediaSettings.VadUseKrisp.Enabled,
         ),
         isSelfDeafened = isSelfDeafened,
         isSelfMuted = isSelfMuted(),

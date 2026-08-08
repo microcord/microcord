@@ -4,6 +4,10 @@ plugins {
 
 android {
     namespace = "com.discord"
+    // The engine opens the Krisp models with openFd, which only works on stored entries.
+    androidResources {
+        noCompress += "kw"
+    }
     compileSdk {
         version = release(36) {
             minorApiLevel = 1

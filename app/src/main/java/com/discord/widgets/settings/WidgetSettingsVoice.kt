@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.text.method.LinkMovementMethod
 import android.view.View
+import androidx.core.view.isVisible
 import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.SeekBar
@@ -20,14 +21,15 @@ import com.discord.app.AppFragment
 import com.discord.app.AppViewModel
 import com.discord.app.appViewModels
 import com.discord.rtcconnection.mediaengine.MediaEngineConnection
+import com.discord.rtcconnection.mediaengine.KrispAvailability
 import com.discord.stores.StoreMediaSettings
 import com.discord.stores.StoreStream
 import com.discord.utilities.accessibility.AccessibilityUtils
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
+import com.discord.utilities.voice.DiscordOverlayService
 import com.discord.views.CheckedSetting
-import com.google.android.material.button.MaterialButton
 import rx.Observable
 import rx.functions.Action1
 import kotlin.math.log10
@@ -41,20 +43,13 @@ import kotlin.math.roundToInt
  * through `StoreMediaSettings`, which persists the whole [StoreMediaSettings.VoiceConfiguration] and
  * pushes it into the native engine; the screen holds no state of its own.
  *
- * Two conventions are easy to get wrong and are reproduced deliberately:
- * - **The output-volume and sensitivity sliders are not linear in the stored value.** Volume is
- *   linear in *perceived loudness* and is converted to amplitude on write; sensitivity is stored in
- *   dBFS (−100…0) and is offset by 100 to fit a progress bar.
- * - **Noise suppression is mutually exclusive with noise cancellation.** When Krisp cancellation is
- *   on, the suppression row is not hidden — it is left visible with a disabled tooltip explaining
- *   why it cannot be turned on.
+ * The output-volume and sensitivity sliders are not linear in the stored value: volume is linear in
+ * *perceived loudness* and is converted to amplitude on write, and sensitivity is stored in dBFS
+ * (−100…0) and offset by 100 to fit a progress bar.
  *
- * ### Degraded pending `StoreStream.getMediaEngine()`
- * `StoreMediaEngine` exists but `StoreStream` exposes no accessor for it (RTC transport is still
- * Phase 11). Three things therefore cannot work and are hidden rather than shown dead:
- * the **OpenSL ES** section (`getOpenSLESConfig`/`setOpenSLESConfig`), the **microphone test** and
- * the **live input meter** (`getLocalVoiceStatus`). The manual sensitivity slider still works,
- * because it only writes. See `docs/parity-audit/followups.md`.
+ * The Krisp-backed rows — noise cancellation, its Learn More link and Advanced Voice Activity — are
+ * shown only when [KrispAvailability.isAvailable]; without them suppression stands alone, which is
+ * the fallback the reference uses when the engine reports Krisp unsupported.
  */
 class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
 
@@ -64,7 +59,6 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
     private lateinit var inputModeValue: TextView
     private lateinit var automaticVadToggle: CheckedSetting
     private lateinit var sensitivityWrap: RelativeLayout
-    private lateinit var sensitivityTestButton: MaterialButton
     private lateinit var sensitivityTestingContainer: LinearLayout
     private lateinit var sensitivityManual: SeekBar
     private lateinit var sensitivityAutomatic: View
@@ -72,16 +66,13 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
     private lateinit var outputVolume: SeekBar
     private lateinit var troubleshootingGuide: TextView
     private lateinit var overlayToggle: CheckedSetting
-    private lateinit var noiseCancellationToggle: CheckedSetting
-    private lateinit var krispInfo: TextView
     private lateinit var echoCancellationToggle: CheckedSetting
     private lateinit var noiseSuppressionToggle: CheckedSetting
     private lateinit var gainControlToggle: CheckedSetting
+    private lateinit var noiseCancellationToggle: CheckedSetting
+    private lateinit var krispInfo: TextView
     private lateinit var krispVadToggle: CheckedSetting
-    private lateinit var videoHardwareScalingToggle: CheckedSetting
-    private lateinit var openSlesHeader: TextView
-    private lateinit var openSlesHelp: TextView
-    private lateinit var openSlesRadios: List<CheckedSetting>
+    private lateinit var sidechainCompressionToggle: CheckedSetting
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -93,7 +84,6 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
         inputModeValue = view.findViewById(R.id.settings_voice_mode_value)
         automaticVadToggle = view.findViewById(R.id.settings_voice_auto_vad_toggle)
         sensitivityWrap = view.findViewById(R.id.settings_voice_sensitivity_wrap)
-        sensitivityTestButton = view.findViewById(R.id.settings_voice_sensitivity_test_button)
         sensitivityTestingContainer =
             view.findViewById(R.id.settings_voice_sensitivity_testing_container)
         sensitivityManual = view.findViewById(R.id.settings_voice_sensitivity_manual)
@@ -102,24 +92,14 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
         outputVolume = view.findViewById(R.id.settings_voice_output_volume)
         troubleshootingGuide = view.findViewById(R.id.settings_voice_video_troubleshooting_guide)
         overlayToggle = view.findViewById(R.id.settings_voice_overlay_toggle)
-        noiseCancellationToggle = view.findViewById(R.id.settings_voice_noise_cancellation_toggle)
-        krispInfo = view.findViewById(R.id.settings_voice_krisp_info)
         echoCancellationToggle = view.findViewById(R.id.settings_voice_echo_cancellation_toggle)
         noiseSuppressionToggle = view.findViewById(R.id.settings_voice_noise_suppression_toggle)
         gainControlToggle = view.findViewById(R.id.settings_voice_gain_control_toggle)
+        noiseCancellationToggle = view.findViewById(R.id.settings_voice_noise_cancellation_toggle)
+        krispInfo = view.findViewById(R.id.settings_voice_krisp_info)
         krispVadToggle = view.findViewById(R.id.settings_voice_krisp_vad_toggle)
-        videoHardwareScalingToggle =
-            view.findViewById(R.id.settings_voice_enable_hardware_scaling_toggle)
-        openSlesHeader = view.findViewById(R.id.settings_voice_opensl_header)
-        openSlesHelp = view.findViewById(R.id.settings_voice_opensles_help)
-        openSlesRadios = listOf(
-            view.findViewById(R.id.settings_voice_opensles_default),
-            view.findViewById(R.id.settings_voice_opensles_force_enabled),
-            view.findViewById(R.id.settings_voice_opensles_force_disabled),
-        )
-
-        openSlesHelp.text =
-            SettingsStrings.render(view.context, R.string.form_label_android_opensl_desc)
+        sidechainCompressionToggle =
+            view.findViewById(R.id.settings_voice_sidechain_compression_toggle)
         troubleshootingGuide.text = SettingsStrings.render(
             view.context,
             R.string.form_help_voice_video_troubleshooting_guide,
@@ -133,15 +113,12 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
         krispInfo.movementMethod = LinkMovementMethod.getInstance()
 
         configureOverlayToggle()
-        configureOpenSlEs()
 
         listOf(
             view.findViewById<View>(R.id.settings_voice_input_header),
             view.findViewById(R.id.settings_voice_output_header),
             view.findViewById(R.id.settings_voice_overlay_header),
             view.findViewById(R.id.settings_voice_processing_header),
-            view.findViewById(R.id.settings_voice_video_header),
-            view.findViewById(R.id.settings_voice_opensl_header),
         ).forEach(AccessibilityUtils::setViewIsHeading)
 
         val targetResId = mostRecentIntent.getIntExtra(ARG_TARGET_RES_ID, 0)
@@ -210,38 +187,11 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
             Action1 { StoreStream.getMediaSettings().toggleAutomaticGainControl() },
         )
 
-        noiseCancellationToggle.setChecked(
-            config.noiseProcessing == StoreMediaSettings.NoiseProcessing.Cancellation,
-            false,
-        )
-        noiseCancellationToggle.setOnCheckedListener(
-            Action1 { StoreStream.getMediaSettings().toggleNoiseCancellation() },
-        )
+        configureNoiseProcessing(config)
 
-        noiseSuppressionToggle.setChecked(
-            config.noiseProcessing == StoreMediaSettings.NoiseProcessing.Suppression,
-            false,
-        )
-        if (config.noiseProcessing == StoreMediaSettings.NoiseProcessing.Cancellation) {
-            // Krisp cancellation already owns the input; suppression stays visible but explains
-            // itself rather than silently doing nothing.
-            noiseSuppressionToggle.setDisabledTooltip(R.string.user_settings_disable_noise_suppression)
-            noiseSuppressionToggle.setSubtext(
-                getString(R.string.user_settings_disable_noise_suppression),
-            )
-        } else {
-            noiseSuppressionToggle.setContainerClickListener {
-                StoreStream.getMediaSettings().toggleNoiseSuppression()
-            }
-            noiseSuppressionToggle.setSubtext(null)
-        }
-
-        krispVadToggle.setChecked(
-            config.vadUseKrisp == StoreMediaSettings.VadUseKrisp.Enabled,
-            false,
-        )
-        krispVadToggle.setOnCheckedListener(
-            Action1 { StoreStream.getMediaSettings().toggleVADUseKrisp() },
+        sidechainCompressionToggle.setChecked(config.sidechainCompression, false)
+        sidechainCompressionToggle.setOnCheckedListener(
+            Action1 { StoreStream.getMediaSettings().toggleSidechainCompression() },
         )
 
         echoCancellationToggle.setChecked(config.echoCancellation, false)
@@ -256,12 +206,63 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
             Action1 { StoreStream.getMediaSettings().toggleAutomaticVAD() },
         )
 
-        videoHardwareScalingToggle.setChecked(config.enableVideoHardwareScaling, false)
-        videoHardwareScalingToggle.setOnCheckedListener(
-            Action1 { StoreStream.getMediaSettings().toggleEnableVideoHardwareScaling() },
-        )
-
         configureVoiceSensitivity(viewState)
+    }
+
+    /**
+     * Krisp cancellation and plain suppression are one choice. While Krisp is unavailable its rows
+     * are absent entirely and suppression stands alone, which is the fallback the reference uses.
+     */
+    private fun configureNoiseProcessing(config: StoreMediaSettings.VoiceConfiguration) {
+        val krisp = KrispAvailability.isAvailable
+        listOf<View>(noiseCancellationToggle, krispInfo, krispVadToggle)
+            .forEach { it.isVisible = krisp }
+
+        if (krisp) {
+            noiseCancellationToggle.setChecked(
+                config.noiseProcessing == StoreMediaSettings.NoiseProcessing.Cancellation,
+                false,
+            )
+            noiseCancellationToggle.setOnCheckedListener(
+                Action1 { StoreStream.getMediaSettings().toggleNoiseCancellation() },
+            )
+            krispVadToggle.setChecked(
+                config.vadUseKrisp == StoreMediaSettings.VadUseKrisp.Enabled,
+                false,
+            )
+            krispVadToggle.setOnCheckedListener(
+                Action1 { StoreStream.getMediaSettings().toggleVADUseKrisp() },
+            )
+        }
+
+        val cancelling = krisp && config.noiseProcessing == StoreMediaSettings.NoiseProcessing.Cancellation
+        noiseSuppressionToggle.setChecked(
+            config.noiseProcessing != StoreMediaSettings.NoiseProcessing.None,
+            false,
+        )
+        if (cancelling) {
+            noiseSuppressionToggle.setDisabledTooltip(R.string.user_settings_disable_noise_suppression)
+            noiseSuppressionToggle.setSubtext(
+                getString(R.string.user_settings_disable_noise_suppression),
+            )
+        } else {
+            // Must go through setContainerClickListener: it is what clears the disabled tooltip and
+            // restores the row's alpha after a spell of Krisp cancellation. And the value is set
+            // rather than toggled, because from Cancellation a toggle only reaches Suppression and
+            // the row would stay checked.
+            noiseSuppressionToggle.setContainerClickListener {
+                StoreStream.getMediaSettings().setNoiseProcessing(
+                    if (config.noiseProcessing == StoreMediaSettings.NoiseProcessing.None) {
+                        StoreMediaSettings.NoiseProcessing.Suppression
+                    } else {
+                        StoreMediaSettings.NoiseProcessing.None
+                    },
+                )
+            }
+            noiseSuppressionToggle.setSubtext(
+                getString(R.string.user_settings_noise_cancellation_description),
+            )
+        }
     }
 
     private fun configureVoiceSensitivity(viewState: SettingsVoiceViewModel.ViewState) {
@@ -275,7 +276,6 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
         // hidden rather than sitting inert. See the class KDoc.
         sensitivityTestingContainer.visibility =
             if (config.automaticVad) View.GONE else View.VISIBLE
-        sensitivityTestButton.visibility = View.GONE
 
         if (config.automaticVad) {
             // Automatic mode has nothing to drag; the reference shows a live speaking indicator here.
@@ -287,14 +287,6 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
             sensitivityManual.progress =
                 (config.sensitivity + SENSITIVITY_DBFS_OFFSET).roundToInt()
         }
-    }
-
-    private fun configureOpenSlEs() {
-        // `StoreMediaEngine.getOpenSLESConfig()`/`setOpenSLESConfig()` are unreachable — see the
-        // class KDoc. Three radios that cannot read or write the engine would be worse than absent.
-        openSlesHeader.visibility = View.GONE
-        openSlesHelp.visibility = View.GONE
-        openSlesRadios.forEach { it.visibility = View.GONE }
     }
 
     private fun configureOverlayToggle() {
@@ -337,10 +329,12 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
     }
 
     private fun onOverlayToggled() {
-        // The reference starts/stops `DiscordOverlayService` here, which does not exist in this
-        // project yet (only the abstract `com.discord.overlay.OverlayService`). The preference is
-        // persisted correctly, so the overlay comes up on the next voice connection once that
-        // service lands; it does not appear or disappear immediately. See the class KDoc.
+        val context = requireContext()
+        if (StoreStream.getUserSettings().getIsMobileOverlayEnabled()) {
+            DiscordOverlayService.launchForVoice(context)
+        } else {
+            DiscordOverlayService.launchForClose(context)
+        }
     }
 
     /**

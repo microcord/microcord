@@ -207,7 +207,6 @@ class Connection(
         if (!disposed) native.setSelfDeafen(isDeafened)
     }
 
-    fun disableVideo(userId: Long, isDisabled: Boolean) = Unit
 
     @Synchronized
     fun dispose() {
@@ -217,8 +216,6 @@ class Connection(
         native.dispose()
     }
 
-    fun enableForwardErrorCorrection(enabled: Boolean) = Unit
-    fun enableDiscontinuousTransmission(enabled: Boolean) = Unit
 
     fun getEncryptionModes(callback: EncryptionModesCallback?) {
         if (!disposed && callback != null) native.getEncryptionModes(callback::onEncryptionModes)
