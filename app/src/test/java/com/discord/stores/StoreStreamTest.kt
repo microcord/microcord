@@ -246,12 +246,12 @@ class StoreStreamTest {
         navigation.updateAuthState(AuthNavigationState(true, false))
         assertEquals(MainRoute.LoggedOut, navigation.getMainRoute())
         navigation.updateAuthState(
-            AuthNavigationState(true, true, true, RequiredAction.VERIFY_ACCOUNT, StoreNavigation.AgeGate.REGISTER_AGE_GATE),
+            AuthNavigationState(true, true, RequiredAction.VERIFY_ACCOUNT, StoreNavigation.AgeGate.REGISTER_AGE_GATE),
         )
         assertEquals(MainRoute.Required(RequiredAction.VERIFY_ACCOUNT), navigation.getMainRoute())
-        navigation.updateAuthState(AuthNavigationState(true, true, true, ageGate = StoreNavigation.AgeGate.NSFW_CHANNEL_AGE_GATE))
+        navigation.updateAuthState(AuthNavigationState(true, true, ageGate = StoreNavigation.AgeGate.NSFW_CHANNEL_AGE_GATE))
         assertEquals(MainRoute.AgeGated(StoreNavigation.AgeGate.NSFW_CHANNEL_AGE_GATE), navigation.getMainRoute())
-        navigation.updateAuthState(AuthNavigationState(true, true, true))
+        navigation.updateAuthState(AuthNavigationState(true, true))
         assertEquals(MainRoute.LoggedIn, navigation.getMainRoute())
     }
 

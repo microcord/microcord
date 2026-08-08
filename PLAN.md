@@ -1163,6 +1163,7 @@ or observable behavior. Small implementation details do not belong here.
 | 2026-08-08 | Use Gateway `zstd-stream` with zstd-jni `1.5.7-12` and pre-HELLO zlib fallback | Discord documents zstd transport and clean A65 tracing showed Gateway as 7.62% of cold-launch CPU; `1.5.7-13` requires compile SDK 37 | One persistent native decoder context is scoped to each connection and emits UTF-8 bytes directly into the parser |
 | 2026-08-08 | Retain Gson streaming for Gateway metadata and reject Fastjson2 `2.0.64.android5` | A65 A/B tracing found Fastjson2 14% slower on ordinary dispatches, with higher Gateway CPU, heap, and GC count despite a 2.8% faster READY sample | Fastjson2 and its parser selector were removed; the existing Gson adapters remain the single Gateway JSON stack |
 | 2026-08-08 | Stream `ModelPayload` directly from Gson's `JsonReader` | The former adapter built the complete READY tree and reparsed each field; the reference also streams READY | Only irregular experiment arrays retain local trees; the large guild/member/presence surfaces parse once |
+| 2026-08-08 | Open the authenticated main UI before Gateway READY | The user explicitly requires cached UI to open immediately while Gateway connects in the background | `MainRoute.LoggedIn` depends on initialized persisted auth, not channel hydration; required-action and age gates still take priority when known |
 | 2026-07-22 | Rebuild in existing Android boilerplate | Project already exists at target path | Convert template rather than create another project |
 | 2026-07-22 | Use Kotlin + XML | Closest to original architecture and recovered layouts | Remove Compose |
 | 2026-07-22 | Use `dev.mantikafasi.manticord` application ID | Official signing identity cannot be reproduced | External integrations need new configuration |
@@ -3055,6 +3056,10 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   Fastjson2 benefit. Streaming READY reduced its parse slice by 26.8%, Gateway CPU by 25.9%, and peak ART heap by 47.1% in
   the comparable run; cold start regressed 20.1% and is treated as unrelated run variance rather than a parser win.
   `GatewayContractTest`, `ReadyPayloadHydratorTest`, `assembleDebug`, A65 install, and live READY/dispatch traffic pass.
+- Detailed boot progress is controlled by a persisted `Verbose Boot` developer setting. It defaults off and shows concise
+  `Loading`/`Connecting…` status; enabled mode shows every safe boot event. Authenticated navigation no longer waits for Gateway
+  READY, so cached UI opens while the existing global connectivity banner reports background connection state. Focused boot
+  and route-matrix tests, debug assembly, A65 install, and live HELLO/IDENTIFY/READY pass.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each

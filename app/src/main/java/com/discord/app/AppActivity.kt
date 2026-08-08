@@ -32,8 +32,10 @@ import com.discord.stores.StoreNotices
 import com.discord.stores.StoreStream
 import com.discord.utilities.intent.AppIntentParser
 import com.discord.utilities.cache.SharedPreferencesProvider
+import com.discord.utilities.developer.DeveloperSettings
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
+import com.discord.utilities.logging.isGatewayConnecting
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.user.UserUtils.isStaff
@@ -213,9 +215,14 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
     override fun onStart() {
         super.onStart()
         if (fatalCrashShown) return
+        val verboseBoot = DeveloperSettings.isVerboseBootEnabled()
         stopBootLog = BootLog.observe { lines ->
             runOnUiThread {
-                binding.appBootLog.text = lines.joinToString("\n")
+                binding.appBootLog.text = if (verboseBoot) {
+                    lines.joinToString("\n")
+                } else {
+                    getString(if (isGatewayConnecting(lines.lastOrNull())) R.string.connecting else R.string.loading)
+                }
                 binding.appLoading.post { binding.appLoading.fullScroll(ScrollView.FOCUS_DOWN) }
             }
         }

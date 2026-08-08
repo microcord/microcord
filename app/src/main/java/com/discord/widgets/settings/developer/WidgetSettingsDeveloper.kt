@@ -63,6 +63,10 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
             isChecked = preferences.getBoolean(PREF_SCREENSHOT_REPORTING, false)
             setOnCheckedListener { preferences.edit().putBoolean(PREF_SCREENSHOT_REPORTING, it).apply() }
         }
+        binding.settingsDeveloperVerboseBoot.apply {
+            isChecked = DeveloperSettings.isVerboseBootEnabled()
+            setOnCheckedListener(DeveloperSettings::setVerboseBootEnabled)
+        }
         binding.settingsDeveloperLogGatewayEvents.apply {
             isChecked = AppGatewaySocketLogger.isEnabled()
             setOnCheckedListener(AppGatewaySocketLogger::setEnabled)

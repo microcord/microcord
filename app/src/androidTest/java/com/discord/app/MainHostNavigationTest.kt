@@ -147,7 +147,7 @@ class MainHostNavigationTest {
     fun loggedInRouteCreatesTabsAndHomeHost() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         WidgetTabsHost.homeFragmentFactory = ::WidgetHome
-        StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, true, true))
+        StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, true))
         val activity = instrumentation.startActivitySync(
             Intent(instrumentation.targetContext, AppActivity.Main::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         ) as AppActivity.Main
@@ -167,7 +167,7 @@ class MainHostNavigationTest {
     fun loggedInHostRestoresAfterActivityRecreation() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         WidgetTabsHost.homeFragmentFactory = ::TestHomeFragment
-        StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, true, true))
+        StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, true))
         val activity = instrumentation.startActivitySync(
             Intent(instrumentation.targetContext, AppActivity.Main::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         ) as AppActivity.Main
@@ -195,7 +195,7 @@ class MainHostNavigationTest {
     fun detachedTabsHostClearsCrossScreenCallbacks() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         WidgetTabsHost.homeFragmentFactory = ::TestHomeFragment
-        StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, true, true))
+        StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, true))
         val activity = instrumentation.startActivitySync(
             Intent(instrumentation.targetContext, AppActivity.Main::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         ) as AppActivity.Main

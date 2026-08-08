@@ -132,7 +132,7 @@ class MutualNavigationTest {
 
     private fun launchLoggedInShell(tab: NavigationTab): AppActivity.Main {
         WidgetTabsHost.homeFragmentFactory = ::WidgetHome
-        StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, true, true))
+        StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, true))
         val activity = instrumentation.startActivitySync(
             Intent(instrumentation.targetContext, AppActivity.Main::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),

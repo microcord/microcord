@@ -15,7 +15,6 @@ import rx.subjects.SerializedSubject
 data class AuthNavigationState(
     val initialized: Boolean,
     val authenticated: Boolean,
-    val initializedForAuthenticatedUser: Boolean = false,
     val requiredAction: RequiredAction? = null,
     val ageGate: StoreNavigation.AgeGate? = null,
 )
@@ -84,13 +83,12 @@ class StoreNavigation internal constructor(private val stream: StoreStream) {
         mainRouteSubject.onNext(resolveMainRoute(state))
     }
 
-    fun updateAuthState(authState: AuthState?, initializedForAuthenticatedUser: Boolean) {
+    fun updateAuthState(authState: AuthState?) {
         updatePasswordRequired = AuthState.isUpdatePasswordRequired(authState)
         updateAuthState(
             AuthNavigationState(
                 initialized = true,
                 authenticated = authState != null,
-                initializedForAuthenticatedUser = initializedForAuthenticatedUser,
                 requiredAction = effectiveRequiredAction(),
             ),
         )
@@ -194,7 +192,6 @@ class StoreNavigation internal constructor(private val stream: StoreStream) {
             !state.authenticated -> MainRoute.LoggedOut
             state.requiredAction != null -> MainRoute.Required(state.requiredAction)
             state.ageGate != null -> MainRoute.AgeGated(state.ageGate)
-            !state.initializedForAuthenticatedUser -> MainRoute.Loading
             else -> MainRoute.LoggedIn
         }
     }

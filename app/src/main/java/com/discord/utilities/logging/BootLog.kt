@@ -23,6 +23,15 @@ enum class BootLogEvent(val line: String) {
     OPENING_INTERFACE("Opening application interface"),
 }
 
+internal fun isGatewayConnecting(line: String?): Boolean = when (line) {
+    BootLogEvent.GATEWAY_DISCOVERY.line,
+    BootLogEvent.GATEWAY_SOCKET_OPEN.line,
+    BootLogEvent.GATEWAY_HELLO.line,
+    BootLogEvent.GATEWAY_IDENTIFY.line,
+    -> true
+    else -> false
+}
+
 object BootLog {
     internal const val MAX_LINES = 80
     private val lines = ArrayDeque<String>(MAX_LINES)

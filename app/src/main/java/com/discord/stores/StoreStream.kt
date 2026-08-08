@@ -2697,7 +2697,7 @@ class StoreStream private constructor(
                     dispatcher.schedule {
                         if (channels.getChannelsByIdInternal().isNotEmpty() || guilds.getGuildsInternal().isNotEmpty()) {
                             channels.handleStoreInitTimeout()
-                            navigation.updateAuthState(authentication.getAuthState(), channels.getInitializedForAuthedUser())
+                            navigation.updateAuthState(authentication.getAuthState())
                         } else {
                             Log.w("ManticordGateway", "READY timeout with no cached guild/channel state")
                         }
@@ -2705,7 +2705,7 @@ class StoreStream private constructor(
                 }
             }
         }
-        navigation.updateAuthState(state, channels.getInitializedForAuthedUser())
+        navigation.updateAuthState(state)
         if (state == null) {
             Persister.reset()
             preferences.edit().clear().apply()
@@ -2969,7 +2969,7 @@ class StoreStream private constructor(
         connectionOpen.handleConnectionOpen()
         updateSortedGuilds()
         BootLog.record(BootLogEvent.CACHE_HYDRATION_FINISHED)
-        navigation.updateAuthState(authentication.getAuthState(), channels.getInitializedForAuthedUser())
+        navigation.updateAuthState(authentication.getAuthState())
     }
 
     @StoreThread

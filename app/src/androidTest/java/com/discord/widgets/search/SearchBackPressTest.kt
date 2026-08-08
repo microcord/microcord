@@ -84,7 +84,7 @@ class SearchBackPressTest {
         await { StoreStream.getChannels().getChannel(CHANNEL_ID) != null }
 
         WidgetTabsHost.homeFragmentFactory = ::WidgetHome
-        StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, true, true))
+        StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, true))
         val activity = instrumentation.startActivitySync(
             Intent(instrumentation.targetContext, AppActivity.Main::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),

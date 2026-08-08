@@ -43,7 +43,7 @@ class WidgetSettingsPrivacyColdLaunchTest {
         val api = apiReturningEmptyConsents()
         RestAPI.install(api)
         StoreStream.getUserSettings().bindApi(api)
-        StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, true, true))
+        StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, true))
 
         scenario = ActivityScenario.launch<AppActivity>(
             AppScreenRouter.createScreenIntent(

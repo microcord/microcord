@@ -1,10 +1,27 @@
 package com.discord.utilities.logging
 
+import com.discord.utilities.cache.SharedPreferencesProvider
+import com.discord.utilities.developer.DeveloperSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BootLogTest {
+    @Test
+    fun verboseBootDefaultsOff() {
+        SharedPreferencesProvider.setInstanceForTesting(null)
+        assertFalse(DeveloperSettings.isVerboseBootEnabled())
+    }
+
+    @Test
+    fun conciseStatusShowsConnectingOnlyDuringGatewayHandshake() {
+        assertFalse(isGatewayConnecting(BootLogEvent.PROCESS_START.line))
+        assertTrue(isGatewayConnecting(BootLogEvent.GATEWAY_DISCOVERY.line))
+        assertTrue(isGatewayConnecting(BootLogEvent.GATEWAY_IDENTIFY.line))
+        assertFalse(isGatewayConnecting(BootLogEvent.GATEWAY_DATA_READY.line))
+    }
+
     @Test
     fun publishesOnlyBoundedFixedSafeEvents() {
         BootLog.resetForTest()

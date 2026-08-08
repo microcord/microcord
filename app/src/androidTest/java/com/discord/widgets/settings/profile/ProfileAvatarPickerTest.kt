@@ -67,7 +67,7 @@ class ProfileAvatarPickerTest {
             )
         }
         seedProfile()
-        StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, true, true))
+        StoreStream.getNavigation().updateAuthState(AuthNavigationState(true, true))
         val main = instrumentation.startActivitySync(
             Intent(context, AppActivity.Main::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         ) as AppActivity.Main
