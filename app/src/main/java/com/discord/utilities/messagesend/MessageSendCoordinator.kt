@@ -72,6 +72,8 @@ class MessageSendCoordinator @JvmOverloads constructor(
          * send posted as an empty message.
          */
         val stickers: List<Sticker>? = null,
+        /** Reference `SendMessageOptions.location`; see [MessageSendLocation]. */
+        val location: String = MessageSendLocation.OTHER,
     )
 
     sealed class Submission {
@@ -117,6 +119,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
         val original: Message? = null,
         val isEdit: Boolean = false,
         val attachments: List<UploadAttachment>? = null,
+        val location: String = MessageSendLocation.OTHER,
     )
 
     private val operations = ConcurrentHashMap<String, Operation>()
@@ -186,6 +189,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
             queueRequestId = nonce,
             optimistic = optimistic,
             attachments = input.attachments,
+            location = input.location,
         )
         operations[nonce] = operation
         updates.onNext(Update.Optimistic(nonce, optimistic))
@@ -325,6 +329,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
                 message = operation.optimistic,
                 activity = null,
                 attachments = operation.attachments,
+                location = operation.location,
                 onCompleted = { result, _ -> settle(requestId, result) },
                 onPreprocessing = { uploadEvents.onNext(UploadEvent.Preprocessing(requestId, it)) },
                 onProgress = { uploadEvents.onNext(UploadEvent.Progress(requestId, it)) },

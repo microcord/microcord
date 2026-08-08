@@ -26,6 +26,8 @@ class WidgetAuthLanding : AuthFragment(R.layout.widget_auth_landing, AuthRoute.L
                 inviteCode = it.code,
                 source = it.source ?: StoreInviteSettings.LOCATION_DEEPLINK,
                 eventId = it.eventId,
+                targetChannelId = it.targetChannelId,
+                targetMessageId = it.targetMessageId,
             )
         }
         val guildTemplateCode = (route as? DeepLinkRoute.GuildTemplate)?.code
@@ -38,7 +40,12 @@ class WidgetAuthLanding : AuthFragment(R.layout.widget_auth_landing, AuthRoute.L
             override fun <T : ViewModel> create(modelClass: Class<T>): T = WidgetAuthLandingViewModel(
                 storeObservable = WidgetAuthLandingViewModel.observeStoreState(invite, guildTemplateCode),
                 fetchInvite = { code ->
-                    StoreStream.getInstantInvites().fetchInviteIfNotLoaded(code.inviteCode, code.eventId)
+                    StoreStream.getInstantInvites().fetchInviteIfNotLoaded(
+                        code.inviteCode,
+                        code.eventId,
+                        code.targetChannelId,
+                        code.targetMessageId,
+                    )
                 },
                 requestConsentRequired = StoreStream.getAuthentication()::requestConsentRequired,
             ) as T

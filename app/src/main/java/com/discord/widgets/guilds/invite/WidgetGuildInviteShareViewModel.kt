@@ -8,6 +8,7 @@ import com.discord.api.guildscheduledevent.GuildScheduledEvent
 import com.discord.app.AppViewModel
 import com.discord.models.domain.ModelInvite
 import com.discord.models.invite.InviteUtils
+import com.discord.models.invite.InviteUtils.INVITE_SEND_LOCATION
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreChannels
 import com.discord.stores.StoreGuildScheduledEvents
@@ -132,7 +133,7 @@ class WidgetGuildInviteShareViewModel(
     ) {
         val inviteLink = viewState.widgetInviteModel.invite.toInviteLink()
         storeMessages
-            .sendMessage(channelId, viewState.widgetInviteModel.me, inviteLink)
+            .sendMessage(channelId, viewState.widgetInviteModel.me, inviteLink, location = INVITE_SEND_LOCATION)
             .ui(this)
             .appSubscribe(WidgetGuildInviteShareViewModel::class.java) { result ->
                 // Reference: StoreAnalytics.inviteSent(invite, message, "Guild Create Invite

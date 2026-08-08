@@ -8,9 +8,11 @@ import com.discord.api.permission.Permission
 import com.discord.models.message.Message
 import com.discord.restapi.RestAPIParams
 import com.discord.restapi.RestAPIInterface
+import com.discord.utilities.messagesend.MessageSendLocation
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.captcha.CaptchaRequestPolicy
 import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rest.contextPropertiesOf
 import rx.Observable
 
 object ForwardingPolicy {
@@ -110,5 +112,6 @@ object ForwardMessageSender {
         destinationChannelId,
         body(source, sourceChannel),
         CaptchaRequestPolicy(),
+        contextPropertiesOf("location" to MessageSendLocation.FORWARDING),
     )
 }

@@ -5,7 +5,20 @@ sealed interface DeepLinkRoute {
     data object Friends : DeepLinkRoute
     data object Discovery : DeepLinkRoute
     data class ApplicationDirectory(val applicationId: Long? = null) : DeepLinkRoute
-    data class Invite(val code: String, val eventId: Long?, val source: String?) : DeepLinkRoute
+    /**
+     * @param targetChannelId `?channel=` and [targetMessageId] `?message=`, the deep-link context
+     *   the resolve endpoint validates and echoes back on the invite.
+     * @param installationId `?installationId=`, handed back on accept so the server can attribute
+     *   the install that followed the link.
+     */
+    data class Invite(
+        val code: String,
+        val eventId: Long?,
+        val source: String?,
+        val targetChannelId: Long? = null,
+        val targetMessageId: Long? = null,
+        val installationId: String? = null,
+    ) : DeepLinkRoute
     data class Gift(val code: String) : DeepLinkRoute
     data class GuildTemplate(val code: String) : DeepLinkRoute
     data class Guild(val guildId: Long?) : DeepLinkRoute

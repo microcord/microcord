@@ -44,6 +44,7 @@ sealed class MessageRequest(
         val message: Message,
         val activity: Activity? = null,
         val attachments: List<UploadAttachment>? = null,
+        val location: String = MessageSendLocation.OTHER,
         onCompleted: (MessageResult, Boolean) -> Unit,
         val onPreprocessing: (SendUtils.SendPayload.Preprocessing) -> Unit = {},
         val onProgress: (List<FileUpload>) -> Unit = {},

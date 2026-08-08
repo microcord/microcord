@@ -30,7 +30,9 @@ import com.discord.utilities.attachments.AttachmentUrlRefresher
 import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.guildscheduledevent.GuildScheduledEventUtilities
 import com.discord.utilities.io.UserDownloadManager
+import com.discord.utilities.messagesend.MessageSendLocation
 import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rest.contextPropertiesOf
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
@@ -286,7 +288,11 @@ class WidgetChatListAdapterEventsHandler(
     )
 
     override fun onSendGreetMessageClicked(channelId: Long, channelType: Int, sticker: Sticker) {
-        RestAPI.api.sendGreetMessage(channelId, RestAPIParams.GreetMessage(listOf(sticker.id)))
+        RestAPI.api.sendGreetMessage(
+            channelId,
+            RestAPIParams.GreetMessage(listOf(sticker.id)),
+            contextPropertiesOf("location" to MessageSendLocation.GREET),
+        )
             .restSubscribeOn(false)
             .ui(host)
             .appSubscribe(WidgetChatListAdapterEventsHandler::class.java) { }
@@ -317,6 +323,7 @@ class WidgetChatListAdapterEventsHandler(
             content = "",
             stickers = listOf(resolvedSticker),
             guildId = channel.guildId.takeUnless { it == 0L },
+            location = MessageSendLocation.STICKER_REPLY,
         ).subscribe({}, {})
     }
 

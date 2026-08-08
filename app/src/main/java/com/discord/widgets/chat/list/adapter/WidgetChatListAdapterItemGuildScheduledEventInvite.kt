@@ -103,14 +103,14 @@ class WidgetChatListAdapterItemGuildScheduledEventInvite(
                         model.guildScheduledEvent.id,
                     )
                 } else {
-                    joinServerOrDM(javaClass, model.invite)
+                    joinServerOrDM(javaClass, model.invite, EVENT_INVITE_LOCATION)
                 }
             },
             rsvpButtonClickListener = {
                 StoreStream.getGuildScheduledEvents().toggleMeRsvpForEvent(model.guildScheduledEvent)
             },
             joinServerButtonClickListener = {
-                joinServerOrDM(javaClass, model.invite)
+                joinServerOrDM(javaClass, model.invite, EVENT_INVITE_LOCATION)
             },
             shareButtonClickListener = {
                 adapter.onShareButtonClick(

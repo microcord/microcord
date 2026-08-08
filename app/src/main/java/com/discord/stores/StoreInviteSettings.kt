@@ -11,6 +11,7 @@ import com.discord.models.domain.ModelInvite
 import com.discord.restapi.RestAPIParams
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rest.contextPropertiesOf
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
@@ -30,10 +31,12 @@ class StoreInviteSettings : Store() {
     fun generateInvite(
         channelId: Long,
         settings: ModelInvite.Settings = inviteSettings,
+        location: String = LOCATION_INVITE_SHEET,
     ): Observable<ModelInvite> = RestAPI.api
         .postChannelInvite(
             channelId,
             RestAPIParams.Invite(settings.maxAge, settings.maxUses, settings.temporary, null),
+            contextPropertiesOf("location" to location),
         )
         .restSubscribeOn(false)
 
@@ -107,11 +110,15 @@ class StoreInviteSettings : Store() {
         val inviteCode: String,
         val source: String,
         val eventId: Long?,
+        val targetChannelId: Long? = null,
+        val targetMessageId: Long? = null,
     ) : Parcelable {
         private constructor(parcel: Parcel) : this(
             parcel.readString()!!,
             parcel.readString()!!,
-            if (parcel.readInt() != 0) parcel.readLong() else null,
+            parcel.readOptionalLong(),
+            parcel.readOptionalLong(),
+            parcel.readOptionalLong(),
         )
 
         override fun describeContents() = 0
@@ -119,20 +126,30 @@ class StoreInviteSettings : Store() {
         override fun writeToParcel(parcel: Parcel, flags: Int) {
             parcel.writeString(inviteCode)
             parcel.writeString(source)
-            eventId?.let {
-                parcel.writeInt(1)
-                parcel.writeLong(it)
-            } ?: parcel.writeInt(0)
+            parcel.writeOptionalLong(eventId)
+            parcel.writeOptionalLong(targetChannelId)
+            parcel.writeOptionalLong(targetMessageId)
         }
 
         companion object CREATOR : Parcelable.Creator<InviteCode> {
             override fun createFromParcel(parcel: Parcel) = InviteCode(parcel)
             override fun newArray(size: Int): Array<InviteCode?> = arrayOfNulls(size)
+
+            private fun Parcel.readOptionalLong(): Long? =
+                if (readInt() != 0) readLong() else null
+
+            private fun Parcel.writeOptionalLong(value: Long?) = value
+                ?.let { writeInt(1); writeLong(it) }
+                ?: writeInt(0)
         }
     }
 
     companion object {
         const val LOCATION_DEEPLINK = "Deeplink"
         const val LOCATION_JOIN = "Join Guild Modal"
+
+        /** Reference: the invite action sheet is the only mobile surface that mints an invite. */
+        const val LOCATION_INVITE_SHEET = "IOS Instant Invite Action Sheet Mount"
+        const val LOCATION_REGENERATE = "IOS Regenerate"
     }
 }

@@ -44,12 +44,14 @@ class WidgetChatListAdapterItemStageInvite(
     private val joinButton: MaterialButton = itemView.findViewById(R.id.item_invite_join_button)
 
     private var iconUrl: String? = null
+    private var inviteInstanceId: String? = null
 
     override var subscription: Subscription? = null
 
     override fun onConfigure(position: Int, data: ChatListEntry) {
         super.onConfigure(position, data)
         val entry = data as StageInviteEntry
+        inviteInstanceId = inviteInstanceId(entry.messageId, entry.inviteCode)
         observeModel(entry).ui().appSubscribe(
             WidgetChatListAdapterItemStageInvite::class.java,
             subscriptionHandler = { subscription = it },
@@ -141,7 +143,9 @@ class WidgetChatListAdapterItemStageInvite(
         speakersView.setSpeakers(model.speakers)
         speakersView.visibility = if (model.speakers.isEmpty()) View.GONE else View.VISIBLE
 
-        joinButton.setOnClickListener { joinServerOrDM(javaClass, model.invite) }
+        joinButton.setOnClickListener {
+            joinServerOrDM(javaClass, model.invite, inviteInstanceId = inviteInstanceId)
+        }
     }
 
     private fun updateIconUrlIfChanged(url: String?) {

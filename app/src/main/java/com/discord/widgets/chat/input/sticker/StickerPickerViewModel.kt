@@ -17,6 +17,7 @@ import com.discord.stores.StorePermissions
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUser
 import com.discord.stores.StoreUserSettings
+import com.discord.utilities.messagesend.MessageSendLocation
 import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rx.computationLatest
@@ -168,6 +169,7 @@ open class StickerPickerViewModel(
             content = "",
             stickers = listOf(sticker),
             guildId = channel.guildId.takeIf { it != 0L },
+            location = MessageSendLocation.CHAT_INPUT,
         ).subscribe({ }, { })
         searchSubject.onNext("")
         return true

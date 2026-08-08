@@ -523,8 +523,19 @@ object RestAPIParams {
         val regenerate: String?,
     )
 
-    /** Empty, but still required: the endpoints want a JSON object and Retrofit wants a type. */
-    class InviteCode
+    /**
+     * Body for `POST /invites/{code}` — and, with everything null, the empty object `PUT
+     * /guilds/{id}/members/@me` still requires.
+     *
+     * @param inviteInstanceId also travels in `X-Context-Properties`; the reference sends it twice.
+     * @param receivedInstallationId the `installationId` carried by the deep link that opened this
+     *   invite, handed back so the server can attribute the install.
+     */
+    data class InviteCode(
+        val sessionId: String? = null,
+        val inviteInstanceId: String? = null,
+        val receivedInstallationId: String? = null,
+    )
 
     data class InvoicePreviewBody(
         val subscriptionId: String,

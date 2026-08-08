@@ -15,6 +15,7 @@ import com.discord.restapi.RestAPIBuilder
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreMessages
 import com.discord.stores.updates.ObservationDeck
+import com.discord.utilities.rest.EMPTY_CONTEXT_PROPERTIES
 import com.discord.utilities.rest.RestAPI
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.adapter.shouldAnimatePollResults
@@ -65,7 +66,7 @@ class PollContractsTest {
             multiselect = true,
         ).toBody()
 
-        RestAPI.apiOrNull!!.sendMessage(7, body, null).toBlocking().single()
+        RestAPI.apiOrNull!!.sendMessage(7, body, null, EMPTY_CONTEXT_PROPERTIES).toBlocking().single()
         RestAPI.apiOrNull!!.votePoll(7, 9, RestAPIParams.PollVote(listOf(1, 2)))
             .toBlocking().subscribe()
 

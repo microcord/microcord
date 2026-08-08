@@ -1,6 +1,5 @@
 package com.discord.widgets.settings.account
 
-import android.util.Base64
 import androidx.annotation.StringRes
 import com.discord.R
 import com.discord.app.AppViewModel
@@ -11,6 +10,7 @@ import com.discord.stores.StoreUser
 import com.discord.stores.StoreUserRelationships
 import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
 import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rest.contextPropertiesOf
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
@@ -69,10 +69,7 @@ class WidgetSettingsBlockedUsersViewModel(
         const val VIEW_TYPE_BLOCKED_USER_ITEM = 0
         private const val LOCATION = "Blocked Users List"
 
-        private fun relationshipContext(): String = Base64.encodeToString(
-            "{\"location\":\"$LOCATION\"}".toByteArray(),
-            Base64.NO_WRAP,
-        )
+        private fun relationshipContext(): String = contextPropertiesOf("location" to LOCATION)
 
         fun observeStores(
             storeUserRelationships: StoreUserRelationships,

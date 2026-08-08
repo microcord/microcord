@@ -2,6 +2,7 @@ package com.discord.restapi
 
 import com.discord.api.message.activity.MessageActivityType
 import com.discord.restapi.utils.CountingRequestBody
+import com.discord.utilities.rest.EMPTY_CONTEXT_PROPERTIES
 import com.google.gson.JsonParser
 import okhttp3.CookieJar
 import okhttp3.MediaType.Companion.toMediaType
@@ -42,6 +43,7 @@ class MessageRestContractTest {
             PayloadJSON(RestAPIParams.Message(content = "with file", nonce = "n")),
             arrayOf(file),
             null,
+            EMPTY_CONTEXT_PROPERTIES,
         ).toBlocking().single()
 
         val request = server.takeRequest()

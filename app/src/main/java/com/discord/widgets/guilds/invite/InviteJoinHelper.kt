@@ -11,6 +11,7 @@ import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rest.contextPropertiesOf
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.filterNull
 import com.discord.utilities.rx.restSubscribeOn
@@ -42,6 +43,8 @@ import rx.Observable
 object InviteJoinHelper {
 
     /**
+     * @param inviteInstanceId `"<message id>:<invite code>"` when the invite was accepted from a
+     *   chat embed, otherwise null.
      * @param onInvitePostError fires before any navigation; the accept screen uses it to render the
      *   failure in place.
      * @param onInvitePostSuccess fires as soon as the server accepts, before the gate or the
@@ -54,6 +57,7 @@ object InviteJoinHelper {
         javaClass: Class<*>,
         fragment: AppFragment,
         location: String,
+        inviteInstanceId: String? = null,
         onInvitePostError: (RestApiError?) -> Unit = {},
         onInvitePostSuccess: (ModelInvite) -> Unit = {},
         onInviteFlowFinished: (ModelInvite) -> Unit = {},
@@ -64,11 +68,22 @@ object InviteJoinHelper {
             return
         }
 
+        val instantInvites = StoreStream.getInstantInvites()
+        val receivedInstallationId = instantInvites.getReceivedInstallationId(code)
+
         RestAPI.api
             .postInviteCode(
                 code,
-                RestAPIParams.InviteCode(),
-                location,
+                RestAPIParams.InviteCode(
+                    sessionId = StoreStream.getAuthentication().getSessionId(),
+                    inviteInstanceId = inviteInstanceId,
+                    receivedInstallationId = receivedInstallationId,
+                ),
+                contextPropertiesOf(
+                    "location" to location,
+                    "invite_instance_id" to inviteInstanceId,
+                    "invite_guild_scheduled_event_id" to invite.getGuildScheduledEvent()?.id?.toString(),
+                ),
             )
             .restSubscribeOn(false)
             .ui(fragment)
@@ -77,6 +92,7 @@ object InviteJoinHelper {
                 context = fragment.context,
                 errorHandler = { error -> onInvitePostError(error) },
             ) { joinedInvite ->
+                if (receivedInstallationId != null) instantInvites.clearReceivedInstallationId(code)
                 onInvitePostSuccess(joinedInvite)
                 completeJoin(fragment, joinedInvite, location, onInviteFlowFinished)
             }

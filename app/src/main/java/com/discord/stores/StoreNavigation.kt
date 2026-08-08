@@ -5,6 +5,7 @@ import com.discord.panels.PanelState
 import com.discord.models.authentication.AuthState
 import com.discord.models.requiredaction.RequiredAction as ModelRequiredAction
 import com.discord.utilities.intent.AppIntentContract
+import com.discord.utilities.intent.DeepLinkRoute
 import com.discord.utilities.intent.LinkParseResult
 import com.discord.widgets.home.PanelLayout
 import rx.Observable
@@ -118,12 +119,23 @@ class StoreNavigation internal constructor(private val stream: StoreStream) {
         is AppIntentContract.Link -> when (val result = contract.result) {
             is LinkParseResult.External -> IntentRouteResult.External(result.uri)
             is LinkParseResult.Internal -> IntentRouteResult.Queued.also {
+                rememberInviteInstallationId(result.route)
                 pendingIntentSubject.onNext(PendingIntentState.Value(contract))
             }
             is LinkParseResult.Unsupported -> IntentRouteResult.Rejected
         }
         is AppIntentContract.Share, is AppIntentContract.SdkAction ->
             IntentRouteResult.Queued.also { pendingIntentSubject.onNext(PendingIntentState.Value(contract)) }
+    }
+
+    /**
+     * Reference `handleIncomingURL`: an invite link may carry the installation id of whoever handed
+     * it over, which the accept request hands back for attribution.
+     */
+    private fun rememberInviteInstallationId(route: DeepLinkRoute) {
+        val invite = route as? DeepLinkRoute.Invite ?: return
+        val installationId = invite.installationId ?: return
+        StoreStream.getInstantInvites().setReceivedInstallationId(invite.code, installationId)
     }
 
     @Synchronized

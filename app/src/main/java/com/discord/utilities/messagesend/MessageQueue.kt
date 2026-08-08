@@ -12,6 +12,7 @@ import com.discord.utilities.rest.FileUpload
 import com.discord.utilities.attachments.CloudUploader
 import com.discord.utilities.attachments.UploadAttachment
 import com.discord.utilities.rest.SendUtils
+import com.discord.utilities.rest.contextPropertiesOf
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.filterIs
 import com.discord.utilities.rx.restSubscribeOn
@@ -251,6 +252,7 @@ class MessageQueue @JvmOverloads constructor(
                     ready,
                     request.attachments,
                     captchaPolicy,
+                    contextPropertiesOf("location" to request.location),
                     api,
                     request.onProgress,
                 )
@@ -284,11 +286,12 @@ class MessageQueue @JvmOverloads constructor(
         ready: SendUtils.SendPayload.ReadyToSend,
         attachments: List<UploadAttachment>?,
         captchaPolicy: CaptchaRequestPolicy,
+        context: String,
         client: RestAPIInterface = api,
         onProgress: (List<FileUpload>) -> Unit = {},
     ): Observable<com.discord.api.message.Message> {
         if (attachments.isNullOrEmpty() || contentResolver == null) {
-            return client.sendMessage(channelId, ready.message, captchaPolicy)
+            return client.sendMessage(channelId, ready.message, captchaPolicy, context)
         }
         return CloudUploader.stageAndSend(
             channelId,
@@ -296,7 +299,7 @@ class MessageQueue @JvmOverloads constructor(
             attachments,
             onProgress = { upload -> onProgress(listOf(upload)) },
         ) { uploads ->
-            client.sendMessage(channelId, claimUploads(ready.message, uploads), captchaPolicy)
+            client.sendMessage(channelId, claimUploads(ready.message, uploads), captchaPolicy, context)
         }
     }
 

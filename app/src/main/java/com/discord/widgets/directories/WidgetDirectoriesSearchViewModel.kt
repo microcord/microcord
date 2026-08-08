@@ -6,6 +6,7 @@ import com.discord.api.permission.Permission
 import com.discord.app.AppViewModel
 import com.discord.models.guild.Guild
 import com.discord.restapi.RestAPIParams
+import com.discord.stores.JoinGuildSources
 import com.discord.stores.StoreGuildSelected
 import com.discord.stores.StoreGuilds
 import com.discord.stores.StorePermissions
@@ -138,7 +139,7 @@ class WidgetDirectoriesSearchViewModel(
                 sessionId = null,
                 directoryChannelId = directoryChannelId,
                 body = RestAPIParams.InviteCode(),
-                context = contextPropertiesOf("source" to DIRECTORY_JOIN_GUILD_SOURCE),
+                context = contextPropertiesOf("source" to JoinGuildSources.DIRECTORY_ENTRY),
             )
             ?.restSubscribeOn()
             ?.ui(this)

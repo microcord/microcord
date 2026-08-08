@@ -60,6 +60,7 @@ class StoreAuthentication(
     private val ageGateError = BehaviorSubject.create<String?>()
     private var authState: AuthState? = null
     private var authSessionIdHash: String? = null
+    private var sessionId: String? = null
     private val authStateCache = AuthStateCache(preferences)
     /**
      * Seeded with `null` so a subscriber attaching before [init] immediately learns "logged out"
@@ -183,6 +184,7 @@ class StoreAuthentication(
     fun handleConnectionOpen(payload: ModelPayload) {
         StoreThreadScheduler.assertCurrentThread()
         authSessionIdHash = payload.authSessionIdHash
+        sessionId = payload.sessionId
         // A logged-in client is handed its installation here rather than by `/experiments`, which
         // only runs while logged out.
         setInstallation(payload.installation)
@@ -197,6 +199,9 @@ class StoreAuthentication(
 
     /** Which entry of `auth/sessions` is this connection, so the list can refuse to revoke it. */
     fun getAuthSessionIdHash(): String? = authSessionIdHash
+
+    /** Reference `AuthenticationStore.getSessionId`: the gateway session this client is on. */
+    fun getSessionId(): String? = sessionId
 
     fun loginWithToken(token: String) {
         require(token.isNotBlank()) { "Token is required." }

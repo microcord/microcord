@@ -1,6 +1,6 @@
 package com.discord.widgets.friends
 
-import android.util.Base64
+import com.discord.utilities.rest.contextPropertiesOf
 import androidx.annotation.MainThread
 import androidx.annotation.StringRes
 import com.discord.R
@@ -433,10 +433,8 @@ class FriendsListViewModel(
         private const val CONTACTS_CONNECTION_TYPE = "contacts"
 
         /** `X-Context-Properties` is a base64 JSON blob naming where the action was taken. */
-        private fun relationshipContext(location: String): String = Base64.encodeToString(
-            "{\"location\":\"$location\"}".toByteArray(),
-            Base64.NO_WRAP,
-        )
+        private fun relationshipContext(location: String): String =
+            contextPropertiesOf("location" to location)
 
         /**
          * Folds the raw store maps into sections. Pure — it is deliberately callable from a background

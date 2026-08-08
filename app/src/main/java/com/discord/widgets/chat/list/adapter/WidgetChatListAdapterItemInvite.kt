@@ -309,8 +309,9 @@ class WidgetChatListAdapterItemInvite(
         joinedButton.visibility = if (isJoined) View.VISIBLE else View.GONE
         joinButton.visibility = if (isJoined) View.GONE else View.VISIBLE
         mentionButton.visibility = View.GONE
-        joinButton.setOnClickListener { joinServerOrDM(javaClass, invite) }
-        joinedButton.setOnClickListener { joinServerOrDM(javaClass, invite) }
+        val instanceId = inviteInstanceId(item.messageId, item.inviteCode)
+        joinButton.setOnClickListener { joinServerOrDM(javaClass, invite, inviteInstanceId = instanceId) }
+        joinedButton.setOnClickListener { joinServerOrDM(javaClass, invite, inviteInstanceId = instanceId) }
 
         // The reference gates the hub e-mail prompt on a growth experiment; the experiment client
         // is not reconstructed, so the prompt stays off, which is its default state.

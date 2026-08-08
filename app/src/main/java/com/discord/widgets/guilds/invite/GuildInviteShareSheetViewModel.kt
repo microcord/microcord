@@ -7,6 +7,7 @@ import com.discord.api.stageinstance.StageInstance
 import com.discord.app.AppViewModel
 import com.discord.models.domain.ModelInvite
 import com.discord.models.guild.Guild
+import com.discord.models.invite.InviteUtils.INVITE_SEND_LOCATION
 import com.discord.models.user.MeUser
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreChannels
@@ -131,7 +132,7 @@ class GuildInviteShareSheetViewModel(
     private fun sendInviteToChannel(channelId: Long) {
         val state = currentStoreState ?: return
         val link = invite?.toLink() ?: return
-        storeMessages.sendMessage(channelId, state.me, link)
+        storeMessages.sendMessage(channelId, state.me, link, location = INVITE_SEND_LOCATION)
             .ui(this)
             .appSubscribe(GuildInviteShareSheetViewModel::class.java) { result ->
                 if (result !is MessageResult.Success) return@appSubscribe

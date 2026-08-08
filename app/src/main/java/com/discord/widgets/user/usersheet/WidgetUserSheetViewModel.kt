@@ -1,7 +1,6 @@
 package com.discord.widgets.user.usersheet
 
 import android.content.Context
-import android.util.Base64
 import androidx.annotation.StringRes
 import com.discord.R
 import com.discord.api.channel.Channel
@@ -34,6 +33,7 @@ import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.permissions.ManageUserContext
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rest.contextPropertiesOf
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
@@ -731,16 +731,7 @@ class WidgetUserSheetViewModel(
         /** Analytics location reported for relationship changes made from this sheet. */
         const val LOCATION = "User Profile"
 
-        /**
-         * `X-Context-Properties` is a base64-encoded JSON blob, not raw JSON — sending the plain
-         * text makes the server drop the analytics context silently.
-         */
-        private val RELATIONSHIP_CONTEXT: String by lazy {
-            Base64.encodeToString(
-                """{"location":"$LOCATION"}""".toByteArray(),
-                Base64.NO_WRAP,
-            )
-        }
+        private val RELATIONSHIP_CONTEXT: String by lazy { contextPropertiesOf("location" to LOCATION) }
 
         /** Guild icon in the "Roles in <guild>" header. */
         private const val GUILD_SECTION_ICON_SIZE_DP = 16

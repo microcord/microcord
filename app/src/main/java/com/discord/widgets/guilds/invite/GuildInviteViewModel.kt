@@ -45,7 +45,12 @@ class GuildInviteViewModel(
 
     fun fetchInviteIfNotLoaded() {
         val code = inviteCode ?: return
-        instantInvitesStore.fetchInviteIfNotLoaded(code.inviteCode, code.eventId)
+        instantInvitesStore.fetchInviteIfNotLoaded(
+            code.inviteCode,
+            code.eventId,
+            code.targetChannelId,
+            code.targetMessageId,
+        )
     }
 
     companion object {

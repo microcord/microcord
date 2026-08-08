@@ -19,6 +19,7 @@ import com.discord.utilities.error.RestApiError
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rest.RestAPIAbortMessages
+import com.discord.utilities.rest.contextPropertiesOf
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
@@ -347,11 +348,7 @@ class WidgetFriendsFindNearby : AppFragment(R.layout.widget_friends_nearby) {
         private const val NEARBY_HELP_URL =
             "https://support.discord.com/hc/en-us/articles/360014894392"
 
-        /** `X-Context-Properties` is a base64 JSON blob naming where the action was taken. */
         private fun relationshipContext(location: String): String =
-            android.util.Base64.encodeToString(
-                "{\"location\":\"$location\"}".toByteArray(),
-                android.util.Base64.NO_WRAP,
-            )
+            contextPropertiesOf("location" to location)
     }
 }

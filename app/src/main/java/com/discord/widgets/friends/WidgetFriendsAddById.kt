@@ -18,6 +18,7 @@ import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rest.RestAPIAbortMessages
+import com.discord.utilities.rest.contextPropertiesOf
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
@@ -196,12 +197,8 @@ class WidgetFriendsAddById : AppFragment(R.layout.widget_friends_add_by_id) {
             }
         }
 
-        /** `X-Context-Properties` is a base64 JSON blob naming where the action was taken. */
         private fun relationshipContext(location: String): String =
-            android.util.Base64.encodeToString(
-                "{\"location\":\"$location\"}".toByteArray(),
-                android.util.Base64.NO_WRAP,
-            )
+            contextPropertiesOf("location" to location)
 
         data class UserNameDiscriminator(val username: String, val discriminator: Int?)
     }

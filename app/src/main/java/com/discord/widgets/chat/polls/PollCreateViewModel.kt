@@ -4,7 +4,9 @@ import com.discord.api.message.reaction.MessageReactionEmoji
 import com.discord.app.AppViewModel
 import com.discord.models.domain.NonceGenerator
 import com.discord.restapi.RestAPIParams
+import com.discord.utilities.messagesend.MessageSendLocation
 import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rest.contextPropertiesOf
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
@@ -51,7 +53,12 @@ class PollCreateViewModel : AppViewModel<PollCreateViewModel.State>(State()) {
             failures.onNext(Unit)
             return
         }
-        api.sendMessage(channelId, state.toBody(), null)
+        api.sendMessage(
+            channelId,
+            state.toBody(),
+            null,
+            contextPropertiesOf("location" to MessageSendLocation.POLL_CREATION),
+        )
             .restSubscribeOn()
             .ui(this)
             .appSubscribe(

@@ -117,7 +117,16 @@ object DeepLinkParser {
     }
 
     private fun invite(value: String, query: Map<String, String>) = value.takeIf(code::matches)?.let {
-        DeepLinkRoute.Invite(it, query["event"]?.let(::positive), query["source"]?.takeIf(String::isNotBlank))
+        // A message target without a channel target is dropped, as the reference does.
+        val targetChannelId = query["channel"]?.let(::positive)
+        DeepLinkRoute.Invite(
+            code = it,
+            eventId = query["event"]?.let(::positive),
+            source = query["source"]?.takeIf(String::isNotBlank),
+            targetChannelId = targetChannelId,
+            targetMessageId = targetChannelId?.let { query["message"]?.let(::positive) },
+            installationId = query["installationId"]?.takeIf(String::isNotBlank),
+        )
     }
 
     private fun parseQuery(query: Map<String, String>): DeepLinkRoute? {

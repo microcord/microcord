@@ -66,7 +66,7 @@ class GuildInviteSettingsViewModel(
         val settings = pendingSettings ?: return
         val channel = targetChannel ?: return
         storeInviteSettings.setInviteSettings(settings)
-        storeInviteSettings.generateInvite(channel.id)
+        storeInviteSettings.generateInvite(channel.id, location = StoreInviteSettings.LOCATION_REGENERATE)
             .ui(this)
             .appSubscribe(
                 GuildInviteSettingsViewModel::class.java,

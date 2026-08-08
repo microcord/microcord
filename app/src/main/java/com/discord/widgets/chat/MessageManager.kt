@@ -27,6 +27,7 @@ import com.discord.stores.StoreSlowMode
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUser
 import com.discord.utilities.attachments.UploadAttachment
+import com.discord.utilities.messagesend.MessageSendLocation
 import com.discord.widgets.captcha.WidgetCaptchaBottomSheet
 import com.discord.utilities.error.RestApiError
 import com.discord.utilities.messagesend.MessageResult
@@ -247,6 +248,7 @@ class MessageManager(
                         stickers = stickers.map { it.toSendableSticker() },
                         messageReference = pendingReply?.messageReference,
                         allowedMentions = allowedMentions,
+                        location = MessageSendLocation.CHAT_INPUT,
                     )
                 }
             }

@@ -28,9 +28,6 @@ import com.discord.utilities.view.recycler.MaxHeightRecyclerView
 import com.discord.utilities.views.SimpleRecyclerAdapter
 import com.facebook.drawee.view.SimpleDraweeView
 
-/** Analytics source recorded on a join started from a directory row. */
-const val DIRECTORY_JOIN_GUILD_SOURCE: String = "Directory Channel Entry"
-
 /** How many "recently added" servers the directory home page shows. */
 private const val MAX_RECOMMENDATION_COUNT = 5
 

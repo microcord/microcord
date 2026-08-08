@@ -4,6 +4,7 @@ import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreMessages
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUser
+import com.discord.utilities.messagesend.MessageSendLocation
 
 /**
  * Sends a picked GIF into the currently open channel as its Tenor link.
@@ -30,6 +31,7 @@ class GifMessageSender(
             author = storeUser.getMe(),
             content = content,
             guildId = channel.guildId.takeIf { it != 0L },
+            location = MessageSendLocation.CHAT_INPUT,
         ).subscribe({ }, { })
         return true
     }

@@ -1,7 +1,6 @@
 package com.discord.widgets.mobile_reports
 
 import android.content.Context
-import android.util.Base64
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.directory.DirectoryEntryGuild
@@ -31,6 +30,7 @@ import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.message.MessageUtils
 import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rest.contextPropertiesOf
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
@@ -41,7 +41,6 @@ import com.discord.utilities.textprocessing.MessageRenderContext
 import com.discord.utilities.time.Clock
 import com.discord.widgets.directories.DirectoryStores
 import com.facebook.drawee.span.DraweeSpanStringBuilder
-import com.google.gson.Gson
 import java.lang.ref.WeakReference
 import java.util.HashSet
 import rx.Observable
@@ -351,10 +350,8 @@ class MobileReportsViewModel @JvmOverloads constructor(
     }
 
     companion object {
-        private fun relationshipContext(location: String): String = Base64.encodeToString(
-            Gson().toJson(mapOf("location" to location)).toByteArray(),
-            Base64.NO_WRAP,
-        )
+        private fun relationshipContext(location: String): String =
+            contextPropertiesOf("location" to location)
 
         private fun getStoreState(
             args: MobileReportArgs,

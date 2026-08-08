@@ -13,6 +13,9 @@ object InviteUtils {
      */
     const val HOST_INVITE = "https://discord.gg"
 
+    /** Reference `InviteQueue.enqueue` location: an invite link posted from the invite sheet. */
+    const val INVITE_SEND_LOCATION = "Invite Action Sheet"
+
     fun createLinkFromCode(code: String, eventId: Long? = null): String = if (eventId != null) {
         String.format(ModelInvite.URL_FORMAT_WITH_EVENT, HOST_INVITE, code, eventId)
     } else {

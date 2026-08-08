@@ -107,6 +107,26 @@ class StoreInstantInvites(
 
     // endregion
 
+    // region received installation ids
+
+    /**
+     * Reference `InstantInviteStore`'s received-installation-id map: the `installationId` a deep
+     * link carried, held until the matching invite is accepted and then cleared.
+     */
+    private val receivedInstallationIds = LinkedHashMap<String, String>()
+
+    fun setReceivedInstallationId(inviteCode: String, installationId: String) = dispatcher.schedule {
+        receivedInstallationIds[inviteCode] = installationId
+    }
+
+    fun getReceivedInstallationId(inviteCode: String): String? = receivedInstallationIds[inviteCode]
+
+    fun clearReceivedInstallationId(inviteCode: String) = dispatcher.schedule {
+        receivedInstallationIds.remove(inviteCode)
+    }
+
+    // endregion
+
     // region code resolution
 
     fun getKnownInvites(): Map<String, InviteState> = knownInvitesSnapshot
@@ -130,6 +150,7 @@ class StoreInstantInvites(
      * *not* count as known, so a transport failure retries.
      *
      * @param eventId scopes the resolution to a scheduled event; part of the cache key.
+     * @param targetChannelId deep-link context the server validates and echoes back on the invite.
      * @param onError invoked before the state transition, on the REST thread, for callers that
      *   need to dismiss a screen.
      *
@@ -141,6 +162,8 @@ class StoreInstantInvites(
     fun fetchInviteIfNotLoaded(
         inviteCode: String,
         eventId: Long? = null,
+        targetChannelId: Long? = null,
+        targetMessageId: Long? = null,
         onError: (() -> Unit)? = null,
     ) {
         val inviteKey = ModelInvite.getInviteStoreKey(inviteCode, eventId)
@@ -149,7 +172,12 @@ class StoreInstantInvites(
             if (known != null && known !is InviteState.LoadFailed) return@schedule
             setChatInvites(inviteKey, InviteState.Loading)
             val api = restApi() ?: return@schedule
-            api.getInviteCode(inviteCode, true, eventId)
+            api.getInviteCode(
+                code = inviteCode,
+                guildScheduledEventId = eventId,
+                targetChannelId = targetChannelId,
+                targetMessageId = targetMessageId,
+            )
                 .restSubscribeOn(false)
                 .appSubscribe(
                     StoreInstantInvites::class.java,

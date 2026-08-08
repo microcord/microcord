@@ -132,6 +132,7 @@ import com.discord.models.gifpicker.dto.TrendingGifCategoriesResponseDto
 import com.discord.models.sticker.dto.ModelStickerPack
 import com.discord.models.sticker.dto.ModelStickerStoreDirectory
 import com.discord.utilities.captcha.CaptchaRequestPolicy
+import com.discord.utilities.rest.EMPTY_CONTEXT_PROPERTIES
 import com.google.gson.JsonObject
 import com.discord.api.attachment.CreateAttachmentsBody
 import com.discord.api.attachment.CreateAttachmentsResponse
@@ -324,7 +325,10 @@ interface RestAPIInterface {
     fun userGet(@Path("userId") userId: Long): Observable<User>
 
     @POST("users/@me/channels")
-    fun userCreateChannel(@Body body: RestAPIParams.CreateChannel): Observable<Channel>
+    fun userCreateChannel(
+        @Body body: RestAPIParams.CreateChannel,
+        @Header(X_CONTEXT_PROPERTIES) context: String = EMPTY_CONTEXT_PROPERTIES,
+    ): Observable<Channel>
 
     @POST("users/@me/devices")
     fun userCreateDevice(@Body body: RestAPIParams.UserDevices): Observable<Void>
@@ -534,6 +538,7 @@ interface RestAPIInterface {
     @PUT("users/@me/connections/contacts/@me")
     fun createConnectionContacts(
         @Body connectedAccountContacts: RestAPIParams.ConnectedAccountContacts,
+        @Header(X_CONTEXT_PROPERTIES) context: String = EMPTY_CONTEXT_PROPERTIES,
     ): Observable<ConnectedAccount>
 
     @PATCH("users/@me/connections/{connection}/{connectionId}")
@@ -693,12 +698,14 @@ interface RestAPIInterface {
         @Path("channelId") channelId: Long,
         @Body message: RestAPIParams.Message,
         @Tag captcha: CaptchaRequestPolicy?,
+        @Header(X_CONTEXT_PROPERTIES) context: String,
     ): Observable<Message>
 
     @POST("channels/{channelId}/greet")
     fun sendGreetMessage(
         @Path("channelId") channelId: Long,
         @Body body: RestAPIParams.GreetMessage,
+        @Header(X_CONTEXT_PROPERTIES) context: String,
     ): Observable<Message>
 
     @Multipart
@@ -708,6 +715,7 @@ interface RestAPIInterface {
         @Part("payload_json") payloadJson: PayloadJSON<RestAPIParams.Message>,
         @Part files: Array<MultipartBody.Part>,
         @Tag captcha: CaptchaRequestPolicy?,
+        @Header(X_CONTEXT_PROPERTIES) context: String,
     ): Observable<Message>
 
     /**
@@ -779,6 +787,7 @@ interface RestAPIInterface {
     fun postChannelInvite(
         @Path("channelId") channelId: Long,
         @Body invite: RestAPIParams.Invite,
+        @Header(X_CONTEXT_PROPERTIES) context: String,
     ): Observable<ModelInvite>
 
     @DELETE("channels/{channelId}/messages/{messageId}")
@@ -842,6 +851,7 @@ interface RestAPIInterface {
     fun addChannelRecipient(
         @Path("channelId") channelId: Long,
         @Path("recipientId") recipientId: Long,
+        @Header(X_CONTEXT_PROPERTIES) context: String = EMPTY_CONTEXT_PROPERTIES,
     ): Observable<Void>
 
     @DELETE("channels/{channelId}/recipients/{recipientId}")
@@ -1138,6 +1148,7 @@ interface RestAPIInterface {
     fun postGuildEmoji(
         @Path("guildId") guildId: Long,
         @Body body: RestAPIParams.PostGuildEmoji,
+        @Header(X_CONTEXT_PROPERTIES) context: String = EMPTY_CONTEXT_PROPERTIES,
     ): Observable<ModelEmojiGuild>
 
     @PATCH("guilds/{guildId}/emojis/{emojiId}")
@@ -1493,11 +1504,20 @@ interface RestAPIInterface {
         @Header(X_CONTEXT_PROPERTIES) context: String,
     ): Observable<ModelInvite>
 
+    /**
+     * Query mirrors the reference's `resolveInvite`, in the same order. `target_*` come from an
+     * invite deep link's `?channel=`/`?message=` suffix and are echoed back on the resolved invite;
+     * they are absent for a hand-typed code.
+     */
     @GET("invites/{code}")
     fun getInviteCode(
         @Path("code") code: String,
-        @Query("with_counts") withCounts: Boolean,
+        @Query("with_counts") withCounts: Boolean = true,
+        @Query("with_expiration") withExpiration: Boolean = true,
         @Query("guild_scheduled_event_id") guildScheduledEventId: Long? = null,
+        @Query("target_channel_id") targetChannelId: Long? = null,
+        @Query("target_message_id") targetMessageId: Long? = null,
+        @Query("with_permissions") withPermissions: Boolean = true,
     ): Observable<ModelInvite>
 
     @GET("guilds/templates/{guildTemplateCode}")

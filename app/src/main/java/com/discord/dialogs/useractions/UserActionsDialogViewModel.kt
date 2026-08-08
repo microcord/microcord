@@ -1,6 +1,6 @@
 package com.discord.dialogs.useractions
 
-import android.util.Base64
+import com.discord.utilities.rest.contextPropertiesOf
 import androidx.annotation.StringRes
 import com.discord.R
 import com.discord.api.channel.Channel
@@ -156,9 +156,7 @@ class UserActionsDialogViewModel(
         }
 
         /** `X-Context-Properties` is a base64 JSON blob naming where the action was taken. */
-        private fun relationshipContext(location: String): String = Base64.encodeToString(
-            "{\"location\":\"$location\"}".toByteArray(),
-            Base64.NO_WRAP,
-        )
+        private fun relationshipContext(location: String): String =
+            contextPropertiesOf("location" to location)
     }
 }

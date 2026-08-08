@@ -7,6 +7,7 @@ import android.content.SharedPreferences
 import android.os.Build
 import android.os.LocaleList
 import android.util.Log
+import com.discord.utilities.messagesend.MessageSendLocation
 import com.discord.utilities.user.NicknameUtils
 import com.discord.api.activity.ActivityEmoji
 import com.discord.api.channel.Channel
@@ -115,6 +116,7 @@ import com.discord.api.message.MessageReference
 import com.discord.utilities.rest.MessageUploadPayloadBuilder
 import com.discord.utilities.rest.AckToken
 import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rest.contextPropertiesOf
 import com.discord.widgets.guild_role_subscriptions.GuildRoleSubscriptionsFeatureFlag
 import com.discord.utilities.textprocessing.Rules
 import com.discord.restapi.PayloadJSON
@@ -1021,7 +1023,12 @@ class StoreStream private constructor(
         ChatInputStoreBindings.threadDraftState = threadDraft::observeDraftState
         com.discord.widgets.search.SearchStoreProvider.install(search.asWidgetStore())
         ChatInputGuardActions.joinGuildAsMember = { guildId, onSuccess, onFailure ->
-            lurking.postJoinGuildAsMember(guildId, { onSuccess() }, onFailure)
+            lurking.postJoinGuildAsMember(
+                guildId,
+                { onSuccess() },
+                onFailure,
+                source = JoinGuildSources.CHAT_INPUT_BLOCKER,
+            )
         }
     }
 
@@ -1322,6 +1329,7 @@ class StoreStream private constructor(
                         stickerIds = stickerId.takeIf { it != -1L }?.let(::listOf),
                     ),
                     null,
+                    contextPropertiesOf("location" to MessageSendLocation.PUSH_NOTIFICATION),
                 ).subscribeOn(Schedulers.io()).toBlocking().single().also {
                     analytics.ackMessage(channelId)
                     NotificationClient.displaySent(applicationContext, channelId, channelName, true)
@@ -2330,13 +2338,9 @@ class StoreStream private constructor(
         )
     }
 
-    private fun relationshipContext(location: String): String = android.util.Base64.encodeToString(
-        "{\"location\":\"$location\"}".toByteArray(), android.util.Base64.NO_WRAP,
-    )
+    private fun relationshipContext(location: String): String = contextPropertiesOf("location" to location)
 
-    private fun callContext(messageId: Long): String = android.util.Base64.encodeToString(
-        "{\"message_id\":$messageId}".toByteArray(), android.util.Base64.NO_WRAP,
-    )
+    private fun callContext(messageId: Long): String = contextPropertiesOf("message_id" to messageId)
 
     private fun scheduleBackgroundMessageSend(canReplayAttachments: Boolean) {
         if (!::applicationContext.isInitialized) return
@@ -2483,7 +2487,13 @@ class StoreStream private constructor(
         preprocessingUploads.remove(nonce)
         upload.aggregateProgress.subscribe { progress -> dispatcher.schedule { messageUploads.onProgress(nonce, progress) } }
         val requestSubscription = restApi
-            .sendMessage(channelId, PayloadJSON(body), upload.uploads.mapNotNull { it.part }.toTypedArray(), null)
+            .sendMessage(
+                channelId,
+                PayloadJSON(body),
+                upload.uploads.mapNotNull { it.part }.toTypedArray(),
+                null,
+                contextPropertiesOf("location" to MessageSendLocation.CHAT_INPUT),
+            )
             .subscribeOn(Schedulers.io())
             .subscribe(
             { apiMessage ->

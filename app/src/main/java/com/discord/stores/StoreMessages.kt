@@ -28,6 +28,7 @@ import com.discord.utilities.attachments.toUploadAttachment
 import com.discord.utilities.captcha.CaptchaSolution
 import com.discord.utilities.messagesend.MessageResult
 import com.discord.utilities.messagesend.MessageSendCoordinator
+import com.discord.utilities.messagesend.MessageSendLocation
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.time.Clock
 import com.discord.utilities.user.UserUtils.synthesizeApiUser
@@ -934,6 +935,7 @@ class StoreMessages @JvmOverloads constructor(
         numRetries: Int? = null,
         captchaSolution: CaptchaSolution? = null,
         guildId: Long? = null,
+        location: String = MessageSendLocation.OTHER,
     ): Observable<MessageResult> {
         val coordinator = sendCoordinator ?: return Observable.just(MessageResult.NoValidContent)
         val submission = coordinator.send(
@@ -946,6 +948,7 @@ class StoreMessages @JvmOverloads constructor(
                 captcha = captchaSolution,
                 attachments = attachments,
                 stickers = stickers,
+                location = location,
             ),
         )
         return when (submission) {
@@ -1028,6 +1031,7 @@ class StoreMessages @JvmOverloads constructor(
             numRetries = (message.numRetries ?: 0) + 1,
             captchaSolution = captchaSolution,
             guildId = message.guildId,
+            location = if (isAutoAttempt) MessageSendLocation.OTHER else MessageSendLocation.RETRY,
         )
     }
 

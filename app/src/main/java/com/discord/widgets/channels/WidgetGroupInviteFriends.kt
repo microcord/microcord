@@ -30,6 +30,7 @@ import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
 import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rest.contextPropertiesOf
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.filterNull
 import com.discord.utilities.rx.restSubscribeOn
@@ -387,6 +388,7 @@ class WidgetGroupInviteFriends : AppFragment(R.layout.widget_group_invite_friend
 
     companion object {
         private const val INTENT_EXTRA_CHANNEL_ID = "INTENT_EXTRA_CHANNEL_ID"
+        private const val LOCATION_NEW_GROUP_DM = "New Group DM"
         private const val MAX_GROUP_MEMBERS = 10
         private const val MAX_GROUP_MEMBERS_STAFF = 25
         private const val NO_CHANNEL_ID = -1L
@@ -411,7 +413,11 @@ class WidgetGroupInviteFriends : AppFragment(R.layout.widget_group_invite_friend
         internal fun submit(channel: Channel?, recipients: List<User>): Observable<Channel> = when {
             channel != null -> addGroupRecipients(channel.id, recipients)
             recipients.size == 1 -> createOrFetchDm(recipients.first().id)
-            else -> RestAPI.api.userCreateChannel(RestAPIParams.CreateChannel(recipients.map(User::id)))
+            else -> RestAPI.api
+                .userCreateChannel(
+                    RestAPIParams.CreateChannel(recipients.map(User::id)),
+                    contextPropertiesOf("location" to LOCATION_NEW_GROUP_DM),
+                )
                 .restSubscribeOn()
                 .doOnNext(StoreStream.getChannels()::onGroupCreated)
         }
@@ -420,7 +426,11 @@ class WidgetGroupInviteFriends : AppFragment(R.layout.widget_group_invite_friend
             StoreStream.getChannels().observePrivateChannels().takeSingleUntilTimeout().flatMap { channels ->
                 channels.values.firstOrNull { it.isDM() && it.getDMRecipient()?.id == userId }
                     ?.let { Observable.just(it) }
-                    ?: RestAPI.api.userCreateChannel(RestAPIParams.CreateChannel(userId))
+                    ?: RestAPI.api
+                        .userCreateChannel(
+                            RestAPIParams.CreateChannel(userId),
+                            contextPropertiesOf("location" to LOCATION_NEW_GROUP_DM),
+                        )
                         .restSubscribeOn()
                         .doOnNext { StoreStream.getGatewayConnection().channelCreateOrUpdate.onNext(it) }
             }

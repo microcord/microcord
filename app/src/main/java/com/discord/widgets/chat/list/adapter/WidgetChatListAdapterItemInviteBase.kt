@@ -15,6 +15,8 @@ abstract class WidgetChatListAdapterItemInviteBase(
     protected fun joinServerOrDM(
         javaClass: Class<*>,
         invite: ModelInvite,
+        location: String = INVITE_LOCATION,
+        inviteInstanceId: String? = null,
         onInvitePostSuccess: (ModelInvite) -> Unit = {},
         onInviteFlowFinished: (ModelInvite) -> Unit = {},
     ) {
@@ -22,13 +24,18 @@ abstract class WidgetChatListAdapterItemInviteBase(
             invite = invite,
             javaClass = javaClass,
             fragment = itemView.findFragment<AppFragment>(),
-            location = INVITE_LOCATION,
+            location = location,
+            inviteInstanceId = inviteInstanceId,
             onInvitePostSuccess = onInvitePostSuccess,
             onInviteFlowFinished = onInviteFlowFinished,
         )
     }
 
-    private companion object {
+    companion object {
         const val INVITE_LOCATION = "Invite Button Embed"
+        const val EVENT_INVITE_LOCATION = "Guild Scheduled Event Invite Button Embed"
+
+        /** Reference `getInviteInstanceId`: identifies the embed a join came from. */
+        fun inviteInstanceId(messageId: Long, inviteCode: String) = "$messageId:$inviteCode"
     }
 }

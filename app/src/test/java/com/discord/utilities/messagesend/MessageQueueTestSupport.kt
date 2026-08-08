@@ -84,6 +84,7 @@ class RecordingRestApi {
         val body: RestAPIParams.Message?,
         val multipart: Boolean,
         val captcha: CaptchaRequestPolicy? = null,
+        val context: String? = null,
     )
     data class CommandCall(val body: RestAPIParams.ApplicationCommand, val multipart: Boolean)
     data class EditCall(val channelId: Long, val messageId: Long, val content: String?)
@@ -116,7 +117,7 @@ class RecordingRestApi {
             }
 
             "sendMessage" -> {
-                val multipart = arguments.size > 3
+                val multipart = arguments[1] is PayloadJSON<*>
                 val body = if (multipart) {
                     payloadMessage(arguments[1] as PayloadJSON<*>)
                 } else {
@@ -126,7 +127,8 @@ class RecordingRestApi {
                     arguments[0] as Long,
                     body,
                     multipart,
-                    arguments.last() as CaptchaRequestPolicy?,
+                    arguments[if (multipart) 3 else 2] as CaptchaRequestPolicy?,
+                    arguments.last() as String,
                 )
                 deferred()
             }

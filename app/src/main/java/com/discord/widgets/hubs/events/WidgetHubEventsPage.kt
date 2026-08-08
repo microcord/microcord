@@ -1,7 +1,6 @@
 package com.discord.widgets.hubs.events
 
 import android.os.Bundle
-import android.util.Base64
 import android.view.View
 import android.widget.TextView
 import androidx.fragment.app.FragmentManager
@@ -12,12 +11,14 @@ import com.discord.app.AppBottomSheet
 import com.discord.app.appViewModels
 import com.discord.i18n.i18nPlural
 import com.discord.restapi.RestAPIParams
+import com.discord.stores.JoinGuildSources
 import com.discord.stores.StoreStream
 import com.discord.stores.utilities.Success
 import com.discord.stores.utilities.handleResponse
 import com.discord.utilities.guildscheduledevent.GuildScheduledEventUtilities
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rest.contextPropertiesOf
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.rx.restSubscribeOn
@@ -25,10 +26,8 @@ import com.discord.utilities.rx.ui
 import com.discord.widgets.guildscheduledevent.GuildScheduledEventTiming
 import com.discord.widgets.guildscheduledevent.ScheduledEventUi
 import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventDetailsBottomSheet
-import com.discord.widgets.directories.DIRECTORY_JOIN_GUILD_SOURCE
 import com.discord.widgets.hubs.hubDialogArgs
 import com.discord.widgets.hubs.toArgsBundle
-import org.json.JSONObject
 
 /**
  * The scheduled events published into a hub directory channel. Binds
@@ -113,10 +112,8 @@ class WidgetHubEventsPage : AppBottomSheet() {
             }
     }
 
-    private fun directoryJoinContext(): String = Base64.encodeToString(
-        JSONObject().put("source", DIRECTORY_JOIN_GUILD_SOURCE).toString().toByteArray(Charsets.UTF_8),
-        Base64.NO_WRAP,
-    )
+    private fun directoryJoinContext(): String =
+        contextPropertiesOf("source" to JoinGuildSources.DIRECTORY_EVENTS)
 
     override fun getContentViewResId(): Int = R.layout.widget_hub_events_page
 
