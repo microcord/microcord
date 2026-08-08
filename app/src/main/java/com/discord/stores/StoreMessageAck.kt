@@ -477,13 +477,25 @@ class StoreMessageAck @JvmOverloads constructor(
                 val ackable = threadState.isNonThreadChannel() || threadState.isThreadAndAbleToAck()
                 val required = isLockedAck || isUpdateRequired(ack, mostRecentMessageId, clearLock)
                 if (ackable && required) {
-                    PendingAck(channelId, Ack(mostRecentMessageId, true, isLockedAck))
+                    PendingAck(channelId, Ack(ackMessageIdFor(channelId, mostRecentMessageId), true, isLockedAck))
                 } else {
                     PendingAck.EMPTY
                 }
             }
         }
     }
+
+    /**
+     * A forum is acked by "now" rather than by its newest post, matching the reference's
+     * `ackChannel`: its unread state is about posts that may not exist yet, and the marker doubles
+     * as the point the post list counts new activity from.
+     */
+    private fun ackMessageIdFor(channelId: Long, mostRecentMessageId: Long): Long =
+        if (storeChannels.getChannel(channelId)?.isThreadOnlyChannel() == true) {
+            SnowflakeUtils.fromTimestamp(clock.currentTimeMillis())
+        } else {
+            mostRecentMessageId
+        }
 
     /**
      * Whether the marker actually needs to move.
@@ -527,8 +539,30 @@ class StoreMessageAck @JvmOverloads constructor(
                         ),
                         immediate = immediate || hadMentions,
                     )
+                    tryAckParentForumChannel(channelId)
                 }
             }, { })
+    }
+
+    /**
+     * Reading the last unread post marks the forum itself read.
+     *
+     * A forum's own marker only moves when a post is created, so without this it would stay lit
+     * behind posts the viewer has already been through.
+     */
+    @StoreThread
+    private fun tryAckParentForumChannel(channelId: Long) {
+        val channel = storeChannels.findChannelByIdInternal(channelId) ?: return
+        if (!channel.isThread()) return
+        val parent = storeChannels.findChannelByIdInternal(channel.parentId) ?: return
+        if (!parent.isThreadOnlyChannel()) return
+        val parentAck = acks[parent.id]?.messageId
+        val stillUnread = storeThreadsActive.getAllForumThreadsByIdInternal().values.any { post ->
+            post.parentId == parent.id && post.id !in acks && MessageUtils.isNewer(parentAck, post.id)
+        }
+        if (stillUnread) return
+        val ack = Ack(SnowflakeUtils.fromTimestamp(clock.currentTimeMillis()), true, false)
+        postPendingAck(Observable.just(PendingAck(parent.id, ack)))
     }
 
     @StoreThread

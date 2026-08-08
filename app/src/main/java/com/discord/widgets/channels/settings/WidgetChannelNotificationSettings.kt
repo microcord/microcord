@@ -331,7 +331,8 @@ class WidgetChannelNotificationSettings : AppFragment(R.layout.widget_channel_no
             isChecked = when (model.forumPostNotificationSetting) {
                 ModelNotificationSettings.FORUM_THREAD_CREATED_ON -> true
                 ModelNotificationSettings.FORUM_THREAD_CREATED_OFF -> false
-                else -> model.parentNotificationSetting == ModelNotificationSettings.FREQUENCY_ALL
+                // Unset follows the forum's own resolved level, not its category's.
+                else -> model.notificationSetting == ModelNotificationSettings.FREQUENCY_ALL
             }
             setOnCheckedListener { checked ->
                 val setting = if (checked) {

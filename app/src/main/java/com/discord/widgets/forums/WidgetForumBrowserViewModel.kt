@@ -33,6 +33,7 @@ class WidgetForumBrowserViewModel(
     private var canFetchMoreOlderPosts = false
     private var isFetchingMoreOlderPosts = false
     private var lastSelectedForumChannelId = 0L
+    private var lastAckedForum = 0L to 0L
 
     init {
         storeStateObservable.distinctUntilChanged().computationLatest().ui(this)
@@ -64,6 +65,7 @@ class WidgetForumBrowserViewModel(
 
     private fun handleStoreState(state: StoreState) {
         val loaded = state as? StoreState.Loaded ?: return
+        maybeAckForum(loaded)
         val nsfw = NsfwPanelState(
             isNsfwUnconsented = loaded.channel.nsfw && !ForumUtils.isGuildNsfwGateAgreed(loaded.channel.guildId),
             isChannelNsfw = loaded.channel.nsfw,
@@ -78,6 +80,19 @@ class WidgetForumBrowserViewModel(
                 archived.threads.isEmpty() && !archived.isLoadingMore -> publishLoaded(loaded, nsfw, emptyList())
             else -> publishLoaded(loaded, nsfw, buildItems(loaded))
         }
+    }
+
+    /**
+     * Browsing a forum reads it.
+     *
+     * A forum has no message list, so the chat's automatic ack never runs for one; the reference
+     * acks from the post list instead, whenever it refreshes with something newer than the marker.
+     */
+    private fun maybeAckForum(state: StoreState.Loaded) {
+        val mostRecentPostId = state.mostRecentMessageIds[state.channel.id] ?: return
+        if (lastAckedForum == state.channel.id to mostRecentPostId) return
+        lastAckedForum = state.channel.id to mostRecentPostId
+        StoreStream.getMessageAck().ack(state.channel.id, isLockedAck = false)
     }
 
     private fun publishLoaded(state: StoreState.Loaded, nsfw: NsfwPanelState, items: List<ForumBrowserItem>) {

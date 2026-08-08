@@ -187,6 +187,10 @@ class StoreReadStates(private val clock: Clock) : Store() {
             // does, and mentions are counted separately. Chat in a call is constant and would
             // otherwise leave every server the viewer talks in permanently marked unread.
             if (channel.isGuildVocalChannel()) continue
+            // An unjoined forum post is unread in the browser but invisible everywhere else, so
+            // the reference rolls up only threads the viewer joined. Without this a forum the
+            // viewer never opens keeps its server permanently marked.
+            if (channel.isThread() && joinedThread == null) continue
             var parentMuted = isChannelMuted(parent, guildSettings, joinedThread)
             if (!parentMuted && channel.isThread() && parent != null) {
                 parentMuted = isChannelMuted(channels[parent.parentId], guildSettings, joinedThread)
