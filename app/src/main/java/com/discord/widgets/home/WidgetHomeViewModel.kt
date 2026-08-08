@@ -116,7 +116,6 @@ class WidgetHomeViewModel(
         object AnimatePeekOut : Event()
         data class ShowGuildWelcomeSheet(val guildId: Long) : Event()
         data class ShowGuildEventUpsell(val guildId: Long) : Event()
-        data class ShowGuildRoleSubscriptionUpsell(val guildId: Long) : Event()
     }
 
     private val eventSubject: PublishSubject<Event> = PublishSubject.create()
@@ -211,10 +210,6 @@ class WidgetHomeViewModel(
                 eventSubject.onNext(Event.ShowGuildEventUpsell(guildId))
             }
 
-            guild != null && guildRoleSubscriptionUpsellCanShow(guild) -> {
-                eventSubject.onNext(Event.ShowGuildRoleSubscriptionUpsell(storeState.guildId))
-                guildRoleSubscriptionUpsellShown()
-            }
         }
 
         previousLeftPanelState = leftPanelState
@@ -246,19 +241,6 @@ class WidgetHomeViewModel(
             guildId != 0L &&
             isNewUser &&
             !hasUserSeenChannelOnboarding
-
-        /**
-         * Seams for managers this project has not reconstructed yet. Each defaults to "already
-         * shown / cannot show", so the corresponding sheet stays silent rather than being offered
-         * with nothing behind it.
-         *
-         * * `GuildRoleSubscriptionOnboardingUpsellManager.canShow` / `setHasBeenShown`
-         */
-        @JvmField
-        var guildRoleSubscriptionUpsellCanShow: (Guild) -> Boolean = { false }
-
-        @JvmField
-        var guildRoleSubscriptionUpsellShown: () -> Unit = {}
 
         /**
          * The lurk and NSFW-gate stores exist but are not published by `StoreStream`, so they are

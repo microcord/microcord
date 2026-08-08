@@ -24,6 +24,8 @@ import com.discord.models.message.Message
 import com.discord.models.user.CoreUser
 import com.discord.models.user.User
 import com.discord.stores.StoreStream
+import com.discord.utilities.fcm.NotificationClient
+import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.drawable.getDrawable
 import com.discord.utilities.drawable.getThemedDrawableRes
@@ -52,6 +54,8 @@ import rx.functions.Func9
  * Nothing is shown if the user is already looking at the channel the message arrived in.
  */
 object NoticePopupChannel {
+
+    private const val IN_APP_NOTICE_SUFFIX = "InAppNotif"
 
     /**
      * Builds the banner model and hands it to [NoticePopup].
@@ -119,6 +123,28 @@ object NoticePopupChannel {
                     onClick = onClick,
                 )
             }
+    }
+
+    /**
+     * Routes a foreground push into the in-app banner.
+     *
+     * The message body comes from the store rather than the payload: a foregrounded client has
+     * already taken `MESSAGE_CREATE` over the gateway, and the notification carries only the
+     * flattened fields. Returning false when it is absent lets the caller drop the notification,
+     * which is what it did while this seam was unset.
+     */
+    fun install() {
+        NotificationClient.inAppNotificationHandler = handler@{ context, data ->
+            val channelId = data.channelId
+            val messageId = data.messageId ?: return@handler false
+            val message = StoreStream.getMessages().getMessages(channelId)
+                .firstOrNull { it.id == messageId }
+                ?: return@handler false
+            enqueue(context, "$channelId$IN_APP_NOTICE_SUFFIX", message) {
+                ChannelSelector.getInstance().selectChannel(data.guildId ?: 0L, channelId)
+            }
+            true
+        }
     }
 
     /** @return `null` when there is no channel, or the user is already reading it. */

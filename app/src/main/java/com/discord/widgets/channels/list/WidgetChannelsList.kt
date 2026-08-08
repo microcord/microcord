@@ -20,6 +20,7 @@ import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isGuildVocalChannel
+import com.discord.widgets.voice.fullscreen.WidgetGuildCallOnboardingSheet
 import com.discord.api.guild.GuildFeature
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
@@ -247,6 +248,15 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
                 channel.id,
             ) { selectChannel(channel) }
         ) return
+        // First guild voice channel a viewer opens gets the "how calls work" sheet instead of a
+        // silent join, which is the only thing that ever showed it.
+        if (channel.isGuildVocalChannel() &&
+            !WidgetGuildCallOnboardingSheet.hasUserSeenVoiceChannelOnboarding(requireContext())
+        ) {
+            WidgetGuildCallOnboardingSheet.markSeenUserVoiceChannelOnboarding(requireContext())
+            WidgetGuildCallOnboardingSheet.show(parentFragmentManager, channel.id)
+            return
+        }
         ChannelSelector.getInstance().selectChannel(
             channel,
             analyticsLocation = SelectedChannelAnalyticsLocation.CHANNEL_LIST,

@@ -51,7 +51,7 @@ class WidgetGuildListAdapter(
         is GuildListItem.FolderItem -> GuildListItem.TYPE_FOLDER
         GuildListItem.HelpItem -> GuildListItem.TYPE_HELP
         GuildListItem.SpaceItem -> GuildListItem.TYPE_BOTTOM_NAV_SPACE
-        is GuildListItem.HubItem -> GuildListItem.TYPE_HUB
+        GuildListItem.HubItem -> GuildListItem.TYPE_HUB
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): GuildListViewHolder {
@@ -115,12 +115,10 @@ class WidgetGuildListAdapter(
                 (holder as GuildListViewHolder.PrivateChannelViewHolder).configure(item)
             is GuildListItem.FolderItem -> (holder as GuildListViewHolder.FolderViewHolder).configure(item)
             // The chrome rows carry no state, so the click listener is all the binding they need.
-            is GuildListItem.UnavailableItem, GuildListItem.CreateItem, GuildListItem.HelpItem ->
+            is GuildListItem.UnavailableItem, GuildListItem.CreateItem, GuildListItem.HelpItem,
+            GuildListItem.HubItem,
+            ->
                 holder.itemView.setOnClickListener { interactionListener.onItemClicked(holder.itemView, item) }
-            is GuildListItem.HubItem -> {
-                holder.itemView.setOnClickListener { interactionListener.onItemClicked(holder.itemView, item) }
-                (holder as GuildListViewHolder.DiscordHubViewHolder).configure(item)
-            }
             GuildListItem.SpaceItem -> (holder as GuildListViewHolder.SpaceViewHolder).configure(bottomNavHeight)
             GuildListItem.DividerItem -> Unit
         }

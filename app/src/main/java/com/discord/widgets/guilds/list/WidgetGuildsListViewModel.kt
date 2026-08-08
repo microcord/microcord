@@ -117,10 +117,7 @@ class WidgetGuildsListViewModel(
                 StoreStream.selectGuild(0L)
             }
             GuildListItem.CreateItem -> eventSubject.onNext(Event.ShowCreateGuild)
-            is GuildListItem.HubItem -> {
-                GuildsListStoreHooks.markDiscordHubClicked()
-                eventSubject.onNext(Event.ShowHubVerification)
-            }
+            GuildListItem.HubItem -> eventSubject.onNext(Event.ShowHubVerification)
             GuildListItem.HelpItem -> eventSubject.onNext(Event.ShowHelp)
             is GuildListItem.FolderItem -> {
                 val folders = StoreStream.getExpandedGuildFolders()
@@ -403,7 +400,6 @@ class WidgetGuildsListViewModel(
         val allChannelPermissions: Map<Long, Long>,
         val isLeftPanelOpened: Boolean,
         val isOnHomeTab: Boolean,
-        val showHubSparkle: Boolean,
     )
 
     companion object {
@@ -459,7 +455,6 @@ class WidgetGuildsListViewModel(
                 allChannelPermissions = permissions,
                 isLeftPanelOpened = isLeftPanelOpened,
                 isOnHomeTab = isOnHomeTab,
-                showHubSparkle = second.showHubSparkle,
             )
         }.leadingEdgeThrottle(100L, TimeUnit.MILLISECONDS)
 
@@ -498,13 +493,12 @@ class WidgetGuildsListViewModel(
             GuildIdsWithVisibleStageInstanceModel.observe(),
             GuildIdsWithActiveEventsModel.observe(),
             StoreStream.getChannels().observeAllChannels(),
-            GuildsListStoreHooks.discordHubClicked(),
             StoreStream.getReadStates().getUnreadChannelIds(),
             Observable.combineLatest(
                 StoreStream.getUserGuildSettings().observeAccountNotificationSettings(),
                 StoreStream.getMentions().observeLowImportanceMentionChannels(),
             ) { accountSettings, lowImportanceChannels -> accountSettings to lowImportanceChannels },
-        ) { guildJoinRequests, pendingGuilds, guildIds, stageEvents, scheduledEvents, channels, hubClicked,
+        ) { guildJoinRequests, pendingGuilds, guildIds, stageEvents, scheduledEvents, channels,
             unreadChannelIds, notifications ->
             SecondChunk(
                 guildJoinRequests = guildJoinRequests,
@@ -513,7 +507,6 @@ class WidgetGuildsListViewModel(
                 guildIdsWithActiveStageEvents = stageEvents,
                 guildIdsWithActiveScheduledEvents = scheduledEvents,
                 channels = channels,
-                showHubSparkle = !hubClicked,
                 unreadChannelIds = unreadChannelIds,
                 accountNotificationSettings = notifications.first,
                 lowImportanceMentionChannels = notifications.second,
@@ -539,8 +532,7 @@ class WidgetGuildsListViewModel(
             val guildIdsWithActiveStageEvents: Set<Long>,
             val guildIdsWithActiveScheduledEvents: Set<Long>,
             val channels: Map<Long, Channel>,
-            val showHubSparkle: Boolean,
-            val unreadChannelIds: Set<Long>,
+                val unreadChannelIds: Set<Long>,
             val accountNotificationSettings: AccountNotificationSettings,
             val lowImportanceMentionChannels: Set<Long>,
         )

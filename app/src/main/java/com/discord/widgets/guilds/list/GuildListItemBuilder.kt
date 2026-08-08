@@ -103,13 +103,7 @@ internal object GuildListItemBuilder {
             items.add(GuildListItem.UnavailableItem(storeState.unavailableGuilds.size))
         }
         items.add(GuildListItem.CreateItem)
-        if (GuildsListStoreHooks.isHubDiscoveryEnabled()) {
-            items.add(
-                GuildListItem.HubItem(
-                    showSparkle = storeState.showHubSparkle && GuildsListStoreHooks.isHubDiscoverySparkleEnabled(),
-                ),
-            )
-        }
+        items.add(GuildListItem.HubItem)
         if (storeState.isNewUser) {
             items.add(GuildListItem.DividerItem)
             items.add(GuildListItem.HelpItem)

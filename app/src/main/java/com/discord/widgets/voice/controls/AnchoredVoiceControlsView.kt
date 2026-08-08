@@ -15,9 +15,7 @@ import com.discord.app.AppComponent
 import com.discord.rtcconnection.audio.DiscordAudioManager
 import com.discord.rtcconnection.mediaengine.MediaEngineConnection
 import com.discord.stores.StoreAudioManagerV2
-import com.discord.tooltips.FloatingViewGravity
 import com.discord.tooltips.FloatingViewManager
-import com.discord.tooltips.SparkleView
 import com.discord.tooltips.TooltipManager
 import com.discord.widgets.voice.model.CameraState
 import com.discord.widgets.voice.feedback.call.CallFeedbackSheetNavigator
@@ -35,7 +33,6 @@ class AnchoredVoiceControlsView @JvmOverloads constructor(
     private val screenShare: ImageView
     private val soundboard: ImageView
     private val speaker: ImageView
-    private var sparkle: SparkleView? = null
     private val tooltipManager: TooltipManager =
         TooltipManager.Provider.get(FloatingViewManager.Provider.get())
 
@@ -57,7 +54,6 @@ class AnchoredVoiceControlsView @JvmOverloads constructor(
         audioManagerState: StoreAudioManagerV2.State,
         isMuted: Boolean,
         isScreensharing: Boolean,
-        showScreenShareSparkle: Boolean,
         cameraState: CameraState,
         onMutePressed: () -> Unit,
         onScreenSharePressed: () -> Unit,
@@ -67,9 +63,9 @@ class AnchoredVoiceControlsView @JvmOverloads constructor(
         onDisconnectPressed: () -> Unit,
         appComponent: AppComponent,
         fragmentManager: FragmentManager,
-        onNavigateToScreenShareNfxSheet: () -> Unit,
         channelId: Long,
         guildId: Long,
+        canUseSoundboard: Boolean,
         forwardToFullscreenIfVideoActivated: Boolean,
         featureContext: WidgetVoiceBottomSheet.FeatureContext,
     ) {
@@ -96,24 +92,13 @@ class AnchoredVoiceControlsView @JvmOverloads constructor(
         mute.setContentDescription(if (isMuted) R.string.unmute else R.string.mute)
         mute.setOnClickListener { onMutePressed() }
 
-        soundboard.visibility = if (guildId != 0L) VISIBLE else GONE
+        soundboard.visibility = if (canUseSoundboard) VISIBLE else GONE
         soundboard.setOnClickListener { onSoundboardPressed() }
 
         screenShare.isActivated = isScreensharing
         screenShare.setImageResource(state.screenShareIcon)
         screenShare.setContentDescription(state.screenShareDescription)
         screenShare.setOnClickListener { onScreenSharePressed() }
-        configureScreenShareSparkle(
-            showScreenShareSparkle,
-            appComponent,
-            fragmentManager,
-            channelId,
-            guildId,
-            forwardToFullscreenIfVideoActivated,
-            featureContext,
-            onNavigateToScreenShareNfxSheet,
-            onScreenSharePressed,
-        )
 
         disconnect.setOnClickListener { onDisconnectPressed() }
     }
@@ -136,74 +121,6 @@ class AnchoredVoiceControlsView @JvmOverloads constructor(
             }
             false
         }
-    }
-
-    override fun onDetachedFromWindow() {
-        removeSparkle()
-        super.onDetachedFromWindow()
-    }
-
-    /**
-     * Shows or hides the one-time sparkle on the screen-share button.
-     *
-     * Placement, the per-cold-start quota and the persisted acknowledgement all belong to
-     * [TooltipManager], so the sparkle is deduplicated against every other coach mark in the app
-     * and is torn down centrally when the hosting component pauses.
-     */
-    @Suppress("LongParameterList")
-    private fun configureScreenShareSparkle(
-        show: Boolean,
-        appComponent: AppComponent,
-        fragmentManager: FragmentManager,
-        channelId: Long,
-        guildId: Long,
-        forwardToFullscreenIfVideoActivated: Boolean,
-        featureContext: WidgetVoiceBottomSheet.FeatureContext,
-        onNavigateToScreenShareNfxSheet: () -> Unit,
-        onScreenSharePressed: () -> Unit,
-    ) {
-        if (!show) {
-            tooltipManager.hideTooltip(ScreenShareButtonSparkleTooltip)
-            sparkle = null
-            return
-        }
-        // Already on screen: re-configuring the controls must not restart the animation.
-        if (sparkle != null) return
-
-        val sparkleView = SparkleView(screenShare.context, null).also { view ->
-            view.setOnClickListener {
-                tooltipManager.ackTooltip(ScreenShareButtonSparkleTooltip)
-                sparkle = null
-                if (WidgetScreenShareNfxSheet.canShow()) {
-                    WidgetScreenShareNfxSheet.show(
-                        fragmentManager,
-                        channelId,
-                        guildId,
-                        WidgetScreenShareNfxSheet.VoiceBottomSheetParams(
-                            forwardToFullscreenIfVideoActivated,
-                            featureContext,
-                        ),
-                    )
-                    onNavigateToScreenShareNfxSheet()
-                } else {
-                    onScreenSharePressed()
-                }
-            }
-        }
-        sparkle = sparkleView
-        tooltipManager.showTooltip(
-            anchorView = screenShare,
-            tooltipView = sparkleView,
-            tooltip = ScreenShareButtonSparkleTooltip,
-            tooltipGravity = FloatingViewGravity.CENTER,
-            componentPausedObservable = appComponent.unsubscribeSignal.map { },
-        )
-    }
-
-    private fun removeSparkle() {
-        tooltipManager.hideTooltip(ScreenShareButtonSparkleTooltip)
-        sparkle?.stop()
-        sparkle = null
     }
 
     private fun themedTint(active: Boolean): ColorStateList {

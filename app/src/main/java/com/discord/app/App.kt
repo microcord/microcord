@@ -20,6 +20,7 @@ import com.discord.utilities.images.MGImagesConfig
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
 import com.discord.utilities.notices.NoticeBuilders
+import com.discord.widgets.notice.NoticePopupChannel
 import com.discord.utilities.persister.PersisterConfig
 import com.discord.utilities.time.ClockFactory
 import com.discord.rtcconnection.mediaengine.KrispAssetPack
@@ -57,6 +58,8 @@ class App : Application() {
         // Without this `StoreNotices.dialogPresenter` stays null, every dialog-backed notice
         // reports "did not show", and it stays queued forever with nothing user-visible.
         NoticeBuilders.install()
+        // Without this a foreground push is dropped instead of becoming the in-app banner.
+        NoticePopupChannel.install()
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
         BootLog.record(BootLogEvent.PLATFORM_READY)
         System.loadLibrary("dsti")

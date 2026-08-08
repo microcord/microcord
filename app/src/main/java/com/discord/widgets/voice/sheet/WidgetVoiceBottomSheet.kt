@@ -23,6 +23,7 @@ import com.discord.dialogs.audio.AudioOutputSelectionDialog
 import com.discord.rtcconnection.mediaengine.MediaEngineConnection
 import com.discord.stores.StoreAudioManagerV2
 import com.discord.stores.StoreStream
+import com.discord.utilities.permissions.PermissionUtils
 import com.discord.stores.StoreVoiceParticipants
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
@@ -96,7 +97,6 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
             val audioManagerState: StoreAudioManagerV2.State,
             val isMuted: Boolean,
             val cameraState: CameraState,
-            val showScreenShareSparkle: Boolean,
             val isScreensharing: Boolean,
         ) : BottomContent()
     }
@@ -287,7 +287,6 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
                     audioManagerState = bottomContent.audioManagerState,
                     isMuted = bottomContent.isMuted,
                     isScreensharing = bottomContent.isScreensharing,
-                    showScreenShareSparkle = bottomContent.showScreenShareSparkle,
                     cameraState = bottomContent.cameraState,
                     onMutePressed = viewModel::onMutePressed,
                     onScreenSharePressed = viewModel::onScreenSharePressed,
@@ -299,9 +298,12 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
                     onDisconnectPressed = viewModel::onDisconnectPressed,
                     appComponent = this,
                     fragmentManager = parentFragmentManager,
-                    onNavigateToScreenShareNfxSheet = ::dismiss,
                     channelId = channelId,
                     guildId = channel.guildId,
+                    canUseSoundboard = PermissionUtils.canUseSoundboard(
+                        channel,
+                        StoreStream.getPermissions().getPermissionsByChannel()[channel.id],
+                    ),
                     forwardToFullscreenIfVideoActivated = forwardToFullscreenIfVideoActivated,
                     featureContext = featureContext,
                 )

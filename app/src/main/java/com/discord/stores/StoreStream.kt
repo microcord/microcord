@@ -236,6 +236,7 @@ class StoreStream private constructor(
         observationDeck,
         guildStore = guilds,
         getLurkingGuildIds = { if (::lurking.isInitialized) lurking.getLurkingGuildIdsSync() else emptySet() },
+           onSampleGuildIdSelected = { nux.handleSamplePremiumGuildSelected(it) },
     )
     private val channelsSelected = StoreChannelsSelected(
         channels, permissions, guildSelected, dispatcher, observationDeck,
@@ -2948,6 +2949,7 @@ class StoreStream private constructor(
         emojiCustom.handleConnectionOpen(payload)
         guildStickers.handleConnectionOpen(payload)
         reviewRequest.handleConnectionOpen(payload)
+        contactSync.handleConnectionOpen()
         changeLog.handleConnectionOpen()
         voiceStates.handleConnectionOpen(payload)
         voiceChannelSelected.handleConnectionOpen(payload)

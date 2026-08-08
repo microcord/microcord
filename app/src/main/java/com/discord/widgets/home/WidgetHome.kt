@@ -18,10 +18,14 @@ import com.discord.stores.StoreStream
 import com.discord.dialogs.WidgetUrgentMessageDialog
 import com.discord.widgets.channels.list.WidgetChannelsList
 import com.discord.widgets.channels.list.WidgetChannelsListItemChannelActions
+import com.discord.widgets.hubs.HubEmailArgs
+import com.discord.widgets.hubs.WidgetHubEmailFlow
+import com.discord.widgets.hubs.toArgsIntent
 import com.discord.widgets.channels.memberlist.WidgetChannelMembersList
 import com.discord.widgets.channels.WidgetChannelOnboarding
 import com.discord.widgets.channels.WidgetChannelTopic
 import com.discord.widgets.channels.WidgetChannelSidebarActions
+import com.discord.app.AppScreenRouter
 import com.discord.widgets.guilds.list.GuildsListNavigation
 import com.discord.widgets.guilds.list.WidgetGuildsList
 import com.discord.widgets.guilds.join.WidgetGuildWelcomeSheet
@@ -55,6 +59,7 @@ import com.discord.widgets.user.calls.PrivateCallLauncher
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.widgets.forums.WidgetForumBrowser
 import com.discord.widgets.message_requests.WidgetMessageRequests
+import com.discord.widgets.nux.WidgetNavigationHelp
 import com.discord.widgets.nux.WidgetNewUserOnboarding
 import com.discord.widgets.guilds.onboarding.WidgetGuildOnboarding
 import com.discord.models.member.GuildMemberFlags
@@ -106,8 +111,13 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                 StoreStream.getNavigation().setRightPanelState(it)
             },
         )
-        // Closed here rather than in the guild list so that panel keeps out of `channels/list`.
+        // Closed here rather than in the guild list so that panel keeps out of `channels/list`
+        // and `hubs`.
         GuildsListNavigation.showChannelActions = WidgetChannelsListItemChannelActions::show
+        GuildsListNavigation.showNavigationHelp = WidgetNavigationHelp::show
+        GuildsListNavigation.showHubVerification = { context ->
+            AppScreenRouter.launch(context, WidgetHubEmailFlow::class.java, HubEmailArgs().toArgsIntent())
+        }
         if (childFragmentManager.findFragmentByTag(GUILDS_TAG) == null) {
             childFragmentManager.commitNow { replace(R.id.widget_guilds, WidgetGuildsList(), GUILDS_TAG) }
         }
@@ -478,7 +488,6 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
             WidgetGuildWelcomeSheet.show(parentFragmentManager, event.guildId)
         is WidgetHomeViewModel.Event.ShowGuildEventUpsell ->
             WidgetGuildScheduledEventUpsellBottomSheet.launch(parentFragmentManager, event.guildId)
-        is WidgetHomeViewModel.Event.ShowGuildRoleSubscriptionUpsell -> Unit
     }
 
     private fun updateUnreadCount() {

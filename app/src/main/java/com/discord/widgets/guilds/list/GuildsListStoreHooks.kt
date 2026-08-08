@@ -70,25 +70,9 @@ object GuildsListStoreHooks {
     @Volatile
     var applicationStreams: () -> Observable<List<GuildStream>> = { Observable.just(emptyList()) }
 
-    /** `StoreDirectories.observeDiscordHubClicked()`; the sparkle shows until the row is tapped. */
-    @Volatile
-    var discordHubClicked: () -> Observable<Boolean> = { Observable.just(true) }
-
-    /** `StoreDirectories.markDiscordHubClicked()`. */
-    @Volatile
-    var markDiscordHubClicked: () -> Unit = {}
-
-    /** `GrowthTeamFeatures.isHubDiscoveryEnabled()` — gates the student-hub sidebar row. */
-    @Volatile
-    var isHubDiscoveryEnabled: () -> Boolean = { false }
-
-    /** `GrowthTeamFeatures.isHubDiscoverySparkleEnabled()`. */
-    @Volatile
-    var isHubDiscoverySparkleEnabled: () -> Boolean = { false }
-
     /** `GrowthTeamFeatures.isHubEnabled()` — when false, tapping a hub guild toasts instead. */
     @Volatile
-    var isHubEnabled: () -> Boolean = { false }
+    var isHubEnabled: () -> Boolean = { true }
 
     /**
      * `MemberVerificationUtils.maybeShowVerificationGate(...)`, returning whether a gate was shown.

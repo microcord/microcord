@@ -89,7 +89,7 @@ sealed class GuildListItem(val itemId: Long) {
     object SpaceItem : GuildListItem(ID_BOTTOM_NAV_SPACE)
 
     /** Student-hub discovery entry point. */
-    data class HubItem(val showSparkle: Boolean) : GuildListItem(ID_HUB)
+    object HubItem : GuildListItem(ID_HUB)
 
     companion object {
         const val TYPE_FRIENDS = 0

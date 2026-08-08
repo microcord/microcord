@@ -29,7 +29,6 @@ class ServerGuildRoleSubscriptionContractsTest {
             "ServerSettingsGuildRoleSubscriptionTierListViewModel.kt",
             "WidgetServerSettingsGuildRoleSubscriptionTierList.kt",
             "edit_tier/WidgetServerSettingsGuildRoleSubscriptionEditTier.kt",
-            "upsell/WidgetGuildRoleSubscriptionOnboardingUpsellBottomSheet.kt",
             "payments/WidgetServerSettingsGuildRoleSubscriptionEarnings.kt",
             "model/CurrentMonthEarningMetrics.kt",
             "model/TotalEarningMetrics.kt",

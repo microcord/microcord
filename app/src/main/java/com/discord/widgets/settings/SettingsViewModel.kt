@@ -64,19 +64,11 @@ class SettingsViewModel(
         ) : ViewState()
     }
 
-    /**
-     * Set when the user taps "dismiss" on the push-notification upsell banner. The reference
-     * persists this through `StoreNotificationUpsells.dismissPushNotificationsUpsell()`.
-     */
-    private val upsellDismissed = BehaviorSubject.create(false)
-
     /** Toggled by a banner press on the profile header; reference: `UserProfileHeaderViewModel`. */
     private val allowAnimationInReducedMotion = BehaviorSubject.create(false)
 
     init {
-        Observable.combineLatest(storeStateObservable, upsellDismissed) { storeState, dismissed ->
-            storeState.copy(pushNotificationUpsellDismissed = storeState.pushNotificationUpsellDismissed || dismissed)
-        }
+        storeStateObservable
             .distinctUntilChanged()
             .ui(this)
             .subscribe { handleStoreState(it) }
@@ -97,7 +89,7 @@ class SettingsViewModel(
             }
         }.distinctUntilChanged()
 
-    fun dismissPushNotificationUpsell() = upsellDismissed.onNext(true)
+    fun dismissPushNotificationUpsell() = StoreStream.getNotificationUpsells().dismissPushNotificationsUpsell()
 
     /** Reference: `UserProfileHeaderViewModel.toggleAllowAnimationInReducedMotion()`. */
     fun toggleAllowAnimationInReducedMotion() =
@@ -130,13 +122,14 @@ class SettingsViewModel(
             StoreStream.getPresences().observeAllPresences(),
             promoCountSource,
             hasActiveGuildSubscriptionSource,
-        ) { meUser, presences, promoCount, hasActiveGuildSubscription ->
+            StoreStream.getNotificationUpsells().observePushNotificationUpsellDismissed(),
+        ) { meUser, presences, promoCount, hasActiveGuildSubscription, upsellDismissed ->
             StoreState(
                 meUser = meUser,
                 isStaffOrAlpha = meUser.isStaff,
                 presence = presences[meUser.id],
                 promoCount = promoCount,
-                pushNotificationUpsellDismissed = false,
+                pushNotificationUpsellDismissed = upsellDismissed,
                 hasActiveGuildSubscription = hasActiveGuildSubscription,
             )
         }

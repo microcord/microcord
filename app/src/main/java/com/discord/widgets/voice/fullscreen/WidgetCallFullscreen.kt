@@ -42,7 +42,6 @@ import com.discord.widgets.stage.sheet.WidgetStageRaisedHandsBottomSheet
 import com.discord.widgets.status.WidgetGlobalStatusIndicatorState
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.widgets.voice.controls.VoiceControlsSheetView
-import com.discord.widgets.voice.controls.WidgetScreenShareNfxSheet
 import com.discord.widgets.voice.feedback.call.CallFeedbackSheetNavigator
 import com.discord.widgets.voice.feedback.stream.StreamFeedbackSheetNavigator
 import com.discord.widgets.voice.fullscreen.grid.VideoCallGridAdapter
@@ -336,11 +335,7 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
             onInviteClick = {
                 com.discord.widgets.voice.sheet.launchChannelInvite(this, state.callModel.channel, "Voice Call")
             },
-            onScreenshareClick = {
-                if (WidgetScreenShareNfxSheet.canShow()) {
-                    WidgetScreenShareNfxSheet.show(parentFragmentManager, channelId, state.callModel.channel.guildId)
-                } else viewModel.onScreenShareClick()
-            },
+            onScreenshareClick = viewModel::onScreenShareClick,
             onSoundboardClick = {
                 com.discord.widgets.voice.sheet.WidgetSoundboardBottomSheet.show(
                     parentFragmentManager,

@@ -201,7 +201,6 @@ class WidgetVoiceBottomSheetViewModel(
                 cameraState = callModel.cameraState,
                 // Reference oddity, reproduced: the sparkle flag is fed `hasVideoPermission()`
                 // rather than a "never seen the screen-share button" signal.
-                showScreenShareSparkle = hasVideoPermission(),
                 isScreensharing = callModel.isStreaming,
             )
         } else {
