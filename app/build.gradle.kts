@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.androidx.baselineprofile)
 }
 
 android {
@@ -80,6 +81,7 @@ dependencies {
     implementation(libs.androidx.swiperefreshlayout)
     implementation(libs.androidx.viewpager2)
     implementation(libs.androidx.work.runtime)
+    implementation(libs.androidx.profileinstaller)
     implementation(libs.exoplayer.core)
     implementation(libs.exoplayer.ui)
     implementation(libs.camerakit)
@@ -127,5 +129,6 @@ dependencies {
     androidTestImplementation(libs.androidx.work.testing)
     androidTestImplementation(libs.okhttp.mockwebserver)
     androidTestUtil(libs.androidx.test.orchestrator)
+    baselineProfile(project(":baselineprofile"))
     //debugImplementation(libs.leakcanary)
 }

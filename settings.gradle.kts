@@ -34,3 +34,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Discord"
 include(":app")
+include(":baselineprofile")

@@ -1164,6 +1164,7 @@ or observable behavior. Small implementation details do not belong here.
 | 2026-08-08 | Retain Gson streaming for Gateway metadata and reject Fastjson2 `2.0.64.android5` | A65 A/B tracing found Fastjson2 14% slower on ordinary dispatches, with higher Gateway CPU, heap, and GC count despite a 2.8% faster READY sample | Fastjson2 and its parser selector were removed; the existing Gson adapters remain the single Gateway JSON stack |
 | 2026-08-08 | Stream `ModelPayload` directly from Gson's `JsonReader` | The former adapter built the complete READY tree and reparsed each field; the reference also streams READY | Only irregular experiment arrays retain local trees; the large guild/member/presence surfaces parse once |
 | 2026-08-08 | Open the authenticated main UI before Gateway READY | The user explicitly requires cached UI to open immediately while Gateway connects in the background | `MainRoute.LoggedIn` depends on initialized persisted auth, not channel hydration; required-action and age gates still take priority when known |
+| 2026-08-08 | Generate release Baseline Profiles with AndroidX `1.5.0-beta01` | Stable `1.4.1` rejects AGP `9.2.1`; the current beta configures and generates successfully with that AGP | `:baselineprofile` records non-destructive startup on a connected device; ProfileInstaller remains stable `1.4.1` |
 | 2026-07-22 | Rebuild in existing Android boilerplate | Project already exists at target path | Convert template rather than create another project |
 | 2026-07-22 | Use Kotlin + XML | Closest to original architecture and recovered layouts | Remove Compose |
 | 2026-07-22 | Use `dev.mantikafasi.manticord` application ID | Official signing identity cannot be reproduced | External integrations need new configuration |
@@ -3071,6 +3072,10 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   Wumpus empty state. The authenticated shell is published only after cached users, relationships, guilds, channels,
   permissions, selection, and messages finish restoring, so its first frame is the resolved channel with panels already centered.
   Focused stream/cache/connectivity/friends tests, debug assembly, and A65 install pass.
+- Added the AndroidX `:baselineprofile` generator module and app integration. A non-destructive A65 startup run generated
+  `app/src/release/generated/baselineProfiles/{baseline-prof,startup-prof}.txt` (32,573 rules each). `assembleRelease` passes,
+  and `app-release-unsigned.apk` contains `assets/dexopt/baseline.prof` plus `baseline.profm`. D8 drops stale synthetic entries
+  whose generated names differ between the non-minified collection build and release, while retaining and packaging valid rules.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each
