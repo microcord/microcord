@@ -32,8 +32,11 @@ fun Context.getI18nPluralString(
  *
  * Android's plural rules have no `zero` category in English, so a count of nothing has to be a
  * separate resource ("No members" rather than "0 members").
+ *
+ * Not named `getQuantityString`: members beat extensions, so that name binds to the platform's
+ * `(id, quantity, vararg Object)` overload instead.
  */
-fun Resources.getQuantityString(
+fun Resources.getI18nPluralString(
     @PluralsRes id: Int,
     @StringRes zeroCountStringId: Int,
     quantity: Int,

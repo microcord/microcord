@@ -15,9 +15,11 @@ import com.discord.app.AppToast
 import com.discord.app.appViewModels
 import com.discord.databinding.WidgetGuildProfileSheetBinding
 import com.discord.databinding.WidgetGuildProfileActionsBinding
+import com.discord.i18n.i18nFormat
+import com.discord.i18n.i18nPlural
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
-import com.discord.utilities.resources.getQuantityString
+import com.discord.utilities.resources.getI18nPluralString
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.views.CheckedSetting
@@ -107,10 +109,14 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
         }
         binding.guildProfileSheetOnlineCount.visibility =
             if (state.onlineCount == null) View.GONE else View.VISIBLE
-        binding.guildProfileSheetOnlineCountText.text = state.onlineCount?.toString()
+        binding.guildProfileSheetOnlineCountText.text = state.onlineCount?.let {
+            requireContext().i18nFormat(R.string.instant_invite_guild_members_online, "membersOnline" to it)
+        }
         binding.guildProfileSheetMemberCount.visibility =
             if (state.memberCount == null) View.GONE else View.VISIBLE
-        binding.guildProfileSheetMemberCountText.text = state.memberCount?.toString()
+        binding.guildProfileSheetMemberCountText.text = state.memberCount?.let {
+            requireContext().i18nPlural(R.plurals.members_header_members, it, "members" to it)
+        }
         binding.guildProfileSheetBanner.apply {
             val url = when (state.banner.type) {
                 WidgetGuildProfileSheetViewModel.Banner.Type.BANNER ->
@@ -174,7 +180,7 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
                 )
             }
         }
-        binding.guildProfileSheetBoosts.text = resources.getQuantityString(
+        binding.guildProfileSheetBoosts.text = resources.getI18nPluralString(
             R.plurals.premium_guild_subscription_num_subscriptions_numSubscriptions,
             R.string.premium_guild_subscription,
             tabs.premiumSubscriptionCount,
