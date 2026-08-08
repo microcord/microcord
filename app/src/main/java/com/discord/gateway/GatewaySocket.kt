@@ -343,9 +343,13 @@ class GatewaySocket(
         )
     }
 
-    private fun handleMessage(json: String) {
+    private fun handleMessage(json: ByteArray) {
         if (gatewaySocketLogger.logLevel == GatewaySocketLogger.LogLevel.VERBOSE) {
-            runCatching { gatewaySocketLogger.logInboundMessage(GatewayLogRedactor.redact(json)) }
+            runCatching {
+                gatewaySocketLogger.logInboundMessage(
+                    GatewayLogRedactor.redact(json.toString(Charsets.UTF_8)),
+                )
+            }
         }
         Trace.beginSection("Gateway JSON parse")
         val incoming = try {

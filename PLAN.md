@@ -1160,7 +1160,9 @@ or observable behavior. Small implementation details do not belong here.
 
 | Date | Decision | Reason | Consequence |
 | --- | --- | --- | --- |
-| 2026-08-08 | Use Gateway `zstd-stream` with zstd-jni `1.5.7-12` and pre-HELLO zlib fallback | Discord documents zstd transport and clean A65 tracing showed Gateway as 7.62% of cold-launch CPU; `1.5.7-13` requires compile SDK 37 | One persistent native decoder context is scoped to each connection; JSON remains unchanged for isolated A/B measurement |
+| 2026-08-08 | Use Gateway `zstd-stream` with zstd-jni `1.5.7-12` and pre-HELLO zlib fallback | Discord documents zstd transport and clean A65 tracing showed Gateway as 7.62% of cold-launch CPU; `1.5.7-13` requires compile SDK 37 | One persistent native decoder context is scoped to each connection and emits UTF-8 bytes directly into the parser |
+| 2026-08-08 | Retain Gson streaming for Gateway metadata and reject Fastjson2 `2.0.64.android5` | A65 A/B tracing found Fastjson2 14% slower on ordinary dispatches, with higher Gateway CPU, heap, and GC count despite a 2.8% faster READY sample | Fastjson2 and its parser selector were removed; the existing Gson adapters remain the single Gateway JSON stack |
+| 2026-08-08 | Stream `ModelPayload` directly from Gson's `JsonReader` | The former adapter built the complete READY tree and reparsed each field; the reference also streams READY | Only irregular experiment arrays retain local trees; the large guild/member/presence surfaces parse once |
 | 2026-07-22 | Rebuild in existing Android boilerplate | Project already exists at target path | Convert template rather than create another project |
 | 2026-07-22 | Use Kotlin + XML | Closest to original architecture and recovered layouts | Remove Compose |
 | 2026-07-22 | Use `dev.mantikafasi.manticord` application ID | Official signing identity cannot be reproduced | External integrations need new configuration |
@@ -3038,6 +3040,27 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   Against the pre-stream zstd trace, READY parsing fell from 2.034 s to 1.787 s, Gateway CPU from 2.519 s to 2.071 s, peak ART
   heap from 284,222 KiB to about 200,046 KiB, and cold activity start from 1.519 s to 0.926 s. GC count varies by run (9 before,
   6 after streaming alone, 7 after all startup changes), so only repeated medians should be treated as release evidence.
+- The decoder/parser boundary now stays byte-native: zstd and zlib return UTF-8 `ByteArray` frames and `IncomingParser`
+  streams them through Gson without constructing a full UTF-16 frame string. A Fastjson2 metadata-only candidate was built,
+  installed, and traced on A65, then removed. The comparable 15-second cold traces were:
+
+  | Parser / input | Events | READY parse | Ordinary parse/event | Ordinary decode/event | Gateway CPU | Peak ART heap | GCs | Cold start |
+  | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+  | Gson / string | 89 | 1,787 ms | 1.491 ms | 0.218 ms | 2.071 s | 200,046 KiB | 7 | 0.926 s |
+  | Fastjson2 metadata + Gson body / bytes | 154 | 1,738 ms | 1.704 ms | 0.153 ms | 2.147 s | 207,582 KiB | 10 | 0.923 s |
+  | Gson / bytes, READY tree | 30 | 1,842 ms | 1.532 ms | 0.079 ms | 1.944 s | 199,240 KiB | 6 | 0.919 s |
+  | Gson / bytes, streaming READY (retained) | 27 | 1,348 ms | 1.519 ms | 0.064 ms | 1.441 s | 105,446 KiB | 5 | 1.104 s |
+
+  Event counts varied with live traffic, so aggregate CPU and READY are directional only; ordinary per-event parsing shows no
+  Fastjson2 benefit. Streaming READY reduced its parse slice by 26.8%, Gateway CPU by 25.9%, and peak ART heap by 47.1% in
+  the comparable run; cold start regressed 20.1% and is treated as unrelated run variance rather than a parser win.
+  `GatewayContractTest`, `ReadyPayloadHydratorTest`, `assembleDebug`, A65 install, and live READY/dispatch traffic pass.
+
+Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
+`app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each
+large READY field; if the metadata pass is material, replace the second full-frame scan with a tested byte-level top-level
+envelope indexer, then add a custom streaming adapter only for the measured dominant guild/member/presence field. Do not
+parallelize READY or replace Gson without trace evidence.
 
 Resumable task: `app/src/main/java/com/discord/widgets/user/profile/UserProfileWidgetsView.kt` | RN
 `modules/user_profile/native/UserProfileApplicationWidgetCard.tsx` and `modules/application_widget/**` | add typed

@@ -61,7 +61,7 @@ Widget/view/data reports remain OPEN despite high physical coverage:
 - Widgets: 23 classified path mismatches, nine missing experiment gates, inert cross-package actions, provider gaps, and incomplete device/live matrices.
 - Views: 76/76 present, but video-grid contracts, reduced motion, tooltip/overlay behavior, accessibility, RTL, and animation remain open.
 - Utilities: 156 unmatched FQCNs require classification; Android-only regex/span/image/URI/drag behavior remains unverified.
-- Models/API: 19 unmatched FQCNs, READY tree parsing, `authSessionIdHash` value semantics, and exact legacy MFA transport remain open.
+- Models/API: 19 unmatched FQCNs, `ForumTag.customEmojiId`, malformed/null/unknown-enum coverage, and exact legacy MFA transport remain open.
 
 ## Resolved since the July audit
 
@@ -73,12 +73,13 @@ Widget/view/data reports remain OPEN despite high physical coverage:
 - TOS, sidebar Search, directory navigation, formerly dropped deep links, blocked users, shortcuts, and App Actions are structurally reachable.
 - MFA challenge handling, logout clearing, mark-unread boundary, read-state inputs, notification construction, guild profile preservation, permission fallback, reduced-motion mapping, and StoreV2 off-thread behavior are corrected.
 - Former JADX blockers for notification policy, message queue ordering, chat action visibility, client status order, READY hydration branches, and multiple store handlers were resolved with Vineflower/bytecode evidence.
+- READY now streams through `ModelPayloadAdapter`; `authSessionIdHash` parsing, copy, equality/hash, and redacted rendering are complete.
 
 ## Highest-priority blockers
 
 1. Complete the production StoreStream wiring ledger: readiness, age gate, push token, phone init, guild timeout/callback, guild settings API, channel/member inputs, guild subscriptions, loader backgrounding, typing API/cooldown, and voice participants.
 2. Construct or reconcile the 10 absent graph responsibilities and the five present-but-dead store files without duplicating existing substitutes.
-3. Fix READY custom emoji/sticker carry-over, streaming allocation, and `ModelPayload.authSessionIdHash` value semantics.
+3. Fix READY custom emoji/sticker carry-over.
 4. Close user-reachable widget gaps: membership screening, overlay sticker suggestions, directory unread state, Nearby transport decision, remaining guild/user/settings/stage actions, experiment gates, and SMS auto-fill decision.
 5. Run the missing ARM64 voice/video/screen-share/overlay and broad route, lifecycle, accessibility, RTL, large-font, malformed-input, provider, and live-backend matrices.
 6. Device-test the hCaptcha WebView origin/navigation behavior; keep it unverified until observed or fail-closed.

@@ -39,6 +39,15 @@
     "sessions": [],
     "connected_accounts": [],
     "guild_join_requests": [],
-    "users": []
+    "users": [],
+    "analytics_token": "sanitized-analytics",
+    "auth_token": "sanitized-auth",
+    "auth_session_id_hash": "sanitized-session-hash",
+    "apex_experiments": {"installation": "sanitized-installation", "assignments": [1, 2]},
+    "experiments": [[123, 1, 2, 3], ["malformed"]],
+    "guild_experiments": [[456, "guild-experiment", 1, [], []]],
+    "country_code": "US",
+    "_trace": ["{\"gateway\":\"fixture\"}", "ignored"],
+    "friend_suggestion_count": 4
   }
 }

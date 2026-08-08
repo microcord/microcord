@@ -145,7 +145,16 @@ class GatewayContractTest {
         val create = parser.parse(stageEvent("STAGE_INSTANCE_CREATE", "topic"))
         val update = parser.parse(stageEvent("STAGE_INSTANCE_UPDATE", "updated"))
         val delete = parser.parse(stageEvent("STAGE_INSTANCE_DELETE", "updated"))
-        assertEquals("sanitized-session", (ready.data as ModelPayload).sessionId)
+        val readyPayload = ready.data as ModelPayload
+        assertEquals("sanitized-session", readyPayload.sessionId)
+        assertEquals("sanitized-installation", readyPayload.installation)
+        assertEquals("sanitized-session-hash", readyPayload.authSessionIdHash)
+        assertEquals(setOf(123L), readyPayload.experiments?.keys)
+        assertEquals(456L, readyPayload.guildExperiments?.single()?.experimentIdHash)
+        assertEquals("fixture", (readyPayload.trace as Map<*, *>)["gateway"])
+        assertEquals(4, readyPayload.friendSuggestionCount)
+        assertEquals(readyPayload, ModelPayload(readyPayload))
+        assertFalse(readyPayload.toString().contains("sanitized-session-hash"))
         val reorderedReady = parser.parse(
             """{"d":{"session_id":"reordered-session"},"s":42,"t":"READY","op":0}""",
         )

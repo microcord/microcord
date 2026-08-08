@@ -22,7 +22,7 @@ Vineflower, `javap`/DEX, call sites, fixtures, device, or runtime evidence first
 | Guild/channel wiring | Start guild timeout init, bind its permission callback, bind guild-settings REST, provide channel permissions/member inputs, and follow guild/voice selection in subscriptions | `storestream-wiring.md:163-217` |
 | Messages/users | Forward loader background state; migrate editing to `StoreChat`; inject typing API/slow-mode callbacks | `storestream-wiring.md:218-230`; message/user reports |
 | Voice | Call `StoreVoiceParticipants.init`; reconcile stale widget bridge claims with current VoiceTransport construction; run ARM64/live lifecycle matrix | `storestream-wiring.md:232-236`; voice reports |
-| READY/model | Source cached emoji/stickers from dedicated stores; avoid tree-materializing READY; include `authSessionIdHash` in copy/equality/hash | core and models/API reports |
+| READY/model | Source cached emoji/stickers from dedicated stores | core report |
 | Read state | DEX-check ACK comparator direction and mark-unread snowflake fallback before editing | `audit-stores-channels.md:201-219` |
 | Widgets | Wire membership screening, overlay sticker suggestions, directory unread state, guild/user/settings/stage inert actions, and decide Nearby/SMS/experiment-gate handling | widget reports |
 | Utilities/views | Classify 156 unmatched FQCNs; reconcile video-grid/reduced-motion/tooltip behavior; run Android-only ICU/span/image/URI/drag/accessibility tests | utilities/views reports |

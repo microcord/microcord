@@ -19,8 +19,11 @@ class ZstdStreamDecoderTest {
         val first = encode(sink, compressor, "{\"op\":10,\"d\":{\"heartbeat_interval\":45000}}")
         val second = encode(sink, compressor, "{\"op\":11,\"d\":null}")
 
-        assertEquals("{\"op\":10,\"d\":{\"heartbeat_interval\":45000}}", decoder.decode(first).single())
-        assertEquals("{\"op\":11,\"d\":null}", decoder.decode(second).single())
+        assertEquals(
+            "{\"op\":10,\"d\":{\"heartbeat_interval\":45000}}",
+            decoder.decode(first).single().toString(Charsets.UTF_8),
+        )
+        assertEquals("{\"op\":11,\"d\":null}", decoder.decode(second).single().toString(Charsets.UTF_8))
 
         compressor.close()
         decoder.close()

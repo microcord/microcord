@@ -105,14 +105,14 @@ Vineflower recovered the previously JADX-skipped `IncomingParser.assignField` sw
 - `ClientStatuses` order is `desktop, web, mobile` in both target (`ClientStatuses.kt:3-10`) and Vineflower (`ClientStatuses.kt:3, 9-11`). The old unverified blocker is closed.
 - `ModelPayload.Hello` contains both `heartbeatInterval` and `trace`; dex2jar `javap -p` confirms those two reference fields. The old claim that `trace` was target-only was wrong.
 - `Model`, `Model.JsonReader`, and `Model.TypeAdapterFactory` exist at `models/domain/Model.kt:19-208`.
+- `ModelPayloadAdapter` now streams READY fields directly from `JsonReader`; only the two irregular experiment-array formats retain local trees. A live A65 READY completed, and the comparable trace reduced READY parsing from 1,842 ms to 1,348 ms and peak ART heap from 199,240 KiB to 105,446 KiB.
+- `ModelPayload.authSessionIdHash` is parsed, copied, included in equality/hash semantics, and redacted from `toString()`.
 
 ### Open findings
 
-1. **MAJOR: READY still materializes a full JSON tree.** `ModelPayloadAdapter.read` calls `JsonParser.parseReader(reader).asJsonObject` at `ModelPayload.kt:226-230`. The reference `ModelPayload` implements streaming `Model.assignField`; large-account READY memory behavior is therefore still divergent even though the shared streaming framework now exists.
-2. **MAJOR: `ModelPayload` has an extra `authSessionIdHash` with incomplete value semantics.** The field is declared at `ModelPayload.kt:50-52`, but the copy constructor (`:78-104`), `fields()` equality/hash list (`:135-140`), and `toString()` (`:125-133`) omit it. Copies can silently lose the value and two payloads differing only by session hash compare equal.
-3. **MINOR: `ForumTag.customEmojiId` is still a body initializer** at `Channel.kt:65-72`. The reference stores it as a body-level backing field. Gson does not run Kotlin body initializers, so a reflectively deserialized `ForumTag` can observe null rather than `emojiId.toString()`; use of the property remains unsafe until fixture/device evidence proves its adapter path.
-4. **STRUCTURAL: 19 reference FQCNs remain unmatched** as listed above. Consolidated behavior must be checked before deleting or recreating any helper facade.
-5. **DELIBERATE SECURITY DIVERGENCE:** redacted `toString()` implementations remain on credential/content-bearing models. Keep them; the project security contract outranks generated reference output.
+1. **MINOR: `ForumTag.customEmojiId` is still a body initializer** at `Channel.kt:65-72`. The reference stores it as a body-level backing field. Gson does not run Kotlin body initializers, so a reflectively deserialized `ForumTag` can observe null rather than `emojiId.toString()`; use of the property remains unsafe until fixture/device evidence proves its adapter path.
+2. **STRUCTURAL: 19 reference FQCNs remain unmatched** as listed above. Consolidated behavior must be checked before deleting or recreating any helper facade.
+3. **DELIBERATE SECURITY DIVERGENCE:** redacted `toString()` implementations remain on credential/content-bearing models. Keep them; the project security contract outranks generated reference output.
 
 ## Adapter registration
 
@@ -128,7 +128,5 @@ Open limitation: registration count is not a field inventory. Later DTO addition
 
 ## Top remaining blockers
 
-1. Convert READY/`ModelPayload` back to true streaming parsing or prove the tree allocation acceptable on large sanitized fixtures.
-2. Fix `ModelPayload.authSessionIdHash` copy/equality/hash semantics.
-3. Audit the 19 unmatched helper/interceptor FQCNs member by member.
-4. Run sanitized malformed/null/unknown-enum fixtures and the opt-in live transport matrix before claiming behavioral parity.
+1. Audit the 19 unmatched helper/interceptor FQCNs member by member.
+2. Run sanitized malformed/null/unknown-enum fixtures and the opt-in live transport matrix before claiming behavioral parity.

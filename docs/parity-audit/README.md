@@ -60,7 +60,7 @@ provider, DEX, device, or live-backend verification gaps.
 | [audit-widgets-shell-auth.md](audit-widgets-shell-auth.md) | OPEN: auth/shell structurally live; SMS auto-fill and end-to-end matrices open |
 | [audit-views.md](audit-views.md) | OPEN: 76/76 present; video, reduced-motion, tooltip, overlay, and accessibility behavior open |
 | [audit-utilities.md](audit-utilities.md) | OPEN: 156 exact FQCNs unmatched and Android-only behavior unverified |
-| [audit-models-api.md](audit-models-api.md) | OPEN: 19 exact FQCNs unmatched; READY parsing and model semantics remain major findings |
+| [audit-models-api.md](audit-models-api.md) | OPEN: 19 exact FQCNs unmatched; malformed/null/unknown-enum and live matrices remain |
 
 Finding totals are report-local and overlap across reports; they must not be
 summed into a project-wide defect count.
@@ -84,7 +84,7 @@ The following 2026-07-26 rollup defects are closed by current cited evidence:
 
 - Store graph: 10 reference graph instances remain absent; initialization readiness is hardcoded; pre-logout/full reset ordering diverges; five present store files remain unconstructed.
 - Production wiring: age-gate inputs/routing, push token logout, `StorePhone.init`, guild timeout init/callback, guild-settings REST, channel permission/member-list inputs, guild subscriptions, message-loader backgrounding, typing REST/cooldown, and voice-participant init remain open.
-- Data: READY still builds a full JSON tree; `ModelPayload.authSessionIdHash` is omitted from copy/value semantics. The generalized modern MFA route is an accepted replacement, not an open parity blocker.
+- Data: READY now streams through `ModelPayloadAdapter`, and `authSessionIdHash` participates in parsing/copy/value semantics. `ForumTag.customEmojiId`, malformed/null/unknown-enum fixtures, and the live matrix remain open. The generalized modern MFA route is an accepted replacement, not an open parity blocker.
 - Widgets: Nearby has no transport; nine reference experiment/feature gates and SMS auto-fill are absent; membership screening, overlay sticker suggestions, directory unread state, several guild/user/settings/stage actions, and broad runtime matrices remain open.
 - Utilities/views: 156 exact utility FQCNs remain unmatched; video grid, representative-color, reduced-motion, tooltip, overlay, RTL, large-font, animation, and Android ICU behavior require focused reconciliation or device checks.
 - Voice: graph construction is substantially present, but report-local widget bridge comments conflict with current `StoreStream` evidence; do not call the bridge resolved until callers are checked and ARM64/live call, video, screen-share, audio-route, overlay, background, and teardown tests pass.

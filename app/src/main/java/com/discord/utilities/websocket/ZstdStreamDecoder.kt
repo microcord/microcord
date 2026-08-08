@@ -11,7 +11,7 @@ class ZstdStreamDecoder : GatewayStreamDecoder {
     private val target = ByteBuffer.allocateDirect(OUTPUT_CHUNK_SIZE)
     private val outputChunk = ByteArray(OUTPUT_CHUNK_SIZE)
 
-    override fun decode(bytes: ByteArray): List<String> {
+    override fun decode(bytes: ByteArray): List<ByteArray> {
         require(bytes.isNotEmpty()) { "Empty zstd Gateway message" }
         require(bytes.size <= MAX_COMPRESSED_MESSAGE_SIZE) { "Compressed Gateway message is too large" }
         ensureInputCapacity(bytes.size)
@@ -33,7 +33,7 @@ class ZstdStreamDecoder : GatewayStreamDecoder {
         } while (source.hasRemaining() || outputWasFull)
 
         require(output.size() > 0) { "Zstd Gateway message produced no output" }
-        return listOf(output.toString(Charsets.UTF_8.name()))
+        return listOf(output.toByteArray())
     }
 
     override fun reset() = context.reset()

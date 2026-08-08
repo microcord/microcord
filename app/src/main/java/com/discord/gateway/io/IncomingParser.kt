@@ -67,6 +67,8 @@ import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
+import java.io.ByteArrayInputStream
+import java.io.InputStreamReader
 import java.io.StringReader
 
 /**
@@ -83,16 +85,31 @@ class IncomingParser(private val gson: Gson) {
 
     fun parse(json: String): Incoming {
         val metadata = readMetadata(json)
-        val data = if (metadata.opcode == Opcode.DISPATCH && metadata.type in BODYLESS_EVENTS) {
-            Unit
-        } else {
-            readData(json, metadata)
+        val data = parseData(metadata) { readData(JsonReader(StringReader(json)), metadata) }
+        return Incoming(metadata.type, metadata.sequence, metadata.opcode, data)
+    }
+
+    fun parse(json: ByteArray): Incoming {
+        val metadata = readMetadata(json)
+        val data = parseData(metadata) {
+            val input = InputStreamReader(ByteArrayInputStream(json), Charsets.UTF_8)
+            readData(JsonReader(input), metadata)
         }
         return Incoming(metadata.type, metadata.sequence, metadata.opcode, data)
     }
 
+    private inline fun parseData(metadata: Metadata, parser: () -> Any?): Any? =
+        if (metadata.opcode == Opcode.DISPATCH && metadata.type in BODYLESS_EVENTS) Unit else parser()
+
     /** Reads the small envelope fields without materialising the potentially huge `d` tree. */
-    private fun readMetadata(json: String): Metadata = JsonReader(StringReader(json)).use { reader ->
+    private fun readMetadata(json: String): Metadata = readGsonMetadata(JsonReader(StringReader(json)))
+
+    private fun readMetadata(json: ByteArray): Metadata {
+        val input = InputStreamReader(ByteArrayInputStream(json), Charsets.UTF_8)
+        return readGsonMetadata(JsonReader(input))
+    }
+
+    private fun readGsonMetadata(reader: JsonReader): Metadata = reader.use {
         var type: String? = null
         var sequence: Int? = null
         var opcode = -1
@@ -110,7 +127,7 @@ class IncomingParser(private val gson: Gson) {
     }
 
     /** Replays the envelope and streams only `d` into the adapter selected by [metadata]. */
-    private fun readData(json: String, metadata: Metadata): Any? = JsonReader(StringReader(json)).use { reader ->
+    private fun readData(reader: JsonReader, metadata: Metadata): Any? = reader.use {
         reader.beginObject()
         while (reader.hasNext()) {
             if (reader.nextName() != "d") {

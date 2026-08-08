@@ -1,7 +1,7 @@
 package com.discord.utilities.websocket
 
 interface GatewayStreamDecoder : AutoCloseable {
-    fun decode(bytes: ByteArray): List<String>
+    fun decode(bytes: ByteArray): List<ByteArray>
     fun reset()
     override fun close() = Unit
 }

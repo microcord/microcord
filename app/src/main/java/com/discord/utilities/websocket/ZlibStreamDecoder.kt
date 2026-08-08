@@ -8,10 +8,10 @@ class ZlibStreamDecoder : GatewayStreamDecoder {
     private val inflater = Inflater()
     private val compressed = ByteArrayOutputStream()
 
-    override fun decode(bytes: ByteArray): List<String> {
+    override fun decode(bytes: ByteArray): List<ByteArray> {
         compressed.write(bytes)
         val input = compressed.toByteArray()
-        val messages = mutableListOf<String>()
+        val messages = mutableListOf<ByteArray>()
         var frameStart = 0
         var index = 0
         while (index <= input.size - SUFFIX.size) {
@@ -37,7 +37,7 @@ class ZlibStreamDecoder : GatewayStreamDecoder {
 
     override fun close() = inflater.end()
 
-    private fun inflate(frame: ByteArray): String {
+    private fun inflate(frame: ByteArray): ByteArray {
         inflater.setInput(frame)
         val output = ByteArrayOutputStream(frame.size * 2)
         val buffer = ByteArray(4096)
@@ -51,7 +51,7 @@ class ZlibStreamDecoder : GatewayStreamDecoder {
             reset()
             throw error
         }
-        return output.toString(Charsets.UTF_8.name())
+        return output.toByteArray()
     }
 
     private companion object {
