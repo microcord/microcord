@@ -3,6 +3,13 @@ plugins {
     alias(libs.plugins.androidx.baselineprofile)
 }
 
+val buildId = providers.environmentVariable("MANTICORD_BUILD_ID").orElse("local")
+val commitHash = providers.environmentVariable("MANTICORD_COMMIT_SHA").orElse(
+    providers.exec {
+        commandLine("git", "rev-parse", "--short=8", "HEAD")
+    }.standardOutput.asText.map { it.trim() }
+)
+
 android {
     namespace = "com.discord"
     // The engine opens the Krisp models with openFd, which only works on stored entries.
@@ -21,12 +28,28 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+        buildConfigField("String", "BUILD_ID", "\"${buildId.get()}\"")
+        buildConfigField("String", "COMMIT_HASH", "\"${commitHash.get()}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("manticord") {
+            // Public development identity: consistent installs, not production trust.
+            storeFile = file("manticord-dev.keystore")
+            storePassword = "manticord"
+            keyAlias = "manticord"
+            keyPassword = "manticord"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("manticord")
+        }
         release {
+            signingConfig = signingConfigs.getByName("manticord")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

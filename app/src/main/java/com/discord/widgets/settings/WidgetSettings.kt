@@ -78,10 +78,10 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         binding.appInfoHeader.text = buildString {
             append(getString(R.string.app_information))
             append(" - ")
-            append(BuildConfig.VERSION_NAME)
-            append(" - Stable (")
-            append(BuildConfig.VERSION_CODE)
-            append(")")
+            append("Dev ")
+            append(BuildConfig.BUILD_ID)
+            append(" ")
+            append(BuildConfig.COMMIT_HASH.take(8))
         }
 
         bindRoute(binding.account, ::WidgetSettingsAccount)

@@ -1160,6 +1160,8 @@ or observable behavior. Small implementation details do not belong here.
 
 | Date | Decision | Reason | Consequence |
 | --- | --- | --- | --- |
+| 2026-08-09 | Publish master builds as debug Actions artifacts and reserve tagged release APKs for manual workflow runs | Continuous tagged releases obscured intentional releases and provided no embedded CI provenance | Settings shows `Dev <build id> <commit hash>`; manual release APKs retain the committed Baseline Profile |
+| 2026-08-09 | Sign local and CI debug/release APKs with one repository-owned development certificate | Per-machine Android debug keys made GitHub Actions APKs incompatible with local installs | All Manticord development artifacts are update-compatible; the public key is explicitly not a production trust identity |
 | 2026-08-08 | Use Gateway `zstd-stream` with zstd-jni `1.5.7-12` and pre-HELLO zlib fallback | Discord documents zstd transport and clean A65 tracing showed Gateway as 7.62% of cold-launch CPU; `1.5.7-13` requires compile SDK 37 | One persistent native decoder context is scoped to each connection and emits UTF-8 bytes directly into the parser |
 | 2026-08-08 | Retain Gson streaming for Gateway metadata and reject Fastjson2 `2.0.64.android5` | A65 A/B tracing found Fastjson2 14% slower on ordinary dispatches, with higher Gateway CPU, heap, and GC count despite a 2.8% faster READY sample | Fastjson2 and its parser selector were removed; the existing Gson adapters remain the single Gateway JSON stack |
 | 2026-08-08 | Stream `ModelPayload` directly from Gson's `JsonReader` | The former adapter built the complete READY tree and reparsed each field; the reference also streams READY | Only irregular experiment arrays retain local trees; the large guild/member/presence surfaces parse once |
@@ -3076,6 +3078,17 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   `app/src/release/generated/baselineProfiles/{baseline-prof,startup-prof}.txt` (32,573 rules each). `assembleRelease` passes,
   and `app-release-unsigned.apk` contains `assets/dexopt/baseline.prof` plus `baseline.profm`. D8 drops stale synthetic entries
   whose generated names differ between the non-minified collection build and release, while retaining and packaging valid rules.
+- Local and GitHub Actions debug/release APKs now share the repository-owned Manticord development certificate, avoiding
+  update failures caused by Android Studio and CI generating different debug keys. Continuous release builds the signed
+  release APK, which packages the committed generated Baseline Profile, instead of publishing a debug APK. Local debug and
+  release assembly pass; `apksigner` verifies both with SHA-256 certificate digest
+  `f3dc2959fdb2686777fa0f193836700e4ae296cb1ab3089da50d001cd8a9c269`, and the release APK contains
+  `assets/dexopt/baseline.prof` plus `baseline.profm`.
+- Build provenance is compiled into `BuildConfig` and shown by the existing app-information settings header as
+  `Dev <build id> <commit hash>`. Master pushes build and upload only a signed debug Actions artifact; manual workflow runs
+  build the signed release APK with its Baseline Profile and create the numbered GitHub tag/release. Local debug/release
+  assembly passes; local metadata resolves to build `local` plus the current short Git hash, and the release APK still contains
+  both dexopt Baseline Profile assets.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each
