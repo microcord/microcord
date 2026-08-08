@@ -69,6 +69,8 @@ This supersedes the 2026-07-26 report. No production code was modified.
   implemented (`StoreChannelsSelected.kt:157-486`).
 - StoreStream observes resolved selection and routes selection side effects
   (`StoreStream.kt:1334-1378,2426-2444`).
+- Cold-start selection validation now begins after the persisted channel/guild/permission snapshots are restored, so the
+  selected channel and cached message holder can render before Gateway READY; the initial channel open closes the left panel.
 
 ### Open
 

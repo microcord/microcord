@@ -4,6 +4,8 @@
     <color name="loading_background">#2B2E31</color>
     <string name="manticord_app_name">Manticord</string>
     <string name="manticord_boot_title" translatable="false">MantiCord</string>
+    <dimen name="gateway_connecting_banner_height">36dp</dimen>
+    <dimen name="gateway_banner_status_overlap">4dp</dimen>
     <string name="manticord_login_with_token" translatable="false">Log in with token</string>
     <string name="manticord_token" translatable="false">Token</string>
     <string name="manticord_token_required" translatable="false">A token is required.</string>

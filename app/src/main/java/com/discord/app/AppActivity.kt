@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.ScrollView
@@ -35,7 +36,6 @@ import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.developer.DeveloperSettings
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
-import com.discord.utilities.logging.isGatewayConnecting
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.user.UserUtils.isStaff
@@ -216,14 +216,16 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
         super.onStart()
         if (fatalCrashShown) return
         val verboseBoot = DeveloperSettings.isVerboseBootEnabled()
-        stopBootLog = BootLog.observe { lines ->
-            runOnUiThread {
-                binding.appBootLog.text = if (verboseBoot) {
-                    lines.joinToString("\n")
-                } else {
-                    getString(if (isGatewayConnecting(lines.lastOrNull())) R.string.connecting else R.string.loading)
+        binding.appBootContent.gravity = if (verboseBoot) Gravity.BOTTOM else Gravity.CENTER
+        binding.appBootLogo.visibility = if (verboseBoot) View.GONE else View.VISIBLE
+        binding.appBootTitle.visibility = if (verboseBoot) View.VISIBLE else View.GONE
+        binding.appBootLog.visibility = if (verboseBoot) View.VISIBLE else View.GONE
+        if (verboseBoot) {
+            stopBootLog = BootLog.observe { lines ->
+                runOnUiThread {
+                    binding.appBootLog.text = lines.joinToString("\n")
+                    binding.appLoading.post { binding.appLoading.fullScroll(ScrollView.FOCUS_DOWN) }
                 }
-                binding.appLoading.post { binding.appLoading.fullScroll(ScrollView.FOCUS_DOWN) }
             }
         }
         if (!directScreen) {

@@ -76,6 +76,8 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
     private var bottomNavAnimator: ValueAnimator? = null
     private var previousShowBottomNav: Boolean? = null
     private var previousBottomNavHeight = 0
+    private var systemTopInset = 0
+    private var globalStatusVisible = false
     private var viewState: TabsHostViewModel.ViewState? = null
     private var pendingIntentSubscription: Subscription? = null
 
@@ -235,6 +237,8 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
         globalStatusIndicatorStateObserver.observeState()
             .bindToComponentLifecycle(this)
             .appSubscribe(WidgetTabsHost::class.java) { state ->
+                globalStatusVisible = state.isVisible
+                updateContentTopPadding()
                 if (!state.isCustomBackground) ColorCompat.setStatusBarColor(this, themedColor)
             }
     }
@@ -262,7 +266,8 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
         // The home surface is padded down by the status bar here and then handed insets with the
         // top removed, so its panels only ever see the side and bottom insets.
         ViewCompat.setOnApplyWindowInsetsListener(homeContainer) { view, insets ->
-            view.setPadding(view.paddingLeft, insets.systemWindowInsetTop, view.paddingRight, view.paddingBottom)
+            systemTopInset = insets.systemWindowInsetTop
+            updateContentTopPadding()
             val forwarded = WindowInsetsCompat.Builder()
                 .setSystemWindowInsets(
                     Insets.of(
@@ -277,7 +282,8 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
             forwarded
         }
         ViewCompat.setOnApplyWindowInsetsListener(nonFullscreenNavHost) { view, insets ->
-            view.setPadding(view.paddingLeft, insets.systemWindowInsetTop, view.paddingRight, view.paddingBottom)
+            systemTopInset = insets.systemWindowInsetTop
+            updateContentTopPadding()
             insets.consumeSystemWindowInsets()
         }
         ViewCompat.setOnApplyWindowInsetsListener(bottomNavigation) { view, insets ->
@@ -285,6 +291,17 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
             insets.consumeSystemWindowInsets()
         }
         container.requestApplyInsets()
+    }
+
+    private fun updateContentTopPadding() {
+        val top = if (globalStatusVisible) 0 else systemTopInset
+        homeContainer.setPadding(homeContainer.paddingLeft, top, homeContainer.paddingRight, homeContainer.paddingBottom)
+        nonFullscreenNavHost.setPadding(
+            nonFullscreenNavHost.paddingLeft,
+            top,
+            nonFullscreenNavHost.paddingRight,
+            nonFullscreenNavHost.paddingBottom,
+        )
     }
 
     private fun installTabFragments() {

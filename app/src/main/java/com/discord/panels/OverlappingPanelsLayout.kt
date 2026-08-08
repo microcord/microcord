@@ -158,6 +158,16 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
     fun openEndPanel() = openEndPanel(false)
     fun closePanels() = closePanels(false)
 
+    fun closePanelsImmediately() {
+        if (centerPanel == null) {
+            pendingUpdate = ::closePanelsImmediately
+            return
+        }
+        centerPanelXAnimator?.cancel()
+        centerPanelAnimationEndX = 0f
+        updateCenterPanelX(0f)
+    }
+
     private fun openStartPanel(fromGesture: Boolean) {
         if (centerPanel == null) {
             pendingUpdate = { openStartPanel(fromGesture) }

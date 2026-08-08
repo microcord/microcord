@@ -26,6 +26,7 @@ import com.discord.widgets.channels.memberlist.WidgetChannelMembersList
 import com.discord.widgets.guilds.list.WidgetGuildsList
 import com.discord.widgets.settings.WidgetSettings
 import com.discord.widgets.share.WidgetIncomingShare
+import com.discord.widgets.status.WidgetGlobalStatusIndicator
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -155,6 +156,10 @@ class MainHostNavigationTest {
         instrumentation.waitForIdleSync()
         instrumentation.runOnMainSync { activity.supportFragmentManager.executePendingTransactions() }
         val tabs = activity.supportFragmentManager.findFragmentById(R.id.app_root) as WidgetTabsHost
+        assertTrue(
+            tabs.childFragmentManager.findFragmentById(R.id.widget_tabs_host_global_status_indicator) is
+                WidgetGlobalStatusIndicator,
+        )
         val home = tabs.childFragmentManager.findFragmentByTag("HOME") as WidgetHome
         assertTrue(home.childFragmentManager.findFragmentById(R.id.widget_guilds) is WidgetGuildsList)
         assertTrue(home.childFragmentManager.findFragmentById(R.id.widget_channels) is WidgetChannelsList)

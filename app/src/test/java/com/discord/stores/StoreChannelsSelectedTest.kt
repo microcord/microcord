@@ -158,6 +158,50 @@ class StoreChannelsSelectedTest {
         assertTrue(StoreChannelsSelected.shouldPersistResolvedSelection(null, 1))
     }
 
+    @Test
+    fun coldStartResolvesPersistedChannelBeforeReady() {
+        val dm = channel(55, guildId = 0, type = Channel.DM)
+        val restoredDispatcher = Dispatcher(scheduler)
+        val restoredDeck = ObservationDeck()
+        val users = StoreUser(dispatcher = restoredDispatcher, observationDeck = restoredDeck)
+        val guilds = StoreGuilds(users, restoredDispatcher, restoredDeck)
+        val restoredChannels = StoreChannels(
+            restoredDispatcher,
+            restoredDeck,
+            isAuthenticated = { true },
+            channelsCache = Persister("test_channels_${System.nanoTime()}", emptyList<Channel>()).apply {
+                set(listOf(dm))
+            },
+        )
+        val permissions = StorePermissions(users, restoredChannels, guilds, restoredDeck)
+        val restoredGuildSelected = StoreGuildSelected(restoredDispatcher, restoredDeck)
+        val restoredSelection = StoreChannelsSelected(
+            restoredChannels,
+            permissions,
+            restoredGuildSelected,
+            restoredDispatcher,
+            restoredDeck,
+            selectedChannelIdsCache = Persister(
+                "test_selected_channel_${System.nanoTime()}",
+                emptyMap<Long, Long>(),
+            ).apply { set(mapOf(0L to dm.id)) },
+        )
+        restoredDispatcher.registerDispatchHandlers(
+            StoreV2DispatchHandler(
+                listOf(users, guilds, restoredChannels, permissions, restoredGuildSelected, restoredSelection),
+                restoredDeck,
+            ),
+        )
+
+        restoredDispatcher.schedule {
+            restoredChannels.init()
+            restoredSelection.restore()
+        }
+        drain()
+
+        assertEquals(dm, restoredSelection.getSelectedChannel())
+    }
+
     // -- helpers --------------------------------------------------------------------------------
 
     /** Drains the dispatcher, the resolution pipeline and the dispatch it schedules back. */

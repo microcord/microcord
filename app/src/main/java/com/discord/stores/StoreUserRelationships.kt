@@ -26,7 +26,7 @@ class StoreUserRelationships(
     @StoreThread
     fun init() {
         StoreThreadScheduler.assertCurrentThread()
-        relationshipsCache.get().takeUnless { it == UNLOADED_SENTINEL }?.let {
+        relationshipsCache.get().takeUnless { it == UNLOADED_SENTINEL || it.isEmpty() }?.let {
             relationshipsState = UserRelationshipsState.Loaded(LinkedHashMap(it))
             nicknames = LinkedHashMap(nicknamesCache.get())
             markChanged()

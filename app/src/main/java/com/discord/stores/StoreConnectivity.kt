@@ -14,7 +14,8 @@ import rx.Subscription
  *
  * The emitted [DelayedState] carries the delay the UI should wait before *showing* the state. That
  * lets a short reconnect resolve silently while a genuinely stuck connection surfaces after
- * [DELAY_NOMINAL] (or [DELAY_EXTENDED] for a cold connect). The delay is recomputed on every
+ * [DELAY_NOMINAL]. Gateway connection progress is shown immediately because cached UI opens before
+ * READY. The delay is recomputed on every
  * update against how long the current state has already been active, so a state that has been
  * pending for a while surfaces sooner.
  */
@@ -28,13 +29,13 @@ class StoreConnectivity(
 
     data class DelayedState(val state: State, val delay: Long = DELAY_NOMINAL)
 
-    private var delayedState: DelayedState by MarkChangedDelegate(DelayedState(State.CONNECTING, DELAY_EXTENDED))
+    private var delayedState: DelayedState by MarkChangedDelegate(DelayedState(State.CONNECTING, 0L))
 
     private var deviceNetworkState: NetworkMonitor.State = NetworkMonitor.State.OFFLINE
     private var isReadyPayloadReceived: Boolean = false
     private var channelMessagesLoading: Boolean = false
-    private var stateTriggeredDelay: Long = DELAY_EXTENDED
-    private var stateTriggeredTimeMillis: Long? = null
+    private var stateTriggeredDelay: Long = 0L
+    private var stateTriggeredTimeMillis: Long = clock.currentTimeMillis()
 
     private var networkSubscription: Subscription? = null
     private var messagesLoadingSubscription: Subscription? = null
@@ -76,7 +77,7 @@ class StoreConnectivity(
     fun handleBackgrounded(backgrounded: Boolean) {
         // Time spent backgrounded should not count against the visible delay budget.
         if (backgrounded) stateTriggeredDelay -= getStateActiveMillis()
-        if (stateTriggeredTimeMillis != null) stateTriggeredTimeMillis = clock.currentTimeMillis()
+        stateTriggeredTimeMillis = clock.currentTimeMillis()
         updateConnectivityState()
     }
 
@@ -100,25 +101,14 @@ class StoreConnectivity(
             isReadyPayloadReceived && !channelMessagesLoading -> State.ONLINE
             else -> State.CONNECTING
         }
-        if (delayedState.state != nextState || stateTriggeredTimeMillis == null) {
+        if (delayedState.state != nextState) {
             stateTriggeredTimeMillis = clock.currentTimeMillis()
-            stateTriggeredDelay = getNextStateDelayInitial(delayedState, nextState)
+            stateTriggeredDelay = if (nextState == State.CONNECTING) 0L else DELAY_NOMINAL
         }
         delayedState = DelayedState(nextState, getStateDelay(stateTriggeredDelay))
     }
 
-    private fun getNextStateDelayInitial(currentState: DelayedState, nextState: State): Long = when (nextState) {
-        State.ONLINE, State.OFFLINE, State.OFFLINE_AIRPLANE_MODE -> DELAY_NOMINAL
-        // Coming back from a known-offline device resolves fast; a cold connect gets the long budget.
-        State.CONNECTING -> {
-            val wasOffline = currentState.state == State.OFFLINE ||
-                currentState.state == State.OFFLINE_AIRPLANE_MODE
-            if (wasOffline && getStateActiveMillis() > DELAY_NOMINAL) DELAY_NOMINAL else DELAY_EXTENDED
-        }
-    }
-
-    private fun getStateActiveMillis(): Long =
-        stateTriggeredTimeMillis?.let { clock.currentTimeMillis() - it } ?: 0L
+    private fun getStateActiveMillis(): Long = clock.currentTimeMillis() - stateTriggeredTimeMillis
 
     /** Remaining delay, quantised to [DELAY_INTERVAL] so equal states de-duplicate. */
     private fun getStateDelay(defaultDelay: Long): Long =
@@ -135,6 +125,5 @@ class StoreConnectivity(
     companion object {
         const val DELAY_INTERVAL = 100L
         const val DELAY_NOMINAL = 1_000L
-        const val DELAY_EXTENDED = 10_000L
     }
 }

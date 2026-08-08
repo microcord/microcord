@@ -7,6 +7,7 @@ import android.os.Build
 import android.text.SpannableStringBuilder
 import android.util.TypedValue
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -84,16 +85,13 @@ class WidgetGlobalStatusIndicator : AppFragment(R.layout.widget_global_status_in
         alertText = view.findViewById(R.id.alert_text)
         acceptButton = view.findViewById(R.id.indicator_accept)
         declineButton = view.findViewById(R.id.indicator_decline)
-
-        // The banner is the topmost chrome, so it takes the status-bar inset itself rather than
-        // letting its text slide under the clock.
-        ViewCompat.setOnApplyWindowInsetsListener(view) { container, insets ->
-            container.setPadding(
-                container.paddingLeft,
-                insets.systemWindowInsetTop,
-                container.paddingRight,
-                container.paddingBottom,
-            )
+        ViewCompat.setOnApplyWindowInsetsListener(view) { _, insets ->
+            (view.parent as? View)?.let { container ->
+                val overlap = resources.getDimensionPixelSize(R.dimen.gateway_banner_status_overlap)
+                (container.layoutParams as? ViewGroup.MarginLayoutParams)?.topMargin =
+                    (insets.systemWindowInsetTop - overlap).coerceAtLeast(0)
+                container.requestLayout()
+            }
             insets.consumeSystemWindowInsets()
         }
     }
@@ -139,10 +137,24 @@ class WidgetGlobalStatusIndicator : AppFragment(R.layout.widget_global_status_in
 
     private fun configureUIVisibility(state: WidgetGlobalStatusIndicatorState.State) {
         lastIndicatorState = state
-        indicator.visibility = if (state.isVisible) View.VISIBLE else View.GONE
+        val visibility = if (state.isVisible) View.VISIBLE else View.GONE
+        indicator.visibility = visibility
+        (indicator.parent as? View)?.visibility = visibility
     }
 
     private fun configureUI(viewState: WidgetGlobalStatusIndicatorViewModel.ViewState) {
+        val compact = viewState is WidgetGlobalStatusIndicatorViewModel.ViewState.Connecting ||
+            viewState is WidgetGlobalStatusIndicatorViewModel.ViewState.Offline
+        indicator.layoutParams.height =
+            if (compact) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT
+        (indicator.parent as? View)?.let { container ->
+            container.layoutParams.height = if (compact) {
+                resources.getDimensionPixelSize(R.dimen.gateway_connecting_banner_height)
+            } else {
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            }
+            container.requestLayout()
+        }
         indicatorState.updateState(
             isVisible = viewState != WidgetGlobalStatusIndicatorViewModel.ViewState.Inactive,
             isCustomBackground = viewState.isSpeakingInOngoingCall,
@@ -166,7 +178,6 @@ class WidgetGlobalStatusIndicator : AppFragment(R.layout.widget_global_status_in
             }
             WidgetGlobalStatusIndicatorViewModel.ViewState.Inactive -> resetContentVisibility()
         }
-
         // While the user is already looking at the call, the descriptive half of the banner is
         // redundant — it collapses to nothing unless it still has buttons to offer.
         if (lastIndicatorState?.isViewingCall == true) {

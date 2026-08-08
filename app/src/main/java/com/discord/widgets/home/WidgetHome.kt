@@ -91,7 +91,6 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         panels = view.findViewById(R.id.overlapping_panels)
         startPanelState = PanelState.Closed
         endPanelState = PanelState.Closed
-        initialChannelShown = savedInstanceState != null
         // Registered here rather than in onViewBound so `panels` is already resolved, and before the
         // child transactions below so this stays behind WidgetTabsHost in the registry.
         setOnBackPressed(::handleBackPressed)
@@ -182,7 +181,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                     }
                     if (!initialChannelShown) {
                         initialChannelShown = true
-                        panels.closePanels()
+                        panels.post(panels::closePanelsImmediately)
                     }
                 }
             }

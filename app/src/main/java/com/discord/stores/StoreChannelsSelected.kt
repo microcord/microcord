@@ -173,16 +173,11 @@ class StoreChannelsSelected(
         validateSelectedChannel()
     }
 
-    /**
-     * Hydrate from disk without the initial validation.
-     *
-     * `StoreStream` restores caches from a dispatch that runs before the channel store has any
-     * content; [init] is the entry point that also kicks off resolution.
-     */
+    /** Restores the persisted selection after `StoreChannels` has restored its channel snapshot. */
     @StoreThread
     internal fun restore() {
         loadFromCache()
-        markChanged()
+        validateSelectedChannel()
     }
 
     @StoreThread

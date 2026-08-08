@@ -1433,10 +1433,11 @@ class StoreStream private constructor(
             messages.restore()
             guildFolders = userSettings.getGuildFolders()
             updateSortedGuilds()
+            navigation.updateAuthState(authentication.getAuthState())
+            initialized.onNext(true)
             BootLog.record(BootLogEvent.CACHE_RESTORE_FINISHED)
+            BootLog.record(BootLogEvent.RUNTIME_READY)
         }
-        initialized.onNext(true)
-        BootLog.record(BootLogEvent.RUNTIME_READY)
     }
 
     private fun initForTesting() {
@@ -1470,11 +1471,12 @@ class StoreStream private constructor(
             messages.restore()
             guildFolders = userSettings.getGuildFolders()
             updateSortedGuilds()
+            navigation.updateAuthState(authentication.getAuthState())
+            initialized.onNext(true)
         }
         // No socket is attached in tests; the listeners still let a test drive the router directly
         // through handleGatewayDispatch.
         initGatewaySocketListeners()
-        initialized.onNext(true)
     }
 
     /**
@@ -2705,7 +2707,7 @@ class StoreStream private constructor(
                 }
             }
         }
-        navigation.updateAuthState(state)
+        if (initialized.value == true) navigation.updateAuthState(state)
         if (state == null) {
             Persister.reset()
             preferences.edit().clear().apply()

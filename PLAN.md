@@ -3056,10 +3056,21 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   Fastjson2 benefit. Streaming READY reduced its parse slice by 26.8%, Gateway CPU by 25.9%, and peak ART heap by 47.1% in
   the comparable run; cold start regressed 20.1% and is treated as unrelated run variance rather than a parser win.
   `GatewayContractTest`, `ReadyPayloadHydratorTest`, `assembleDebug`, A65 install, and live READY/dispatch traffic pass.
-- Detailed boot progress is controlled by a persisted `Verbose Boot` developer setting. It defaults off and shows concise
-  `Loading`/`Connecting…` status; enabled mode shows every safe boot event. Authenticated navigation no longer waits for Gateway
+- Detailed boot progress is controlled by a persisted `Verbose Boot` developer setting. It defaults off with the current
+  recovered white Clyde mark while caches restore; enabled mode shows every safe boot event. Authenticated navigation no longer waits for Gateway
   READY, so cached UI opens while the existing global connectivity banner reports background connection state. Focused boot
   and route-matrix tests, debug assembly, A65 install, and live HELLO/IDENTIFY/READY pass.
+- Cold startup now resolves `CACHE_KEY_SELECTED_CHANNEL_IDS` immediately after the existing `STORE_CHANNELS_V26`, guild/role,
+  permission, and `STORE_MESSAGES_CACHE_V38` snapshots are restored; `StoreChannelsSelected.restore()` no longer waits for READY
+  to start validation. The first restored channel closes the initially open left panel, matching an explicit channel open; later
+  reconnects do not repeat that action, including after saved-state restoration. `WidgetTabsHost` now mounts the previously
+  missing global-status fragment, and its reference `Connecting…` text plus animated three-bar network vector shows immediately
+  whenever Gateway is connecting. Its parent container is 36dp only for connectivity states, wraps content for call/stage states,
+  becomes `GONE` when inactive, and overlaps the status inset by 4dp to reduce the top gap. While visible, tab content no longer
+  applies a duplicate status-bar top inset. An empty relationship cache stays `Unloaded` until READY instead of flashing the
+  Wumpus empty state. The authenticated shell is published only after cached users, relationships, guilds, channels,
+  permissions, selection, and messages finish restoring, so its first frame is the resolved channel with panels already centered.
+  Focused stream/cache/connectivity/friends tests, debug assembly, and A65 install pass.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each
