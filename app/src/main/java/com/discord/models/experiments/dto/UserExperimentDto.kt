@@ -36,4 +36,6 @@ data class UserExperimentDto(
 data class UnauthenticatedUserExperimentsDto(
     val fingerprint: String,
     val assignments: List<UserExperimentDto>,
+    /** Minted server-side on first contact and reused thereafter; absent once this device has one. */
+    val installation: String? = null,
 )

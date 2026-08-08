@@ -321,7 +321,7 @@ class GatewaySocket(
         token = data.token
         send(
             Opcode.IDENTIFY,
-            Identify(data.token, 100, true, CAPABILITIES, identifyProperties(), data.clientState),
+            Identify(data.token, true, CAPABILITIES, identifyProperties(), data.clientState),
         )
     }
 

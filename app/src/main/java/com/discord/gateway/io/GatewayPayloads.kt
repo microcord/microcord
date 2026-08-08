@@ -92,14 +92,13 @@ sealed class OutgoingPayload private constructor() {
 
     class Identify(
         private val token: String,
-        private val largeThreshold: Int,
         private val compress: Boolean,
         private val capabilities: Long,
         private val properties: Map<String, Any?>,
         private val clientState: IdentifyClientState?,
     ) : OutgoingPayload() {
         override fun toString(): String =
-            "Identify(token=<redacted>, largeThreshold=$largeThreshold, compress=$compress, " +
+            "Identify(token=<redacted>, compress=$compress, " +
                 "capabilities=$capabilities, properties=$properties, clientState=$clientState)"
     }
 

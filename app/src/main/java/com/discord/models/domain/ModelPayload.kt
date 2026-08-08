@@ -47,6 +47,14 @@ class ModelPayload() {
     var presences: List<Presence>? = null
         internal set
     var analyticsToken: String? = null
+
+    /**
+     * The install's tracking token, carried inside `apex_experiments`.
+     *
+     * Only this field is read: the assignments beside it are the APEX experiment set, which is not
+     * reconstructed, and the token is needed regardless of whether those ever are.
+     */
+    var installation: String? = null
         internal set
     var authToken: String? = null
         internal set
@@ -92,6 +100,7 @@ class ModelPayload() {
         guildJoinRequests = other.guildJoinRequests
         presences = other.presences
         analyticsToken = other.analyticsToken
+        installation = other.installation
         authToken = other.authToken
         requiredAction = other.requiredAction
         experiments = other.experiments
@@ -255,6 +264,12 @@ private class ModelPayloadAdapter(private val gson: Gson) : TypeAdapter<ModelPay
                 }
                 "merged_members" -> payload.guildMembers = gson.fromJson(value, type<List<List<GuildMember>>>())
                 "analytics_token" -> payload.analyticsToken = value.asString
+                "apex_experiments" -> if (value.isJsonObject) {
+                    payload.installation = value.asJsonObject
+                        .get("installation")
+                        ?.takeUnless { it.isJsonNull }
+                        ?.asString
+                }
                 "auth_token" -> payload.authToken = value.asString
                 "required_action" -> payload.requiredAction = value.asString
                 "experiments" -> if (value.isJsonArray) payload.experiments = value.asJsonArray.mapNotNull { encoded ->

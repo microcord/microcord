@@ -13,6 +13,9 @@ class RequiredHeadersInterceptor(private val headersProvider: HeadersProvider) :
 
         /** Comma-separated debug switches, or null when none are on. */
         fun getDebugOptions(): String? = null
+
+        /** The install's tracking token, or null without consent. */
+        fun getInstallationId(): String? = null
     }
 
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -23,6 +26,7 @@ class RequiredHeadersInterceptor(private val headersProvider: HeadersProvider) :
                 headersProvider.getLocale()?.let { header("X-Discord-Locale", it) }
                 headersProvider.getAcceptLanguages()?.let { header("Accept-Language", it) }
                 headersProvider.getDebugOptions()?.let { header("X-Debug-Options", it) }
+                headersProvider.getInstallationId()?.let { header("X-Installation-ID", it) }
             }
             .build()
         return chain.proceed(request)

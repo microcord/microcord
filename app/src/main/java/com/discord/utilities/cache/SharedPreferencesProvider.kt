@@ -21,7 +21,8 @@ object SharedPreferencesProvider {
         checkNotNull(prefsSessionDurable) { "You must call init() before accessing prefsSessionDurable" }
 
     @VisibleForTesting
-    fun setInstanceForTesting(prefs: SharedPreferences?) {
+    fun setInstanceForTesting(prefs: SharedPreferences?, sessionDurable: SharedPreferences? = prefs) {
         sharedPreferences = prefs
+        prefsSessionDurable = sessionDurable
     }
 }

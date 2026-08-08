@@ -966,6 +966,18 @@ class StoreStream private constructor(
     @Volatile private var authGeneration = 0
     /** Drives `StoreNotifications`' foreground/system split. Fed by `Backgrounded.observe()`. */
     @Volatile private var isBackgrounded = false
+
+    /**
+     * Why the socket is being connected, comma-separated and sorted, or `NO_REASONS`.
+     *
+     * The reference accumulates a token per outstanding request — headless tasks, bridges — and
+     * only cold start is reconstructed here, so that is the sole reason a connection is attributed
+     * to until the rest exist.
+     */
+    private fun gatewayConnectReasons(): String =
+        if (hasConnectedGatewayOnce) GATEWAY_NO_REASONS else GATEWAY_COLD_START
+
+    @Volatile private var hasConnectedGatewayOnce = false
     private val activeUploads = ConcurrentHashMap<String, Pair<Subscription, com.discord.utilities.rest.MessageUploadPayload>>()
     private val preprocessingUploads = ConcurrentHashMap<String, Subscription>()
     private data class FailedUpload(
@@ -1355,7 +1367,20 @@ class StoreStream private constructor(
         }
         gateway = GatewaySocket(
             identifyDataProvider = gatewayConnection::getIdentifyData,
-            identifyProperties = AnalyticSuperProperties::superProperties,
+            identifyProperties = {
+                // Omitted rather than sent null when absent: the server mints an installation only
+                // when the field is missing, so sending an explicit null would ask for a second one.
+                val installation = authentication.getInstallationForTracking()
+                AnalyticSuperProperties.superProperties +
+                    mapOf(
+                        "client_app_state" to if (isBackgrounded) APP_STATE_BACKGROUND else APP_STATE_FOCUSED,
+                        // A resumed-then-identified socket is not a fast connect; this
+                        // reconstruction has no fast-connect path at all, so it is always false.
+                        "is_fast_connect" to false,
+                        "gateway_connect_reasons" to gatewayConnectReasons(),
+                    ) +
+                    if (installation != null) mapOf("installation_id" to installation) else emptyMap()
+            },
             eventHandler = gatewayConnection,
             scheduler = gatewayScheduler,
             discovery = GatewayDiscovery(preferences) { api.getGateway().toBlocking().single() },
@@ -1566,7 +1591,12 @@ class StoreStream private constructor(
         stageInstances.handleConnectionOpen(guilds)
     }
 
-    fun handleConnectionOpen(payload: ModelPayload) = dispatcher.schedule { handleConnectionOpenInternal(payload) }
+    fun handleConnectionOpen(payload: ModelPayload) = dispatcher.schedule {
+        // Only the first connection of the process is a cold start; every reconnect after it is
+        // attributed to nothing in particular until the reference's other reasons are reconstructed.
+        hasConnectedGatewayOnce = true
+        handleConnectionOpenInternal(payload)
+    }
 
     @StoreThread
     fun handleSearchFinish(searchState: com.discord.utilities.search.network.state.SearchState) {
@@ -3057,6 +3087,7 @@ class StoreStream private constructor(
             override fun getAcceptLanguages() = acceptLanguages()
             override fun getSpotifyToken(): String? = null
             override fun getDebugOptions(): String? = debugOptions.getDebugOptionsHeaderValue()
+            override fun getInstallationId(): String? = authentication.getInstallationForTracking()
         }
         val builder = RestAPIBuilder(API_BASE_URL, CookieJars.persistent(context))
         // Ahead of the header interceptor so a 429 parks every later request on the same route
@@ -3072,6 +3103,11 @@ class StoreStream private constructor(
     }
 
     companion object {
+        private const val APP_STATE_FOCUSED = "focused"
+        private const val APP_STATE_BACKGROUND = "background"
+        private const val GATEWAY_COLD_START = "COLD_START"
+        private const val GATEWAY_NO_REASONS = "NO_REASONS"
+
         /** Enough to ride out a burst; the interceptor caps each wait at a minute. */
     private const val RATE_LIMIT_MAX_RETRIES = 3
 
@@ -3137,6 +3173,9 @@ class StoreStream private constructor(
             scheduler: Scheduler,
             clock: Clock = Clock { 0 },
         ): StoreStream {
+            // Stores reach the prefs through the global provider, and a class that clears it in
+            // teardown would otherwise break every class scheduled after it in the same JVM.
+            SharedPreferencesProvider.setInstanceForTesting(preferences, sessionDurablePreferences)
             // Idempotent for the class that owns [filesDir]; a different fixture directory means a
             // different test class, and it gets its own graph rather than the previous one's.
             instance?.takeIf { testFilesDir == filesDir }?.let { return it }

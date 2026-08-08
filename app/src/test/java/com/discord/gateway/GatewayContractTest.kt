@@ -68,12 +68,12 @@ class GatewayContractTest {
     fun controlPayloadsUseExactWireNamesAndExplicitNullData() {
         assertEquals("{\"op\":7,\"d\":null}", gson.toJson(Outgoing(7)))
         val identify = gson.toJsonTree(
-            Identify("token", 100, true, 351, emptyMap(), IdentifyClientState(emptyMap(), 0, 1, 2)),
+            Identify("token", true, 351, emptyMap(), IdentifyClientState(emptyMap(), 0, 1, 2)),
         ).asJsonObject
         assertTrue(identify.has("client_state"))
         assertTrue(identify["client_state"].asJsonObject.has("useruser_guild_settings_version"))
         assertFalse(identify["client_state"].asJsonObject.has("user_guild_settings_version"))
-        val nullableState = gson.toJsonTree(Identify("token", 100, true, 351, emptyMap(), null)).asJsonObject
+        val nullableState = gson.toJsonTree(Identify("token", true, 351, emptyMap(), null)).asJsonObject
         assertTrue(nullableState["client_state"].isJsonNull)
     }
 

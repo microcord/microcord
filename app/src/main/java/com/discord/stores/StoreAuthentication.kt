@@ -71,6 +71,7 @@ class StoreAuthentication(
         // `Observable.create(OnSubscribe)` overload instead of `BehaviorSubject.create(default)`.
         SerializedSubject(BehaviorSubject.create(null as AuthState?))
     private var fingerprint: String? = null
+    private var installation: String? = null
     private val fingerprintSubject = SerializedSubject<String, String>(BehaviorSubject.create())
     private var isConsentRequiredSubscription: Subscription? = null
     private val oauthUriSubject = SerializedSubject<Uri, Uri>(BehaviorSubject.create(Uri.EMPTY))
@@ -84,6 +85,7 @@ class StoreAuthentication(
 
     fun init(context: Context? = null) {
         sessionDurablePreferences.getString(CACHE_KEY_FINGERPRINT, null)?.let { setFingerprint(it, false) }
+        installation = sessionDurablePreferences.getString(CACHE_KEY_INSTALLATION, null)?.takeIf(String::isNotEmpty)
         val cached = authStateCache.getCachedAuthState()
             ?: context?.getSharedPreferences(RNA_CACHE_NAME, Context.MODE_PRIVATE)
                 ?.getString(RNA_TOKEN_KEY, null)
@@ -181,6 +183,9 @@ class StoreAuthentication(
     fun handleConnectionOpen(payload: ModelPayload) {
         StoreThreadScheduler.assertCurrentThread()
         authSessionIdHash = payload.authSessionIdHash
+        // A logged-in client is handed its installation here rather than by `/experiments`, which
+        // only runs while logged out.
+        setInstallation(payload.installation)
     }
 
     /** A password reset moves the connection to a new auth session without dropping it. */
@@ -253,6 +258,29 @@ class StoreAuthentication(
     fun isAuthed(): Boolean = authState != null
     fun getSavedLogin(): String? = savedLogin
     fun getFingerprint(): String? = fingerprint
+
+    /**
+     * The installation token, or null when tracking consent has not been given.
+     *
+     * Gated at read rather than at store: the token is kept so it survives a consent change, but it
+     * only reaches the wire while consent stands.
+     */
+    fun getInstallationForTracking(): String? = installation?.takeIf { !isConsentRequired() }
+
+    /**
+     * Records the installation token the server minted.
+     *
+     * First write wins. The server mints one per install and reuses it; accepting a later, different
+     * one would split this device's history in two and is the thing the reference explicitly guards
+     * against.
+     */
+    @Synchronized
+    fun setInstallation(value: String?) {
+        if (value.isNullOrEmpty()) return
+        if (!installation.isNullOrEmpty()) return
+        installation = value
+        sessionDurablePreferences.edit().putString(CACHE_KEY_INSTALLATION, value).apply()
+    }
     fun observeFingerprint(): Observable<String> = fingerprintSubject.distinctUntilChanged()
     fun getPreLogoutSignal(): Observable<Boolean> = userInitiatedAuthEventSubject.filter { !it }
     fun observeAgeGateError(): Observable<String?> = ageGateError.distinctUntilChanged()
@@ -382,6 +410,8 @@ class StoreAuthentication(
 
     companion object {
         const val CACHE_KEY_FINGERPRINT = "STORE_AUTHED_FINGERPRINT"
+        /** The reference's mobile key; kept verbatim so an existing install keeps its token. */
+        const val CACHE_KEY_INSTALLATION = "analytics_installation"
         const val CACHE_KEY_LOGIN = "STORE_AUTHED_LOGIN"
 
         private val SUSPENSION_GSON: Gson = GsonBuilder()

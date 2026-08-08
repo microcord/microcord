@@ -281,6 +281,9 @@ class StoreExperiments(
                 errorHandler = { dispatcher.schedule { setInitialized() } },
             ) { response ->
                 dispatcher.schedule {
+                    // Before the fingerprint: the analytics queue drains on the fingerprint, and
+                    // anything it sends first would go out without the installation header.
+                    storeAuthentication.setInstallation(response.installation)
                     storeAuthentication.setFingerprint(response.fingerprint, false)
                     handleLoadedUserExperiments(
                         response.assignments.associateBy(UserExperimentDto::nameHash),
