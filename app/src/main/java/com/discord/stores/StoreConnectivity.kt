@@ -14,10 +14,11 @@ import rx.Subscription
  *
  * The emitted [DelayedState] carries the delay the UI should wait before *showing* the state. That
  * lets a short reconnect resolve silently while a genuinely stuck connection surfaces after
- * [DELAY_NOMINAL]. Gateway connection progress is shown immediately because cached UI opens before
- * READY. The delay is recomputed on every
- * update against how long the current state has already been active, so a state that has been
- * pending for a while surfaces sooner.
+ * [DELAY_NOMINAL]. Only the first connect of the process skips the delay, because cached UI opens
+ * before READY and the user is owed an explanation for it; afterwards every CONNECTING waits, since
+ * loading a channel's messages reports as one and switching guilds would otherwise flash the
+ * banner. The delay is recomputed on every update against how long the current state has already
+ * been active, so a state that has been pending for a while surfaces sooner.
  */
 class StoreConnectivity(
     private val dispatcher: Dispatcher,
@@ -33,6 +34,7 @@ class StoreConnectivity(
 
     private var deviceNetworkState: NetworkMonitor.State = NetworkMonitor.State.OFFLINE
     private var isReadyPayloadReceived: Boolean = false
+    private var hasCompletedInitialConnect: Boolean = false
     private var channelMessagesLoading: Boolean = false
     private var stateTriggeredDelay: Long = 0L
     private var stateTriggeredTimeMillis: Long = clock.currentTimeMillis()
@@ -103,8 +105,13 @@ class StoreConnectivity(
         }
         if (delayedState.state != nextState) {
             stateTriggeredTimeMillis = clock.currentTimeMillis()
-            stateTriggeredDelay = if (nextState == State.CONNECTING) 0L else DELAY_NOMINAL
+            // Boot progress is worth showing at once, because cached UI opens before READY.
+            // Afterwards CONNECTING is either a blip or a channel fetching its messages — and
+            // every guild switch does the latter — so both wait out the delay.
+            stateTriggeredDelay =
+                if (nextState == State.CONNECTING && !hasCompletedInitialConnect) 0L else DELAY_NOMINAL
         }
+        if (nextState == State.ONLINE) hasCompletedInitialConnect = true
         delayedState = DelayedState(nextState, getStateDelay(stateTriggeredDelay))
     }
 

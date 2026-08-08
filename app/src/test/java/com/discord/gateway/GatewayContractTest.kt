@@ -71,8 +71,8 @@ class GatewayContractTest {
             Identify("token", true, 351, emptyMap(), IdentifyClientState(emptyMap(), 0, 1, 2)),
         ).asJsonObject
         assertTrue(identify.has("client_state"))
-        assertTrue(identify["client_state"].asJsonObject.has("useruser_guild_settings_version"))
-        assertFalse(identify["client_state"].asJsonObject.has("user_guild_settings_version"))
+        assertTrue(identify["client_state"].asJsonObject.has("user_guild_settings_version"))
+        assertFalse(identify["client_state"].asJsonObject.has("useruser_guild_settings_version"))
         val nullableState = gson.toJsonTree(Identify("token", true, 351, emptyMap(), null)).asJsonObject
         assertTrue(nullableState["client_state"].isJsonNull)
     }

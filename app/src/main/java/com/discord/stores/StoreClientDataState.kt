@@ -12,6 +12,7 @@ import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelReadState
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
+import com.discord.utilities.persister.Persister
 import rx.Observable
 
 /**
@@ -24,6 +25,7 @@ import rx.Observable
  */
 class StoreClientDataState(
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
+    private val cache: Persister<ClientDataState> = Persister(CACHE_KEY, ClientDataState()),
 ) : StoreV2() {
 
     /**
@@ -64,6 +66,20 @@ class StoreClientDataState(
 
     private var clientDataStateSnapshot = ClientDataState()
 
+    /**
+     * Restores the cache written by the previous process, so the first IDENTIFY after a cold start
+     * can still ask the gateway to skip guilds this client already has.
+     */
+    @StoreThread
+    fun init() {
+        val restored = cache.get()
+        guildHashes.putAll(restored.guildHashes)
+        highestLastMessageId = restored.highestLastMessageId
+        readStateVersion = restored.readStateVersion
+        userGuildSettingsVersion = restored.userGuildSettingsVersion
+        markChanged()
+    }
+
     fun getClientDataState(): ClientDataState = clientDataStateSnapshot
 
     fun observeClientState(): Observable<ClientDataState> =
@@ -77,14 +93,18 @@ class StoreClientDataState(
             readStateVersion,
             userGuildSettingsVersion,
         )
+        // Marked dirty only: snapshotData runs after every dispatch that touched this store,
+        // and Persister.persist() is a synchronous Kryo write. The strategy flush picks it up.
+        cache.set(clientDataStateSnapshot)
     }
 
     @StoreThread
     fun clear() {
         guildHashes.clear()
         highestLastMessageId = 0L
-        readStateVersion = 0
+        readStateVersion = -1
         userGuildSettingsVersion = -1
+        cache.clear(persist = true)
         markChanged()
     }
 
@@ -177,11 +197,13 @@ class StoreClientDataState(
         if (newMessageId > highestLastMessageId) highestLastMessageId = newMessageId
     }
 
-    private companion object {
-        /** The gateway only honours version 1 of the guild-hash contract. */
-        const val SUPPORTED_GUILD_HASH_VERSION = 1
+    companion object {
+        const val CACHE_KEY = "STORE_CLIENT_DATA_STATE_V1"
 
-        val GuildHashes?.isSupported: Boolean
+        /** The gateway only honours version 1 of the guild-hash contract. */
+        private const val SUPPORTED_GUILD_HASH_VERSION = 1
+
+        private val GuildHashes?.isSupported: Boolean
             get() = this?.version == SUPPORTED_GUILD_HASH_VERSION
     }
 }

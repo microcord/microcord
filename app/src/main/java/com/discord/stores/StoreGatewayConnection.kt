@@ -115,14 +115,10 @@ class StoreGatewayConnection(
     data class ClientState(
         val tokenIfAvailable: String?,
         val authed: Boolean,
-        val clientDataState: StoreClientDataState.ClientDataState,
     ) {
-        fun getIdentifyData(): IdentifyData? =
-            tokenIfAvailable?.let { IdentifyData(it, clientDataState.toIdentifyData()) }
-
         override fun toString(): String =
             "ClientState(tokenIfAvailable=${if (tokenIfAvailable != null) "<redacted>" else "null"}, " +
-                "authed=$authed, clientDataState=$clientDataState)"
+                "authed=$authed)"
 
         companion object {
             fun create(
@@ -130,13 +126,12 @@ class StoreGatewayConnection(
                 token: String?,
                 selectedVoiceChannelId: Long,
                 hasGatewayConnectionConsumers: Boolean,
-                clientDataState: StoreClientDataState.ClientDataState,
             ): ClientState {
                 val authed = token != null
                 val effectiveToken =
                     if (backgrounded && selectedVoiceChannelId <= 0L && !hasGatewayConnectionConsumers) null
                     else token
-                return ClientState(effectiveToken, authed, clientDataState)
+                return ClientState(effectiveToken, authed)
             }
         }
     }
@@ -294,9 +289,8 @@ class StoreGatewayConnection(
             stream.getAuthenticationInternal().observeAuthState().map { it?.token },
             observeSelectedVoiceChannelId,
             GatewayConnectionConsumers.observeHasConsumers(),
-            stream.getClientDataStateInternal().observeClientState(),
-        ) { backgrounded, token, selectedVoiceChannelId, hasConsumers, clientDataState ->
-            ClientState.create(backgrounded, token, selectedVoiceChannelId, hasConsumers, clientDataState)
+        ) { backgrounded, token, selectedVoiceChannelId, hasConsumers ->
+            ClientState.create(backgrounded, token, selectedVoiceChannelId, hasConsumers)
         }
             .distinctUntilChanged()
             .observeOn(scheduler)
@@ -309,7 +303,13 @@ class StoreGatewayConnection(
             }, {})
     }
 
-    fun getIdentifyData(): IdentifyData? = clientState?.getIdentifyData()
+    /**
+     * Read at IDENTIFY time rather than captured per emission: the cache moves with every message,
+     * and folding it into [ClientState] made the socket lifecycle churn on each one.
+     */
+    fun getIdentifyData(): IdentifyData? = clientState?.tokenIfAvailable?.let { token ->
+        IdentifyData(token, stream.getClientDataStateInternal().getClientDataState().toIdentifyData())
+    }
 
     private fun handleClientStateUpdate(clientState: ClientState) {
         this.clientState = clientState
