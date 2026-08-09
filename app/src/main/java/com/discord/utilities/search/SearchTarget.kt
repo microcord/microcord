@@ -1,7 +1,7 @@
 package com.discord.utilities.search
 
 /**
- * What a message search is scoped to — one guild, or one private channel.
+ * What a message search is scoped to — one guild, one private channel, or every DM at once.
  *
  * In the reference this is `StoreSearch.SearchTarget`. `StoreSearch` does not exist in this project
  * yet, and the whole search domain layer (history cache, fetcher, query store) is keyed on it, so it
@@ -13,5 +13,6 @@ package com.discord.utilities.search
  * endpoint and search-data builder.
  */
 data class SearchTarget(val type: Type, val id: Long) {
-    enum class Type { GUILD, CHANNEL }
+    /** [DMS] carries no id: it is every private channel at once. */
+    enum class Type { GUILD, CHANNEL, DMS }
 }

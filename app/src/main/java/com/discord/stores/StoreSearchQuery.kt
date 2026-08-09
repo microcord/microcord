@@ -5,6 +5,8 @@ import com.discord.models.message.Message
 import com.discord.stores.StoreSearch.SearchTarget
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationBuffered
+import com.discord.api.search.SearchCursor
+import com.discord.utilities.search.SearchSortMode
 import com.discord.utilities.search.network.SearchFetcher
 import com.discord.utilities.search.network.SearchQuery
 import com.discord.utilities.search.network.state.QueryFetchState
@@ -25,6 +27,8 @@ class StoreSearchQuery(
     private val searchStateSubject = SerializedSubject(BehaviorSubject.create(SEARCH_STATE_NONE))
     private var currentSearchState = SEARCH_STATE_NONE
     private var querySubscription: Subscription? = null
+    private var sortMode = SearchSortMode.DEFAULT
+    private var lastTarget: SearchTarget? = null
 
     val state: Observable<SearchState> = searchStateSubject.distinctUntilChanged()
 
@@ -80,9 +84,29 @@ class StoreSearchQuery(
         val query = currentSearchState.searchQuery ?: return
         if (currentSearchState.queryFetchState != QueryFetchState.COMPLETED || !currentSearchState.hasMore) return
         unsubscribe()
+        val cursor = currentSearchState.cursor
         updateAndPublish(currentSearchState.copy(queryFetchState = QueryFetchState.LOADING_MORE, hasMore = false))
-        makeQuery(query, searchTarget, oldestMessageId, isInitialLoad = false)
+        makeQuery(query, searchTarget, oldestMessageId, isInitialLoad = false, cursor = cursor)
     }
+
+    /**
+     * Re-runs the current query under a new ordering.
+     *
+     * The whole result set is discarded rather than re-sorted: a cursor is only valid for the sort
+     * that minted it, and the server holds far more results than the client has fetched.
+     */
+    @Synchronized
+    fun setSortMode(mode: SearchSortMode) {
+        if (mode == sortMode) return
+        sortMode = mode
+        val query = currentSearchState.searchQuery ?: return
+        val target = lastTarget ?: return
+        unsubscribe()
+        updateAndPublish(SearchState(QueryFetchState.IN_PROGRESS, query))
+        makeQuery(query, target, oldestMessageId = null, isInitialLoad = true)
+    }
+
+    fun getSortMode(): SearchSortMode = sortMode
 
     fun clear() {
         unsubscribe()
@@ -91,6 +115,7 @@ class StoreSearchQuery(
 
     private fun performInitialLoad(searchTarget: SearchTarget, query: SearchQuery) {
         unsubscribe()
+        lastTarget = searchTarget
         makeQuery(query, searchTarget, oldestMessageId = null, isInitialLoad = true)
     }
 
@@ -99,8 +124,9 @@ class StoreSearchQuery(
         searchTarget: SearchTarget,
         oldestMessageId: Long?,
         isInitialLoad: Boolean,
+        cursor: SearchCursor? = null,
     ) {
-        searchFetcher.makeQuery(searchTarget.toUtility(), oldestMessageId, query).appSubscribe(
+        searchFetcher.makeQuery(searchTarget.toUtility(), oldestMessageId, query, sortMode, cursor).appSubscribe(
             errorTag = "makeQuery",
             subscriptionHandler = { querySubscription = it },
             errorHandler = { handleError() },
@@ -121,8 +147,11 @@ class StoreSearchQuery(
                     threads = response.threads,
                     threadMembers = response.members,
                     hits = hits,
-                    hasMore = total > hits.size,
+                    // A cursor endpoint is authoritative about whether more exist; the count-based
+                    // test is only meaningful for the offset endpoints, which return no cursor.
+                    hasMore = if (response.cursor != null) true else total > hits.size,
                     totalResults = total,
+                    cursor = response.cursor,
                 )
             }
             response.errorCode == SearchFetcher.ERROR_CODE_INDEXING ->

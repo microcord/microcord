@@ -33,8 +33,8 @@ import com.google.android.material.textfield.TextInputLayout
  */
 class WidgetSearch : AppFragment(R.layout.widget_search) {
 
-    /** Whether [targetId] names a guild or a private channel. */
-    enum class TargetType { GUILD, CHANNEL }
+    /** Whether [targetId] names a guild or a private channel; [DMS] has no id. */
+    enum class TargetType { GUILD, CHANNEL, DMS }
 
     private var targetId: Long = 0L
     private var targetType: TargetType? = null
@@ -63,7 +63,21 @@ class WidgetSearch : AppFragment(R.layout.widget_search) {
         when (targetType) {
             TargetType.GUILD -> searchStore.initForGuild(targetId, stringProvider)
             TargetType.CHANNEL -> searchStore.initForChannel(targetId, stringProvider)
+            TargetType.DMS -> searchStore.initForDms(stringProvider)
             null -> Unit
+        }
+
+        // Only on a fresh launch: on a rotation the field already holds whatever was typed since.
+        // A query handed over from another screen is run straight away — the caller already asked
+        // for these results, so stopping at a filled-in box would look like nothing happened.
+        if (!isRecreated) {
+            mostRecentIntent.getStringExtra(INTENT_EXTRA_INITIAL_QUERY)
+                ?.takeIf(String::isNotBlank)
+                ?.let { query ->
+                    searchInputEditText.setText(query)
+                    searchInputEditText.setSelection(searchInputEditText.length())
+                    searchInputEditText.post { if (view != null) sendQuery() }
+                }
         }
     }
 
@@ -135,6 +149,8 @@ class WidgetSearch : AppFragment(R.layout.widget_search) {
             TargetType.GUILD -> requireContext()
                 .i18nFormat(R.string.search_in, "guildName" to viewState.guild?.name.orEmpty())
             TargetType.CHANNEL -> channelHint(viewState.channel)
+            TargetType.DMS -> requireContext()
+                .i18nFormat(R.string.search_in, "guildName" to getString(R.string.direct_messages))
             null -> getString(R.string.search)
         }
 
@@ -167,6 +183,7 @@ class WidgetSearch : AppFragment(R.layout.widget_search) {
     companion object {
         const val INTENT_EXTRA_TARGET_ID = "INTENT_EXTRA_TARGET_ID"
         const val INTENT_EXTRA_TARGET_TYPE = "INTENT_EXTRA_SEARCH_TYPE"
+        const val INTENT_EXTRA_INITIAL_QUERY = "INTENT_EXTRA_INITIAL_QUERY"
 
         fun launchForGuild(guildId: Long, context: Context) =
             launch(guildId, TargetType.GUILD, context)
@@ -174,13 +191,23 @@ class WidgetSearch : AppFragment(R.layout.widget_search) {
         fun launchForChannel(channelId: Long, context: Context) =
             launch(channelId, TargetType.CHANNEL, context)
 
-        private fun launch(targetId: Long, targetType: TargetType, context: Context) {
+        /** Cross-DM search: every private channel at once, so there is no id to scope it to. */
+        fun launchForDms(context: Context, initialQuery: String? = null) =
+            launch(0L, TargetType.DMS, context, initialQuery)
+
+        private fun launch(
+            targetId: Long,
+            targetType: TargetType,
+            context: Context,
+            initialQuery: String? = null,
+        ) {
             AppScreenRouter.launch(
                 context,
                 WidgetSearch::class.java,
                 Intent()
                     .putExtra(INTENT_EXTRA_TARGET_ID, targetId)
-                    .putExtra(INTENT_EXTRA_TARGET_TYPE, targetType.name),
+                    .putExtra(INTENT_EXTRA_TARGET_TYPE, targetType.name)
+                    .putExtra(INTENT_EXTRA_INITIAL_QUERY, initialQuery),
             )
         }
 

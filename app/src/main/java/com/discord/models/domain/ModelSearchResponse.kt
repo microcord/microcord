@@ -2,6 +2,7 @@ package com.discord.models.domain
 
 import com.discord.api.channel.Channel
 import com.discord.api.message.Message
+import com.discord.api.search.SearchCursor
 import com.discord.api.thread.ThreadMember
 
 /**
@@ -23,6 +24,8 @@ data class ModelSearchResponse(
     val errorCode: Int? = null,
     val documentIndexed: Int? = null,
     val retryAfter: Int? = null,
+    /** Only the tabs endpoints paginate by cursor; null on the GET endpoints. */
+    val cursor: SearchCursor? = null,
 ) {
     /**
      * DELIBERATE DIVERGENCE from the reference — computed, where the reference stores.

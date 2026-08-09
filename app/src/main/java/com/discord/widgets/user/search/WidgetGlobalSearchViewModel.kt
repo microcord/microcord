@@ -228,7 +228,17 @@ class WidgetGlobalSearchViewModel : AppViewModel<WidgetGlobalSearchModel>() {
             .sortedByDescending { it.score(searchType, frecencyChannels) }
             .take(WidgetGlobalSearchModel.MAX_RESULTS)
 
-        return WidgetGlobalSearchModel(filter, searchType, withHeaders(ranked), guildsList.items)
+        val rows = withHeaders(ranked)
+        // Only offered for a plain query: the `@`/`#`/`*` prefixes scope the switcher to one kind
+        // of entity, and message search has nothing to say about those.
+        val withMessageSearch = if (
+            filter.isNotBlank() && searchType == WidgetGlobalSearchModel.SEARCH_TYPE_GENERAL
+        ) {
+            listOf(WidgetGlobalSearchModel.ItemSearchMessages(filter)) + rows
+        } else {
+            rows
+        }
+        return WidgetGlobalSearchModel(filter, searchType, withMessageSearch, guildsList.items)
     }
 
     /** Groups the ranked list under one header per kind, preserving rank inside each group. */

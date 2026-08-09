@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.i18n.i18nFormat
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 
@@ -26,6 +27,7 @@ class WidgetGlobalSearchAdapter(
         viewType: Int,
     ): MGRecyclerViewHolder<*, WidgetGlobalSearchModel.ItemDataPayload> = when (viewType) {
         WidgetGlobalSearchModel.TYPE_HEADER -> HeaderViewHolder(this)
+        WidgetGlobalSearchModel.TYPE_SEARCH_MESSAGES -> SearchMessagesViewHolder(this)
         WidgetGlobalSearchModel.TYPE_CHANNEL,
         WidgetGlobalSearchModel.TYPE_GUILD,
         WidgetGlobalSearchModel.TYPE_USER,
@@ -44,6 +46,26 @@ class WidgetGlobalSearchAdapter(
         override fun onConfigure(position: Int, data: WidgetGlobalSearchModel.ItemDataPayload) {
             super.onConfigure(position, data)
             label.setText((data as WidgetGlobalSearchModel.ItemHeader).name)
+        }
+    }
+
+    /** "Search for …", the hand-off from the switcher to full message search. */
+    private class SearchMessagesViewHolder(
+        adapter: WidgetGlobalSearchAdapter,
+    ) : MGRecyclerViewHolder<WidgetGlobalSearchAdapter, WidgetGlobalSearchModel.ItemDataPayload>(
+        R.layout.widget_global_search_item_messages,
+        adapter,
+    ) {
+        private val label: TextView = itemView.findViewById(R.id.global_search_messages_text)
+
+        override fun onConfigure(position: Int, data: WidgetGlobalSearchModel.ItemDataPayload) {
+            super.onConfigure(position, data)
+            val item = data as WidgetGlobalSearchModel.ItemSearchMessages
+            label.text = itemView.context.i18nFormat(
+                R.string.search_from_suggestions,
+                "suggestion" to item.query,
+            )
+            itemView.setOnClickListener { view -> adapter.onSelectedListener(view, false, data) }
         }
     }
 

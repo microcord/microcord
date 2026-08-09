@@ -54,6 +54,20 @@ data class WidgetGlobalSearchModel(
         override val unread: Boolean = false
     }
 
+    /**
+     * "Search messages for …" — the switcher's hand-off to full message search across every DM.
+     *
+     * Carries no channel and never scores; it is prepended after ranking, like [ItemHeader].
+     */
+    data class ItemSearchMessages(val query: String) : ItemDataPayload {
+        override val type = TYPE_SEARCH_MESSAGES
+        override val key = "search-messages"
+        override val channel: Channel? = null
+        override val matchedResult: MatchedResult = EMPTY_MATCH_RESULT
+        override val mentions: Int = 0
+        override val unread: Boolean = false
+    }
+
     data class ItemChannel(
         override val matchedResult: MatchedResult,
         override val channel: Channel,
@@ -97,6 +111,7 @@ data class WidgetGlobalSearchModel(
         const val TYPE_CHANNEL = 0
         const val TYPE_USER = 1
         const val TYPE_GUILD = 2
+        const val TYPE_SEARCH_MESSAGES = 3
 
         /** No prefix: everything is searched. */
         const val SEARCH_TYPE_GENERAL = 0

@@ -1,6 +1,7 @@
 package com.discord.utilities.search.network.state
 
 import com.discord.api.channel.Channel
+import com.discord.api.search.SearchCursor
 import com.discord.api.thread.ThreadMember
 import com.discord.models.message.Message
 import com.discord.utilities.search.network.SearchQuery
@@ -20,4 +21,6 @@ data class SearchState(
     val hits: List<Message>? = null,
     val hasMore: Boolean = false,
     val totalResults: Int = 0,
+    /** Cursor for the next page on the tabs endpoints; null when paging by message id. */
+    val cursor: SearchCursor? = null,
 )

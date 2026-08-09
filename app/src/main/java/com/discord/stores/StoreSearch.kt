@@ -58,6 +58,12 @@ class StoreSearch(
             override fun loadMore(searchTarget: com.discord.utilities.search.SearchTarget, oldestMessageId: Long) =
                 this@StoreSearch.storeSearchQuery.loadMore(searchTarget.toStoreTarget(), oldestMessageId)
 
+            override fun setSortMode(mode: com.discord.utilities.search.SearchSortMode) =
+                this@StoreSearch.storeSearchQuery.setSortMode(mode)
+
+            override fun getSortMode(): com.discord.utilities.search.SearchSortMode =
+                this@StoreSearch.storeSearchQuery.getSortMode()
+
             override fun clear() = this@StoreSearch.storeSearchQuery.clear()
         }
 
@@ -66,6 +72,9 @@ class StoreSearch(
 
         override fun initForChannel(channelId: Long, searchStringProvider: SearchStringProvider) =
             this@StoreSearch.initForChannel(channelId, searchStringProvider)
+
+        override fun initForDms(searchStringProvider: SearchStringProvider) =
+            this@StoreSearch.initForDms(searchStringProvider)
 
         override fun getDisplayState(): Observable<SearchStore.DisplayState> =
             this@StoreSearch.getDisplayState().map { SearchStore.DisplayState.valueOf(it.name) }
@@ -104,6 +113,12 @@ class StoreSearch(
 
     fun initForChannel(channelId: Long, searchStringProvider: SearchStringProvider) {
         init(SearchTarget(SearchTarget.Type.CHANNEL, channelId), searchStringProvider)
+        SearchSuggestionEngine.targetGuildId = null
+    }
+
+    /** Searches every private channel at once; there is no id to scope it to. */
+    fun initForDms(searchStringProvider: SearchStringProvider) {
+        init(SearchTarget(SearchTarget.Type.DMS, 0L), searchStringProvider)
         SearchSuggestionEngine.targetGuildId = null
     }
 
@@ -193,6 +208,6 @@ class StoreSearch(
     enum class DisplayState { SUGGESTIONS, RESULTS }
 
     data class SearchTarget(val type: Type, val id: Long) {
-        enum class Type { GUILD, CHANNEL }
+        enum class Type { GUILD, CHANNEL, DMS }
     }
 }

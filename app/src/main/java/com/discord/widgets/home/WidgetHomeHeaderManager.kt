@@ -21,7 +21,6 @@ import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isSystemDM
 import com.discord.api.channel.isThread
 import com.discord.api.channel.isVoiceChannel
-import com.discord.api.user.NsfwAllowance
 import com.discord.databinding.WidgetHomeBinding
 import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreStream
@@ -29,8 +28,6 @@ import com.discord.utilities.channel.guildChannelIcon
 import com.discord.utilities.toolbar.positionUnreadCountView
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.widgets.channels.invite.GroupInviteFriendsSheet
-import com.discord.widgets.channels.threads.browser.WidgetThreadBrowser
-import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.friends.WidgetFriendsAdd
 import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
 import com.discord.widgets.search.WidgetSearch
@@ -38,7 +35,6 @@ import com.discord.widgets.user.calls.PrivateCallLauncher
 
 object WidgetHomeHeaderManager {
     private const val ANALYTICS_SOURCE = "Toolbar"
-    private const val SMALL_SCREEN_WIDTH_DP = 360
 
     data class HeaderData(
         val title: CharSequence?,
@@ -51,9 +47,6 @@ object WidgetHomeHeaderManager {
     internal data class MenuState(
         val search: Boolean = false,
         val sidePanel: Boolean = false,
-        val threadBrowser: Boolean = false,
-        val pins: Boolean = false,
-        val pinsEnabled: Boolean = false,
         val startCall: Boolean = false,
         val startVideoCall: Boolean = false,
         val stopCall: Boolean = false,
@@ -105,7 +98,6 @@ object WidgetHomeHeaderManager {
             unread.setTextAndVisibilityBy(unreadCountText(model.unreadCount))
             toolbar?.positionUnreadCountView(unread)
         }
-        configureThreadBrowserIconBehavior(toolbar, channel, model.threadCount, context)
     }
 
     private fun WidgetHomeModel.getHeaderData(context: Context): HeaderData = when (val selected = selectedChannel) {
@@ -159,18 +151,8 @@ object WidgetHomeHeaderManager {
             isArchivedThread = channel?.isArchivedThread() == true,
             isSystemDm = channel?.isSystemDM() == true,
             isCallConnected = model.isCallConnected,
-            isSmallScreen = resources.displayMetrics.widthPixels <=
-                SMALL_SCREEN_WIDTH_DP * resources.displayMetrics.density,
-            threadCount = model.threadCount,
-            isChannelNsfw = model.isChannelNsfw,
-            isNsfwUnconsented = model.isNsfwUnConsented,
-            nsfwAllowed = model.nsfwAllowed,
         )
-        menu.setHeaderActions(state.search, state.sidePanel, state.threadBrowser)
-        menu.findItem(R.id.menu_chat_pins).apply {
-            isVisible = state.pins
-            isEnabled = state.pinsEnabled
-        }
+        menu.setHeaderActions(state.search, state.sidePanel)
         menu.findItem(R.id.menu_chat_start_call).isVisible = state.startCall
         menu.findItem(R.id.menu_chat_start_video_call).isVisible = state.startVideoCall
         menu.findItem(R.id.menu_chat_stop_call).isVisible = state.stopCall
@@ -181,42 +163,31 @@ object WidgetHomeHeaderManager {
         isArchivedThread: Boolean = false,
         isSystemDm: Boolean = false,
         isCallConnected: Boolean = false,
-        isSmallScreen: Boolean = false,
-        threadCount: Int = 0,
-        isChannelNsfw: Boolean = false,
-        isNsfwUnconsented: Boolean = false,
-        nsfwAllowed: NsfwAllowance? = null,
     ): MenuState {
-        val showThreadBrowser = threadCount > 0 &&
-            !isChannelNsfwGated(isChannelNsfw, isNsfwUnconsented, nsfwAllowed)
-        val showPins = channelType in PINNED_MESSAGES_CHANNEL_TYPES
+        // The bar carries search and members only. Pins and the thread browser both live in the
+        // channel sidebar, so dropping them here orphans nothing, and leaving room for two icons is
+        // what stops search being pushed into an overflow that is never shown.
         val header = when (channelType) {
-            Channel.DM, Channel.GROUP_DM, Channel.DIRECTORY -> MenuState(sidePanel = true)
-            Channel.GUILD_TEXT, Channel.GUILD_ANNOUNCEMENT, Channel.GUILD_FORUM, Channel.GUILD_MEDIA -> MenuState(
-                search = !isSmallScreen,
-                sidePanel = true,
-                threadBrowser = showThreadBrowser,
-            )
+            Channel.DM, Channel.GROUP_DM, Channel.DIRECTORY -> MenuState(search = true, sidePanel = true)
+            Channel.GUILD_TEXT, Channel.GUILD_ANNOUNCEMENT, Channel.GUILD_FORUM, Channel.GUILD_MEDIA ->
+                MenuState(search = true, sidePanel = true)
             Channel.ANNOUNCEMENT_THREAD, Channel.PUBLIC_THREAD, Channel.PRIVATE_THREAD -> MenuState(
-                search = !isSmallScreen,
+                search = true,
                 sidePanel = !isArchivedThread,
             )
             else -> MenuState()
         }
         val privateChannel = channelType == Channel.DM || channelType == Channel.GROUP_DM
         return header.copy(
-            pins = showPins,
-            pinsEnabled = showPins && !isChannelNsfwGated(isChannelNsfw, isNsfwUnconsented, nsfwAllowed),
             startCall = !isCallConnected && privateChannel && !isSystemDm,
             startVideoCall = !isCallConnected && privateChannel && !isSystemDm,
             stopCall = isCallConnected && !isSystemDm,
         )
     }
 
-    private fun Menu.setHeaderActions(search: Boolean, sidePanel: Boolean, threads: Boolean) {
+    private fun Menu.setHeaderActions(search: Boolean, sidePanel: Boolean) {
         findItem(R.id.menu_chat_search).isVisible = search
         findItem(R.id.menu_chat_side_panel).isVisible = sidePanel
-        findItem(R.id.menu_chat_thread_browser).isVisible = threads
     }
 
     private fun handleMenuItem(widgetHome: WidgetHome, model: WidgetHomeModel, item: MenuItem) {
@@ -229,12 +200,15 @@ object WidgetHomeHeaderManager {
         )
         when (item.itemId) {
             R.id.menu_chat_add_friend -> WidgetFriendsAdd.show(context, source = ANALYTICS_SOURCE)
-            R.id.menu_chat_search -> model.channel?.let { channel ->
-                if (channel.isPrivate()) WidgetSearch.launchForChannel(model.channelId, context)
-                else if (channel.isGuildTextyChannel()) WidgetSearch.launchForGuild(channel.guildId, context)
+            // With no channel open the header belongs to the DM list, where search spans every
+            // private channel rather than one of them.
+            R.id.menu_chat_search -> when {
+                model.channel == null -> WidgetSearch.launchForDms(context)
+                model.channel.isPrivate() -> WidgetSearch.launchForChannel(model.channelId, context)
+                model.channel.isGuildTextyChannel() -> WidgetSearch.launchForGuild(model.channel.guildId, context)
+                else -> Unit
             }
             R.id.menu_chat_side_panel -> widgetHome.getPanelLayout().openEndPanel()
-            R.id.menu_chat_pins -> WidgetChannelPinnedMessages.show(context, model.channelId)
             R.id.menu_chat_start_call -> launcher.launchVoiceCall(model.channelId)
             R.id.menu_chat_start_group -> inviteToChannel(widgetHome, model.channel)
             R.id.menu_chat_start_video_call -> launcher.launchVideoCall(model.channelId)
@@ -258,39 +232,6 @@ object WidgetHomeHeaderManager {
         }
     }
 
-    internal fun configureThreadBrowserIconBehavior(
-        toolbar: Toolbar?,
-        channel: Channel?,
-        threadCount: Int,
-        context: Context?,
-    ) {
-        channel ?: return
-        val visible = !channel.isThreadOnlyChannel()
-        val item = toolbar?.menu?.findItem(R.id.menu_chat_thread_browser)
-        item?.actionView?.findViewById<TextView>(R.id.thread_browser_count)?.apply {
-            text = minOf(99, threadCount).toString()
-            isVisible = threadCount != 0 && visible
-        }
-        item?.actionView?.findViewById<View>(R.id.thread_browser_root)?.apply {
-            isVisible = visible
-            setOnClickListener {
-                context ?: return@setOnClickListener
-                WidgetThreadBrowser.show(
-                    context,
-                    channel.guildId,
-                    if (channel.isThread()) channel.parentId else channel.id,
-                    "Chat List Header",
-                )
-            }
-        }
-    }
-
-    private fun isChannelNsfwGated(
-        isChannelNsfw: Boolean,
-        isNsfwUnConsented: Boolean,
-        nsfwAllowed: NsfwAllowance?,
-    ): Boolean = isChannelNsfw && (isNsfwUnConsented || nsfwAllowed == NsfwAllowance.DISALLOWED)
-
     internal fun unreadCountText(unreadCount: Int): String? = unreadCount.takeIf { it > 0 }?.toString()
 
     private val TITLE_OPENS_SIDE_PANEL_TYPES = setOf(
@@ -302,14 +243,4 @@ object WidgetHomeHeaderManager {
         Channel.GUILD_TEXT,
     )
 
-    private val PINNED_MESSAGES_CHANNEL_TYPES = setOf(
-        Channel.DM,
-        Channel.GROUP_DM,
-        Channel.GUILD_TEXT,
-        Channel.GUILD_ANNOUNCEMENT,
-        Channel.ANNOUNCEMENT_THREAD,
-        Channel.PUBLIC_THREAD,
-        Channel.PRIVATE_THREAD,
-        Channel.GUILD_VOICE,
-    )
 }

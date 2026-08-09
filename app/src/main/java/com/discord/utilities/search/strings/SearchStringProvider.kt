@@ -12,6 +12,16 @@ interface SearchStringProvider {
     val inFilterString: String
     val mentionsFilterString: String
     val hasFilterString: String
+    val duringFilterString: String
+    /** `on:`, the reference's alias for `during:`. */
+    val onFilterString: String
+    val beforeFilterString: String
+    val afterFilterString: String
+    val authorTypeFilterString: String
+    val linkFromFilterString: String
+    val fileTypeFilterString: String
+    val fileNameFilterString: String
+    val pinnedFilterString: String
 
     val linkAnswerString: String
     val embedAnswerString: String
@@ -20,4 +30,10 @@ interface SearchStringProvider {
     val imageAnswerString: String
     val soundAnswerString: String
     val stickerAnswerString: String
+    val pollAnswerString: String
+    val forwardAnswerString: String
+
+    val userAuthorTypeAnswerString: String
+    val botAuthorTypeAnswerString: String
+    val webhookAuthorTypeAnswerString: String
 }

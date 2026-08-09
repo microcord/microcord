@@ -1,5 +1,6 @@
 package com.discord.widgets.search
 
+import com.discord.utilities.search.SearchSortMode
 import com.discord.utilities.search.SearchTarget
 import com.discord.utilities.search.network.state.SearchState
 import com.discord.utilities.search.query.FilterType
@@ -38,6 +39,9 @@ interface SearchStore {
 
     /** Binds the store to a private channel. Idempotent for the same target. */
     fun initForChannel(channelId: Long, searchStringProvider: SearchStringProvider)
+
+    /** Searches every private channel at once. */
+    fun initForDms(searchStringProvider: SearchStringProvider)
 
     fun getDisplayState(): Observable<DisplayState>
 
@@ -121,6 +125,12 @@ interface SearchQueryStore {
     )
 
     fun loadMore(searchTarget: SearchTarget, oldestMessageId: Long)
+
+    /** Re-runs the current query under a new ordering, from the first page. */
+    fun setSortMode(mode: SearchSortMode)
+
+    fun getSortMode(): SearchSortMode
+
     fun clear()
 }
 

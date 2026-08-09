@@ -16,6 +16,7 @@ import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rx.ui
+import com.discord.widgets.search.WidgetSearch
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -146,6 +147,11 @@ class WidgetGlobalSearch : AppFragment(R.layout.widget_global_search) {
         hideKeyboard(view)
         if (isLongPress && data is WidgetGlobalSearchModel.ItemUser) {
             WidgetUserSheet.show(data.user.id, parentFragmentManager)
+            return
+        }
+        if (data is WidgetGlobalSearchModel.ItemSearchMessages) {
+            WidgetSearch.launchForDms(view.context, data.query)
+            dismissViewModel.dismiss()
             return
         }
         when (data) {

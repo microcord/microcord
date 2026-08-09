@@ -75,6 +75,14 @@ class StoreSearchInput : SearchInputStore {
                 FilterType.MENTIONS -> searchStringProvider.mentionsFilterString
                 FilterType.HAS -> searchStringProvider.hasFilterString
                 FilterType.IN -> searchStringProvider.inFilterString
+                FilterType.DURING -> searchStringProvider.duringFilterString
+                FilterType.BEFORE -> searchStringProvider.beforeFilterString
+                FilterType.AFTER -> searchStringProvider.afterFilterString
+                FilterType.AUTHOR_TYPE -> searchStringProvider.authorTypeFilterString
+                FilterType.LINK_FROM -> searchStringProvider.linkFromFilterString
+                FilterType.FILE_TYPE -> searchStringProvider.fileTypeFilterString
+                FilterType.FILE_NAME -> searchStringProvider.fileNameFilterString
+                FilterType.PINNED -> searchStringProvider.pinnedFilterString
             },
         )
         replaceAndPublish(

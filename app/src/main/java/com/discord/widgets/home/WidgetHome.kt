@@ -18,20 +18,18 @@ import com.discord.stores.StoreStream
 import com.discord.dialogs.WidgetUrgentMessageDialog
 import com.discord.widgets.channels.list.WidgetChannelsList
 import com.discord.widgets.channels.list.WidgetChannelsListItemChannelActions
-import com.discord.widgets.hubs.HubEmailArgs
-import com.discord.widgets.hubs.WidgetHubEmailFlow
-import com.discord.widgets.hubs.toArgsIntent
 import com.discord.widgets.channels.memberlist.WidgetChannelMembersList
 import com.discord.widgets.channels.WidgetChannelOnboarding
 import com.discord.widgets.channels.WidgetChannelTopic
 import com.discord.widgets.channels.WidgetChannelSidebarActions
-import com.discord.app.AppScreenRouter
 import com.discord.widgets.guilds.list.GuildsListNavigation
 import com.discord.widgets.guilds.list.WidgetGuildsList
+import com.discord.widgets.hubs.HubEmailArgs
+import com.discord.widgets.hubs.WidgetHubEmailFlow
+import com.discord.widgets.hubs.toArgsIntent
 import com.discord.widgets.guilds.join.WidgetGuildWelcomeSheet
 import com.discord.widgets.chat.list.WidgetChatList
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapterItemCallMessage
-import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.quickmentions.WidgetQuickMentionsDialog
 import com.discord.widgets.search.WidgetSearch
 import com.discord.api.channel.Channel
@@ -43,6 +41,7 @@ import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isPendingMessageRequestChannel
 import com.discord.api.channel.isSystemDM
 import com.discord.api.channel.isThread
+import com.discord.app.AppScreenRouter
 import com.discord.app.appViewModels
 import com.discord.app.appActivityViewModels
 import com.discord.utilities.rx.appSubscribe
@@ -396,28 +395,11 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         }
         val callableDm = channel.isPrivate() && !channel.isSystemDM()
         val selectedVoiceChannelId = StoreStream.getVoiceChannelSelected().getSelectedVoiceChannelId()
-        val threadParentId = if (channel.isThread()) channel.parentId else channel.id
-        val threadCount = StoreStream.getThreadsActive().getAllActiveThreadsById().values
-            .count { it.guildId == channel.guildId && it.parentId == threadParentId }
-        val pinState = WidgetHomeHeaderManager.menuState(
-            channelType = channel.type,
-            threadCount = threadCount,
-            isCallConnected = callableDm && selectedVoiceChannelId == channel.id,
-            isChannelNsfw = channel.nsfw,
-            isNsfwUnconsented = channel.nsfw &&
-                !StoreStream.getGuildsNsfw().isGuildNsfwGateAgreed(channel.guildId),
-            nsfwAllowed = StoreStream.getUsers().getMe().nsfwAllowance,
-        )
-        toolbar.menu.findItem(R.id.menu_chat_pins)?.apply {
-            isVisible = pinState.pins
-            isEnabled = pinState.pinsEnabled
-        }
         toolbar.menu.findItem(R.id.menu_chat_start_call)?.isVisible = callableDm && selectedVoiceChannelId == 0L
         toolbar.menu.findItem(R.id.menu_chat_start_video_call)?.isVisible = callableDm && selectedVoiceChannelId == 0L
         toolbar.menu.findItem(R.id.menu_chat_stop_call)?.isVisible = callableDm && selectedVoiceChannelId == channel.id
-        toolbar.menu.findItem(R.id.menu_chat_thread_browser)?.isVisible = pinState.threadBrowser
+        toolbar.menu.findItem(R.id.menu_chat_search)?.isVisible = true
         toolbar.menu.findItem(R.id.menu_chat_side_panel)?.isVisible = true
-        WidgetHomeHeaderManager.configureThreadBrowserIconBehavior(toolbar, channel, threadCount, context)
         toolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 R.id.menu_chat_start_call -> true.also { privateCallLauncher().launchVoiceCall(channel.id) }
@@ -425,9 +407,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                 R.id.menu_chat_stop_call -> true.also {
                     StoreStream.getVoiceChannelSelected().selectVoiceChannel(0L).subscribe({}, {})
                 }
-                R.id.menu_chat_pins -> true.also {
-                    WidgetChannelPinnedMessages.show(requireContext(), channel.id)
-                }
+                R.id.menu_chat_search -> true.also { openSearch(channel) }
                 R.id.menu_chat_side_panel -> true.also { panels.openEndPanel() }
                 else -> false
             }

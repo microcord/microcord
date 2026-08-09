@@ -59,8 +59,17 @@ class SearchQuery(val params: Map<String, List<String>>, val includeNsfw: Boolea
                         }
                         currentFilter = null
                     }
+                    // `linkFrom:`, `fileType:` and `fileName:` take one unvalidated token, so
+                    // their answer is whatever text follows. Resolved here rather than by a parser
+                    // rule: a rule broad enough to match any token would swallow ordinary search
+                    // terms, since the parser has no memory of which filter preceded them.
                     is ContentNode -> {
-                        appendContent(node.text)
+                        val textParam = TEXT_FILTER_PARAMS[currentFilter]
+                        if (textParam != null) {
+                            appendParam(textParam, node.text.toString())
+                        } else {
+                            appendContent(node.text)
+                        }
                         currentFilter = null
                     }
                     // Any other node kind leaves the pending filter in place.
@@ -79,5 +88,18 @@ class SearchQuery(val params: Map<String, List<String>>, val includeNsfw: Boolea
         const val PARAM_CHANNEL_ID = "channel_id"
         const val PARAM_HAS = "has"
         const val PARAM_CONTENT = "content"
+        const val PARAM_AUTHOR_TYPE = "author_type"
+        const val PARAM_LINK_HOSTNAME = "link_hostname"
+        const val PARAM_ATTACHMENT_EXTENSION = "attachment_extension"
+        const val PARAM_ATTACHMENT_FILENAME = "attachment_filename"
+        const val PARAM_MIN_ID = "min_id"
+        const val PARAM_MAX_ID = "max_id"
+        const val PARAM_PINNED = "pinned"
+
+        private val TEXT_FILTER_PARAMS = mapOf(
+            FilterType.LINK_FROM to PARAM_LINK_HOSTNAME,
+            FilterType.FILE_TYPE to PARAM_ATTACHMENT_EXTENSION,
+            FilterType.FILE_NAME to PARAM_ATTACHMENT_FILENAME,
+        )
     }
 }

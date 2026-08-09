@@ -1,6 +1,7 @@
 package com.discord.widgets.search
 
 import com.discord.api.channel.isGuildTextyChannel
+import com.discord.api.search.SearchCursor
 import com.discord.api.user.NsfwAllowance
 import com.discord.models.domain.ModelSearchResponse
 import com.discord.models.message.Message
@@ -8,6 +9,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.leadingEdgeThrottle
+import com.discord.utilities.search.SearchSortMode
 import com.discord.utilities.search.SearchTarget
 import com.discord.utilities.search.history.PersistedSearchHistoryCache
 import com.discord.utilities.search.history.SearchHistoryCache
@@ -69,6 +71,11 @@ class DefaultSearchStore(
 
     override fun initForChannel(channelId: Long, searchStringProvider: SearchStringProvider) {
         init(SearchTarget(SearchTarget.Type.CHANNEL, channelId), searchStringProvider)
+        SearchSuggestionEngine.targetGuildId = null
+    }
+
+    override fun initForDms(searchStringProvider: SearchStringProvider) {
+        init(SearchTarget(SearchTarget.Type.DMS, 0L), searchStringProvider)
         SearchSuggestionEngine.targetGuildId = null
     }
 
@@ -225,6 +232,14 @@ class DefaultSearchInputStore : SearchInputStore {
                 FilterType.MENTIONS -> searchStringProvider.mentionsFilterString
                 FilterType.HAS -> searchStringProvider.hasFilterString
                 FilterType.IN -> searchStringProvider.inFilterString
+                FilterType.DURING -> searchStringProvider.duringFilterString
+                FilterType.BEFORE -> searchStringProvider.beforeFilterString
+                FilterType.AFTER -> searchStringProvider.afterFilterString
+                FilterType.AUTHOR_TYPE -> searchStringProvider.authorTypeFilterString
+                FilterType.LINK_FROM -> searchStringProvider.linkFromFilterString
+                FilterType.FILE_TYPE -> searchStringProvider.fileTypeFilterString
+                FilterType.FILE_NAME -> searchStringProvider.fileNameFilterString
+                FilterType.PINNED -> searchStringProvider.pinnedFilterString
             },
         )
         // A filter tapped while the user is mid-word replaces that word; otherwise it is appended.
@@ -344,6 +359,8 @@ class DefaultSearchQueryStore(
     private val searchStateSubject = SerializedSubject(BehaviorSubject.create(SEARCH_STATE_NONE))
     private var currentSearchState: SearchState = SEARCH_STATE_NONE
     private var querySubscription: Subscription? = null
+    private var sortMode = SearchSortMode.DEFAULT
+    private var lastTarget: SearchTarget? = null
 
     override val state: Observable<SearchState>
         get() = searchStateSubject.distinctUntilChanged()
@@ -391,6 +408,7 @@ class DefaultSearchQueryStore(
         if (currentSearchState.queryFetchState != QueryFetchState.COMPLETED) return
         if (!currentSearchState.hasMore) return
 
+        val cursor = currentSearchState.cursor
         unsubscribe()
         updateAndPublish(
             currentSearchState.copy(
@@ -398,8 +416,25 @@ class DefaultSearchQueryStore(
                 hasMore = false,
             ),
         )
-        makeQuery(searchQuery, searchTarget, oldestMessageId, isInitialLoad = false)
+        makeQuery(searchQuery, searchTarget, oldestMessageId, isInitialLoad = false, cursor = cursor)
     }
+
+    /**
+     * Re-runs the current query under a new ordering, discarding what was fetched: a cursor is only
+     * valid for the sort that minted it.
+     */
+    @Synchronized
+    override fun setSortMode(mode: SearchSortMode) {
+        if (mode == sortMode) return
+        sortMode = mode
+        val searchQuery = currentSearchState.searchQuery ?: return
+        val target = lastTarget ?: return
+        unsubscribe()
+        updateAndPublish(SearchState(QueryFetchState.IN_PROGRESS, searchQuery))
+        makeQuery(searchQuery, target, oldestMessageId = null, isInitialLoad = true)
+    }
+
+    override fun getSortMode(): SearchSortMode = sortMode
 
     override fun clear() {
         unsubscribe()
@@ -408,6 +443,7 @@ class DefaultSearchQueryStore(
 
     private fun performInitialLoad(searchTarget: SearchTarget, query: SearchQuery) {
         unsubscribe()
+        lastTarget = searchTarget
         makeQuery(query, searchTarget, oldestMessageId = null, isInitialLoad = true)
     }
 
@@ -416,8 +452,9 @@ class DefaultSearchQueryStore(
         searchTarget: SearchTarget,
         oldestMessageId: Long?,
         isInitialLoad: Boolean,
+        cursor: SearchCursor? = null,
     ) {
-        searchFetcher.makeQuery(searchTarget, oldestMessageId, query).appSubscribe(
+        searchFetcher.makeQuery(searchTarget, oldestMessageId, query, sortMode, cursor).appSubscribe(
             errorTag = "makeQuery",
             subscriptionHandler = { querySubscription = it },
             errorHandler = { _ -> handleError() },
@@ -502,6 +539,8 @@ class DefaultSearchDataStore : SearchDataStore {
         val source = when (searchTarget.type) {
             SearchTarget.Type.GUILD -> guildSearchData(searchTarget.id)
             SearchTarget.Type.CHANNEL -> channelSearchData(searchTarget.id)
+            // No guild to enumerate members or channels from.
+            SearchTarget.Type.DMS -> Observable.just(SearchData())
         }
         source
             .distinctUntilChanged()

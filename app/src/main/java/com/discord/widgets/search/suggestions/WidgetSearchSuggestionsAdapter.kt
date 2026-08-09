@@ -172,6 +172,14 @@ class WidgetSearchSuggestionsAdapter(
             FilterType.MENTIONS -> R.string.search_filter_mentions
             FilterType.HAS -> R.string.search_filter_has
             FilterType.IN -> R.string.search_filter_in
+            FilterType.DURING -> R.string.search_filter_during
+            FilterType.BEFORE -> R.string.search_filter_before
+            FilterType.AFTER -> R.string.search_filter_after
+            FilterType.AUTHOR_TYPE -> R.string.search_filter_author_type
+            FilterType.LINK_FROM -> R.string.search_filter_link_from
+            FilterType.FILE_TYPE -> R.string.search_filter_file_type
+            FilterType.FILE_NAME -> R.string.search_filter_file_name
+            FilterType.PINNED -> R.string.search_filter_pinned
         }
 
         private fun answerText(filterType: FilterType): Int = when (filterType) {
@@ -179,13 +187,22 @@ class WidgetSearchSuggestionsAdapter(
             FilterType.MENTIONS -> R.string.search_answer_mentions
             FilterType.HAS -> R.string.search_answer_has
             FilterType.IN -> R.string.search_answer_in
+            FilterType.DURING, FilterType.BEFORE, FilterType.AFTER -> R.string.search_answer_date
+            FilterType.AUTHOR_TYPE -> R.string.search_answer_author_type
+            FilterType.LINK_FROM -> R.string.search_answer_link_from
+            FilterType.FILE_TYPE -> R.string.search_answer_file_type
+            FilterType.FILE_NAME -> R.string.search_answer_file_name
+            FilterType.PINNED -> R.string.search_filter_pinned
         }
 
         private fun filterIcon(filterType: FilterType): Int = when (filterType) {
-            FilterType.FROM -> R.drawable.ic_members_24dp
+            FilterType.FROM, FilterType.AUTHOR_TYPE -> R.drawable.ic_members_24dp
             FilterType.MENTIONS -> R.drawable.ic_mentions_white_24dp
-            FilterType.HAS -> R.drawable.ic_attachment_white_24dp
+            FilterType.HAS, FilterType.FILE_TYPE, FilterType.FILE_NAME -> R.drawable.ic_attachment_white_24dp
             FilterType.IN -> R.drawable.ic_text_channel_white_24dp
+            FilterType.DURING, FilterType.BEFORE, FilterType.AFTER -> R.drawable.ic_calendar_white_24dp
+            FilterType.LINK_FROM -> R.drawable.ic_diag_link_24dp
+            FilterType.PINNED -> R.drawable.ic_pin_24dp
         }
     }
 
@@ -280,6 +297,8 @@ class WidgetSearchSuggestionsAdapter(
             HasAnswerOption.IMAGE -> R.drawable.ic_text_image_24dp
             HasAnswerOption.SOUND -> R.drawable.ic_sound_24dp
             HasAnswerOption.STICKER -> R.drawable.ic_sticker_icon_24dp
+            HasAnswerOption.POLL -> R.drawable.ic_poll_24dp
+            HasAnswerOption.FORWARD -> R.drawable.ic_forward_16dp
         }
     }
 

@@ -85,6 +85,7 @@ import com.discord.api.user.UserProfile
 import com.discord.api.user.UserSurveyFetchResponse
 import com.discord.models.domain.Consents
 import com.discord.models.domain.UserSettingsProtoPatch
+import com.discord.models.domain.ModelSearchTabsResponse
 import com.discord.models.domain.UserSettingsProtoResponse
 import com.discord.models.domain.Harvest
 import com.discord.models.domain.ModelApplicationStreamPreview
@@ -986,6 +987,19 @@ interface RestAPIInterface {
 
     @POST("channels/{channelId}/followers")
     fun createChannelFollower(
+        @Query("min_id") newestMessageId: Long? = null,
+        @Query("author_type") authorTypes: List<String>? = null,
+        @Query("mentions_role_id") mentionsRoleIds: List<String>? = null,
+        @Query("mention_everyone") mentionEveryone: Boolean? = null,
+        @Query("pinned") pinned: Boolean? = null,
+        @Query("embed_type") embedTypes: List<String>? = null,
+        @Query("embed_provider") embedProviders: List<String>? = null,
+        @Query("link_hostname") linkHostnames: List<String>? = null,
+        @Query("attachment_filename") attachmentFilenames: List<String>? = null,
+        @Query("attachment_extension") attachmentExtensions: List<String>? = null,
+        @Query("sort_by") sortBy: String? = null,
+        @Query("sort_order") sortOrder: String? = null,
+        @Query("offset") offset: Int? = null,
         @Path("channelId") channelId: Long,
         @Body body: RestAPIParams.ChannelFollowerPost,
     ): Observable<Void>
@@ -1400,6 +1414,13 @@ interface RestAPIInterface {
         @Query("channel_id") inChannelIds: List<String>?,
         @Query("has") has: List<String>?,
         @Query("content") content: List<String>?,
+    /**
+     * Cross-DM search. The only endpoint that searches every private channel at once, and the only
+     * form it comes in — there is no `GET /users/@me/messages/search`.
+     */
+    @POST("users/@me/messages/search/tabs")
+    fun searchDmMessages(@Body body: RestAPIParams.SearchTabs): Observable<ModelSearchTabsResponse>
+
         @Query("attempts") attempts: Int?,
         @Query("include_nsfw") includeNsfw: Boolean?,
     ): Observable<ModelSearchResponse>
@@ -1411,6 +1432,19 @@ interface RestAPIInterface {
         @Query("before") before: Long?,
         @Query("user_id") userId: Long?,
         @Query("action_type") actionType: Int?,
+        @Query("min_id") newestMessageId: Long? = null,
+        @Query("author_type") authorTypes: List<String>? = null,
+        @Query("mentions_role_id") mentionsRoleIds: List<String>? = null,
+        @Query("mention_everyone") mentionEveryone: Boolean? = null,
+        @Query("pinned") pinned: Boolean? = null,
+        @Query("embed_type") embedTypes: List<String>? = null,
+        @Query("embed_provider") embedProviders: List<String>? = null,
+        @Query("link_hostname") linkHostnames: List<String>? = null,
+        @Query("attachment_filename") attachmentFilenames: List<String>? = null,
+        @Query("attachment_extension") attachmentExtensions: List<String>? = null,
+        @Query("sort_by") sortBy: String? = null,
+        @Query("sort_order") sortOrder: String? = null,
+        @Query("offset") offset: Int? = null,
     ): Observable<ModelAuditLog>
 
     // -- Guild discovery, welcome screen, membership screening ---------------------------------------------------

@@ -23,6 +23,15 @@ private object EnglishSearchStrings : SearchStringProvider {
     override val inFilterString = "in"
     override val mentionsFilterString = "mentions"
     override val hasFilterString = "has"
+    override val duringFilterString = "during"
+    override val onFilterString = "on"
+    override val beforeFilterString = "before"
+    override val afterFilterString = "after"
+    override val authorTypeFilterString = "authorType"
+    override val linkFromFilterString = "linkFrom"
+    override val fileTypeFilterString = "fileType"
+    override val fileNameFilterString = "fileName"
+    override val pinnedFilterString = "pinned"
     override val linkAnswerString = "link"
     override val embedAnswerString = "embed"
     override val fileAnswerString = "file"
@@ -30,6 +39,11 @@ private object EnglishSearchStrings : SearchStringProvider {
     override val imageAnswerString = "image"
     override val soundAnswerString = "sound"
     override val stickerAnswerString = "sticker"
+    override val pollAnswerString = "poll"
+    override val forwardAnswerString = "forward"
+    override val userAuthorTypeAnswerString = "user"
+    override val botAuthorTypeAnswerString = "bot"
+    override val webhookAuthorTypeAnswerString = "webhook"
 }
 
 class QueryParserTest {

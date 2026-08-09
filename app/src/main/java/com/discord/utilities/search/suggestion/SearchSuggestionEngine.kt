@@ -108,10 +108,9 @@ object SearchSuggestionEngine {
         searchStringProvider: SearchStringProvider,
         includeInChannels: Boolean,
     ): List<SearchSuggestion> =
-        // Only the first three filters are offered; `IN` is reachable through the `#` shorthand and
-        // is suppressed entirely when the target has no channels to name (a DM).
-        FilterType.values()
-            .take(3)
+        // `IN` is suppressed when the target has no channels to name (a DM); it stays reachable
+        // through the `#` shorthand either way.
+        FilterType.OFFERED
             .filter { includeInChannels || it != FilterType.IN }
             .filter { FilterSuggestion.canComplete(rawContent, it, searchStringProvider) }
             .map(::FilterSuggestion)
@@ -122,9 +121,7 @@ object SearchSuggestionEngine {
         searchStringProvider: SearchStringProvider,
     ): List<SearchSuggestion> {
         if (currentFilterType != FilterType.HAS) return emptyList()
-        // `STICKER` is the seventh option and is deliberately not offered on mobile.
-        return HasAnswerOption.values()
-            .take(6)
+        return HasAnswerOption.OFFERED
             .filter { HasSuggestion.canComplete(rawContent, it, searchStringProvider) }
             .map(::HasSuggestion)
     }

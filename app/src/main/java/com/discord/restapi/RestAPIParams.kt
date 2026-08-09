@@ -13,6 +13,7 @@ import com.discord.api.message.allowedmentions.MessageAllowedMentions
 import com.discord.api.permission.PermissionOverwrite
 import com.discord.api.presence.ClientStatus
 import com.discord.api.role.GuildRole
+import com.discord.api.search.SearchCursor
 import com.discord.api.stageinstance.StageInstancePrivacyLevel
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.domain.ModelCustomStatusSetting
@@ -526,6 +527,38 @@ object RestAPIParams {
         val temporary: Boolean,
         val regenerate: String?,
     )
+
+    /**
+     * Body for `POST {guilds|channels|users/@me}/messages/search/tabs`.
+     *
+     * `include_nsfw` and `channel_ids` are lifted out of the per-tab query to the envelope, which is
+     * the one shape difference from the GET search endpoints.
+     */
+    data class SearchTabs(
+        val tabs: Map<String, Tab>,
+        val includeNsfw: Boolean? = null,
+        val channelIds: List<String>? = null,
+        val trackExactTotalHits: Boolean? = null,
+    ) {
+        /** @param cursor the previous page's cursor, echoed back verbatim. */
+        data class Tab(
+            val content: String? = null,
+            val authorId: List<String>? = null,
+            val mentions: List<String>? = null,
+            val has: List<String>? = null,
+            val authorType: List<String>? = null,
+            val linkHostname: List<String>? = null,
+            val attachmentExtension: List<String>? = null,
+            val attachmentFilename: List<String>? = null,
+            val pinned: Boolean? = null,
+            val minId: String? = null,
+            val maxId: String? = null,
+            val sortBy: String? = null,
+            val sortOrder: String? = null,
+            val limit: Int? = null,
+            val cursor: SearchCursor? = null,
+        )
+    }
 
     /**
      * Body for `POST /invites/{code}` — and, with everything null, the empty object `PUT

@@ -28,6 +28,9 @@ class StoreSearchData(
         val source = when (searchTarget.type) {
             SearchTarget.Type.GUILD -> getGuildSearchData(searchTarget.id)
             SearchTarget.Type.CHANNEL -> getChannelSearchData(searchTarget.id)
+            // No guild to enumerate members or channels from, so only `has:`-style filters and free
+            // text are suggestible.
+            SearchTarget.Type.DMS -> Observable.just(SearchData())
         }
         source.computationBuffered().distinctUntilChanged().appSubscribe(
             errorClass = StoreSearchData::class.java,

@@ -1,6 +1,7 @@
 package com.discord.stores
 
 import android.content.SharedPreferences
+import com.discord.api.search.SearchCursor
 import com.discord.models.domain.ModelSearchResponse
 import com.discord.models.gifpicker.dto.GifCategoryDto
 import com.discord.models.gifpicker.dto.GifDto
@@ -9,6 +10,7 @@ import com.discord.models.gifpicker.dto.TrendingGifPreviewDto
 import com.discord.restapi.RestAPIInterface
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.persister.Persister
+import com.discord.utilities.search.SearchSortMode
 import com.discord.utilities.search.SearchTarget
 import com.discord.utilities.search.network.SearchFetcher
 import com.discord.utilities.search.network.SearchQuery
@@ -198,6 +200,8 @@ class SearchGifExpressionStoresTest {
             searchTarget: SearchTarget,
             oldestMessageId: Long?,
             searchQuery: SearchQuery,
+            sortMode: SearchSortMode,
+            cursor: SearchCursor?,
         ): Observable<ModelSearchResponse> {
             oldestMessageIds += oldestMessageId
             return if (oldestMessageId == null) {
@@ -268,6 +272,15 @@ class SearchGifExpressionStoresTest {
             override val inFilterString = "in:"
             override val mentionsFilterString = "mentions:"
             override val hasFilterString = "has:"
+            override val duringFilterString = "during:"
+            override val onFilterString = "on:"
+            override val beforeFilterString = "before:"
+            override val afterFilterString = "after:"
+            override val authorTypeFilterString = "authorType:"
+            override val linkFromFilterString = "linkFrom:"
+            override val fileTypeFilterString = "fileType:"
+            override val fileNameFilterString = "fileName:"
+            override val pinnedFilterString = "pinned:"
             override val linkAnswerString = "link"
             override val embedAnswerString = "embed"
             override val fileAnswerString = "file"
@@ -275,6 +288,11 @@ class SearchGifExpressionStoresTest {
             override val imageAnswerString = "image"
             override val soundAnswerString = "sound"
             override val stickerAnswerString = "sticker"
+            override val pollAnswerString = "poll"
+            override val forwardAnswerString = "forward"
+            override val userAuthorTypeAnswerString = "user"
+            override val botAuthorTypeAnswerString = "bot"
+            override val webhookAuthorTypeAnswerString = "webhook"
         }
     }
 }

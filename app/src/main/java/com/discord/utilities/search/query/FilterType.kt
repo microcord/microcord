@@ -1,15 +1,30 @@
 package com.discord.utilities.search.query
 
 /**
- * The four search filters the mobile client understands.
+ * The search filters the client understands.
  *
- * Ordinal order is load-bearing — `UserNode.updateQuery` and `FilterSuggestion` both dispatch on it
- * — and is `FROM, MENTIONS, HAS, IN`. (The reference's decompiled source lists them alphabetically;
- * the real order comes from the enum's static initialiser.)
+ * Declaration order is the order the suggestion list offers them, which is the reference's mobile
+ * filter order: `from, in, has, mentions, during, before, after, authorType`. The remaining entries
+ * are parsed but never suggested — [PINNED] is web-only in the reference, and the three text
+ * filters are reachable by typing their keyword.
  */
 enum class FilterType {
     FROM,
-    MENTIONS,
-    HAS,
     IN,
+    HAS,
+    MENTIONS,
+    DURING,
+    BEFORE,
+    AFTER,
+    AUTHOR_TYPE,
+    LINK_FROM,
+    FILE_TYPE,
+    FILE_NAME,
+    PINNED,
+    ;
+
+    companion object {
+        /** What the picker offers, in order. */
+        val OFFERED = listOf(FROM, IN, HAS, MENTIONS, DURING, BEFORE, AFTER, AUTHOR_TYPE)
+    }
 }

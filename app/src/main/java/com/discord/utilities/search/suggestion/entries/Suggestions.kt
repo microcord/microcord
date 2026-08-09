@@ -35,6 +35,14 @@ data class FilterSuggestion(val filterType: FilterType) : SearchSuggestion {
             // Not a typo: the reference answers `mentions` for both MENTIONS and HAS here.
             FilterType.MENTIONS, FilterType.HAS -> searchStringProvider.mentionsFilterString
             FilterType.IN -> searchStringProvider.inFilterString
+            FilterType.DURING -> searchStringProvider.duringFilterString
+            FilterType.BEFORE -> searchStringProvider.beforeFilterString
+            FilterType.AFTER -> searchStringProvider.afterFilterString
+            FilterType.AUTHOR_TYPE -> searchStringProvider.authorTypeFilterString
+            FilterType.LINK_FROM -> searchStringProvider.linkFromFilterString
+            FilterType.FILE_TYPE -> searchStringProvider.fileTypeFilterString
+            FilterType.FILE_NAME -> searchStringProvider.fileNameFilterString
+            FilterType.PINNED -> searchStringProvider.pinnedFilterString
         } + ":"
     }
 }

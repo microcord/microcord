@@ -46,7 +46,12 @@ class WidgetSearchViewModel(
                 searchStore.getDisplayState(),
                 searchStore.storeSearchInput.isInputValid,
             ) { resolvedGuild, resolvedChannel, displayState, isQueryValid ->
-                if (targetType == null || (resolvedGuild == null && resolvedChannel == null)) {
+                // Cross-DM search is scoped to no single entity, so it resolves neither a guild
+                // nor a channel and is still a valid target.
+                val resolved = resolvedGuild != null ||
+                    resolvedChannel != null ||
+                    targetType == WidgetSearch.TargetType.DMS
+                if (targetType == null || !resolved) {
                     ViewState.Invalid
                 } else {
                     ViewState.Loaded(resolvedGuild, resolvedChannel, displayState, isQueryValid)
