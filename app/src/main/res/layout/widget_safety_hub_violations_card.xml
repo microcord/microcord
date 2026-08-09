@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:background="@drawable/drawable_safety_hub_card" android:padding="16dp">
+    <TextView android:id="@+id/violations_card_header" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/uikit_textsize_medium" android:textColor="?attr/colorHeaderPrimary" style="@style/UiKit.TextView.Semibold"/>
+    <TextView android:id="@+id/violations_card_subheader" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textSize="@dimen/uikit_textsize_small" android:textColor="?attr/colorHeaderSecondary" style="@style/UiKit.TextView"/>
+    <LinearLayout android:id="@+id/violations_card_items" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"/>
+    <TextView android:id="@+id/violations_card_more" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:paddingTop="6dp" android:paddingBottom="6dp" android:textSize="@dimen/uikit_textsize_small" android:textColor="?attr/colorTextLink" android:visibility="gone" style="@style/UiKit.TextView.Semibold"/>
+</LinearLayout>

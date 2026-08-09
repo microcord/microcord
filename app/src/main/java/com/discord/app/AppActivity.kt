@@ -60,6 +60,7 @@ import com.discord.widgets.auth.WidgetAuthRegisterIdentity
 import com.discord.widgets.auth.WidgetAuthRequiredAction
 import com.discord.widgets.auth.WidgetAuthResetPassword
 import com.discord.widgets.auth.WidgetAuthUndeleteAccount
+import com.discord.widgets.safetyhub.WidgetSuspendedUser
 import com.discord.widgets.tabs.WidgetTabsHost
 import com.discord.widgets.voice.fullscreen.WidgetCallFullscreen
 import com.discord.widgets.voice.call.WidgetVoiceCallIncoming
@@ -561,6 +562,7 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
             AuthRoute.FORCE_PASSWORD -> WidgetAuthForceChangePassword()
             AuthRoute.RESET_PASSWORD -> WidgetAuthResetPassword()
             AuthRoute.UNDELETE_ACCOUNT -> WidgetAuthUndeleteAccount()
+            AuthRoute.ACCOUNT_STANDING -> WidgetSuspendedUser()
         }.apply { arguments = AuthFragment.arguments(state) }
         AppLog.recordNavigation(javaClass.simpleName, fragment.javaClass.simpleName)
         supportFragmentManager.beginTransaction()

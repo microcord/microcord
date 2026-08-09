@@ -24,6 +24,7 @@ enum class AuthRoute : Serializable {
     FORCE_PASSWORD,
     RESET_PASSWORD,
     UNDELETE_ACCOUNT,
+    ACCOUNT_STANDING,
 }
 
 enum class AuthIdentityMode : Serializable { EMAIL, PHONE }

@@ -13,6 +13,7 @@ import com.discord.api.message.allowedmentions.MessageAllowedMentions
 import com.discord.api.permission.PermissionOverwrite
 import com.discord.api.presence.ClientStatus
 import com.discord.api.role.GuildRole
+import com.discord.api.safetyhub.AppealIngestionSignal
 import com.discord.api.search.SearchCursor
 import com.discord.api.stageinstance.StageInstancePrivacyLevel
 import com.discord.api.utcdatetime.UtcDateTime
@@ -453,6 +454,18 @@ object RestAPIParams {
 
     /** Body of `POST auth/sessions/logout`; 1-64 session id hashes. */
     data class LogoutAuthSessions(val sessionIdHashes: List<String>)
+
+    /** Identifies a suspended account to the endpoints it can still reach. */
+    data class SuspendedUser(val token: String) {
+        override fun toString(): String = "SuspendedUser(token=<redacted>)"
+    }
+
+    /** [token] is set only on the suspended variant of `safety-hub/request-review`. */
+    data class SafetyHubReviewRequest(
+        val signal: AppealIngestionSignal,
+        val userInput: String,
+        val token: String? = null,
+    )
 
     data class RenameAuthenticator(val name: String)
 

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="horizontal" android:gravity="center_vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="?attr/selectableItemBackground" android:paddingTop="10dp" android:paddingBottom="10dp">
+    <LinearLayout android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+        <TextView android:id="@+id/violation_description" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/uikit_textsize_medium" android:textColor="?attr/colorHeaderPrimary" style="@style/UiKit.TextView"/>
+        <TextView android:id="@+id/violation_expiration" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textSize="@dimen/uikit_textsize_small" android:textColor="?attr/colorTextMuted" android:visibility="gone" style="@style/UiKit.TextView"/>
+    </LinearLayout>
+    <ImageView android:layout_width="12dp" android:layout_height="12dp" android:layout_marginStart="8dp" android:src="@drawable/ic_chevron_right_grey_12dp" android:importantForAccessibility="no"/>
+</LinearLayout>

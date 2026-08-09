@@ -28,8 +28,8 @@ object I18nSpans {
      * `[label](target)` — the target may itself have been produced by a `{token}` substitution.
      *
      * The optional leading `$` is Discord's marker for "this target names a hook, not a URL"
-     * (`$[Learn More](learnMoreHook)`). It is consumed by the match so it never reaches the user;
-     * without that, every hook string renders with a stray `$` in front of its label.
+     * (`$[Learn More](learnMoreHook)`). It is consumed by the match so it never reaches the user,
+     * and it selects the hook span rather than a [URLSpan] to the hook's name.
      */
     // The closing `]` is escaped for the same reason `}` is in FormatUtils: Android's ICU engine
     // rejects a bare closing delimiter that the JVM accepts.
@@ -50,6 +50,8 @@ object I18nSpans {
      */
     private val EMPHASIS = Regex("""!!(.+?)!!""", RegexOption.DOT_MATCHES_ALL)
 
+    private val BOLD_SPAN = { StyleSpan(android.graphics.Typeface.BOLD) }
+
     /**
      * Substitutes [args] into [template] and converts the surviving markdown into spans.
      *
@@ -58,11 +60,25 @@ object I18nSpans {
      */
     @JvmStatic
     fun render(template: CharSequence, vararg args: Pair<String, Any?>): CharSequence =
-        renderMarkdown(FormatUtils.substitute(template, args.toMap()))
+        renderMarkdown(FormatUtils.substitute(template, args.toMap()), BOLD_SPAN)
 
-    private fun renderMarkdown(source: String): CharSequence {
+    /**
+     * As [render], but hook runs take [hookSpan] instead of the default emphasis.
+     *
+     * A hook target names a style the screen supplies, not a URL, so it is the one construct
+     * [render] cannot resolve on its own.
+     */
+    fun renderWithHook(
+        template: CharSequence,
+        vararg args: Pair<String, Any?>,
+        hookSpan: () -> Any,
+    ): CharSequence = renderMarkdown(FormatUtils.substitute(template, args.toMap()), hookSpan)
+
+    private fun renderMarkdown(source: String, hookSpan: () -> Any): CharSequence {
         val builder = SpannableStringBuilder(source)
-        applyInline(builder, MASKED_LINK) { match -> URLSpan(match.groupValues[2]) }
+        applyInline(builder, MASKED_LINK) { match ->
+            if (match.value.startsWith('$')) hookSpan() else URLSpan(match.groupValues[2])
+        }
         applyInline(builder, BOLD) { StyleSpan(android.graphics.Typeface.BOLD) }
         applyInline(builder, EMPHASIS) { StyleSpan(android.graphics.Typeface.BOLD) }
         applyInline(builder, ITALIC_UNDERSCORE) { StyleSpan(android.graphics.Typeface.ITALIC) }

@@ -77,6 +77,10 @@ class StoreAuthentication(
     private var isConsentRequiredSubscription: Subscription? = null
     private val oauthUriSubject = SerializedSubject<Uri, Uri>(BehaviorSubject.create(Uri.EMPTY))
     private var savedLogin: String? = null
+    /** In memory only, as in the reference: a restart drops it and returns to the login screen. */
+    private var suspendedUserToken: String? = null
+    private val suspendedUserTokenSubject: SerializedSubject<String?, String?> =
+        SerializedSubject(BehaviorSubject.create(null as String?))
     private val userInitiatedAuthEventSubject = PublishSubject.create<Boolean>()
     private var api: RestAPIInterface? = null
 
@@ -222,6 +226,20 @@ class StoreAuthentication(
     }
 
     fun setAuthed(token: String?) = publishAuthState(AuthState.from(token, emptySet()))
+
+    private fun setSuspendedUserToken(token: String?) {
+        suspendedUserToken = token
+        suspendedUserTokenSubject.onNext(token)
+    }
+
+    fun getSuspendedUserToken(): String? = suspendedUserToken
+
+    fun observeSuspendedUserToken(): Observable<String?> = suspendedUserTokenSubject.distinctUntilChanged()
+
+    fun closeSuspendedUser() {
+        setSuspendedUserToken(null)
+        publishAuthState(null)
+    }
 
     fun logout() {
         userInitiatedAuthEventSubject.onNext(false)
@@ -400,8 +418,9 @@ class StoreAuthentication(
                 response.errorBody()?.source()?.peek()?.readUtf8()
                     ?.let { SUSPENSION_GSON.fromJson(it, ModelLoginResult::class.java) }
             }.getOrNull()?.suspendedUserToken?.takeUnless(String::isBlank)
+            if (suspended != null) setSuspendedUserToken(suspended)
             Observable.error(
-                if (suspended != null) AccountSuspendedException() else HttpException(response),
+                if (suspended != null) AccountSuspendedException(suspended) else HttpException(response),
             )
         }
 

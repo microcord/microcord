@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="?attr/colorBackgroundPrimary">
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="16dp">
+        <TextView android:id="@+id/appeal_header" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/safety_hub_appeal_modal_header" android:textSize="@dimen/uikit_textsize_large" android:textColor="?attr/colorHeaderPrimary" style="@style/UiKit.TextView.Semibold"/>
+        <TextView android:id="@+id/appeal_subheader" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/safety_hub_appeal_collect_signal_subheader" android:textSize="@dimen/uikit_textsize_medium" android:textColor="?attr/colorHeaderSecondary" style="@style/UiKit.TextView"/>
+
+        <RadioGroup android:id="@+id/appeal_signals" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp">
+            <RadioButton android:id="@+id/appeal_signal_didnt_violate" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/safety_hub_appeal_collect_signal_didnt_violate_policy" android:textColor="?attr/colorHeaderPrimary"/>
+            <RadioButton android:id="@+id/appeal_signal_too_strict" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/safety_hub_appeal_collect_signal_too_strict_unfair" android:textColor="?attr/colorHeaderPrimary"/>
+            <RadioButton android:id="@+id/appeal_signal_dont_agree" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/safety_hub_appeal_collect_signal_dont_agree_penalty" android:textColor="?attr/colorHeaderPrimary"/>
+            <RadioButton android:id="@+id/appeal_signal_something_else" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/safety_hub_appeal_collect_signal_something_else" android:textColor="?attr/colorHeaderPrimary"/>
+        </RadioGroup>
+
+        <TextView android:id="@+id/appeal_free_text_subheader" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="@string/safety_hub_appeal_free_text_subheader" android:textSize="@dimen/uikit_textsize_small" android:textColor="?attr/colorHeaderSecondary" style="@style/UiKit.TextView"/>
+        <EditText android:id="@+id/appeal_input" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:gravity="top|start" android:hint="@string/safety_hub_appeal_free_text_placeholder" android:inputType="textMultiLine|textCapSentences" android:maxLength="1024" android:minLines="3" android:textColor="?attr/colorHeaderPrimary" android:importantForAutofill="no"/>
+
+        <TextView android:id="@+id/appeal_footer" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/safety_hub_appeal_confirm_submission_footer" android:textSize="@dimen/uikit_textsize_small" android:textColor="?attr/colorTextMuted" style="@style/UiKit.TextView"/>
+        <TextView android:id="@+id/appeal_disclaimer" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textSize="@dimen/uikit_textsize_small" android:textColor="?attr/colorTextMuted" style="@style/UiKit.TextView"/>
+
+        <com.google.android.material.button.MaterialButton android:id="@+id/appeal_submit" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:enabled="false" android:text="@string/safety_hub_appeal_modal_header"/>
+    </LinearLayout>
+</ScrollView>

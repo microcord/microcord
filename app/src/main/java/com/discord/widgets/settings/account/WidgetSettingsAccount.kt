@@ -31,6 +31,7 @@ import com.discord.utilities.view.extensions.setEnabledAlpha
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.views.CheckedSetting
 import com.discord.widgets.notice.WidgetNoticeDialog
+import com.discord.widgets.safetyhub.WidgetSafetyHub
 import com.discord.widgets.settings.SettingsNavigation
 import com.discord.widgets.settings.account.mfa.WidgetEnableMFASteps
 import com.discord.widgets.settings.SettingsStrings
@@ -143,6 +144,9 @@ class WidgetSettingsAccount : AppFragment(R.layout.widget_settings_account) {
                 WidgetUserAccountVerifyBase.Mode.UNFORCED,
                 WidgetUserPhoneManage.Source.USER_SETTINGS_UPDATE,
             )
+        }
+        view?.findViewById<View>(R.id.settings_account_standing)?.setOnClickListener {
+            SettingsNavigation.launch(it.context, WidgetSafetyHub::class.java)
         }
         view?.findViewById<View>(R.id.settings_blocked_users)?.setOnClickListener {
             SettingsNavigation.launch(it.context, WidgetSettingsBlockedUsers::class.java)

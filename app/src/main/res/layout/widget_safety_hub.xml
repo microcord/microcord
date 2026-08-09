@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+
+    <com.google.android.material.appbar.AppBarLayout android:id="@+id/safety_hub_app_bar" style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <FrameLayout android:layout_width="match_parent" android:layout_height="match_parent" app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <ScrollView android:id="@+id/safety_hub_scroll" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
+            <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="16dp">
+
+                <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/drawable_safety_hub_card" android:padding="16dp">
+                    <TextView android:id="@+id/safety_hub_standing_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/uikit_textsize_xlarge" android:textColor="?attr/colorHeaderPrimary" style="@style/UiKit.TextView.Semibold"/>
+                    <TextView android:id="@+id/safety_hub_standing_description" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textSize="@dimen/uikit_textsize_medium" android:textColor="?attr/colorHeaderSecondary" style="@style/UiKit.TextView"/>
+                    <com.discord.widgets.safetyhub.AccountStandingProgressView android:id="@+id/safety_hub_standing_progress" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:layout_marginBottom="4dp"/>
+                    <TextView android:id="@+id/safety_hub_standing_short" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textSize="@dimen/uikit_textsize_small" style="@style/UiKit.TextView.Semibold"/>
+                </LinearLayout>
+
+                <include android:id="@+id/safety_hub_active" layout="@layout/widget_safety_hub_violations_card"/>
+
+                <include android:id="@+id/safety_hub_expired" layout="@layout/widget_safety_hub_violations_card"/>
+
+            </LinearLayout>
+        </ScrollView>
+
+        <ProgressBar android:id="@+id/safety_hub_loading" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center"/>
+
+        <LinearLayout android:id="@+id/safety_hub_error" android:orientation="vertical" android:gravity="center" android:layout_width="match_parent" android:layout_height="match_parent" android:padding="32dp" android:visibility="gone">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:gravity="center" android:text="@string/safety_hub_error_message" android:textSize="@dimen/uikit_textsize_medium" android:textColor="?attr/colorHeaderSecondary" style="@style/UiKit.TextView"/>
+            <com.google.android.material.button.MaterialButton android:id="@+id/safety_hub_error_retry" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="@string/safety_hub_error_action_button"/>
+        </LinearLayout>
+
+    </FrameLayout>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

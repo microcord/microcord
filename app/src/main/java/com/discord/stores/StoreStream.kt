@@ -531,6 +531,34 @@ class StoreStream private constructor(
                 { if (generation == authGeneration) callback(Result.failure(it)) },
             )
     })
+    private val safetyHub = StoreSafetyHub(
+        dispatcher,
+        observationDeck,
+        loader = { callback ->
+            val generation = authGeneration
+            val token = authentication.getSuspendedUserToken()
+            val request = if (token == null) {
+                restApi.getSafetyHub()
+            } else {
+                restApi.getSuspendedSafetyHub(RestAPIParams.SuspendedUser(token))
+            }
+            request
+                .subscribeOn(Schedulers.io())
+                .subscribe(
+                    { if (generation == authGeneration) callback(Result.success(it)) },
+                    { if (generation == authGeneration) callback(Result.failure(it)) },
+                )
+        },
+        reviewer = { classificationId, signal, userInput ->
+            val token = authentication.getSuspendedUserToken()
+            val body = RestAPIParams.SafetyHubReviewRequest(signal, userInput, token)
+            if (token == null) {
+                restApi.requestSafetyHubReview(classificationId, body)
+            } else {
+                restApi.requestSuspendedSafetyHubReview(classificationId, body)
+            }.subscribeOn(Schedulers.io())
+        },
+    )
     private val messageUploads = StoreMessageUploads(observationDeck)
     private val messageState = StoreMessageState(dispatcher)
     private val chatInputEditing = StoreChatInputEditing()
@@ -884,6 +912,7 @@ class StoreStream private constructor(
         messagesMostRecent,
         pendingReplies,
         pinnedMessages,
+        safetyHub,
         unreadSettingNotice,
         messageUploads,
         tabsNavigation,
@@ -2759,6 +2788,7 @@ class StoreStream private constructor(
         pendingReplies.handlePreLogout()
         pinnedMessages.handlePreLogout()
         chatInputEditing.clear()
+        safetyHub.handlePreLogout()
         usersTyping.clear()
         guildSelected.handlePreLogout()
         guildSubscriptions.reset()
@@ -2881,6 +2911,7 @@ class StoreStream private constructor(
         resetStore("pendingReplies", pendingReplies::handlePreLogout)
         resetStore("pinnedMessages", pinnedMessages::handlePreLogout)
         resetStore("chatInputEditing", chatInputEditing::clear)
+        resetStore("safetyHub", safetyHub::handlePreLogout)
         resetStore("usersTyping", usersTyping::clear)
         resetStore("tabsNavigation", tabsNavigation::handlePreLogout)
         resetStore("clientDataState", clientDataState::clear)
@@ -3277,6 +3308,7 @@ class StoreStream private constructor(
         @JvmStatic fun getFriendSuggestions() = requireInstance().friendSuggestions
         @JvmStatic fun getUserAffinities() = requireInstance().userAffinities
         @JvmStatic fun getGatewayConnection() = requireInstance().gatewayConnection
+        @JvmStatic fun getSafetyHub() = requireInstance().safetyHub
         @JvmStatic fun getClientDataState() = requireInstance().clientDataState
         @JvmStatic fun getConnectionOpen() = requireInstance().connectionOpen
         @JvmStatic fun getConnectivity() = requireInstance().connectivity

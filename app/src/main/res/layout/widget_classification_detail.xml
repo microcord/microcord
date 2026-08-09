@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="?attr/colorBackgroundPrimary">
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="16dp">
+        <TextView android:id="@+id/classification_header" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="@dimen/uikit_textsize_large" android:textColor="?attr/colorHeaderPrimary" style="@style/UiKit.TextView.Semibold"/>
+
+        <TextView android:id="@+id/classification_evidence_header" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:text="@string/safety_hub_classification_detail_evidence_header" android:textSize="@dimen/uikit_textsize_small" android:textColor="?attr/colorHeaderSecondary" android:visibility="gone" style="@style/UiKit.TextView.Semibold"/>
+        <LinearLayout android:id="@+id/classification_evidence" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp"/>
+
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:text="@string/safety_hub_classification_detail_actions_taken_header" android:textSize="@dimen/uikit_textsize_medium" android:textColor="?attr/colorHeaderPrimary" style="@style/UiKit.TextView.Semibold"/>
+        <LinearLayout android:id="@+id/classification_actions" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp"/>
+
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:text="@string/safety_hub_classification_detail_what_you_can_do_header" android:textSize="@dimen/uikit_textsize_medium" android:textColor="?attr/colorHeaderPrimary" style="@style/UiKit.TextView.Semibold"/>
+        <TextView android:id="@+id/classification_what_you_can_do" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textSize="@dimen/uikit_textsize_medium" android:textColor="?attr/colorHeaderSecondary" style="@style/UiKit.TextView"/>
+
+        <TextView android:id="@+id/classification_policy" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:background="@drawable/drawable_safety_hub_card" android:padding="12dp" android:textSize="@dimen/uikit_textsize_medium" android:textColor="?attr/colorHeaderPrimary" android:visibility="gone" style="@style/UiKit.TextView.Semibold"/>
+
+        <TextView android:id="@+id/classification_appeal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:textSize="@dimen/uikit_textsize_medium" android:textColor="?attr/colorHeaderSecondary" style="@style/UiKit.TextView"/>
+    </LinearLayout>
+</ScrollView>

@@ -70,6 +70,7 @@ import com.discord.api.report.MenuAPIResponse
 import com.discord.api.report.ReportReason
 import com.discord.api.report.ReportSubmissionBody
 import com.discord.api.role.GuildRole
+import com.discord.api.safetyhub.SafetyHub
 import com.discord.api.science.Science
 import com.discord.api.stageinstance.RecommendedStageInstance
 import com.discord.api.stageinstance.StageInstance
@@ -2136,6 +2137,25 @@ interface RestAPIInterface {
         @GET
         fun getFile(@Url url: String): Observable<ResponseBody>
     }
+
+    @GET("safety-hub/@me")
+    fun getSafetyHub(): Observable<SafetyHub>
+
+    /** The `suspended/` variants take the login 403's token in the body, having no session. */
+    @POST("safety-hub/suspended/@me")
+    fun getSuspendedSafetyHub(@Body body: RestAPIParams.SuspendedUser): Observable<SafetyHub>
+
+    @PUT("safety-hub/request-review/{classificationId}")
+    fun requestSafetyHubReview(
+        @Path("classificationId") classificationId: String,
+        @Body body: RestAPIParams.SafetyHubReviewRequest,
+    ): Observable<Unit>
+
+    @PUT("safety-hub/suspended/request-review/{classificationId}")
+    fun requestSuspendedSafetyHubReview(
+        @Path("classificationId") classificationId: String,
+        @Body body: RestAPIParams.SafetyHubReviewRequest,
+    ): Observable<Unit>
 
     /**
      * The presigned Google Cloud Storage upload.

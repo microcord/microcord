@@ -441,10 +441,25 @@ object AuthRequests {
                 errorHandler = { error ->
                     // The form renders the failure itself; a toast on top of that is noise.
                     error.showErrorToasts = false
-                    callback(onError?.invoke(error) ?: defaultFailure(error))
+                    callback(suspension(error) ?: onError?.invoke(error) ?: defaultFailure(error))
                 },
             ) { value -> onSuccess(value) }
     }
+
+    /**
+     * Handled here rather than per request: password, MFA and one-time login can all answer with a
+     * suspension, and each takes the user to the same place.
+     */
+    private fun suspension(error: RestApiError): AuthResult? =
+        if (error.type != RestApiError.Type.ACCOUNT_SUSPENDED) {
+            null
+        } else {
+            pendingLogin = null
+            AuthResult.Challenge(
+                AuthRoute.ACCOUNT_STANDING,
+                AuthUiState(route = AuthRoute.ACCOUNT_STANDING),
+            )
+        }
 
     /** No fragment here, so validation ids resolve against the application context. */
     private fun Map<String, Int>.resolve(): Map<String, String> = mapValues { (_, res) -> string(res) }
