@@ -433,9 +433,6 @@ class WidgetUserSheet : AppBottomSheet() {
                     showingWidgets = tab.position == BOARD_TAB
                     tabSwipeOffset = if (showingWidgets) 1f else 0f
                     showSelectedProfileTab()
-                    if (!selectingTabFromSwipe) {
-                        binding.root.scrollTo(0, binding.userSheetProfileTabs.top)
-                    }
                 }
 
                 override fun onTabUnselected(tab: TabLayout.Tab) = Unit

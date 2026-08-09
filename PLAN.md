@@ -3094,6 +3094,8 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   future route; debug assembly passes.
 - Primary-guild tags in profile headers now consume the resolved profile pill surface and text color instead of the global app
   theme, and restore their defaults when no custom profile theme is active. This prevents the dark tag card on white profiles.
+- Selecting Main or Board on a user profile no longer calls `scrollTo` on `ProfilePagerScrollView`; switching tabs now preserves
+  the user's current vertical position instead of immediately jumping down to the tab strip.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each
