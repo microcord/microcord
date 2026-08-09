@@ -20,6 +20,7 @@ import androidx.vectordrawable.graphics.drawable.Animatable2Compat
 import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
 import com.discord.R
 import com.discord.api.channel.getDisplayNameOrDefault
+import com.discord.api.channel.isPrivate
 import com.discord.app.AppFragment
 import com.discord.app.appViewModels
 import com.discord.i18n.i18nFormat
@@ -32,6 +33,8 @@ import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.rx.ui
 import com.discord.utilities.spans.TypefaceSpanCompat
 import com.google.android.material.button.MaterialButton
+import com.discord.widgets.voice.fullscreen.WidgetCallFullscreen
+import com.discord.widgets.voice.sheet.WidgetVoiceBottomSheet
 import java.util.concurrent.TimeUnit
 import rx.Observable
 
@@ -64,6 +67,7 @@ class WidgetGlobalStatusIndicator : AppFragment(R.layout.widget_global_status_in
     private lateinit var declineButton: MaterialButton
 
     private var connectingVector: AnimatedVectorDrawableCompat? = null
+    private var statusBarInset = 0
 
     /**
      * `AnimatedVectorDrawableCompat` plays once; restarting it on end is what makes the connecting
@@ -85,13 +89,14 @@ class WidgetGlobalStatusIndicator : AppFragment(R.layout.widget_global_status_in
         alertText = view.findViewById(R.id.alert_text)
         acceptButton = view.findViewById(R.id.indicator_accept)
         declineButton = view.findViewById(R.id.indicator_decline)
-        ViewCompat.setOnApplyWindowInsetsListener(view) { _, insets ->
-            (view.parent as? View)?.let { container ->
-                val overlap = resources.getDimensionPixelSize(R.dimen.gateway_banner_status_overlap)
-                (container.layoutParams as? ViewGroup.MarginLayoutParams)?.topMargin =
-                    (insets.systemWindowInsetTop - overlap).coerceAtLeast(0)
-                container.requestLayout()
-            }
+        ViewCompat.setOnApplyWindowInsetsListener(view) { indicator, insets ->
+            statusBarInset = insets.systemWindowInsetTop
+            indicator.setPadding(
+                indicator.paddingLeft,
+                statusBarInset,
+                indicator.paddingRight,
+                indicator.paddingBottom,
+            )
             insets.consumeSystemWindowInsets()
         }
     }
@@ -149,7 +154,7 @@ class WidgetGlobalStatusIndicator : AppFragment(R.layout.widget_global_status_in
             if (compact) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT
         (indicator.parent as? View)?.let { container ->
             container.layoutParams.height = if (compact) {
-                resources.getDimensionPixelSize(R.dimen.gateway_connecting_banner_height)
+                resources.getDimensionPixelSize(R.dimen.gateway_connecting_banner_height) + statusBarInset
             } else {
                 ViewGroup.LayoutParams.WRAP_CONTENT
             }
@@ -251,7 +256,16 @@ class WidgetGlobalStatusIndicator : AppFragment(R.layout.widget_global_status_in
         viewState: WidgetGlobalStatusIndicatorViewModel.ViewState.CallOngoing,
     ) {
         indicator.setOnClickListener {
-            onCallBannerPressed?.invoke(this, viewState.selectedVoiceChannel.id)
+            if (viewState.selectedVoiceChannel.isPrivate()) {
+                WidgetCallFullscreen.launch(requireContext(), viewState.selectedVoiceChannel.id)
+            } else {
+                WidgetVoiceBottomSheet.show(
+                    parentFragmentManager,
+                    viewState.selectedVoiceChannel.id,
+                    forwardToFullscreenIfVideoActivated = true,
+                    featureContext = WidgetVoiceBottomSheet.FeatureContext.HOME,
+                )
+            }
         }
     }
 
@@ -308,7 +322,7 @@ class WidgetGlobalStatusIndicator : AppFragment(R.layout.widget_global_status_in
         viewState: WidgetGlobalStatusIndicatorViewModel.ViewState.StageChannelOngoing,
     ) {
         indicator.setOnClickListener {
-            onCallBannerPressed?.invoke(this, viewState.selectedVoiceChannel.id)
+            WidgetCallFullscreen.launch(requireContext(), viewState.selectedVoiceChannel.id)
         }
         // Accepting means unmuting, so the microphone permission is requested first; declining
         // needs nothing.
@@ -427,17 +441,4 @@ class WidgetGlobalStatusIndicator : AppFragment(R.layout.widget_global_status_in
 
     // endregion
 
-    companion object {
-        /**
-         * Opens the call the banner is describing.
-         *
-         * The destinations — `WidgetCallFullscreen` and `WidgetVoiceBottomSheet` — live in
-         * `widgets/voice`, which is being reconstructed in parallel, so the banner does not name
-         * them. Whoever owns that package installs this, exactly as `StoreStream` installs
-         * `WidgetChatStatus.onJumpToMessage`. Until then the banner renders correctly and is inert
-         * on tap.
-         */
-        @JvmField
-        var onCallBannerPressed: ((AppFragment, Long) -> Unit)? = null
-    }
 }

@@ -3160,6 +3160,12 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
 - Voice participant display now lets connected mute/self-mute/self-deaf state override a stale speaking flag, so muted users cannot
   retain the green speaking treatment. Existing speaking-over-ringing and disconnected behavior remains intact. Updated release
   assembly and installation pass.
+- The global call banner restores the reference 4dp top/8dp bottom padding. Banner taps now route directly: guild voice opens
+  `WidgetVoiceBottomSheet`, private calls and stages open fullscreen. The obsolete optional callback seam was removed. Updated
+  release assembly and installation pass.
+- The global status indicator now applies the system status-bar inset as its own top padding, matching the reference; call/stage
+  colours therefore paint continuously to the physical top edge instead of starting below a separate status-bar strip. Compact
+  connection banner height includes the inset. Updated release assembly and installation pass.
 - Detailed boot progress is controlled by a persisted `Verbose Boot` developer setting. It defaults off with the current
   recovered white Clyde mark while caches restore; enabled mode shows every safe boot event. Authenticated navigation no longer waits for Gateway
   READY, so cached UI opens while the existing global connectivity banner reports background connection state. Focused boot
