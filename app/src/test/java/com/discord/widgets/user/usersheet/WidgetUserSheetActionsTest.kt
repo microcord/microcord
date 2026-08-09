@@ -47,6 +47,17 @@ class WidgetUserSheetActionsTest {
     }
 
     @Test
+    fun `server bio wins over cached and account bios`() {
+        val profile = UserProfile(
+            userProfile = UserProfile.ProfileMetadata(bio = "account bio"),
+            guildMemberProfile = UserProfile.ProfileMetadata(bio = "server bio"),
+        )
+
+        assertEquals("server bio" to true, WidgetUserSheetViewModel.resolveProfileBio(profile, "cached server", "cached account"))
+        assertEquals("account bio" to false, WidgetUserSheetViewModel.resolveProfileBio(profile.copy(guildMemberProfile = null), null, "cached account"))
+    }
+
+    @Test
     fun `profile actions match the recovered predicates`() {
         val ordinary = visibility()
         assertTrue(ordinary.showActions)

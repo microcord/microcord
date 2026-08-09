@@ -3113,6 +3113,12 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   profiles restore their original semantic green/yellow text from the captured default state.
 - The profile badge surface is translated left by its unchanged 7dp internal padding so badge icons align with the username;
   measurement, wrapping, padding, and touch-target size remain unchanged.
+- User sheets resolve server bios from the profile response's `guildMemberProfile` before cached member and account fallbacks,
+  and mark the About Me guild chip from that effective source rather than only checking the cached member.
+- User-sheet DM navigation now selects known/created DM channels directly without capturing `Fragment.requireContext()` in the
+  asynchronous creation callback, preventing detached-fragment crashes on `Main-StoreThread` after the sheet closes.
+- User profiles are cached separately by `(user, guild?)` while preserving the latest-profile API for unscoped consumers. User
+  sheets switch instantly to a cached matching scope, or an empty loading profile, without flashing another scope's data.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each

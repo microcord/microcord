@@ -143,7 +143,7 @@ class WidgetUserSheet : AppBottomSheet() {
                 }
             },
             selectDm = { channelId ->
-                ChannelSelector.getInstance().findAndSet(requireContext(), channelId)
+                ChannelSelector.getInstance().selectChannel(0L, channelId)
             },
             closeSheet = ::dismiss,
             selectHome = {

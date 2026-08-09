@@ -21,6 +21,34 @@ import rx.schedulers.TestScheduler
 
 class UserProfileNotesSuggestionsAffinitiesTest {
     @Test
+    fun profileObserverCachesScopesSeparately() {
+        val harness = Harness()
+        lateinit var success: (UserProfile) -> Unit
+        val store = StoreUserProfile(
+            harness.dispatcher,
+            harness.deck,
+            fetchProfile = { _, _, _, loaded, _ -> success = loaded },
+        )
+        harness.register(store)
+
+        store.fetchProfile(1)
+        harness.run()
+        success(UserProfile(user = User(1, "global")))
+        harness.run()
+
+        assertEquals("global", store.getUserProfile(1).user.username)
+        assertEquals(StoreUserProfile.EMPTY_PROFILE, store.getUserProfile(1, 10))
+
+        store.fetchProfile(1, 10)
+        harness.run()
+        success(UserProfile(user = User(1, "server")))
+        harness.run()
+
+        assertEquals("server", store.getUserProfile(1, 10).user.username)
+        assertEquals("global", store.getUserProfile(1, null).user.username)
+    }
+
+    @Test
     fun profileDeduplicatesRetriesPublishesImmutableSnapshotsAndClears() {
         val harness = Harness()
         val requests = mutableListOf<Pair<(UserProfile) -> Unit, () -> Unit>>()

@@ -38,13 +38,9 @@ class StoreUserProfile(
     ) -> Unit = { _, _, failure -> failure() },
 ) : StoreV2() {
     private val profiles = HashMap<Long, UserProfile>()
-    /**
-     * The guild each cached profile was fetched for. A profile is guild-scoped — `guildMember` and
-     * `guildMemberProfile` are only populated when the request carried a `guild_id` — but the cache
-     * is keyed by user alone, so without this a global fetch would satisfy a guild request and the
-     * per-guild identity would never load.
-     */
-    private val profileScopes = HashMap<Long, Long?>()
+    /** Guild metadata only exists on scoped responses, so each user retains one entry per scope. */
+    private data class ProfileCacheKey(val userId: Long, val guildId: Long?)
+    private val profilesByScope = HashMap<ProfileCacheKey, UserProfile>()
     private val profilesLoading = HashSet<Long>()
     private val profileErrors = HashSet<Long>()
     // ponytail: session cache; add the shop's ten-minute refresh only if effect metadata proves mutable.
@@ -58,11 +54,14 @@ class StoreUserProfile(
     private val applicationIdentitiesLoading = HashSet<Long>()
     private var applicationIdentitiesSnapshot: Map<Long, List<UserApplicationIdentity>> = emptyMap()
     private var profilesSnapshot: Map<Long, UserProfile> = emptyMap()
+    private var profilesByScopeSnapshot: Map<ProfileCacheKey, UserProfile> = emptyMap()
     private var profilesLoadingSnapshot: Set<Long> = emptySet()
     private var profileErrorsSnapshot: Set<Long> = emptySet()
     private var profileEffectProductsSnapshot: Map<Long, UserProfile.ProfileEffectProduct> = emptyMap()
 
     fun getUserProfile(userId: Long): UserProfile = profilesSnapshot[userId] ?: EMPTY_PROFILE
+    fun getUserProfile(userId: Long, guildId: Long?): UserProfile =
+        profilesByScopeSnapshot[ProfileCacheKey(userId, guildId)] ?: EMPTY_PROFILE
     fun getUserProfiles(): Map<Long, UserProfile> = profilesSnapshot
     fun getProfilesLoading(): Set<Long> = profilesLoadingSnapshot
     fun observeProfileError(userId: Long): Observable<Boolean> =
@@ -70,6 +69,9 @@ class StoreUserProfile(
 
     fun observeUserProfile(userId: Long): Observable<UserProfile> =
         observationDeck.connectRx(this) { getUserProfile(userId) }.distinctUntilChanged()
+
+    fun observeUserProfile(userId: Long, guildId: Long?): Observable<UserProfile> =
+        observationDeck.connectRx(this) { getUserProfile(userId, guildId) }.distinctUntilChanged()
 
     fun observeUserProfiles(): Observable<Map<Long, UserProfile>> =
         observationDeck.connectRx(this) { profilesSnapshot }.distinctUntilChanged()
@@ -161,13 +163,13 @@ class StoreUserProfile(
         withMutualGuilds: Boolean = false,
     ) = dispatcher.schedule {
         if (userId in profilesLoading) return@schedule
-        val cached = profiles.containsKey(userId) && profileScopes[userId] == guildId
+        val cached = profilesByScope.containsKey(ProfileCacheKey(userId, guildId))
         if (cached) return@schedule
         startFetch(userId, guildId, withMutualGuilds, null)
     }
 
     fun invalidateProfile(userId: Long) = dispatcher.schedule {
-        profileScopes.remove(userId)
+        profilesByScope.keys.removeAll { it.userId == userId }
         if (profiles.remove(userId) == null) return@schedule
         markChanged()
     }
@@ -189,8 +191,7 @@ class StoreUserProfile(
             withMutualGuilds,
             { profile ->
                 dispatcher.schedule {
-                    profileScopes[userId] = guildId
-                    handleUserProfile(profile)
+                    handleUserProfile(profile, guildId)
                     // The reference's `StoreStream.handleUserProfile(profile, guildId)` fan-out is
                     // exactly this: the member is only propagated when the fetch was scoped to a
                     // guild, because the profile's member has no guild id of its own.
@@ -211,11 +212,15 @@ class StoreUserProfile(
         dispatcher.schedule { handleProfileMetadata(userId, metadata) }
 
     @StoreThread
-    fun handleUserProfile(userProfile: UserProfile) {
+    fun handleUserProfile(userProfile: UserProfile) = handleUserProfile(userProfile, null)
+
+    @StoreThread
+    private fun handleUserProfile(userProfile: UserProfile, guildId: Long?) {
         StoreThreadScheduler.assertCurrentThread()
         profilesLoading.remove(userProfile.user.id)
         profileErrors.remove(userProfile.user.id)
         val resolved = resolveProfileEffects(userProfile)
+        profilesByScope[ProfileCacheKey(userProfile.user.id, guildId)] = resolved
         profiles[userProfile.user.id] = resolved
         loadProfileEffects(resolved)
         loadProfileFrames(resolved)
@@ -226,7 +231,7 @@ class StoreUserProfile(
     fun handlePreLogout() {
         StoreThreadScheduler.assertCurrentThread()
         profiles.clear()
-        profileScopes.clear()
+        profilesByScope.clear()
         profilesLoading.clear()
         profileErrors.clear()
         profileEffectProducts.clear()
@@ -241,6 +246,7 @@ class StoreUserProfile(
 
     override fun snapshotData() {
         profilesSnapshot = HashMap(profiles)
+        profilesByScopeSnapshot = HashMap(profilesByScope)
         profilesLoadingSnapshot = HashSet(profilesLoading)
         profileErrorsSnapshot = HashSet(profileErrors)
         profileEffectProductsSnapshot = HashMap(profileEffectProducts)
@@ -261,6 +267,9 @@ class StoreUserProfile(
         StoreThreadScheduler.assertCurrentThread()
         val profile = profiles[user.id] ?: return
         profiles[user.id] = profile.copy(user = user)
+        profilesByScope.entries.forEach { entry ->
+            if (entry.key.userId == user.id) entry.setValue(entry.value.copy(user = user))
+        }
         markChanged()
     }
 
@@ -268,13 +277,15 @@ class StoreUserProfile(
     @StoreThread
     private fun handleProfileMetadata(userId: Long, metadata: UserProfile.ProfileMetadata) {
         StoreThreadScheduler.assertCurrentThread()
-        val profile = profiles[userId] ?: return
+        val key = ProfileCacheKey(userId, metadata.guildId)
+        val profile = profilesByScope[key] ?: profiles[userId] ?: return
         val updated = if (metadata.guildId != null) {
             profile.copy(guildMemberProfile = metadata)
         } else {
             profile.copy(userProfile = metadata)
         }
         val resolved = resolveProfileEffects(updated)
+        profilesByScope[key] = resolved
         profiles[userId] = resolved
         loadProfileEffects(resolved)
         markChanged()
@@ -329,6 +340,13 @@ class StoreUserProfile(
         profileEffectProducts[skuId] = product
         markChanged()
         var changed = false
+        profilesByScope.entries.forEach { entry ->
+            val resolved = resolveProfileEffects(entry.value)
+            if (resolved != entry.value) {
+                entry.setValue(resolved)
+                changed = true
+            }
+        }
         profiles.entries.forEach { entry ->
             val resolved = resolveProfileEffects(entry.value)
             if (resolved != entry.value) {

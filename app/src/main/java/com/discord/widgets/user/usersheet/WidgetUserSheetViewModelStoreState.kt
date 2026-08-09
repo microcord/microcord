@@ -148,7 +148,7 @@ object WidgetUserSheetViewModelStoreState {
                 val myStageRoles: Observable<StageRoles?> = stageChannel
                     ?.let { storeStageChannels.observeMyRoles(it.id) }
                     ?: Observable.just(null)
-                val profileData = storeUserProfile.observeUserProfile(user.id).switchMap { profile ->
+                val profileData = storeUserProfile.observeUserProfile(user.id, scopedGuildId).switchMap { profile ->
                     val gameIds = profile.widgets.orEmpty().flatMapTo(linkedSetOf()) { widget ->
                         widget.data.games.orEmpty().map(UserProfile.ProfileWidgetGame::gameId)
                     }

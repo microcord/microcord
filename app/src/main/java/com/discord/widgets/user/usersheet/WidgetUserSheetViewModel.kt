@@ -157,6 +157,7 @@ class WidgetUserSheetViewModel(
             val userInSameVoiceChannel: Boolean,
             /** Rendered "About Me" markdown; `null` when the user has no bio. */
             val bioAst: List<Node<MessageRenderContext>>?,
+            val hasGuildMemberBio: Boolean,
             val profileLoaded: Boolean,
             val guildId: Long?,
             val guildMember: GuildMember?,
@@ -180,9 +181,6 @@ class WidgetUserSheetViewModel(
 
             /** The guild the sheet is scoped to: the channel's, falling back to the explicit one. */
             val currentGuildId: Long? = channel?.guildId?.takeIf { it != 0L } ?: guildId
-
-            /** The bio shown is the guild-specific one rather than the account-wide one. */
-            val hasGuildMemberBio: Boolean = !guildMember?.bio.isNullOrEmpty()
 
             val guildIconURL: String? = guildIcon?.let {
                 IconUtils.getForGuild(guildId, it, size = GUILD_SECTION_ICON_SIZE_DP)
@@ -294,7 +292,7 @@ class WidgetUserSheetViewModel(
             .mapNotNull { roleId -> storeState.guildRoles[roleId] }
             .sortedByDescending { it.position }
 
-        val bio = guildMember?.bio?.takeUnless { it.isBlank() } ?: user.bio
+        val (bio, hasGuildMemberBio) = resolveProfileBio(storeState.userProfile, guildMember?.bio, user.bio)
 
         val note = storeState.userNoteFetchState
         val userNote = (note as? StoreUserNotes.UserNoteState.Loaded)?.note?.note.orEmpty()
@@ -345,6 +343,7 @@ class WidgetUserSheetViewModel(
                 userNote = userNote,
                 userInSameVoiceChannel = userInSameVoiceChannel,
                 bioAst = createAndProcessBioAstFromText(bio),
+                hasGuildMemberBio = hasGuildMemberBio,
                 profileLoaded = storeState.userProfile.connectedAccounts.isNotEmpty() ||
                     note !is StoreUserNotes.UserNoteState.Loading,
                 guildId = storeState.guild?.id,
@@ -759,6 +758,19 @@ class WidgetUserSheetViewModel(
                 showMore = showActions,
                 showEditProfile = isMe,
             )
+        }
+
+        internal fun resolveProfileBio(
+            profile: UserProfile,
+            cachedGuildMemberBio: String?,
+            cachedUserBio: String?,
+        ): Pair<String?, Boolean> {
+            val guildBio = profile.guildMemberProfile?.bio?.takeUnless(String::isBlank)
+                ?: cachedGuildMemberBio?.takeUnless(String::isBlank)
+            val bio = guildBio
+                ?: profile.userProfile?.bio?.takeUnless(String::isBlank)
+                ?: cachedUserBio?.takeUnless(String::isBlank)
+            return bio to (guildBio != null)
         }
     }
 }
