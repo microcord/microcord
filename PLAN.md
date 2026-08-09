@@ -3148,6 +3148,15 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
 - `WidgetChatInput` now consumes the already-wired `StoreChat` one-shot event stream. Username clicks append the reference
   `@username#discriminator ` text at the cursor, replace-text events update the whole composer, and both focus/show the keyboard.
   Updated release assembly and installation pass.
+- Autocomplete/user-ID tokens remain `<@id>` in the editable for drafts and outbound wire correctness, but the composer overlays
+  them with a rounded Discord-themed `@username` replacement span. Text changes rebuild spans from the user store without altering
+  the underlying token. Updated release assembly and installation pass.
+- `StoreChat.appendMention` is now the canonical mention insertion path for username clicks and other callers, emitting `<@id> `
+  while warming guild members. Composer mention spans are atomic during deletion: removing any part deletes the entire underlying
+  token. Updated release assembly and installation pass.
+- Mention pill rendering/deletion now belongs to `InputAutocomplete`, matching the reference ownership. Text changes emit/apply
+  `ReplacePillSpans`; a deletion intersecting a pill emits an explicit whole-token `RemoveText` action. `WidgetChatInput` no longer
+  contains deletion-range state. Updated release assembly and installation pass.
 - Detailed boot progress is controlled by a persisted `Verbose Boot` developer setting. It defaults off with the current
   recovered white Clyde mark while caches restore; enabled mode shows every safe boot event. Authenticated navigation no longer waits for Gateway
   READY, so cached UI opens while the existing global connectivity banner reports background connection state. Focused boot

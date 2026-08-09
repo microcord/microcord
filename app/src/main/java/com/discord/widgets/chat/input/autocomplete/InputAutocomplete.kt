@@ -1,7 +1,9 @@
 package com.discord.widgets.chat.input.autocomplete
 
 import android.text.Editable
+import android.text.Spanned
 import android.text.TextWatcher
+import android.text.style.CharacterStyle
 import android.view.View
 import android.widget.EditText
 import android.widget.TextView
@@ -16,6 +18,8 @@ import com.discord.models.commands.ApplicationCommand
 import com.discord.models.commands.ApplicationCommandOption
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.rx.ui
+import com.discord.stores.StoreStream
+import com.discord.widgets.chat.input.ComposerMentionSpan
 import com.discord.widgets.chat.input.applicationcommands.SelectedApplicationCommandAdapter
 import com.discord.widgets.chat.input.autocomplete.adapter.ChatInputAutocompleteAdapter
 import com.discord.widgets.chat.input.models.ApplicationCommandData
@@ -69,12 +73,36 @@ class InputAutocomplete(
      * a mention in would immediately re-open the popup on the text we just inserted.
      */
     private var applyingSelection = false
+    private var pendingPillDeletion: Pair<Int, Int>? = null
 
     private val textWatcher = object : TextWatcher {
-        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
+            if (applyingSelection || count <= after || s !is Spanned) return
+            val deletedEnd = start + count
+            val span = s.getSpans(start, deletedEnd, ComposerMentionSpan::class.java).firstOrNull() ?: return
+            val spanStart = s.getSpanStart(span)
+            val spanEnd = s.getSpanEnd(span)
+            val removed = count - after
+            val remainingStart = if (spanStart < start) spanStart else start
+            val remainingEnd = if (spanEnd > deletedEnd) spanEnd - removed else start
+            pendingPillDeletion = remainingStart to remainingEnd
+        }
         override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
         override fun afterTextChanged(s: Editable?) {
             if (applyingSelection) return
+            val remaining = pendingPillDeletion
+            pendingPillDeletion = null
+            if (s != null && remaining != null && remaining.second > remaining.first) {
+                applyEditTextAction(
+                    InputEditTextAction.RemoveText(
+                        assumedInput = s.toString(),
+                        range = remaining.first until remaining.second,
+                        selectionIndex = remaining.first,
+                    ),
+                )
+                return
+            }
+            replaceMentionPills()
             viewModel.onInputChanged(s ?: "", editText.selectionStart.coerceAtLeast(0).let { it..it })
         }
     }
@@ -194,6 +222,7 @@ class InputAutocomplete(
 
     companion object {
         private const val REMOTE_LOADING_ITEMS = 4
+        private val MENTION_TOKEN = Regex("<@!?(\\d+)>")
 
         internal fun renderedItems(state: AutocompleteViewState.Autocomplete): List<Autocompletable> =
             if (state.isLoading && !state.isError) {
@@ -334,7 +363,56 @@ class InputAutocomplete(
      * `getSelectedToken` finds no word under it and the state reduces to `Hidden`.
      */
     private fun resyncAfterEdit() {
+        replaceMentionPills()
         val caret = editText.selectionStart.coerceAtLeast(0)
         viewModel.onInputChanged(editText.text ?: "", caret..caret)
+    }
+
+    private fun replaceMentionPills() {
+        val editable = editText.editableText ?: return
+        val spans = buildMap<IntRange, List<CharacterStyle>> {
+            MENTION_TOKEN.findAll(editable).forEach { match ->
+                val userId = match.groupValues[1].toLongOrNull() ?: return@forEach
+                val username = StoreStream.getUsers().getUsers()[userId]?.username ?: return@forEach
+                put(
+                    match.range,
+                    listOf(
+                        ComposerMentionSpan(
+                            display = "@$username",
+                            textColor = ColorCompat.getThemedColor(editText, R.attr.colorInteractiveActive),
+                            backgroundColor = ColorCompat.getThemedColor(editText, R.attr.theme_chat_mention_background),
+                            density = editText.resources.displayMetrics.density,
+                        ),
+                    ),
+                )
+            }
+        }
+        applyEditTextAction(InputEditTextAction.ReplacePillSpans(editable.toString(), spans))
+    }
+
+    private fun applyEditTextAction(action: InputEditTextAction) {
+        val editable = editText.editableText ?: return
+        if (editable.toString() != action.assumedInput.toString()) return
+        when (action) {
+            is InputEditTextAction.RemoveText -> {
+                applyingSelection = true
+                try {
+                    editable.replace(action.range.first, action.range.last + 1, "")
+                    editText.setSelection(action.selectionIndex.coerceAtMost(editable.length))
+                } finally {
+                    applyingSelection = false
+                }
+                resyncAfterEdit()
+            }
+            is InputEditTextAction.ReplacePillSpans -> {
+                editable.getSpans(0, editable.length, ComposerMentionSpan::class.java).forEach(editable::removeSpan)
+                action.spans.forEach { (range, styles) ->
+                    styles.forEach { style ->
+                        editable.setSpan(style, range.first, range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    }
+                }
+            }
+            else -> Unit
+        }
     }
 }

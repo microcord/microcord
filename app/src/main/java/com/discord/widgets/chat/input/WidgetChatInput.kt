@@ -3,8 +3,8 @@ package com.discord.widgets.chat.input
 import android.content.Context
 import android.content.res.ColorStateList
 import android.text.Editable
-import android.text.SpannableString
 import android.text.Spanned
+import android.text.SpannableString
 import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan

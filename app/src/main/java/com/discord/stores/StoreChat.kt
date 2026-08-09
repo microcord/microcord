@@ -5,7 +5,6 @@ import com.discord.models.message.Message
 import com.discord.models.user.User
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.rx.filterNull
-import com.discord.utilities.user.UserUtils.discriminatorWithPadding
 import rx.Observable
 import rx.subjects.PublishSubject
 
@@ -172,17 +171,11 @@ class StoreChat @JvmOverloads constructor(
         markChanged()
     }
 
-    /**
-     * Inserts `@username#discriminator ` into the composer and warms the member cache.
-     *
-     * The gateway request matters: mentioning someone the client has never seen would otherwise
-     * render as a raw id until a member chunk happened to arrive.
-     */
+    /** Inserts the canonical mention token and warms the member cache for local rendering. */
     fun appendMention(user: User?, guildId: Long) {
-        if (user == null || user.username.isEmpty()) return
-        requestGuildMembers(guildId, user.username)
-        val mention = "@${user.username}${user.discriminatorWithPadding}"
-        eventSubject.onNext(Event.AppendChatText("$mention "))
+        if (user == null) return
+        if (user.username.isNotEmpty()) requestGuildMembers(guildId, user.username)
+        eventSubject.onNext(Event.AppendChatText("<@${user.id}> "))
     }
 
     fun replaceChatText(text: String) = eventSubject.onNext(Event.ReplaceChatText("$text "))
