@@ -7,12 +7,8 @@ interface GatewayStreamDecoder : AutoCloseable {
 }
 
 enum class GatewayCompression(val queryValue: String) {
-    ZLIB("zlib-stream"),
     ZSTD("zstd-stream"),
     ;
 
-    fun createDecoder(): GatewayStreamDecoder = when (this) {
-        ZLIB -> ZlibStreamDecoder()
-        ZSTD -> ZstdStreamDecoder()
-    }
+    fun createDecoder(): GatewayStreamDecoder = ZstdStreamDecoder()
 }

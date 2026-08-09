@@ -88,7 +88,9 @@ class GatewaySocket(
     private val webSocketFactory: GatewayWebSocketFactory,
     private val gatewaySocketLogger: GatewaySocketLogger = NoopGatewaySocketLogger,
     private val jitter: () -> Double = Math::random,
-    initialCompression: GatewayCompression = GatewayCompression.ZLIB,
+    initialCompression: GatewayCompression = GatewayCompression.ZSTD,
+    @Volatile private var identifyOnOpen: Boolean = false,
+    decoderFactory: (GatewayCompression) -> GatewayStreamDecoder = GatewayCompression::createDecoder,
 ) {
     private enum class State { DISCONNECTED, DISCOVERING, CONNECTING, IDENTIFYING, RESUMING, CONNECTED }
 
@@ -102,8 +104,8 @@ class GatewaySocket(
         .registerDiscordApiTypeAdapters()
         .create()
     private val incomingParser = IncomingParser(gson)
-    private var compression = initialCompression
-    private var decoder: GatewayStreamDecoder = compression.createDecoder()
+    private val compression = initialCompression
+    private var decoder: GatewayStreamDecoder = decoderFactory(compression)
     private var state = State.DISCONNECTED
     private var socket: GatewayWebSocket? = null
     private var generation = 0
@@ -257,6 +259,10 @@ class GatewaySocket(
 
     fun isSessionEstablished(): Boolean = state == State.CONNECTED
 
+    fun completeFastConnect() {
+        identifyOnOpen = false
+    }
+
     private fun scheduleSend(action: () -> Unit) {
         scheduler.schedule(0) { if (state == State.CONNECTED) action() }
     }
@@ -286,6 +292,7 @@ class GatewaySocket(
                 override fun onOpen() {
                     BootLog.record(BootLogEvent.GATEWAY_SOCKET_OPEN)
                     logInfo("websocket opened; waiting for HELLO")
+                    if (identifyOnOpen && state == State.CONNECTING) identify()
                 }
 
                 override fun onBinaryMessage(bytes: ByteArray) = serialized(currentGeneration) {
@@ -305,14 +312,6 @@ class GatewaySocket(
                             "inflate/parse failure: ${error.javaClass.simpleName}: ${error.message}",
                             error,
                         )
-                        if (state == State.CONNECTING && compression == GatewayCompression.ZSTD) {
-                            logWarn("zstd failed before HELLO; retrying with zlib")
-                            decoder.close()
-                            compression = GatewayCompression.ZLIB
-                            decoder = compression.createDecoder()
-                            reconnect("Gateway zstd unavailable", immediate = true)
-                            return@serialized
-                        }
                         reconnect("Gateway inflate/parse failure: ${error.javaClass.simpleName}", immediate = false)
                     }
                 }

@@ -186,7 +186,7 @@ reached.
 - OkHttp provides headers, cookies, request metadata, timeouts, and WebSockets.
 - Gson behavior must match reference payload naming and optional/null handling.
 - Gateway supports discovery, identify, resume, sequence tracking, heartbeat,
-  heartbeat ACK timeout, reconnect/backoff, and zlib-stream decompression.
+  heartbeat ACK timeout, reconnect/backoff, and zstd-stream decompression.
 - Network parsing must be isolated from UI and tested with sanitized fixtures.
 
 ### Persistence
@@ -530,7 +530,7 @@ gateway events are parsed as untyped JSON. See
 - [x] Implement required headers and cookie persistence.
 - [x] Implement structured API errors and rate-limit handling.
 - [x] Implement Gateway discovery and WebSocket connection.
-- [x] Implement zlib-stream decoding.
+- [x] Implement zstd-stream decoding.
 - [x] Implement identify, resume, heartbeat, ACK timeout, and reconnect.
 - [x] Dispatch core gateway events into stores.
 - [ ] Add fixture-based REST and Gateway contract tests.
@@ -1162,7 +1162,8 @@ or observable behavior. Small implementation details do not belong here.
 | --- | --- | --- | --- |
 | 2026-08-09 | Publish master builds as debug Actions artifacts and reserve tagged release APKs for manual workflow runs | Continuous tagged releases obscured intentional releases and provided no embedded CI provenance | Settings shows `Dev <build id> <commit hash>`; manual release APKs retain the committed Baseline Profile |
 | 2026-08-09 | Sign local and CI debug/release APKs with one repository-owned development certificate | Per-machine Android debug keys made GitHub Actions APKs incompatible with local installs | All Manticord development artifacts are update-compatible; the public key is explicitly not a production trust identity |
-| 2026-08-08 | Use Gateway `zstd-stream` with zstd-jni `1.5.7-12` and pre-HELLO zlib fallback | Discord documents zstd transport and clean A65 tracing showed Gateway as 7.62% of cold-launch CPU; `1.5.7-13` requires compile SDK 37 | One persistent native decoder context is scoped to each connection and emits UTF-8 bytes directly into the parser |
+| 2026-08-09 | Use Gateway `zstd-stream` exclusively with zstd-jni `1.5.7-12` | Discord documents zstd transport, repeated A65 runs support it, and the user explicitly removed legacy fallback | One persistent native decoder context is scoped to each connection; zlib decoder/fallback code is removed |
+| 2026-08-09 | Start an identified Fast Connect socket before constructing the store graph | The modern Android native module proves this is a client-side early-socket handoff, and the user requested it | Cached token/client state opens one zstd socket with `is_fast_connect=true`; typed events buffer until cache restore and store listener attachment |
 | 2026-08-08 | Retain Gson streaming for Gateway metadata and reject Fastjson2 `2.0.64.android5` | A65 A/B tracing found Fastjson2 14% slower on ordinary dispatches, with higher Gateway CPU, heap, and GC count despite a 2.8% faster READY sample | Fastjson2 and its parser selector were removed; the existing Gson adapters remain the single Gateway JSON stack |
 | 2026-08-08 | Stream `ModelPayload` directly from Gson's `JsonReader` | The former adapter built the complete READY tree and reparsed each field; the reference also streams READY | Only irregular experiment arrays retain local trees; the large guild/member/presence surfaces parse once |
 | 2026-08-08 | Open the authenticated main UI before Gateway READY | The user explicitly requires cached UI to open immediately while Gateway connects in the background | `MainRoute.LoggedIn` depends on initialized persisted auth, not channel hydration; required-action and age gates still take priority when known |
@@ -3026,8 +3027,8 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   Its focused persistence/API-isolation test and `assembleDebug` pass; device visual verification remains open.
 - Removed the unused Android Studio LeakCanary auto-installer after it crashed non-debuggable benchmark APKs before
   `Application.onCreate`. Memory and Gateway performance measurements use Perfetto without an auto-start provider.
-- Gateway transport now defaults to `zstd-stream` through zstd-jni `1.5.7-12`, with reusable direct buffers, a persistent
-  per-connection context, 16 MiB compressed/64 MiB decompressed guards, trace slices, and one pre-HELLO zlib fallback. A65
+- Gateway transport now uses `zstd-stream` through zstd-jni `1.5.7-12`, with reusable direct buffers, a persistent
+  per-connection context, 16 MiB compressed/64 MiB decompressed guards, and trace slices. A65
   loaded the ARM64 library and completed HELLO/IDENTIFY/READY plus live dispatches without fallback. Matching 35-second cold
   traces measured Gateway CPU at 2.668 s/7.62% for zlib and 2.519 s/7.20% for zstd (5.6% lower in this single run). Zstd
   decoding itself took 87.7 ms across 124 payloads (0.707 ms average; 50.98 ms READY), while unchanged JSON parsing took
@@ -3059,6 +3060,21 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   Fastjson2 benefit. Streaming READY reduced its parse slice by 26.8%, Gateway CPU by 25.9%, and peak ART heap by 47.1% in
   the comparable run; cold start regressed 20.1% and is treated as unrelated run variance rather than a parser win.
   `GatewayContractTest`, `ReadyPayloadHydratorTest`, `assembleDebug`, A65 install, and live READY/dispatch traffic pass.
+- A fresh 20-second A65 cold-connect Perfetto capture on 2026-08-09 measured process start to HELLO at 1,428.4 ms,
+  HELLO-to-READY arrival at 1,560.2 ms, and READY decode/parse at 44.6/1,139.9 ms. READY parsing was 99.79% running CPU,
+  not scheduler or network wait. The initial queued dispatch burst drained 16.7 ms later, 4,189.9 ms after process start.
+  Excluding READY, 24 Gateway frames averaged 0.060 ms decode, 1.080 ms parse, and 1.159 ms total client pipeline time.
+- Inspection of the modern Android APK's RN bundle and `com.discord.fast_connect.FastConnectModule` DEX shows Fast Connect is
+  an early native WebSocket handoff, not the prioritized-READY capability: it caches token/user/client state, opens and identifies
+  before RN initialization finishes, injects native database guild versions, buffers messages, then lets the normal Gateway adopt
+  the socket without re-identifying. Moving Manticord's measured +891.9 ms Gateway start to process start has a theoretical
+  ceiling of about 892 ms off connection readiness; it does not reduce the 1,139.9 ms READY parse itself.
+- Manticord now starts one zstd Gateway socket from persisted auth/client state before store-graph construction, sends IDENTIFY
+  on WebSocket open with `is_fast_connect=true`, buffers typed events, then adopts the same socket after listener setup and cache
+  restore. Focused Gateway tests and debug assembly pass; a clean A65 launch shows one physical connect/IDENTIFY, HELLO, READY,
+  and continued live dispatches with no reconnect. The first A/B trace moved Gateway thread start from +891.9 to +446.2 ms,
+  HELLO from +1,428.4 to +1,045.0 ms, READY arrival from +2,988.6 to +2,346.9 ms, and parsed READY completion from +4,173.2
+  to +3,929.5 ms; READY parse variance rose from 1,139.9 to 1,547.0 ms in that single concurrent-startup run.
 - Detailed boot progress is controlled by a persisted `Verbose Boot` developer setting. It defaults off with the current
   recovered white Clyde mark while caches restore; enabled mode shows every safe boot event. Authenticated navigation no longer waits for Gateway
   READY, so cached UI opens while the existing global connectivity banner reports background connection state. Focused boot

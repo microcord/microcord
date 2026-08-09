@@ -42,6 +42,7 @@ import com.discord.models.domain.ModelMuteConfig
 import com.discord.models.domain.ModelUserNote
 import com.discord.gateway.GatewayCancellable
 import com.discord.gateway.GatewayDiscovery
+import com.discord.gateway.FastConnectBootstrap
 import com.discord.gateway.GatewaySocket
 import com.discord.gateway.RealGatewayScheduler
 import com.discord.models.domain.ModelUserRelationship
@@ -1414,29 +1415,36 @@ class StoreStream private constructor(
                 guildMemberRequester.handleLoadMessages(chunk.channelId, chunk.messages)
             }
         }
-        gateway = GatewaySocket(
-            identifyDataProvider = gatewayConnection::getIdentifyData,
-            identifyProperties = {
+        authentication.init(context)
+        BootLog.record(BootLogEvent.SESSION_READY)
+        val gatewayIdentifyProperties = {
                 // Omitted rather than sent null when absent: the server mints an installation only
                 // when the field is missing, so sending an explicit null would ask for a second one.
                 val installation = authentication.getInstallationForTracking()
                 AnalyticSuperProperties.superProperties +
                     mapOf(
                         "client_app_state" to if (isBackgrounded) APP_STATE_BACKGROUND else APP_STATE_FOCUSED,
-                        // A resumed-then-identified socket is not a fast connect; this
-                        // reconstruction has no fast-connect path at all, so it is always false.
+                        // Only the bootstrap IDENTIFY is fast; later re-identifies use this path.
                         "is_fast_connect" to false,
                         "gateway_connect_reasons" to gatewayConnectReasons(),
                     ) +
                     if (installation != null) mapOf("installation_id" to installation) else emptyMap()
-            },
-            eventHandler = gatewayConnection,
-            scheduler = gatewayScheduler,
-            discovery = GatewayDiscovery(preferences) { api.getGateway().toBlocking().single() },
-            webSocketFactory = OkHttpGatewayWebSocketFactory(),
-            gatewaySocketLogger = AppGatewaySocketLogger.INSTANCE,
-            initialCompression = GatewayCompression.ZSTD,
-        ).also { socket ->
+            }
+        val fastConnectSocket = FastConnectBootstrap.adopt(
+            gatewayConnection::getIdentifyData,
+            gatewayIdentifyProperties,
+        )
+        gateway = fastConnectSocket ?: GatewaySocket(
+                identifyDataProvider = gatewayConnection::getIdentifyData,
+                identifyProperties = gatewayIdentifyProperties,
+                eventHandler = gatewayConnection,
+                scheduler = gatewayScheduler,
+                discovery = GatewayDiscovery(preferences) { api.getGateway().toBlocking().single() },
+                webSocketFactory = OkHttpGatewayWebSocketFactory(),
+                gatewaySocketLogger = AppGatewaySocketLogger.INSTANCE,
+                initialCompression = GatewayCompression.ZSTD,
+            )
+        gateway?.also { socket ->
             gatewayConnection.init(socket)
             initGatewaySocketListeners()
         }
@@ -1452,8 +1460,6 @@ class StoreStream private constructor(
             {},
         )
         BootLog.record(BootLogEvent.GATEWAY_READY)
-        authentication.init(context)
-        BootLog.record(BootLogEvent.SESSION_READY)
         accessibilityMonitorBind(context)
         accessibility.init(context)
         userSettings.init(context)
@@ -1479,6 +1485,7 @@ class StoreStream private constructor(
             updateSortedGuilds()
             navigation.updateAuthState(authentication.getAuthState())
             initialized.onNext(true)
+            if (fastConnectSocket != null) FastConnectBootstrap.attach(gatewayConnection)
             BootLog.record(BootLogEvent.CACHE_RESTORE_FINISHED)
             BootLog.record(BootLogEvent.RUNTIME_READY)
         }
@@ -3215,11 +3222,14 @@ class StoreStream private constructor(
             val clock = Clock(System::currentTimeMillis)
             Persister.init(context.applicationContext, clock, Observable.never())
             BootLog.record(BootLogEvent.PERSISTENCE_READY)
+            val preferences = SharedPreferencesProvider.get()
+            val sessionDurablePreferences = SharedPreferencesProvider.getPrefsSessionDurable()
+            FastConnectBootstrap.start(preferences, sessionDurablePreferences)
             return create(
                 StoreThreadScheduler.create(),
                 clock,
-                SharedPreferencesProvider.get(),
-                SharedPreferencesProvider.getPrefsSessionDurable(),
+                preferences,
+                sessionDurablePreferences,
             ).also {
                 instance = it
                 BootLog.record(BootLogEvent.STORE_GRAPH_READY)

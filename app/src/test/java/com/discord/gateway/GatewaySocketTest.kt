@@ -8,11 +8,9 @@ import com.discord.stores.GuildSubscriptionPayload
 import com.discord.utilities.websocket.GatewayWebSocket
 import com.discord.utilities.websocket.GatewayWebSocketFactory
 import com.discord.utilities.websocket.GatewayWebSocketListener
-import com.discord.utilities.websocket.ZlibStreamDecoder
+import com.discord.utilities.websocket.GatewayStreamDecoder
 import com.google.gson.JsonParser
-import java.io.ByteArrayOutputStream
 import java.util.PriorityQueue
-import java.util.zip.Deflater
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -20,13 +18,35 @@ import org.junit.Test
 
 class GatewaySocketTest {
     @Test
-    fun fragmentedZlibStreamEmitsOnlyCompleteMessages() {
-        val fixture = ZlibFixture()
-        val compressed = fixture.encode("{\"op\":10,\"d\":{\"heartbeat_interval\":1000,\"_trace\":[\"edge\"]}}")
-        val decoder = ZlibStreamDecoder()
+    fun fastConnectIdentifiesOnOpenWithoutWaitingForHello() {
+        val harness = Harness(identifyOnOpen = true)
 
-        compressed.dropLast(1).forEach { assertTrue(decoder.decode(byteArrayOf(it)).isEmpty()) }
-        assertEquals(1, decoder.decode(byteArrayOf(compressed.last())).size)
+        harness.connect()
+        assertEquals(2, harness.socket.lastOp())
+        val sentAfterOpen = harness.socket.sent.size
+
+        harness.socket.serverMessage(hello())
+        harness.scheduler.runCurrent()
+        assertEquals(sentAfterOpen, harness.socket.sent.size)
+    }
+
+    @Test
+    fun deferredHandlerReplaysEventsInOrderBeforeGoingLive() {
+        val deferred = DeferredGatewayEventHandler()
+        val events = mutableListOf<String>()
+        val handler = object : GatewayEventHandler {
+            override fun handleConnected(connected: Boolean) { events += "connected:$connected" }
+            override fun handleConnectionReady(connectionReady: Boolean) { events += "ready:$connectionReady" }
+            override fun handleDisconnect(authenticationFailed: Boolean) { events += "disconnect:$authenticationFailed" }
+            override fun handleDispatch(type: String?, data: Any) { events += "dispatch:$type:$data" }
+        }
+
+        deferred.handleConnected(true)
+        deferred.handleDispatch("READY", "payload")
+        deferred.attach(handler)
+        deferred.handleConnectionReady(true)
+
+        assertEquals(listOf("connected:true", "dispatch:READY:payload", "ready:true"), events)
     }
 
     @Test
@@ -152,10 +172,9 @@ class GatewaySocketTest {
         assertTrue(harness.logger.inbound.any { it.contains("<redacted>") })
     }
 
-    private class Harness {
+    private class Harness(identifyOnOpen: Boolean = false) {
         val scheduler = FakeScheduler()
-        val fixture = ZlibFixture()
-        val factory = FakeSocketFactory(fixture)
+        val factory = FakeSocketFactory()
         val handler = RecordingHandler()
         val logger = RecordingLogger()
         val gateway = GatewaySocket(
@@ -172,6 +191,8 @@ class GatewaySocketTest {
             webSocketFactory = factory,
             gatewaySocketLogger = logger,
             jitter = { 1.0 },
+            identifyOnOpen = identifyOnOpen,
+            decoderFactory = { IdentityDecoder() },
         )
 
         val socket: FakeSocket get() = factory.sockets.last()
@@ -215,18 +236,17 @@ class GatewaySocketTest {
         }
     }
 
-    private class FakeSocketFactory(private val fixture: ZlibFixture) : GatewayWebSocketFactory {
+    private class FakeSocketFactory : GatewayWebSocketFactory {
         val sockets = mutableListOf<FakeSocket>()
 
         override fun connect(url: String, listener: GatewayWebSocketListener): GatewayWebSocket {
             assertTrue(url.startsWith("wss://"))
-            return FakeSocket(listener, ZlibFixture()).also(sockets::add)
+            return FakeSocket(listener).also(sockets::add)
         }
     }
 
     private class FakeSocket(
         private val listener: GatewayWebSocketListener,
-        private val fixture: ZlibFixture,
     ) : GatewayWebSocket {
         val sent = mutableListOf<String>()
         var closed = false
@@ -235,7 +255,7 @@ class GatewaySocketTest {
         override fun close(code: Int, reason: String?): Boolean { closed = true; return true }
         fun open() = listener.onOpen()
         fun fail() = listener.onFailure(IllegalStateException("fixture failure"))
-        fun serverMessage(json: String) = listener.onBinaryMessage(fixture.encode(json))
+        fun serverMessage(json: String) = listener.onBinaryMessage(json.toByteArray(Charsets.UTF_8))
         fun lastPayload() = JsonParser.parseString(sent.last()).asJsonObject
         fun lastOp(): Int = lastPayload()["op"].asInt
     }
@@ -267,19 +287,9 @@ class GatewaySocketTest {
         }
     }
 
-    private class ZlibFixture {
-        private val deflater = Deflater()
-
-        fun encode(json: String): ByteArray {
-            deflater.setInput(json.toByteArray(Charsets.UTF_8))
-            val output = ByteArrayOutputStream()
-            val buffer = ByteArray(256)
-            do {
-                val count = deflater.deflate(buffer, 0, buffer.size, Deflater.SYNC_FLUSH)
-                output.write(buffer, 0, count)
-            } while (!deflater.needsInput())
-            return output.toByteArray()
-        }
+    private class IdentityDecoder : GatewayStreamDecoder {
+        override fun decode(bytes: ByteArray) = listOf(bytes)
+        override fun reset() = Unit
     }
 
     private companion object {
