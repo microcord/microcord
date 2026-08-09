@@ -3239,6 +3239,10 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   The reference-shaped footer contains filename, expand, wrap, copy, and download controls at 8dp spacing. No-wrap scrolls up to
   16 viewports without opening side panels; wrap pins text to the viewport. Spoilers and recycled rows cancel or defer loading,
   and failures restore the ordinary file card.
+- Profile-popout action labels now resolve the platform Whitney medium family explicitly while retaining the support-family fallback.
+  Devices/session rows and notices use `UiKit.TextAppearance` styles rather than incorrectly passing `UiKit.TextView` widget styles
+  to `android:textAppearance`, restoring Whitney medium/semibold consistently without geometry changes. Debug assembly and A65
+  installation pass.
 - Foreground incoming private calls now consume `StoreCallsIncoming.observeHasIncoming()` from the activity lifecycle and open the
   existing single-task, lock-screen-capable incoming-call activity. Its screen plays the looped communication-request ringtone and
   stops/releases it in `onStop`, matching the recovered `StoreNavigation` and `WidgetVoiceCallIncoming` flow. Outgoing rings now
