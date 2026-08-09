@@ -3096,6 +3096,8 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   theme, and restore their defaults when no custom profile theme is active. This prevents the dark tag card on white profiles.
 - Selecting Main or Board on a user profile no longer calls `scrollTo` on `ProfilePagerScrollView`; switching tabs now preserves
   the user's current vertical position instead of immediately jumping down to the tab strip.
+- Continuous master builds use `actions/upload-artifact@v3` because this repository runs on GHES, which does not support the
+  artifact service v2 required by `upload-artifact@v4`.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each
