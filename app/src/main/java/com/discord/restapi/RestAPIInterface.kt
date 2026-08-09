@@ -1153,8 +1153,30 @@ interface RestAPIInterface {
         @Body body: RestAPIParams.DeleteGuild,
     ): Observable<Void>
 
+    /**
+     * @param after the highest user id of the previous page; bans come back ascending by user id.
+     *   A user token must send [limit] — without one the server answers with nothing.
+     */
     @GET("guilds/{guildId}/bans")
-    fun getBans(@Path("guildId") guildId: Long): Observable<List<ModelBan>>
+    fun getBans(
+        @Path("guildId") guildId: Long,
+        @Query("limit") limit: Int = BANS_PAGE_SIZE,
+        @Query("after") after: Long? = null,
+    ): Observable<List<ModelBan>>
+
+    /**
+     * Server-side ban search over usernames and display names.
+     *
+     * [userIds] takes at most 10 and [limit] tops out at 10 too, so this answers "find this person"
+     * rather than "page through matches".
+     */
+    @GET("guilds/{guildId}/bans/search")
+    fun searchBans(
+        @Path("guildId") guildId: Long,
+        @Query("query") query: String? = null,
+        @Query("user_ids") userIds: List<Long>? = null,
+        @Query("limit") limit: Int = BANS_SEARCH_LIMIT,
+    ): Observable<List<ModelBan>>
 
     @DELETE("guilds/{guildId}/bans/{userId}")
     fun unbanUser(
@@ -2139,6 +2161,12 @@ interface RestAPIInterface {
 
     companion object {
         const val X_CONTEXT_PROPERTIES = "X-Context-Properties"
+
+        /** The maximum the ban list endpoint accepts, and what the reference always asks for. */
+        const val BANS_PAGE_SIZE = 1000
+
+        /** The ban search endpoint refuses anything larger. */
+        const val BANS_SEARCH_LIMIT = 10
 
         /** Reference `ChannelPinActionCreators.fetchPins`; the server allows up to 50. */
         const val PINS_PAGE_SIZE = 25

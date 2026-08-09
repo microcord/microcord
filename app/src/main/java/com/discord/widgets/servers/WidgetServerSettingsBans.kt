@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.view.View
 import android.view.ViewGroup
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppFragment
@@ -21,16 +22,19 @@ import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.api.permission.Permission
 import com.discord.utilities.permissions.PermissionUtils
+import com.discord.utilities.search.fuzzyMatches
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.view.extensions.getTextOrEmpty
+import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.utilities.view.text.addBindedTextWatcher
 import com.discord.widgets.settings.SettingsNavigation
 import com.discord.widgets.settings.SettingsStrings
 import com.discord.widgets.notice.WidgetNoticeDialog
+import java.util.concurrent.TimeUnit
 import rx.Observable
 import rx.subjects.BehaviorSubject
 
@@ -53,6 +57,16 @@ class WidgetServerSettingsBans : AppFragment(R.layout.widget_server_settings_ban
 
     private var adapter: Adapter? = null
     private val filterPublisher = BehaviorSubject.create("")
+    private val isSearching get() = filterPublisher.value.isNotBlank()
+
+    /**
+     * The current search, held in a hot subject.
+     *
+     * [Model.get] re-subscribes to whatever it is given every time the ban list changes, so the
+     * request cannot live in that chain — it would re-fire on its own results. The requests run in
+     * their own subscription and only publish here.
+     */
+    private val searchState = BehaviorSubject.create(Model.Search())
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -62,6 +76,16 @@ class WidgetServerSettingsBans : AppFragment(R.layout.widget_server_settings_ban
 
         val recycler = binding.serverSettingsBansRecycler
         adapter = MGRecyclerAdapter.configure<Model.BanItem, Adapter>(Adapter(recycler))
+        recycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(view: RecyclerView, dx: Int, dy: Int) {
+                if (dy <= 0 || isSearching) return
+                val layout = view.layoutManager as? LinearLayoutManager ?: return
+                if (layout.findLastVisibleItemPosition() >= layout.itemCount - LOAD_MORE_THRESHOLD) {
+                    StoreStream.getBans().loadMoreBans(guildId)
+                }
+            }
+        })
+        StoreStream.getBans().loadMoreBans(guildId)
     }
 
     override fun onDestroyView() {
@@ -76,8 +100,34 @@ class WidgetServerSettingsBans : AppFragment(R.layout.widget_server_settings_ban
         filterPublisher.onNext(binding.serverSettingsBansSearch.getTextOrEmpty())
         binding.serverSettingsBansSearch.editText
             ?.addBindedTextWatcher(this) { filterPublisher.onNext(it.toString()) }
-        Model.get(guildId, filterPublisher).ui(this).appSubscribe(javaClass) { configureUI(it) }
+        searchPublisher().ui(this).appSubscribe(javaClass) { searchState.onNext(it) }
+        Model.get(guildId, searchState).ui(this).appSubscribe(javaClass) { configureUI(it) }
     }
+
+    /**
+     * Turns what was typed into a search.
+     *
+     * The local match is the same fuzzy subsequence the reference uses, but only the pages already
+     * pulled are in memory, so `bans/search` is asked as well to reach anyone further down the
+     * list. Its answer is a substring match over usernames and display names and is added to the
+     * local one rather than replacing it — the two disagree, and the server's stricter answer must
+     * not take rows away. A run of snowflakes also goes out as `user_ids`, which is how a moderator
+     * looks up someone whose name they do not have.
+     */
+    private fun searchPublisher(): Observable<Model.Search> = filterPublisher
+        .debounce(SEARCH_DEBOUNCE_MS, TimeUnit.MILLISECONDS)
+        .switchMap { typed ->
+            val query = typed.trim()
+            if (query.isEmpty()) return@switchMap Observable.just(Model.Search())
+            val userIds = SNOWFLAKE.findAll(query).mapNotNull { it.value.toLongOrNull() }.toList()
+            Observable.just(Model.Search(query))
+                .concatWith(
+                    StoreStream.getBans().searchBans(guildId, query, userIds)
+                        .map { Model.Search(query, it) }
+                        // A failed search leaves the local matches on screen rather than blanking it.
+                        .onErrorResumeNext(Observable.empty()),
+                )
+        }
 
     private fun configureUI(model: Model?) {
         if (_binding == null) return
@@ -134,10 +184,16 @@ class WidgetServerSettingsBans : AppFragment(R.layout.widget_server_settings_ban
             override fun onConfigure(position: Int, data: Model.BanItem) {
                 super.onConfigure(position, data)
                 val ban = data.ban
-                binding.banListItemName.text = ban?.user?.username
+                val user = ban?.user
+                val displayName = user?.globalName?.takeUnless(String::isBlank)
+                binding.banListItemName.text = displayName ?: user?.username
+                // The username only earns a second line when it is not already the label.
+                binding.banListItemUsername.setTextAndVisibilityBy(
+                    user?.username?.takeIf { displayName != null },
+                )
                 IconUtils.setIcon(
                     binding.banListItemAvatar,
-                    ban?.user?.let(::CoreUser),
+                    user?.let(::CoreUser),
                     R.dimen.avatar_size_standard,
                 )
                 binding.banContainer.setOnClickListener {
@@ -161,15 +217,33 @@ class WidgetServerSettingsBans : AppFragment(R.layout.widget_server_settings_ban
             fun create(ban: ModelBan) = BanItem().also { it.ban = ban }
         }
 
+        /**
+         * What is being looked for, and whatever the server has said about it so far. An empty
+         * [query] is the unfiltered list.
+         */
+        data class Search(val query: String = "", val serverMatches: List<ModelBan> = emptyList())
+
         companion object {
             const val TYPE_BANNED_USER = 1
             private val emptyBansList = arrayListOf<BanItem>()
+
+            /**
+             * Matches the query against both the username and the display name, the way the
+             * reference does — a fuzzy subsequence rather than a substring, so a query can skip
+             * over characters.
+             */
+            internal fun matchesSearch(ban: ModelBan, filter: String): Boolean {
+                val needle = filter.trim().lowercase()
+                if (needle.isEmpty()) return true
+                return fuzzyMatches(needle, ban.user.username.lowercase()) ||
+                    ban.user.globalName?.lowercase()?.let { fuzzyMatches(needle, it) } == true
+            }
 
             internal fun create(guild: Guild?, total: Int?, bans: List<BanItem>?): Model? =
                 if (guild == null || total == null || bans == null) null
                 else Model(total, bans, guild.id, guild.name, false)
 
-            fun get(guildId: Long, filterPublisher: Observable<String>): Observable<Model?> =
+            fun get(guildId: Long, searchPublisher: Observable<Search>): Observable<Model?> =
                 Observable.combineLatest(
                     StoreStream.getPermissions().observePermissionsForGuild(guildId),
                     StoreStream.getGuilds().observeGuild(guildId),
@@ -191,13 +265,16 @@ class WidgetServerSettingsBans : AppFragment(R.layout.widget_server_settings_ban
                         } else {
                             Observable.combineLatest(
                                 StoreStream.getGuilds().observeGuild(guildId),
-                                filterPublisher.flatMap { filter ->
-                                    Observable.just(
+                                searchPublisher.map { search ->
+                                    if (search.query.isEmpty()) {
                                         bans.values
-                                            .filter { it.user.username.contains(filter, ignoreCase = true) }
-                                            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.user.username })
-                                            .map(::BanItem),
-                                    )
+                                    } else {
+                                        bans.values.filter { matchesSearch(it, search.query) } +
+                                            search.serverMatches
+                                    }
+                                        .distinctBy { it.user.id }
+                                        .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.user.username })
+                                        .map(::BanItem)
                                 },
                             ) { guild, filtered -> create(guild, bans.size, filtered) }
                         }
@@ -214,6 +291,14 @@ class WidgetServerSettingsBans : AppFragment(R.layout.widget_server_settings_ban
         private const val VIEW_INDEX_BAN_LIST = 1
         private const val VIEW_INDEX_NO_BANS = 2
         private const val VIEW_INDEX_NO_RESULTS = 3
+
+        private const val SEARCH_DEBOUNCE_MS = 300L
+
+        /** Rows from the end at which the next page is requested. */
+        private const val LOAD_MORE_THRESHOLD = 10
+
+        /** A run of digits long enough to be a user id. */
+        private val SNOWFLAKE = Regex("\\d{17,20}")
 
         fun create(context: Context, guildId: Long) {
             StoreStream.getAnalytics().onGuildSettingsPaneViewed("BANS", guildId)
@@ -258,7 +343,7 @@ object ServerSettingsBansViewModel {
             isLoading = bans == null,
             totalBannedUsers = bans?.size ?: 0,
             bans = bans.orEmpty().values
-                .filter { it.user.username.contains(filter, ignoreCase = true) }
+                .filter { WidgetServerSettingsBans.Model.matchesSearch(it, filter) }
                 .sortedBy { it.user.username.lowercase() }
                 .map(::BanItem),
         )
