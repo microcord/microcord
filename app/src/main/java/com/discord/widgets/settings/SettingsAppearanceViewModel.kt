@@ -47,7 +47,6 @@ class SettingsAppearanceViewModel(
         data class Loaded(
             val meUser: MeUser,
             val currentTheme: String,
-            val canSeePureEvil: Boolean,
             val fontScale: Int,
             val isThemeSyncEnabled: Boolean,
         ) : ViewState()
@@ -62,34 +61,24 @@ class SettingsAppearanceViewModel(
          */
         object ShowHolyLight : Event()
 
-        /**
-         * Taps four through eight on "Dark" tease the hidden theme; [remaining] counts down to the
-         * reveal, which lands on the ninth. Same pre-increment counting as [ShowHolyLight].
-         */
-        data class PureEvilHint(val remaining: Int) : Event()
-
-        object PureEvilRevealed : Event()
-
         data class ThemeUpdated(@StringRes val messageResId: Int) : Event()
     }
 
-    private val pureEvilUnlocked = BehaviorSubject.create(false)
     private val fontScaleWrites = BehaviorSubject.create<Int>()
     private val eventSubject = PublishSubject.create<Event>()
 
     private var holyLightTaps = 0
-    private var pureEvilTaps = 0
 
     init {
-        Observable.combineLatest(storeStateObservable, pureEvilUnlocked) { storeState, unlocked ->
-            ViewState.Loaded(
-                meUser = storeState.meUser,
-                currentTheme = storeState.settings.theme,
-                canSeePureEvil = unlocked || storeState.meUser.isStaff,
-                fontScale = storeState.settings.fontScale,
-                isThemeSyncEnabled = userSettingsSystem.getIsThemeSyncEnabled(),
-            )
-        }
+        storeStateObservable
+            .map { storeState ->
+                ViewState.Loaded(
+                    meUser = storeState.meUser,
+                    currentTheme = storeState.settings.theme,
+                    fontScale = storeState.settings.fontScale,
+                    isThemeSyncEnabled = userSettingsSystem.getIsThemeSyncEnabled(),
+                )
+            }
             .distinctUntilChanged()
             .ui(this)
             .subscribe { updateViewState(it) }
@@ -111,29 +100,24 @@ class SettingsAppearanceViewModel(
         if (taps == HOLY_LIGHT_UNLOCK_COUNT) eventSubject.onNext(Event.ShowHolyLight)
     }
 
+    @MainThread
+    fun onDarkThemeTapped() = updateTheme(ModelUserSettings.THEME_DARK)
+
+    @MainThread
+    fun onOnyxThemeTapped() = updateTheme(ModelUserSettings.THEME_MIDNIGHT)
+
+    @MainThread
+    fun onDarkerThemeTapped() = updateTheme(ModelUserSettings.THEME_DARKER)
+
     /**
-     * Tapping "Dark" while the hidden theme is still locked counts towards revealing it. The taps
-     * are silent for the first three, then count down out loud until the ninth reveals the switch.
+     * Material You is client-only, so the account has no value that could round-trip it. Sync is
+     * turned off first: [StoreUserSettingsSystem.setIsSyncThemeEnabled] writes preferences without
+     * marking the store changed, so it needs the [StoreUserSettingsSystem.setTheme] that follows to
+     * publish the state the switch renders from.
      */
     @MainThread
-    fun onDarkThemeTapped(canSeePureEvil: Boolean) {
-        updateTheme(ModelUserSettings.THEME_DARK)
-        if (canSeePureEvil) return
-        val taps = pureEvilTaps++
-        when {
-            taps == 0 -> resetAfterTimeout { pureEvilTaps = 0 }
-            taps in PURE_EVIL_HINT_COUNT until PURE_EVIL_UNLOCK_COUNT ->
-                eventSubject.onNext(Event.PureEvilHint(PURE_EVIL_UNLOCK_COUNT - taps))
-
-            taps == PURE_EVIL_UNLOCK_COUNT -> {
-                eventSubject.onNext(Event.PureEvilRevealed)
-                pureEvilUnlocked.onNext(true)
-            }
-        }
-    }
-
-    @MainThread
     fun onMaterialYouThemeTapped() {
+        userSettingsSystem.setIsSyncThemeEnabled(false)
         userSettingsSystem.setTheme(ModelUserSettings.THEME_MATERIAL_YOU, apiSync = false)
     }
 
@@ -142,17 +126,6 @@ class SettingsAppearanceViewModel(
         Observable.timer(EASTER_EGG_UNLOCK_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .ui(this)
             .subscribe { reset() }
-    }
-
-    @MainThread
-    fun setPureEvilEnabled(enabled: Boolean, currentTheme: String) = when {
-        enabled && currentTheme == ModelUserSettings.THEME_DARK ->
-            updateTheme(ModelUserSettings.THEME_PURE_EVIL)
-
-        !enabled && currentTheme == ModelUserSettings.THEME_PURE_EVIL ->
-            updateTheme(ModelUserSettings.THEME_DARK)
-
-        else -> Unit
     }
 
     @MainThread
@@ -167,32 +140,16 @@ class SettingsAppearanceViewModel(
     @MainThread
     fun resetFontScale() = userSettingsSystem.setFontScale(USE_SYSTEM_FONT_SCALE)
 
-    /**
-     * Applies a Discord-supported [theme] locally, then mirrors it to the account.
-     *
-     * `pureEvil` is a client-only variant of `dark`, so the server is told `dark` — which is why
-     * `StoreUserSettingsSystem.setTheme` keeps the local `pureEvil` when the incoming value is
-     * `dark`.
-     */
+    /** Applies a Discord-supported [theme] locally, then mirrors it to the account. */
     @MainThread
     private fun updateTheme(theme: String) {
         userSettingsSystem.setTheme(theme, apiSync = true) {
             val api = RestAPI.apiOrNull ?: return@setTheme
-            val remoteTheme =
-                if (theme == ModelUserSettings.THEME_PURE_EVIL) ModelUserSettings.THEME_DARK else theme
-            api.updateUserSettings(RestAPIParams.UserSettings.createWithTheme(remoteTheme))
+            api.updateUserSettings(RestAPIParams.UserSettings.createWithTheme(theme))
                 .restSubscribeOn()
                 .ui(this)
                 .appSubscribe(StoreUserSettings::class.java) {
-                    eventSubject.onNext(
-                        Event.ThemeUpdated(
-                            if (theme == ModelUserSettings.THEME_PURE_EVIL) {
-                                R.string.theme_pure_evil_updated
-                            } else {
-                                R.string.theme_updated
-                            },
-                        ),
-                    )
+                    eventSubject.onNext(Event.ThemeUpdated(R.string.theme_updated))
                 }
         }
     }
@@ -206,8 +163,6 @@ class SettingsAppearanceViewModel(
         const val MAX_FONT_SCALING = 150
 
         private const val HOLY_LIGHT_UNLOCK_COUNT = 5
-        private const val PURE_EVIL_HINT_COUNT = 3
-        private const val PURE_EVIL_UNLOCK_COUNT = 8
         private const val EASTER_EGG_UNLOCK_TIMEOUT_SECONDS = 5L
         private const val FONT_SCALE_WRITE_DEBOUNCE_MS = 400L
 

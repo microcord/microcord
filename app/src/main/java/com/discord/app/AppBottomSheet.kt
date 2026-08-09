@@ -1,6 +1,8 @@
 package com.discord.app
 
 import android.app.Dialog
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -10,6 +12,7 @@ import androidx.annotation.CallSuper
 import androidx.annotation.LayoutRes
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.graphics.Insets
+import androidx.core.view.OneShotPreDrawListener
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.FragmentManager
@@ -239,6 +242,8 @@ abstract class AppBottomSheet(
             designBottomSheet.fitsSystemWindows = true
             ViewCompat.setOnApplyWindowInsetsListener(designBottomSheet) { _, insets -> insets }
         }
+        // Child bounds are only trustworthy once laid out, and the colour depends on them.
+        view?.let { OneShotPreDrawListener.add(it) { applyBottomEdgeBackground() } }
         view?.let { sheetContent ->
             ViewCompat.setOnApplyWindowInsetsListener(sheetContent) { v, insets ->
                 v.setPadding(
@@ -250,6 +255,40 @@ abstract class AppBottomSheet(
                 insets.consumeSystemWindowInsets()
             }
         }
+    }
+
+    /**
+     * The colour showing at the sheet's bottom edge, which is the strip the navigation bar sits over.
+     *
+     * The content is inset away from the navigation bar, so something has to paint behind it, and
+     * most layouts hang their background off a child rather than the root — leaving the flat band
+     * under the gesture bar. Which child is the right one cannot be read off the tree shape: the
+     * attachment sheet wraps a single background-bearing child, while the select-component sheet
+     * has several siblings and only the last one reaches the bottom. So this asks geometry instead,
+     * descending through whichever visible children actually touch the bottom edge and taking the
+     * deepest background found there.
+     */
+    private fun View.bottomEdgeBackground(): Drawable? {
+        val own = background?.takeUnless { it is ColorDrawable && it.alpha == 0 }
+        val group = this as? ViewGroup ?: return own
+        for (index in group.childCount - 1 downTo 0) {
+            val child = group.getChildAt(index)
+            if (child.visibility != View.VISIBLE || child.bottom < group.height) continue
+            child.bottomEdgeBackground()?.let { return it }
+        }
+        return own
+    }
+
+    private fun applyBottomEdgeBackground() {
+        val content = view ?: return
+        val sheet = content.rootView.findViewById<View>(MaterialR.id.design_bottom_sheet) ?: return
+        val background = content.bottomEdgeBackground() ?: return
+        // The content's own background fills its padding, so painting it there covers the strip.
+        // The container gets it too, for the gap the sheet leaves while it settles.
+        if (content.background == null) {
+            content.background = background.constantState?.newDrawable()?.mutate() ?: background
+        }
+        sheet.background = background.constantState?.newDrawable()?.mutate() ?: background
     }
 
     // endregion

@@ -10,6 +10,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.VelocityTracker
 import android.view.View
+import android.view.WindowInsets
 import android.widget.FrameLayout
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator
 import androidx.interpolator.view.animation.LinearOutSlowInInterpolator
@@ -31,6 +32,22 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
 ) : FrameLayout(context, attrs, defStyleAttr) {
+
+    /**
+     * Hands the insets to every panel instead of stopping at the first that consumes them.
+     *
+     * All three panels set `fitsSystemWindows`, and each paints its own colour behind the system
+     * bars. The default dispatch walks children in order and stops at the first consumer, so the
+     * start panel would take the insets and the centre panel — the chat — would never be told to
+     * inset itself, leaving the bars over whatever is behind the panels rather than over the chat.
+     */
+    override fun dispatchApplyWindowInsets(insets: WindowInsets): WindowInsets {
+        for (index in 0 until childCount) {
+            getChildAt(index).dispatchApplyWindowInsets(WindowInsets(insets))
+        }
+        return insets
+    }
+
     enum class Panel { START, CENTER, END }
     enum class LockState { OPEN, CLOSE, UNLOCKED }
     fun interface PanelStateListener { fun onPanelStateChange(panelState: PanelState) }

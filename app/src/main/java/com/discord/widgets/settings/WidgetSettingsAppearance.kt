@@ -53,6 +53,8 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
             listOf(
                 binding.settingsAppearanceThemeLightRadio,
                 binding.settingsAppearanceThemeDarkRadio,
+                binding.settingsAppearanceThemeDarkerRadio,
+                binding.settingsAppearanceThemeOnyxRadio,
                 binding.settingsAppearanceThemeMaterialYouRadio,
             ),
         )
@@ -95,29 +97,24 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
             when (viewState.currentTheme) {
                 ModelUserSettings.THEME_LIGHT -> binding.settingsAppearanceThemeLightRadio
                 ModelUserSettings.THEME_MATERIAL_YOU -> binding.settingsAppearanceThemeMaterialYouRadio
+                ModelUserSettings.THEME_DARKER -> binding.settingsAppearanceThemeDarkerRadio
+                ModelUserSettings.THEME_MIDNIGHT -> binding.settingsAppearanceThemeOnyxRadio
                 else -> binding.settingsAppearanceThemeDarkRadio
             },
         )
         binding.settingsAppearanceThemeLightRadio.setContainerClickListener { viewModel.onLightThemeTapped() }
         binding.settingsAppearanceThemeDarkRadio.setContainerClickListener {
-            viewModel.onDarkThemeTapped(viewState.canSeePureEvil)
+            viewModel.onDarkThemeTapped()
+        }
+        binding.settingsAppearanceThemeDarkerRadio.setContainerClickListener {
+            viewModel.onDarkerThemeTapped()
+        }
+        binding.settingsAppearanceThemeOnyxRadio.setContainerClickListener {
+            viewModel.onOnyxThemeTapped()
         }
         binding.settingsAppearanceThemeMaterialYouRadio.setContainerClickListener {
             viewModel.onMaterialYouThemeTapped()
         }
-
-        val isPureEvil = viewState.currentTheme == ModelUserSettings.THEME_PURE_EVIL
-        // Reference quirk, reproduced: once the hidden theme is on, the row is dimmed and its
-        // container stops responding. The switch itself still toggles, because
-        // `setDisabledTooltip` only replaces the container's click listener.
-        if (isPureEvil) binding.settingsAppearanceThemePureEvilSwitch.setDisabledTooltip(null)
-        binding.settingsAppearanceThemePureEvilSwitch.setOnCheckedListener(null)
-        binding.settingsAppearanceThemePureEvilSwitch.isChecked = isPureEvil
-        binding.settingsAppearanceThemePureEvilSwitch.visibility =
-            if (viewState.canSeePureEvil) View.VISIBLE else View.GONE
-        binding.settingsAppearanceThemePureEvilSwitch.setOnCheckedListener(
-            Action1 { checked -> viewModel.setPureEvilEnabled(checked, viewState.currentTheme) },
-        )
 
         binding.settingsAppearanceSyncSwitch.setOnCheckedListener(null)
         binding.settingsAppearanceSyncSwitch.isChecked = viewState.isThemeSyncEnabled
@@ -164,13 +161,6 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
 
     private fun handleEvent(event: SettingsAppearanceViewModel.Event) = when (event) {
         is SettingsAppearanceViewModel.Event.ShowHolyLight -> showHolyLight()
-
-        is SettingsAppearanceViewModel.Event.PureEvilHint -> toast(
-            getString(R.string.theme_pure_evil_easter_hint, event.remaining.toString()),
-        )
-
-        is SettingsAppearanceViewModel.Event.PureEvilRevealed ->
-            toast(getString(R.string.theme_pure_evil_easter_reveal))
 
         is SettingsAppearanceViewModel.Event.ThemeUpdated ->
             toast(getString(event.messageResId))

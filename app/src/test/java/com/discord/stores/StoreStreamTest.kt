@@ -193,13 +193,13 @@ class StoreStreamTest {
     @Test
     fun persistedSystemSettingsRestore() {
         val store = StoreStream.getUserSettingsSystem()
-        store.setTheme("pureEvil", apiSync = false)
+        store.setTheme(ModelUserSettings.THEME_LEGACY_MIDNIGHT, apiSync = false)
         store.setLocale("tr", apiSync = false)
         store.setFontScale(125)
 
         val restored = StoreUserSettingsSystem({}, stream.dispatcher, stream.observationDeck, prefs, durablePrefs)
         restored.restore()
-        assertEquals("pureEvil", restored.getTheme())
+        assertEquals(ModelUserSettings.THEME_MIDNIGHT, restored.getTheme())
         assertEquals("tr", restored.getLocale())
         assertEquals(125, restored.getFontScale())
     }
@@ -294,7 +294,7 @@ class StoreStreamTest {
         settings.setContactSyncUpsellShown(true)
         settings.setIsStickerSuggestionsEnabled(false)
         settings.setIsAccessibilityDetectionAllowed(true)
-        systemSettings.setTheme(ModelUserSettings.THEME_PURE_EVIL, apiSync = false)
+        systemSettings.setTheme(ModelUserSettings.THEME_MIDNIGHT, apiSync = false)
         systemSettings.setLocale("tr", apiSync = false)
         systemSettings.setFontScale(125)
         accessibility.setReducedMotionEnabled(true)

@@ -44,8 +44,18 @@ class StoreUserSettingsSystem(
 
     internal fun restore(defaultTheme: String = ModelUserSettings.THEME_LIGHT) {
         this.defaultTheme = defaultTheme
+        val stored = sessionDurablePreferences.getString(KEY_THEME, defaultTheme) ?: defaultTheme
+        // Without this an install that had the AMOLED theme on falls through to Ash, since nothing
+        // answers to the old name any more.
+        val theme = if (stored == ModelUserSettings.THEME_LEGACY_MIDNIGHT) {
+            ModelUserSettings.THEME_MIDNIGHT.also { migrated ->
+                sessionDurablePreferences.edit { putString(KEY_THEME, migrated) }
+            }
+        } else {
+            stored
+        }
         settings = Settings(
-            sessionDurablePreferences.getString(KEY_THEME, defaultTheme) ?: defaultTheme,
+            theme,
             preferences.getString(KEY_LOCALE, null),
             preferences.getInt(KEY_FONT_SCALE, -1),
         )
@@ -54,11 +64,8 @@ class StoreUserSettingsSystem(
     fun setTheme(theme: String, apiSync: Boolean, onRequestApiSync: (() -> Unit)? = null) = dispatcher.schedule {
         require(!getIsThemeSyncEnabled() || !apiSync || onRequestApiSync != null) { "API callback required." }
         onRequestApiSync?.takeIf { getIsThemeSyncEnabled() && apiSync }?.invoke()
-        val retainedTheme = if (settings.theme == ModelUserSettings.THEME_PURE_EVIL && theme == ModelUserSettings.THEME_DARK) {
-            ModelUserSettings.THEME_PURE_EVIL
-        } else theme
-        settings = settings.copy(theme = retainedTheme)
-        sessionDurablePreferences.edit { putString(KEY_THEME, retainedTheme) }
+        settings = settings.copy(theme = theme)
+        sessionDurablePreferences.edit { putString(KEY_THEME, theme) }
         markChanged()
     }
 
@@ -91,7 +98,7 @@ class StoreUserSettingsSystem(
         StoreThreadScheduler.assertCurrentThread()
         val bootstrap = loginResult.userSettings ?: return
         var updated = settings
-        if (getIsThemeSyncEnabled() && settings.theme != ModelUserSettings.THEME_MATERIAL_YOU) {
+        if (acceptsSyncedTheme()) {
             bootstrap.theme?.let { updated = updated.copy(theme = it) }
         }
         if (getIsLocaleSyncEnabled()) bootstrap.locale?.let { updated = updated.copy(_locale = it) }
@@ -122,11 +129,20 @@ class StoreUserSettingsSystem(
         markChanged()
     }
 
+    /**
+     * Whether an incoming account theme should replace the local one.
+     *
+     * Material You is the only theme the account cannot express, so it is the only one an echo
+     * could undo. Guards the synced path alone: picking a theme by hand always wins.
+     */
+    private fun acceptsSyncedTheme(): Boolean =
+        getIsThemeSyncEnabled() && settings.theme != ModelUserSettings.THEME_MATERIAL_YOU
+
     @StoreThread
     private fun handleUserSettings(userSettings: ModelUserSettings) {
         StoreThreadScheduler.assertCurrentThread()
         var updated = settings
-        if (getIsThemeSyncEnabled() && settings.theme != ModelUserSettings.THEME_MATERIAL_YOU) {
+        if (acceptsSyncedTheme()) {
             userSettings.theme?.let { updated = updated.copy(theme = it) }
         }
         if (getIsLocaleSyncEnabled()) userSettings.locale?.let { updated = updated.copy(_locale = it) }

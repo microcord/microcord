@@ -17,6 +17,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
@@ -176,10 +177,15 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
             when (theme) {
                 ModelUserSettings.THEME_LIGHT -> R.style.AppTheme_Light
                 ModelUserSettings.THEME_MATERIAL_YOU -> R.style.AppTheme_MaterialYou
-                ModelUserSettings.THEME_PURE_EVIL -> R.style.AppTheme_Dark_Evil
+                ModelUserSettings.THEME_DARKER -> R.style.AppTheme_Dark_Darker
+                ModelUserSettings.THEME_MIDNIGHT -> R.style.AppTheme_Dark_Evil
                 else -> R.style.AppTheme_Dark
             }
         )
+        // Edge to edge. API 35 enforces this anyway; doing it explicitly makes older releases match
+        // rather than leaving them with opaque bars. Screens still inset themselves through
+        // `drawUnderSystemBars`, which sets `fitsSystemWindows` on each fragment root.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
         supportFragmentManager.registerFragmentLifecycleCallbacks(noticeFragmentCallbacks, true)
         try {

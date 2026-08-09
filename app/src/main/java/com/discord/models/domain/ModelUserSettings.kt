@@ -185,9 +185,13 @@ class ModelUserSettings(
         const val STICKER_ANIMATION_ANIMATE_ON_INTERACTION = 1
         const val STICKER_ANIMATION_NEVER_ANIMATE = 2
         const val THEME_DARK = "dark"
+        /** Upstream `darker`, shown as "Dark"; [THEME_DARK] is the one shown as "Ash". */
+        const val THEME_DARKER = "darker"
         const val THEME_LIGHT = "light"
         const val THEME_MATERIAL_YOU = "materialYou"
-        const val THEME_PURE_EVIL = "pureEvil"
+        /** Upstream `midnight`, shown as "Onyx". Stored as `pureEvil` before this build. */
+        const val THEME_MIDNIGHT = "midnight"
+        const val THEME_LEGACY_MIDNIGHT = "pureEvil"
 
         @JvmStatic fun getDefaultLocale(): String = localeString(Locale.getDefault())
 
