@@ -62,6 +62,7 @@ class StoreCalls(
      */
     private fun findCall(channelId: Long, onFoundCall: (ModelCall?) -> Unit) {
         get(channelId)
+            .filter { it != null }
             .timeout(FIND_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS, Observable.just<ModelCall?>(null))
             .takeSingleUntilTimeout()
             .subscribe(onFoundCall, {})

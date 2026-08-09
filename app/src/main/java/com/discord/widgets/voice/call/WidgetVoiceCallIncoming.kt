@@ -15,6 +15,8 @@ import com.discord.app.AppFragment
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreVoiceParticipants
 import com.discord.utilities.fcm.NotificationClient
+import com.discord.utilities.media.AppSound
+import com.discord.utilities.media.AppSoundManager
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.widgets.voice.VoiceStoreAccess
@@ -130,9 +132,7 @@ open class WidgetVoiceCallIncoming : AppFragment(R.layout.widget_voice_call_inco
             true
         })
 
-        // The reference also plays `AppSound.SOUND_CALL_RINGING` through `AppSoundManager` here and
-        // stops it in `onStop`. Neither class is reconstructed, so the screen is silent — see the
-        // handoff report.
+        AppSoundManager.Provider.get().play(AppSound.SOUND_CALL_RINGING)
 
         statusPrimary.text = if (callModel.channel.isMultiUserDM()) {
             callModel.channel.getDisplayName()
@@ -180,5 +180,10 @@ open class WidgetVoiceCallIncoming : AppFragment(R.layout.widget_voice_call_inco
     /** The call ended or was answered elsewhere while this screen was up. */
     open fun onEmptyCallModel() {
         appActivity?.finish()
+    }
+
+    override fun onStop() {
+        AppSoundManager.Provider.get().stop(AppSound.SOUND_CALL_RINGING)
+        super.onStop()
     }
 }

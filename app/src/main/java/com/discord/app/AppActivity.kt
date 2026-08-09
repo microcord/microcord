@@ -82,6 +82,7 @@ import rx.subjects.Subject
 open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
     private lateinit var binding: ActivityAppBinding
     private var routeSubscription: Subscription? = null
+    private var incomingCallSubscription: Subscription? = null
     private var settingsSubscription: Subscription? = null
     private var noticeSubscription: Subscription? = null
     private var pendingNotice: StoreNotices.Notice? = null
@@ -234,6 +235,13 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
             routeSubscription = StoreStream.getNavigation().observeMainRoute()
                 .subscribe { route -> runOnUiThread { showRoute(route) } }
         }
+        if (this !is IncomingCall) {
+            incomingCallSubscription = StoreStream.getCallsIncoming().observeHasIncoming()
+                .filter { it }
+                .subscribe {
+                    runOnUiThread { startActivity(Intent(this, IncomingCall::class.java)) }
+                }
+        }
         noticeSubscription = StoreStream.getNotices().getNotices().subscribe { notice ->
             runOnUiThread {
                 pendingNotice = notice
@@ -274,6 +282,8 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
         stopBootLog = null
         routeSubscription?.unsubscribe()
         routeSubscription = null
+        incomingCallSubscription?.unsubscribe()
+        incomingCallSubscription = null
         noticeSubscription?.unsubscribe()
         noticeSubscription = null
         pendingNotice = null

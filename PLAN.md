@@ -3239,6 +3239,15 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   The reference-shaped footer contains filename, expand, wrap, copy, and download controls at 8dp spacing. No-wrap scrolls up to
   16 viewports without opening side panels; wrap pins text to the viewport. Spoilers and recycled rows cancel or defer loading,
   and failures restore the ordinary file card.
+- Foreground incoming private calls now consume `StoreCallsIncoming.observeHasIncoming()` from the activity lifecycle and open the
+  existing single-task, lock-screen-capable incoming-call activity. Its screen plays the looped communication-request ringtone and
+  stops/releases it in `onStop`, matching the recovered `StoreNavigation` and `WidgetVoiceCallIncoming` flow. Outgoing rings now
+  ignore `StoreCalls`' meaningful null placeholder while resolving a call, so they wait for the real `CALL_CREATE` and its message
+  ID instead of either disappearing or sending an ineffective early request with `message_id=0`. Debug REST logs now show concrete
+  encoded paths, including channel/user IDs, while still omitting query strings and redacting credentials and bodies. A focused
+  null-placeholder regression test was added. Debug assembly, A65 installation, and
+  `git diff --check` pass; a second approved account is still required for live ring/answer/decline verification. The focused logger
+  test is blocked by unrelated `ActivityMessageEntryTest.kt:113`, which omits its required `message` argument.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each
@@ -3257,4 +3266,9 @@ routes against live command, directory, frecency, installed-app, and shelf data.
 Resumable task: `app/src/main/java/com/discord/activities/**` | Android 340.12 Hermes Activity modules
 and ActivitiesV2 | use an approved account to verify authorize/authenticate, launch, join, leave,
 proxy-ticket, media permissions, lifecycle cleanup, and voice-channel Activity cards.
+
+Resumable task: `app/src/main/java/com/discord/app/AppActivity.kt` and
+`app/src/main/java/com/discord/widgets/voice/call/WidgetVoiceCallIncoming.kt` | reference `StoreNavigation.java` and
+`WidgetVoiceCallIncoming.java` | use two approved accounts to verify foreground incoming activity launch, ringtone stop on
+answer/decline/cancel, video answer, multiple incoming calls, and background FCM behavior.
 

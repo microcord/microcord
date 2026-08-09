@@ -151,6 +151,30 @@ class VoiceStoresTest {
 
     // endregion
 
+    // region StoreCalls
+
+    @Test
+    fun ringWaitsForCallCreateInsteadOfConsumingNullPlaceholder() {
+        val rings = mutableListOf<Triple<Long, Long, List<Long>?>>()
+        val store = StoreCalls(
+            callConnectRequest = {},
+            ringRequest = { channelId, messageId, recipients ->
+                rings += Triple(channelId, messageId, recipients)
+            },
+            stopRingingRequest = { _, _, _ -> },
+            onStopRingingWithoutCall = {},
+        )
+
+        store.handleConnectionOpen()
+        store.ring(20L, listOf(99L))
+        assertTrue(rings.isEmpty())
+
+        store.handleCallCreateOrUpdate(ModelCall(channelId = 20L, messageId = 30L))
+        assertEquals(listOf(Triple(20L, 30L, listOf(99L))), rings)
+    }
+
+    // endregion
+
     // region StoreCallsIncoming
 
     @Test

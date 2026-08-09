@@ -19,17 +19,8 @@ import okhttp3.OkHttpClient
 import okhttp3.RequestBody
 import okhttp3.Response
 import okio.Buffer
-import retrofit2.Invocation
 import retrofit2.Retrofit
 import retrofit2.adapter.rxjava.RxJavaCallAdapterFactory
-import retrofit2.http.DELETE
-import retrofit2.http.GET
-import retrofit2.http.HEAD
-import retrofit2.http.HTTP
-import retrofit2.http.OPTIONS
-import retrofit2.http.PATCH
-import retrofit2.http.POST
-import retrofit2.http.PUT
 
 internal fun OkHttpClient.Builder.addDebugRestLogging(
     enabled: Boolean,
@@ -46,7 +37,7 @@ internal class RestMetadataLoggingInterceptor(
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val startedAt = System.nanoTime()
-        val prefix = "method=${request.method} path=${request.routeTemplate()}"
+        val prefix = "method=${request.method} path=${request.url.encodedPath}"
         val verbose = verbose()
         if (verbose) {
             logger("$prefix requestHeaders=${request.headers.sanitized()} requestBody=${request.body.sanitized()}")
@@ -65,22 +56,6 @@ internal class RestMetadataLoggingInterceptor(
             logger("$prefix status=failed durationMs=${elapsedMillis(startedAt)} error=${failure.javaClass.simpleName}")
             throw failure
         }
-    }
-
-    private fun okhttp3.Request.routeTemplate(): String {
-        val method = tag(Invocation::class.java)?.method() ?: return REDACTED_PATH
-        val route = when (this.method) {
-            "DELETE" -> method.getAnnotation(DELETE::class.java)?.value
-            "GET" -> method.getAnnotation(GET::class.java)?.value
-                ?: method.getAnnotation(HEAD::class.java)?.value
-            "PATCH" -> method.getAnnotation(PATCH::class.java)?.value
-            "POST" -> method.getAnnotation(POST::class.java)?.value
-            "PUT" -> method.getAnnotation(PUT::class.java)?.value
-            "OPTIONS" -> method.getAnnotation(OPTIONS::class.java)?.value
-            else -> null
-        } ?: method.getAnnotation(HTTP::class.java)?.path
-        return route?.substringBefore('?')?.takeIf(String::isNotBlank)?.let { "/${it.trimStart('/')}" }
-            ?: REDACTED_PATH
     }
 
     private fun elapsedMillis(startedAt: Long) =
@@ -109,7 +84,6 @@ internal class RestMetadataLoggingInterceptor(
     }.getOrDefault("<redacted unreadable body>")
 
     private companion object {
-        const val REDACTED_PATH = "[redacted]"
         const val MAX_LOG_BODY_BYTES = 65_536L
         val SENSITIVE_HEADERS = setOf("authorization", "cookie", "set-cookie", "x-super-properties")
     }

@@ -34,7 +34,7 @@ class RestMetadataLoggingInterceptorTest {
     }
 
     @Test
-    fun `logs only route metadata without secrets or bodies`() {
+    fun `logs concrete path without query secrets or bodies`() {
         val server = MockWebServer()
         val logs = mutableListOf<String>()
         server.enqueue(
@@ -65,9 +65,8 @@ class RestMetadataLoggingInterceptorTest {
 
         assertEquals(1, logs.size)
         val log = logs.single()
-        assertTrue(log.startsWith("method=POST path=/channels/{channelId}/messages status=200 durationMs="))
+        assertTrue(log.startsWith("method=POST path=/api/v9/channels/123456789/messages status=200 durationMs="))
         listOf(
-            "123456789",
             "query-token-secret",
             "authorization-secret",
             "request-cookie-secret",
@@ -108,7 +107,7 @@ class RestMetadataLoggingInterceptorTest {
         assertTrue(log.contains("Missing Access"))
         assertTrue(log.contains("\"applied_tags\":[\"42\"]"))
         listOf(
-            "123456789", "authorization-secret", "private title", "private body", "nonce-secret",
+            "authorization-secret", "private title", "private body", "nonce-secret",
             "private-filename.png", "private-file-bytes", "response-secret",
         ).forEach { secret -> assertFalse("leaked $secret in $log", log.contains(secret)) }
     }
