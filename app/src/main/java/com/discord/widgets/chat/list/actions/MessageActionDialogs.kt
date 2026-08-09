@@ -5,6 +5,9 @@ import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.app.AppComponent
 import com.discord.app.AppToast
+import com.discord.api.channel.getDisplayNameOrDefault
+import com.discord.api.channel.isPrivate
+import com.discord.i18n.i18nFormat
 import com.discord.models.message.Message
 import com.discord.stores.StoreStream
 import com.discord.utilities.rest.RestAPI
@@ -14,6 +17,13 @@ import com.discord.utilities.rx.ui
 import com.discord.widgets.notice.WidgetNoticeDialog
 
 object MessageActionDialogs {
+
+    /** Reference `MAX_PINS_PER_CHANNEL`. */
+    const val MAX_PINS_PER_CHANNEL = 250
+
+    /** `TOO_MANY_PINS_IN_CHANNEL`. */
+    private const val ABORT_CODE_TOO_MANY_PINS = 30003
+
     fun showDeleteMessageConfirmation(
         fragmentManager: FragmentManager,
         context: Context,
@@ -53,11 +63,49 @@ object MessageActionDialogs {
                     RestAPI.api.addChannelPin(message.channelId, message.id)
                 }
                 request.restSubscribeOn().ui(appComponent)
-                    .appSubscribe(MessageActionDialogs::class.java, view.context) {
+                    .appSubscribe(
+                        MessageActionDialogs::class.java,
+                        view.context,
+                        errorHandler = { error ->
+                            if (error.code != ABORT_CODE_TOO_MANY_PINS) return@appSubscribe
+                            error.showErrorToasts = false
+                            showPinLimitReached(fragmentManager, context, message)
+                        },
+                    ) {
                         AppToast.show(context, if (isPinned) R.string.message_unpinned else R.string.message_pinned)
                         onSuccess()
                     }
             }),
+        )
+    }
+
+    /**
+     * The pin limit is only ever discovered from the server: the reference does not pre-check the
+     * count before pinning, so neither does this.
+     */
+    private fun showPinLimitReached(
+        fragmentManager: FragmentManager,
+        context: Context,
+        message: Message,
+    ) {
+        val channel = StoreStream.getChannels().getChannel(message.channelId)
+        val body = if (channel?.isPrivate() == true) {
+            context.i18nFormat(
+                R.string.pin_message_too_many_body_private_channel,
+                "maxPins" to MAX_PINS_PER_CHANNEL,
+            )
+        } else {
+            context.i18nFormat(
+                R.string.pin_message_too_many_body,
+                "maxPins" to MAX_PINS_PER_CHANNEL,
+                "channelName" to channel?.getDisplayNameOrDefault(context, includePrefix = false).orEmpty(),
+            )
+        }
+        WidgetNoticeDialog.show(
+            fragmentManager = fragmentManager,
+            headerText = context.getString(R.string.pin_message_too_many_title),
+            bodyText = body,
+            okText = context.getString(R.string.okay),
         )
     }
 

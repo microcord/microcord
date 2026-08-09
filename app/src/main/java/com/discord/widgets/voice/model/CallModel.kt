@@ -89,6 +89,8 @@ data class CallModel(
     fun canRequestToSpeak() =
         channel.isStageVoiceChannel() && hasPermission(REQUEST_TO_SPEAK)
 
+    fun canUseSoundboard() = PermissionUtils.canUseSoundboard(channel, channelPermissions)
+
     fun getCallDurationMs(clock: Clock) = clock.currentTimeMillis() - timeConnectedMs
 
     private fun hasPermission(permission: Long) = PermissionUtils.can(permission, channelPermissions)

@@ -20,8 +20,8 @@ class StorePinnedMessagesTest {
         val scheduler = TestScheduler()
         val dispatcher = Dispatcher(scheduler)
         val deck = ObservationDeck()
-        val callbacks = mutableListOf<(Result<List<Message>>) -> Unit>()
-        val store = StorePinnedMessages(dispatcher, deck) { _, callback -> callbacks += callback }
+        val callbacks = mutableListOf<(Result<StorePinnedMessages.Page>) -> Unit>()
+        val store = StorePinnedMessages(dispatcher, deck, loader = { _, _, callback -> callbacks += callback })
         dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
 
         val observed = mutableListOf<List<Message>>()
@@ -34,7 +34,7 @@ class StorePinnedMessagesTest {
 
         store.observeForChannel(CHANNEL_ID).subscribe(observed::add)
         assertEquals(2, callbacks.size)
-        callbacks.last()(Result.success(listOf(message(1), message(2))))
+        callbacks.last()(Result.success(page(message(1), message(2))))
         scheduler.triggerActions()
 
         assertEquals(listOf(1L, 2L), observed.last().map(Message::id))
@@ -45,12 +45,12 @@ class StorePinnedMessagesTest {
         val scheduler = TestScheduler()
         val dispatcher = Dispatcher(scheduler)
         val deck = ObservationDeck()
-        lateinit var callback: (Result<List<Message>>) -> Unit
-        val store = StorePinnedMessages(dispatcher, deck) { _, loaded -> callback = loaded }
+        lateinit var callback: (Result<StorePinnedMessages.Page>) -> Unit
+        val store = StorePinnedMessages(dispatcher, deck, loader = { _, _, loaded -> callback = loaded })
         dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
         val observed = mutableListOf<List<Message>>()
         store.observeForChannel(CHANNEL_ID).subscribe(observed::add)
-        callback(Result.success(listOf(message(1).copy(poll = poll()))))
+        callback(Result.success(page(message(1).copy(poll = poll()))))
         scheduler.triggerActions()
 
         dispatcher.schedule {
@@ -62,6 +62,13 @@ class StorePinnedMessagesTest {
     }
 
     private fun message(id: Long) = Message(id, CHANNEL_ID, author = User(id, "user$id"))
+
+    private fun page(vararg messages: Message, hasMore: Boolean = false) = StorePinnedMessages.Page(
+        messages.mapIndexed { index, message ->
+            StorePinnedMessages.Pin("2024-01-0${index + 1}T00:00:00.000Z", message)
+        },
+        hasMore,
+    )
 
     private fun poll() = MessagePoll(
         question = PollMedia("Question"),

@@ -140,7 +140,7 @@ class VoiceControlsSheetView @JvmOverloads constructor(
         configureOutput(outputSelectorState, onAudioOutputClick, !startedAsVideo && !isStage)
         configureVideo(model, onVideoClick, showVideoButton)
         configureScreenShare(model, onScreenshareClick, startedAsVideo, isStage)
-        soundboardButton.show(model.channel.guildId != 0L && !isStage)
+        soundboardButton.show(model.canUseSoundboard() && !isStage)
         soundboardButton.backgroundTintList = ColorStateList.valueOf(buttonBackground(false))
         soundboardButton.setOnClickListener { onSoundboardClick() }
         configureStreamVolume(showStreamVolume, streamVolume, onStreamVolumeChange)

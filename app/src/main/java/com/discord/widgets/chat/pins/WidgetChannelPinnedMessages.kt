@@ -3,6 +3,7 @@ package com.discord.widgets.chat.pins
 import android.content.Context
 import android.content.Intent
 import android.view.View
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
@@ -67,11 +68,26 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
             ),
         )
         recycler.addItemDecoration(ThreadSpineItemDecoration(requireContext(), chatAdapter))
+        recycler.addOnScrollListener(pinPagingListener(channel.id))
         adapter = chatAdapter
 
         setActionBarDisplayHomeAsUpEnabled()
         setActionBarTitle(R.string.pinned_messages)
         setActionBarSubtitle(channel.getDisplayNameOrDefault(requireContext(), includePrefix = false))
+    }
+
+    /**
+     * Pins arrive one page at a time, so the next page is asked for as the list nears its end.
+     * `StorePinnedMessages.loadMore` is a no-op while a request is in flight or once the server has
+     * said this is the last page, so there is no need to debounce here.
+     */
+    private fun pinPagingListener(channelId: Long) = object : RecyclerView.OnScrollListener() {
+        override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+            if (dy <= 0) return
+            val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return
+            val remaining = layoutManager.itemCount - 1 - layoutManager.findLastVisibleItemPosition()
+            if (remaining <= PAGE_PREFETCH_DISTANCE) StoreStream.getPinnedMessages().loadMore(channelId)
+        }
     }
 
     override fun onViewBoundOrOnResume() {
@@ -198,6 +214,9 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
 
     companion object {
         internal const val INTENT_EXTRA_CHANNEL_ID = "INTENT_EXTRA_CHANNEL_ID"
+
+        /** Rows left below the fold before the next page is requested. */
+        private const val PAGE_PREFETCH_DISTANCE = 5
         internal val TRANSITION = AppTransitionActivity.Transition.TYPE_SLIDE_HORIZONTAL
 
         fun show(context: Context, channelId: Long) {

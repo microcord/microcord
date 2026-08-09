@@ -41,7 +41,8 @@ object MessageActions {
         val userMessage = input.messageType == 0 || input.messageType == 19
         val canSend = privateChannel || input.has(Permission.SEND_MESSAGES)
         val canManage = input.has(Permission.MANAGE_MESSAGES)
-        val canPin = privateChannel || canManage
+        val canPin = privateChannel ||
+            input.has(Permission.PIN_MESSAGES) && input.has(Permission.READ_MESSAGE_HISTORY)
         val remote = !input.isLocal
 
         return mapOf(

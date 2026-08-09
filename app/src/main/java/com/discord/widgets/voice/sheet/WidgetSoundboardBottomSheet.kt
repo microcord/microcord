@@ -20,7 +20,9 @@ import com.discord.models.domain.emoji.ModelEmojiCustom
 import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.utilities.developer.DeveloperSettings
 import com.discord.restapi.RestAPIParams
+import com.discord.api.permission.Permission
 import com.discord.stores.StoreStream
+import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.bindToComponentLifecycle
@@ -118,7 +120,13 @@ class WidgetSoundboardBottomSheet : AppBottomSheet() {
     private fun showSounds() {
         val seen = hashSetOf<Long>()
         val tierOverride = DeveloperSettings.premiumTierOverride()
-        val allowExternalSounds = tierOverride == null || tierOverride == com.discord.api.premium.PremiumTier.TIER_2
+        // Another guild's sound needs both Nitro and the channel's permission to carry it in;
+        // this guild's own sounds and the built-in ones are exempt, as they are in the reference.
+        val allowExternalSounds = (tierOverride == null || tierOverride == com.discord.api.premium.PremiumTier.TIER_2) &&
+            PermissionUtils.can(
+                Permission.USE_EXTERNAL_SOUNDS,
+                StoreStream.getPermissions().getPermissionsByChannel()[channelId],
+            )
         fun filtered(sounds: List<SoundboardSound>) = sounds.filter { sound ->
             val id = sound.soundId
             id != null && ((allowExternalSounds && sound.available != false) ||

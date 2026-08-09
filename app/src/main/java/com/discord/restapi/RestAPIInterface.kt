@@ -24,6 +24,7 @@ import com.discord.api.auth.mfa.SendMfaSmsResponse
 import com.discord.api.billing.BillingCountryCode
 import com.discord.api.bugreport.BugReportConfig
 import com.discord.api.channel.Channel
+import com.discord.api.channel.ChannelPinsResponse
 import com.discord.api.collectibles.CollectibleProduct
 import com.discord.api.collectibles.ProfileFrameProduct
 import com.discord.api.commands.ApplicationCommandData
@@ -84,8 +85,8 @@ import com.discord.api.user.UserApplicationIdentities
 import com.discord.api.user.UserProfile
 import com.discord.api.user.UserSurveyFetchResponse
 import com.discord.models.domain.Consents
-import com.discord.models.domain.UserSettingsProtoPatch
 import com.discord.models.domain.ModelSearchTabsResponse
+import com.discord.models.domain.UserSettingsProtoPatch
 import com.discord.models.domain.UserSettingsProtoResponse
 import com.discord.models.domain.Harvest
 import com.discord.models.domain.ModelApplicationStreamPreview
@@ -915,16 +916,24 @@ interface RestAPIInterface {
     @POST("channels/{channelId}/pins/ack")
     fun ackPins(@Path("channelId") channelId: Long): Observable<Void>
 
-    @GET("channels/{channelId}/pins")
-    fun getChannelPins(@Path("channelId") channelId: Long): Observable<List<Message>>
+    /**
+     * @param before ISO8601 `pinned_at` of the last item of the previous page.
+     * @param limit 1-50; the reference asks for [PINS_PAGE_SIZE].
+     */
+    @GET("channels/{channelId}/messages/pins")
+    fun getChannelPins(
+        @Path("channelId") channelId: Long,
+        @Query("limit") limit: Int = PINS_PAGE_SIZE,
+        @Query("before") before: String? = null,
+    ): Observable<ChannelPinsResponse>
 
-    @PUT("channels/{channelId}/pins/{messageId}")
+    @PUT("channels/{channelId}/messages/pins/{messageId}")
     fun addChannelPin(
         @Path("channelId") channelId: Long,
         @Path("messageId") messageId: Long,
     ): Observable<Void>
 
-    @DELETE("channels/{channelId}/pins/{messageId}")
+    @DELETE("channels/{channelId}/messages/pins/{messageId}")
     fun deleteChannelPin(
         @Path("channelId") channelId: Long,
         @Path("messageId") messageId: Long,
@@ -978,15 +987,6 @@ interface RestAPIInterface {
         @Query("content") content: List<String>?,
         @Query("attempts") attempts: Int?,
         @Query("include_nsfw") includeNsfw: Boolean?,
-    ): Observable<ModelSearchResponse>
-
-    @GET("channels/{channelId}/follower-stats")
-    fun getChannelFollowerStats(
-        @Path("channelId") channelId: Long,
-    ): Observable<ModelChannelFollowerStatsDto>
-
-    @POST("channels/{channelId}/followers")
-    fun createChannelFollower(
         @Query("min_id") newestMessageId: Long? = null,
         @Query("author_type") authorTypes: List<String>? = null,
         @Query("mentions_role_id") mentionsRoleIds: List<String>? = null,
@@ -1000,6 +1000,15 @@ interface RestAPIInterface {
         @Query("sort_by") sortBy: String? = null,
         @Query("sort_order") sortOrder: String? = null,
         @Query("offset") offset: Int? = null,
+    ): Observable<ModelSearchResponse>
+
+    @GET("channels/{channelId}/follower-stats")
+    fun getChannelFollowerStats(
+        @Path("channelId") channelId: Long,
+    ): Observable<ModelChannelFollowerStatsDto>
+
+    @POST("channels/{channelId}/followers")
+    fun createChannelFollower(
         @Path("channelId") channelId: Long,
         @Body body: RestAPIParams.ChannelFollowerPost,
     ): Observable<Void>
@@ -1405,6 +1414,13 @@ interface RestAPIInterface {
         @Body body: List<RestAPIParams.ChannelPosition>,
     ): Observable<Void?>
 
+    /**
+     * Cross-DM search. The only endpoint that searches every private channel at once, and the only
+     * form it comes in — there is no `GET /users/@me/messages/search`.
+     */
+    @POST("users/@me/messages/search/tabs")
+    fun searchDmMessages(@Body body: RestAPIParams.SearchTabs): Observable<ModelSearchTabsResponse>
+
     @GET("guilds/{guildId}/messages/search")
     fun searchGuildMessages(
         @Path("guildId") guildId: Long,
@@ -1414,24 +1430,8 @@ interface RestAPIInterface {
         @Query("channel_id") inChannelIds: List<String>?,
         @Query("has") has: List<String>?,
         @Query("content") content: List<String>?,
-    /**
-     * Cross-DM search. The only endpoint that searches every private channel at once, and the only
-     * form it comes in — there is no `GET /users/@me/messages/search`.
-     */
-    @POST("users/@me/messages/search/tabs")
-    fun searchDmMessages(@Body body: RestAPIParams.SearchTabs): Observable<ModelSearchTabsResponse>
-
         @Query("attempts") attempts: Int?,
         @Query("include_nsfw") includeNsfw: Boolean?,
-    ): Observable<ModelSearchResponse>
-
-    @GET("guilds/{guildId}/audit-logs")
-    fun getAuditLogs(
-        @Path("guildId") guildId: Long,
-        @Query("limit") limit: Int,
-        @Query("before") before: Long?,
-        @Query("user_id") userId: Long?,
-        @Query("action_type") actionType: Int?,
         @Query("min_id") newestMessageId: Long? = null,
         @Query("author_type") authorTypes: List<String>? = null,
         @Query("mentions_role_id") mentionsRoleIds: List<String>? = null,
@@ -1445,6 +1445,15 @@ interface RestAPIInterface {
         @Query("sort_by") sortBy: String? = null,
         @Query("sort_order") sortOrder: String? = null,
         @Query("offset") offset: Int? = null,
+    ): Observable<ModelSearchResponse>
+
+    @GET("guilds/{guildId}/audit-logs")
+    fun getAuditLogs(
+        @Path("guildId") guildId: Long,
+        @Query("limit") limit: Int,
+        @Query("before") before: Long?,
+        @Query("user_id") userId: Long?,
+        @Query("action_type") actionType: Int?,
     ): Observable<ModelAuditLog>
 
     // -- Guild discovery, welcome screen, membership screening ---------------------------------------------------
@@ -2130,6 +2139,9 @@ interface RestAPIInterface {
 
     companion object {
         const val X_CONTEXT_PROPERTIES = "X-Context-Properties"
+
+        /** Reference `ChannelPinActionCreators.fetchPins`; the server allows up to 50. */
+        const val PINS_PAGE_SIZE = 25
         const val X_AUDIT_LOG_REASON = "X-Audit-Log-Reason"
         const val PROMPT_CONSENT = "consent"
     }

@@ -74,13 +74,15 @@ class GuildScheduledEventUtilities {
             permissionsStore: StorePermissions = StoreStream.getPermissions(),
         ): Boolean {
             val guildPermissions = permissionsStore.getGuildPermissions()[guildId] ?: return false
-            return PermissionUtils.can(Permission.MANAGE_EVENTS, guildPermissions) ||
+            return PermissionUtils.can(Permission.CREATE_EVENTS, guildPermissions) ||
+                PermissionUtils.can(Permission.MANAGE_EVENTS, guildPermissions) ||
                 getGuildScheduledEventCreatableChannelsForGuild(guildId, channelsStore, permissionsStore).isNotEmpty()
         }
 
         @JvmStatic
         fun canCreateExternalEvent(guildPermissions: Long?): Boolean =
-            PermissionUtils.can(Permission.MANAGE_EVENTS, guildPermissions)
+            PermissionUtils.can(Permission.CREATE_EVENTS, guildPermissions) ||
+                PermissionUtils.can(Permission.MANAGE_EVENTS, guildPermissions)
 
         /**
          * Whether the viewer may hand out a link to this event.

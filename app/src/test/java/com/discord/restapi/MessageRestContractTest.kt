@@ -58,17 +58,17 @@ class MessageRestContractTest {
 
     @Test
     fun pinsAndReactionsMatchPathsAndMethods() {
-        enqueueList()
+        server.enqueue(MockResponse().setBody("""{"items":[],"has_more":false}"""))
         api.getChannelPins(42).toBlocking().single()
-        assertRequest("GET", "/api/v9/channels/42/pins")
+        assertRequest("GET", "/api/v9/channels/42/messages/pins?limit=25")
 
         enqueueEmpty()
         api.addChannelPin(42, 8).toBlocking().subscribe()
-        assertRequest("PUT", "/api/v9/channels/42/pins/8")
+        assertRequest("PUT", "/api/v9/channels/42/messages/pins/8")
 
         enqueueEmpty()
         api.deleteChannelPin(42, 8).toBlocking().subscribe()
-        assertRequest("DELETE", "/api/v9/channels/42/pins/8")
+        assertRequest("DELETE", "/api/v9/channels/42/messages/pins/8")
 
         val reaction = "%F0%9F%91%8D"
         enqueueEmpty()

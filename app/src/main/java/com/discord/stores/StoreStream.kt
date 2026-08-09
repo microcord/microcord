@@ -236,7 +236,7 @@ class StoreStream private constructor(
         observationDeck,
         guildStore = guilds,
         getLurkingGuildIds = { if (::lurking.isInitialized) lurking.getLurkingGuildIdsSync() else emptySet() },
-           onSampleGuildIdSelected = { nux.handleSamplePremiumGuildSelected(it) },
+        onSampleGuildIdSelected = { nux.handleSamplePremiumGuildSelected(it) },
     )
     private val channelsSelected = StoreChannelsSelected(
         channels, permissions, guildSelected, dispatcher, observationDeck,
@@ -514,13 +514,23 @@ class StoreStream private constructor(
     })
     private val pendingReplies = StorePendingReplies(dispatcher, observationDeck)
     private val unreadSettingNotice = StoreUnreadSettingNotice(dispatcher, observationDeck, clock)
-    private val pinnedMessages = StorePinnedMessages(dispatcher, observationDeck) { channelId, callback ->
+    private val pinnedMessages = StorePinnedMessages(dispatcher, observationDeck, loader = { channelId, before, callback ->
         val generation = authGeneration
-        restApi.getChannelPins(channelId).subscribeOn(Schedulers.io()).map { it.map(::DomainMessage) }.subscribe(
-            { if (generation == authGeneration) callback(Result.success(it)) },
-            { if (generation == authGeneration) callback(Result.failure(it)) },
-        )
-    }
+        restApi.getChannelPins(channelId, before = before)
+            .subscribeOn(Schedulers.io())
+            .map { response ->
+                StorePinnedMessages.Page(
+                    items = response.items.map {
+                        StorePinnedMessages.Pin(it.pinnedAt, DomainMessage(it.message))
+                    },
+                    hasMore = response.hasMore,
+                )
+            }
+            .subscribe(
+                { if (generation == authGeneration) callback(Result.success(it)) },
+                { if (generation == authGeneration) callback(Result.failure(it)) },
+            )
+    })
     private val messageUploads = StoreMessageUploads(observationDeck)
     private val messageState = StoreMessageState(dispatcher)
     private val chatInputEditing = StoreChatInputEditing()

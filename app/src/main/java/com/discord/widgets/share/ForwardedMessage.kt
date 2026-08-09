@@ -19,7 +19,6 @@ object ForwardingPolicy {
     enum class DestinationIssue { CHANNEL, SEND_MESSAGES, ATTACHMENTS, EMBEDS, STICKERS, VOICE }
 
     private val forwardableTypes = setOf(0, 19, 20, 23, 35)
-    private const val SEND_VOICE_MESSAGES = 70_368_744_177_664L
     private const val BLOCKED_FLAGS =
         MessageFlags.CROSSPOSTED or
             MessageFlags.IS_CROSSPOST or
@@ -68,7 +67,7 @@ object ForwardingPolicy {
         ) {
             return DestinationIssue.STICKERS
         }
-        if (message.isVoiceMessage() && !can(destination, destinationPermissions, SEND_VOICE_MESSAGES)) {
+        if (message.isVoiceMessage() && !can(destination, destinationPermissions, Permission.SEND_VOICE_MESSAGES)) {
             return DestinationIssue.VOICE
         }
         return null
