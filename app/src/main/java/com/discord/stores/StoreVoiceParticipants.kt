@@ -86,8 +86,6 @@ class StoreVoiceParticipants(
         private val voiceConfiguration: VoiceConfiguration?,
         private val _isSpeaking: Boolean,
     ) {
-        val isSpeaking: Boolean =
-            voiceState != null && _isSpeaking && !voiceState.mute && !voiceState.deaf
         // A guild nick wins in a guild channel; in a private call there is no member, so the
         // friend nickname is what applies.
         val nickname: String? = guildMember?.nick
@@ -106,6 +104,7 @@ class StoreVoiceParticipants(
         val isSelfDeafened: Boolean =
             if (isMe) voiceConfiguration?.isSelfDeafened == true else voiceState?.selfDeaf == true
         val isDeafened: Boolean = isServerDeafened || isSelfDeafened
+        val isSpeaking: Boolean = voiceState != null && _isSpeaking && !isMuted && !isDeafened
 
         val isRequestingToSpeak: Boolean = voiceState.stageRequestToSpeakState.isRequestingToSpeak
         val isInvitedToSpeak: Boolean =

@@ -2007,6 +2007,7 @@ class StoreStream private constructor(
             if (::voiceTransport.isInitialized) voiceTransport.storeRtcConnection.handleVoiceServerUpdate(server)
         }
         dispatchSubscribe(events.callCreateOrUpdate, "streamCallCreateOrUpdate") { call ->
+            call.voiceStates?.let(voiceStates::handleVoiceStateUpdates)
             calls.handleCallCreateOrUpdate(call)
             callsIncoming.handleCallCreateOrUpdate(call)
         }

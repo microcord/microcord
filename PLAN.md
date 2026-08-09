@@ -3166,6 +3166,13 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
 - The global status indicator now applies the system status-bar inset as its own top padding, matching the reference; call/stage
   colours therefore paint continuously to the physical top edge instead of starting below a separate status-bar strip. Compact
   connection banner height includes the inset. Updated release assembly and installation pass.
+- Voice participant mute/deafen badges now use `VoiceUser`'s local-aware derived state, and the video-grid indicator container checks
+  child visibility rather than `isShown` while its parent is hidden. Private-call `CALL_CREATE/UPDATE.voice_states` are routed into
+  `StoreVoiceStates`, so users joining after the call opens become connected immediately. Speaking is suppressed by all mute/deafen
+  sources. Updated release assembly and installation pass.
+- Fullscreen private-call avatar tiles now opt into dedicated mute/deafen overlays; other `VoiceUserView` consumers remain unchanged
+  to avoid duplicate badges. `CallModel.isMeMutedByAnySource` now uses the participant's local-aware derived mute/deafen state, so
+  the bottom-sheet mute selector updates immediately. Updated release assembly and installation pass.
 - Detailed boot progress is controlled by a persisted `Verbose Boot` developer setting. It defaults off with the current
   recovered white Clyde mark while caches restore; enabled mode shows every safe boot event. Authenticated navigation no longer waits for Gateway
   READY, so cached UI opens while the existing global connectivity banner reports background connection state. Focused boot

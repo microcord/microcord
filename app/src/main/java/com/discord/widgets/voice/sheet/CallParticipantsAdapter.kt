@@ -330,9 +330,9 @@ class CallParticipantsAdapter @JvmOverloads constructor(
                 return
             }
 
-            val deafened = voiceState.selfDeaf || voiceState.deaf
+            val deafened = voiceUser.isDeafened
             // Suppressed counts as muted here: a stage audience member cannot speak either.
-            val muted = voiceState.selfMute || voiceState.mute || voiceState.suppress
+            val muted = voiceUser.isMuted || voiceState.suppress
 
             spectatingIndicator.visibility =
                 if (data.isSpectatingSameStream) View.VISIBLE else View.GONE

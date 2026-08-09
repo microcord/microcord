@@ -196,7 +196,7 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
         }
         mute.visibility = visible(participant?.isMuted == true && data?.type == ParticipantData.Type.DEFAULT)
         deafen.visibility = visible(participant?.isDeafened == true && data?.type == ParticipantData.Type.DEFAULT)
-        indicators.visibility = visible(mute.isShown || deafen.isShown)
+        indicators.visibility = visible(mute.visibility == VISIBLE || deafen.visibility == VISIBLE)
 
         resetStreamState()
         if (data?.type == ParticipantData.Type.APPLICATION_STREAMING) {

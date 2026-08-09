@@ -10,6 +10,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
 import androidx.annotation.DimenRes
 import androidx.annotation.MainThread
 import com.discord.R
@@ -49,6 +51,10 @@ class VoiceUserView @JvmOverloads constructor(
     private var previousAvatarUrl: String? = null
     private var fadeWhenDisconnected = false
     private var animateAvatarWhenRinging = false
+    private var showStatusIndicators = false
+    private val statusIndicators: LinearLayout = findViewById(R.id.voice_user_status_indicators)
+    private val muteIndicator: ImageView = findViewById(R.id.voice_user_mute_indicator)
+    private val deafenIndicator: ImageView = findViewById(R.id.voice_user_deafen_indicator)
     private var bitmapListener: (Bitmap, String?) -> Unit = { _, _ -> }
     /**
      * Pulses the whole tile while the user is being rung. Each run fades out and
@@ -131,6 +137,7 @@ class VoiceUserView @JvmOverloads constructor(
         }
         binding.voiceUserNameDisplay.text = voiceUser.displayName
         setVoiceState(voiceDisplayState(voiceUser))
+        updateStatusIndicators(voiceUser)
     }
 
     @MainThread
@@ -161,6 +168,11 @@ class VoiceUserView @JvmOverloads constructor(
     @MainThread
     fun setAnimateAvatarWhenRinging(value: Boolean) {
         animateAvatarWhenRinging = value
+    }
+
+    fun setShowStatusIndicators(value: Boolean) {
+        showStatusIndicators = value
+        voiceUser?.let(::updateStatusIndicators)
     }
 
     fun setOnBitmapLoadedListener(listener: (Bitmap, String?) -> Unit) {
@@ -204,6 +216,13 @@ class VoiceUserView @JvmOverloads constructor(
             ringAnimator.cancel()
             this.alpha = alpha
         }
+    }
+
+    private fun updateStatusIndicators(user: StoreVoiceParticipants.VoiceUser) {
+        muteIndicator.visibility = if (showStatusIndicators && user.isMuted) VISIBLE else GONE
+        deafenIndicator.visibility = if (showStatusIndicators && user.isDeafened) VISIBLE else GONE
+        statusIndicators.visibility =
+            if (muteIndicator.visibility == VISIBLE || deafenIndicator.visibility == VISIBLE) VISIBLE else GONE
     }
 
     private fun View.resize(size: Int) {

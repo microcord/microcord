@@ -51,6 +51,7 @@ class PrivateCallGridView @JvmOverloads constructor(
                     setMargins(margin, margin, margin, margin)
                 }
                 setAnimateAvatarWhenRinging(true)
+                setShowStatusIndicators(true)
                 setFadeWhenDisconnected(true)
                 setAvatarSize(dpToPixels(92))
                 setRingMargin(dpToPixels(6))

@@ -60,9 +60,7 @@ data class CallModel(
     val isServerDeafened get() = participants[myId]?.voiceState?.deaf == true
     val isDeafenedByAnySource get() = isSelfDeafened || isServerDeafened
     val isMeMutedByAnySource: Boolean
-        get() = participants[myId]?.voiceState?.let {
-            it.selfMute || it.selfDeaf || it.mute || it.deaf
-        } == true
+        get() = participants[myId]?.let { it.isMuted || it.isDeafened } == true
     val isStreaming get() = activeStream?.stream?.ownerId == myId
     val isSuppressed get() = participants[myId]?.voiceState?.suppress == true
 
