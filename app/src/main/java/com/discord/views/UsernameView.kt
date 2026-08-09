@@ -91,6 +91,9 @@ class UsernameView @JvmOverloads constructor(
         binding.usernameGuildTag.bind(primaryGuild)
     }
 
+    fun setGuildTagProfileColors(backgroundColor: Int?, textColor: Int?) =
+        binding.usernameGuildTag.setProfileColors(backgroundColor, textColor)
+
     fun setUsernameColor(color: Int) {
         binding.usernameText.setTextColor(color)
     }

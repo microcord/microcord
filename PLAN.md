@@ -3092,6 +3092,8 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
 - Screenshot detection no longer initializes or subscribes from the activity, and its developer-options toggle is removed, so
   taking a screenshot cannot open the internal bug-report form. The form implementation remains available for an explicit
   future route; debug assembly passes.
+- Primary-guild tags in profile headers now consume the resolved profile pill surface and text color instead of the global app
+  theme, and restore their defaults when no custom profile theme is active. This prevents the dark tag card on white profiles.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each

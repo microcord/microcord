@@ -2,6 +2,7 @@ package com.discord.views
 
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.util.AttributeSet
 import android.util.TypedValue
@@ -29,12 +30,14 @@ class GuildTagView @JvmOverloads constructor(
         isSingleLine = true
         setTypeface(typeface, Typeface.BOLD)
     }
+    private val defaultBackgroundColor = ColorCompat.getThemedColor(context, R.attr.colorBackgroundSecondary)
+    private val defaultTextColors = label.textColors
 
     init {
         visibility = View.GONE
         radius = dp(4).toFloat()
         cardElevation = 0f
-        setCardBackgroundColor(ColorCompat.getThemedColor(context, R.attr.colorBackgroundSecondary))
+        setCardBackgroundColor(defaultBackgroundColor)
         setContentPadding(dp(4), dp(1), dp(4), dp(1))
         addView(LinearLayout(context).apply {
             gravity = Gravity.CENTER_VERTICAL
@@ -51,6 +54,11 @@ class GuildTagView @JvmOverloads constructor(
         val badgeSize = sp(textSizeSp + 2f)
         badge.layoutParams = LinearLayout.LayoutParams(badgeSize, badgeSize)
         label.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSizeSp)
+    }
+
+    fun setProfileColors(backgroundColor: Int?, textColor: Int?) {
+        setCardBackgroundColor(backgroundColor ?: defaultBackgroundColor)
+        label.setTextColor(textColor?.let(ColorStateList::valueOf) ?: defaultTextColors)
     }
 
     fun bind(primaryGuild: PrimaryGuild?) {
