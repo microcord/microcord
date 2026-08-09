@@ -126,14 +126,36 @@ class GatewaySocket(
         }
     }
 
-    fun close(resetSession: Boolean = true) {
-        logInfo("close requested resetSession=$resetSession")
+    /**
+     * Brings a pending reconnect forward, which is what the reference does when the app comes to the
+     * foreground: a socket that dropped while the user was away may be sitting on a full backoff,
+     * and they should not have to wait it out.
+     */
+    fun resetBackoff() {
+        scheduler.schedule(0) {
+            backoffMs = MIN_BACKOFF_MS
+            if (state == State.DISCONNECTED && reconnectTask != null) {
+                reconnectTask?.cancel()
+                reconnectTask = null
+                discoverAndConnect()
+            }
+        }
+    }
+
+    /**
+     * Ends the session for good — the only caller is logout.
+     *
+     * 1000 is what tells the gateway that, and it is why nothing else may use this: a client that
+     * intends to come back has to close with 4000 like [reconnect] does, or its RESUME is rejected.
+     */
+    fun close() {
+        logInfo("close requested")
         scheduler.schedule(0) {
             reconnectTask?.cancel()
             reconnectTask = null
             cleanup(1000, "Client closed")
             state = State.DISCONNECTED
-            if (resetSession) clearSession()
+            clearSession()
             eventHandler.handleConnected(false)
             eventHandler.handleConnectionReady(false)
         }

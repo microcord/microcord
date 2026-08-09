@@ -126,7 +126,7 @@ class MessageHistoryStoreTest {
             },
             scheduler = TestScheduler(),
             retryJitter = { 0 },
-        )
+        ).apply { handleBackgrounded(false) }
         val scheduler = TestScheduler()
         val dispatcher = Dispatcher(scheduler)
         val deck = ObservationDeck()
@@ -182,7 +182,7 @@ class MessageHistoryStoreTest {
             },
             scheduler = scheduler,
             retryJitter = { 0 },
-        )
+        ).apply { handleBackgrounded(false) }
         val states = mutableListOf<StoreMessagesLoader.ChannelLoadedState>()
         loader.getMessagesLoadedState(9).subscribe(states::add)
         loader.handleAuthToken("test-token")
@@ -416,7 +416,7 @@ class MessageHistoryStoreTest {
         },
         scheduler = TestScheduler(),
         retryJitter = { 0 },
-    )
+    ).apply { handleBackgrounded(false) }
 
     private fun chunk(
         messages: List<Message>,

@@ -135,14 +135,10 @@ class StoreMessagesLoader @JvmOverloads constructor(
     /**
      * Whether the app is in the background; nothing loads while it is.
      *
-     * The reference seeds this `true` and relies on `StoreStream` pushing the first foreground
-     * signal. This target has no such wiring yet, so "never told" is treated as foreground —
-     * seeding `true` here would silently stop *all* history loading until the signal is added.
-     * Once `handleBackgrounded` is driven from the activity lifecycle this can become a plain
-     * `var backgrounded = true`.
+     * Seeded backgrounded, as the reference does: `Backgrounded` starts that way too and the first
+     * resumed activity clears it before anything is on screen to load into.
      */
-    private var backgroundedOrNull: Boolean? = null
-    private val backgrounded: Boolean get() = backgroundedOrNull == true
+    private var backgrounded = true
 
     private var detachedChannels: Set<Long> = emptySet()
     private var interactionState: InteractionState? = null
@@ -190,10 +186,14 @@ class StoreMessagesLoader @JvmOverloads constructor(
         tryLoadMessages(resetRetry = true, resetDelay = hasConnected)
     }
 
-    /** True while the app is in the background; nothing loads then. */
+    /**
+     * Nothing loads while backgrounded, so coming forward is also where a channel that went stale
+     * behind the user's back gets refetched — the reference refetches the selected channel on the
+     * same signal.
+     */
     @Synchronized
     fun handleBackgrounded(backgrounded: Boolean) {
-        this.backgroundedOrNull = backgrounded
+        this.backgrounded = backgrounded
         tryLoadMessages(resetRetry = true)
     }
 

@@ -1437,14 +1437,17 @@ class StoreStream private constructor(
             gatewaySocketLogger = AppGatewaySocketLogger.INSTANCE,
             initialCompression = GatewayCompression.ZSTD,
         ).also { socket ->
-            gatewayConnection.init(socket, voiceChannelSelected.observeSelectedVoiceChannelId())
+            gatewayConnection.init(socket)
             initGatewaySocketListeners()
         }
         connectivity.init(networkMonitor, messagesLoader.observeChannelMessagesLoading())
         com.discord.utilities.lifecycle.Backgrounded.observe().subscribe(
             { backgrounded ->
                 AnalyticSuperProperties.setBackgrounded(backgrounded)
-                dispatcher.schedule { connectivity.handleBackgrounded(backgrounded) }
+                dispatcher.schedule {
+                    connectivity.handleBackgrounded(backgrounded)
+                    messagesLoader.handleBackgrounded(backgrounded)
+                }
             },
             {},
         )
@@ -2732,8 +2735,8 @@ class StoreStream private constructor(
                 WorkManager.getInstance(applicationContext).cancelUniqueWork("BACKGROUND_MESSAGE_SENDING")
                 WorkManager.getInstance(applicationContext).cancelAllWorkByTag("MESSAGE_ACK")
             }
-            // The socket itself is opened and closed by StoreGatewayConnection's ClientState, which
-            // already observes the auth token; here we only reset the READY watchdog.
+            // StoreGatewayConnection opens and closes the socket off its own observation of the auth
+            // token; here we only reset the READY watchdog.
             gatewayToken = token
             gatewayInitTimeout?.cancel()
             gatewayInitTimeout = null
@@ -3132,7 +3135,7 @@ class StoreStream private constructor(
 
     fun observeInitialized(): Observable<Boolean> = initialized.distinctUntilChanged()
 
-    // Accessors used by StoreGatewayConnection to assemble its ClientState and outgoing traffic.
+    // Accessors used by StoreGatewayConnection to assemble IDENTIFY and outgoing traffic.
     internal fun getAuthenticationInternal() = authentication
     internal fun getClientDataStateInternal() = clientDataState
     internal fun getGuildSubscriptionsInternal() = guildSubscriptions

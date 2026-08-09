@@ -43,7 +43,6 @@ import com.discord.api.user.TypingUser
 import com.discord.api.user.User
 import com.discord.api.voice.server.VoiceServer
 import com.discord.api.voice.state.VoiceState
-import com.discord.gateway.GatewayConnectionConsumers
 import com.discord.gateway.GatewayEventHandler
 import com.discord.gateway.GatewaySocket
 import com.discord.gateway.IdentifyData
@@ -105,43 +104,13 @@ class StoreGatewayConnection(
     private val scheduler: Scheduler = Schedulers.from(executor),
 ) : GatewayEventHandler {
 
-    /**
-     * The inputs that decide whether the socket should be open, and with what identify payload.
-     *
-     * A backgrounded client with no voice channel and no registered consumer drops its token here,
-     * which closes the socket. [authed] stays true in that case so the close is not mistaken for a
-     * logout.
-     */
-    data class ClientState(
-        val tokenIfAvailable: String?,
-        val authed: Boolean,
-    ) {
-        override fun toString(): String =
-            "ClientState(tokenIfAvailable=${if (tokenIfAvailable != null) "<redacted>" else "null"}, " +
-                "authed=$authed)"
-
-        companion object {
-            fun create(
-                backgrounded: Boolean,
-                token: String?,
-                selectedVoiceChannelId: Long,
-                hasGatewayConnectionConsumers: Boolean,
-            ): ClientState {
-                val authed = token != null
-                val effectiveToken =
-                    if (backgrounded && selectedVoiceChannelId <= 0L && !hasGatewayConnectionConsumers) null
-                    else token
-                return ClientState(effectiveToken, authed)
-            }
-        }
-    }
-
     private val coroutineDispatcher: ExecutorCoroutineDispatcher = executor.asCoroutineDispatcher()
     private val batches = BatchManager(coroutineDispatcher, clock)
 
     private var socket: GatewaySocket? = null
-    private var clientState: ClientState? = null
-    private var clientStateSubscription: Subscription? = null
+    private var token: String? = null
+    private var tokenSubscription: Subscription? = null
+    private var backgroundedSubscription: Subscription? = null
     private var guildSubscriptionsSubscription: Subscription? = null
 
     // Connection state
@@ -273,28 +242,31 @@ class StoreGatewayConnection(
     fun getConnectionReady(): Observable<Boolean> = connectionReady.distinctUntilChanged()
 
     /**
-     * Adopts [socket] and starts driving its lifetime from [ClientState].
+     * Adopts [socket] and ties its lifetime to whether we hold a token.
      *
      * The socket is built by [StoreStream] because it needs REST for gateway discovery; everything
      * after construction belongs to this store.
+     *
+     * Backgrounding deliberately does not enter into it. The reference only drops the socket on
+     * background for iOS, where the OS suspends the process anyway; its Android branch leaves the
+     * socket up and merely resets the reconnect backoff on the way back in. Closing it would lose
+     * every dispatch that arrived while the app was away, and neither RESUME nor IDENTIFY replays
+     * events the client was not connected for.
      */
-    fun init(
-        socket: GatewaySocket,
-        observeSelectedVoiceChannelId: Observable<Long> = Observable.just(NO_VOICE_CHANNEL),
-    ) {
+    fun init(socket: GatewaySocket) {
         this.socket = socket
-        clientStateSubscription?.unsubscribe()
-        clientStateSubscription = Observable.combineLatest(
-            Backgrounded.observe(),
-            stream.getAuthenticationInternal().observeAuthState().map { it?.token },
-            observeSelectedVoiceChannelId,
-            GatewayConnectionConsumers.observeHasConsumers(),
-        ) { backgrounded, token, selectedVoiceChannelId, hasConsumers ->
-            ClientState.create(backgrounded, token, selectedVoiceChannelId, hasConsumers)
-        }
+        tokenSubscription?.unsubscribe()
+        tokenSubscription = stream.getAuthenticationInternal().observeAuthState()
+            .map { it?.token }
             .distinctUntilChanged()
             .observeOn(scheduler)
-            .subscribe(::handleClientStateUpdate, {})
+            .subscribe(::handleTokenUpdate, {})
+
+        backgroundedSubscription?.unsubscribe()
+        backgroundedSubscription = Backgrounded.observe()
+            .filter { backgrounded -> !backgrounded }
+            .observeOn(scheduler)
+            .subscribe({ this.socket?.resetBackoff() }, {})
 
         guildSubscriptionsSubscription?.unsubscribe()
         guildSubscriptionsSubscription = stream.getGuildSubscriptionsInternal().observeSubscriptions()
@@ -304,22 +276,16 @@ class StoreGatewayConnection(
     }
 
     /**
-     * Read at IDENTIFY time rather than captured per emission: the cache moves with every message,
-     * and folding it into [ClientState] made the socket lifecycle churn on each one.
+     * Read at IDENTIFY time rather than captured when the token changes: the cache moves with every
+     * message, and folding it into the socket's lifecycle input churned it on each one.
      */
-    fun getIdentifyData(): IdentifyData? = clientState?.tokenIfAvailable?.let { token ->
-        IdentifyData(token, stream.getClientDataStateInternal().getClientDataState().toIdentifyData())
+    fun getIdentifyData(): IdentifyData? = token?.let {
+        IdentifyData(it, stream.getClientDataStateInternal().getClientDataState().toIdentifyData())
     }
 
-    private fun handleClientStateUpdate(clientState: ClientState) {
-        this.clientState = clientState
-        if (clientState.tokenIfAvailable != null) {
-            socket?.connect()
-        } else {
-            // Keep the session when we still have a token overall: this is a background pause, not
-            // a logout, and a resumable session avoids a full READY when we come back.
-            socket?.close(resetSession = !clientState.authed)
-        }
+    private fun handleTokenUpdate(token: String?) {
+        this.token = token
+        if (token != null) socket?.connect() else socket?.close()
     }
 
     // region Outgoing
@@ -446,8 +412,10 @@ class StoreGatewayConnection(
     }
 
     fun dispose() {
-        clientStateSubscription?.unsubscribe()
-        clientStateSubscription = null
+        tokenSubscription?.unsubscribe()
+        tokenSubscription = null
+        backgroundedSubscription?.unsubscribe()
+        backgroundedSubscription = null
         guildSubscriptionsSubscription?.unsubscribe()
         guildSubscriptionsSubscription = null
         batches.dispose()
@@ -596,7 +564,6 @@ class StoreGatewayConnection(
     private companion object {
         const val EVENT_VOICE_STATE_UPDATE = "VOICE_STATE_UPDATE"
         const val DEFAULT_MEMBER_REQUEST_LIMIT = 100
-        const val NO_VOICE_CHANNEL = 0L
 
         fun <T> behavior(): SerializedSubject<T, T> = SerializedSubject(BehaviorSubject.create())
         fun <T> behavior(initialValue: T): SerializedSubject<T, T> =

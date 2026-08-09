@@ -13,12 +13,12 @@ import rx.Subscription
  * banner renders.
  *
  * The emitted [DelayedState] carries the delay the UI should wait before *showing* the state. That
- * lets a short reconnect resolve silently while a genuinely stuck connection surfaces after
- * [DELAY_NOMINAL]. Only the first connect of the process skips the delay, because cached UI opens
- * before READY and the user is owed an explanation for it; afterwards every CONNECTING waits, since
- * loading a channel's messages reports as one and switching guilds would otherwise flash the
- * banner. The delay is recomputed on every update against how long the current state has already
- * been active, so a state that has been pending for a while surfaces sooner.
+ * lets a short reconnect resolve silently while a genuinely stuck connection surfaces after the
+ * delay. CONNECTING gets the long one: it covers the whole of startup, a network blip, and a channel
+ * fetching its messages — which every guild switch does — and in all three cases there is cached UI
+ * on screen, so nothing is gained by interrupting it. Offline is the short one, since the user
+ * cannot mistake it for progress. The delay is recomputed on every update against how long the
+ * current state has already been active, so a state that has been pending a while surfaces sooner.
  */
 class StoreConnectivity(
     private val dispatcher: Dispatcher,
@@ -30,14 +30,16 @@ class StoreConnectivity(
 
     data class DelayedState(val state: State, val delay: Long = DELAY_NOMINAL)
 
-    private var delayedState: DelayedState by MarkChangedDelegate(DelayedState(State.CONNECTING, 0L))
+    private var delayedState: DelayedState by MarkChangedDelegate(DelayedState(State.CONNECTING, DELAY_EXTENDED))
 
     private var deviceNetworkState: NetworkMonitor.State = NetworkMonitor.State.OFFLINE
     private var isReadyPayloadReceived: Boolean = false
-    private var hasCompletedInitialConnect: Boolean = false
     private var channelMessagesLoading: Boolean = false
-    private var stateTriggeredDelay: Long = 0L
+    private var stateTriggeredDelay: Long = DELAY_EXTENDED
     private var stateTriggeredTimeMillis: Long = clock.currentTimeMillis()
+
+    /** Nothing surfaces before this; see [handleBackgrounded]. */
+    private var earliestVisibleTimeMillis: Long = 0L
 
     private var networkSubscription: Subscription? = null
     private var messagesLoadingSubscription: Subscription? = null
@@ -75,11 +77,18 @@ class StoreConnectivity(
         updateConnectivityState()
     }
 
+    /**
+     * The delay budget measures how long the user has been kept waiting, and a backgrounded user is
+     * not waiting: time away must not spend it. Coming forward then buys a further
+     * [DELAY_FOREGROUND_COOLOFF], so a connection that has to re-establish itself gets to do so
+     * before the user is told anything is wrong.
+     */
     @StoreThread
     fun handleBackgrounded(backgrounded: Boolean) {
-        // Time spent backgrounded should not count against the visible delay budget.
-        if (backgrounded) stateTriggeredDelay -= getStateActiveMillis()
         stateTriggeredTimeMillis = clock.currentTimeMillis()
+        if (!backgrounded) {
+            earliestVisibleTimeMillis = clock.currentTimeMillis() + DELAY_FOREGROUND_COOLOFF
+        }
         updateConnectivityState()
     }
 
@@ -105,22 +114,22 @@ class StoreConnectivity(
         }
         if (delayedState.state != nextState) {
             stateTriggeredTimeMillis = clock.currentTimeMillis()
-            // Boot progress is worth showing at once, because cached UI opens before READY.
-            // Afterwards CONNECTING is either a blip or a channel fetching its messages — and
-            // every guild switch does the latter — so both wait out the delay.
-            stateTriggeredDelay =
-                if (nextState == State.CONNECTING && !hasCompletedInitialConnect) 0L else DELAY_NOMINAL
+            stateTriggeredDelay = if (nextState == State.CONNECTING) DELAY_EXTENDED else DELAY_NOMINAL
         }
-        if (nextState == State.ONLINE) hasCompletedInitialConnect = true
         delayedState = DelayedState(nextState, getStateDelay(stateTriggeredDelay))
     }
 
     private fun getStateActiveMillis(): Long = clock.currentTimeMillis() - stateTriggeredTimeMillis
 
     /** Remaining delay, quantised to [DELAY_INTERVAL] so equal states de-duplicate. */
-    private fun getStateDelay(defaultDelay: Long): Long =
-        (((defaultDelay - getStateActiveMillis()).toFloat() / DELAY_INTERVAL).roundToInt().toLong() * DELAY_INTERVAL)
+    private fun getStateDelay(defaultDelay: Long): Long {
+        val remaining = maxOf(
+            defaultDelay - getStateActiveMillis(),
+            earliestVisibleTimeMillis - clock.currentTimeMillis(),
+        )
+        return ((remaining.toFloat() / DELAY_INTERVAL).roundToInt().toLong() * DELAY_INTERVAL)
             .coerceAtLeast(0L)
+    }
 
     fun reset() {
         networkSubscription?.unsubscribe()
@@ -132,5 +141,7 @@ class StoreConnectivity(
     companion object {
         const val DELAY_INTERVAL = 100L
         const val DELAY_NOMINAL = 1_000L
+        const val DELAY_EXTENDED = 10_000L
+        const val DELAY_FOREGROUND_COOLOFF = 5_000L
     }
 }
