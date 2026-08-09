@@ -787,5 +787,7 @@ object Rules {
             textAppearanceProvider(R.style.Code_TextAppearance_Types),
             textAppearanceProvider(R.style.Code_TextAppearance_Generics),
             textAppearanceProvider(R.style.Code_TextAppearance_Params),
+            textAppearanceProvider(R.style.Code_TextAppearance_Addition),
+            textAppearanceProvider(R.style.Code_TextAppearance_Deletion),
         )
 }

@@ -3119,6 +3119,8 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   asynchronous creation callback, preventing detached-fragment crashes on `Main-StoreThread` after the sheet closes.
 - User profiles are cached separately by `(user, guild?)` while preserving the latest-profile API for unscoped consumers. User
   sheets switch instantly to a cached matching scope, or an empty loading profile, without flashing another scope's data.
+- Fenced `diff` code blocks now provide SimpleAST's addition/deletion style slots with Discord green/red text appearances;
+  previously those two optional providers defaulted to empty spans, leaving diff lines monochrome.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each
