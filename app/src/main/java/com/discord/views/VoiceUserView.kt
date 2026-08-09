@@ -24,10 +24,11 @@ import com.facebook.imagepipeline.request.BasePostprocessor
 internal enum class VoiceDisplayState { CONNECTED, SPEAKING, MUTED, RINGING, DISCONNECTED }
 
 internal fun voiceDisplayState(user: StoreVoiceParticipants.VoiceUser): VoiceDisplayState = when {
+    user.isConnected && user.voiceState?.let { it.selfMute || it.selfDeaf || it.mute } == true ->
+        VoiceDisplayState.MUTED
     user.isSpeaking -> VoiceDisplayState.SPEAKING
     user.isRinging -> VoiceDisplayState.RINGING
     !user.isConnected -> VoiceDisplayState.DISCONNECTED
-    user.voiceState?.let { it.selfMute || it.selfDeaf || it.mute } == true -> VoiceDisplayState.MUTED
     else -> VoiceDisplayState.CONNECTED
 }
 

@@ -3157,6 +3157,9 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
 - Mention pill rendering/deletion now belongs to `InputAutocomplete`, matching the reference ownership. Text changes emit/apply
   `ReplacePillSpans`; a deletion intersecting a pill emits an explicit whole-token `RemoveText` action. `WidgetChatInput` no longer
   contains deletion-range state. Updated release assembly and installation pass.
+- Voice participant display now lets connected mute/self-mute/self-deaf state override a stale speaking flag, so muted users cannot
+  retain the green speaking treatment. Existing speaking-over-ringing and disconnected behavior remains intact. Updated release
+  assembly and installation pass.
 - Detailed boot progress is controlled by a persisted `Verbose Boot` developer setting. It defaults off with the current
   recovered white Clyde mark while caches restore; enabled mode shows every safe boot event. Authenticated navigation no longer waits for Gateway
   READY, so cached UI opens while the existing global connectivity banner reports background connection state. Focused boot

@@ -15,6 +15,7 @@ class VoiceVideoLeafBehaviorTest {
         assertEquals(VoiceDisplayState.RINGING, voiceDisplayState(voiceUser(ringing = true, connected = false)))
         assertEquals(VoiceDisplayState.DISCONNECTED, voiceDisplayState(voiceUser(connected = false, muted = true)))
         assertEquals(VoiceDisplayState.MUTED, voiceDisplayState(voiceUser(muted = true)))
+        assertEquals(VoiceDisplayState.MUTED, voiceDisplayState(voiceUser(speaking = true, muted = true)))
         assertEquals(VoiceDisplayState.CONNECTED, voiceDisplayState(voiceUser()))
     }
 
