@@ -3188,10 +3188,11 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   Wumpus empty state. The authenticated shell is published only after cached users, relationships, guilds, channels,
   permissions, selection, and messages finish restoring, so its first frame is the resolved channel with panels already centered.
   Focused stream/cache/connectivity/friends tests, debug assembly, and A65 install pass.
-- Added the AndroidX `:baselineprofile` generator module and app integration. A non-destructive A65 startup run generated
-  `app/src/release/generated/baselineProfiles/{baseline-prof,startup-prof}.txt` (32,573 rules each). `assembleRelease` passes,
-  and `app-release-unsigned.apk` contains `assets/dexopt/baseline.prof` plus `baseline.profm`. D8 drops stale synthetic entries
-  whose generated names differ between the non-minified collection build and release, while retaining and packaging valid rules.
+- Added the AndroidX `:baselineprofile` generator module and app integration. The latest non-destructive A65 startup run generated
+  `app/src/release/generated/baselineProfiles/{baseline-prof,startup-prof}.txt` (35,174 rules each): 6,998 rules added, 4,397
+  removed, and 28,176 unchanged from the prior profile. The generator and debug assembly pass; the debug APK was restored on A65.
+  D8 drops stale synthetic entries whose generated names differ between the non-minified collection build and release, while
+  retaining and packaging valid rules.
 - Local and GitHub Actions debug/release APKs now share the repository-owned Manticord development certificate, avoiding
   update failures caused by Android Studio and CI generating different debug keys. Continuous release builds the signed
   release APK, which packages the committed generated Baseline Profile, instead of publishing a debug APK. Local debug and
