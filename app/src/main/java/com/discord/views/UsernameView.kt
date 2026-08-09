@@ -1,7 +1,7 @@
 package com.discord.views
 
 import android.content.Context
-import android.net.Uri
+import android.graphics.drawable.ColorDrawable
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.LayoutInflater
@@ -14,13 +14,9 @@ import com.discord.api.user.PrimaryGuild
 import com.discord.databinding.ViewUsernameBinding
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.icon.IconUtils
-import com.facebook.drawee.backends.pipeline.Fresco
+import com.discord.utilities.images.setVitoSpan
 import com.facebook.drawee.drawable.ScalingUtils
-import com.facebook.drawee.generic.GenericDraweeHierarchyBuilder
-import com.facebook.drawee.generic.RoundingParams
 import com.facebook.drawee.span.DraweeSpanStringBuilder
-import com.facebook.imagepipeline.common.ResizeOptions
-import com.facebook.imagepipeline.request.ImageRequestBuilder
 
 class UsernameView @JvmOverloads constructor(
     context: Context,
@@ -112,23 +108,21 @@ class UsernameView @JvmOverloads constructor(
         append(spaceCharacter)
         val size = avatarSizePx ?: (16 * resources.displayMetrics.density).toInt()
         val proxySize = IconUtils.getMediaProxySize(size)
-        val request = ImageRequestBuilder.newBuilderWithSource(Uri.parse(avatarUrl))
-            .setResizeOptions(ResizeOptions(proxySize, proxySize))
-            .build()
-        val controller = Fresco.newDraweeControllerBuilder()
-            .setImageRequest(request)
-            .setAutoPlayAnimations(animateAvatar)
-            .build()
-        val rounding = RoundingParams.asCircle().apply {
-            roundingOverlayColor?.let(::setOverlayColor)
-        }
-        val hierarchy = GenericDraweeHierarchyBuilder(resources)
-            .setPlaceholderImage(
-                AppCompatResources.getDrawable(context, R.drawable.asset_default_avatar_32dp),
-            )
-            .setRoundingParams(rounding)
-            .setActualImageScaleType(ScalingUtils.ScaleType.CENTER_CROP)
-            .build()
-        setImageSpan(context, hierarchy, controller, start, start, size, size, false, 2)
+        setVitoSpan(
+            context = context,
+            url = avatarUrl,
+            start = start,
+            end = start,
+            width = size,
+            height = size,
+            alignment = 2,
+            autoPlay = animateAvatar,
+            placeholder = AppCompatResources.getDrawable(context, R.drawable.asset_default_avatar_32dp),
+            scaleType = ScalingUtils.ScaleType.CENTER_CROP,
+            circular = true,
+            background = roundingOverlayColor?.let(::ColorDrawable),
+            resizeWidth = proxySize,
+            resizeHeight = proxySize,
+        )
     }
 }

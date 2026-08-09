@@ -1,6 +1,7 @@
 package com.discord.views.user
 
 import android.content.Context
+import android.graphics.drawable.ColorDrawable
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
@@ -11,11 +12,10 @@ import com.discord.models.member.GuildMember
 import com.discord.models.user.User
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
+import com.discord.utilities.images.setVitoSpan
 import com.discord.views.ThemedColor
 import com.discord.views.UsernameView
-import com.facebook.drawee.backends.pipeline.Fresco
 import com.facebook.drawee.drawable.ScalingUtils
-import com.facebook.drawee.generic.GenericDraweeHierarchyBuilder
 import com.facebook.drawee.generic.RoundingParams
 import com.facebook.drawee.span.DraweeSpanStringBuilder
 import com.facebook.drawee.span.SimpleDraweeSpanTextView
@@ -116,17 +116,19 @@ class SettingsMemberView constructor(
         val start = length
         append('#')
         append('\u2002')
-        val request = MGImages.getImageRequest(url, sizePx, sizePx, useSmallCache = true).build()
-        val controller = Fresco.newDraweeControllerBuilder()
-            .setImageRequest(request)
-            .setAutoPlayAnimations(false)
-            .build()
-        val hierarchy = GenericDraweeHierarchyBuilder(resources)
-            .setPlaceholderImage(AppCompatResources.getDrawable(context, R.drawable.asset_default_avatar_32dp))
-            .setRoundingParams(RoundingParams.asCircle().apply { setOverlayColor(overlayColor) })
-            .setActualImageScaleType(ScalingUtils.ScaleType.CENTER_CROP)
-            .build()
-        setImageSpan(context, hierarchy, controller, start, start, sizePx, sizePx, false, 2)
+        setVitoSpan(
+            context = context,
+            url = url,
+            start = start,
+            end = start,
+            width = sizePx,
+            height = sizePx,
+            alignment = 2,
+            placeholder = AppCompatResources.getDrawable(context, R.drawable.asset_default_avatar_32dp),
+            scaleType = ScalingUtils.ScaleType.CENTER_CROP,
+            circular = true,
+            background = ColorDrawable(overlayColor),
+        )
     }
 
     private companion object {

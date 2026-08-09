@@ -2,7 +2,6 @@ package com.discord.utilities.textprocessing.node
 
 import android.content.Context
 import android.graphics.drawable.ColorDrawable
-import android.net.Uri
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import com.discord.R
@@ -10,15 +9,13 @@ import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.simpleast.core.node.TextNode
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.setVitoSpan
 import com.discord.utilities.spans.ClickableSpan
 import com.discord.utilities.textprocessing.EmojiImages
 import com.discord.utilities.textprocessing.Rules
 import com.discord.utilities.textprocessing.dpToPixels
-import com.facebook.drawee.backends.pipeline.Fresco
 import com.facebook.drawee.drawable.ScalingUtils
-import com.facebook.drawee.generic.GenericDraweeHierarchyBuilder
 import com.facebook.drawee.span.DraweeSpanStringBuilder
-import com.facebook.imagepipeline.request.ImageRequestBuilder
 import java.io.Serializable
 
 /**
@@ -74,31 +71,22 @@ class EmojiNode<T : EmojiNode.RenderContext>(
                 IconUtils.getMediaProxySize(renderWidth),
                 context,
             )
-            val controller = Fresco.newDraweeControllerBuilder()
-                .setImageRequest(ImageRequestBuilder.newBuilderWithSource(Uri.parse(url)).build())
-                .setAutoPlayAnimations(isRevealed)
-                .build()
-            val hierarchy = GenericDraweeHierarchyBuilder(context.resources)
-                .setPlaceholderImage(ColorDrawable(TRANSPARENT))
-                .setActualImageScaleType(ScalingUtils.ScaleType.FIT_CENTER)
-                .apply {
-                    if (!isRevealed) {
-                        val spoilerColor = (renderContext as? SpoilerNode.RenderContext)?.spoilerColorRes
-                            ?: ColorCompat.getThemedColor(context, R.attr.theme_chat_spoiler_bg)
-                        setOverlay(ColorDrawable(spoilerColor))
-                    }
-                }
-                .build()
-            draweeBuilder.setImageSpan(
-                context,
-                hierarchy,
-                controller,
-                start,
-                end,
-                renderWidth,
-                renderHeight,
-                false,
-                alignment,
+            val overlay = if (isRevealed) null else ColorDrawable(
+                (renderContext as? SpoilerNode.RenderContext)?.spoilerColorRes
+                    ?: ColorCompat.getThemedColor(context, R.attr.theme_chat_spoiler_bg),
+            )
+            draweeBuilder.setVitoSpan(
+                context = context,
+                url = url,
+                start = start,
+                end = end,
+                width = renderWidth,
+                height = renderHeight,
+                alignment = alignment,
+                autoPlay = isRevealed,
+                placeholder = ColorDrawable(TRANSPARENT),
+                overlay = overlay,
+                scaleType = ScalingUtils.ScaleType.FIT_CENTER,
             )
         }
 

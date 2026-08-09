@@ -24,7 +24,7 @@ class SparkleView(context: Context, attrs: AttributeSet?) : FrameLayout(context,
         layoutParams = LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         image.setImageDrawable(sparkleDrawable)
         sparkleDrawable?.registerAnimationCallback(object : Animatable2Compat.AnimationCallback() {
-            override fun onAnimationEnd(drawable: Drawable?) {
+            override fun onAnimationEnd(drawable: Drawable) {
                 postDelayed(restart, 500L)
             }
         })

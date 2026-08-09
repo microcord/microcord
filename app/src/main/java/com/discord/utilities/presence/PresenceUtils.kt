@@ -2,7 +2,6 @@ package com.discord.utilities.presence
 
 import android.content.Context
 import android.graphics.Typeface
-import android.net.Uri
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.StyleSpan
@@ -19,12 +18,10 @@ import com.discord.api.presence.ClientStatus
 import com.discord.api.presence.ClientStatuses
 import com.discord.models.presence.Presence
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.images.setVitoSpan
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
-import com.facebook.drawee.backends.pipeline.Fresco
-import com.facebook.drawee.generic.GenericDraweeHierarchyBuilder
+import com.facebook.drawee.drawable.ScalingUtils
 import com.facebook.drawee.span.DraweeSpanStringBuilder
-import com.facebook.imagepipeline.common.ResizeOptions
-import com.facebook.imagepipeline.request.ImageRequestBuilder
 
 /**
  * Renders a presence as the one line of text shown under a username, and exposes the
@@ -366,26 +363,18 @@ object PresenceUtils {
         }
         val sizePx = (context.resources.displayMetrics.density * CUSTOM_STATUS_EMOJI_SIZE_DP).toInt()
         val extension = if (emoji.animated) "gif" else "png"
-        val request = ImageRequestBuilder
-            .newBuilderWithSource(Uri.parse("https://cdn.discordapp.com/emojis/$id.$extension?size=32"))
-            .setResizeOptions(ResizeOptions(sizePx, sizePx))
-            .build()
-        val controller = Fresco.newDraweeControllerBuilder()
-            .setImageRequest(request)
-            .setAutoPlayAnimations(animate)
-            .build()
         val start = length
         append('#')
-        setImageSpan(
-            context,
-            GenericDraweeHierarchyBuilder(context.resources).build(),
-            controller,
-            start,
-            start,
-            sizePx,
-            sizePx,
-            false,
-            DRAWEE_SPAN_ALIGN_CENTER,
+        setVitoSpan(
+            context = context,
+            url = "https://cdn.discordapp.com/emojis/$id.$extension?size=32",
+            start = start,
+            end = start,
+            width = sizePx,
+            height = sizePx,
+            alignment = DRAWEE_SPAN_ALIGN_CENTER,
+            autoPlay = animate,
+            scaleType = ScalingUtils.ScaleType.FIT_CENTER,
         )
         return true
     }

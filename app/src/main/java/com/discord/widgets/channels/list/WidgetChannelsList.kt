@@ -16,7 +16,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.core.view.ViewCompat
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.discord.R
+import com.discord.panels.PanelState
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isGuildVocalChannel
@@ -41,6 +43,7 @@ import com.discord.utilities.view.rounded.RoundedCoordinatorLayout
 import com.discord.views.CustomAppBarLayout
 import com.discord.views.ThemedColor
 import com.discord.widgets.channels.invite.GroupInviteFriendsSheet
+import com.discord.widgets.channels.list.items.ChannelListItemPrivate
 import com.discord.widgets.directories.WidgetDirectoryChannel
 import com.discord.widgets.friends.EmptyFriendsStateView
 import com.discord.widgets.hubs.events.WidgetHubEventsPage
@@ -85,6 +88,9 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
 
     /** The guild whose list is on screen, used to detect a switch and reset the scroll. */
     private var selectedGuildId: Long? = null
+    private var focusedPrivateChannelId: Long? = null
+    private var pendingPrivateChannelAnchor: Pair<Int, Int>? = null
+    private var isStartPanelOpen = false
 
     /** Re-uploading the same banner on every emission would flicker the drawee view. */
     private val bannerChangeDetector = MGImages.DistinctChangeDetector()
@@ -132,6 +138,13 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
         WidgetChannelListModel.get()
             .ui(this)
             .appSubscribe(WidgetChannelsList::class.java, onNext = ::configureUI)
+
+        storeNavigation.observeLeftPanelState()
+            .ui(this)
+            .appSubscribe(WidgetChannelsList::class.java) { state ->
+                isStartPanelOpen = state == PanelState.Open
+                if (isStartPanelOpen) applyPendingPrivateChannelAnchor()
+            }
 
         if (mostRecentIntent.getBooleanExtra(INTENT_EXTRA_OPEN_PANEL, false)) {
             storeNavigation.setNavigationPanelAction(StoreNavigation.PanelAction.OPEN)
@@ -360,7 +373,9 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
             guild?.id?.let { adapter.selectedGuildId = it }
         }
 
+        val privateChannelAnchor = capturePrivateChannelAnchor(model)
         adapter.setData(model.items)
+        restorePrivateChannelAnchor(privateChannelAnchor)
 
         collapsingToolbar.visibility = if (model.isGuildSelected) View.VISIBLE else View.GONE
         (collapsingToolbar.layoutParams as? AppBarLayout.LayoutParams)?.scrollFlags =
@@ -398,6 +413,39 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
         }
 
         premiumGuildHint.visibility = if (model.showPremiumGuildHint) View.VISIBLE else View.GONE
+    }
+
+    private fun capturePrivateChannelAnchor(model: WidgetChannelListModel): Pair<Int, Int>? {
+        if (model.isGuildSelected) {
+            focusedPrivateChannelId = null
+            pendingPrivateChannelAnchor = null
+            return null
+        }
+        val newIndex = model.items.indexOfFirst { it is ChannelListItemPrivate && it.selected }
+        if (newIndex < 0) return null
+        val channelId = (model.items[newIndex] as ChannelListItemPrivate).channel.id
+        val oldIndex = (0 until adapter.itemCount).firstOrNull { index ->
+            (adapter.getItem(index) as? ChannelListItemPrivate)?.channel?.id == channelId
+        }
+        if (focusedPrivateChannelId == channelId && oldIndex == newIndex) return null
+        val oldTop = oldIndex?.let { index -> recycler.layoutManager?.findViewByPosition(index)?.top } ?: 0
+        focusedPrivateChannelId = channelId
+        return newIndex to oldTop
+    }
+
+    private fun restorePrivateChannelAnchor(anchor: Pair<Int, Int>?) {
+        pendingPrivateChannelAnchor = anchor ?: return
+        applyPendingPrivateChannelAnchor()
+    }
+
+    private fun applyPendingPrivateChannelAnchor() {
+        if (!isStartPanelOpen) return
+        val (index, top) = pendingPrivateChannelAnchor ?: return
+        pendingPrivateChannelAnchor = null
+        recycler.post {
+            (recycler.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(index, top)
+                ?: recycler.scrollToPosition(index)
+        }
     }
 
     private fun configureBanner(guild: Guild?, startsWithPaddedElement: Boolean) {

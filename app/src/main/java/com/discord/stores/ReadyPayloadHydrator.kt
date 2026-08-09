@@ -71,8 +71,13 @@ internal class ReadyPayloadHydrator(
             }
         }
 
-        val privateChannels = (payload.privateChannels
-            ?: channelStore.getChannelsByGuildInternal()[0L].orEmpty().values.toList())
+        val cachedPrivateChannels = channelStore.getChannelsByGuildInternal()[0L].orEmpty().values
+        val incomingPrivateChannels = payload.privateChannels
+        val privateChannels = if (payload.readyGuilds.orEmpty().any { it.dataMode == ReadyGuild.DATA_MODE_PARTIAL }) {
+            (cachedPrivateChannels + incomingPrivateChannels.orEmpty()).associateBy(Channel::id).values
+        } else {
+            incomingPrivateChannels ?: cachedPrivateChannels
+        }
             .map { hydrateRecipients(it, users) }
         val relationships = payload.relationships?.map { it.hydrate(users) }
         val hydrated = payload.withGuilds(hydratedGuilds).withHydratedUserData(

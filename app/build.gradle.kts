@@ -24,7 +24,7 @@ android {
 
     defaultConfig {
         applicationId = "dev.mantikafasi.manticord"
-        minSdk = 22
+        minSdk = 23
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -117,6 +117,11 @@ dependencies {
     }
     implementation(libs.fresco)
     implementation(libs.fresco.drawee.span)
+    implementation(libs.fresco.vito.source)
+    implementation(libs.fresco.vito.options)
+    implementation(libs.fresco.vito.core)
+    implementation(libs.fresco.vito.core.java.impl)
+    implementation(libs.fresco.vito.provider)
     implementation(libs.fresco.animated.gif)
     implementation(libs.fresco.animated.webp)
     implementation(libs.photo.drawee.view)

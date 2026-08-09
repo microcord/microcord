@@ -89,6 +89,7 @@ class ReadyPayloadHydratorTest {
         assertEquals(listOf(11L), guild.channels!!.map { it.id })
         assertEquals(123L, guild.channels!!.single().lastMessageId)
         assertEquals("cached-name", guild.name)
+        assertEquals(listOf(20L), result.payload.privateChannels!!.map { it.id })
     }
 
     private fun stores(): Pair<StoreGuilds, StoreChannels> {
@@ -148,6 +149,7 @@ class ReadyPayloadHydratorTest {
         private val CACHED_READY = """
             {
               "users":[],
+              "private_channels":[{"id":20,"type":1,"recipient_ids":[]}],
               "guilds":[{
                  "id":1,"name":"cached-name","description":"cached-description","nsfw_level":1,
                 "default_message_notifications":2,"region":"cached-region","owner_id":42,
@@ -205,6 +207,7 @@ class ReadyPayloadHydratorTest {
         private val V2_PARTIAL_READY = """
             {
               "users":[],
+              "private_channels":[],
               "guilds":[{
                 "id":1,"data_mode":"partial","version":20,"member_count":8,
                 "partial_updates":{

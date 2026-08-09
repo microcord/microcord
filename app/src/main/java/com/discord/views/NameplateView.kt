@@ -288,6 +288,8 @@ class NameplateView @JvmOverloads constructor(
     }
 
     private object ArtworkScaleType : ScalingUtils.ScaleType {
+        override fun getDescription(): String = "nameplate_end_crop"
+
         override fun getTransform(
             outTransform: Matrix,
             parentRect: Rect,

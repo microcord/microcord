@@ -7,6 +7,14 @@ import android.content.Context
 import com.facebook.cache.disk.DiskCacheConfig
 import com.facebook.common.internal.Supplier
 import com.facebook.drawee.backends.pipeline.Fresco
+import com.facebook.common.executors.UiThreadImmediateExecutorService
+import com.facebook.fresco.vito.core.DefaultFrescoVitoConfig
+import com.facebook.fresco.vito.core.ListVitoImagePerfListener
+import com.facebook.fresco.vito.core.impl.DefaultImageDecodeOptionsProviderImpl
+import com.facebook.fresco.vito.core.impl.ImagePipelineUtilsImpl
+import com.facebook.fresco.vito.provider.components.FrescoVitoComponents
+import com.facebook.fresco.vito.provider.impl.DefaultFrescoVitoProvider
+import com.facebook.imagepipeline.common.ImageDecodeOptions
 import com.facebook.imagepipeline.cache.DefaultBitmapMemoryCacheParamsSupplier
 import com.facebook.imagepipeline.cache.MemoryCacheParams
 import com.facebook.imagepipeline.core.ImagePipelineConfig
@@ -43,15 +51,28 @@ object MGImagesConfig {
     private val PARAMS_CHECK_INTERVAL_MS = TimeUnit.MINUTES.toMillis(5)
 
     fun init(context: Application) {
-        val config = ImagePipelineConfig.newBuilder(context)
+        val builder = ImagePipelineConfig.newBuilder(context)
             .setDownsampleEnabled(true)
             .setMainDiskCacheConfig(newDiskCacheConfig(context, CACHE_DIR))
             .setSmallImageDiskCacheConfig(newDiskCacheConfig(context, CACHE_DIR_SMALL))
             .setBitmapMemoryCacheParamsSupplier(getAppBitmapMemoryCacheParamsSupplier(context))
-            .experiment()
+        builder.experiment()
             .setShouldDownscaleFrameToDrawableDimensions(true)
-            .build()
+        val config = builder.build()
         Fresco.initialize(context, config)
+        FrescoVitoComponents.setImplementation(
+            DefaultFrescoVitoProvider(
+                DefaultFrescoVitoConfig(),
+                Fresco.getImagePipeline(),
+                ImagePipelineUtilsImpl(
+                    DefaultImageDecodeOptionsProviderImpl { ImageDecodeOptions.defaults() },
+                ),
+                config.executorSupplier.forLightweightBackgroundTasks(),
+                UiThreadImmediateExecutorService.getInstance(),
+                { _, _ -> },
+                ListVitoImagePerfListener(),
+            ),
+        )
     }
 
     /**

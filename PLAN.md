@@ -3125,6 +3125,26 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   every cached guild metadata field, including safety-alert channel, premium progress, NSFW/content levels, incidents, and official
   message color. Focused tests are added but currently cannot compile because unrelated `ActivityMessageEntryTest.kt:113` omits its
   new required `message` argument; `assembleRelease` succeeds and the updated release APK is installed.
+- Library refresh compatibility: `androidx.core` remains at 1.18.0 and `zstd-jni` at 1.5.7-12 because their next releases require
+  compile SDK 37, which is not installed. Upgraded dependencies now own `buttonSize`, `colorScheme`, and
+  `imageAspectRatioAdjust`; duplicate recovered declarations were removed for modern AAPT compatibility.
+- Fresco 3.7 is retained rather than downgraded. Inline avatars/status/custom emoji now use Vito `ImageSource`/`ImageOptions`
+  spans with the default Vito provider initialized from the configured Fresco pipeline, image-pipeline experiments are configured through the 3.7 builder, circle processing wraps the now-final Fresco
+  postprocessor, and custom scale types provide the required description. Release compilation, lint-vital, packaging, and device
+  installation pass with the refreshed dependency set.
+- CLIENT_STATE_V2 partial READY hydration now merges private-channel deltas into the restored DM cache instead of treating an
+  omitted/empty `private_channels` array as an authoritative empty list. Full READY still replaces the list. The updated release
+  builds, installs, launches, and remains alive with a clean crash buffer.
+- The private-channel sidebar now re-anchors to the selected DM only when its channel ID or adapter index changes. Cached-to-READY
+  reordering can no longer leave RecyclerView at an unrelated preserved position, while ordinary presence/unread rebinds do not
+  trigger repeated scrolling. The selected row uses an explicit zero top offset rather than RecyclerView's ambiguous
+  `scrollToPosition` placement. Updated release assembly and installation pass.
+- DM cached-to-READY reordering now captures the selected row's pre-update pixel offset and restores that same offset at its new
+  adapter index. Ordering changes therefore no longer teleport the sidebar, while the open channel stays anchored. Updated release
+  assembly and installation pass.
+- If READY arrives while the start panel is closed, the selected-DM anchor now remains pending until `PanelState.Open`; it is no
+  longer consumed against an off-screen RecyclerView layout. Opening the sidebar applies the latest selected channel/index once.
+  Updated release assembly and installation pass.
 - Detailed boot progress is controlled by a persisted `Verbose Boot` developer setting. It defaults off with the current
   recovered white Clyde mark while caches restore; enabled mode shows every safe boot event. Authenticated navigation no longer waits for Gateway
   READY, so cached UI opens while the existing global connectivity banner reports background connection state. Focused boot

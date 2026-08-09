@@ -70,7 +70,7 @@ class WidgetGlobalStatusIndicator : AppFragment(R.layout.widget_global_status_in
      * indicator loop.
      */
     private val connectingVectorReplayCallback = object : Animatable2Compat.AnimationCallback() {
-        override fun onAnimationEnd(drawable: Drawable?) {
+        override fun onAnimationEnd(drawable: Drawable) {
             connectingVector?.start()
         }
     }
