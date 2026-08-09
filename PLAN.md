@@ -3121,6 +3121,10 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   sheets switch instantly to a cached matching scope, or an empty loading profile, without flashing another scope's data.
 - Fenced `diff` code blocks now provide SimpleAST's addition/deletion style slots with Discord green/red text appearances;
   previously those two optional providers defaulted to empty spans, leaving diff lines monochrome.
+- Common text/code attachments render a binary-safe 300-byte preview with SimpleAST highlighting and bounded 128 KiB expansion.
+  The reference-shaped footer contains filename, expand, wrap, copy, and download controls at 8dp spacing. No-wrap scrolls up to
+  16 viewports without opening side panels; wrap pins text to the viewport. Spoilers and recycled rows cancel or defer loading,
+  and failures restore the ordinary file card.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each

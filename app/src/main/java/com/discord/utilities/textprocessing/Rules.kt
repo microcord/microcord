@@ -777,7 +777,7 @@ object Rules {
      * Maps SimpleAST's syntax-highlight roles onto the recovered `Code.TextAppearance.*` styles.
      * Addition/deletion (diff) roles keep the library defaults, as in the reference.
      */
-    private fun <RC : BasicRenderContext> createCodeStyleProviders(): CodeStyleProviders<RC> =
+    internal fun <RC : BasicRenderContext> createCodeStyleProviders(): CodeStyleProviders<RC> =
         CodeStyleProviders(
             spanProvider { context -> listOf(codeTextAppearance(context), RelativeSizeSpan(CODE_TEXT_SCALE)) },
             textAppearanceProvider(R.style.Code_TextAppearance_Comment),
