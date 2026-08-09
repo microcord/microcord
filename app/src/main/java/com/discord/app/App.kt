@@ -3,7 +3,6 @@ package com.discord.app
 import android.app.Application
 import androidx.appcompat.app.AppCompatDelegate
 import com.discord.dialogs.WidgetMaskedLinksDialog
-import com.discord.screenshot_detection.ScreenshotDetector
 import com.discord.stores.StoreStream
 import com.discord.utilities.billing.GooglePlayBillingManager
 import com.discord.utilities.cache.SharedPreferencesProvider
@@ -46,7 +45,6 @@ class App : Application() {
         CaptchaSolver.install(ActivityCaptchaSolver())
         MfaSolver.install(ActivityMfaSolver())
         ClockFactory.init()
-        ScreenshotDetector.instance = ScreenshotDetector(this, AppLog, SharedPreferencesProvider.get())
         Backgrounded.init(this)
         PersisterConfig.init(this, ClockFactory.get())
         MGImagesConfig.init(this)

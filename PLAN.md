@@ -3089,6 +3089,9 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   build the signed release APK with its Baseline Profile and create the numbered GitHub tag/release. Local debug/release
   assembly passes; local metadata resolves to build `local` plus the current short Git hash, and the release APK still contains
   both dexopt Baseline Profile assets.
+- Screenshot detection no longer initializes or subscribes from the activity, and its developer-options toggle is removed, so
+  taking a screenshot cannot open the internal bug-report form. The form implementation remains available for an explicit
+  future route; debug assembly passes.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each

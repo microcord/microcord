@@ -24,7 +24,6 @@ import androidx.lifecycle.Lifecycle
 import com.discord.R
 import com.discord.databinding.ActivityAppBinding
 import com.discord.models.domain.ModelUserSettings
-import com.discord.screenshot_detection.ScreenshotDetector
 import com.discord.stores.IntentRouteResult
 import com.discord.stores.MainRoute
 import com.discord.stores.RequiredAction
@@ -32,7 +31,6 @@ import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreNotices
 import com.discord.stores.StoreStream
 import com.discord.utilities.intent.AppIntentParser
-import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.developer.DeveloperSettings
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
@@ -62,7 +60,6 @@ import com.discord.widgets.auth.WidgetAuthRegisterIdentity
 import com.discord.widgets.auth.WidgetAuthRequiredAction
 import com.discord.widgets.auth.WidgetAuthResetPassword
 import com.discord.widgets.auth.WidgetAuthUndeleteAccount
-import com.discord.widgets.bugreports.WidgetBugReport
 import com.discord.widgets.tabs.WidgetTabsHost
 import com.discord.widgets.voice.fullscreen.WidgetCallFullscreen
 import com.discord.widgets.voice.call.WidgetVoiceCallIncoming
@@ -84,8 +81,6 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
     private lateinit var binding: ActivityAppBinding
     private var routeSubscription: Subscription? = null
     private var settingsSubscription: Subscription? = null
-    private var screenshotSubscription: Subscription? = null
-    private var screenshotUserSubscription: Subscription? = null
     private var noticeSubscription: Subscription? = null
     private var pendingNotice: StoreNotices.Notice? = null
     private var stopBootLog: (() -> Unit)? = null
@@ -257,24 +252,6 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
         settingsSubscription = userSettings.observeSettings(true)
             .bindToComponentLifecycle(this)
             .subscribe { settings -> runOnUiThread { onUserSettingsChanged(settings.locale, settings.theme, settings.fontScale) } }
-        ScreenshotDetector.instance?.let { detector ->
-            screenshotSubscription = detector.screenshots
-                .bindToComponentLifecycle(this)
-                .subscribe { screenshot ->
-                    runOnUiThread { WidgetBugReport.launch(this, screenshot.uri, screenshot.filename) }
-                }
-            screenshotUserSubscription = StoreStream.getUsers().observeMe(true)
-                .map { it.isStaff }
-                .distinctUntilChanged()
-                .bindToComponentLifecycle(this)
-                .subscribe { isStaff ->
-                    runOnUiThread {
-                        val settingEnabled = SharedPreferencesProvider.get()
-                            .getBoolean(PREF_BUG_REPORTING_ENABLED, true)
-                        detector.setEnabled(isStaff && settingEnabled)
-                    }
-                }
-        }
         tryShowPendingNotice()
     }
 
@@ -283,10 +260,6 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
         unsubscribeSignal.onNext(null)
         settingsSubscription?.unsubscribe()
         settingsSubscription = null
-        screenshotSubscription?.unsubscribe()
-        screenshotSubscription = null
-        screenshotUserSubscription?.unsubscribe()
-        screenshotUserSubscription = null
     }
 
     override fun onStop() {
@@ -673,7 +646,6 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
 
     companion object {
         private const val STATE_PENDING_INTENT = "pending_launch_intent"
-        private const val PREF_BUG_REPORTING_ENABLED = "prefs_ss_bug_reporting_enabled"
 
         /** Discord's own "I forgot my password" help article. */
         private const val PASSWORD_HELP_URL =

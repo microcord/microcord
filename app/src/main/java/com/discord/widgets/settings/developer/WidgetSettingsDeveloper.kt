@@ -16,7 +16,6 @@ import com.discord.app.AppScreenRouter
 import com.discord.databinding.WidgetSettingsDeveloperBinding
 import com.discord.stores.StoreDebugOptions
 import com.discord.stores.StoreStream
-import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.developer.DeveloperSettings
 import com.discord.utilities.experiments.ExperimentRegistry
 import com.discord.utilities.logging.AppGatewaySocketLogger
@@ -53,15 +52,10 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
             }
         }).attachToRecyclerView(noticesView)
 
-        val preferences = SharedPreferencesProvider.get()
         val debugOptions = StoreStream.getDebugOptions()
         binding.settingsDeveloperForceCanary.apply {
             isChecked = debugOptions.isEnabled(StoreDebugOptions.Option.CANARY)
             setOnCheckedListener { debugOptions.setEnabled(StoreDebugOptions.Option.CANARY, it) }
-        }
-        binding.settingsDeveloperScreenshotBugReporting.apply {
-            isChecked = preferences.getBoolean(PREF_SCREENSHOT_REPORTING, false)
-            setOnCheckedListener { preferences.edit().putBoolean(PREF_SCREENSHOT_REPORTING, it).apply() }
         }
         binding.settingsDeveloperVerboseBoot.apply {
             isChecked = DeveloperSettings.isVerboseBootEnabled()
@@ -150,8 +144,6 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
     }
 
     companion object {
-        private const val PREF_SCREENSHOT_REPORTING = "prefs_ss_bug_reporting_enabled"
-
         fun launch(context: Context) {
             AppScreenRouter.launch(context, WidgetSettingsDeveloper::class.java)
         }
