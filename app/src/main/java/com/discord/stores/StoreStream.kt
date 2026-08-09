@@ -1599,7 +1599,8 @@ class StoreStream private constructor(
                     ?.let { channels.getChannelsByIdInternal()[it] },
                 guild = guilds.getGuildsInternal()[guildId],
                 currentUserId = meId,
-                relationshipType = message.author?.id?.let { userRelationships.getRelationships()[it] },
+                isAuthorBlockedOrIgnored =
+                    message.author?.id?.let(userRelationships::isBlockedOrIgnored) == true,
                 effectivePermissions = permissions.getPermissionsByChannelInternal()[channel.id],
                 currentUserRoleIds = guilds.getGuildMembersInternal()[guildId]?.get(meId)?.roles.orEmpty().toSet(),
                 guildSettings = guildSettings.getGuildSettingsInternal()[guildId],
@@ -2787,8 +2788,8 @@ class StoreStream private constructor(
         applicationInteractions.handlePreLogout()
         pendingReplies.handlePreLogout()
         pinnedMessages.handlePreLogout()
-        chatInputEditing.clear()
         safetyHub.handlePreLogout()
+        chatInputEditing.clear()
         usersTyping.clear()
         guildSelected.handlePreLogout()
         guildSubscriptions.reset()
@@ -2910,8 +2911,8 @@ class StoreStream private constructor(
         resetStore("messages", messages::handlePreLogout)
         resetStore("pendingReplies", pendingReplies::handlePreLogout)
         resetStore("pinnedMessages", pinnedMessages::handlePreLogout)
-        resetStore("chatInputEditing", chatInputEditing::clear)
         resetStore("safetyHub", safetyHub::handlePreLogout)
+        resetStore("chatInputEditing", chatInputEditing::clear)
         resetStore("usersTyping", usersTyping::clear)
         resetStore("tabsNavigation", tabsNavigation::handlePreLogout)
         resetStore("clientDataState", clientDataState::clear)
@@ -3277,6 +3278,17 @@ class StoreStream private constructor(
         @JvmStatic fun getUserSettingsSystem() = requireInstance().userSettingsSystem
         @JvmStatic fun getUsers() = requireInstance().users
         @JvmStatic fun getUserRelationships() = requireInstance().userRelationships
+
+        /**
+         * Records an ignore locally once the REST call has been accepted.
+         *
+         * The endpoint returns no body, and the gateway sends no relationship event for a user the
+         * viewer has no relationship with, so nothing else would move the flag.
+         */
+        @JvmStatic
+        fun setUserIgnored(userId: Long, isIgnored: Boolean) = requireInstance().let { stream ->
+            stream.dispatcher.schedule { stream.userRelationships.handleIgnoreUpdate(userId, isIgnored) }
+        }
         @JvmStatic fun getGuilds() = requireInstance().guilds
         @JvmStatic fun getGuildSelected() = requireInstance().guildSelected
         @JvmStatic fun getGuildsSorted() = requireInstance().guildsSorted
@@ -3296,6 +3308,7 @@ class StoreStream private constructor(
         @JvmStatic fun getMessagesMostRecent() = requireInstance().messagesMostRecent
         @JvmStatic fun getPendingReplies() = requireInstance().pendingReplies
         @JvmStatic fun getPinnedMessages() = requireInstance().pinnedMessages
+        @JvmStatic fun getSafetyHub() = requireInstance().safetyHub
         @JvmStatic fun getMessageUploads() = requireInstance().messageUploads
         @JvmStatic fun getMessageState() = requireInstance().messageState
         @JvmStatic fun getChatInputEditing() = requireInstance().chatInputEditing
@@ -3308,7 +3321,6 @@ class StoreStream private constructor(
         @JvmStatic fun getFriendSuggestions() = requireInstance().friendSuggestions
         @JvmStatic fun getUserAffinities() = requireInstance().userAffinities
         @JvmStatic fun getGatewayConnection() = requireInstance().gatewayConnection
-        @JvmStatic fun getSafetyHub() = requireInstance().safetyHub
         @JvmStatic fun getClientDataState() = requireInstance().clientDataState
         @JvmStatic fun getConnectionOpen() = requireInstance().connectionOpen
         @JvmStatic fun getConnectivity() = requireInstance().connectivity

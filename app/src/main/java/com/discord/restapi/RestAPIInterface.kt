@@ -493,6 +493,18 @@ interface RestAPIInterface {
         @Body body: RestAPIParams.FriendNickname,
     ): Observable<Void>
 
+    @PUT("users/@me/relationships/{userId}/ignore")
+    fun ignoreUser(
+        @Path("userId") userId: Long,
+        @Header(X_CONTEXT_PROPERTIES) context: String,
+    ): Observable<Void>
+
+    @DELETE("users/@me/relationships/{userId}/ignore")
+    fun unignoreUser(
+        @Path("userId") userId: Long,
+        @Header(X_CONTEXT_PROPERTIES) context: String,
+    ): Observable<Void>
+
     @GET("users/{userId}/relationships")
     fun getRelationships(@Path("userId") userId: Long): Observable<List<ModelUserRelationship>>
 
@@ -2126,18 +2138,6 @@ interface RestAPIInterface {
     @PATCH("users/@me/settings")
     fun updateUserSettingsStatus(@Body body: RestAPIParams.UserSettingsStatus): Observable<ModelUserSettings>
 
-    /** Absolute-URL fetch used for CDN/attachment JSON that does not live under the API base URL. */
-    interface Dynamic {
-        @GET
-        fun get(@Url url: String): Observable<JsonObject>
-    }
-
-    /** Absolute-URL fetch returning raw bytes (attachments, avatars, log uploads). */
-    interface Files {
-        @GET
-        fun getFile(@Url url: String): Observable<ResponseBody>
-    }
-
     @GET("safety-hub/@me")
     fun getSafetyHub(): Observable<SafetyHub>
 
@@ -2156,6 +2156,18 @@ interface RestAPIInterface {
         @Path("classificationId") classificationId: String,
         @Body body: RestAPIParams.SafetyHubReviewRequest,
     ): Observable<Unit>
+
+    /** Absolute-URL fetch used for CDN/attachment JSON that does not live under the API base URL. */
+    interface Dynamic {
+        @GET
+        fun get(@Url url: String): Observable<JsonObject>
+    }
+
+    /** Absolute-URL fetch returning raw bytes (attachments, avatars, log uploads). */
+    interface Files {
+        @GET
+        fun getFile(@Url url: String): Observable<ResponseBody>
+    }
 
     /**
      * The presigned Google Cloud Storage upload.

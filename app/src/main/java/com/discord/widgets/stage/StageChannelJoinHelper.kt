@@ -3,6 +3,7 @@ package com.discord.widgets.stage
 import android.content.Context
 import androidx.annotation.MainThread
 import androidx.fragment.app.FragmentManager
+import com.discord.models.domain.ModelUserRelationship
 import com.discord.R
 import com.discord.app.AppLog
 import com.discord.app.AppToast
@@ -31,7 +32,6 @@ import rx.Subscription
 object StageChannelJoinHelper {
 
     /** Wire value of the "blocked" relationship type. */
-    private const val RELATIONSHIP_TYPE_BLOCKED = 2
 
     private var lurkSubscription: Subscription? = null
 
@@ -64,7 +64,7 @@ object StageChannelJoinHelper {
                 voiceChannelSelectedStore.getSelectedVoiceChannelId() == channelId
             val shouldWarn = !warnedAboutBlockedUsers &&
                 !alreadyConnected &&
-                occupantIds.any { relationships[it] == RELATIONSHIP_TYPE_BLOCKED }
+                occupantIds.any { relationships[it] == ModelUserRelationship.TYPE_BLOCKED }
 
             if (shouldWarn) {
                 WidgetStageAudienceBlockedBottomSheet.show(

@@ -5,7 +5,6 @@ import com.discord.api.permission.Permission
 import com.discord.api.user.User
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.domain.ModelNotificationSettings
-import com.discord.models.domain.ModelUserRelationship
 import com.discord.models.guild.Guild
 import com.discord.models.message.Message
 import com.discord.models.notification.NotificationSettingsV2
@@ -40,7 +39,7 @@ class StoreNotificationsTest {
         val foreground = setOf(Delivery.FOREGROUND)
         assertEquals(foreground, evaluate())
         assertTrue(evaluate(message = message(authorId = ME)).isEmpty())
-        assertTrue(evaluate(relationship = ModelUserRelationship.TYPE_BLOCKED).isEmpty())
+        assertTrue(evaluate(blockedOrIgnored = true).isEmpty())
         assertTrue(evaluate(selected = CHANNEL).isEmpty())
         assertTrue(evaluate(permissions = 0).isEmpty())
         assertTrue(evaluate(dnd = true).isEmpty())
@@ -168,26 +167,26 @@ class StoreNotificationsTest {
 
     private fun evaluate(
         message: Message = message(),
-        relationship: Int? = null,
+        blockedOrIgnored: Boolean = false,
         selected: Long? = null,
         permissions: Long = Permission.VIEW_CHANNEL,
         roles: Set<Long> = emptySet(),
         dnd: Boolean = false,
         settings: ModelNotificationSettings = setting(),
-    ) = NotificationPolicy.evaluate(input(message, relationship = relationship, selected = selected,
+    ) = NotificationPolicy.evaluate(input(message, blockedOrIgnored = blockedOrIgnored, selected = selected,
         permissions = permissions, roles = roles, dnd = dnd, settings = settings))
 
     private fun input(
         message: Message = message(),
         channel: Channel = channel(),
         parent: Channel? = null,
-        relationship: Int? = null,
+        blockedOrIgnored: Boolean = false,
         selected: Long? = null,
         permissions: Long = Permission.VIEW_CHANNEL,
         roles: Set<Long> = emptySet(),
         dnd: Boolean = false,
         settings: ModelNotificationSettings = setting(),
-    ) = NotificationPolicy.Input(message, channel, parent, Guild(id = GUILD), ME, relationship,
+    ) = NotificationPolicy.Input(message, channel, parent, Guild(id = GUILD), ME, blockedOrIgnored,
         permissions, roles, settings, selected, dnd)
 
     private fun message(

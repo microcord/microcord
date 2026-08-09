@@ -481,7 +481,12 @@ class DefaultSearchQueryStore(
                 } else {
                     ArrayList(currentSearchState.hits.orEmpty())
                 }
+                // Mobile drops results from blocked and ignored authors in the store; the
+                // reveal affordance that desktop offers instead has no mobile component.
                 hits += response.hits.map { Message(it) }
+                    .filterNot { m ->
+                        m.author?.id?.let(StoreStream.getUserRelationships()::isBlockedOrIgnored) == true
+                    }
                 SearchState(
                     queryFetchState = QueryFetchState.COMPLETED,
                     searchQuery = searchQuery,

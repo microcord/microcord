@@ -21,6 +21,7 @@ import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
 import com.discord.models.user.User
 import com.discord.restapi.RestAPIInterface
+import com.discord.models.domain.ModelUserRelationship
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreDirectories
 import com.discord.stores.StoreStream
@@ -208,7 +209,7 @@ class MobileReportsViewModel @JvmOverloads constructor(
         updateViewState(current.copy(blockUserElement = block.copy(isBlocked = true)))
         restAPI.addRelationship(
             block.user.id,
-            RestAPIParams.UserRelationship(type = 2),
+            RestAPIParams.UserRelationship(type = ModelUserRelationship.TYPE_BLOCKED),
             relationshipContext("REPORT_MENU_NODE_${current.nodeNavigationType.node}.id"),
         ).restSubscribeOn().ui(this).appSubscribe(MobileReportsViewModel::class.java) { }
     }

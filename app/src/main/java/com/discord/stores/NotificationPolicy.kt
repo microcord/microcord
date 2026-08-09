@@ -3,7 +3,6 @@ package com.discord.stores
 import com.discord.api.channel.Channel
 import com.discord.api.permission.Permission
 import com.discord.models.domain.ModelNotificationSettings
-import com.discord.models.domain.ModelUserRelationship
 import com.discord.models.guild.Guild
 import com.discord.models.message.Message
 import com.discord.models.notification.NotificationSettingsV2
@@ -17,7 +16,8 @@ object NotificationPolicy {
         val parentChannel: Channel? = null,
         val guild: Guild? = null,
         val currentUserId: Long,
-        val relationshipType: Int? = null,
+        /** True when the author is blocked or ignored; either silences the notification. */
+        val isAuthorBlockedOrIgnored: Boolean = false,
         val effectivePermissions: Long? = null,
         val currentUserRoleIds: Set<Long> = emptySet(),
         val guildSettings: ModelNotificationSettings? = null,
@@ -30,7 +30,7 @@ object NotificationPolicy {
         val message = input.message
         val channel = input.channel
         if (message.author?.id == input.currentUserId ||
-            input.relationshipType == ModelUserRelationship.TYPE_BLOCKED ||
+            input.isAuthorBlockedOrIgnored ||
             input.isDnd || !isAccessible(channel, input.effectivePermissions)
         ) return emptySet()
 

@@ -18,6 +18,9 @@ class WidgetSettingsBlockedUsersAdapter(recycler: RecyclerView) :
     var onClickUnblock: (User) -> Unit = {}
     var onClickUserProfile: (User) -> Unit = {}
 
+    /** Labels the trailing button; the ignored list undoes an ignore rather than a block. */
+    var isIgnoredList: Boolean = false
+
     override fun onCreateViewHolder(
         parent: ViewGroup,
         viewType: Int,
@@ -42,6 +45,13 @@ class WidgetSettingsBlockedUsersAdapter(recycler: RecyclerView) :
             itemView.setOnClickListener { adapter.onClickUserProfile(data.user) }
             IconUtils.setIcon(avatar, data.user, R.dimen.avatar_size_standard)
             name.text = NicknameUtils.getFriendName(data.user)
+            unblock.setText(
+                if (adapter.isIgnoredList) {
+                    R.string.user_settings_ignored_users_unignorebutton
+                } else {
+                    R.string.user_settings_blocked_users_unblockbutton
+                },
+            )
             unblock.setOnClickListener { adapter.onClickUnblock(data.user) }
         }
     }

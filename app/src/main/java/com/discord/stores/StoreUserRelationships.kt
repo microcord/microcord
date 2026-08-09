@@ -11,6 +11,7 @@ class StoreUserRelationships(
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
     private val relationshipsCache: Persister<Map<Long, Int>> = Persister(CACHE_KEY, UNLOADED_SENTINEL),
     private val nicknamesCache: Persister<Map<Long, String>> = Persister(NICKNAMES_CACHE_KEY, emptyMap()),
+    private val ignoredCache: Persister<Set<Long>> = Persister(IGNORED_CACHE_KEY, emptySet()),
 ) : StoreV2() {
     sealed class UserRelationshipsState {
         data object Unloaded : UserRelationshipsState()
@@ -23,12 +24,16 @@ class StoreUserRelationships(
     private var nicknames: Map<Long, String> = emptyMap()
     private var nicknamesSnapshot: Map<Long, String> = emptyMap()
 
+    private var ignored: Set<Long> = emptySet()
+    private var ignoredSnapshot: Set<Long> = emptySet()
+
     @StoreThread
     fun init() {
         StoreThreadScheduler.assertCurrentThread()
         relationshipsCache.get().takeUnless { it == UNLOADED_SENTINEL || it.isEmpty() }?.let {
             relationshipsState = UserRelationshipsState.Loaded(LinkedHashMap(it))
             nicknames = LinkedHashMap(nicknamesCache.get())
+            ignored = LinkedHashSet(ignoredCache.get())
             markChanged()
         }
     }
@@ -41,6 +46,17 @@ class StoreUserRelationships(
 
     fun getNicknames(): Map<Long, String> = nicknamesSnapshot
 
+    /** Ids the viewer has ignored, excluding blocked users. */
+    fun getIgnoredUserIds(): Set<Long> = ignoredSnapshot
+
+    /**
+     * Blocking supersedes ignoring, so a blocked user never reports as ignored. Otherwise the
+     * softer treatment would win wherever the two are tested in order.
+     */
+    fun isIgnored(userId: Long): Boolean = !isBlocked(userId) && userId in ignoredSnapshot
+
+    fun isBlockedOrIgnored(userId: Long): Boolean = isBlocked(userId) || isIgnored(userId)
+
     @StoreThread
     fun handleConnectionOpen(payload: ModelPayload) {
         StoreThreadScheduler.assertCurrentThread()
@@ -49,6 +65,7 @@ class StoreUserRelationships(
         nicknames = relationships.mapNotNull { relationship ->
             relationship.nickname?.takeUnless(String::isBlank)?.let { relationship.id to it }
         }.toMap()
+        ignored = relationships.filter { it.userIgnored }.map { it.id }.toSet()
         markChanged()
     }
 
@@ -56,6 +73,7 @@ class StoreUserRelationships(
         StoreThreadScheduler.assertCurrentThread()
         relationshipsState = UserRelationshipsState.Unloaded
         nicknames = emptyMap()
+        ignored = emptySet()
         markChanged()
     }
 
@@ -65,11 +83,31 @@ class StoreUserRelationships(
             val nickname = relationship.nickname?.takeUnless(String::isBlank)
             if (nickname == null) nicks.remove(relationship.id) else nicks[relationship.id] = nickname
         },
+        ignores = { if (relationship.userIgnored) it.add(relationship.id) else it.remove(relationship.id) },
     )
 
+    /**
+     * Removing a relationship does not lift an ignore.
+     *
+     * The server sends a remove for users who are still ignored — un-friending someone you had
+     * also ignored, for instance — so dropping the flag here would silently un-ignore them.
+     */
     @StoreThread fun handleRelationshipRemove(relationship: ModelUserRelationship) = update(
         types = { it.remove(relationship.id) },
         nicks = { it.remove(relationship.id) },
+        ignores = { if (!relationship.userIgnored) it.remove(relationship.id) },
+    )
+
+    /**
+     * Applies an ignore locally.
+     *
+     * The endpoint returns no body, and the gateway sends no relationship event for a user the
+     * viewer has no relationship with, so without this the toggle would not stick.
+     */
+    @StoreThread fun handleIgnoreUpdate(userId: Long, isIgnored: Boolean) = update(
+        types = {},
+        nicks = {},
+        ignores = { if (isIgnored) it.add(userId) else it.remove(userId) },
     )
 
     fun observe(): Observable<Map<Long, Int>> = observationDeck.connectRx(this) { getRelationships() }.distinctUntilChanged()
@@ -80,8 +118,23 @@ class StoreUserRelationships(
     }
     fun observeForType(relationshipType: Int): Observable<Map<Long, Int>> =
         observe().map { it.filterValues(relationshipType::equals) }.distinctUntilChanged()
+
+    fun isBlocked(userId: Long): Boolean =
+        getRelationships()[userId] == ModelUserRelationship.TYPE_BLOCKED
+
+    fun observeBlocked(): Observable<Map<Long, Int>> =
+        observeForType(ModelUserRelationship.TYPE_BLOCKED)
     fun observeUserRelationshipsState(): Observable<UserRelationshipsState> =
         observationDeck.connectRx(this) { relationshipsStateSnapshot }.distinctUntilChanged()
+
+    fun observeIgnoredUserIds(): Observable<Set<Long>> =
+        observationDeck.connectRx(this) { getIgnoredUserIds() }.distinctUntilChanged()
+
+    /** Ids whose content is hidden from the viewer: blocked, plus ignored. */
+    fun observeBlockedOrIgnored(): Observable<Set<Long>> = Observable.combineLatest(
+        observeBlocked(),
+        observeIgnoredUserIds(),
+    ) { blocked, ignoredIds -> blocked.keys + ignoredIds }.distinctUntilChanged()
 
     fun observeNicknames(): Observable<Map<Long, String>> =
         observationDeck.connectRx(this) { getNicknames() }.distinctUntilChanged()
@@ -95,26 +148,31 @@ class StoreUserRelationships(
             UserRelationshipsState.Unloaded -> UserRelationshipsState.Unloaded.also { relationshipsCache.clear() }
         }
         nicknamesSnapshot = LinkedHashMap(nicknames).also(nicknamesCache::set)
+        ignoredSnapshot = LinkedHashSet(ignored).also(ignoredCache::set)
     }
 
     @StoreThread
     private fun update(
         types: (MutableMap<Long, Int>) -> Unit,
         nicks: (MutableMap<Long, String>) -> Unit,
+        ignores: (MutableSet<Long>) -> Unit,
     ) {
         StoreThreadScheduler.assertCurrentThread()
         val beforeTypes = (relationshipsState as? UserRelationshipsState.Loaded)?.relationships.orEmpty()
         val changedTypes = LinkedHashMap(beforeTypes).apply(types)
         val changedNicks = LinkedHashMap(nicknames).apply(nicks)
-        if (changedTypes == beforeTypes && changedNicks == nicknames) return
+        val changedIgnores = LinkedHashSet(ignored).apply(ignores)
+        if (changedTypes == beforeTypes && changedNicks == nicknames && changedIgnores == ignored) return
         relationshipsState = UserRelationshipsState.Loaded(changedTypes)
         nicknames = changedNicks
+        ignored = changedIgnores
         markChanged()
     }
 
     companion object {
         const val CACHE_KEY = "STORE_USER_RELATIONSHIPS_V9"
         const val NICKNAMES_CACHE_KEY = "STORE_USER_RELATIONSHIP_NICKNAMES_V1"
+        const val IGNORED_CACHE_KEY = "STORE_USER_RELATIONSHIP_IGNORED_V1"
         private val UNLOADED_SENTINEL = mapOf(-1L to -1)
     }
 }

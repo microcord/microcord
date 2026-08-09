@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.TextView
 import androidx.fragment.app.FragmentManager
+import com.discord.i18n.i18nFormat
 import com.discord.R
 import com.discord.app.AppDialog
 import com.discord.app.AppToast
@@ -38,6 +39,8 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
     private lateinit var userName: TextView
     private lateinit var blockItem: TextView
     private lateinit var unblockItem: TextView
+    private lateinit var ignoreItem: TextView
+    private lateinit var unignoreItem: TextView
     private lateinit var removeFriendItem: TextView
     private lateinit var friendNicknameItem: TextView
 
@@ -47,6 +50,8 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         userName = view.findViewById(R.id.user_actions_dialog_user_name)
         blockItem = view.findViewById(R.id.user_actions_dialog_block_item)
         unblockItem = view.findViewById(R.id.user_actions_dialog_unblock_item)
+        ignoreItem = view.findViewById(R.id.user_actions_dialog_ignore_item)
+        unignoreItem = view.findViewById(R.id.user_actions_dialog_unignore_item)
         removeFriendItem = view.findViewById(R.id.user_actions_dialog_remove_friend_item)
         friendNicknameItem = view.findViewById(R.id.user_actions_dialog_friend_nickname_item)
 
@@ -54,6 +59,8 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         unblockItem.setOnClickListener {
             viewModel.removeRelationship(R.string.user_has_been_unblocked)
         }
+        ignoreItem.setOnClickListener { confirmIgnore() }
+        unignoreItem.setOnClickListener { viewModel.unignoreUser() }
         removeFriendItem.setOnClickListener {
             viewModel.removeRelationship(R.string.friend_has_been_deleted)
         }
@@ -99,10 +106,27 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
 
         blockItem.visibility = if (state.showBlockItem) View.VISIBLE else View.GONE
         unblockItem.visibility = if (state.showUnblockItem) View.VISIBLE else View.GONE
+        ignoreItem.visibility = if (state.showIgnoreItem) View.VISIBLE else View.GONE
+        unignoreItem.visibility = if (state.showUnignoreItem) View.VISIBLE else View.GONE
         removeFriendItem.visibility = if (state.showRemoveFriendItem) View.VISIBLE else View.GONE
         friendNicknameItem.visibility = if (state.showFriendNicknameItem) View.VISIBLE else View.GONE
         friendNicknameItem.setText(
             if (state.friendNickname == null) R.string.add_friend_nickname else R.string.change_friend_nickname,
+        )
+    }
+
+    /**
+     * Ignoring is explained before it happens.
+     *
+     * The reference gates it behind a sheet listing what ignoring does and does not do, because it
+     * is easily mistaken for blocking, and offers the stronger action from inside that sheet.
+     */
+    private fun confirmIgnore() {
+        IgnoreUserConfirmationSheet.show(
+            fragmentManager = parentFragmentManager,
+            userId = viewModel.userIdForConfirmation,
+            onConfirmIgnore = viewModel::ignoreUser,
+            onBlockInstead = viewModel::blockUser,
         )
     }
 
@@ -111,7 +135,12 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
             is UserActionsDialogViewModel.Event.Success -> event.successMessageStringRes
             is UserActionsDialogViewModel.Event.Failure -> event.failureMessageStringRes
         }
-        AppToast.show(context, messageRes)
+        val username = (event as? UserActionsDialogViewModel.Event.Success)?.username
+        if (username == null) {
+            AppToast.show(context, messageRes)
+        } else {
+            AppToast.show(context, requireContext().i18nFormat(messageRes, "username" to username))
+        }
         dismiss()
     }
 

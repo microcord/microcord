@@ -149,7 +149,10 @@ class WidgetSettingsAccount : AppFragment(R.layout.widget_settings_account) {
             SettingsNavigation.launch(it.context, WidgetSafetyHub::class.java)
         }
         view?.findViewById<View>(R.id.settings_blocked_users)?.setOnClickListener {
-            SettingsNavigation.launch(it.context, WidgetSettingsBlockedUsers::class.java)
+            WidgetSettingsBlockedUsers.launch(it.context)
+        }
+        view?.findViewById<View>(R.id.settings_ignored_users)?.setOnClickListener {
+            WidgetSettingsBlockedUsers.launch(it.context, ignored = true)
         }
 
         val displayedMfa = when (model.pendingMFAState.activationState) {

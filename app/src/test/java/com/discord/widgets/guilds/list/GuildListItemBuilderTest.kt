@@ -6,7 +6,6 @@ import com.discord.api.permission.Permission
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.guild.Guild
 import com.discord.stores.StoreGuildsSorted
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -17,11 +16,6 @@ import com.discord.api.notification.GuildNotificationSettingsFlags
 
 class GuildListItemBuilderTest {
 
-    @After fun resetHooks() {
-        GuildsListStoreHooks.isHubDiscoveryEnabled = { false }
-        GuildsListStoreHooks.isHubDiscoverySparkleEnabled = { false }
-    }
-
     @Test fun emitsTheFixedRowsAroundTheGuilds() {
         val items = GuildListItemBuilder.buildItems(storeState(sortedGuilds = listOf(singleton(1))))
 
@@ -31,6 +25,7 @@ class GuildListItemBuilderTest {
                 GuildListItem.DividerItem::class,
                 GuildListItem.GuildItem::class,
                 GuildListItem.CreateItem::class,
+                GuildListItem.HubItem::class,
                 GuildListItem.SpaceItem::class,
             ),
             items.map { it::class },
@@ -56,16 +51,10 @@ class GuildListItemBuilderTest {
         assertEquals(GuildListItem.SpaceItem, items.last())
     }
 
-    @Test fun showsTheHubRowOnlyWhenDiscoveryIsEnabled() {
-        assertTrue(GuildListItemBuilder.buildItems(storeState()).none { it is GuildListItem.HubItem })
+    @Test fun putsTheHubRowAfterCreate() {
+        val items = GuildListItemBuilder.buildItems(storeState())
 
-        GuildsListStoreHooks.isHubDiscoveryEnabled = { true }
-        GuildsListStoreHooks.isHubDiscoverySparkleEnabled = { true }
-        val hub = GuildListItemBuilder.buildItems(storeState(showHubSparkle = true))
-            .filterIsInstance<GuildListItem.HubItem>()
-            .single()
-
-        assertTrue(hub.showSparkle)
+        assertEquals(items.indexOf(GuildListItem.CreateItem) + 1, items.indexOf(GuildListItem.HubItem))
     }
 
     @Test fun pinsLurkedGuildsAboveTheDivider() {
@@ -347,7 +336,6 @@ class GuildListItemBuilderTest {
         channels: Map<Long, Channel> = emptyMap(),
         privateChannels: Map<Long, Channel> = emptyMap(),
         isNewUser: Boolean = false,
-        showHubSparkle: Boolean = false,
         accountNotificationSettings: AccountNotificationSettings = AccountNotificationSettings(),
     ) = WidgetGuildsListViewModel.StoreState(
         selectedGuildId = selectedGuildId,
@@ -375,6 +363,5 @@ class GuildListItemBuilderTest {
         allChannelPermissions = emptyMap(),
         isLeftPanelOpened = false,
         isOnHomeTab = true,
-        showHubSparkle = showHubSparkle,
     )
 }

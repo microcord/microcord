@@ -12,6 +12,7 @@ import com.discord.api.channel.isVoiceChannel
 import com.discord.api.permission.Permission
 import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
+import com.discord.models.domain.ModelUserRelationship
 import com.discord.models.message.Message
 import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreMessagesLoader
@@ -201,7 +202,7 @@ data class WidgetChatListModel(
                 messages.items.size < MAX_MESSAGES_PER_CHANNEL &&
                 channel.isDM() &&
                 !channel.isSystemDM() &&
-                relationships[recipientId] != 2
+                relationships[recipientId] != ModelUserRelationship.TYPE_BLOCKED
         }
 
         private fun getGreetMessageItem(

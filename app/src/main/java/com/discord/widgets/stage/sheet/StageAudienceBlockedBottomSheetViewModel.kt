@@ -1,5 +1,6 @@
 package com.discord.widgets.stage.sheet
 
+import com.discord.models.domain.ModelUserRelationship
 import com.discord.api.channel.Channel
 import com.discord.app.AppViewModel
 import com.discord.stores.StoreStageChannels
@@ -25,7 +26,6 @@ class StageAudienceBlockedBottomSheetViewModel(
 
     /** Wire value of the "blocked" relationship type. */
     private companion object {
-        const val RELATIONSHIP_TYPE_BLOCKED = 2
 
         fun observeStores(
             channelId: Long,
@@ -33,7 +33,7 @@ class StageAudienceBlockedBottomSheetViewModel(
             stageChannelsStore: StoreStageChannels = StageStoreAccess.stageChannels(),
         ): Observable<StoreState> = Observable.combineLatest(
             CallModel.get(channelId),
-            userRelationshipsStore.observeForType(RELATIONSHIP_TYPE_BLOCKED),
+            userRelationshipsStore.observeBlocked(),
             stageChannelsStore.observeStageRolesByChannel(channelId),
         ) { callModel, blocked, stageRoles ->
             StoreState(channelId, callModel, blocked.keys, stageRoles.orEmpty())

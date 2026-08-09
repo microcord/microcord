@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:background="?attr/colorBackgroundPrimary" android:layout_width="match_parent" android:layout_height="wrap_content">
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="16dp" android:paddingBottom="16dp">
+
+        <FrameLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center_horizontal" android:layout_marginBottom="16dp">
+            <com.facebook.drawee.view.SimpleDraweeView android:id="@+id/ignore_confirmation_avatar" android:layout_width="80dp" android:layout_height="80dp" android:importantForAccessibility="no" app:roundAsCircle="true" app:placeholderImage="?attr/colorPrimaryCircle"/>
+            <ImageView android:id="@+id/ignore_confirmation_avatar_badge" android:layout_width="28dp" android:layout_height="28dp" android:layout_gravity="bottom|end" android:padding="4dp" android:background="@drawable/drawable_circle_background_tertiary" android:src="?attr/ic_visibility_off" android:importantForAccessibility="no" app:tint="?attr/colorInteractiveNormal"/>
+        </FrameLayout>
+
+        <TextView android:id="@+id/ignore_confirmation_title" android:textSize="@dimen/uikit_textsize_xxlarge" android:textColor="?attr/colorHeaderPrimary" android:gravity="center" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="4dp" style="@style/UiKit.TextView.Bold"/>
+        <TextView android:id="@+id/ignore_confirmation_subtitle" android:textSize="@dimen/uikit_textsize_medium" android:textColor="?attr/colorTextNormal" android:gravity="center" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="16dp" android:text="@string/ignore_user_confirm_subtitle" style="@style/UiKit.TextView"/>
+
+        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="?attr/colorBackgroundSecondary" android:layout_marginBottom="16dp" android:paddingTop="4dp" android:paddingBottom="4dp">
+            <include layout="@layout/ignore_user_confirmation_row" android:id="@+id/ignore_confirmation_line_1"/>
+            <include layout="@layout/ignore_user_confirmation_row" android:id="@+id/ignore_confirmation_line_2"/>
+            <include layout="@layout/ignore_user_confirmation_row" android:id="@+id/ignore_confirmation_line_3"/>
+        </LinearLayout>
+
+        <TextView android:textSize="@dimen/uikit_textsize_small" android:textColor="?attr/colorTextMuted" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="8dp" android:text="@string/ignore_user_confirm_other_option_section_title" style="@style/UiKit.TextView.Semibold"/>
+
+        <LinearLayout android:id="@+id/ignore_confirmation_block_instead" android:orientation="horizontal" android:gravity="center_vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="?attr/colorBackgroundSecondary" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="12dp" android:paddingBottom="12dp" android:layout_marginBottom="24dp" android:clickable="true" android:focusable="true">
+            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_marginEnd="16dp" android:src="?attr/ic_user_actions_block" android:importantForAccessibility="no" app:tint="?attr/colorTextDanger"/>
+            <LinearLayout android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+                <TextView android:textSize="@dimen/uikit_textsize_medium" android:textColor="?attr/colorTextDanger" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/ignore_user_confirm_other_option_title" style="@style/UiKit.TextView.Semibold"/>
+                <TextView android:textSize="@dimen/uikit_textsize_small" android:textColor="?attr/colorTextDanger" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/ignore_user_confirm_other_option_subtitle" style="@style/UiKit.TextView"/>
+            </LinearLayout>
+            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="?attr/ic_navigate_next" android:importantForAccessibility="no"/>
+        </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton android:id="@+id/ignore_confirmation_confirm" android:layout_width="match_parent" android:layout_height="48dp" android:text="@string/ignore" style="@style/UiKit.Material.Button"/>
+
+        <TextView android:id="@+id/ignore_confirmation_footer" android:textSize="@dimen/uikit_textsize_small" android:textColor="?attr/colorTextNormal" android:gravity="center" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:paddingBottom="4dp" style="@style/UiKit.TextView"/>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

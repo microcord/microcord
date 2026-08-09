@@ -17,7 +17,6 @@ import com.discord.models.domain.ModelMessageDelete
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelReadState
-import com.discord.models.domain.ModelUserRelationship
 import com.discord.models.message.Message
 import com.discord.models.thread.dto.ModelThreadListSync
 import com.discord.stores.updates.ObservationDeck
@@ -279,10 +278,10 @@ class StoreMentions @JvmOverloads constructor(
             }
         }
 
-        val relationships = storeUserRelationships.getRelationships()
         mentionedMessages.values.forEach { message ->
             val authorId = message.author?.id
-            if (relationships[authorId] == ModelUserRelationship.TYPE_BLOCKED) return@forEach
+            // Ignoring mutes a user as far as badges go, exactly as blocking does.
+            if (authorId != null && storeUserRelationships.isBlockedOrIgnored(authorId)) return@forEach
             if (!isMentionableChannel(message.channelId)) return@forEach
             val ack = acks[message.channelId]
             if (ack != null && ack.messageId >= message.id) return@forEach

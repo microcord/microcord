@@ -60,6 +60,8 @@ data class MessageEntry(
         val messageState: StoreMessageReplies.MessageState,
         val messageEntry: MessageEntry?,
         val isRepliedUserBlocked: Boolean = false,
+        /** Distinguishes the preview copy; ignoring reads as "Ignored message". */
+        val isRepliedUserIgnored: Boolean = false,
     )
 
     private companion object {

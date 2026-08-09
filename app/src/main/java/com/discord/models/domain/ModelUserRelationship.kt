@@ -10,6 +10,13 @@ data class ModelUserRelationship(
     @SerializedName("user_id") val userId: Long? = null,
     /** Per-friend nickname, shown instead of their display name outside guilds. */
     val nickname: String? = null,
+    /**
+     * Whether the viewer has ignored this user.
+     *
+     * Orthogonal to [type] rather than a value of it: a friend or a pending request can be ignored,
+     * and the server keeps the flag when the relationship changes.
+     */
+    @SerializedName("user_ignored") val userIgnored: Boolean = false,
 ) {
     fun hydrate(users: Map<Long, User>): ModelUserRelationship =
         if (userId == null) this else copy(user = users[userId], userId = null)

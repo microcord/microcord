@@ -2,11 +2,14 @@ package com.discord.widgets.settings.account
 
 import android.os.Bundle
 import android.view.View
+import android.widget.TextView
 import androidx.lifecycle.ViewModelProvider
 import com.discord.app.AppFragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.utilities.user.NicknameUtils
+import com.discord.i18n.i18nFormat
 import com.discord.app.AppToast
 import com.discord.app.AppViewFlipper
 import com.discord.widgets.friends.BlockedUsersState
@@ -25,14 +28,32 @@ class WidgetSettingsBlockedUsers : AppFragment(R.layout.widget_settings_blocked_
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         SettingsNavigation.bindBack(this)
-        setActionBarTitle(R.string.user_settings_blocked_users)
+        val ignored = mostRecentIntent.getBooleanExtra(EXTRA_IGNORED, false)
+        setActionBarTitle(
+            if (ignored) R.string.user_settings_ignored_users else R.string.user_settings_blocked_users,
+        )
         setActionBarDisplayHomeAsUpEnabled()
-        viewModel = ViewModelProvider(this)[WidgetSettingsBlockedUsersViewModel::class.java]
+        viewModel = ViewModelProvider(
+            this,
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
+                    WidgetSettingsBlockedUsersViewModel(ignored) as T
+            },
+        )[WidgetSettingsBlockedUsersViewModel::class.java]
+        view.findViewById<TextView>(R.id.blocked_users_empty_text).setText(
+            if (ignored) {
+                R.string.user_settings_ignored_users_empty
+            } else {
+                R.string.user_settings_blocked_users_empty
+            },
+        )
         view.findViewById<RecyclerView>(R.id.blocked_users_list_recycler).apply {
             layoutManager = LinearLayoutManager(context)
             listAdapter = WidgetSettingsBlockedUsersAdapter(this).also { adapter = it }
         }
-        listAdapter.onClickUnblock = { viewModel.onClickUnblock(it.id) }
+        listAdapter.isIgnoredList = ignored
+        listAdapter.onClickUnblock = { viewModel.onClickUnblock(it.id, NicknameUtils.getFriendName(it)) }
         listAdapter.onClickUserProfile = { user ->
             onProfile(
                 FriendUserUi(
@@ -52,7 +73,14 @@ class WidgetSettingsBlockedUsers : AppFragment(R.layout.widget_settings_blocked_
             .subscribe(::show)
         eventSubscription = viewModel.observeEvents().subscribe { event ->
             when (event) {
-                is WidgetSettingsBlockedUsersViewModel.Event.ShowToast -> AppToast.show(this, event.stringRes)
+                is WidgetSettingsBlockedUsersViewModel.Event.ShowToast -> {
+                    val username = event.username
+                    if (username == null) {
+                        AppToast.show(this, event.stringRes)
+                    } else {
+                        AppToast.show(this, requireContext().i18nFormat(event.stringRes, "username" to username))
+                    }
+                }
             }
         }
     }
@@ -78,6 +106,16 @@ class WidgetSettingsBlockedUsers : AppFragment(R.layout.widget_settings_blocked_
     }
 
     companion object {
+        private const val EXTRA_IGNORED = "com.discord.intent.extra.EXTRA_IGNORED"
+
+        /** Opens the blocked list, or the ignored list when [ignored] is set. */
+        fun launch(context: android.content.Context, ignored: Boolean = false) =
+            SettingsNavigation.launch(
+                context,
+                WidgetSettingsBlockedUsers::class.java,
+                android.content.Intent().putExtra(EXTRA_IGNORED, ignored),
+            )
+
         // Retained until StoreStream's old installation sites are removed by their owner.
         @JvmField var stateSource: (() -> Observable<BlockedUsersState>)? = null
         @JvmField var onUnblock: (FriendUserUi) -> Unit = {}

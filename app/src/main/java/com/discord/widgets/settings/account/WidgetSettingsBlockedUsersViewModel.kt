@@ -18,10 +18,18 @@ import com.discord.utilities.user.UserUtils
 import rx.Observable
 import rx.subjects.PublishSubject
 
+/**
+ * Backs both the blocked and the ignored account lists.
+ *
+ * The two screens differ only in which relationship they read and which verb undoes it, so they
+ * share one view model rather than being forked.
+ */
 class WidgetSettingsBlockedUsersViewModel(
+    private val ignored: Boolean = false,
     storeObservable: Observable<StoreState> = observeStores(
         StoreStream.getUserRelationships(),
         StoreStream.getUsers(),
+        ignored,
     ),
 ) : AppViewModel<WidgetSettingsBlockedUsersViewModel.ViewState>(ViewState.Uninitialized) {
     data class StoreState(val users: Map<Long, User>)
@@ -38,7 +46,8 @@ class WidgetSettingsBlockedUsersViewModel(
     }
 
     sealed class Event {
-        data class ShowToast(@StringRes val stringRes: Int) : Event()
+        /** [username] is set only for copy that names the user, and is formatted by the view. */
+        data class ShowToast(@StringRes val stringRes: Int, val username: String? = null) : Event()
     }
 
     private val eventSubject = PublishSubject.create<Event>()
@@ -54,15 +63,29 @@ class WidgetSettingsBlockedUsersViewModel(
 
     fun observeEvents(): Observable<Event> = eventSubject
 
-    fun onClickUnblock(userId: Long) {
+    fun onClickUnblock(userId: Long, username: String? = null) {
         val api = RestAPI.apiOrNull ?: return
-        api.removeRelationship(userId, relationshipContext())
+        val request = if (ignored) {
+            api.unignoreUser(userId, relationshipContext())
+        } else {
+            api.removeRelationship(userId, relationshipContext())
+        }
+        request
             .restSubscribeOn()
             .ui(this)
             .appSubscribe(
                 errorClass = WidgetSettingsBlockedUsersViewModel::class.java,
                 errorHandler = { eventSubject.onNext(Event.ShowToast(R.string.default_failure_to_perform_action_message)) },
-            ) { eventSubject.onNext(Event.ShowToast(R.string.user_has_been_unblocked)) }
+            ) {
+                if (ignored) StoreStream.setUserIgnored(userId, false)
+                eventSubject.onNext(
+                    if (ignored) {
+                        Event.ShowToast(R.string.unignored_user_success_toast, username)
+                    } else {
+                        Event.ShowToast(R.string.user_has_been_unblocked)
+                    },
+                )
+            }
     }
 
     companion object {
@@ -74,12 +97,19 @@ class WidgetSettingsBlockedUsersViewModel(
         fun observeStores(
             storeUserRelationships: StoreUserRelationships,
             storeUser: StoreUser,
-        ): Observable<StoreState> = storeUserRelationships.observe()
-            .switchMap { relationships ->
-                storeUser.observeUsers(
-                    relationships.filterValues { it == ModelUserRelationship.TYPE_BLOCKED }.keys,
-                )
-            }
-            .map(::StoreState)
+            ignored: Boolean = false,
+        ): Observable<StoreState> = if (ignored) {
+            storeUserRelationships.observeIgnoredUserIds()
+                .switchMap(storeUser::observeUsers)
+                .map(::StoreState)
+        } else {
+            storeUserRelationships.observe()
+                .switchMap { relationships ->
+                    storeUser.observeUsers(
+                        relationships.filterValues { it == ModelUserRelationship.TYPE_BLOCKED }.keys,
+                    )
+                }
+                .map(::StoreState)
+        }
     }
 }

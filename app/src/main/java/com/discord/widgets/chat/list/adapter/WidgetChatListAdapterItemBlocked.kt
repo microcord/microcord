@@ -20,7 +20,7 @@ class WidgetChatListAdapterItemBlocked(
     override fun onConfigure(position: Int, data: ChatListEntry) {
         super.onConfigure(position, data)
         val entry = data as BlockedMessagesEntry
-        blockedText.text = blockedText(entry.blockedCount)
+        blockedText.text = blockedText(entry.blockedCount, entry.isIgnored)
         itemView.setOnClickListener {
             adapter.eventHandler.onMessageBlockedGroupClicked(entry.message)
         }
@@ -30,9 +30,9 @@ class WidgetChatListAdapterItemBlocked(
      * `blocked_messages` is a single `{count}` token whose value is itself a pluralised phrase, so
      * the plural is resolved first and then substituted.
      */
-    private fun blockedText(blockedCount: Int): CharSequence {
+    private fun blockedText(blockedCount: Int, isIgnored: Boolean): CharSequence {
         val phrase = itemView.i18nPlural(
-            R.plurals.blocked_messages_count,
+            if (isIgnored) R.plurals.ignored_messages_count else R.plurals.blocked_messages_count,
             blockedCount,
             "count" to blockedCount,
         )

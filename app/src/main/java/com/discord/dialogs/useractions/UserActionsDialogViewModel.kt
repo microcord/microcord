@@ -39,6 +39,7 @@ class UserActionsDialogViewModel(
         val relationshipType: Int?,
         val guildMember: GuildMember?,
         val friendNickname: String?,
+        val isIgnored: Boolean,
     )
 
     sealed class ViewState {
@@ -51,6 +52,8 @@ class UserActionsDialogViewModel(
             val showBlockItem: Boolean,
             val showUnblockItem: Boolean,
             val showRemoveFriendItem: Boolean,
+            val showIgnoreItem: Boolean,
+            val showUnignoreItem: Boolean,
         ) : ViewState() {
             /** Only a friend can carry a friend nickname, so only they are offered one. */
             val showFriendNicknameItem: Boolean get() = showRemoveFriendItem
@@ -59,7 +62,11 @@ class UserActionsDialogViewModel(
 
     /** One-shot outcomes; the dialog toasts and closes on either. */
     sealed class Event {
-        data class Success(@StringRes val successMessageStringRes: Int) : Event()
+        /** [username] is set only for the toasts whose copy names the user. */
+        data class Success(
+            @StringRes val successMessageStringRes: Int,
+            val username: String? = null,
+        ) : Event()
 
         data class Failure(@StringRes val failureMessageStringRes: Int) : Event()
     }
@@ -90,6 +97,10 @@ class UserActionsDialogViewModel(
                 showBlockItem = type != ModelUserRelationship.TYPE_BLOCKED,
                 showUnblockItem = type == ModelUserRelationship.TYPE_BLOCKED,
                 showRemoveFriendItem = type == ModelUserRelationship.TYPE_FRIEND,
+                // Blocking already hides everything ignoring would, so the softer action is not
+                // offered alongside it.
+                showIgnoreItem = type != ModelUserRelationship.TYPE_BLOCKED && !storeState.isIgnored,
+                showUnignoreItem = type != ModelUserRelationship.TYPE_BLOCKED && storeState.isIgnored,
             ),
         )
     }
@@ -109,6 +120,37 @@ class UserActionsDialogViewModel(
             ) { eventSubject.onNext(Event.Success(R.string.user_has_been_blocked)) }
     }
 
+    /** The sheet needs the id to render the avatar and name it is confirming against. */
+    val userIdForConfirmation: Long get() = userId
+
+    fun ignoreUser() {
+        val api = RestAPI.apiOrNull ?: return emitGenericFailure()
+        api.ignoreUser(userId, relationshipContext(LOCATION_USER_PROFILE))
+            .restSubscribeOn()
+            .ui(this)
+            .appSubscribe(
+                errorClass = UserActionsDialogViewModel::class.java,
+                errorHandler = { emitGenericFailure() },
+            ) {
+                StoreStream.setUserIgnored(userId, true)
+                eventSubject.onNext(Event.Success(R.string.ignored_user_success_toast, displayName()))
+            }
+    }
+
+    fun unignoreUser() {
+        val api = RestAPI.apiOrNull ?: return emitGenericFailure()
+        api.unignoreUser(userId, relationshipContext(LOCATION_USER_PROFILE))
+            .restSubscribeOn()
+            .ui(this)
+            .appSubscribe(
+                errorClass = UserActionsDialogViewModel::class.java,
+                errorHandler = { emitGenericFailure() },
+            ) {
+                StoreStream.setUserIgnored(userId, false)
+                eventSubject.onNext(Event.Success(R.string.unignored_user_success_toast, displayName()))
+            }
+    }
+
     fun removeRelationship(@StringRes successMessageStringRes: Int) {
         val api = RestAPI.apiOrNull ?: return emitGenericFailure()
         api.removeRelationship(userId, relationshipContext(LOCATION_USER_PROFILE))
@@ -119,6 +161,9 @@ class UserActionsDialogViewModel(
                 errorHandler = { emitGenericFailure() },
             ) { eventSubject.onNext(Event.Success(successMessageStringRes)) }
     }
+
+    private fun displayName(): String? =
+        (viewState as? ViewState.Loaded)?.let { it.friendNickname ?: it.user.username }
 
     private fun emitGenericFailure() {
         eventSubject.onNext(Event.Failure(R.string.default_failure_to_perform_action_message))
@@ -149,8 +194,9 @@ class UserActionsDialogViewModel(
                 StoreStream.getUserRelationships().observe(userId),
                 member,
                 StoreStream.getUserRelationships().observeNickname(userId),
-            ) { user, relationshipType, guildMember, friendNickname ->
-                StoreState(user, relationshipType, guildMember, friendNickname)
+                StoreStream.getUserRelationships().observeIgnoredUserIds().map { userId in it },
+            ) { user, relationshipType, guildMember, friendNickname, isIgnored ->
+                StoreState(user, relationshipType, guildMember, friendNickname, isIgnored)
             }
                 .distinctUntilChanged()
         }

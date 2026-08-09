@@ -1,5 +1,6 @@
 package com.discord.widgets.stage.model
 
+import com.discord.models.domain.ModelUserRelationship
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isStageVoiceChannel
 import com.discord.api.role.GuildRole
@@ -51,7 +52,6 @@ data class StageCallModel(
         private const val MAX_SPEAKERS_PER_ROW = 3
 
         /** Wire value of the "blocked" relationship type. */
-        private const val RELATIONSHIP_TYPE_BLOCKED = 2
 
         /**
          * The stage model for [channelId], or `null` when the channel is unknown or is not a stage
@@ -76,7 +76,7 @@ data class StageCallModel(
             StoreStream.getGuilds().observeComputed(channel.guildId),
             StoreStream.getGuilds().observeRoles(channel.guildId),
             StoreStream.getGuilds().observeGuild(channel.guildId),
-            StoreStream.getUserRelationships().observeForType(RELATIONSHIP_TYPE_BLOCKED),
+            StoreStream.getUserRelationships().observeBlocked(),
             StoreStream.getStageInstances().observeStageInstanceForChannel(channelId),
             // `false` while `StoreStream` publishes no `StoreLurking` — see [StageStoreAccess].
             StageStoreAccess.observeIsLurking(channel.guildId),

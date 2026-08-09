@@ -31,7 +31,7 @@ private data class ThreadEntities(
 
 private data class ThreadContext(
     val permissions: Long?,
-    val blockedUsers: Map<Long, Int>,
+    val blockedUsers: Set<Long>,
     val guild: Guild?,
     val older: ArchivedThreadsStore.ThreadListingState,
 )
@@ -60,7 +60,7 @@ class WidgetThreadBrowserListViewModel(
         val guildRoles: Map<Long, GuildRole>,
         val channelNames: Map<Long, String>,
         val permissions: Long?,
-        val blockedUsers: Map<Long, Int>,
+        val blockedUsers: Set<Long>,
         val channel: Channel?,
         val guild: Guild?,
         val olderThreads: ArchivedThreadsStore.ThreadListingState,
@@ -122,7 +122,7 @@ class WidgetThreadBrowserListViewModel(
                     state.guildRoles,
                     state.channelNames,
                     state.threadStates[id]?.mostRecentMessage?.author?.id
-                        ?.let { state.blockedUsers[it] == 2 } == true,
+                        ?.let(state.blockedUsers::contains) == true,
                 ),
             )
 
@@ -191,7 +191,7 @@ class WidgetThreadBrowserListViewModel(
             ) { members, users, roles, channels -> ThreadEntities(members, users, roles, channels) },
             Observable.combineLatest(
                 StoreStream.getPermissions().observePermissionsForChannel(channelId),
-                StoreStream.getUserRelationships().observe(),
+                StoreStream.getUserRelationships().observeBlockedOrIgnored(),
                 StoreStream.getGuilds().observeGuild(guildId),
                 archivedThreads.loadAndObserveThreadListing(channelId, OLDER_LISTING),
             ) { permissions, relationships, guild, older ->

@@ -112,7 +112,8 @@ data class WidgetChatListModelMessages(
             val first = Observable.combineLatest(
                 MessagesWithMetadata.get(channel),
                 stores.getChannels().observeChannel(channel.parentId),
-                stores.getUserRelationships().observeForType(2),
+                stores.getUserRelationships().observeBlocked().map { it.keys },
+                stores.getUserRelationships().observeIgnoredUserIds(),
                 stores.getChat().observeExpandedBlockedMessageIds(),
                 stores.getGuilds().observeGuildMembers(channel.guildId),
                 ::FirstInputs,
@@ -139,7 +140,8 @@ data class WidgetChatListModelMessages(
                     channel = channel,
                     metadata = a.metadata,
                     parentChannel = a.parentChannel,
-                    blockedRelationships = a.blockedRelationships,
+                    blockedAuthorIds = a.blockedAuthorIds,
+                    ignoredAuthorIds = a.ignoredAuthorIds,
                     expandedBlockedMessageIds = a.expandedBlockedMessageIds,
                     guildMembers = a.guildMembers,
                     newMessagesMarkerMessageId = b.unreadMarker,
@@ -176,7 +178,7 @@ data class WidgetChatListModelMessages(
             return Observable.combineLatest(first, second) { a, b ->
                 val message = a.message ?: return@combineLatest emptyList()
                 getMessageItems(
-                    channel, a.members, a.roles, emptyMap(), null, null, message,
+                    channel, a.members, a.roles, emptySet(), emptySet(), null, null, message,
                     a.metadata.messageState[messageId], a.metadata.messageReplyState, false, false,
                     null, a.animateEmojis, b.autoPlayGifs, b.renderEmbeds, b.meUserId, false,
                     emptyMap(), b.inviteResolver, false,
@@ -188,7 +190,8 @@ data class WidgetChatListModelMessages(
             channel: Channel,
             metadata: MessagesWithMetadata,
             parentChannel: Channel? = null,
-            blockedRelationships: Map<Long, Int> = emptyMap(),
+            blockedAuthorIds: Set<Long> = emptySet(),
+            ignoredAuthorIds: Set<Long> = emptySet(),
             expandedBlockedMessageIds: List<Long> = emptyList(),
             guildMembers: Map<Long, GuildMember> = emptyMap(),
             newMessagesMarkerMessageId: Long = 0L,
@@ -206,6 +209,7 @@ data class WidgetChatListModelMessages(
             var blockedCount = 0
             var blockedMessage: Message? = null
             var blockedChunkExpanded = false
+            var blockedRunIsIgnored = false
             var groupStart: Message? = null
             var groupStartBlocked = false
             var separatorAdded = false
@@ -213,23 +217,39 @@ data class WidgetChatListModelMessages(
             metadata.messages.forEachIndexed { index, message ->
                 val timestamp = message.timestamp?.dateTimeMillis ?: 0L
                 if (willAddTimestamp(timestamp, nextDayTimestamp)) {
-                    blockedCount = addBlockedMessage(items, blockedMessage, blockedCount, blockedChunkExpanded)
+                    blockedCount =
+                        addBlockedMessage(items, blockedMessage, blockedCount, blockedChunkExpanded, blockedRunIsIgnored)
                 }
                 nextDayTimestamp = tryAddTimestamp(items, message.id, timestamp, nextDayTimestamp)
                 val isMostRecent = index == metadata.messages.lastIndex
                 val blockedAuthor = if (message.type == 21) {
                     getThreadStarterMessageAndChannel(parentChannel, channel, message, metadata).first.author?.id
                 } else message.author?.id
-                val isBlocked = blockedAuthor?.let(blockedRelationships::containsKey) == true
+                // Blocking wins over ignoring, matching the reference: a blocked author is never
+                // reported as ignored, so the two runs can never overlap.
+                val authorBlocked = blockedAuthor != null && blockedAuthor in blockedAuthorIds
+                val authorIgnored = !authorBlocked && blockedAuthor != null && blockedAuthor in ignoredAuthorIds
+                val isBlocked = authorBlocked || authorIgnored
+                // A run only ever holds one kind, so a change of kind closes the previous run.
+                if (isBlocked && blockedCount > 0 && authorIgnored != blockedRunIsIgnored) {
+                    blockedCount =
+                        addBlockedMessage(items, blockedMessage, blockedCount, blockedChunkExpanded, blockedRunIsIgnored)
+                }
                 if (isBlocked) {
                     blockedCount++
                     if (blockedCount == 1) {
                         blockedChunkExpanded = message.id in expandedBlockedMessageIds
                         blockedMessage = message
+                        blockedRunIsIgnored = authorIgnored
                     }
                 }
                 if (!isBlocked || isMostRecent) {
-                    blockedCount = addBlockedMessage(items, blockedMessage, blockedCount, blockedChunkExpanded)
+                    val collapsedRowAdded = blockedCount > 0 && !blockedChunkExpanded
+                    blockedCount =
+                        addBlockedMessage(items, blockedMessage, blockedCount, blockedChunkExpanded, blockedRunIsIgnored)
+                    // A collapsed run renders as its own row, so the messages either side of it are
+                    // no longer adjacent and must not be grouped together.
+                    if (collapsedRowAdded) groupStart = null
                 }
                 if (!isBlocked && blockedChunkExpanded) blockedChunkExpanded = false
 
@@ -244,7 +264,7 @@ data class WidgetChatListModelMessages(
                     if (message.type == 21) {
                         items.addItems(
                             getThreadStarterMessageItems(
-                                parentChannel, channel, guildMembers, guildRoles, blockedRelationships,
+                                parentChannel, channel, guildMembers, guildRoles, blockedAuthorIds, ignoredAuthorIds,
                                 message, metadata, animateEmojis, autoPlayGifs, renderEmbeds, meUserId,
                                 componentStoreState, inviteResolver,
                             ),
@@ -252,7 +272,7 @@ data class WidgetChatListModelMessages(
                     } else {
                         items.addItems(
                             getMessageItems(
-                                channel, guildMembers, guildRoles, blockedRelationships,
+                                channel, guildMembers, guildRoles, blockedAuthorIds, ignoredAuthorIds,
                                 metadata.messageThreads[message.id],
                                 metadata.threadCountsAndLatestMessages[message.id],
                                 message, metadata.messageState[message.id], metadata.messageReplyState,
@@ -285,7 +305,8 @@ data class WidgetChatListModelMessages(
             channel: Channel,
             guildMembers: Map<Long, GuildMember>,
             guildRoles: Map<Long, GuildRole>,
-            blockedRelationships: Map<Long, Int>,
+            blockedAuthorIds: Set<Long>,
+            ignoredAuthorIds: Set<Long>,
             thread: Channel?,
             threadEmbedMetadata: StoreThreadMessages.ThreadState?,
             message: Message,
@@ -310,17 +331,20 @@ data class WidgetChatListModelMessages(
             val replyData = replyState?.let { state ->
                 val entry = (state as? StoreMessageReplies.MessageState.Loaded)?.message?.let { replied ->
                     getMessageItems(
-                        channel, guildMembers, guildRoles, blockedRelationships, thread,
+                        channel, guildMembers, guildRoles, blockedAuthorIds, ignoredAuthorIds, thread,
                         threadEmbedMetadata, replied, messageState, repliedMessages, blockedChunkExpanded,
                         false, null, animateEmojis, autoPlayGifs, renderEmbeds, meUserId, false,
                         emptyMap(), inviteResolver, false,
                     ).firstOrNull() as? MessageEntry
                 }
+                val repliedAuthorId =
+                    (state as? StoreMessageReplies.MessageState.Loaded)?.message?.author?.id
                 MessageEntry.ReplyData(
                     state,
                     entry,
-                    (state as? StoreMessageReplies.MessageState.Loaded)?.message?.author?.id
-                        ?.let(blockedRelationships::containsKey) == true,
+                    isRepliedUserBlocked = repliedAuthorId != null && repliedAuthorId in blockedAuthorIds,
+                    isRepliedUserIgnored = repliedAuthorId != null &&
+                        repliedAuthorId !in blockedAuthorIds && repliedAuthorId in ignoredAuthorIds,
                 )
             }
             val author = guildMembers[message.author?.id]
@@ -458,8 +482,14 @@ data class WidgetChatListModelMessages(
 
         internal fun willAddTimestamp(timestamp: Long, nextDayTimestamp: Long) = timestamp > nextDayTimestamp
 
-        private fun addBlockedMessage(items: Items, message: Message?, count: Int, expanded: Boolean): Int {
-            if (count > 0) items.addItem(BlockedMessagesEntry(requireNotNull(message), count, expanded))
+        private fun addBlockedMessage(
+            items: Items,
+            message: Message?,
+            count: Int,
+            expanded: Boolean,
+            isIgnored: Boolean,
+        ): Int {
+            if (count > 0) items.addItem(BlockedMessagesEntry(requireNotNull(message), count, expanded, isIgnored))
             return 0
         }
 
@@ -468,7 +498,8 @@ data class WidgetChatListModelMessages(
             channel: Channel,
             guildMembers: Map<Long, GuildMember>,
             guildRoles: Map<Long, GuildRole>,
-            blockedRelationships: Map<Long, Int>,
+            blockedAuthorIds: Set<Long>,
+            ignoredAuthorIds: Set<Long>,
             message: Message,
             metadata: MessagesWithMetadata,
             animateEmojis: Boolean,
@@ -480,7 +511,7 @@ data class WidgetChatListModelMessages(
         ): List<ChatListEntry> {
             val (starter, starterChannel) = getThreadStarterMessageAndChannel(parentChannel, channel, message, metadata)
             return getMessageItems(
-                starterChannel, guildMembers, guildRoles, blockedRelationships, null, null, starter,
+                starterChannel, guildMembers, guildRoles, blockedAuthorIds, ignoredAuthorIds, null, null, starter,
                 metadata.messageState[starter.id], metadata.parentChannelMessageReplyState, false, false,
                 null, animateEmojis, autoPlayGifs, renderEmbeds, meUserId, true,
                 componentStoreState, inviteResolver, true,
@@ -586,7 +617,8 @@ data class WidgetChatListModelMessages(
         private data class FirstInputs(
             val metadata: MessagesWithMetadata,
             val parentChannel: Channel?,
-            val blockedRelationships: Map<Long, Int>,
+            val blockedAuthorIds: Set<Long>,
+            val ignoredAuthorIds: Set<Long>,
             val expandedBlockedMessageIds: List<Long>,
             val guildMembers: Map<Long, GuildMember>,
         )

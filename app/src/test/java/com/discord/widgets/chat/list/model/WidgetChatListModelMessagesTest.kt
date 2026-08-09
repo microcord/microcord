@@ -19,7 +19,7 @@ class WidgetChatListModelMessagesTest {
         val metadata = metadata((1L..3L).map { message(it, it * 1_000) })
 
         val collapsed = WidgetChatListModelMessages.build(
-            channel(), metadata, blockedRelationships = mapOf(7L to 2),
+            channel(), metadata, blockedAuthorIds = setOf(7L),
             inviteResolver = InviteEmbedResolver.UNRESOLVED,
         )
         assertEquals(3, collapsed.items.filterIsInstance<BlockedMessagesEntry>().single().blockedCount)
@@ -27,7 +27,7 @@ class WidgetChatListModelMessagesTest {
 
         val expanded = WidgetChatListModelMessages.build(
             channel(), metadata,
-            blockedRelationships = mapOf(7L to 2),
+            blockedAuthorIds = setOf(7L),
             expandedBlockedMessageIds = listOf(1L),
             inviteResolver = InviteEmbedResolver.UNRESOLVED,
         )

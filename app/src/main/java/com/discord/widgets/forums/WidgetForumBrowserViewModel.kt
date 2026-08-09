@@ -307,7 +307,7 @@ class WidgetForumBrowserViewModel(
                 GuildState(members, roles, firstMessages, counts)
             }
             val messages = Observable.combineLatest(
-                StoreStream.getUserRelationships().observeForType(2).map { it.keys },
+                StoreStream.getUserRelationships().observeBlockedOrIgnored(),
                 StoreStream.getPermissions().observePermissionsForChannel(channel.id)
                     .map(ForumUtils::canCreatePost),
                 StoreStream.getMessagesMostRecent().observeRecentMessageIds(),

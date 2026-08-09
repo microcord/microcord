@@ -134,13 +134,18 @@ class StoreSearchQuery(
         )
     }
 
+    private fun isFromHiddenAuthor(message: Message): Boolean =
+        message.author?.id?.let(StoreStream.getUserRelationships()::isBlockedOrIgnored) == true
+
     @Synchronized
     private fun handleResponse(query: SearchQuery, response: ModelSearchResponse, isInitialLoad: Boolean) {
         val next = when {
             response.errorCode == null -> {
                 val total = if (isInitialLoad) response.totalResults else currentSearchState.totalResults
                 val hits = if (isInitialLoad) ArrayList<Message>() else ArrayList(currentSearchState.hits.orEmpty())
-                hits += response.hits.map(::Message)
+                // Mobile drops results from blocked and ignored authors in the store; the
+                // reveal affordance that desktop offers instead has no mobile component.
+                hits += response.hits.map(::Message).filterNot(::isFromHiddenAuthor)
                 SearchState(
                     queryFetchState = QueryFetchState.COMPLETED,
                     searchQuery = query,

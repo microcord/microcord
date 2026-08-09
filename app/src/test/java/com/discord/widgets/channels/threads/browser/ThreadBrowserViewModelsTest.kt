@@ -88,7 +88,7 @@ class ThreadBrowserViewModelsTest {
         guildRoles = emptyMap(),
         channelNames = emptyMap(),
         permissions = null,
-        blockedUsers = emptyMap(),
+        blockedUsers = emptySet(),
         channel = channel(Channel.GUILD_TEXT),
         guild = null,
         olderThreads = older,

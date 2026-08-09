@@ -619,6 +619,8 @@ class WidgetChatListAdapterItemMessage(
 
         val repliedEntry = replyData.messageEntry
         when {
+            replyData.isRepliedUserIgnored ->
+                configureReplySystemMessage(R.string.reply_quote_message_ignored)
             replyData.isRepliedUserBlocked ->
                 configureReplySystemMessage(R.string.reply_quote_message_blocked)
             replyData.messageState is StoreMessageReplies.MessageState.Unloaded ->
