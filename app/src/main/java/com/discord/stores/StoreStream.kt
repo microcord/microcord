@@ -1116,7 +1116,10 @@ class StoreStream private constructor(
         }
         storesV2 += voiceTransport.storeStreamRtcConnection
         storesV2 += voiceTransport.storeAudioManagerV2
-        dispatcher.registerDispatchHandlers(storeV2DispatchHandler)
+        dispatcher.registerDispatchHandlers(
+            storeV2DispatchHandler,
+            DispatchHandler { clientDataState.commitFastConnectStateIfPending() },
+        )
         voiceTransport.storeRtcConnection.speakingUpdates.subscribe { updates ->
             dispatcher.schedule { voiceSpeaking.handleSpeakingUpdates(updates) }
         }
@@ -1445,7 +1448,7 @@ class StoreStream private constructor(
                 initialCompression = GatewayCompression.ZSTD,
             )
         gateway?.also { socket ->
-            gatewayConnection.init(socket)
+            gatewayConnection.init(socket, awaitingRestoredToken = fastConnectSocket != null)
             initGatewaySocketListeners()
         }
         connectivity.init(networkMonitor, messagesLoader.observeChannelMessagesLoading())
@@ -1492,7 +1495,10 @@ class StoreStream private constructor(
     }
 
     private fun initForTesting() {
-        dispatcher.registerDispatchHandlers(storeV2DispatchHandler)
+        dispatcher.registerDispatchHandlers(
+            storeV2DispatchHandler,
+            DispatchHandler { clientDataState.commitFastConnectStateIfPending() },
+        )
         authentication.init()
         userSettingsSystem.restore()
         accessibility.initForTesting()
@@ -1757,7 +1763,7 @@ class StoreStream private constructor(
             channelsSelected.handlePermissionsChanged(event.guildId)
             voiceChannelSelected.handleGuildRoleCreateOrUpdate()
             stageChannels.handleGuildRoleCreateOrUpdate(event.guildId)
-            clientDataState.handleRoleAddOrRemove(event.guildId, event.guildHashes)
+            event.role?.let { clientDataState.handleGuildEntityVersion(event.guildId, it.version) }
         }
         dispatchSubscribe(events.guildRoleUpdate, "streamGuildRoleUpdate") { event ->
             event.role?.let { role ->
@@ -1768,7 +1774,7 @@ class StoreStream private constructor(
             channelsSelected.handlePermissionsChanged(event.guildId)
             voiceChannelSelected.handleGuildRoleCreateOrUpdate()
             stageChannels.handleGuildRoleCreateOrUpdate(event.guildId)
-            clientDataState.handleRoleAddOrRemove(event.guildId, event.guildHashes)
+            event.role?.let { clientDataState.handleGuildEntityVersion(event.guildId, it.version) }
         }
         dispatchSubscribe(events.guildRoleDelete, "streamGuildRoleRemove") { event ->
             guilds.handleGuildRoleRemove(event.guildId, event.roleId)
@@ -1776,7 +1782,7 @@ class StoreStream private constructor(
             channelsSelected.handlePermissionsChanged(event.guildId)
             voiceChannelSelected.handleGuildRoleRemove()
             stageChannels.handleGuildRoleCreateOrUpdate(event.guildId)
-            clientDataState.handleRoleAddOrRemove(event.guildId, event.guildHashes)
+            clientDataState.handleGuildEntityVersion(event.guildId, event.version)
         }
 
         // Guild membership

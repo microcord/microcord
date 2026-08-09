@@ -13,6 +13,8 @@ data class Sticker(
     val type: StickerType,
     val available: Boolean? = null,
 ) : Serializable, BaseSticker {
+    @Transient var version: Long = 0
+
     override fun getFileExtension() = formatType.fileExtension()
     override fun toStickerPartial() = StickerPartial(id, formatType, name)
     override fun getStickerId() = id

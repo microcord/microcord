@@ -43,6 +43,7 @@ class ModelPayload() {
         internal set
     var guilds: List<Guild>? = null
         internal set
+    internal var readyGuilds: List<ReadyGuild>? = null
     var guildJoinRequests: List<GuildJoinRequest>? = null
         internal set
     var presences: List<Presence>? = null
@@ -86,6 +87,8 @@ class ModelPayload() {
         internal set
     var friendSuggestionCount: Int = 0
         internal set
+    var apiCodeVersion: Int? = null
+        internal set
 
     constructor(other: ModelPayload) : this() {
         v = other.v
@@ -98,6 +101,7 @@ class ModelPayload() {
         readState = other.readState
         privateChannels = other.privateChannels
         guilds = other.guilds
+        readyGuilds = other.readyGuilds
         guildJoinRequests = other.guildJoinRequests
         presences = other.presences
         analyticsToken = other.analyticsToken
@@ -116,6 +120,7 @@ class ModelPayload() {
         trace = other.trace
         userSurvey = other.userSurvey
         friendSuggestionCount = other.friendSuggestionCount
+        apiCodeVersion = other.apiCodeVersion
     }
 
     fun withGuilds(guilds: List<Guild>) = ModelPayload(this).also { it.guilds = guilds }
@@ -141,21 +146,21 @@ class ModelPayload() {
         "v=$v, me=$me, userSettings=$userSettings, userGuildSettings=$userGuildSettings, " +
         "notificationSettings=$notificationSettings, " +
         "sessionId=$sessionId, relationships=$relationships, readState=$readState, " +
-        "privateChannels=$privateChannels, guilds=$guilds, guildJoinRequests=$guildJoinRequests, " +
+        "privateChannels=$privateChannels, guilds=$guilds, readyGuilds=${readyGuilds?.size}, guildJoinRequests=$guildJoinRequests, " +
         "presences=$presences, analyticsToken=<redacted>, authToken=<redacted>, " +
         "authSessionIdHash=<redacted>, " +
         "requiredAction=$requiredAction, experiments=$experiments, guildExperiments=$guildExperiments, " +
         "connectedAccounts=$connectedAccounts, sessions=$sessions, users=$users, " +
         "guildPresences=$guildPresences, guildMembers=$guildMembers, countryCode=$countryCode, " +
-        "trace=$trace, userSurvey=$userSurvey, friendSuggestionCount=$friendSuggestionCount)"
+        "trace=$trace, userSurvey=$userSurvey, friendSuggestionCount=$friendSuggestionCount, apiCodeVersion=$apiCodeVersion)"
 
     private fun fields() = listOf(
         v, me, userSettings, userGuildSettings, notificationSettings, sessionId, relationships,
         readState, privateChannels,
-        guilds, guildJoinRequests, presences, analyticsToken, authToken, authSessionIdHash,
+        guilds, readyGuilds, guildJoinRequests, presences, analyticsToken, authToken, authSessionIdHash,
         requiredAction, experiments,
         guildExperiments, connectedAccounts, sessions, users, guildPresences, guildMembers, countryCode,
-        trace, userSurvey, friendSuggestionCount,
+        trace, userSurvey, friendSuggestionCount, apiCodeVersion,
     )
 
     abstract class VersionedModel<T> {
@@ -257,42 +262,43 @@ private class ModelPayloadAdapter(private val gson: Gson) : TypeAdapter<ModelPay
             val name = reader.nextName()
             if (reader.skipNull()) continue
             when (name) {
-                "v" -> payload.v = reader.nextInt()
-                "user" -> payload.me = gson.fromJson(reader, User::class.java)
-                "user_settings" -> payload.userSettings = gson.fromJson(reader, ModelUserSettings::class.java)
-                "user_guild_settings" -> payload.userGuildSettings = versionedSettings(reader)
-                "notification_settings" ->
-                    payload.notificationSettings = gson.fromJson(reader, AccountNotificationSettings::class.java)
-                "session_id" -> payload.sessionId = reader.nextString()
-                "relationships" -> payload.relationships = gson.fromJson(reader, type<List<ModelUserRelationship>>())
-                "read_state" -> payload.readState = versionedReadStates(reader)
-                "private_channels" -> payload.privateChannels = gson.fromJson(reader, type<List<Channel>>())
-                "guilds" -> payload.guilds = gson.fromJson(reader, type<List<Guild>>())
-                "guild_join_requests" -> payload.guildJoinRequests = gson.fromJson(reader, type<List<GuildJoinRequest>>())
-                "presences" -> payload.presences = gson.fromJson(reader, type<List<Presence>>())
-                "merged_presences" -> gson.fromJson<ModelPayload.MergedPresences>(
-                    reader,
-                    ModelPayload.MergedPresences::class.java,
-                ).also {
-                    payload.presences = it.friends
-                    payload.guildPresences = it.guilds
-                }
-                "merged_members" -> payload.guildMembers = gson.fromJson(reader, type<List<List<GuildMember>>>())
-                "analytics_token" -> payload.analyticsToken = reader.nextString()
-                "apex_experiments" -> payload.installation = readInstallation(reader)
-                "auth_token" -> payload.authToken = reader.nextString()
-                "auth_session_id_hash" -> payload.authSessionIdHash = reader.nextString()
-                "required_action" -> payload.requiredAction = reader.nextString()
-                "experiments" -> payload.experiments = readExperiments(reader)
-                "guild_experiments" -> payload.guildExperiments = readGuildExperiments(reader)
-                "connected_accounts" -> payload.connectedAccounts = gson.fromJson(reader, type<List<ConnectedAccount>>())
-                "sessions" -> payload.sessions = gson.fromJson(reader, type<List<ModelSession>>())
-                "users" -> payload.users = gson.fromJson(reader, type<List<User>>())
-                "country_code" -> payload.countryCode = reader.nextString()
-                "_trace" -> payload.trace = readTrace(reader)
-                "user_survey" -> payload.userSurvey = gson.fromJson(reader, UserSurvey::class.java)
-                "friend_suggestion_count" -> payload.friendSuggestionCount = reader.nextInt()
-                else -> reader.skipValue()
+                    "v" -> payload.v = reader.nextInt()
+                    "user" -> payload.me = gson.fromJson(reader, User::class.java)
+                    "user_settings" -> payload.userSettings = gson.fromJson(reader, ModelUserSettings::class.java)
+                    "user_guild_settings" -> payload.userGuildSettings = versionedSettings(reader)
+                    "notification_settings" ->
+                        payload.notificationSettings = gson.fromJson(reader, AccountNotificationSettings::class.java)
+                    "session_id" -> payload.sessionId = reader.nextString()
+                    "relationships" -> payload.relationships = gson.fromJson(reader, type<List<ModelUserRelationship>>())
+                    "read_state" -> payload.readState = versionedReadStates(reader)
+                    "private_channels" -> payload.privateChannels = gson.fromJson(reader, type<List<Channel>>())
+                    "guilds" -> readGuilds(reader, payload)
+                    "guild_join_requests" -> payload.guildJoinRequests = gson.fromJson(reader, type<List<GuildJoinRequest>>())
+                    "presences" -> payload.presences = gson.fromJson(reader, type<List<Presence>>())
+                    "merged_presences" -> gson.fromJson<ModelPayload.MergedPresences>(
+                        reader,
+                        ModelPayload.MergedPresences::class.java,
+                    ).also {
+                        payload.presences = it.friends
+                        payload.guildPresences = it.guilds
+                    }
+                    "merged_members" -> payload.guildMembers = gson.fromJson(reader, type<List<List<GuildMember>>>())
+                    "analytics_token" -> payload.analyticsToken = reader.nextString()
+                    "apex_experiments" -> payload.installation = readInstallation(reader)
+                    "auth_token" -> payload.authToken = reader.nextString()
+                    "auth_session_id_hash" -> payload.authSessionIdHash = reader.nextString()
+                    "required_action" -> payload.requiredAction = reader.nextString()
+                    "experiments" -> payload.experiments = readExperiments(reader)
+                    "guild_experiments" -> payload.guildExperiments = readGuildExperiments(reader)
+                    "connected_accounts" -> payload.connectedAccounts = gson.fromJson(reader, type<List<ConnectedAccount>>())
+                    "sessions" -> payload.sessions = gson.fromJson(reader, type<List<ModelSession>>())
+                    "users" -> payload.users = gson.fromJson(reader, type<List<User>>())
+                    "country_code" -> payload.countryCode = reader.nextString()
+                    "_trace" -> payload.trace = readTrace(reader)
+                    "user_survey" -> payload.userSurvey = gson.fromJson(reader, UserSurvey::class.java)
+                    "friend_suggestion_count" -> payload.friendSuggestionCount = reader.nextInt()
+                    "api_code_version" -> payload.apiCodeVersion = reader.nextInt()
+                    else -> reader.skipValue()
             }
         }
         reader.endObject()
@@ -362,6 +368,29 @@ private class ModelPayloadAdapter(private val gson: Gson) : TypeAdapter<ModelPay
         return value.asJsonArray.mapNotNull {
             runCatching { GuildExperimentDtoTypeAdapter().fromJsonTree(it) }.getOrNull()
         }
+    }
+
+    private fun readGuilds(reader: JsonReader, payload: ModelPayload) {
+        reader.beginArray()
+        if (!reader.hasNext()) {
+            reader.endArray()
+            payload.guilds = emptyList()
+            return
+        }
+        val first = com.google.gson.JsonParser.parseReader(reader)
+        val isV2 = first.asJsonObject.has("data_mode")
+        if (isV2) {
+            payload.readyGuilds = buildList {
+                add(gson.fromJson(first, ReadyGuild::class.java))
+                while (reader.hasNext()) add(gson.fromJson(reader, ReadyGuild::class.java))
+            }
+        } else {
+            payload.guilds = buildList {
+                add(gson.fromJson(first, Guild::class.java))
+                while (reader.hasNext()) add(gson.fromJson(reader, Guild::class.java))
+            }
+        }
+        reader.endArray()
     }
 
     private fun readTrace(reader: JsonReader): Any? {

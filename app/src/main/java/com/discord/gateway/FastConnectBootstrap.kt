@@ -1,13 +1,13 @@
 package com.discord.gateway
 
 import android.content.SharedPreferences
+import android.util.Log
 import com.discord.models.domain.ModelGateway
 import com.discord.stores.StoreAuthentication
 import com.discord.stores.StoreClientDataState
 import com.discord.stores.authentication.AuthStateCache
 import com.discord.utilities.analytics.AnalyticSuperProperties
 import com.discord.utilities.logging.AppGatewaySocketLogger
-import com.discord.utilities.persister.Persister
 import com.discord.utilities.websocket.GatewayCompression
 import com.discord.utilities.websocket.OkHttpGatewayWebSocketFactory
 
@@ -23,10 +23,10 @@ object FastConnectBootstrap {
         if (socket != null) return
         val token = AuthStateCache(preferences).getCachedAuthState()?.token?.takeIf(String::isNotBlank) ?: return
         val clientState = runCatching {
-            Persister(
-                StoreClientDataState.CACHE_KEY,
-                StoreClientDataState.ClientDataState(),
-            ).get().toIdentifyData()
+            (StoreClientDataState.readFastConnectState(preferences) ?: StoreClientDataState.ClientDataState())
+                .toIdentifyData()
+        }.onFailure { error ->
+            Log.w("ManticordGateway", "client state cache read failed: ${error.javaClass.simpleName}: ${error.message}")
         }.getOrNull()
         val installation = sessionDurablePreferences
             .getString(StoreAuthentication.CACHE_KEY_INSTALLATION, null)

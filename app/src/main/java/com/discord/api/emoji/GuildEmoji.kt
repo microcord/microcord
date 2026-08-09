@@ -8,4 +8,6 @@ data class GuildEmoji(
     val managed: Boolean,
     val animated: Boolean,
     val available: Boolean?,
-)
+) {
+    @Transient var version: Long = 0
+}

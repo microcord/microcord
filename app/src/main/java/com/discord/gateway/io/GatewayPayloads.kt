@@ -102,31 +102,18 @@ sealed class OutgoingPayload private constructor() {
                 "capabilities=$capabilities, properties=$properties, clientState=$clientState)"
     }
 
-    class IdentifyClientState(
-        val guildHashes: Map<Long, Array<String>>,
+    data class IdentifyClientState(
+        val guildVersions: Map<Long, Long>,
         val highestLastMessageId: Long,
         val readStateVersion: Int,
         val userGuildSettingsVersion: Int,
+        val userSettingsVersion: Int? = null,
+        val privateChannelsVersion: Long? = null,
+        val apiCodeVersion: Int? = null,
+        val initialGuildId: Long? = null,
     ) {
 
-        override fun equals(other: Any?): Boolean = this === other || (
-            other is IdentifyClientState &&
-                highestLastMessageId == other.highestLastMessageId &&
-                readStateVersion == other.readStateVersion &&
-                userGuildSettingsVersion == other.userGuildSettingsVersion &&
-                guildHashes.keys == other.guildHashes.keys &&
-                guildHashes.all { (id, hashes) -> other.guildHashes[id].contentEquals(hashes) }
-            )
-
-        override fun hashCode(): Int {
-            var result = guildHashes.entries.sumOf { (id, hashes) -> id.hashCode() * 31 + hashes.contentHashCode() }
-            result = 31 * result + highestLastMessageId.hashCode()
-            result = 31 * result + readStateVersion
-            result = 31 * result + userGuildSettingsVersion
-            return result
-        }
-
-        override fun toString(): String = "IdentifyClientState(guildHashes=${guildHashes.size} guilds, " +
+        override fun toString(): String = "IdentifyClientState(guildVersions=${guildVersions.size} guilds, " +
             "highestLastMessageId=$highestLastMessageId, readStateVersion=$readStateVersion, " +
             "userGuildSettingsVersion=$userGuildSettingsVersion)"
     }

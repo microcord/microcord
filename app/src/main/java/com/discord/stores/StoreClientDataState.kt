@@ -1,9 +1,10 @@
 package com.discord.stores
 
+import android.util.Log
+import android.content.SharedPreferences
 import com.discord.api.channel.Channel
 import com.discord.api.emoji.GuildEmojisUpdate
 import com.discord.api.guild.Guild
-import com.discord.api.guildhash.GuildHashes
 import com.discord.api.message.Message
 import com.discord.api.sticker.GuildStickersUpdate
 import com.discord.gateway.io.IdentifyClientState
@@ -13,6 +14,8 @@ import com.discord.models.domain.ModelReadState
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
 import com.discord.utilities.persister.Persister
+import com.discord.utilities.cache.SharedPreferencesProvider
+import com.google.gson.Gson
 import rx.Observable
 
 /**
@@ -33,36 +36,30 @@ class StoreClientDataState(
      * also the correct state for a fresh login.
      */
     data class ClientDataState(
-        val guildHashes: Map<Long, GuildHashes> = emptyMap(),
+        val guildVersions: Map<Long, Long> = emptyMap(),
         val highestLastMessageId: Long = 0L,
         val readStateVersion: Int = -1,
         val userGuildSettingsVersion: Int = -1,
+        val privateChannelsVersion: Long? = null,
+        val apiCodeVersion: Int? = null,
     ) {
-        /**
-         * Only guilds with a complete metadata/channel/role hash triple are worth sending; a
-         * partial triple cannot be validated server-side and is dropped.
-         */
-        private fun GuildHashes.toHashTriple(): Array<String>? {
-            val metadata = metadata?.hash ?: return null
-            val channels = channels?.hash ?: return null
-            val roles = roles?.hash ?: return null
-            return arrayOf(metadata, channels, roles)
-        }
-
         fun toIdentifyData(): IdentifyClientState = IdentifyClientState(
-            guildHashes = guildHashes.mapNotNull { (guildId, hashes) ->
-                hashes.toHashTriple()?.let { guildId to it }
-            }.toMap(),
+            guildVersions = guildVersions,
             highestLastMessageId = highestLastMessageId,
             readStateVersion = readStateVersion,
             userGuildSettingsVersion = userGuildSettingsVersion,
+            privateChannelsVersion = privateChannelsVersion,
+            apiCodeVersion = apiCodeVersion,
         )
     }
 
-    private val guildHashes = HashMap<Long, GuildHashes>()
+    private val guildVersions = HashMap<Long, Long>()
     private var highestLastMessageId = 0L
     private var readStateVersion = -1
     private var userGuildSettingsVersion = -1
+    private var privateChannelsVersion: Long? = null
+    private var apiCodeVersion: Int? = null
+    private var pendingFastConnectCommit = false
 
     private var clientDataStateSnapshot = ClientDataState()
 
@@ -73,10 +70,12 @@ class StoreClientDataState(
     @StoreThread
     fun init() {
         val restored = cache.get()
-        guildHashes.putAll(restored.guildHashes)
+        guildVersions.putAll(restored.guildVersions)
         highestLastMessageId = restored.highestLastMessageId
         readStateVersion = restored.readStateVersion
         userGuildSettingsVersion = restored.userGuildSettingsVersion
+        privateChannelsVersion = restored.privateChannelsVersion
+        apiCodeVersion = restored.apiCodeVersion
         markChanged()
     }
 
@@ -87,84 +86,102 @@ class StoreClientDataState(
 
     override fun snapshotData() {
         super.snapshotData()
-        clientDataStateSnapshot = ClientDataState(
-            HashMap(guildHashes),
-            highestLastMessageId,
-            readStateVersion,
-            userGuildSettingsVersion,
-        )
+        clientDataStateSnapshot = currentState()
         // Marked dirty only: snapshotData runs after every dispatch that touched this store,
         // and Persister.persist() is a synchronous Kryo write. The strategy flush picks it up.
         cache.set(clientDataStateSnapshot)
     }
 
+    private fun currentState() = ClientDataState(
+            HashMap(guildVersions),
+            highestLastMessageId,
+            readStateVersion,
+            userGuildSettingsVersion,
+            privateChannelsVersion,
+            apiCodeVersion,
+        )
+
     @StoreThread
-    fun clear() {
-        guildHashes.clear()
+    fun clear(persist: Boolean = true) {
+        pendingFastConnectCommit = false
+        guildVersions.clear()
         highestLastMessageId = 0L
         readStateVersion = -1
         userGuildSettingsVersion = -1
-        cache.clear(persist = true)
+        privateChannelsVersion = null
+        apiCodeVersion = null
+        cache.clear(persist = persist)
+        if (persist) runCatching {
+            SharedPreferencesProvider.get().edit().remove(FAST_CONNECT_CACHE_KEY).commit()
+        }
         markChanged()
     }
 
     @StoreThread
     fun handleConnectionOpen(payload: ModelPayload) {
-        clear()
+        clear(persist = false)
         payload.guilds.orEmpty().forEach { guild ->
-            updateGuildHash(guild)
+            updateGuildVersion(guild)
             guild.channels.orEmpty().forEach { channel -> updateHighestLastMessageId(channel.lastMessageId) }
         }
-        payload.privateChannels.orEmpty().forEach { channel -> updateHighestLastMessageId(channel.lastMessageId) }
+        payload.privateChannels.orEmpty().forEach { channel -> updatePrivateChannelsVersion(channel.lastMessageId) }
         payload.readState?.let { readStateVersion = it.version }
         payload.userGuildSettings?.let { userGuildSettingsVersion = it.version }
+        apiCodeVersion = payload.apiCodeVersion
+        pendingFastConnectCommit = true
         markChanged()
     }
 
     @StoreThread
     fun handleGuildAdd(guild: Guild) {
-        updateGuildHash(guild)
+        updateGuildVersion(guild)
         markChanged()
     }
 
     @StoreThread
     fun handleGuildRemove(guild: Guild) {
-        guildHashes.remove(guild.id)
+        guildVersions.remove(guild.id)
         markChanged()
     }
 
     @StoreThread
     fun handleChannelCreateOrUpdateOrDelete(channel: Channel) {
-        val hashes = channel.guildHashes ?: return
-        if (!hashes.isSupported) return
-        guildHashes[channel.guildId] = hashes
+        if (channel.guildId == 0L) updatePrivateChannelsVersion(channel.lastMessageId)
+        else updateVersion(channel.guildId, channel.version)
         markChanged()
     }
 
     @StoreThread
-    fun handleRoleAddOrRemove(guildId: Long, guildHashes: GuildHashes?) {
-        if (guildHashes == null || !guildHashes.isSupported) return
-        this.guildHashes[guildId] = guildHashes
+    fun commitFastConnectStateIfPending() {
+        if (!pendingFastConnectCommit || !Persister.persist(REQUIRED_CACHE_KEYS)) return
+        val committed = runCatching {
+            persistFastConnectState(SharedPreferencesProvider.get(), clientDataStateSnapshot)
+        }.getOrDefault(false)
+        if (committed) pendingFastConnectCommit = false
+    }
+
+    @StoreThread
+    fun handleGuildEntityVersion(guildId: Long, version: Long) {
+        updateVersion(guildId, version)
         markChanged()
     }
 
     @StoreThread
     fun handleEmojiUpdate(payload: GuildEmojisUpdate) {
-        if (!payload.guildHashes.isSupported) return
-        guildHashes[payload.guildId] = payload.guildHashes
+        payload.emojis.forEach { updateVersion(payload.guildId, it.version) }
         markChanged()
     }
 
     @StoreThread
     fun handleStickersUpdate(payload: GuildStickersUpdate) {
-        if (!payload.guildHashes.isSupported) return
-        guildHashes[payload.guildId] = payload.guildHashes
+        payload.stickers.forEach { updateVersion(payload.guildId, it.version) }
         markChanged()
     }
 
     @StoreThread
     fun handleMessageCreate(message: Message) {
         updateHighestLastMessageId(message.id)
+        if (message.guildId == null) updatePrivateChannelsVersion(message.id)
         markChanged()
     }
 
@@ -183,13 +200,17 @@ class StoreClientDataState(
     }
 
     @StoreThread
-    private fun updateGuildHash(guild: Guild) {
-        val hashes = guild.guildHashes
-        if (!guild.unavailable && hashes != null && hashes.isSupported) {
-            guildHashes[guild.id] = hashes
-        } else {
-            guildHashes.remove(guild.id)
-        }
+    private fun updateGuildVersion(guild: Guild) {
+        if (guild.unavailable) return
+        updateVersion(guild.id, guild.version)
+        guild.roles.orEmpty().forEach { updateVersion(guild.id, it.version) }
+        guild.emojis.orEmpty().forEach { updateVersion(guild.id, it.version) }
+        guild.stickers.orEmpty().forEach { updateVersion(guild.id, it.version) }
+        guild.channels.orEmpty().forEach { updateVersion(guild.id, it.version) }
+    }
+
+    private fun updateVersion(guildId: Long, version: Long) {
+        if (version > guildVersions.getOrDefault(guildId, 0L)) guildVersions[guildId] = version
     }
 
     @StoreThread
@@ -197,13 +218,29 @@ class StoreClientDataState(
         if (newMessageId > highestLastMessageId) highestLastMessageId = newMessageId
     }
 
+    private fun updatePrivateChannelsVersion(newMessageId: Long) {
+        if (newMessageId > (privateChannelsVersion ?: 0L)) privateChannelsVersion = newMessageId
+    }
+
     companion object {
-        const val CACHE_KEY = "STORE_CLIENT_DATA_STATE_V1"
+        const val CACHE_KEY = "STORE_CLIENT_DATA_STATE_V2"
+        private const val FAST_CONNECT_CACHE_KEY = "STORE_CLIENT_DATA_STATE_V2_FAST_CONNECT_TX1"
+        private val REQUIRED_CACHE_KEYS = setOf(
+            CACHE_KEY,
+            StoreGuilds.GUILDS_CACHE_KEY,
+            StoreGuilds.GUILD_ROLES_CACHE_KEY,
+            StoreChannels.CHANNELS_CACHE_KEY,
+        )
+        private val gson = Gson()
 
-        /** The gateway only honours version 1 of the guild-hash contract. */
-        private const val SUPPORTED_GUILD_HASH_VERSION = 1
+        fun readFastConnectState(preferences: SharedPreferences): ClientDataState? =
+            preferences.getString(FAST_CONNECT_CACHE_KEY, null)?.let { json ->
+                runCatching { gson.fromJson(json, ClientDataState::class.java) }
+                    .onFailure { Log.w("ManticordGateway", "fast connect mirror read failed: ${it.javaClass.simpleName}: ${it.message}") }
+                    .getOrNull()
+            }
 
-        private val GuildHashes?.isSupported: Boolean
-            get() = this?.version == SUPPORTED_GUILD_HASH_VERSION
+        private fun persistFastConnectState(preferences: SharedPreferences, state: ClientDataState): Boolean =
+            preferences.edit().putString(FAST_CONNECT_CACHE_KEY, gson.toJson(state)).commit()
     }
 }

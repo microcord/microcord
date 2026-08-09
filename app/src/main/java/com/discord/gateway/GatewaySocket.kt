@@ -28,6 +28,7 @@ import com.discord.gateway.io.VoiceStateUpdateNoPreferredRegion
 import com.discord.gateway.io.WatchStream
 import com.discord.gateway.opcodes.Opcode
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
+import com.discord.models.deserialization.gson.InboundGatewayGsonParser
 import com.discord.models.domain.ModelPayload
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
@@ -105,7 +106,7 @@ class GatewaySocket(
         .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
         .registerDiscordApiTypeAdapters()
         .create()
-    private val incomingParser = IncomingParser(gson)
+    private val incomingParser = IncomingParser(InboundGatewayGsonParser.gatewayGsonInstance)
     private val compression = initialCompression
     private var decoder: GatewayStreamDecoder = decoderFactory(compression)
     private var state = State.DISCONNECTED
@@ -293,7 +294,7 @@ class GatewaySocket(
         }
         socket = try {
             webSocketFactory.connect(endpoint, object : GatewayWebSocketListener {
-                override fun onOpen() {
+                override fun onOpen() = serialized(currentGeneration) {
                     BootLog.record(BootLogEvent.GATEWAY_SOCKET_OPEN)
                     logInfo("websocket opened; waiting for HELLO")
                     if (identifyOnOpen && state == State.CONNECTING) identify()
@@ -373,7 +374,7 @@ class GatewaySocket(
         }
         state = State.IDENTIFYING
         BootLog.record(BootLogEvent.GATEWAY_IDENTIFY)
-        logInfo("sending IDENTIFY")
+        logInfo("sending IDENTIFY clientState=${data.clientState}")
         token = data.token
         send(
             Opcode.IDENTIFY,
@@ -385,7 +386,11 @@ class GatewaySocket(
         if (gatewaySocketLogger.logLevel == GatewaySocketLogger.LogLevel.VERBOSE) {
             runCatching {
                 gatewaySocketLogger.logInboundMessage(
-                    GatewayLogRedactor.redact(json.toString(Charsets.UTF_8)),
+                    if (json.size <= MAX_VERBOSE_LOG_BYTES) {
+                        GatewayLogRedactor.redact(json.toString(Charsets.UTF_8))
+                    } else {
+                        "<redacted large gateway payload: ${json.size} bytes>"
+                    },
                 )
             }
         }
@@ -575,7 +580,8 @@ class GatewaySocket(
          * Identify capabilities. `NON_CHANNEL_READ_STATES` (1 shl 7) is what makes READY
          * carry guild-event and onboarding read states; without it they never arrive.
          */
-        private const val CAPABILITIES = 479L
+        private const val CAPABILITIES = 479L or (1L shl 10) // CLIENT_STATE_V2
+        private const val MAX_VERBOSE_LOG_BYTES = 256 * 1024
         const val TAG = "ManticordGateway"
         const val HELLO_TIMEOUT_MS = 20_000L
         const val RESUME_WINDOW_MS = 180_000L

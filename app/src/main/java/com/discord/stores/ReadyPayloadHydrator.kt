@@ -8,6 +8,7 @@ import com.discord.api.presence.Presence
 import com.discord.api.role.GuildRole
 import com.discord.api.user.User
 import com.discord.models.domain.ModelPayload
+import com.discord.models.domain.ReadyGuild
 import com.discord.models.guild.Guild as StoredGuild
 
 internal class ReadyPayloadHydrator(
@@ -33,7 +34,9 @@ internal class ReadyPayloadHydrator(
     @StoreThread
     fun hydrateReadyPayload(payload: ModelPayload): HydrateResult {
         snapshotCache()
-        val guilds = payload.guilds ?: return HydrateResult.Success(payload)
+        val guilds = payload.readyGuilds?.map { hydrateReadyGuild(it) ?: return HydrateResult.Error }
+            ?: payload.guilds
+            ?: return HydrateResult.Success(payload)
         val users = LinkedHashMap<Long, User>().apply {
             payload.users.orEmpty().forEach { put(it.id, it) }
             payload.me?.let { put(it.id, it) }
@@ -82,6 +85,68 @@ internal class ReadyPayloadHydrator(
         return HydrateResult.Success(hydrated)
     }
 
+    private fun hydrateReadyGuild(sync: ReadyGuild): Guild? {
+        val cached = cache[sync.id]
+        if (sync.dataMode == ReadyGuild.DATA_MODE_UNAVAILABLE) {
+            return cached?.guild?.copy(unavailable = true) ?: unavailableGuild(sync.id)
+        }
+        val base = sync.properties ?: cached?.guild ?: return null
+        val partial = sync.dataMode == ReadyGuild.DATA_MODE_PARTIAL
+        val updates = sync.partialUpdates
+        val roles = if (partial) merge(cached?.roles, updates?.roles, updates?.deletedRoleIds, { it.id }) else sync.roles
+        val emojis = if (partial) merge(cached?.guild?.emojis, updates?.emojis, updates?.deletedEmojiIds, { it.id }) else sync.emojis
+        val stickers = if (partial) merge(cached?.guild?.stickers, updates?.stickers, updates?.deletedStickerIds, { it.id }) else sync.stickers
+        var channels = if (partial) {
+            merge(cached?.channels, updates?.channels, updates?.deletedChannelIds, { it.id })
+        } else {
+            sync.channels
+        }
+        val timestampUpdates = sync.channelUpdates.orEmpty().associateBy(Channel::id)
+        if (timestampUpdates.isNotEmpty()) {
+            channels = channels?.map { channel ->
+                timestampUpdates[channel.id]?.takeIf { it.lastMessageId != 0L }
+                    ?.let { channel.copy(lastMessageId = it.lastMessageId) } ?: channel
+            }
+        }
+        return base.copy(
+            roles = roles,
+            emojis = emojis,
+            stickers = stickers,
+            presences = sync.presences ?: base.presences,
+            channels = channels,
+            members = sync.members ?: base.members,
+            voiceStates = sync.voiceStates ?: base.voiceStates,
+            unavailable = false,
+            memberCount = sync.memberCount ?: base.memberCount,
+            premiumSubscriptionCount = sync.premiumSubscriptionCount ?: base.premiumSubscriptionCount,
+            joinedAt = sync.joinedAt ?: base.joinedAt,
+            threads = sync.threads ?: base.threads,
+            stageInstances = sync.stageInstances ?: base.stageInstances,
+            guildScheduledEvents = sync.guildScheduledEvents ?: base.guildScheduledEvents,
+            embeddedActivities = sync.embeddedActivities ?: base.embeddedActivities,
+        ).also { it.version = sync.version }
+    }
+
+    private fun <T> merge(
+        cached: List<T>?,
+        writes: List<T>?,
+        deletedIds: List<Long>?,
+        id: (T) -> Long,
+    ): List<T>? {
+        if (cached == null && writes == null) return null
+        val merged = cached.orEmpty().associateByTo(LinkedHashMap(), id)
+        deletedIds.orEmpty().forEach(merged::remove)
+        writes.orEmpty().forEach { merged[id(it)] = it }
+        return merged.values.toList()
+    }
+
+    private fun unavailableGuild(id: Long) = Guild(
+        null, null, null, "", null, null, id, null, 0, null, null, null, null, null,
+        null, null, true, 0, 0, null, null, emptyList(), 0, null, null, 0, 0, 0, null,
+        null, null, null, null, null, null, 0, 0, null, null, null, null, false, null,
+        null, null, null,
+    )
+
     @StoreThread
     fun hydrateGuild(
         guild: Guild,
@@ -89,6 +154,7 @@ internal class ReadyPayloadHydrator(
         members: Map<Long, GuildMember>? = null,
     ): HydrateGuildResult {
         if (guild.unavailable) return HydrateGuildResult.Success(guild)
+        val version = guild.version
 
         val hashes = guild.guildHashes
         val metadataOmitted = hashes.isSupported && hashes?.metadata?.omitted == true
@@ -127,12 +193,19 @@ internal class ReadyPayloadHydrator(
                 preferredLocale = old.preferredLocale,
                 maxVideoChannelUsers = old.maxVideoChannelUsers,
                 vanityUrlCode = old.vanityUrlCode,
+                safetyAlertsChannelId = old.safetyAlertsChannelId,
+                premiumProgressBarEnabled = old.premiumProgressBarEnabled,
+                nsfwLevel = old.nsfwLevel,
+                ownerConfiguredContentLevel = old.ownerConfiguredContentLevel,
+                incidentsData = old.incidentsData,
+                officialMessageColor = old.officialMessageColor,
             )
         }
         if (channelsOmitted) hydrated = hydrateChannels(hydrated, requireNotNull(cached).channels)
         if (rolesOmitted) hydrated = hydrated.copy(roles = requireNotNull(cached).roles)
         if (presences != null) hydrated = hydrated.copy(presences = presences)
         if (members != null) hydrated = hydrated.copy(members = members.values.toList())
+        hydrated.version = version
         return HydrateGuildResult.Success(hydrated)
     }
 
@@ -221,6 +294,12 @@ internal class ReadyPayloadHydrator(
         guildScheduledEvents = null,
         embeddedActivities = emptyList(),
         hubType = hubType,
+        safetyAlertsChannelId = safetyAlertsChannelId,
+        premiumProgressBarEnabled = premiumProgressBarEnabled,
+        nsfwLevel = nsfwLevel,
+        ownerConfiguredContentLevel = ownerConfiguredContentLevel,
+        incidentsData = incidentsData,
+        officialMessageColor = officialMessageColor,
     )
 
     private data class GuildCache(

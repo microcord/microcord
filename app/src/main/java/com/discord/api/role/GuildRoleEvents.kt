@@ -20,4 +20,6 @@ data class GuildRoleDelete(
     val guildId: Long,
     val roleId: Long,
     val guildHashes: GuildHashes?,
-)
+) {
+    @Transient var version: Long = 0
+}

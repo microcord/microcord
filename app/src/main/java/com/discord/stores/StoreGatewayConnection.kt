@@ -253,14 +253,19 @@ class StoreGatewayConnection(
      * every dispatch that arrived while the app was away, and neither RESUME nor IDENTIFY replays
      * events the client was not connected for.
      */
-    fun init(socket: GatewaySocket) {
+    fun init(socket: GatewaySocket, awaitingRestoredToken: Boolean = false) {
         this.socket = socket
+        var waitingForToken = awaitingRestoredToken
         tokenSubscription?.unsubscribe()
         tokenSubscription = stream.getAuthenticationInternal().observeAuthState()
             .map { it?.token }
             .distinctUntilChanged()
             .observeOn(scheduler)
-            .subscribe(::handleTokenUpdate, {})
+            .subscribe({ token ->
+                if (waitingForToken && token == null) return@subscribe
+                waitingForToken = false
+                handleTokenUpdate(token)
+            }, {})
 
         backgroundedSubscription?.unsubscribe()
         backgroundedSubscription = Backgrounded.observe()

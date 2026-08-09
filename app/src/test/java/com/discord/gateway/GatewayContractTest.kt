@@ -2,6 +2,7 @@ package com.discord.gateway
 
 import android.content.SharedPreferences
 import com.discord.api.stageinstance.StageInstance
+import com.discord.api.channel.Channel
 import com.discord.api.stageinstance.StageInstancePrivacyLevel
 import com.discord.api.guildmember.GuildMember
 import com.discord.api.guildmember.GuildMemberRemove
@@ -19,6 +20,7 @@ import com.discord.gateway.rest.RestApi
 import com.discord.gateway.rest.RestClient
 import com.discord.gateway.rest.RestConfig
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
+import com.discord.models.deserialization.gson.InboundGatewayGsonParser
 import com.discord.models.domain.ModelGateway
 import com.discord.restapi.RequiredHeadersInterceptor
 import com.discord.restapi.RestAPIBuilder
@@ -71,10 +73,21 @@ class GatewayContractTest {
             Identify("token", true, 351, emptyMap(), IdentifyClientState(emptyMap(), 0, 1, 2)),
         ).asJsonObject
         assertTrue(identify.has("client_state"))
+        assertTrue(identify["client_state"].asJsonObject.has("guild_versions"))
+        assertFalse(identify["client_state"].asJsonObject.has("guild_hashes"))
         assertTrue(identify["client_state"].asJsonObject.has("user_guild_settings_version"))
         assertFalse(identify["client_state"].asJsonObject.has("useruser_guild_settings_version"))
         val nullableState = gson.toJsonTree(Identify("token", true, 351, emptyMap(), null)).asJsonObject
         assertTrue(nullableState["client_state"].isJsonNull)
+    }
+
+    @Test
+    fun inboundParserRetainsClientStateV2EntityVersions() {
+        val incoming = IncomingParser(InboundGatewayGsonParser.gatewayGsonInstance).parse(
+            """{"op":0,"s":1,"t":"CHANNEL_UPDATE","d":{"id":2,"guild_id":1,"type":0,"name":"general","version":1786288488223}}""",
+        )
+
+        assertEquals(1786288488223L, (incoming.data as Channel).version)
     }
 
     @Test

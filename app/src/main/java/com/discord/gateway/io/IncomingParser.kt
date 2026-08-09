@@ -83,32 +83,57 @@ class IncomingParser(private val gson: Gson) {
     /** Marker for a dispatch type this client does not consume. */
     object DISPATCH_UNPARSED
 
-    fun parse(json: String): Incoming {
-        val metadata = readMetadata(json)
-        val data = parseData(metadata) { readData(JsonReader(StringReader(json)), metadata) }
+    fun parse(json: String): Incoming = parse { JsonReader(StringReader(json)) }
+
+    fun parse(json: ByteArray): Incoming = parse {
+        JsonReader(InputStreamReader(ByteArrayInputStream(json), Charsets.UTF_8))
+    }
+
+    private fun parse(reader: () -> JsonReader): Incoming {
+        readIncoming(reader())?.let { return it }
+        val metadata = readGsonMetadata(reader())
+        val data = parseData(metadata) { readData(reader(), metadata) }
         return Incoming(metadata.type, metadata.sequence, metadata.opcode, data)
     }
 
-    fun parse(json: ByteArray): Incoming {
-        val metadata = readMetadata(json)
-        val data = parseData(metadata) {
-            val input = InputStreamReader(ByteArrayInputStream(json), Charsets.UTF_8)
-            readData(JsonReader(input), metadata)
+    /** Parses normal Gateway envelopes once; unusual envelopes with `d` first use the safe fallback. */
+    private fun readIncoming(reader: JsonReader): Incoming? = reader.use {
+        var type: String? = null
+        var sequence: Int? = null
+        var opcodeValue: Int? = null
+        var data: Any? = null
+        reader.beginObject()
+        while (reader.hasNext()) {
+            when (reader.nextName()) {
+                "t" -> type = reader.nextStringOrNull()
+                "s" -> sequence = reader.nextIntOrNull()
+                "op" -> opcodeValue = reader.nextIntOrNull()
+                "d" -> {
+                    val opcode = opcodeValue?.let(Opcode::fromApiInt) ?: return null
+                    if (opcode == Opcode.DISPATCH && type == null) return null
+                    if (reader.peek() == JsonToken.NULL) {
+                        reader.nextNull()
+                    } else if (opcode == Opcode.DISPATCH && type in BODYLESS_EVENTS) {
+                        reader.skipValue()
+                        data = Unit
+                    } else {
+                        data = readDataValue(reader, Metadata(type, sequence, opcode))
+                        if (data === DISPATCH_UNPARSED) reader.skipValue()
+                    }
+                }
+                else -> reader.skipValue()
+            }
         }
-        return Incoming(metadata.type, metadata.sequence, metadata.opcode, data)
+        reader.endObject()
+        val opcode = Opcode.fromApiInt(opcodeValue ?: -1)
+        if (opcode == Opcode.DISPATCH && type in BODYLESS_EVENTS) data = Unit
+        Incoming(type, sequence, opcode, data)
     }
 
     private inline fun parseData(metadata: Metadata, parser: () -> Any?): Any? =
         if (metadata.opcode == Opcode.DISPATCH && metadata.type in BODYLESS_EVENTS) Unit else parser()
 
     /** Reads the small envelope fields without materialising the potentially huge `d` tree. */
-    private fun readMetadata(json: String): Metadata = readGsonMetadata(JsonReader(StringReader(json)))
-
-    private fun readMetadata(json: ByteArray): Metadata {
-        val input = InputStreamReader(ByteArrayInputStream(json), Charsets.UTF_8)
-        return readGsonMetadata(JsonReader(input))
-    }
-
     private fun readGsonMetadata(reader: JsonReader): Metadata = reader.use {
         var type: String? = null
         var sequence: Int? = null
@@ -138,14 +163,16 @@ class IncomingParser(private val gson: Gson) {
                 reader.nextNull()
                 return@use null
             }
-            return@use when (metadata.opcode) {
-                Opcode.DISPATCH -> parseDispatch(metadata.type, reader)
-                Opcode.HELLO -> gson.fromJson(reader, Hello::class.java)
-                Opcode.INVALID_SESSION -> reader.nextBoolean()
-                else -> JsonParser.parseReader(reader)
-            }
+            return@use readDataValue(reader, metadata)
         }
         null
+    }
+
+    private fun readDataValue(reader: JsonReader, metadata: Metadata): Any? = when (metadata.opcode) {
+        Opcode.DISPATCH -> parseDispatch(metadata.type, reader)
+        Opcode.HELLO -> gson.fromJson(reader, Hello::class.java)
+        Opcode.INVALID_SESSION -> reader.nextBoolean()
+        else -> JsonParser.parseReader(reader)
     }
 
     /**

@@ -7,6 +7,7 @@ import com.discord.utilities.persister.Persister
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import java.nio.file.Files
+import java.lang.reflect.Modifier
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -72,6 +73,24 @@ class ReadyPayloadHydratorTest {
         assertEquals(cached.roles, hydrated.roles)
     }
 
+    @Test
+    fun clientStateV2PartialGuildMergesCachedEntities() {
+        val (guilds, channels) = stores()
+        val cachedPayload = gson.fromJson(CACHED_READY, ModelPayload::class.java)
+        guilds.handleConnectionOpen(cachedPayload)
+        channels.handleConnectionOpen(cachedPayload)
+
+        val result = ReadyPayloadHydrator(guilds, channels).hydrateReadyPayload(
+            gson.fromJson(V2_PARTIAL_READY, ModelPayload::class.java),
+        ) as ReadyPayloadHydrator.HydrateResult.Success
+        val guild = result.payload.guilds!!.single()
+
+        assertEquals(20L, guild.version)
+        assertEquals(listOf(11L), guild.channels!!.map { it.id })
+        assertEquals(123L, guild.channels!!.single().lastMessageId)
+        assertEquals("cached-name", guild.name)
+    }
+
     private fun stores(): Pair<StoreGuilds, StoreChannels> {
         Persister.init(Files.createTempDirectory("ready-hydrator").toFile())
         val dispatcher = Dispatcher(TestScheduler())
@@ -103,10 +122,17 @@ class ReadyPayloadHydratorTest {
         guild.preferredLocale,
         guild.maxVideoChannelUsers,
         guild.vanityUrlCode,
+        guild.safetyAlertsChannelId,
+        guild.premiumProgressBarEnabled,
+        guild.nsfwLevel,
+        guild.ownerConfiguredContentLevel,
+        guild.incidentsData,
+        guild.officialMessageColor,
     )
 
     companion object {
-        private val gson = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+        private val gson = GsonBuilder().excludeFieldsWithModifiers(Modifier.STATIC)
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
             .registerDiscordApiTypeAdapters().create()
         private val COMPACT_READY = """
             {
@@ -114,7 +140,7 @@ class ReadyPayloadHydratorTest {
               "users":[{"id":8,"username":"friend","discriminator":"0001"}],
               "relationships":[{"id":8,"user_id":8,"type":1}],
               "private_channels":[{"id":20,"type":1,"recipient_ids":[8]}],
-              "guilds":[{"id":1,"name":"Guild","owner_id":9,"roles":[{"id":1,"name":"@everyone","permissions":1024}],"channels":[{"id":10,"guild_id":1,"type":0,"name":"general"}],"features":[]}],
+              "guilds":[{"id":1,"name":"Guild","owner_id":9,"nsfw_level":0,"roles":[{"id":1,"name":"@everyone","permissions":1024}],"channels":[{"id":10,"guild_id":1,"type":0,"name":"general"}],"features":[]}],
               "merged_members":[[{"guild_id":1,"user_id":7,"roles":[1],"pending":false}]],
               "merged_presences":{"friends":[],"guilds":[[{"user_id":8,"status":"online"}]]}
             }
@@ -123,14 +149,16 @@ class ReadyPayloadHydratorTest {
             {
               "users":[],
               "guilds":[{
-                "id":1,"name":"cached-name","description":"cached-description",
+                 "id":1,"name":"cached-name","description":"cached-description","nsfw_level":1,
                 "default_message_notifications":2,"region":"cached-region","owner_id":42,
                 "icon":"cached-icon","verification_level":3,"explicit_content_filter":2,
                 "mfa_level":1,"afk_timeout":300,"afk_channel_id":101,"system_channel_id":102,
                 "features":["BANNER","COMMUNITY"],"member_count":70,"banner":"cached-banner",
                 "splash":"cached-splash","premium_tier":3,"premium_subscription_count":77,
                 "system_channel_flags":12,"rules_channel_id":103,"public_updates_channel_id":104,
-                "preferred_locale":"tr","max_video_channel_users":25,"vanity_url_code":"cached-vanity",
+                 "preferred_locale":"tr","max_video_channel_users":25,"vanity_url_code":"cached-vanity",
+                 "safety_alerts_channel_id":105,"premium_progress_bar_enabled":true,
+                 "owner_configured_content_level":2,"incidents_data":{},"official_message_color":123,
                 "roles":[{"id":1,"name":"@everyone","permissions":1024}],
                 "channels":[
                   {"id":10,"guild_id":1,"type":0,"name":"one","last_message_id":99},
@@ -143,7 +171,7 @@ class ReadyPayloadHydratorTest {
             {
               "users":[],
               "guilds":[{
-                "id":1,"name":"Guild","owner_id":9,"features":[],
+                 "id":1,"name":"Guild","owner_id":9,"nsfw_level":0,"features":[],
                 "members":[{"guild_id":1,"user_id":404,"roles":[],"pending":false}],
                 "presences":[{"user_id":405,"status":"online"}]
               }]
@@ -153,7 +181,7 @@ class ReadyPayloadHydratorTest {
             {
               "users":[],
               "guilds":[{
-                "id":1,"name":"incoming-name","description":"incoming-description",
+                 "id":1,"name":"incoming-name","description":"incoming-description","nsfw_level":0,
                 "default_message_notifications":0,"region":"incoming-region","owner_id":5,
                 "icon":"incoming-icon","verification_level":0,"explicit_content_filter":0,
                 "mfa_level":0,"afk_timeout":60,"afk_channel_id":201,"system_channel_id":202,
@@ -171,6 +199,18 @@ class ReadyPayloadHydratorTest {
                   {"id":10,"guild_id":1,"type":0,"last_message_id":0},
                   {"id":11,"guild_id":1,"type":0,"last_message_id":123}
                 ]
+              }]
+            }
+        """.trimIndent()
+        private val V2_PARTIAL_READY = """
+            {
+              "users":[],
+              "guilds":[{
+                "id":1,"data_mode":"partial","version":20,"member_count":8,
+                "partial_updates":{
+                  "channels":[{"id":11,"guild_id":1,"type":0,"name":"two","last_message_id":123,"version":20}],
+                  "deleted_channel_ids":[10]
+                }
               }]
             }
         """.trimIndent()

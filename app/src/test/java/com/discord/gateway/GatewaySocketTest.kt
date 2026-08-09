@@ -104,9 +104,8 @@ class GatewaySocketTest {
         assertEquals(2, identify["op"].asInt)
         // Dropped: current Discord does not send it.
         assertFalse(identify["d"].asJsonObject.has("large_threshold"))
-        // 479 = 351 plus NON_CHANNEL_READ_STATES (1 shl 7), which READY needs to send
-        // guild-event and onboarding read states.
-        assertEquals(479, identify["d"].asJsonObject["capabilities"].asInt)
+        // 1503 = the legacy 479 set plus CLIENT_STATE_V2 (1 shl 10).
+        assertEquals(1503, identify["d"].asJsonObject["capabilities"].asInt)
         assertFalse(harness.handler.readyStates.last())
     }
 
@@ -170,6 +169,37 @@ class GatewaySocketTest {
         assertFalse(harness.logger.inbound.joinToString().contains("fixture-session"))
         assertTrue(harness.logger.outbound.any { it.contains("<redacted>") })
         assertTrue(harness.logger.inbound.any { it.contains("<redacted>") })
+    }
+
+    @Test
+    fun verboseSocketLoggingDoesNotReparseLargePayloads() {
+        val harness = Harness()
+        harness.connectReady(sequence = 1, sessionId = "fixture-session")
+        harness.socket.serverMessage(
+            "{\"op\":0,\"s\":2,\"t\":\"FUTURE_EVENT\",\"d\":{\"padding\":\"${"x".repeat(300_000)}\"}}",
+        )
+        harness.scheduler.runCurrent()
+
+        assertTrue(harness.logger.inbound.last().startsWith("<redacted large gateway payload:"))
+    }
+
+    @Test
+    fun staleSocketOpenAfterRetryDoesNotIdentify() {
+        val harness = Harness(identifyOnOpen = true)
+        harness.gateway.connect()
+        harness.scheduler.runCurrent()
+        val stale = harness.factory.sockets.single()
+        stale.fail()
+        harness.scheduler.runCurrent()
+        harness.scheduler.advanceBy(10_000)
+        val replacement = harness.factory.sockets.last()
+
+        stale.open()
+        replacement.open()
+        harness.scheduler.runCurrent()
+
+        assertTrue(stale.sent.isEmpty())
+        assertEquals(listOf(2), replacement.sent.map { JsonParser.parseString(it).asJsonObject["op"].asInt })
     }
 
     private class Harness(identifyOnOpen: Boolean = false) {

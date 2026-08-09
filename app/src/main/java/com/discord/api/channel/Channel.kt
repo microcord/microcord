@@ -52,6 +52,8 @@ data class Channel(
     val defaultThreadRateLimitPerUser: Int? = null,
     val lastPinTimestamp: UtcDateTime? = null,
 ) {
+    @Transient var version: Long = 0
+
     companion object {
         const val GUILD_TEXT = 0
         const val DM = 1

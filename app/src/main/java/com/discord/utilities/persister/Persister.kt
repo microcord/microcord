@@ -67,8 +67,8 @@ class Persister<T : Any>(val key: String, private val defaultValue: T) {
     }
 
     @Synchronized
-    private fun persist() {
-        if (!valueDirty) return
+    private fun persist(): Boolean {
+        if (!valueDirty) return true
 
         val file = File(filesDir, key)
         val temporary = File(filesDir, "$key.new")
@@ -82,10 +82,12 @@ class Persister<T : Any>(val key: String, private val defaultValue: T) {
             if (!temporary.renameTo(file)) error("Unable to replace preference")
             backup.delete()
             valueDirty = false
+            return true
         } catch (exception: Exception) {
             temporary.delete()
             if (!file.exists()) backup.renameTo(file)
             logger(5, "Unable to serialize preference $key.", Exception(key, exception))
+            return false
         }
     }
 
@@ -194,11 +196,17 @@ class Persister<T : Any>(val key: String, private val defaultValue: T) {
         @JvmStatic
         fun isPreloaded(): Observable<Boolean> = preloader.isPreloaded()
 
-        fun persistAll() {
+        fun persistAll(): Boolean = persistMatching(null)
+
+        fun persist(keys: Set<String>): Boolean = persistMatching(keys)
+
+        private fun persistMatching(keys: Set<String>?): Boolean {
+            var success = true
             preferences.removeAll { reference ->
                 reference.get()?.let {
+                    if (keys != null && it.key !in keys) return@let false
                     val startedAt = clock?.currentTimeMillis()
-                    it.persist()
+                    success = it.persist() && success
                     startedAt?.let { start ->
                         val elapsed = requireNotNull(clock).currentTimeMillis() - start
                         if (elapsed > 100) logger(4, "Cached ${it.key} in ${elapsed / 1_000f} seconds.", null)
@@ -206,6 +214,7 @@ class Persister<T : Any>(val key: String, private val defaultValue: T) {
                     false
                 } ?: true
             }
+            return success
         }
 
         @JvmStatic

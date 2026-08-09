@@ -1164,6 +1164,7 @@ or observable behavior. Small implementation details do not belong here.
 | 2026-08-09 | Sign local and CI debug/release APKs with one repository-owned development certificate | Per-machine Android debug keys made GitHub Actions APKs incompatible with local installs | All Manticord development artifacts are update-compatible; the public key is explicitly not a production trust identity |
 | 2026-08-09 | Use Gateway `zstd-stream` exclusively with zstd-jni `1.5.7-12` | Discord documents zstd transport, repeated A65 runs support it, and the user explicitly removed legacy fallback | One persistent native decoder context is scoped to each connection; zlib decoder/fallback code is removed |
 | 2026-08-09 | Start an identified Fast Connect socket before constructing the store graph | The modern Android native module proves this is a client-side early-socket handoff, and the user requested it | Cached token/client state opens one zstd socket with `is_fast_connect=true`; typed events buffer until cache restore and store listener attachment |
+| 2026-08-09 | Migrate Gateway cache state from v1 hashes to CLIENT_STATE_V2 versions | Current React Native Hermes modules `GatewaySocket`, `GuildVersions`, and `NonGuildVersions` prove the live contract; the backend no longer returns v1 hashes | Persist unsigned entity versions, send `guild_versions` plus non-guild versions, and hydrate typed full/partial READY guild envelopes against restored stores |
 | 2026-08-08 | Retain Gson streaming for Gateway metadata and reject Fastjson2 `2.0.64.android5` | A65 A/B tracing found Fastjson2 14% slower on ordinary dispatches, with higher Gateway CPU, heap, and GC count despite a 2.8% faster READY sample | Fastjson2 and its parser selector were removed; the existing Gson adapters remain the single Gateway JSON stack |
 | 2026-08-08 | Stream `ModelPayload` directly from Gson's `JsonReader` | The former adapter built the complete READY tree and reparsed each field; the reference also streams READY | Only irregular experiment arrays retain local trees; the large guild/member/presence surfaces parse once |
 | 2026-08-08 | Open the authenticated main UI before Gateway READY | The user explicitly requires cached UI to open immediately while Gateway connects in the background | `MainRoute.LoggedIn` depends on initialized persisted auth, not channel hydration; required-action and age gates still take priority when known |
@@ -3037,8 +3038,8 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   loading; the observed Gson allocation belonged primarily to that emoji load, not Gateway JSON. Focused Gateway JVM tests,
   debug assembly/install, and live ARM64 transport pass. The zstd device test is added but the whole Android-test source set
   remains blocked by unrelated stale native-engine, SendUtils, and FlexInput test APIs.
-- Gateway envelopes and every typed dispatch body now stream through `JsonReader`: an order-independent metadata pass skips
-  `d`, then a second pass feeds only `d` directly into its existing type adapter. Unicode emoji assets use the same direct
+- Gateway envelopes and every typed dispatch body now stream through `JsonReader`: normal `op`/`t`-before-`d` envelopes parse
+  in one pass, while unusual `d`-first envelopes retain the order-independent two-pass fallback. Unicode emoji assets use the same direct
   recursive streaming approach. Persister eager reads run on one named preload lane instead of unbounded Rx IO workers, and
   `ObservationDeck` snapshots matching observers under its monitor but invokes callbacks after releasing it. Gateway fixtures,
   reordered-envelope coverage, emoji/persistence/observer tests, debug assembly/install, and live A65 READY traffic pass.
@@ -3079,6 +3080,51 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   parse durations to sanitized `StartupMetrics` debug logs. Developer Options exposes a dedicated Startup Metrics screen with
   live Summary and Timeline tabs and a copy-report action for repeatable on-device benchmarking.
 - Startup Metrics tabs explicitly consume Discord selected/muted text and indicator colors instead of Material defaults.
+- Gateway envelope parsing no longer tokenizes every normal payload twice. Focused Gateway parser/socket tests pass, and an A65
+  cold run reduced READY parsing from 1,293 ms to 1,222 ms; ordinary live events remain mostly below 3 ms. Per-field timing found
+  `guilds` dominates READY (177 guilds, 863-945 ms), followed by `merged_members` (50-155 ms). The persisted v1 client state restores
+  message/read/settings versions but always has zero guild hashes because the current backend's READY no longer supplies the old
+  hash objects. Modern Gateway caching uses `CLIENT_STATE_V2` plus `guild_versions`. The full payload contains 177 guilds,
+  9,938 channels, 11,098 emojis, and 6,814 roles. Bounded parallel guild trees regressed READY parse to 1,592 ms, a handwritten
+  streaming Channel adapter regressed it to 1,492 ms, and Gson 2.13.2's three-run median was 1,220 ms (effectively unchanged);
+  all three candidates were removed.
+- CLIENT_STATE_V2 is now reconstructed from the modern Hermes `GatewaySocket`, `GuildVersions`, `NonGuildVersions`, and READY
+  hydration modules. Cache-only entity versions are unsigned `Long`s; the store persists the maximum guild metadata/role/emoji/
+  sticker/channel version plus message/read/settings/API versions and sends capability 1024 with `guild_versions`. Typed partial
+  READY guild envelopes merge writes/deletes into restored guild, channel, role, emoji, and sticker state. On A65, the first full
+  sync populated 177 guild versions; the next cold READY reduced JSON parse from 1,712 ms to 445 ms and completed account-cache
+  hydration at +2.87 s, while a following reconnect parsed READY in 180 ms. Gson is updated from 2.8.8 to 2.13.2; its standalone
+  parser median was neutral, but the maintained release is retained as requested.
+- V2 cache versions are unsigned and therefore stored as `Long`; the initial `Int` implementation overflowed and discarded every
+  version. Connection-open now persists the rebuilt state in the same operation instead of leaving the just-cleared empty file for
+  the deferred flush. Repeated process starts load 177 versions and receive `{partial=177}` READY payloads (263 ms measured parse).
+  Observed 25-second connection stalls were explicit `SocketTimeoutException` retries; they did not clear or bypass the cache.
+- Verbose Gateway logging no longer reparses/redacts frames above 256 KiB. It logs only a sanitized byte count for those frames;
+  this removed an unmeasured 10-12 second READY queue stall while preserving full redacted logs for ordinary payloads.
+- WebSocket `onOpen` now runs through the same generation guard as message/close/failure callbacks. A connection that finishes
+  opening after its retry replacement is ignored instead of issuing a second IDENTIFY. The regression test simulates stale and
+  replacement opens; an A65 cold launch showed one discovery, one socket open, one cached IDENTIFY, and `{partial=177}` READY
+  parsing in 491 ms.
+- Fast Connect v2 state now has a synchronous ~3 KiB SharedPreferences JSON mirror for the process-start read, with Kryo retained
+  as the normal store cache/fallback. This avoids intermittent Kryo default-state reads without adding network or database startup
+  work. Connection refresh no longer persists an empty intermediate state. The adopted Fast Connect socket also ignores the auth
+  store's initial null while restoration is pending, preventing it from being closed and replaced by a zero-state second socket.
+  Device verification shows one discovery/open/IDENTIFY per process; full READY streams in 1,405 ms and the following cached
+  `{partial=177}` READY in 276 ms.
+- The auth store's initial null emission no longer closes the adopted Fast Connect socket while token restoration is pending; real
+  later nulls still close on logout. V2 guild-array detection now buffers only its first item and streams the remainder, reducing a
+  full READY parse to 1,159-1,405 ms and a normal `{partial=177}` READY to 164 ms. Partial counters correctly show only transmitted
+  deltas (for example roles=0, emojis=0, channels=3), while a full sync reports all 6,814 roles, 11,098 emojis, and 9,942 channels.
+- V2 publication now follows the RN database invariant instead of merely persisting versions early. After StoreV2 snapshots, a
+  second dispatch handler flushes the required guild metadata/emoji/sticker, guild-role, channel, and client-state Persisters and
+  publishes the ~3 KiB Fast Connect mirror only if every required write succeeds. A versioned `TX1` mirror forces one safe full
+  sync when upgrading from the earlier non-transactional build. Device proof: that full sync streamed in 1,153 ms; the next process
+  used 177 committed versions, one socket, `{partial=177}`, and parsed READY in 496 ms with account hydration complete at +2.88 s.
+- Review follow-up separated inbound and outbound Gson again: Gateway dispatches use `InboundGatewayGsonParser`, whose modifier
+  policy retains transient cache-only entity versions, while outbound JSON continues omitting them. Partial hydration now preserves
+  every cached guild metadata field, including safety-alert channel, premium progress, NSFW/content levels, incidents, and official
+  message color. Focused tests are added but currently cannot compile because unrelated `ActivityMessageEntryTest.kt:113` omits its
+  new required `message` argument; `assembleRelease` succeeds and the updated release APK is installed.
 - Detailed boot progress is controlled by a persisted `Verbose Boot` developer setting. It defaults off with the current
   recovered white Clyde mark while caches restore; enabled mode shows every safe boot event. Authenticated navigation no longer waits for Gateway
   READY, so cached UI opens while the existing global connectivity banner reports background connection state. Focused boot

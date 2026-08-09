@@ -66,4 +66,6 @@ data class Guild(
     val ownerConfiguredContentLevel: GuildNsfwLevel? = null,
     val incidentsData: GuildIncidentsData? = null,
     val officialMessageColor: Int? = null,
-)
+) {
+    @Transient var version: Long = 0
+}
