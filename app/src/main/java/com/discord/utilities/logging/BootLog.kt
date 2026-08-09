@@ -29,6 +29,8 @@ object BootLog {
     private val listeners = LinkedHashSet<(List<String>) -> Unit>()
 
     fun record(event: BootLogEvent) {
+        if (event == BootLogEvent.PROCESS_START) StartupMetrics.beginProcess(event.line)
+        else StartupMetrics.markBoot(event.line)
         val update: Pair<List<String>, List<(List<String>) -> Unit>> = synchronized(this) {
             if (lines.size == MAX_LINES) lines.removeFirst()
             lines.addLast(event.line)

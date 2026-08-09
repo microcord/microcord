@@ -1,5 +1,6 @@
 package com.discord.gateway
 
+import android.os.SystemClock
 import android.os.Trace
 import android.util.Log
 import com.discord.api.activity.Activity
@@ -30,6 +31,7 @@ import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.models.domain.ModelPayload
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
+import com.discord.utilities.logging.StartupMetrics
 import com.discord.utilities.websocket.GatewayCompression
 import com.discord.utilities.websocket.GatewayStreamDecoder
 import com.discord.utilities.websocket.GatewayWebSocket
@@ -120,6 +122,7 @@ class GatewaySocket(
     private var reconnectTask: GatewayCancellable? = null
     private var failures = 0
     private var backoffMs = MIN_BACKOFF_MS
+    private var lastFrameReceivedNanos = 0L
 
     fun connect() {
         logInfo("connect requested")
@@ -269,6 +272,7 @@ class GatewaySocket(
 
     private fun discoverAndConnect(ignoreSticky: Boolean = failures > FAILURE_THRESHOLD) {
         state = State.DISCOVERING
+        lastFrameReceivedNanos = 0L
         BootLog.record(BootLogEvent.GATEWAY_DISCOVERY)
         val url = try {
             discovery.discover(ignoreSticky)
@@ -295,25 +299,9 @@ class GatewaySocket(
                     if (identifyOnOpen && state == State.CONNECTING) identify()
                 }
 
-                override fun onBinaryMessage(bytes: ByteArray) = serialized(currentGeneration) {
-                    try {
-                        Trace.beginSection("Gateway ${compression.queryValue} decode")
-                        val messages = try {
-                            decoder.decode(bytes)
-                        } finally {
-                            Trace.endSection()
-                        }
-                        messages.forEach(::handleMessage)
-                    } catch (error: Throwable) {
-                        if (gatewaySocketLogger.logLevel == GatewaySocketLogger.LogLevel.VERBOSE) {
-                            runCatching { gatewaySocketLogger.logMessageInflateFailed(error) }
-                        }
-                        logError(
-                            "inflate/parse failure: ${error.javaClass.simpleName}: ${error.message}",
-                            error,
-                        )
-                        reconnect("Gateway inflate/parse failure: ${error.javaClass.simpleName}", immediate = false)
-                    }
+                override fun onBinaryMessage(bytes: ByteArray) {
+                    val receivedNanos = SystemClock.elapsedRealtimeNanos()
+                    serialized(currentGeneration) { handleBinaryMessage(bytes, receivedNanos) }
                 }
 
                 override fun onClosed(code: Int, reason: String) = serialized(currentGeneration) {
@@ -328,6 +316,35 @@ class GatewaySocket(
         } catch (_: Throwable) {
             scheduleReconnect("Gateway socket creation failed")
             null
+        }
+    }
+
+    private fun handleBinaryMessage(bytes: ByteArray, receivedNanos: Long) {
+        try {
+            val previousReceivedNanos = lastFrameReceivedNanos
+            lastFrameReceivedNanos = receivedNanos
+            val decodeStartedNanos = SystemClock.elapsedRealtimeNanos()
+            Trace.beginSection("Gateway ${compression.queryValue} decode")
+            val messages = try {
+                decoder.decode(bytes)
+            } finally {
+                Trace.endSection()
+            }
+            val decodeNanos = SystemClock.elapsedRealtimeNanos() - decodeStartedNanos
+            messages.forEachIndexed { index, message ->
+                handleMessage(
+                    message,
+                    receivedNanos,
+                    (receivedNanos - previousReceivedNanos).takeIf { previousReceivedNanos != 0L },
+                    decodeNanos.takeIf { index == 0 } ?: 0L,
+                )
+            }
+        } catch (error: Throwable) {
+            if (gatewaySocketLogger.logLevel == GatewaySocketLogger.LogLevel.VERBOSE) {
+                runCatching { gatewaySocketLogger.logMessageInflateFailed(error) }
+            }
+            logError("inflate/parse failure: ${error.javaClass.simpleName}: ${error.message}", error)
+            reconnect("Gateway inflate/parse failure: ${error.javaClass.simpleName}", immediate = false)
         }
     }
 
@@ -364,7 +381,7 @@ class GatewaySocket(
         )
     }
 
-    private fun handleMessage(json: ByteArray) {
+    private fun handleMessage(json: ByteArray, receivedNanos: Long, waitNanos: Long?, decodeNanos: Long) {
         if (gatewaySocketLogger.logLevel == GatewaySocketLogger.LogLevel.VERBOSE) {
             runCatching {
                 gatewaySocketLogger.logInboundMessage(
@@ -373,11 +390,19 @@ class GatewaySocket(
             }
         }
         Trace.beginSection("Gateway JSON parse")
+        val parseStartedNanos = SystemClock.elapsedRealtimeNanos()
         val incoming = try {
             incomingParser.parse(json)
         } finally {
             Trace.endSection()
         }
+        StartupMetrics.recordGatewayFrame(
+            incoming.type ?: incoming.opcode.name,
+            receivedNanos,
+            waitNanos,
+            decodeNanos,
+            SystemClock.elapsedRealtimeNanos() - parseStartedNanos,
+        )
         incoming.seq?.let { sequence = it }
         when (incoming.opcode) {
             Opcode.DISPATCH -> handleDispatch(incoming)

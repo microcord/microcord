@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent" app:layout_behavior="@string/appbar_scrolling_view_behavior">
+        <com.google.android.material.tabs.TabLayout android:id="@+id/startup_metrics_tabs" android:layout_width="match_parent" android:layout_height="wrap_content" app:tabMode="fixed" app:tabTextColor="?attr/colorTextMuted" app:tabSelectedTextColor="?attr/colorHeaderPrimary" app:tabIndicatorColor="?attr/colorHeaderPrimary"/>
+        <androidx.core.widget.NestedScrollView android:id="@+id/startup_metrics_scroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true">
+            <TextView android:id="@+id/startup_metrics_report" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="16dp" android:textIsSelectable="true" android:textSize="12sp" android:fontFamily="monospace" android:textColor="?attr/colorHeaderPrimary"/>
+        </androidx.core.widget.NestedScrollView>
+        <com.google.android.material.button.MaterialButton android:id="@+id/startup_metrics_copy" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginBottom="16dp" android:text="@string/startup_metrics_copy" style="@style/UiKit.Material.Button"/>
+    </LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -69,6 +69,9 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
             isChecked = AppRestRequestLogger.isEnabled()
             setOnCheckedListener(AppRestRequestLogger::setEnabled)
         }
+        binding.settingsDeveloperStartupMetrics.setOnClickListener {
+            WidgetSettingsStartupMetrics.launch(it.context)
+        }
         binding.settingsDeveloperNitroOverride.apply {
             text = premiumTierLabel(DeveloperSettings.premiumTierOverride())
             setOnClickListener { showPremiumTierSelector() }

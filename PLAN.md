@@ -3075,6 +3075,10 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   and continued live dispatches with no reconnect. The first A/B trace moved Gateway thread start from +891.9 to +446.2 ms,
   HELLO from +1,428.4 to +1,045.0 ms, READY arrival from +2,988.6 to +2,346.9 ms, and parsed READY completion from +4,173.2
   to +3,929.5 ms; READY parse variance rose from 1,139.9 to 1,547.0 ms in that single concurrent-startup run.
+- `StartupMetrics` now records monotonic cold-boot milestones plus every Gateway frame's inter-arrival wait, zstd decode, and JSON
+  parse durations to sanitized `StartupMetrics` debug logs. Developer Options exposes a dedicated Startup Metrics screen with
+  live Summary and Timeline tabs and a copy-report action for repeatable on-device benchmarking.
+- Startup Metrics tabs explicitly consume Discord selected/muted text and indicator colors instead of Material defaults.
 - Detailed boot progress is controlled by a persisted `Verbose Boot` developer setting. It defaults off with the current
   recovered white Clyde mark while caches restore; enabled mode shows every safe boot event. Authenticated navigation no longer waits for Gateway
   READY, so cached UI opens while the existing global connectivity banner reports background connection state. Focused boot
