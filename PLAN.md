@@ -3103,6 +3103,16 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   and Gradle chooses a runner-appropriate worker count instead of always creating up to 12 workers. Because GHES runners are
   ephemeral and this is one large app module, the workflow persists only Gradle execution history and Kotlin/Java incremental
   compiler state between commits; it deliberately does not cache the 3.6 GB build tree or 9 GB global local-build cache.
+- Wrapped profile badges now use one rounded background on their shared container rather than separate row backgrounds, keeping
+  the same outer geometry while filling the space between the first and second rows.
+- Profile-header usernames are constrained to one line with native end ellipsis, preventing long names from wrapping the header.
+- Profile-header display names receive the full content width, with the username/pronouns immediately beneath and badges on
+  their own following row instead of a right-side column that cramped long names. Badge wrapping uses the full available width,
+  while the shared background remains content-sized rather than painting empty row space.
+- Add-friend and pending-request profile actions now keep the resolved profile text/icon palette on custom themes; unthemed
+  profiles restore their original semantic green/yellow text from the captured default state.
+- The profile badge surface is translated left by its unchanged 7dp internal padding so badge icons align with the username;
+  measurement, wrapping, padding, and touch-target size remain unchanged.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each

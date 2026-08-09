@@ -364,9 +364,6 @@ class WidgetUserSheet : AppBottomSheet() {
                 colors?.textDefault?.let(ColorStateList::valueOf),
             )
         }
-        binding.userSheetAddFriendActionButton.setTextColor(ColorCompat.getColor(requireContext(), R.color.status_green_600))
-        binding.userSheetPendingFriendRequestActionButton.setTextColor(ColorCompat.getColor(requireContext(), R.color.status_yellow_500))
-
         profileButtons().forEach { button ->
             button.backgroundTintList = colors?.button?.let(ColorStateList::valueOf)
                 ?: defaultButtonBackgroundTints[button]

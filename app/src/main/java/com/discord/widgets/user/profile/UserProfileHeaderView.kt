@@ -164,13 +164,18 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
             context = context,
         )
 
-    /**
-     * Badges wrap into pill rows rather than a plain strip: each row carries its own rounded
-     * surface, so a short final row does not leave an empty tail behind it.
-     */
     private fun setBadges(items: List<Badge>) {
         binding.userProfileHeaderBadges.removeAllViews()
-        if (items.isEmpty()) return
+        if (items.isEmpty()) {
+            binding.userProfileHeaderBadges.background = null
+            binding.userProfileHeaderBadges.setPadding(0, 0, 0, 0)
+            return
+        }
+        binding.userProfileHeaderBadges.setPadding(dp(BADGE_ROW_PADDING_H_DP), dp(BADGE_ROW_PADDING_V_DP), dp(BADGE_ROW_PADDING_H_DP), dp(BADGE_ROW_PADDING_V_DP))
+        binding.userProfileHeaderBadges.background = GradientDrawable().apply {
+            cornerRadius = dp(BADGE_ROW_RADIUS_DP).toFloat()
+            setColor(badgeRowColor)
+        }
         val perRow = badgesPerRow()
         items.chunked(perRow).forEach { row ->
             binding.userProfileHeaderBadges.addView(badgeRow(row))
@@ -180,7 +185,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
     private fun badgesPerRow(): Int {
         val available = (binding.userProfileHeaderBadges.parent as? View)?.width?.takeIf { it > 0 }
             ?: resources.displayMetrics.widthPixels
-        val usable = available / 2 - dp(BADGE_ROW_PADDING_H_DP) * 2
+        val usable = available - dp(BADGE_ROW_PADDING_H_DP) * 2
         val step = dp(BADGE_SIZE_DP) + dp(BADGE_GAP_DP)
         return ((usable + dp(BADGE_GAP_DP)) / step).coerceAtLeast(1)
     }
@@ -188,15 +193,12 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
     private fun badgeRow(items: List<Badge>): View = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(BADGE_ROW_PADDING_H_DP), dp(BADGE_ROW_PADDING_V_DP), dp(BADGE_ROW_PADDING_H_DP), dp(BADGE_ROW_PADDING_V_DP))
-        background = GradientDrawable().apply {
-            cornerRadius = dp(BADGE_ROW_RADIUS_DP).toFloat()
-            setColor(badgeRowColor)
-        }
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
             LinearLayout.LayoutParams.WRAP_CONTENT,
-        ).apply { topMargin = if (binding.userProfileHeaderBadges.childCount == 0) 0 else dp(BADGE_ROW_GAP_DP) }
+        ).apply {
+            topMargin = if (binding.userProfileHeaderBadges.childCount == 0) 0 else dp(BADGE_ROW_GAP_DP + BADGE_ROW_PADDING_V_DP * 2)
+        }
         items.forEachIndexed { index, badge ->
             addView(badgeView(badge), LinearLayout.LayoutParams(dp(BADGE_SIZE_DP), dp(BADGE_SIZE_DP)).apply {
                 if (index > 0) marginStart = dp(BADGE_GAP_DP)
@@ -219,9 +221,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         set(value) {
             if (field == value) return
             field = value
-            for (i in 0 until binding.userProfileHeaderBadges.childCount) {
-                (binding.userProfileHeaderBadges.getChildAt(i).background as? GradientDrawable)?.setColor(value)
-            }
+            (binding.userProfileHeaderBadges.background as? GradientDrawable)?.setColor(value)
         }
 
     companion object {
