@@ -3145,6 +3145,9 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
 - If READY arrives while the start panel is closed, the selected-DM anchor now remains pending until `PanelState.Open`; it is no
   longer consumed against an off-screen RecyclerView layout. Opening the sidebar applies the latest selected channel/index once.
   Updated release assembly and installation pass.
+- `WidgetChatInput` now consumes the already-wired `StoreChat` one-shot event stream. Username clicks append the reference
+  `@username#discriminator ` text at the cursor, replace-text events update the whole composer, and both focus/show the keyboard.
+  Updated release assembly and installation pass.
 - Detailed boot progress is controlled by a persisted `Verbose Boot` developer setting. It defaults off with the current
   recovered white Clyde mark while caches restore; enabled mode shows every safe boot event. Authenticated navigation no longer waits for Gateway
   READY, so cached UI opens while the existing global connectivity banner reports background connection state. Focused boot

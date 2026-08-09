@@ -37,6 +37,7 @@ import com.discord.i18n.FormatUtils
 import com.discord.models.domain.emoji.Emoji
 import com.discord.models.member.GuildMember
 import com.discord.stores.StoreChatInputEditing
+import com.discord.stores.StoreChat
 import com.discord.stores.StorePendingReplies
 import com.discord.stores.StoreSlowMode
 import com.discord.stores.StoreStream
@@ -109,6 +110,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
 
     private var sendResultSubscription: Subscription? = null
     private var mentionSubscription: Subscription? = null
+    private var chatEventSubscription: Subscription? = null
     private var input: FlexEditText? = null
     private var expressionTray: WidgetExpressionTray? = null
     private var autocomplete: InputAutocomplete? = null
@@ -264,6 +266,9 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             }
         }
         mentionSubscription = mentionRequests.subscribe { userId -> view?.post { insertMention(userId) } }
+        chatEventSubscription = ChatInputStoreBindings.chatEvents().subscribe { event ->
+            view?.post { handleChatEvent(event) }
+        }
     }
 
     override fun onStop() {
@@ -271,6 +276,8 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         sendResultSubscription = null
         mentionSubscription?.unsubscribe()
         mentionSubscription = null
+        chatEventSubscription?.unsubscribe()
+        chatEventSubscription = null
         super.onStop()
     }
 
@@ -613,6 +620,22 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val editor = input ?: return
         val start = editor.selectionStart.coerceAtLeast(0)
         editor.text?.insert(start, "<@$userId> ")
+        editor.requestFocus()
+        inputMethodManager().showSoftInput(editor, InputMethodManager.SHOW_IMPLICIT)
+    }
+
+    private fun handleChatEvent(event: StoreChat.Event) {
+        val editor = input ?: return
+        when (event) {
+            is StoreChat.Event.AppendChatText -> {
+                val start = editor.selectionStart.coerceAtLeast(0)
+                editor.text?.insert(start, event.text)
+            }
+            is StoreChat.Event.ReplaceChatText -> {
+                editor.setText(event.text)
+                editor.setSelection(editor.text?.length ?: 0)
+            }
+        }
         editor.requestFocus()
         inputMethodManager().showSoftInput(editor, InputMethodManager.SHOW_IMPLICIT)
     }
