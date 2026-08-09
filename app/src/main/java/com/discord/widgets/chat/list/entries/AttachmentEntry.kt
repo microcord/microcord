@@ -17,6 +17,8 @@ data class AttachmentEntry(
     val isThreadStarterMessage: Boolean,
     override val isPendingReply: Boolean = false,
 ) : ChatListEntry() {
+
+    override val highlightMessage: Message get() = message
     override val type: Int = ChatListEntry.MESSAGE_ATTACHMENT
     override val key: String = "${ChatListEntry.MESSAGE_ATTACHMENT}${message.id}"
 

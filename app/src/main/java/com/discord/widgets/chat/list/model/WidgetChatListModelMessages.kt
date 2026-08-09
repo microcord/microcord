@@ -430,7 +430,7 @@ data class WidgetChatListModelMessages(
                     animateEmojis,
                 )
             }
-            if (message.hasLocalUploads && !message.isFailed()) rows += UploadProgressEntry(message.nonce.orEmpty(), message.channelId)
+            if (message.hasLocalUploads && !message.isFailed()) rows += UploadProgressEntry(message.nonce.orEmpty(), message.channelId, message)
             if (message.hasThread() && thread != null) {
                 for (index in threadSpineStart until rows.size) rows[index].shouldShowThreadSpine = true
                 rows += ChatListEntry.createThreadEmbedEntries(

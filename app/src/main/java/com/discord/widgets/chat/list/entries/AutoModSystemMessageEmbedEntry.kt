@@ -18,6 +18,8 @@ data class AutoModSystemMessageEmbedEntry(
     val roles: Map<Long, GuildRole>?,
     val nickOrUsernames: Map<Long, String>,
 ) : ChatListEntry() {
+
+    override val highlightMessage: Message get() = message
     override val type: Int = ChatListEntry.AUTOMOD_SYSTEM_MESSAGE
     override val key: String = "${ChatListEntry.AUTOMOD_SYSTEM_MESSAGE}${message.id}"
 }

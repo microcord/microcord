@@ -542,12 +542,16 @@ class WidgetChatListAdapterItemMessage(
     }
 
     /**
-     * A hosted row arrives wired for standalone use: its own press background and its own
-     * click/long-click handlers. Both are stripped so the message row owns the highlight and the
-     * action sheet, and long-press is forwarded from any child that would otherwise swallow it.
+     * A hosted row arrives wired for standalone use: its own press background, its own mention
+     * wash, and its own click/long-click handlers. All are stripped so the message row owns the
+     * highlight and the action sheet, and long-press is forwarded from any child that would
+     * otherwise swallow it. The wash matters most: it is translucent, so a hosted row drawing its
+     * own over the message's would tint the accessory a darker shade than the rest of the message.
      */
     private fun adoptAccessoryTouches(view: View, entry: MessageEntry) {
         view.background = null
+        view.findViewById<View>(R.id.chat_list_adapter_item_highlighted_bg)?.visibility = View.GONE
+        view.findViewById<View>(R.id.chat_list_adapter_item_gutter_bg)?.visibility = View.GONE
         view.setOnClickListener(null)
         view.isClickable = false
         val forward = View.OnLongClickListener {

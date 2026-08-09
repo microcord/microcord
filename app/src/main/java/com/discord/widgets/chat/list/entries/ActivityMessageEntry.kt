@@ -1,5 +1,6 @@
 package com.discord.widgets.chat.list.entries
 
+import com.discord.models.message.Message
 import com.discord.api.application.Application
 import com.discord.api.embeddedactivities.EmbeddedActivityPlatform
 import com.discord.api.permission.Permission
@@ -19,7 +20,10 @@ data class ActivityMessageEntry(
     val inviter: User? = null,
     val invite: ModelInvite? = null,
     override val isPendingReply: Boolean = false,
+    val message: Message,
 ) : ChatListEntry() {
+
+    override val highlightMessage: Message get() = message
     override val type = ACTIVITY_MESSAGE
     override val key = "$ACTIVITY_MESSAGE -- $messageId -- ${application?.id ?: 0L} -- ${inviteCode.orEmpty()}"
 }

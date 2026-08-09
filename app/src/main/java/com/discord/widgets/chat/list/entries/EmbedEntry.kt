@@ -17,6 +17,8 @@ data class EmbedEntry(
     val isThreadStarterMessage: Boolean,
     override val isPendingReply: Boolean = false,
 ) : ChatListEntry() {
+
+    override val highlightMessage: Message get() = message
     override val type: Int = ChatListEntry.MESSAGE_EMBED
     override val key: String = "${ChatListEntry.MESSAGE_EMBED}${message.id}"
 

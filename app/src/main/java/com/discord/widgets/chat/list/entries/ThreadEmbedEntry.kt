@@ -18,6 +18,8 @@ data class ThreadEmbedEntry(
     val parentMessage: Message,
     override val isPendingReply: Boolean = false,
 ) : ChatListEntry() {
+
+    override val highlightMessage: Message get() = parentMessage
     override val type: Int = ChatListEntry.THREAD_EMBED
     override val key: String = "${ChatListEntry.THREAD_EMBED} -- $messageId"
 }

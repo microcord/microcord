@@ -10,6 +10,8 @@ data class MessageHeaderEntry(
     val text: String?,
     val channelName: String?,
 ) : ChatListEntry() {
+
+    override val highlightMessage: Message get() = message
     constructor(message: Message, channel: Channel?, guild: Guild?) : this(
         message,
         guild?.name,

@@ -40,6 +40,14 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
     /** True while the composer is replying to the message that owns this row. */
     open val isPendingReply: Boolean = false
 
+    /**
+     * The message whose state decides this row's highlight, for rows that belong to one.
+     *
+     * A message expands into several rows and the wash has to run across all of them, so every row
+     * that is part of a message has to be able to name it.
+     */
+    open val highlightMessage: Message? = null
+
     /** True when this row belongs to a blocked-message chunk the viewer has expanded. */
     open fun isInExpandedBlockedMessageChunk(): Boolean = false
 
@@ -204,7 +212,7 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             val application = message.application ?: return emptyList()
             val activity = message.activity ?: return emptyList()
             val author = message.author!!
-            return listOf(GameInviteEntry(author.id, message.id, activity, application))
+            return listOf(GameInviteEntry(author.id, message.id, activity, application, message))
         }
 
         fun createActivityMessageEntries(message: Message): List<ChatListEntry> {
@@ -216,6 +224,7 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
                     guildId = message.guildId ?: 0L,
                     application = message.application,
                     instanceId = instance.id,
+                    message = message,
                 ),
             )
         }
@@ -224,7 +233,7 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             val activity = message.activity ?: return emptyList()
             if (!message.isSpotifyListeningActivity()) return emptyList()
             val author = message.author!!
-            return listOf(SpotifyListenTogetherEntry(author.id, message.id, activity))
+            return listOf(SpotifyListenTogetherEntry(author.id, message.id, activity, message))
         }
 
         /** One card per distinct gift code in the body; a repeated code collapses onto one row. */
@@ -235,7 +244,7 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             GIFT_LINK.findAll(content).forEach { match ->
                 val code = match.groupValues.lastOrNull().orEmpty()
                 val author = message.author!!
-                entries[code] = GiftEntry(author.id, message.id, message.channelId, code)
+                entries[code] = GiftEntry(author.id, message.id, message.channelId, code, message)
             }
             return entries.values
         }
@@ -248,7 +257,7 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             GUILD_TEMPLATE_LINK.findAll(content).forEach { match ->
                 val code = match.groupValues.lastOrNull().orEmpty()
                 val author = message.author!!
-                entries[code] = GuildTemplateEntry(author.id, message.id, code)
+                entries[code] = GuildTemplateEntry(author.id, message.id, code, message)
             }
             return entries.values
         }
@@ -293,6 +302,7 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
                     inviteCode = inviteCode,
                     inviter = resolved.getInviter() ?: message.author,
                     invite = resolved,
+                    message = message,
                 )
             }
             val author = message.author!!
@@ -300,14 +310,14 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
                 val eventInvite = inviteResolver.resolveInviteForGuildScheduledEvent(inviteCode, eventId)
                 val event = eventInvite?.getGuildScheduledEvent()
                 if (eventInvite != null && event != null) {
-                    return GuildScheduledEventInviteEntry(eventInvite, inviteCode, event)
+                    return GuildScheduledEventInviteEntry(eventInvite, inviteCode, event, message)
                 }
             }
             val stageInvite = inviteResolver.resolveInviteCodeForPublicStage(inviteCode)
             return if (stageInvite != null) {
-                StageInviteEntry(author.id, message.id, inviteCode, stageInvite, message.guildId ?: 0L)
+                StageInviteEntry(author.id, message.id, inviteCode, stageInvite, message.guildId ?: 0L, message)
             } else {
-                InviteEntry(author.id, message.id, inviteCode, message.guildId ?: 0L, eventId)
+                InviteEntry(author.id, message.id, inviteCode, message.guildId ?: 0L, eventId, message)
             }
         }
 

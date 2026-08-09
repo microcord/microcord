@@ -201,7 +201,7 @@ object ChatListRows {
             )
         }
         if (message.hasLocalUploads && !message.isFailed()) {
-            rows += UploadProgressEntry(message.nonce.orEmpty(), message.channelId)
+            rows += UploadProgressEntry(message.nonce.orEmpty(), message.channelId, message)
         }
         if (message.isEphemeralMessage() || (message.isInteraction() && message.isFailed())) {
             rows += EphemeralMessageEntry(message)

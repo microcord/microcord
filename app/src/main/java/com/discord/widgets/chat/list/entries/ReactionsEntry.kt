@@ -9,6 +9,8 @@ data class ReactionsEntry(
     val animateEmojis: Boolean,
     override val isPendingReply: Boolean = false,
 ) : ChatListEntry() {
+
+    override val highlightMessage: Message get() = message
     override val type: Int = ChatListEntry.REACTIONS
     override val key: String = "${ChatListEntry.REACTIONS}${message.nonce ?: message.id}"
 }

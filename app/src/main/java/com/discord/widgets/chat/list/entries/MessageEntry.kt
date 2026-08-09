@@ -39,6 +39,8 @@ data class MessageEntry(
     override val isPendingReply: Boolean = false,
 ) : ChatListEntry() {
 
+    override val highlightMessage: Message get() = message
+
     override val type: Int = resolveType(message, isMinimal)
 
     /**

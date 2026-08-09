@@ -100,7 +100,7 @@ class WidgetChatListModelTest {
                 listOf(
                     entry,
                     ReactionsEntry(message, false, false, false),
-                    ActivityMessageEntry(message.id, message.channelId, 1, null, null),
+                    ActivityMessageEntry(message.id, message.channelId, 1, null, null, message = message),
                     ForwardedMessageEntry(message, 0, ForwardedMessageEntry.State.LOADING),
                     PollEntry(message, poll),
                 ),
