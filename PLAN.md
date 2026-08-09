@@ -3098,6 +3098,11 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   the user's current vertical position instead of immediately jumping down to the tab strip.
 - Continuous master builds use `actions/upload-artifact@v3` because this repository runs on GHES, which does not support the
   artifact service v2 required by `upload-artifact@v4`.
+- CI build provenance is generated as an Android string resource rather than changing `BuildConfig` every run, so build IDs no
+  longer invalidate the app's Kotlin compilation cache. The GHES workflow also caches its API 36.1 platform/build-tools download,
+  and Gradle chooses a runner-appropriate worker count instead of always creating up to 12 workers. Because GHES runners are
+  ephemeral and this is one large app module, the workflow persists only Gradle execution history and Kotlin/Java incremental
+  compiler state between commits; it deliberately does not cache the 3.6 GB build tree or 9 GB global local-build cache.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each

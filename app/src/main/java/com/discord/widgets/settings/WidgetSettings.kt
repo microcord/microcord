@@ -9,7 +9,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.commit
-import com.discord.BuildConfig
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.appViewModels
@@ -78,10 +77,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         binding.appInfoHeader.text = buildString {
             append(getString(R.string.app_information))
             append(" - ")
-            append("Dev ")
-            append(BuildConfig.BUILD_ID)
-            append(" ")
-            append(BuildConfig.COMMIT_HASH.take(8))
+            append(getString(R.string.manticord_build_label))
         }
 
         bindRoute(binding.account, ::WidgetSettingsAccount)

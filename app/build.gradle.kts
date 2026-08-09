@@ -28,8 +28,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
-        buildConfigField("String", "BUILD_ID", "\"${buildId.get()}\"")
-        buildConfigField("String", "COMMIT_HASH", "\"${commitHash.get()}\"")
+        resValue("string", "manticord_build_label", "Dev ${buildId.get()} ${commitHash.get().take(8)}")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -64,6 +63,7 @@ android {
     }
     buildFeatures {
         buildConfig = true
+        resValues = true
         viewBinding = true
     }
     bundle {
