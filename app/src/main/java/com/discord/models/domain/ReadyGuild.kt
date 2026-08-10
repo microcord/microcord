@@ -11,6 +11,7 @@ import com.discord.api.role.GuildRole
 import com.discord.api.stageinstance.StageInstance
 import com.discord.api.sticker.Sticker
 import com.discord.api.voice.state.VoiceState
+import com.discord.api.utcdatetime.UtcDateTime
 import com.google.gson.annotations.SerializedName
 
 /** CLIENT_STATE_V2 guild envelope used by current React Native Gateway clients. */
@@ -24,7 +25,7 @@ data class ReadyGuild(
     val stickers: List<Sticker>? = null,
     val channels: List<Channel>? = null,
     @SerializedName("partial_updates") val partialUpdates: PartialUpdates? = null,
-    @SerializedName("channel_updates") val channelUpdates: List<Channel>? = null,
+    @SerializedName("channel_updates") val channelUpdates: List<ChannelUnreadUpdate>? = null,
     val presences: List<Presence>? = null,
     val members: List<GuildMember>? = null,
     @SerializedName("voice_states") val voiceStates: List<VoiceState>? = null,
@@ -35,6 +36,7 @@ data class ReadyGuild(
     @SerializedName("joined_at") val joinedAt: String? = null,
     @SerializedName("member_count") val memberCount: Int? = null,
     @SerializedName("premium_subscription_count") val premiumSubscriptionCount: Int? = null,
+    @SerializedName("unable_to_sync_deletes") val unableToSyncDeletes: Boolean = false,
 ) {
     data class PartialUpdates(
         val roles: List<GuildRole>? = null,
@@ -53,3 +55,11 @@ data class ReadyGuild(
         const val DATA_MODE_UNAVAILABLE = "unavailable"
     }
 }
+
+data class ChannelUnreadUpdate(
+    val id: Long,
+    @SerializedName("last_message_id") val lastMessageId: Long = 0,
+    @SerializedName("last_pin_timestamp") val lastPinTimestamp: UtcDateTime? = null,
+)
+
+data class BackgroundSync(val guilds: List<ReadyGuild> = emptyList())

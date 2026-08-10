@@ -146,6 +146,14 @@ sealed class OutgoingPayload private constructor() {
 
     data class SoundboardSoundsRequest(val guildIds: List<Long>) : OutgoingPayload()
 
+    data class DeletedEntityIdsRequest(
+        val guildId: Long,
+        val channelIdsHash: String,
+        val roleIdsHash: String,
+        val emojiIdsHash: String,
+        val stickerIdsHash: String,
+    ) : OutgoingPayload()
+
     data class VoiceStateUpdateNoPreferredRegion(
         val guildId: Long?,
         val channelId: Long?,
@@ -171,6 +179,7 @@ typealias IdentifyClientState = OutgoingPayload.IdentifyClientState
 typealias PresenceUpdate = OutgoingPayload.PresenceUpdate
 typealias Resume = OutgoingPayload.Resume
 typealias SoundboardSoundsRequest = OutgoingPayload.SoundboardSoundsRequest
+typealias DeletedEntityIdsRequest = OutgoingPayload.DeletedEntityIdsRequest
 typealias StreamPing = OutgoingPayload.StreamPing
 typealias VoiceStateUpdate = OutgoingPayload.VoiceStateUpdate
 typealias VoiceStateUpdateNoPreferredRegion = OutgoingPayload.VoiceStateUpdateNoPreferredRegion

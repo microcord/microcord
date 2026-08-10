@@ -33,6 +33,7 @@ import com.discord.models.authentication.AuthState
 import com.discord.models.domain.ModelChannelUnreadUpdate
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.domain.ModelPayload
+import com.discord.models.domain.ReadyGuild
 import com.discord.models.domain.ModelReadState
 import com.discord.models.domain.ModelSession
 import com.discord.models.domain.ModelGuildFolder
@@ -44,6 +45,12 @@ import com.discord.gateway.GatewayCancellable
 import com.discord.gateway.GatewayDiscovery
 import com.discord.gateway.FastConnectBootstrap
 import com.discord.gateway.GatewaySocket
+import com.discord.gateway.io.DeletedEntityIds
+import com.discord.gateway.io.DeletedEntityIdsRequest
+import com.discord.gateway.io.guildEntityIdsHash
+import com.discord.api.emoji.GuildEmojisUpdate
+import com.discord.api.sticker.GuildStickersUpdate
+import com.discord.api.guildhash.GuildHashes
 import com.discord.gateway.RealGatewayScheduler
 import com.discord.models.domain.ModelUserRelationship
 import com.discord.models.domain.ModelUserSettings
@@ -1742,9 +1749,13 @@ class StoreStream private constructor(
         )
 
         // Guilds
-        dispatchSubscribe(events.guildCreate, "streamGuildCreate", ::handleGuildCreateOrUpdateInternal)
+        dispatchSubscribe(events.guildCreate, "streamGuildCreate", ::handleGuildCreatePayloadInternal)
         dispatchSubscribe(events.guildUpdate, "streamGuildUpdate", ::handleGuildCreateOrUpdateInternal)
         dispatchSubscribe(events.guildDeleted, "streamGuildRemove", ::handleGuildRemoveInternal)
+        dispatchSubscribe(events.backgroundSync, "streamBackgroundSync") { sync ->
+            sync.guilds.forEach(::handleV2GuildCreateInternal)
+        }
+        dispatchSubscribe(events.deletedEntityIds, "streamDeletedEntityIds", ::handleDeletedEntityIdsInternal)
         dispatchSubscribe(events.guildEmojisUpdate, "streamEmojisUpdate") { update ->
             clientDataState.handleEmojiUpdate(update)
             emojiCustom.handleEmojiUpdate(update)
@@ -3037,6 +3048,76 @@ class StoreStream private constructor(
         updateSortedGuilds()
         BootLog.record(BootLogEvent.CACHE_HYDRATION_FINISHED)
         navigation.updateAuthState(authentication.getAuthState())
+    }
+
+    @StoreThread
+    private fun handleGuildCreatePayloadInternal(payload: Any) {
+        when (payload) {
+            is Guild -> handleGuildCreateOrUpdateInternal(payload)
+            is ReadyGuild -> handleV2GuildCreateInternal(payload)
+            else -> error("Unexpected GUILD_CREATE payload: ${payload.javaClass.name}")
+        }
+    }
+
+    @StoreThread
+    private fun handleV2GuildCreateInternal(sync: ReadyGuild) {
+        val guild = readyPayloadHydrator.hydratePostReadyGuild(sync)
+        if (guild == null) {
+            clientDataState.clear()
+            gatewayConnection.resetOnError()
+            return
+        }
+        handleGuildCreateOrUpdateInternal(guild)
+        if (sync.unableToSyncDeletes) requestDeletedGuildEntities(guild)
+    }
+
+    private fun requestDeletedGuildEntities(guild: Guild) {
+        val request = DeletedEntityIdsRequest(
+            guildId = guild.id,
+            channelIdsHash = guildEntityIdsHash(channels.getChannelsForGuildInternal(guild.id).orEmpty().keys),
+            roleIdsHash = guildEntityIdsHash(guilds.getGuildRolesInternal()[guild.id].orEmpty().keys),
+            emojiIdsHash = guildEntityIdsHash(guild.emojis.orEmpty().map { it.id }),
+            stickerIdsHash = guildEntityIdsHash(guild.stickers.orEmpty().map { it.id }),
+        )
+        Observable.timer(kotlin.math.ceil(Math.random() * 2_000).toLong(), TimeUnit.MILLISECONDS)
+            .subscribe { gatewayConnection.requestDeletedEntityIds(request) }
+    }
+
+    @StoreThread
+    private fun handleDeletedEntityIdsInternal(event: DeletedEntityIds) {
+        event.channelIds?.toSet()?.let { existing ->
+            channels.getChannelsForGuildInternal(event.guildId).orEmpty().values
+                .filterNot { it.id in existing }
+                .toList()
+                .forEach(::handleChannelDeleteInternal)
+        }
+        event.roleIds?.toSet()?.let { existing ->
+            guilds.getGuildRolesInternal()[event.guildId].orEmpty().keys
+                .filterNot(existing::contains)
+                .toList()
+                .forEach { roleId ->
+                    guilds.handleGuildRoleRemove(event.guildId, roleId)
+                    permissions.handleGuildRolesChanged(event.guildId)
+                    channelsSelected.handlePermissionsChanged(event.guildId)
+                    voiceChannelSelected.handleGuildRoleRemove()
+                    stageChannels.handleGuildRoleCreateOrUpdate(event.guildId)
+                }
+        }
+        val currentGuild = guilds.getGuildsInternal()[event.guildId]
+        val emojiIds = event.emojiIds?.toSet()
+        val stickerIds = event.stickerIds?.toSet()
+        guilds.handleGuildEntityIdsReconciled(event.guildId, emojiIds, stickerIds)
+        val emptyHashes = GuildHashes(null, null, null, 0)
+        if (emojiIds != null && currentGuild != null) {
+            val update = GuildEmojisUpdate(event.guildId, currentGuild.emojis.filter { it.id in emojiIds }, emptyHashes)
+            emojiCustom.handleEmojiUpdate(update)
+            emojiGuild.handleEmojiUpdate(update)
+        }
+        if (stickerIds != null && currentGuild != null) {
+            guildStickers.handleStickerUpdate(
+                GuildStickersUpdate(event.guildId, currentGuild.stickers.filter { it.id in stickerIds }, emptyHashes),
+            )
+        }
     }
 
     @StoreThread

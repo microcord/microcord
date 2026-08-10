@@ -301,6 +301,23 @@ class StoreGuilds(
         recomputeMembers(guildId)
     }
 
+    @StoreThread
+    fun handleGuildEntityIdsReconciled(
+        guildId: Long,
+        emojiIds: Set<Long>?,
+        stickerIds: Set<Long>?,
+    ) {
+        val guild = guilds[guildId] ?: return
+        val updated = guild.copy(
+            emojis = emojiIds?.let { ids -> guild.emojis.filter { it.id in ids } } ?: guild.emojis,
+            stickers = stickerIds?.let { ids -> guild.stickers.filter { it.id in ids } } ?: guild.stickers,
+        )
+        if (updated != guild) {
+            guilds[guildId] = updated
+            markChanged(GuildsUpdate)
+        }
+    }
+
     /** Schedules the timeout clear on the store thread; safe to call from anywhere. */
     fun handleGuildMemberCommunicationEnabled(guildId: Long, userId: Long) = dispatcher.schedule {
         handleGuildMemberCommunicationEnabledInternal(guildId, userId)

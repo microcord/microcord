@@ -117,6 +117,20 @@ class ReadyPayloadHydratorTest {
         assertSame(ReadyPayloadHydrator.HydrateResult.Error, result)
     }
 
+    @Test
+    fun fullPrivateChannelSyncPrunesCachedChannels() {
+        val (guilds, channels) = stores()
+        val cachedPayload = gson.fromJson(CACHED_READY, ModelPayload::class.java)
+        guilds.handleConnectionOpen(cachedPayload)
+        channels.handleConnectionOpen(cachedPayload)
+
+        val result = ReadyPayloadHydrator(guilds, channels).hydrateReadyPayload(
+            gson.fromJson(V2_PRIVATE_CHANNEL_DELTA_ONLY, ModelPayload::class.java),
+        ) as ReadyPayloadHydrator.HydrateResult.Success
+
+        assertEquals(emptyList<Any>(), result.payload.privateChannels)
+    }
+
     private fun stores(): Pair<StoreGuilds, StoreChannels> {
         Persister.init(Files.createTempDirectory("ready-hydrator").toFile())
         val dispatcher = Dispatcher(TestScheduler())

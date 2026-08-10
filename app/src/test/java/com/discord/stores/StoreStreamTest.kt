@@ -102,6 +102,38 @@ class StoreStreamTest {
     }
 
     @Test
+    fun v2GuildCreateBackgroundSyncAndDeletedIdsReconcileStores() {
+        val gson = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .registerDiscordApiTypeAdapters().create()
+        val parser = IncomingParser(gson)
+        fun dispatch(json: String) = parser.parse(json).also { event ->
+            stream.handleGatewayDispatch(event.type, requireNotNull(event.data))
+        }
+
+        dispatch(
+            """{"op":0,"t":"GUILD_CREATE","d":{"id":5,"data_mode":"full","version":1,"properties":{"id":5,"name":"Joined Guild","icon":"icon-hash","owner_id":7,"unavailable":false,"features":[]},"roles":[{"id":5,"name":"@everyone","permissions":1024},{"id":6,"name":"stale","permissions":0}],"emojis":[{"id":7,"name":"stale"}],"stickers":[{"id":8,"guild_id":5,"name":"stale","description":"","tags":"","format_type":1,"type":2}],"channels":[{"id":50,"guild_id":5,"type":0,"name":"stale"},{"id":51,"guild_id":5,"type":0,"name":"general"}],"members":[]}}""",
+        )
+        dispatch(
+            """{"op":0,"t":"BACKGROUND_SYNC","d":{"guilds":[{"id":5,"data_mode":"partial","version":2,"partial_updates":{"channels":[{"id":51,"guild_id":5,"type":0,"name":"renamed"}]},"channel_updates":[{"id":51,"last_message_id":99,"last_pin_timestamp":"2022-01-01T00:00:00Z"}]}]}}""",
+        )
+
+        assertEquals("Joined Guild", StoreStream.getGuilds().getGuild(5)?.name)
+        assertEquals("icon-hash", StoreStream.getGuilds().getGuild(5)?.icon)
+        assertEquals("renamed", StoreStream.getChannels().getChannel(51)?.name)
+        assertEquals(99L, StoreStream.getChannels().getChannel(51)?.lastMessageId)
+        assertEquals(1_640_995_200_000L, StoreStream.getChannels().getChannel(51)?.lastPinTimestamp?.dateTimeMillis)
+
+        dispatch(
+            """{"op":0,"t":"DELETED_ENTITY_IDS","d":{"guild_id":5,"channel_ids":[51],"role_ids":[5],"emoji_ids":[],"sticker_ids":[]}}""",
+        )
+
+        assertNull(StoreStream.getChannels().getChannel(50))
+        assertEquals(setOf(5L), StoreStream.getGuilds().getRoles()[5]?.keys)
+        assertEquals(emptyList<Long>(), StoreStream.getGuilds().getGuild(5)?.emojis?.map { it.id })
+        assertEquals(emptyList<Long>(), StoreStream.getGuilds().getGuild(5)?.stickers?.map { it.id })
+    }
+
+    @Test
     fun snapshotsStayStableAcrossDispatches() {
         val store = StoreStream.getStageInstances()
         stream.dispatcher.schedule { store.handleConnectionOpen(emptyList()) }

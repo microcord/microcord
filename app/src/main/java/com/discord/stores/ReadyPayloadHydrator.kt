@@ -2,6 +2,8 @@ package com.discord.stores
 
 import com.discord.api.channel.Channel
 import com.discord.api.guild.Guild
+import com.discord.api.guild.GuildFeature
+import com.discord.api.guild.GuildNsfwLevel
 import com.discord.api.guildhash.GuildHashes
 import com.discord.api.guildmember.GuildMember
 import com.discord.api.presence.Presence
@@ -93,12 +95,18 @@ internal class ReadyPayloadHydrator(
         return HydrateResult.Success(hydrated)
     }
 
+    @StoreThread
+    fun hydratePostReadyGuild(sync: ReadyGuild): Guild? {
+        snapshotCache()
+        return hydrateReadyGuild(sync)
+    }
+
     private fun hydrateReadyGuild(sync: ReadyGuild): Guild? {
         val cached = cache[sync.id]
         if (sync.dataMode == ReadyGuild.DATA_MODE_UNAVAILABLE) {
             return cached?.guild?.copy(unavailable = true) ?: unavailableGuild(sync.id)
         }
-        val base = sync.properties ?: cached?.guild ?: return null
+        val base = (sync.properties ?: cached?.guild ?: return null).withRequiredFields(cached?.guild)
         val partial = sync.dataMode == ReadyGuild.DATA_MODE_PARTIAL
         val updates = sync.partialUpdates
         val roles = if (partial) merge(cached?.roles, updates?.roles, updates?.deletedRoleIds, { it.id }) else sync.roles
@@ -112,11 +120,15 @@ internal class ReadyPayloadHydrator(
         } else {
             sync.channels
         }
-        val timestampUpdates = sync.channelUpdates.orEmpty().associateBy(Channel::id)
+        val timestampUpdates = sync.channelUpdates.orEmpty().associateBy { it.id }
         if (timestampUpdates.isNotEmpty()) {
             channels = channels?.map { channel ->
-                timestampUpdates[channel.id]?.takeIf { it.lastMessageId != 0L }
-                    ?.let { channel.copy(lastMessageId = it.lastMessageId) } ?: channel
+                timestampUpdates[channel.id]?.let { update ->
+                    channel.copy(
+                        lastMessageId = update.lastMessageId.takeUnless { it == 0L } ?: channel.lastMessageId,
+                        lastPinTimestamp = update.lastPinTimestamp ?: channel.lastPinTimestamp,
+                    )
+                } ?: channel
             }
         }
         return base.copy(
@@ -176,7 +188,7 @@ internal class ReadyPayloadHydrator(
             return HydrateGuildResult.Error
         }
 
-        var hydrated = guild
+        var hydrated = guild.withRequiredFields(cached?.guild)
         if (metadataOmitted) {
             val old = requireNotNull(cached).guild
             hydrated = hydrated.copy(
@@ -241,6 +253,18 @@ internal class ReadyPayloadHydrator(
                 else cached.copy(lastMessageId = update.lastMessageId)
             },
             channelUpdates = null,
+        )
+    }
+
+    private fun Guild.withRequiredFields(cached: Guild?): Guild {
+        val incomingName: String? = name
+        val incomingFeatures: List<GuildFeature>? = features
+        val incomingNsfwLevel: GuildNsfwLevel? = nsfwLevel
+        if (incomingName != null && incomingFeatures != null && incomingNsfwLevel != null) return this
+        return copy(
+            name = incomingName ?: cached?.name.orEmpty(),
+            features = incomingFeatures ?: cached?.features.orEmpty(),
+            nsfwLevel = incomingNsfwLevel ?: cached?.nsfwLevel ?: GuildNsfwLevel.DEFAULT,
         )
     }
 

@@ -111,6 +111,7 @@ class ActivityMessageEntryTest {
         guildId = apiMessage.guildId!!,
         application = application,
         instanceId = instanceId,
+        message = Message(apiMessage),
     )
 
     private fun state(

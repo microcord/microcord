@@ -60,6 +60,9 @@ import com.discord.models.domain.ModelMessageDelete
 import com.discord.api.notification.AccountNotificationSettings
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.domain.ModelPayload
+import com.discord.models.domain.BackgroundSync
+import com.discord.gateway.io.DeletedEntityIds
+import com.discord.gateway.io.DeletedEntityIdsRequest
 import com.discord.models.domain.ModelReadState
 import com.discord.models.domain.ModelSession
 import com.discord.models.domain.ModelUserNote
@@ -142,9 +145,11 @@ class StoreGatewayConnection(
     val friendSuggestionDelete = behavior<FriendSuggestionDelete>()
 
     // Guilds
-    val guildCreate = behavior<Guild>()
+    val guildCreate = behavior<Any>()
     val guildUpdate = behavior<Guild>()
     val guildDeleted = behavior<Guild>()
+    val backgroundSync = behavior<BackgroundSync>()
+    val deletedEntityIds = behavior<DeletedEntityIds>()
     val guildEmojisUpdate = behavior<GuildEmojisUpdate>()
     val guildStickersUpdate = behavior<GuildStickersUpdate>()
     val soundboardSounds = publish<SoundboardSounds>()
@@ -315,6 +320,10 @@ class StoreGatewayConnection(
         it.requestSoundboardSounds(guildIds)
     }
 
+    fun requestDeletedEntityIds(request: DeletedEntityIdsRequest): Boolean = requestIfSessionEstablished {
+        it.requestDeletedEntityIds(request)
+    }
+
     fun voiceStateUpdate(
         guildId: Long?,
         channelId: Long?,
@@ -476,6 +485,8 @@ class StoreGatewayConnection(
 
             // Guilds
             "GUILD_CREATE" -> guildCreate.emit(data)
+            "BACKGROUND_SYNC" -> backgroundSync.emit(data)
+            "DELETED_ENTITY_IDS" -> deletedEntityIds.emit(data)
             "GUILD_UPDATE" -> guildUpdate.emit(data)
             "GUILD_DELETE" -> guildDeleted.emit(data)
             "GUILD_BAN_ADD" -> guildBanAdd.emit(data)

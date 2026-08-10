@@ -3327,6 +3327,13 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   guild values. This fixes the observed `api.name.ifEmpty` Main-StoreThread crash and prevents the next two equivalent null crashes.
   A focused partial-update regression test was added; debug assembly and A65 installation pass, while unit-test compilation remains
   blocked by unrelated `ActivityMessageEntryTest.kt:113`.
+- Post-READY `GUILD_CREATE` and `BACKGROUND_SYNC` now use the CLIENT_STATE_V2 envelope hydrator; `DELETED_ENTITY_IDS` opcode 30
+  reconciles channels, roles, emojis, and stickers when the gateway reports `unable_to_sync_deletes`. Channel timestamp deltas retain
+  pin timestamps, guild messages alone advance `highest_last_message_id`, and DM messages advance `private_channels_version`. Full
+  private-channel syncs replace and prune the cached list, while versioned deltas merge and reject a missing cache. The hydrator
+  normalizes constructor-bypassed null `name`, `features`, and `nsfw_level` values before data-class copies. All 25 focused V2/store
+  tests pass; debug assembly, A65 installation, and `git diff --check` pass. The full 1,952-test run has seven unrelated failures in
+  frecency, lurking, voice, premium, community, and settings tests.
 - AutoMod message cards now consume the current RN field contract: all 18 message keys and 9 notification keys, including keyword
   match, flagged message, timeout/quarantine, decision reason/outcome, app interaction, alert execution, raid/mention-raid, activity
   alert, and suspicious-mention context. The card adds dynamic headers/badge, highlighted matched text, role dot/icon, timestamp,
@@ -3408,4 +3415,9 @@ Resumable task: `app/src/main/java/com/discord/widgets/chat/input/VoiceMessageRe
 `app/src/main/java/com/discord/widgets/chat/list/VoiceMessageView.kt` | RN Hermes modules 11361/11479/11480/11581 | use an
 approved account to verify Ogg upload acceptance, incoming waveform metadata, reply sends, retry after restart, playback/audio
 focus, background teardown, API 21-28 M4A fallback acceptance, and the Feature Flags visibility toggle on device.
+
+Resumable task: `app/src/main/java/com/discord/stores/StoreStream.kt` and
+`app/src/main/java/com/discord/stores/ReadyPayloadHydrator.kt` | current RN Hermes `GatewaySocket`, `GuildVersions`, and
+`NonGuildVersions` modules | with an approved account, join a guild and verify post-READY hydration, background sync, deleted-entity
+reconciliation, and private-channel deletion across a reconnect.
 

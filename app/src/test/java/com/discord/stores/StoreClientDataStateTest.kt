@@ -1,7 +1,10 @@
 package com.discord.stores
 
 import com.discord.api.emoji.GuildEmojisUpdate
+import com.discord.api.message.Message
 import com.discord.api.sticker.GuildStickersUpdate
+import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
+import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import java.lang.reflect.Modifier
 import java.nio.file.Files
@@ -39,5 +42,20 @@ class StoreClientDataStateTest {
             cached,
             Persister(StoreClientDataState.CACHE_KEY, StoreClientDataState.ClientDataState()).get(),
         )
+    }
+
+    @Test
+    fun `direct messages advance only the private channel version`() {
+        Persister.init(Files.createTempDirectory("client-state-v2-messages").toFile())
+        val gson = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .registerDiscordApiTypeAdapters().create()
+        val store = StoreClientDataState()
+
+        store.handleMessageCreate(gson.fromJson("""{"id":100,"channel_id":10,"guild_id":1}""", Message::class.java))
+        store.handleMessageCreate(gson.fromJson("""{"id":200,"channel_id":20}""", Message::class.java))
+        store.snapshotData()
+
+        assertEquals(100L, store.getClientDataState().highestLastMessageId)
+        assertEquals(200L, store.getClientDataState().privateChannelsVersion)
     }
 }

@@ -22,6 +22,7 @@ import com.discord.gateway.io.Outgoing
 import com.discord.gateway.io.PresenceUpdate
 import com.discord.gateway.io.Resume
 import com.discord.gateway.io.SoundboardSoundsRequest
+import com.discord.gateway.io.DeletedEntityIdsRequest
 import com.discord.gateway.io.StreamPing
 import com.discord.gateway.io.VoiceStateUpdate
 import com.discord.gateway.io.VoiceStateUpdateNoPreferredRegion
@@ -253,6 +254,10 @@ class GatewaySocket(
 
     fun requestSoundboardSounds(guildIds: List<Long>) = scheduleSend {
         send(Opcode.REQUEST_SOUNDBOARD_SOUNDS, SoundboardSoundsRequest(guildIds))
+    }
+
+    fun requestDeletedEntityIds(request: DeletedEntityIdsRequest) = scheduleSend {
+        send(Opcode.REQUEST_DELETED_ENTITY_IDS, request)
     }
 
     /**

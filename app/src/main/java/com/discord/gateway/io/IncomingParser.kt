@@ -56,12 +56,15 @@ import com.discord.models.domain.ModelSession
 import com.discord.models.domain.ModelUserRelationship
 import com.discord.models.domain.ModelUserNote
 import com.discord.models.domain.ModelUserSettings
+import com.discord.models.domain.ReadyGuild
+import com.discord.models.domain.BackgroundSync
 import com.discord.models.domain.StreamCreateOrUpdate
 import com.discord.models.domain.StreamDelete
 import com.discord.models.domain.StreamServerUpdate
 import com.discord.models.domain.UserSettingsProtoUpdate
 import com.discord.models.thread.dto.ModelThreadListSync
 import com.google.gson.Gson
+import com.google.gson.JsonElement
 import com.google.gson.JsonParseException
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
@@ -210,7 +213,10 @@ class IncomingParser(private val gson: Gson) {
         "FRIEND_SUGGESTION_DELETE" -> gson.fromJson(data, FriendSuggestionDelete::class.java)
 
         // Guilds
-        "GUILD_CREATE", "GUILD_UPDATE", "GUILD_DELETE" -> gson.fromJson(data, Guild::class.java)
+        "GUILD_CREATE" -> parseGuildCreate(JsonParser.parseReader(data))
+        "BACKGROUND_SYNC" -> gson.fromJson(JsonParser.parseReader(data), BackgroundSync::class.java)
+        "DELETED_ENTITY_IDS" -> gson.fromJson(data, DeletedEntityIds::class.java)
+        "GUILD_UPDATE", "GUILD_DELETE" -> gson.fromJson(data, Guild::class.java)
         "GUILD_BAN_ADD", "GUILD_BAN_REMOVE" -> gson.fromJson(data, ModelBan::class.java)
         "GUILD_EMOJIS_UPDATE" -> gson.fromJson(data, GuildEmojisUpdate::class.java)
         "GUILD_STICKERS_UPDATE" -> gson.fromJson(data, GuildStickersUpdate::class.java)
@@ -289,6 +295,11 @@ class IncomingParser(private val gson: Gson) {
         "EMBEDDED_ACTIVITY_UPDATE_V2" -> gson.fromJson(data, EmbeddedActivityInstance::class.java)
 
         else -> DISPATCH_UNPARSED
+    }
+
+    private fun parseGuildCreate(data: JsonElement): Any {
+        if (!data.asJsonObject.has("data_mode")) return gson.fromJson(data, Guild::class.java)
+        return gson.fromJson(data, ReadyGuild::class.java)
     }
 
     private fun JsonReader.nextStringOrNull(): String? {

@@ -180,8 +180,8 @@ class StoreClientDataState(
 
     @StoreThread
     fun handleMessageCreate(message: Message) {
-        updateHighestLastMessageId(message.id)
         if (message.guildId == null) updatePrivateChannelsVersion(message.id)
+        else updateHighestLastMessageId(message.id)
         markChanged()
     }
 
