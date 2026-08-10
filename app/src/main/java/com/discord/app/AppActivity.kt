@@ -149,6 +149,7 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
     override fun attachBaseContext(newBase: Context) {
         val configuredLocale = runCatching { StoreStream.getUserSettingsSystem().getLocale() }
             .getOrElse { ModelUserSettings.getDefaultLocale() }
+        appliedLocale = configuredLocale
         val locale = ModelUserSettings.getLocaleObject(configuredLocale)
         Locale.setDefault(locale)
         val configuration = Configuration(newBase.resources.configuration).apply {
