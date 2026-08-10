@@ -19,13 +19,15 @@ import rx.Observable
 import rx.subjects.PublishSubject
 
 /**
- * Decides which of block / unblock / remove-friend the user-actions dialog offers, and performs the
- * chosen one.
+ * Decides which rows the user-actions dialog offers, and performs the relationship ones.
  *
- * The three visibilities are mutually consistent by construction: a blocked user can only be
- * unblocked, anyone else can be blocked, and only an actual friend can be un-friended. That is one
- * relationship type driving three booleans, which is why they are computed here rather than in the
- * view.
+ * The relationship visibilities are mutually consistent by construction: a blocked user can only
+ * be unblocked, anyone else can be blocked, and only an actual friend can be un-friended. That is
+ * one relationship type driving several booleans, which is why they are computed here rather than
+ * in the view.
+ *
+ * Opened on yourself the dialog keeps only the copy rows — there is no relationship to act on —
+ * which is the whole reason the profile shows its overflow button for your own profile at all.
  */
 class UserActionsDialogViewModel(
     private val userId: Long,
@@ -40,6 +42,8 @@ class UserActionsDialogViewModel(
         val guildMember: GuildMember?,
         val friendNickname: String?,
         val isIgnored: Boolean,
+        val isMe: Boolean,
+        val isDeveloperMode: Boolean,
     )
 
     sealed class ViewState {
@@ -54,9 +58,14 @@ class UserActionsDialogViewModel(
             val showRemoveFriendItem: Boolean,
             val showIgnoreItem: Boolean,
             val showUnignoreItem: Boolean,
+            /** Developer mode only, as in the reference. */
+            val showCopyIdItem: Boolean,
         ) : ViewState() {
             /** Only a friend can carry a friend nickname, so only they are offered one. */
             val showFriendNicknameItem: Boolean get() = showRemoveFriendItem
+
+            /** The profile link the "Copy Link" row puts on the clipboard. */
+            val profileLink: String get() = "https://discord.com/users/${user.id}"
         }
     }
 
@@ -89,18 +98,22 @@ class UserActionsDialogViewModel(
             return
         }
         val type = ModelUserRelationship.getType(storeState.relationshipType)
+        val isOther = !storeState.isMe
         updateViewState(
             ViewState.Loaded(
                 user = user,
                 userNickname = storeState.guildMember?.nick,
                 friendNickname = storeState.friendNickname,
-                showBlockItem = type != ModelUserRelationship.TYPE_BLOCKED,
-                showUnblockItem = type == ModelUserRelationship.TYPE_BLOCKED,
-                showRemoveFriendItem = type == ModelUserRelationship.TYPE_FRIEND,
+                showBlockItem = isOther && type != ModelUserRelationship.TYPE_BLOCKED,
+                showUnblockItem = isOther && type == ModelUserRelationship.TYPE_BLOCKED,
+                showRemoveFriendItem = isOther && type == ModelUserRelationship.TYPE_FRIEND,
                 // Blocking already hides everything ignoring would, so the softer action is not
                 // offered alongside it.
-                showIgnoreItem = type != ModelUserRelationship.TYPE_BLOCKED && !storeState.isIgnored,
-                showUnignoreItem = type != ModelUserRelationship.TYPE_BLOCKED && storeState.isIgnored,
+                showIgnoreItem = isOther &&
+                    type != ModelUserRelationship.TYPE_BLOCKED && !storeState.isIgnored,
+                showUnignoreItem = isOther &&
+                    type != ModelUserRelationship.TYPE_BLOCKED && storeState.isIgnored,
+                showCopyIdItem = storeState.isDeveloperMode,
             ),
         )
     }
@@ -195,8 +208,19 @@ class UserActionsDialogViewModel(
                 member,
                 StoreStream.getUserRelationships().observeNickname(userId),
                 StoreStream.getUserRelationships().observeIgnoredUserIds().map { userId in it },
-            ) { user, relationshipType, guildMember, friendNickname, isIgnored ->
-                StoreState(user, relationshipType, guildMember, friendNickname, isIgnored)
+                StoreStream.getUsers().observeMe().map { it.id == userId },
+            ) { user, relationshipType, guildMember, friendNickname, isIgnored, isMe ->
+                StoreState(
+                    user,
+                    relationshipType,
+                    guildMember,
+                    friendNickname,
+                    isIgnored,
+                    isMe,
+                    // Read rather than observed: the toggle lives behind several screens, so it
+                    // cannot change while this dialog is open.
+                    StoreStream.getUserSettings().getIsDeveloperMode(),
+                )
             }
                 .distinctUntilChanged()
         }

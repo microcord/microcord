@@ -1,7 +1,5 @@
 package com.discord.widgets.user.usersheet
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.animation.ValueAnimator
@@ -16,7 +14,6 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.cardview.widget.CardView
-import androidx.core.content.getSystemService
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
 import androidx.core.widget.ImageViewCompat
@@ -267,7 +264,6 @@ class WidgetUserSheet : AppBottomSheet() {
         configureGuildSection(loaded)
         configureConnectionsSection(loaded)
         configureNote(loaded)
-        configureDeveloperSection(loaded)
         configureWidgets(loaded)
 
         if (!viewModel.openPopoutLogged && loaded.profileLoaded) {
@@ -363,7 +359,6 @@ class WidgetUserSheet : AppBottomSheet() {
         val iconColor = colors?.textDefault
             ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorInteractiveNormal)
         ImageViewCompat.setImageTintList(binding.userSheetMoreButton, ColorStateList.valueOf(iconColor))
-        TextViewCompat.setCompoundDrawableTintList(binding.userSheetCopyId, ColorStateList.valueOf(iconColor))
         tintTaggedIcons(iconColor)
         profileActionButtons().forEach { button ->
             button.setTextColor(colors?.textDefault?.let(ColorStateList::valueOf) ?: defaultTextColors.getValue(button))
@@ -533,7 +528,6 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetGuildHeader,
         binding.userSheetConnectionsHeader,
         binding.userSheetNoteHeader,
-        binding.userSheetDeveloperHeader,
         binding.userSheetIncomingFriendRequestHeader,
     )
 
@@ -795,19 +789,6 @@ class WidgetUserSheet : AppBottomSheet() {
     }
 
     /** Copy-ID row, shown only with developer mode on. */
-    private fun configureDeveloperSection(
-        state: WidgetUserSheetViewModel.ViewState.Loaded,
-    ) {
-        val developerMode = StoreStream.getUserSettings().getIsDeveloperMode()
-        binding.userSheetDeveloperHeader.show(developerMode)
-        binding.userSheetCopyId.show(developerMode)
-        if (!developerMode) return
-        binding.userSheetCopyId.setOnClickListener {
-            requireContext().getSystemService<ClipboardManager>()
-                ?.setPrimaryClip(ClipData.newPlainText("User ID", state.user.id.toString()))
-        }
-    }
-
     // ---------------------------------------------------------------------------------------
     // Wiring
     // ---------------------------------------------------------------------------------------
@@ -889,7 +870,6 @@ class WidgetUserSheet : AppBottomSheet() {
             binding.userSheetGuildHeader,
             binding.userSheetConnectionsHeader,
             binding.userSheetNoteHeader,
-            binding.userSheetDeveloperHeader,
             binding.userSheetIncomingFriendRequestHeader,
         ).forEach { ViewCompat.setAccessibilityHeading(it, true) }
     }

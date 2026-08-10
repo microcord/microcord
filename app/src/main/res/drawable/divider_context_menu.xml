@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Needs an intrinsic height: LinearLayout sizes `android:divider` from the drawable itself. -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="?attr/colorPrimaryDivider"/>
-    <size android:height="1dp"/>
-</shape>

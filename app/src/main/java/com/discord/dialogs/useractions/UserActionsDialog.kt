@@ -1,9 +1,12 @@
 package com.discord.dialogs.useractions
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.core.content.getSystemService
 import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentManager
 import com.discord.i18n.i18nFormat
@@ -21,9 +24,10 @@ import com.facebook.drawee.view.SimpleDraweeView
 /**
  * The overflow menu for another user, opened from the profile's ⋯ button or a long press.
  *
- * Rows come in two groups, as the reference's context menu does: what you can do *with* someone,
- * then what you can do *about* them. Which rows appear depends on the relationship — block and
- * unblock are mutually exclusive, and most rows are terminal, toasting the outcome and closing.
+ * Rows come in two groups, as the reference does: what you can copy or edit, then what you can do
+ * about the relationship. Which rows appear depends on the relationship — block and unblock are
+ * mutually exclusive — and the relationship group is empty for your own profile, which is opened
+ * purely for the copy rows.
  */
 class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
 
@@ -45,14 +49,15 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
     private lateinit var unignoreItem: TextView
     private lateinit var removeFriendItem: TextView
     private lateinit var friendNicknameItem: TextView
+    private lateinit var copyUsernameItem: TextView
+    private lateinit var copyLinkItem: TextView
+    private lateinit var copyIdItem: TextView
     private lateinit var primaryGroup: ViewGroup
     private lateinit var relationshipGroup: ViewGroup
     private lateinit var groupSeparator: View
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        // The rounded surface has to clip, or a row's pressed highlight paints over its corners.
-        view.clipToOutline = true
         primaryGroup = view.findViewById(R.id.user_actions_dialog_primary_group)
         relationshipGroup = view.findViewById(R.id.user_actions_dialog_relationship_group)
         groupSeparator = view.findViewById(R.id.user_actions_dialog_group_separator)
@@ -64,9 +69,14 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         unignoreItem = view.findViewById(R.id.user_actions_dialog_unignore_item)
         removeFriendItem = view.findViewById(R.id.user_actions_dialog_remove_friend_item)
         friendNicknameItem = view.findViewById(R.id.user_actions_dialog_friend_nickname_item)
+        copyUsernameItem = view.findViewById(R.id.user_actions_dialog_copy_username_item)
+        copyLinkItem = view.findViewById(R.id.user_actions_dialog_copy_link_item)
+        copyIdItem = view.findViewById(R.id.user_actions_dialog_copy_id_item)
 
-        listOf(blockItem, unblockItem, ignoreItem, unignoreItem, removeFriendItem, friendNicknameItem)
-            .forEach(::restoreIconOpacity)
+        listOf(
+            blockItem, unblockItem, ignoreItem, unignoreItem, removeFriendItem, friendNicknameItem,
+            copyUsernameItem, copyLinkItem, copyIdItem,
+        ).forEach(::restoreIconOpacity)
 
         blockItem.setOnClickListener { viewModel.blockUser() }
         unblockItem.setOnClickListener {
@@ -78,11 +88,35 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
             viewModel.removeRelationship(R.string.friend_has_been_deleted)
         }
         friendNicknameItem.setOnClickListener {
-            val state = viewModel.viewState as? UserActionsDialogViewModel.ViewState.Loaded
-                ?: return@setOnClickListener
+            val state = loadedState() ?: return@setOnClickListener
             FriendNicknameDialog.show(parentFragmentManager, state.user.id, state.friendNickname)
             dismiss()
         }
+        copyUsernameItem.setOnClickListener {
+            loadedState()?.let { copy("Username", it.user.username) }
+        }
+        copyLinkItem.setOnClickListener {
+            loadedState()?.let { copy("Profile link", it.profileLink) }
+        }
+        copyIdItem.setOnClickListener {
+            loadedState()?.let { copy("User ID", it.user.id.toString()) }
+        }
+    }
+
+    private fun loadedState(): UserActionsDialogViewModel.ViewState.Loaded? =
+        viewModel.viewState as? UserActionsDialogViewModel.ViewState.Loaded
+
+    /**
+     * Android 13 and up shows its own clipboard confirmation, so a toast there would be a second
+     * one saying the same thing.
+     */
+    private fun copy(label: String, value: String) {
+        requireContext().getSystemService<ClipboardManager>()
+            ?.setPrimaryClip(ClipData.newPlainText(label, value))
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) {
+            AppToast.show(context, R.string.copied)
+        }
+        dismiss()
     }
 
     override fun onViewBoundOrOnResume() {
@@ -123,6 +157,7 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         unignoreItem.visibility = if (state.showUnignoreItem) View.VISIBLE else View.GONE
         removeFriendItem.visibility = if (state.showRemoveFriendItem) View.VISIBLE else View.GONE
         friendNicknameItem.visibility = if (state.showFriendNicknameItem) View.VISIBLE else View.GONE
+        copyIdItem.visibility = if (state.showCopyIdItem) View.VISIBLE else View.GONE
         friendNicknameItem.setText(
             if (state.friendNickname == null) R.string.add_friend_nickname else R.string.change_friend_nickname,
         )
@@ -141,8 +176,7 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
 
     /**
      * These icons carry `android:alpha="0.6"` in the asset, which a tint multiplies rather than
-     * replaces — so tinting them to the label colour still left them looking disabled. The
-     * reference draws its menu icons at the label's full strength.
+     * replaces — so tinting them to the label colour still left them looking disabled.
      */
     private fun restoreIconOpacity(row: TextView) {
         row.compoundDrawablesRelative.firstOrNull()?.mutate()?.alpha = 255

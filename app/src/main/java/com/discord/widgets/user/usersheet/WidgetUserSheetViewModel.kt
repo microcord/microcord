@@ -766,7 +766,9 @@ class WidgetUserSheetViewModel(
                 ),
                 showIncomingRequest = showActions &&
                     relationshipType == ModelUserRelationship.TYPE_INVITE_INCOMING,
-                showMore = showActions,
+                // Not gated on showActions: your own profile has no relationship rows but still
+                // offers the copy ones, which is the only place they live now.
+                showMore = !isSystemUser,
                 showEditProfile = isMe,
             )
         }

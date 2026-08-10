@@ -81,15 +81,17 @@ class WidgetUserSheetActionsTest {
     }
 
     @Test
-    fun `current user popout exposes profile editing but no social actions`() {
+    fun `current user popout exposes profile editing and overflow but no social actions`() {
         visibility(isMe = true).let { visibility ->
             assertFalse(visibility.showActions)
             assertFalse(visibility.showMessage)
-            assertFalse(visibility.showMore)
+            // The overflow survives on your own profile: it is where the copy rows live.
+            assertTrue(visibility.showMore)
             assertTrue(visibility.showEditProfile)
         }
 
         assertFalse(visibility(isSystemUser = true).showEditProfile)
+        assertFalse(visibility(isSystemUser = true).showMore)
     }
 
     @Test
