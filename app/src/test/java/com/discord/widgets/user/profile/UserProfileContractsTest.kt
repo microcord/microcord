@@ -70,6 +70,19 @@ class UserProfileContractsTest {
         )
     }
 
+    /** `private` is a Kotlin keyword, so the field is renamed and only the annotation binds it. */
+    @Test
+    fun parsesThePrivateProfileFlag() {
+        val gson = GsonBuilder()
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .registerDiscordApiTypeAdapters()
+            .create()
+        val user = """"user":{"id":"2","username":"target"}"""
+
+        assertTrue(gson.fromJson("""{$user,"private":true}""", UserProfile::class.java).isPrivate)
+        assertFalse(gson.fromJson("""{$user}""", UserProfile::class.java).isPrivate)
+    }
+
     @Test
     fun parsesProfileBoardWidgetsInServerOrder() {
         val profile = GsonBuilder()

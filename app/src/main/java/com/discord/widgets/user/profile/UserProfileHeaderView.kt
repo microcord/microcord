@@ -85,6 +85,10 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         PresenceUtils.setCustomStatusText(state.presence, binding.userProfileHeaderCustomStatus)
         binding.avatarEdit.visibility = if (state.editable) View.VISIBLE else View.GONE
         binding.bannerEdit.visibility = if (state.editable) View.VISIBLE else View.GONE
+        // Never over your own banner: the endpoint answers the owner in full, so a lock there would
+        // only ever be a stale flag reading as "you are locked out of yourself".
+        binding.privateProfileBanner.visibility =
+            if (state.userProfile.isPrivate && !state.isMe) View.VISIBLE else View.GONE
     }
 
     fun updateBannerColor(state: UserProfileHeaderViewModel.ViewState.Loaded) {

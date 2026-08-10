@@ -207,9 +207,11 @@ object AnalyticsTracker {
         gameName: String?,
         gamePlatform: ActivityPlatform?,
         guildMember: GuildMember?,
+        isPrivateToViewer: Boolean = false,
     ) {
         val properties = mutableMapOf<String, Any>(
             "profile_has_nitro_customization" to hasPremiumCustomization,
+            "is_private_to_viewer" to isPrivateToViewer,
             "type" to "User Sheet",
         )
         gameName?.let { properties["game_name"] = it }

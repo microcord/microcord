@@ -175,6 +175,14 @@ class WidgetUserSheetViewModel(
                 relationshipType = userRelationshipType,
             )
 
+            /**
+             * The owner has limited who sees their full profile, and we are not on that list.
+             *
+             * Never true for [isMe]: the endpoint answers the owner in full, and a lock over your
+             * own profile would read as "you are locked out of yourself".
+             */
+            val isProfilePrivate: Boolean = !isMe && userProfile.isPrivate
+
             /** The user has a per-guild banner or an animated avatar — Nitro-only decorations. */
             val hasPremiumCustomization: Boolean =
                 user.banner != null || user.avatar?.let(IconUtils::isImageHashAnimated) == true
@@ -329,7 +337,10 @@ class WidgetUserSheetViewModel(
                     canMuteMembers = PermissionUtils.can(Permission.MUTE_MEMBERS, storeState.permissions),
                 ),
                 channel = storeState.channel,
-                streamContext = storeState.streamContext,
+                // A private profile does not advertise what they are streaming. Rich presence still
+                // renders: the reference gates only the stream and voice-channel cards on the flag.
+                streamContext = storeState.streamContext
+                    ?.takeUnless { !isMe && storeState.userProfile.isPrivate },
                 guildName = storeState.guild?.name,
                 guildIcon = storeState.guild?.icon,
                 userRelationshipType =

@@ -43,6 +43,16 @@ data class UserProfile(
     val badges: List<ProfileBadge>? = null,
     val guildBadges: List<ProfileBadge>? = null,
     val widgets: List<ProfileWidget>? = null,
+    /**
+     * The owner limited who can see their full profile, and the viewer is not on that list.
+     *
+     * Nothing is hidden client-side by this: the server has already blanked `bio`, `pronouns`,
+     * `badges`, `guildBadges`, `connectedAccounts`, `premiumSince` and `premiumGuildSince` by the
+     * time the response arrives. The flag exists so the viewer is told *why* the profile is bare
+     * instead of being left to assume it is broken.
+     */
+    @SerializedName("private")
+    val isPrivate: Boolean = false,
 ) {
     /**
      * The frame this profile is wearing, if any.

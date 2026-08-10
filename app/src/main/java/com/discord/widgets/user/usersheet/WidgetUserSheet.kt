@@ -46,6 +46,7 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.utilities.textprocessing.AstRenderer
 import com.discord.utilities.textprocessing.MessageRenderContext
+import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.utilities.uri.UriHandler
 import com.discord.widgets.guildcommunicationdisabled.start.WidgetDisableGuildCommunication
 import com.discord.widgets.guildcommunicationdisabled.start.WidgetEnableGuildCommunication
@@ -259,6 +260,7 @@ class WidgetUserSheet : AppBottomSheet() {
         configureRichPresence(loaded)
         configureProfileActionButtons(loaded)
         configureStageActions(loaded)
+        configurePrivateProfile(loaded)
         configureAboutMe(loaded)
         configureVoiceSection(loaded)
         configureGuildSection(loaded)
@@ -274,6 +276,7 @@ class WidgetUserSheet : AppBottomSheet() {
                 activity?.name,
                 activity?.platform,
                 loaded.guildMember,
+                loaded.isProfilePrivate,
             )
             viewModel.openPopoutLogged = true
         }
@@ -668,6 +671,21 @@ class WidgetUserSheet : AppBottomSheet() {
      * About Me, rendered as markdown rather than plain text, with a guild chip when the bio is the
      * guild-specific one.
      */
+    /**
+     * Explains a bare profile.
+     *
+     * Everything the privacy setting covers is already blank by the time it reaches us, so without
+     * this the sheet just looks like a user who never filled anything in.
+     */
+    private fun configurePrivateProfile(state: WidgetUserSheetViewModel.ViewState.Loaded) {
+        binding.userSheetPrivateProfileCard.show(state.isProfilePrivate)
+        if (!state.isProfilePrivate) return
+        binding.userSheetPrivateProfileText.text = requireContext().i18nFormat(
+            R.string.user_profile_private_info_banner,
+            "username" to state.user.getDisplayName(state.guildMember?.nick),
+        )
+    }
+
     private fun configureAboutMe(state: WidgetUserSheetViewModel.ViewState.Loaded) {
         val bioAst = state.bioAst
         val hasBio = bioAst != null
