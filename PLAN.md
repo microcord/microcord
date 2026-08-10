@@ -3350,6 +3350,36 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   moderation operations stay hidden for insufficient permissions or self-targeting. Debug assembly and A65 installation pass.
 - Former-member AutoMod rows still expose View Profile, Copy ID, and Ban-by-ID when the moderator has `BAN_MEMBERS`; only Timeout
   and Kick require current guild membership. Debug assembly and A65 installation pass.
+- The guild-sidebar Channels & Roles row now opens the current RN-style two-tab page instead of replaying initial onboarding.
+  Customize includes every enabled prompt (including prompts excluded from first-run onboarding), preserves single-select behavior,
+  shows granted role/channel summaries, and synchronizes edits through `PUT guilds/{guildId}/onboarding-responses`; queued rapid
+  edits retain the newest local selection while an earlier request completes. Browse supports search, category select-all, and
+  individual channel opt-in. Until channel visibility is reconstructed it deliberately lists every non-thread guild channel, as
+  requested, and first use atomically enables guild opt-in while preserving all other channels as selected. Category/bulk changes
+  use one guild-settings request. The new PUT transport is covered by metadata-header/path/body assertions, and customization prompt
+  coverage has a store test. Debug assembly and A65 installation pass; unit-test compilation remains blocked by unrelated
+  `ActivityMessageEntryTest.kt:113`, and live channel/role synchronization remains unverified.
+- Channels & Roles visual structure now follows the RN reference: the sidebar icon consumes the same state tint as its label;
+  Browse uses an outlined dark search field, natural-case category headings with Follow Category controls, channel-type icons,
+  grouped rounded channel cards, and inset separators. Customize renders onboarding prompts as grouped rounded option cards and
+  keeps each option's role/channel gain summary visible. Browse updates the toolbar title independently. Debug assembly and A65
+  installation pass.
+- Channels & Roles now uses the muted divider token for the search outline and the exact generated onboarding option view for
+  Customize, including emoji, selected border/check treatment, and visible role/channel gain summaries. Browse channel rows share
+  one secondary-surface card treatment per category. Partial response bodies from `PUT onboarding-responses` no longer replace the
+  loaded prompt list, so selecting an option cannot make the Customize UI disappear. Debug assembly and A65 installation pass.
+- The Browse search field no longer inherits the child style's hardcoded “Search” hint. “Search channels” remains as the floating
+  label, with explicit muted hint colors and a stateful outline (divider when idle, interactive when focused). Debug assembly and
+  A65 installation pass.
+- Browse category channel groups now use the visibly distinct tertiary surface instead of a secondary color that blended into the
+  page background on the active theme. Rounded group edges and inset separators are retained. Debug assembly and A65 installation
+  pass.
+- Ponytail cleanup removed unused Channels & Roles row keys/option edge state, consolidated the shared onboarding option renderer,
+  and centralized onboarding response-body construction. Customize changes are now marked dirty and synchronized once when the
+  screen stops, matching RN lifecycle behavior and removing the overlapping-request resync state machine. Debug assembly and A65
+  installation pass.
+- Customize prompt questions now wrap without ellipsis, and the Customize/Browse controls use 48dp heights instead of the cramped
+  40dp variant. Debug assembly and A65 installation pass.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each

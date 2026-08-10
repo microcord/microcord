@@ -410,6 +410,42 @@ class StoreUserGuildSettings(
         )
     }
 
+    /** Writes a category or first-time channel-browser selection in one guild-settings request. */
+    fun setChannelsOptedIn(
+        context: Context,
+        guildId: Long,
+        selections: Map<Long, Boolean>,
+        enableOptIn: Boolean,
+    ) {
+        val settings = getGuildSettings()[guildId]
+        val overrides = selections.mapValues { (channelId, optedIn) ->
+            val current = settings?.getChannelOverride(channelId)?.flags ?: 0
+            RestAPIParams.UserGuildSettings.ChannelOverride(
+                messageNotifications = null,
+                flags = ChannelNotificationSettingsFlags.withFlag(
+                    current,
+                    ChannelNotificationSettingsFlags.OPT_IN_ENABLED,
+                    optedIn,
+                ),
+            )
+        }
+        updateUserGuildSettings(
+            context,
+            guildId,
+            RestAPIParams.UserGuildSettings(
+                channelOverrides = overrides,
+                flags = if (enableOptIn) {
+                    GuildNotificationSettingsFlags.withFlag(
+                        settings?.flags ?: 0,
+                        GuildNotificationSettingsFlags.OPT_IN_CHANNELS_ON,
+                        true,
+                    )
+                } else null,
+            ),
+            SettingsUpdateType.CHANNEL,
+        )
+    }
+
     /** Hides channels the viewer has not opted into, across the whole guild. */
     fun setGuildOptInChannels(context: Context, guildId: Long, optInOnly: Boolean) {
         val current = getGuildSettings()[guildId]?.flags ?: 0

@@ -179,6 +179,7 @@ class RestTransportTest {
         val response = """{"guild_id":"1","prompts":[],"default_channel_ids":[],"responses":[],"mode":0,"enabled":true,"onboarding_prompts_seen":{},"onboarding_responses_seen":{},"below_requirements":false,"connections":[]}"""
         server.enqueue(MockResponse().setBody(response))
         server.enqueue(MockResponse().setResponseCode(204))
+        server.enqueue(MockResponse().setResponseCode(204))
         installDefaultApi()
 
         RestAPI.api.getGuildOnboarding(1).toBlocking().single()
@@ -186,8 +187,12 @@ class RestTransportTest {
             1,
             GuildOnboardingResponses(listOf(10), mapOf("2" to 3), mapOf("10" to 3)),
         ).toBlocking().single()
+        RestAPI.api.updateGuildOnboardingResponses(
+            1,
+            GuildOnboardingResponses(listOf(11), mapOf("2" to 4), mapOf("11" to 4)),
+        ).toBlocking().single()
 
-        val requests = listOf(server.takeRequest(), server.takeRequest())
+        val requests = listOf(server.takeRequest(), server.takeRequest(), server.takeRequest())
         requests.forEach { request ->
             assertEquals("fixture-token", request.getHeader("Authorization"))
             assertEquals(AnalyticSuperProperties.USER_AGENT, request.getHeader("User-Agent"))
@@ -199,6 +204,9 @@ class RestTransportTest {
         assertEquals("POST", requests[1].method)
         assertEquals("/api/v9/guilds/1/onboarding-responses", requests[1].path)
         assertTrue(requests[1].body.readUtf8().contains("\"onboarding_responses\":[10]"))
+        assertEquals("PUT", requests[2].method)
+        assertEquals("/api/v9/guilds/1/onboarding-responses", requests[2].path)
+        assertTrue(requests[2].body.readUtf8().contains("\"onboarding_responses\":[11]"))
         run {
             val get = RestAPIInterface::class.java.getMethod("getGuildOnboarding", Long::class.javaPrimitiveType)
             val post = RestAPIInterface::class.java.getMethod(
@@ -206,8 +214,14 @@ class RestTransportTest {
                 Long::class.javaPrimitiveType,
                 GuildOnboardingResponses::class.java,
             )
+            val put = RestAPIInterface::class.java.getMethod(
+                "updateGuildOnboardingResponses",
+                Long::class.javaPrimitiveType,
+                GuildOnboardingResponses::class.java,
+            )
             assertEquals("guilds/{guildId}/onboarding", get.getAnnotation(retrofit2.http.GET::class.java).value)
             assertEquals("guilds/{guildId}/onboarding-responses", post.getAnnotation(retrofit2.http.POST::class.java).value)
+            assertEquals("guilds/{guildId}/onboarding-responses", put.getAnnotation(retrofit2.http.PUT::class.java).value)
         }
     }
 

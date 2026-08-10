@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <LinearLayout android:orientation="vertical" app:layout_behavior="@string/appbar_scrolling_view_behavior" style="@style/UiKit.ViewGroup.LinearLayout">
+        <LinearLayout android:orientation="horizontal" android:paddingStart="12dp" android:paddingTop="12dp" android:paddingEnd="12dp" android:paddingBottom="8dp" style="@style/UiKit.ViewGroup.LinearLayout.Horizontal">
+            <com.google.android.material.button.MaterialButton android:id="@+id/customize_tab" android:layout_width="0dp" android:layout_height="48dp" android:layout_weight="1" android:text="@string/guild_onboarding_customize" style="@style/UiKit.Material.Button.Secondary"/>
+            <com.google.android.material.button.MaterialButton android:id="@+id/browse_tab" android:layout_width="0dp" android:layout_height="48dp" android:layout_marginStart="8dp" android:layout_weight="1" android:text="@string/guild_onboarding_browse_channels" style="@style/UiKit.Material.Button.Secondary"/>
+        </LinearLayout>
+        <com.google.android.material.textfield.TextInputLayout android:id="@+id/search_wrap" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_marginTop="4dp" android:layout_marginEnd="16dp" android:layout_marginBottom="8dp" android:hint="@string/guild_onboarding_search_channels" android:textColorHint="?attr/colorTextMuted" app:boxBackgroundColor="?attr/colorBackgroundPrimary" app:boxCornerRadiusBottomEnd="8dp" app:boxCornerRadiusBottomStart="8dp" app:boxCornerRadiusTopEnd="8dp" app:boxCornerRadiusTopStart="8dp" app:boxStrokeColor="@color/channels_roles_search_stroke" app:boxStrokeWidth="1dp" app:boxStrokeWidthFocused="1dp" app:hintEnabled="true" app:hintTextColor="?attr/colorTextMuted" app:startIconDrawable="@drawable/ic_search_grey_24dp" app:startIconTint="?attr/colorInteractiveNormal" style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+            <com.google.android.material.textfield.TextInputEditText android:id="@+id/search" android:singleLine="true" style="@style/UiKit.TextInputLayout.EditText.SingleLine"/>
+        </com.google.android.material.textfield.TextInputLayout>
+        <ProgressBar android:id="@+id/loading" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center"/>
+        <TextView android:id="@+id/empty" android:visibility="gone" android:gravity="center" android:padding="24dp" style="@style/UiKit.TextView.Subtext"/>
+        <TextView android:id="@+id/error" android:visibility="gone" android:gravity="center" android:padding="12dp" android:text="@string/guild_onboarding_submit_failed" android:textColor="?attr/colorError" style="@style/UiKit.TextView"/>
+        <androidx.recyclerview.widget.RecyclerView android:id="@+id/list" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:clipToPadding="false" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingBottom="24dp" app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"/>
+    </LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

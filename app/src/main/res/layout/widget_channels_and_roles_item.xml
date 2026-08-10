@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="vertical" android:background="?attr/selectableItemBackground" android:minHeight="56dp" style="@style/UiKit.ViewGroup.LinearLayout">
+    <LinearLayout android:orientation="horizontal" android:gravity="center_vertical" android:minHeight="55dp" android:paddingStart="16dp" android:paddingTop="8dp" android:paddingEnd="12dp" android:paddingBottom="8dp" style="@style/UiKit.ViewGroup.LinearLayout.Horizontal">
+    <ImageView android:id="@+id/icon" android:visibility="gone" android:layout_width="28dp" android:layout_height="28dp" android:layout_marginEnd="12dp" android:importantForAccessibility="no"/>
+    <LinearLayout android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+        <TextView android:id="@+id/title" android:maxLines="1" android:ellipsize="end" style="@style/UiKit.TextView.Semibold"/>
+        <TextView android:id="@+id/subtitle" android:visibility="gone" android:layout_marginTop="2dp" android:maxLines="2" android:ellipsize="end" style="@style/UiKit.TextView.Subtext"/>
+    </LinearLayout>
+    <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/checkbox" android:layout_width="48dp" android:layout_height="48dp" android:gravity="center"/>
+    </LinearLayout>
+    <View android:id="@+id/divider" android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="56dp" android:background="?attr/colorBackgroundModifierAccent"/>
+</LinearLayout>

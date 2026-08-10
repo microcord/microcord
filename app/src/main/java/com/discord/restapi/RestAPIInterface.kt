@@ -1517,6 +1517,12 @@ interface RestAPIInterface {
         @Body body: GuildOnboardingResponses,
     ): Observable<Response<GuildOnboarding>>
 
+    @PUT("guilds/{guildId}/onboarding-responses")
+    fun updateGuildOnboardingResponses(
+        @Path("guildId") guildId: Long,
+        @Body body: GuildOnboardingResponses,
+    ): Observable<Response<GuildOnboarding>>
+
     @GET("guilds/{guildId}/member-verification")
     fun getGuildMemberVerificationForm(
         @Path("guildId") guildId: Long,

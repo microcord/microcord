@@ -7,8 +7,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.Gravity
-import android.view.animation.OvershootInterpolator
-import android.view.MotionEvent
 import android.view.animation.AnimationUtils
 import android.widget.ImageView
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -516,98 +514,21 @@ class WidgetGuildOnboarding : AppFragment(R.layout.widget_guild_onboarding) {
         inner class Holder(
             private val binding: WidgetGuildOnboardingOptionBinding,
         ) : RecyclerView.ViewHolder(binding.root) {
-            private var boundOptionId: Long? = null
-            private var boundSelected = false
-
-            init {
-                itemView.setOnTouchListener { touched, event ->
-                    when (event.actionMasked) {
-                        MotionEvent.ACTION_DOWN -> touched.animate()
-                            .scaleX(0.985f)
-                            .scaleY(0.985f)
-                            .setDuration(PRESS_ANIMATION_MS)
-                            .start()
-                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> touched.animate()
-                            .scaleX(1f)
-                            .scaleY(1f)
-                            .setDuration(PRESS_ANIMATION_MS)
-                            .start()
-                    }
-                    false
-                }
-            }
+            private val optionBinder = GuildOnboardingOptionBinder(binding)
 
             fun bind(row: Row) {
                 when (row) {
                     is Row.Option -> {
-                        val animateSelection = boundOptionId == row.option.id && !boundSelected && row.selected
-                        val optionEmoji = row.option.emoji
-                        val emojiId = optionEmoji?.id
-                        if (emojiId == null) {
-                            MGImages.cancelImageRequests(binding.guildOnboardingOptionEmojiImage)
-                            binding.guildOnboardingOptionEmojiImage.visibility = View.GONE
-                            binding.guildOnboardingOptionEmojiText.visibility = View.VISIBLE
-                            binding.guildOnboardingOptionEmojiText.text = optionEmoji?.name.orEmpty()
-                        } else {
-                            binding.guildOnboardingOptionEmojiText.visibility = View.GONE
-                            binding.guildOnboardingOptionEmojiImage.visibility = View.VISIBLE
-                            val animate = optionEmoji.animated && allowAnimatedEmojis
-                            MGImages.setImage(
-                                binding.guildOnboardingOptionEmojiImage,
-                                IconUtils.getForEmoji(emojiId, animate, EMOJI_SIZE_PX),
-                                autoPlayAnimations = animate,
-                            )
-                        }
-                        binding.guildOnboardingOptionTitle.text = row.option.title
-                        binding.guildOnboardingOptionDescription.text = row.option.description.orEmpty()
-                        binding.guildOnboardingOptionDescription.visibility = if (row.option.description.isNullOrBlank()) View.GONE else View.VISIBLE
                         val count = row.option.roleIds.maxOfOrNull { roleMemberCounts[it] ?: 0 } ?: 0
-                        binding.guildOnboardingOptionMemberCount.visibility = if (row.selected && count > 0) View.VISIBLE else View.GONE
-                        if (row.selected && count > 0) {
-                            binding.guildOnboardingOptionMemberCount.text = itemView.context.getString(
-                                R.string.guild_onboarding_people_in_common,
-                                count,
-                            )
-                        }
-                        itemView.setBackgroundResource(
-                            if (row.selected) R.drawable.bg_guild_onboarding_option_selected
-                            else R.drawable.bg_guild_onboarding_option,
+                        optionBinder.bind(
+                            option = row.option,
+                            selected = row.selected,
+                            memberCount = count,
+                            allowAnimatedEmoji = allowAnimatedEmojis,
+                            onClick = { onOption(row.promptId, row.option, !row.selected) },
                         )
-                        binding.guildOnboardingOptionChecked.visibility = if (row.selected) View.VISIBLE else View.GONE
-                        binding.guildOnboardingOptionChecked.animate().cancel()
-                        itemView.animate().cancel()
-                        if (animateSelection) {
-                            binding.guildOnboardingOptionChecked.alpha = 0f
-                            binding.guildOnboardingOptionChecked.scaleX = 0.65f
-                            binding.guildOnboardingOptionChecked.scaleY = 0.65f
-                            binding.guildOnboardingOptionChecked.animate()
-                                .alpha(1f)
-                                .scaleX(1f)
-                                .scaleY(1f)
-                                .setDuration(SELECTION_ANIMATION_MS)
-                                .setInterpolator(OvershootInterpolator())
-                                .start()
-                            itemView.scaleX = 0.985f
-                            itemView.scaleY = 0.985f
-                            itemView.animate()
-                                .scaleX(1f)
-                                .scaleY(1f)
-                                .setDuration(SELECTION_ANIMATION_MS)
-                                .start()
-                        } else {
-                            binding.guildOnboardingOptionChecked.alpha = 1f
-                            binding.guildOnboardingOptionChecked.scaleX = 1f
-                            binding.guildOnboardingOptionChecked.scaleY = 1f
-                            itemView.scaleX = 1f
-                            itemView.scaleY = 1f
-                        }
-                        boundOptionId = row.option.id
-                        boundSelected = row.selected
-                        itemView.setOnClickListener { onOption(row.promptId, row.option, !row.selected) }
                     }
                     is Row.Connection -> {
-                        boundOptionId = null
-                        boundSelected = row.connected
                         recycle()
                         binding.guildOnboardingOptionTitle.text = row.displayName
                         binding.guildOnboardingOptionDescription.text = row.connection.description.orEmpty()
@@ -624,20 +545,11 @@ class WidgetGuildOnboarding : AppFragment(R.layout.widget_guild_onboarding) {
             }
 
             fun recycle() {
-                boundOptionId = null
-                boundSelected = false
-                MGImages.cancelImageRequests(binding.guildOnboardingOptionEmojiImage)
-                binding.guildOnboardingOptionEmojiImage.controller = null
+                optionBinder.recycle()
                 binding.guildOnboardingOptionEmojiImage.visibility = View.GONE
                 binding.guildOnboardingOptionEmojiText.text = ""
                 binding.guildOnboardingOptionEmojiText.visibility = View.VISIBLE
             }
-        }
-
-        companion object {
-            private const val EMOJI_SIZE_PX = 64
-            private const val SELECTION_ANIMATION_MS = 180L
-            private const val PRESS_ANIMATION_MS = 90L
         }
     }
 

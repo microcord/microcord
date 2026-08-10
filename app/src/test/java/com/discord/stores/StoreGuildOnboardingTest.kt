@@ -45,6 +45,22 @@ class StoreGuildOnboardingTest {
         assertEquals(listOf(1L, 4L, 5L, 6L), store.get(GUILD_ID).prompts.map { it.id })
     }
 
+    @Test fun channelsAndRolesIncludesEnabledPromptsOutsideInitialOnboarding() {
+        val option = option(30)
+        val prompt = GuildOnboardingPrompt(
+            id = 3,
+            title = "Later customization",
+            inOnboarding = false,
+            options = listOf(option),
+        )
+        store.handleLoaded(GUILD_ID, GuildOnboarding(prompts = listOf(prompt)))
+
+        assertEquals(listOf(prompt), store.get(GUILD_ID).customizationPrompts)
+        store.selectOption(GUILD_ID, prompt.id, option.id, true)
+        scheduler.triggerActions()
+        assertEquals(setOf(option.id), store.get(GUILD_ID).selectedOptionIds)
+    }
+
     private fun option(id: Long) = GuildOnboardingPromptOption(id = id, title = id.toString())
 
     private companion object {

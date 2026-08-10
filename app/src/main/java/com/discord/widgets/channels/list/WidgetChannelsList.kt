@@ -47,7 +47,7 @@ import com.discord.widgets.channels.list.items.ChannelListItemPrivate
 import com.discord.widgets.directories.WidgetDirectoryChannel
 import com.discord.widgets.friends.EmptyFriendsStateView
 import com.discord.widgets.hubs.events.WidgetHubEventsPage
-import com.discord.widgets.guilds.onboarding.WidgetGuildOnboarding
+import com.discord.widgets.guilds.onboarding.WidgetChannelsAndRoles
 import com.discord.widgets.message_requests.WidgetMessageRequests
 import com.discord.widgets.user.search.WidgetGlobalSearchDialog
 import com.discord.widgets.user.usersheet.WidgetUserSheet
@@ -218,7 +218,7 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
             }
         }
         adapter.onViewGuildOnboarding = {
-            selectedGuildId?.let { WidgetGuildOnboarding.launch(requireContext(), it) }
+            selectedGuildId?.let { WidgetChannelsAndRoles.launch(requireContext(), it) }
         }
         adapter.onCollapseCategory = ::collapseCategory
         adapter.onSelectInvite = { anchor ->

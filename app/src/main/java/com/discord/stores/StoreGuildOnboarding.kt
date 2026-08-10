@@ -23,6 +23,9 @@ class StoreGuildOnboarding(
         val prompts: List<GuildOnboardingPrompt>
             get() = onboarding?.prompts.orEmpty().filter { it.inOnboarding && !it.disabled }.take(MAX_ONBOARDING_PROMPTS)
 
+        val customizationPrompts: List<GuildOnboardingPrompt>
+            get() = onboarding?.prompts.orEmpty().filterNot { it.disabled }
+
         fun missingRequiredPrompt(): GuildOnboardingPrompt? = prompts.firstOrNull { prompt ->
             prompt.required && prompt.options.none { it.id in selectedOptionIds }
         }
@@ -60,7 +63,7 @@ class StoreGuildOnboarding(
 
     fun selectOption(guildId: Long, promptId: Long, optionId: Long, selected: Boolean) = dispatcher.schedule {
         val current = get(guildId)
-        val prompt = current.prompts.firstOrNull { it.id == promptId } ?: return@schedule
+        val prompt = current.customizationPrompts.firstOrNull { it.id == promptId } ?: return@schedule
         val next = current.selectedOptionIds.toMutableSet()
         if (prompt.singleSelect && selected) next.removeAll(prompt.options.map { it.id }.toSet())
         if (selected) next += optionId else next -= optionId
@@ -72,14 +75,7 @@ class StoreGuildOnboarding(
         if (current.submitting || current.missingRequiredPrompt() != null) return@schedule
         val onboarding = current.onboarding ?: return@schedule
         val prompts = current.prompts
-        val validOptionIds = prompts.flatMap { it.options }.mapTo(hashSetOf()) { it.id }
-        val selected = current.selectedOptionIds.filter(validOptionIds::contains)
-        val now = System.currentTimeMillis()
-        val body = GuildOnboardingResponses(
-            onboardingResponses = selected,
-            onboardingPromptsSeen = prompts.associate { it.id.toString() to now },
-            onboardingResponsesSeen = prompts.flatMap { it.options }.associate { it.id.toString() to now },
-        )
+        val body = responsesBody(current, prompts)
         val service = RestAPI.apiOrNull
         if (service == null) {
             publish(guildId, current.copy(error = true))
@@ -97,6 +93,41 @@ class StoreGuildOnboarding(
         }
     }
 
+    /** Persists Channels & Roles edits without marking onboarding complete. */
+    fun syncResponses(guildId: Long) {
+        dispatcher.schedule {
+            val current = get(guildId)
+            if (current.submitting) return@schedule
+            val prompts = current.customizationPrompts
+            val body = responsesBody(current, prompts)
+            val service = RestAPI.apiOrNull ?: return@schedule publish(guildId, current.copy(error = true))
+            publish(guildId, current.copy(submitting = true, error = false))
+            service.updateGuildOnboardingResponses(guildId, body).restSubscribeOn(false).appSubscribe(
+                StoreGuildOnboarding::class.java,
+                errorHandler = { dispatcher.schedule { publish(guildId, get(guildId).copy(submitting = false, error = true)) } },
+            ) { response ->
+                dispatcher.schedule {
+                    val latest = get(guildId)
+                    val responseBody = response.body()?.let { body ->
+                        val existing = latest.onboarding
+                        if (existing != null && body.prompts.isEmpty()) {
+                            existing.copy(
+                                responses = body.responses ?: latest.selectedOptionIds.toList(),
+                                onboardingPromptsSeen = body.onboardingPromptsSeen ?: existing.onboardingPromptsSeen,
+                                onboardingResponsesSeen = body.onboardingResponsesSeen ?: existing.onboardingResponsesSeen,
+                            )
+                        } else body
+                    }
+                    if (responseBody != null) {
+                        handleLoaded(guildId, responseBody)
+                    } else {
+                        publish(guildId, latest.copy(submitting = false))
+                    }
+                }
+            }
+        }
+    }
+
     fun reset() = dispatcher.schedule {
         states.clear()
         subjects.values.forEach { it.onNext(State()) }
@@ -110,6 +141,19 @@ class StoreGuildOnboarding(
                 onboarding = onboarding,
                 selectedOptionIds = onboarding.responses.orEmpty().toSet(),
             ),
+        )
+    }
+
+    private fun responsesBody(
+        state: State,
+        prompts: List<GuildOnboardingPrompt>,
+    ): GuildOnboardingResponses {
+        val validOptionIds = prompts.flatMap { it.options }.mapTo(hashSetOf()) { it.id }
+        val now = System.currentTimeMillis()
+        return GuildOnboardingResponses(
+            onboardingResponses = state.selectedOptionIds.filter(validOptionIds::contains),
+            onboardingPromptsSeen = prompts.associate { it.id.toString() to now },
+            onboardingResponsesSeen = prompts.flatMap { it.options }.associate { it.id.toString() to now },
         )
     }
 
