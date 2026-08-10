@@ -16,6 +16,7 @@ import com.discord.stores.StoreMessageReplies
 import com.discord.stores.StoreMessageState
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreThreadMessages
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.message.MessageUtils
 import com.discord.utilities.permissions.PermissionUtils
@@ -133,6 +134,7 @@ data class WidgetChatListModelMessages(
                 stores.getUsers().observeMeId(),
                 ComponentChatListState.observeChatListComponentState(),
                 observeInviteResolver(),
+                observeUncachedUserUpdates(),
                 ::ThirdInputs,
             )
             return Observable.combineLatest(first, second, third) { a, b, c ->
@@ -153,6 +155,7 @@ data class WidgetChatListModelMessages(
                     meUserId = c.meUserId,
                     componentStoreState = c.components,
                     inviteResolver = c.inviteResolver,
+                    userUpdates = c.userUpdates,
                 )
             }
         }
@@ -173,6 +176,7 @@ data class WidgetChatListModelMessages(
                 stores.getUsers().observeMeId(),
                 stores.getUserSettings().observeIsRenderEmbedsEnabled(),
                 observeInviteResolver(),
+                observeUncachedUserUpdates(),
                 ::SingleSecondInputs,
             )
             return Observable.combineLatest(first, second) { a, b ->
@@ -181,7 +185,7 @@ data class WidgetChatListModelMessages(
                     channel, a.members, a.roles, emptySet(), emptySet(), null, null, message,
                     a.metadata.messageState[messageId], a.metadata.messageReplyState, false, false,
                     null, a.animateEmojis, b.autoPlayGifs, b.renderEmbeds, b.meUserId, false,
-                    emptyMap(), b.inviteResolver, false,
+                    emptyMap(), b.inviteResolver, false, b.userUpdates,
                 ).asReversed()
             }
         }
@@ -203,6 +207,7 @@ data class WidgetChatListModelMessages(
             meUserId: Long = 0L,
             componentStoreState: Map<Long, ComponentChatListState.ComponentStoreState> = emptyMap(),
             inviteResolver: InviteEmbedResolver,
+            userUpdates: UserUpdates = UserUpdates(),
         ): WidgetChatListModelMessages {
             val items = Items(metadata.messages.size)
             var nextDayTimestamp = 0L
@@ -266,7 +271,7 @@ data class WidgetChatListModelMessages(
                             getThreadStarterMessageItems(
                                 parentChannel, channel, guildMembers, guildRoles, blockedAuthorIds, ignoredAuthorIds,
                                 message, metadata, animateEmojis, autoPlayGifs, renderEmbeds, meUserId,
-                                componentStoreState, inviteResolver,
+                                componentStoreState, inviteResolver, userUpdates,
                             ),
                         )
                     } else {
@@ -278,7 +283,7 @@ data class WidgetChatListModelMessages(
                                 message, metadata.messageState[message.id], metadata.messageReplyState,
                                 blockedChunkExpanded, concatenate, permissionsForChannel, animateEmojis,
                                 autoPlayGifs, renderEmbeds, meUserId, true, componentStoreState,
-                                inviteResolver, false,
+                                inviteResolver, false, userUpdates,
                             ),
                         )
                     }
@@ -323,6 +328,7 @@ data class WidgetChatListModelMessages(
             componentStoreState: Map<Long, ComponentChatListState.ComponentStoreState>,
             inviteResolver: InviteEmbedResolver,
             isThreadStarterMessage: Boolean = false,
+            userUpdates: UserUpdates = UserUpdates(),
         ): List<ChatListEntry> {
             if (message.type == 38 && !PermissionUtils.can(Permission.CREATE_INSTANT_INVITE, permissionsForChannel)) return emptyList()
 
@@ -335,6 +341,7 @@ data class WidgetChatListModelMessages(
                         threadEmbedMetadata, replied, messageState, repliedMessages, blockedChunkExpanded,
                         false, null, animateEmojis, autoPlayGifs, renderEmbeds, meUserId, false,
                         emptyMap(), inviteResolver, false,
+                        userUpdates,
                     ).firstOrNull() as? MessageEntry
                 }
                 val repliedAuthorId =
@@ -350,7 +357,15 @@ data class WidgetChatListModelMessages(
             val author = guildMembers[message.author?.id]
             val firstMention = guildMembers[message.mentions?.firstOrNull()?.id]
             val roles = guildRoles.takeIf { RoleUtils.containsRoleMentions(message.content) }
-            val names = MessageUtils.getNickOrUsernames(message, channel, guildMembers, channel.nicks)
+            val names = MessageUtils.getNickOrUsernames(message, channel, guildMembers, channel.nicks).toMutableMap()
+            if (FeatureFlags.fetchUncachedUsersEnabled()) {
+                mergeFetchedMentionNames(
+                    names,
+                    message.content.orEmpty(),
+                    userUpdates.users,
+                    userUpdates.fetchingUserIds,
+                )
+            }
             val interactionAuthor = guildMembers[message.interaction?.user?.id]
             val parentChannel = if (channel.type in setOf(
                     Channel.ANNOUNCEMENT_THREAD,
@@ -508,13 +523,14 @@ data class WidgetChatListModelMessages(
             meUserId: Long,
             componentStoreState: Map<Long, ComponentChatListState.ComponentStoreState>,
             inviteResolver: InviteEmbedResolver,
+            userUpdates: UserUpdates,
         ): List<ChatListEntry> {
             val (starter, starterChannel) = getThreadStarterMessageAndChannel(parentChannel, channel, message, metadata)
             return getMessageItems(
                 starterChannel, guildMembers, guildRoles, blockedAuthorIds, ignoredAuthorIds, null, null, starter,
                 metadata.messageState[starter.id], metadata.parentChannelMessageReplyState, false, false,
                 null, animateEmojis, autoPlayGifs, renderEmbeds, meUserId, true,
-                componentStoreState, inviteResolver, true,
+                componentStoreState, inviteResolver, true, userUpdates,
             )
         }
 
@@ -598,6 +614,13 @@ data class WidgetChatListModelMessages(
             } as InviteEmbedResolver
         }
 
+        private fun observeUncachedUserUpdates(): Observable<UserUpdates> =
+            if (FeatureFlags.fetchUncachedUsersEnabled()) Observable.combineLatest(
+                StoreStream.getUsers().observeAllUsers(),
+                StoreStream.getUsers().observeFetchingUserIds(),
+                ::UserUpdates,
+            ) else Observable.just(UserUpdates(emptyMap(), emptySet()))
+
         internal class Items(size: Int) {
             val items: MutableList<ChatListEntry> = ArrayList(size + 10)
             var listItemMostRecentlyAdded: ChatListEntry? = null
@@ -636,6 +659,7 @@ data class WidgetChatListModelMessages(
             val meUserId: Long,
             val components: Map<Long, ComponentChatListState.ComponentStoreState>,
             val inviteResolver: InviteEmbedResolver,
+            val userUpdates: UserUpdates,
         )
 
         private data class SingleFirstInputs(
@@ -651,6 +675,29 @@ data class WidgetChatListModelMessages(
             val meUserId: Long,
             val renderEmbeds: Boolean,
             val inviteResolver: InviteEmbedResolver,
+            val userUpdates: UserUpdates,
         )
+
+        internal data class UserUpdates(
+            val users: Map<Long, com.discord.models.user.User> = emptyMap(),
+            val fetchingUserIds: Set<Long> = emptySet(),
+        )
+
+        internal fun mergeFetchedMentionNames(
+            names: MutableMap<Long, String>,
+            content: String,
+            users: Map<Long, com.discord.models.user.User>,
+            fetchingUserIds: Set<Long>,
+        ) {
+            USER_MENTION.findAll(content).forEach { match ->
+                val userId = match.groupValues[1].toLongOrNull() ?: return@forEach
+                val user = users[userId]
+                if (user != null) names[userId] = user.globalName ?: user.username
+                else if (userId in fetchingUserIds) names[userId] = FETCHING_USER
+            }
+        }
+
+        private val USER_MENTION = Regex("<@!?(\\d+)>")
+        private const val FETCHING_USER = "fetching"
     }
 }

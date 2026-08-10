@@ -358,6 +358,7 @@ class WidgetChatListAdapterItemMessage(
         // message would keep a blank line between the author and the embed.
         textView.visibility = if (text.isNotEmpty()) View.VISIBLE else View.GONE
         textView.setDraweeSpanStringBuilder(rendered)
+        textView.movementMethod = LinkMovementMethod.getInstance()
         // A message that has not reached the server yet, or that slow mode rejected, is dimmed.
         textView.alpha =
             if (message.type == TYPE_LOCAL || message.type == TYPE_LOCAL_SLOWMODE) DIMMED_ALPHA else 1f

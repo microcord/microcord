@@ -45,12 +45,12 @@ class ReadyUserSocialStoresTest {
         val deck = ObservationDeck()
         val dispatcher = Dispatcher(scheduler)
         val cache = Persister("test-me-${System.nanoTime()}", StoreUser.EMPTY_ME_USER)
-        val requested = mutableListOf<Set<Long>>()
+        val requested = mutableListOf<Long>()
         val store = StoreUser(
             dispatcher = dispatcher,
             observationDeck = deck,
             meCache = cache,
-            requestUsers = { ids, _ -> requested += ids },
+            requestUser = { id, _ -> requested += id },
         )
         dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
         val snapshots = mutableListOf<Map<Long, com.discord.models.user.User>>()
@@ -75,8 +75,8 @@ class ReadyUserSocialStoresTest {
         assertEquals("renamed", store.getMe().username)
         assertEquals(null, store.getMe().avatar)
         assertEquals(initialMe.copy(username = "renamed", avatar = null), store.getMe())
-        assertEquals(listOf(setOf(99L)), requested)
-        assertEquals(3, snapshots.size)
+        assertEquals(listOf(99L), requested)
+        assertEquals(4, snapshots.size)
         assertFalse(store.getMe().toString().contains("auth-secret"))
 
         Persister.persistAll()
@@ -92,17 +92,17 @@ class ReadyUserSocialStoresTest {
     }
 
     @Test
-    fun sparseUsersMergeAndMissingRequestsAreDeduplicated() {
+    fun sparseUsersMergeAndMissingRequestsAreDeduplicatedAndSerialized() {
         val scheduler = TestScheduler()
         val deck = ObservationDeck()
         val dispatcher = Dispatcher(scheduler)
-        val requested = mutableListOf<Set<Long>>()
-        val callbacks = mutableListOf<(ApiUser) -> Unit>()
+        val requested = mutableListOf<Long>()
+        val callbacks = mutableListOf<(ApiUser?) -> Unit>()
         val store = StoreUser(
             dispatcher = dispatcher,
             observationDeck = deck,
             meCache = Persister("test-sparse-me-${System.nanoTime()}", StoreUser.EMPTY_ME_USER),
-            requestUsers = { ids, callback -> requested += ids; callbacks += callback },
+            requestUser = { id, callback -> requested += id; callbacks += callback },
         )
         dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
         val complete = ApiUser(
@@ -122,7 +122,7 @@ class ReadyUserSocialStoresTest {
         }
         scheduler.triggerActions()
         val merged = store.getUsers()[77] as CoreUser
-        store.fetchUsers(listOf(88, 88))
+        store.fetchUsers(listOf(88, 88, 89))
         store.fetchUsers(listOf(88))
         scheduler.triggerActions()
 
@@ -133,14 +133,24 @@ class ReadyUserSocialStoresTest {
         assertEquals(7, merged.flags)
         assertEquals(9, merged.publicFlags)
         assertEquals("bio", merged.bio)
-        assertEquals(listOf(setOf(88L)), requested)
+        assertEquals(listOf(88L), requested)
         assertEquals(1, callbacks.size)
+        assertTrue(store.isUserFetchPending(88))
+        assertTrue(store.isUserFetchPending(89))
 
-        callbacks.single()(ApiUser(88, "fetched"))
+        callbacks[0](ApiUser(88, "fetched"))
         scheduler.triggerActions()
-        store.fetchUsers(listOf(88))
+        assertEquals(listOf(88L, 89L), requested)
+        assertEquals("fetched", store.getUsers()[88]?.username)
+        assertFalse(store.isUserFetchPending(88))
+        assertTrue(store.isUserFetchPending(89))
+
+        callbacks[1](null)
         scheduler.triggerActions()
-        assertEquals(listOf(setOf(88L), setOf(88L)), requested)
+        assertFalse(store.isUserFetchPending(89))
+        store.fetchUsers(listOf(88, 89))
+        scheduler.triggerActions()
+        assertEquals(listOf(88L, 89L), requested)
     }
 
     @Test

@@ -20,17 +20,21 @@ import com.discord.utilities.developer.DeveloperSettings
 import rx.Observable
 
 class StoreUser(
-    private val notifyUserUpdated: (ApiUser) -> Unit = {},
     private val dispatcher: Dispatcher,
     private val observationDeck: ObservationDeck,
     private val meCache: Persister<MeUser> = Persister(ME_CACHE_KEY, EMPTY_ME_USER),
-    private val requestUsers: (Set<Long>, (ApiUser) -> Unit) -> Unit = { _, _ -> },
+    private val requestUser: (Long, (ApiUser?) -> Unit) -> Unit = { _, _ -> },
 ) : StoreV2() {
     private var me = EMPTY_ME_USER
     private val users = LinkedHashMap<Long, User>()
     private val requestedUserIds = HashSet<Long>()
+    private val fetchingUserIds = HashSet<Long>()
+    private val pendingUserIds = ArrayDeque<Long>()
+    private var userRequestInFlight = false
+    private var userRequestGeneration = 0
     private var meSnapshot = me
     private var usersSnapshot: Map<Long, User> = emptyMap()
+    private var fetchingUserIdsSnapshot: Set<Long> = emptySet()
 
     override fun init(context: Context) {
         restore()
@@ -49,13 +53,17 @@ class StoreUser(
         val apiMe = requireNotNull(payload.me)
         users.clear()
         requestedUserIds.clear()
+        fetchingUserIds.clear()
+        pendingUserIds.clear()
+        userRequestInFlight = false
+        userRequestGeneration++
         me = MeUser(apiMe)
         users[me.id] = me
         payload.privateChannels.orEmpty().flatMap { it.recipients.orEmpty() }.forEach(::putUser)
         payload.relationships.orEmpty().mapNotNull(ModelUserRelationship::user).forEach(::putUser)
         payload.guilds.orEmpty().flatMap { it.members.orEmpty() }.map(GuildMember::user).forEach(::putUser)
         payload.users.orEmpty().forEach(::updateUser)
-        markChanged(MeUpdate, UsersUpdate)
+        markChanged(MeUpdate, UsersUpdate, UserFetchUpdate)
     }
 
     @StoreThread
@@ -113,6 +121,8 @@ class StoreUser(
     fun getMe(): MeUser = meSnapshot
     @StoreThread fun getMeInternal(): MeUser = me
     fun getUsers(): Map<Long, User> = usersSnapshot
+    fun getFetchingUserIds(): Set<Long> = fetchingUserIdsSnapshot
+    fun isUserFetchPending(userId: Long) = userId in fetchingUserIdsSnapshot
     @StoreThread fun getUsersInternal(): Map<Long, User> = users
     fun getUsers(userIds: Collection<Long>, fetchMissing: Boolean = false): Map<Long, User> {
         val filtered = usersSnapshot.filterKeys(userIds.toSet()::contains)
@@ -121,6 +131,8 @@ class StoreUser(
     }
 
     fun observeAllUsers(): Observable<Map<Long, User>> = observationDeck.connectRx(this) { usersSnapshot }
+    fun observeFetchingUserIds(): Observable<Set<Long>> =
+        observationDeck.connectRx(UserFetchUpdate) { fetchingUserIdsSnapshot }.distinctUntilChanged()
     @JvmOverloads fun observeMe(emitEmpty: Boolean = false): Observable<MeUser> =
         observationDeck.connectRx(MeUpdate) { meSnapshot }.filter { emitEmpty || it != EMPTY_ME_USER }.distinctUntilChanged()
     fun observeMeId(): Observable<Long> = observationDeck.connectRx(MeUpdate) { meSnapshot.id }.distinctUntilChanged()
@@ -140,8 +152,12 @@ class StoreUser(
         me = EMPTY_ME_USER
         users.clear()
         requestedUserIds.clear()
+        fetchingUserIds.clear()
+        pendingUserIds.clear()
+        userRequestInFlight = false
+        userRequestGeneration++
         meCache.clear()
-        markChanged(MeUpdate, UsersUpdate)
+        markChanged(MeUpdate, UsersUpdate, UserFetchUpdate)
     }
 
     override fun snapshotData() {
@@ -153,6 +169,7 @@ class StoreUser(
                 if (displayedMe.id in this) put(displayedMe.id, displayedMe)
             }
         }
+        if (UserFetchUpdate in updateSources) fetchingUserIdsSnapshot = fetchingUserIds.toSet()
         if (MeUpdate in updateSources) {
             meSnapshot = displayedMe
             meCache.set(me)
@@ -182,12 +199,28 @@ class StoreUser(
         StoreThreadScheduler.assertCurrentThread()
         val missing = userIds.filterTo(LinkedHashSet()) { it !in loadedIds && requestedUserIds.add(it) }
         if (missing.isEmpty()) return
-        requestUsers(missing) { user ->
-            dispatcher.schedule {
-                requestedUserIds.remove(user.id)
-                notifyUserUpdated(user)
+        fetchingUserIds.addAll(missing)
+        pendingUserIds.addAll(missing)
+        markChanged(UserFetchUpdate)
+        requestNextUser()
+    }
+
+    @StoreThread
+    private fun requestNextUser() {
+        if (userRequestInFlight || pendingUserIds.isEmpty()) return
+        val userId = pendingUserIds.removeFirst()
+        val generation = userRequestGeneration
+        userRequestInFlight = true
+        requestUser(userId) { user -> dispatcher.schedule {
+            if (generation != userRequestGeneration) return@schedule
+            userRequestInFlight = false
+            fetchingUserIds.remove(userId)
+            if (user != null) {
+                handleUserUpdated(user)
             }
-        }
+            markChanged(UserFetchUpdate)
+            requestNextUser()
+        } }
     }
 
     private fun mergeCore(old: CoreUser, new: ApiUser) = old.copy(
@@ -243,6 +276,7 @@ class StoreUser(
         private const val URGENT_MESSAGE_USER_FLAG = 8192
         @JvmField val MeUpdate = object : ObservationDeck.UpdateSource {}
         @JvmField val UsersUpdate = object : ObservationDeck.UpdateSource {}
+        @JvmField val UserFetchUpdate = object : ObservationDeck.UpdateSource {}
         @JvmField val EMPTY_ME_USER = MeUser(
             0, "EMPTY_USERNAME", null, null, false, false, 0,
             com.discord.api.premium.PremiumTier.NONE, null, false, false, null,

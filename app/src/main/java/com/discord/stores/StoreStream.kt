@@ -176,10 +176,9 @@ class StoreStream private constructor(
     private val users = StoreUser(
         dispatcher = dispatcher,
         observationDeck = observationDeck,
-        requestUsers = { ids, callback ->
-            if (::restApi.isInitialized) ids.forEach { userId ->
-                restApi.userGet(userId).subscribeOn(Schedulers.io()).subscribe(callback, {})
-            }
+        requestUser = { userId, callback ->
+            if (!::restApi.isInitialized) callback(null)
+            else restApi.userGet(userId).subscribeOn(Schedulers.io()).subscribe(callback, { callback(null) })
         },
     )
     private val userRelationships = StoreUserRelationships(observationDeck)

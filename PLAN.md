@@ -3387,6 +3387,17 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   installation pass.
 - Customize prompt questions now wrap without ellipsis, and the Customize/Browse controls use 48dp heights instead of the cramped
   40dp variant. Debug assembly and A65 installation pass.
+- Feature Flags now owns TapTap instead of the experiment override registry and adds an opt-in Fetch Uncached Users switch. Tapping
+  an unknown user mention enqueues the existing `users/{id}` transport only when enabled; `StoreUser` deduplicates IDs, permits one request in
+  flight, caches successful users, suppresses repeated failures, advances after errors, and ignores callbacks from an old READY/logout
+  generation. Active IDs publish separately from failed IDs, so message and embed mentions immediately change from `@invalid-user`
+  to `@fetching` after a tap and then re-render with the resolved name. Message rows carry those values through DiffUtil, while embed
+  holders keep their resolved-name subscription for the holder lifecycle instead of discarding updates after `.take(1)`. Resolved
+  embed mentions route through the same user-profile click action as message-body mentions. Focused user-store and row-map tests,
+  debug assembly, A65 installation, and `git diff --check` pass.
+- Ponytail cleanup removed the unused fetched-user callback, changed the serial transport from singleton sets to one user ID, folded
+  repeated feature-flag preference access into two helpers, passed one `UserUpdates` value through chat row construction, and removed
+  the embed-only pending-ID change token. Focused mention/store tests and debug assembly pass.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each
@@ -3420,4 +3431,9 @@ Resumable task: `app/src/main/java/com/discord/stores/StoreStream.kt` and
 `app/src/main/java/com/discord/stores/ReadyPayloadHydrator.kt` | current RN Hermes `GatewaySocket`, `GuildVersions`, and
 `NonGuildVersions` modules | with an approved account, join a guild and verify post-READY hydration, background sync, deleted-entity
 reconciliation, and private-channel deletion across a reconnect.
+
+Resumable task: `app/src/main/java/com/discord/stores/StoreUser.kt` and
+`app/src/main/java/com/discord/utilities/textprocessing/node/UserMentionNode.kt` | user-provided ValidUser behavior and live
+`GET users/{id}` transport | with an approved account, enable Fetch Uncached Users and verify multiple unknown mentions resolve in
+serial without repeat requests for invalid IDs or cross-account callback leakage.
 

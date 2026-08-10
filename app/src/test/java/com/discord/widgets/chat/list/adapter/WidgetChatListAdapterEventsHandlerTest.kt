@@ -39,9 +39,6 @@ class WidgetChatListAdapterEventsHandlerTest {
         val own = Message(id = 1, author = User(7, "me"), type = 0)
         val other = Message(id = 2, author = User(8, "other"), type = 0)
 
-        assertFalse(TapTapBehavior.isEnabled(null))
-        assertFalse(TapTapBehavior.isEnabled(0))
-        assertTrue(TapTapBehavior.isEnabled(1))
         assertEquals(TapTapBehavior.Action.EDIT, TapTapBehavior.action(own, 7))
         assertEquals(TapTapBehavior.Action.REPLY, TapTapBehavior.action(other, 7))
         assertEquals(200L, TapTapBehavior.TIMEOUT_MS)

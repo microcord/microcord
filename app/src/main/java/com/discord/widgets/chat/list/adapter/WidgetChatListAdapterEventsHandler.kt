@@ -28,6 +28,7 @@ import com.discord.stores.StoreChat
 import com.discord.stores.StoreStream
 import com.discord.utilities.attachments.AttachmentUrlRefresher
 import com.discord.utilities.channel.ChannelSelector
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.guildscheduledevent.GuildScheduledEventUtilities
 import com.discord.utilities.io.UserDownloadManager
 import com.discord.utilities.messagesend.MessageSendLocation
@@ -177,10 +178,7 @@ class WidgetChatListAdapterEventsHandler(
         StoreStream.getChat().toggleBlockedMessageGroup(message.id)
 
     override fun onMessageClicked(message: Message, isThreadStarterMessage: Boolean) {
-        val enabled = TapTapBehavior.isEnabled(
-            StoreStream.getExperiments().getUserExperiment(TapTapBehavior.EXPERIMENT_KEY)?.bucket,
-        )
-        if (!enabled || !TapTapBehavior.canHandle(message)) {
+        if (!FeatureFlags.tapTapEnabled() || !TapTapBehavior.canHandle(message)) {
             handleSingleTap(message, isThreadStarterMessage)
             return
         }
@@ -483,12 +481,9 @@ class WidgetChatListAdapterEventsHandler(
 }
 
 internal object TapTapBehavior {
-    const val EXPERIMENT_KEY = "manticord_local_taptap"
     const val TIMEOUT_MS = 200L
 
     enum class Action { REPLY, EDIT }
-
-    fun isEnabled(bucket: Int?) = bucket == 1
 
     fun canHandle(message: Message) = !message.isEphemeralMessage() && !message.isLocal() &&
         !message.isFailed() && !message.isLoading()

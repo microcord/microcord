@@ -11,9 +11,18 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
         super.onViewBound(view)
         setActionBarTitle(R.string.feature_flags)
         setActionBarDisplayHomeAsUpEnabled()
-        WidgetSettingsFeatureFlagsBinding.bind(view).settingsFeatureVoiceMessages.apply {
+        val binding = WidgetSettingsFeatureFlagsBinding.bind(view)
+        binding.settingsFeatureVoiceMessages.apply {
             isChecked = FeatureFlags.voiceMessagesEnabled()
             setOnCheckedListener(FeatureFlags::setVoiceMessagesEnabled)
+        }
+        binding.settingsFeatureTapTap.apply {
+            isChecked = FeatureFlags.tapTapEnabled()
+            setOnCheckedListener(FeatureFlags::setTapTapEnabled)
+        }
+        binding.settingsFeatureFetchUncachedUsers.apply {
+            isChecked = FeatureFlags.fetchUncachedUsersEnabled()
+            setOnCheckedListener(FeatureFlags::setFetchUncachedUsersEnabled)
         }
     }
 }

@@ -4,6 +4,7 @@ import com.discord.api.channel.Channel
 import com.discord.api.user.User
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.message.Message
+import com.discord.models.user.CoreUser
 import com.discord.widgets.chat.list.entries.BlockedMessagesEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
 import com.discord.widgets.chat.list.entries.NewMessagesEntry
@@ -49,6 +50,19 @@ class WidgetChatListModelMessagesTest {
         assertFalse(messages.single { it.message.id == 3L }.type == 1)
         assertEquals(1, model.items.count { it is NewMessagesEntry })
         assertEquals(1, model.items.count { it is TimestampEntry })
+    }
+
+    @Test fun fetchedMentionNamesAndPendingStateChangeTheRowNameMap() {
+        val names = mutableMapOf<Long, String>()
+
+        WidgetChatListModelMessages.mergeFetchedMentionNames(
+            names,
+            "<@8> <@!9>",
+            mapOf(8L to CoreUser(id = 8, username = "resolved", globalName = "Resolved User")),
+            setOf(9L),
+        )
+
+        assertEquals(mapOf(8L to "Resolved User", 9L to "fetching"), names)
     }
 
     private fun metadata(messages: List<Message>) = WidgetChatListModelMessages.MessagesWithMetadata(

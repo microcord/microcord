@@ -10,7 +10,9 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import com.discord.R
 import com.discord.simpleast.core.node.Node
+import com.discord.stores.StoreStream
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.spans.ClickableSpan
 
 /**
@@ -52,21 +54,29 @@ class UserMentionNode<T : UserMentionNode.RenderContext>(
         val context = renderContext.context
         val userNames = renderContext.userNames
         val start = builder.length
-        val isKnownUser = userNames?.containsKey(userId) == true
-        val displayName = userNames?.get(userId) ?: INVALID_USER
+        val fetchMissing = FeatureFlags.fetchUncachedUsersEnabled()
+        val userStore = if (fetchMissing) StoreStream.getUsers() else null
+        val isFetching = userStore?.isUserFetchPending(userId) == true
+        val cachedName = userStore?.getUsers()?.get(userId)?.let { it.globalName ?: it.username }
+        val displayName = if (isFetching) null else userNames?.get(userId) ?: cachedName
+        val isKnownUser = displayName != null
 
         val spans = mutableListOf<CharacterStyle>(
             StyleSpan(Typeface.BOLD),
             BackgroundColorSpan(ColorCompat.getThemedColor(context, R.attr.theme_chat_mention_background)),
         )
         val onClick = renderContext.userMentionOnClick
-        spans += if (isKnownUser && onClick != null) {
-            ClickableSpan(ColorCompat.getThemedColor(context, R.attr.theme_chat_mention_foreground), false) { onClick(userId) }
-        } else {
-            ForegroundColorSpan(ColorCompat.getThemedColor(context, R.attr.theme_chat_mention_foreground))
+        spans += when {
+            isKnownUser && onClick != null ->
+                ClickableSpan(ColorCompat.getThemedColor(context, R.attr.theme_chat_mention_foreground), false) { onClick(userId) }
+            fetchMissing && !isFetching && userId > 0 ->
+                ClickableSpan(ColorCompat.getThemedColor(context, R.attr.theme_chat_mention_foreground), false) {
+                    userStore?.fetchUsers(listOf(userId))
+                }
+            else -> ForegroundColorSpan(ColorCompat.getThemedColor(context, R.attr.theme_chat_mention_foreground))
         }
 
-        builder.append(MENTION_PREFIX).append(displayName)
+        builder.append(MENTION_PREFIX).append(displayName ?: if (isFetching) FETCHING_USER else INVALID_USER)
         spans.forEach { builder.setSpan(it, start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
     }
 
@@ -83,5 +93,6 @@ class UserMentionNode<T : UserMentionNode.RenderContext>(
 
         /** Not localized in the reference client either; it is a protocol level placeholder. */
         private const val INVALID_USER = "invalid-user"
+        private const val FETCHING_USER = "fetching"
     }
 }

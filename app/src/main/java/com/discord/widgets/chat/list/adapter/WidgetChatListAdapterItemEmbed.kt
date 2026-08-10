@@ -3,6 +3,7 @@ package com.discord.widgets.chat.list.adapter
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.text.method.LinkMovementMethod
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -156,8 +157,9 @@ class WidgetChatListAdapterItemEmbed(
 
         // Second pass: only an embed that actually mentions a user, role or channel needs names,
         // and only then is it worth touching the stores.
+        nameSubscription?.unsubscribe()
         nameSubscription = null
-        observeResolvedNames(model)?.take(1)?.ui()?.appSubscribe(
+        observeResolvedNames(model)?.ui()?.appSubscribe(
             errorClass = WidgetChatListAdapterItemEmbed::class.java,
             subscriptionHandler = { nameSubscription = it },
         ) { resolved -> configureUI(resolved) }
@@ -356,6 +358,7 @@ class WidgetChatListAdapterItemEmbed(
                 ),
             ),
         )
+        title.movementMethod = LinkMovementMethod.getInstance()
         title.setTextColor(
             ThemedColor.resolve(
                 title.context,
@@ -386,6 +389,7 @@ class WidgetChatListAdapterItemEmbed(
                 ),
             ),
         )
+        description.movementMethod = LinkMovementMethod.getInstance()
         description.visibility = View.VISIBLE
     }
 
@@ -428,6 +432,8 @@ class WidgetChatListAdapterItemEmbed(
 
             name.setDraweeSpanStringBuilder(render(field.parsedName, "$PART_FIELD_NAME:$index"))
             value.setDraweeSpanStringBuilder(render(field.parsedValue, "$PART_FIELD_VALUE:$index"))
+            name.movementMethod = LinkMovementMethod.getInstance()
+            value.movementMethod = LinkMovementMethod.getInstance()
             fields.addView(row)
         }
     }
@@ -588,17 +594,19 @@ class WidgetChatListAdapterItemEmbed(
                 usernames + members.mapNotNull { (id, member) -> member.nick?.let { id to it } }
             },
             guilds.observeRoles(guildId, mentions.roles),
+            StoreStream.getUsers().observeFetchingUserIds(),
         ) { myId: Long,
             channelNames: Map<Long, String>,
             userNames: Map<Long, String>,
-            roles: Map<Long, GuildRole> ->
+            roles: Map<Long, GuildRole>,
+            _: Set<Long> ->
             model.copy(
                 channelNames = channelNames,
                 userNames = userNames,
                 roles = roles,
                 myId = myId,
             )
-        }.computationLatest().distinctUntilChanged()
+        }.computationLatest()
     }
 
     /** The ids an embed's parsed text refers to, gathered in one walk of the trees. */
@@ -662,6 +670,9 @@ class WidgetChatListAdapterItemEmbed(
             channelNames = channelNames,
             roles = roles,
             onLongPressUrl = eventHandler::onUrlLongClicked,
+            userMentionOnClick = { userId ->
+                eventHandler.onUserMentionClicked(userId, embedEntry.message.channelId, embedEntry.guildId)
+            },
         )
 
         fun preprocessorFor(embedIndex: Int, part: String): MessagePreprocessor = MessagePreprocessor(
