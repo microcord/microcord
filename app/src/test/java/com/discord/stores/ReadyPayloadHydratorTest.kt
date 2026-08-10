@@ -80,7 +80,7 @@ class ReadyPayloadHydratorTest {
         guilds.handleConnectionOpen(cachedPayload)
         channels.handleConnectionOpen(cachedPayload)
 
-        val result = ReadyPayloadHydrator(guilds, channels).hydrateReadyPayload(
+        val result = ReadyPayloadHydrator(guilds, channels) { 100L }.hydrateReadyPayload(
             gson.fromJson(V2_PARTIAL_READY, ModelPayload::class.java),
         ) as ReadyPayloadHydrator.HydrateResult.Success
         val guild = result.payload.guilds!!.single()
@@ -90,6 +90,31 @@ class ReadyPayloadHydratorTest {
         assertEquals(123L, guild.channels!!.single().lastMessageId)
         assertEquals("cached-name", guild.name)
         assertEquals(listOf(20L), result.payload.privateChannels!!.map { it.id })
+    }
+
+    @Test
+    fun privateChannelDeltaMergesWithoutPartialGuildEntries() {
+        val (guilds, channels) = stores()
+        val cachedPayload = gson.fromJson(CACHED_READY, ModelPayload::class.java)
+        guilds.handleConnectionOpen(cachedPayload)
+        channels.handleConnectionOpen(cachedPayload)
+
+        val result = ReadyPayloadHydrator(guilds, channels) { 100L }.hydrateReadyPayload(
+            gson.fromJson(V2_PRIVATE_CHANNEL_DELTA_ONLY, ModelPayload::class.java),
+        ) as ReadyPayloadHydrator.HydrateResult.Success
+
+        assertEquals(listOf(20L), result.payload.privateChannels!!.map { it.id })
+    }
+
+    @Test
+    fun privateChannelDeltaRejectsMissingVersionedCache() {
+        val (guilds, channels) = stores()
+
+        val result = ReadyPayloadHydrator(guilds, channels) { 100L }.hydrateReadyPayload(
+            gson.fromJson(V2_PRIVATE_CHANNEL_DELTA_ONLY, ModelPayload::class.java),
+        )
+
+        assertSame(ReadyPayloadHydrator.HydrateResult.Error, result)
     }
 
     private fun stores(): Pair<StoreGuilds, StoreChannels> {
@@ -215,6 +240,13 @@ class ReadyPayloadHydratorTest {
                   "deleted_channel_ids":[10]
                 }
               }]
+            }
+        """.trimIndent()
+        private val V2_PRIVATE_CHANNEL_DELTA_ONLY = """
+            {
+              "users":[],
+              "private_channels":[],
+              "guilds":[]
             }
         """.trimIndent()
     }

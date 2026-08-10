@@ -224,12 +224,15 @@ class StoreClientDataState(
 
     companion object {
         const val CACHE_KEY = "STORE_CLIENT_DATA_STATE_V2"
-        private const val FAST_CONNECT_CACHE_KEY = "STORE_CLIENT_DATA_STATE_V2_FAST_CONNECT_TX1"
+        private const val FAST_CONNECT_CACHE_KEY = "STORE_CLIENT_DATA_STATE_V2_FAST_CONNECT_TX2"
         private val REQUIRED_CACHE_KEYS = setOf(
             CACHE_KEY,
             StoreGuilds.GUILDS_CACHE_KEY,
             StoreGuilds.GUILD_ROLES_CACHE_KEY,
             StoreChannels.CHANNELS_CACHE_KEY,
+            StoreMessageAck.ACKS_CACHE_KEY,
+            StoreMentions.MENTION_COUNTS_CACHE_KEY,
+            StoreUserGuildSettings.GUILD_SETTINGS_CACHE_KEY,
         )
         private val gson = Gson()
 

@@ -14,6 +14,7 @@ import com.discord.models.guild.Guild as StoredGuild
 internal class ReadyPayloadHydrator(
     private val guildStore: StoreGuilds,
     private val channelStore: StoreChannels,
+    private val getPrivateChannelsVersion: () -> Long? = { null },
 ) {
     private val cache = HashMap<Long, GuildCache>()
 
@@ -73,7 +74,9 @@ internal class ReadyPayloadHydrator(
 
         val cachedPrivateChannels = channelStore.getChannelsByGuildInternal()[0L].orEmpty().values
         val incomingPrivateChannels = payload.privateChannels
-        val privateChannels = if (payload.readyGuilds.orEmpty().any { it.dataMode == ReadyGuild.DATA_MODE_PARTIAL }) {
+        val privateChannelsPartial = getPrivateChannelsVersion() != null
+        if (privateChannelsPartial && cachedPrivateChannels.isEmpty()) return HydrateResult.Error
+        val privateChannels = if (privateChannelsPartial) {
             (cachedPrivateChannels + incomingPrivateChannels.orEmpty()).associateBy(Channel::id).values
         } else {
             incomingPrivateChannels ?: cachedPrivateChannels

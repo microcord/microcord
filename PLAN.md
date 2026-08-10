@@ -3116,10 +3116,10 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   full READY parse to 1,159-1,405 ms and a normal `{partial=177}` READY to 164 ms. Partial counters correctly show only transmitted
   deltas (for example roles=0, emojis=0, channels=3), while a full sync reports all 6,814 roles, 11,098 emojis, and 9,942 channels.
 - V2 publication now follows the RN database invariant instead of merely persisting versions early. After StoreV2 snapshots, a
-  second dispatch handler flushes the required guild metadata/emoji/sticker, guild-role, channel, and client-state Persisters and
-  publishes the ~3 KiB Fast Connect mirror only if every required write succeeds. A versioned `TX1` mirror forces one safe full
-  sync when upgrading from the earlier non-transactional build. Device proof: that full sync streamed in 1,153 ms; the next process
-  used 177 committed versions, one socket, `{partial=177}`, and parsed READY in 496 ms with account hydration complete at +2.88 s.
+  second dispatch handler flushes the required guild metadata/emoji/sticker, guild-role, channel, read-ack, mention-count,
+  notification-settings, and client-state Persisters before publishing the ~3 KiB Fast Connect mirror. The `TX2` mirror forces one
+  safe full sync from earlier transaction sets. Device proof for the original transaction: full sync streamed in 1,153 ms; the next
+  process used 177 committed versions, one socket, `{partial=177}`, and parsed READY in 496 ms with hydration complete at +2.88 s.
 - Review follow-up separated inbound and outbound Gson again: Gateway dispatches use `InboundGatewayGsonParser`, whose modifier
   policy retains transient cache-only entity versions, while outbound JSON continues omitting them. Partial hydration now preserves
   every cached guild metadata field, including safety-alert channel, premium progress, NSFW/content levels, incidents, and official
@@ -3132,9 +3132,11 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   spans with the default Vito provider initialized from the configured Fresco pipeline, image-pipeline experiments are configured through the 3.7 builder, circle processing wraps the now-final Fresco
   postprocessor, and custom scale types provide the required description. Release compilation, lint-vital, packaging, and device
   installation pass with the refreshed dependency set.
-- CLIENT_STATE_V2 partial READY hydration now merges private-channel deltas into the restored DM cache instead of treating an
-  omitted/empty `private_channels` array as an authoritative empty list. Full READY still replaces the list. The updated release
-  builds, installs, launches, and remains alive with a clean crash buffer.
+- CLIENT_STATE_V2 private-channel partialness is keyed to the `private_channels_version` actually sent, not to whether any guild in
+  READY happens to use `data_mode=partial`. DM deltas therefore merge even for an empty/all-unavailable guild list. A versioned DM
+  response with no cached private channels is rejected and retried as a full sync instead of persisting an empty sidebar. Full READY
+  still replaces the list. Focused tests cover delta-only and missing-cache cases; the test task remains blocked by unrelated
+  `ActivityMessageEntryTest.kt:113`. Debug assembly and A65 installation pass.
 - The private-channel sidebar now re-anchors to the selected DM only when its channel ID or adapter index changes. Cached-to-READY
   reordering can no longer leave RecyclerView at an unrelated preserved position, while ordinary presence/unread rebinds do not
   trigger repeated scrolling. The selected row uses an explicit zero top offset rather than RecyclerView's ambiguous
