@@ -3242,6 +3242,21 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   The reference-shaped footer contains filename, expand, wrap, copy, and download controls at 8dp spacing. No-wrap scrolls up to
   16 viewports without opening side panels; wrap pins text to the viewport. Spoilers and recycled rows cancel or defer loading,
   and failures restore the ordinary file card.
+- The chat attachment gallery now queries both image and video rows from `MediaStore.Files`; the public FlexInput
+  `PhotoCursorAdapter` was hardcoded to `MediaStore.Images` despite video permission being requested. The combined adapter is
+  installed both after granting permission and when permission already exists. Existing selection behavior is retained and video
+  rows use native thumbnails with a persistent 28dp play overlay; the full-cell play placeholder was removed to prevent selection
+  flashes while thumbnails reload. Selection payloads now update only the check indicator instead of reloading the thumbnail, and
+  animate the thumbnail to the reference 0.85 selected scale. The composer preview strip draws a non-measuring video overlay, and
+  the attachment action sheet reserves a square video preview with its own persistent icon. The poll page uses a dedicated poll
+  vector whose fill resolves `flexInputIconColor`, matching the native attachment-tab tint. Debug assembly and A65 installation pass.
+- A device ANR trace proved an `ObservationDeck` lock inversion while opening Android's DocumentsUI: the UI thread held the deck
+  monitor while waiting to stale an observer, and the Store thread held that observer while connecting another stream. `disconnect`
+  no longer takes the deck monitor because it only mutates the observer. A deterministic concurrency regression test was added; its
+  task remains blocked by unrelated `ActivityMessageEntryTest.kt:113`. Debug assembly and A65 installation pass.
+- The message context menu's Forward action now uses React Native's current 24dp `ForwardingIcon` path
+  (`ArrowAngleRightUpIcon`) instead of the unrelated share glyph. The exact module and asset were recovered from the local Hermes
+  bundle. Debug assembly and A65 installation pass.
 - Profile-popout action labels now resolve the platform Whitney medium family explicitly while retaining the support-family fallback.
   Devices/session rows and notices use `UiKit.TextAppearance` styles rather than incorrectly passing `UiKit.TextView` widget styles
   to `android:textAppearance`, restoring Whitney medium/semibold consistently without geometry changes. Debug assembly and A65

@@ -94,7 +94,6 @@ class ObservationDeck(
         observerName = observerName,
     ).map { generator() }
 
-    @Synchronized
     fun disconnect(observer: Observer) {
         logBreadcrumb("disconnect START. observer: ${observer.name}")
         observer.markStale()

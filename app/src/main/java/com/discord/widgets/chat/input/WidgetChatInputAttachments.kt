@@ -2,21 +2,33 @@ package com.discord.widgets.chat.input
 
 import android.content.Context
 import android.app.Activity
+import android.content.AsyncQueryHandler
+import android.content.ContentResolver
+import android.content.ContentUris
 import android.content.Intent
+import android.database.Cursor
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.ColorDrawable
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Size
 import android.text.TextPaint
 import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.GestureDetector
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.view.inputmethod.InputContentInfoCompat
 import androidx.fragment.app.Fragment
@@ -48,13 +60,11 @@ import com.lytefast.flexinput.adapters.AddContentPagerAdapter
 import com.lytefast.flexinput.adapters.AttachmentPreviewAdapter
 import com.lytefast.flexinput.adapters.EmptyListAdapter
 import com.lytefast.flexinput.adapters.FileListAdapter
-import com.lytefast.flexinput.adapters.PhotoCursorAdapter
 import com.lytefast.flexinput.fragment.FilesFragment
 import com.lytefast.flexinput.fragment.FlexInputFragment
 import com.lytefast.flexinput.fragment.PhotosFragment
 import com.lytefast.flexinput.model.Attachment
 import com.lytefast.flexinput.model.Attachment.Companion.toAttachment
-import com.lytefast.flexinput.model.Photo
 import com.lytefast.flexinput.utils.SelectionAggregator
 import com.lytefast.flexinput.utils.SelectionCoordinator
 import com.lytefast.flexinput.utils.FileUtils.toAttachment
@@ -66,7 +76,10 @@ import com.otaliastudios.cameraview.controls.Facing
 import com.otaliastudios.cameraview.controls.Flash
 import java.net.URLConnection
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Everything the composer needs from FlexInput: the attachment pages, the attachment preview strip,
@@ -107,7 +120,7 @@ class WidgetChatInputAttachments(
         val permissions = channel?.let { StoreStream.getPermissions().getPermissionsByChannel()[it.id] }
         if (channel != null && ((channel.isPrivate() && !channel.isSystemDM()) ||
                 PermissionUtils.can(Permission.SEND_POLLS, permissions))) {
-            pages += page(R.drawable.ic_sort_white_24dp, R.string.poll_create) { PollCreateLauncherFragment() }
+            pages += page(R.drawable.ic_poll_flexinput_24dp, R.string.poll_create) { PollCreateLauncherFragment() }
         }
         flexInputFragment.setContentPages(*pages.toTypedArray())
         if (canCreateThread) {
@@ -415,11 +428,11 @@ class WidgetChatInputAttachments(
     }
 
     open class DiscordMediaFragment : PhotosFragment() {
-        private var grantedSelectionCoordinator: SelectionCoordinator<Attachment<Any>, Photo>? = null
+        private var grantedSelectionCoordinator: SelectionCoordinator<Attachment<Any>, Attachment<Any>>? = null
 
         override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? =
             super.onCreateView(inflater, container, savedInstanceState).also { view ->
-                if (!hasPermissions()) view?.post(::requestGallery)
+                view?.post { if (hasPermissions()) refreshAfterGrant() else requestGallery() }
             }
 
         override fun hasPermissions(vararg requiredPermissionList: String): Boolean =
@@ -439,22 +452,22 @@ class WidgetChatInputAttachments(
             val context = context ?: return
             val recyclerView = view?.findViewById<RecyclerView>(com.lytefast.flexinput.R.id.list) ?: return
             grantedSelectionCoordinator?.close()
-            val coordinator = SelectionCoordinator<Attachment<Any>, Photo>()
+            val coordinator = SelectionCoordinator<Attachment<Any>, Attachment<Any>>()
             flexInputCoordinator()?.selectionAggregator?.registerSelectionCoordinator(coordinator)
             grantedSelectionCoordinator = coordinator
             val thumbnailSide = resources.displayMetrics.widthPixels / MEDIA_GRID_COLUMNS
             recyclerView.layoutManager = GridLayoutManager(context, MEDIA_GRID_COLUMNS)
-            val adapter = PhotoCursorAdapter(
+            val adapter = MediaCursorAdapter(
                 context.contentResolver,
                 coordinator,
                 thumbnailSide,
-                thumbnailSide,
+                viewLifecycleOwner.lifecycleScope,
             )
             recyclerView.adapter = adapter
             recyclerView.invalidateItemDecorations()
             view?.findViewById<SwipeRefreshLayout>(com.lytefast.flexinput.R.id.swipeRefreshLayout)?.let { swipeRefresh ->
                 swipeRefresh.setOnRefreshListener {
-                    adapter.loadPhotos()
+                    adapter.loadMedia()
                     swipeRefresh.isRefreshing = false
                 }
             }
@@ -464,6 +477,189 @@ class WidgetChatInputAttachments(
             grantedSelectionCoordinator?.close()
             grantedSelectionCoordinator = null
             super.onDestroyView()
+        }
+    }
+
+    private class MediaCursorAdapter(
+        private val resolver: ContentResolver,
+        coordinator: SelectionCoordinator<Attachment<Any>, Attachment<Any>>,
+        private val thumbnailSize: Int,
+        private val scope: kotlinx.coroutines.CoroutineScope,
+    ) : RecyclerView.Adapter<MediaCursorAdapter.Holder>() {
+        private val selection = coordinator.bind(this)
+        private var cursor: Cursor? = null
+        private var idColumn = 0
+        private var nameColumn = 0
+        private var typeColumn = 0
+
+        init {
+            setHasStableIds(true)
+        }
+
+        override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+            super.onAttachedToRecyclerView(recyclerView)
+            loadMedia()
+        }
+
+        override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+            cursor?.close()
+            cursor = null
+            super.onDetachedFromRecyclerView(recyclerView)
+        }
+
+        override fun getItemCount() = cursor?.count ?: 0
+
+        override fun getItemId(position: Int) = item(position)?.id ?: RecyclerView.NO_ID
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = Holder(
+            LayoutInflater.from(parent.context).inflate(com.lytefast.flexinput.R.layout.view_grid_image, parent, false),
+        )
+
+        override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(item(position), position)
+
+        override fun onBindViewHolder(holder: Holder, position: Int, payloads: MutableList<Any>) {
+            val selectionEvent = payloads.filterIsInstance<SelectionCoordinator.SelectionEvent<*>>().firstOrNull()
+            if (selectionEvent == null) super.onBindViewHolder(holder, position, payloads)
+            else holder.setSelected(selectionEvent.isSelected)
+        }
+
+        override fun onViewRecycled(holder: Holder) {
+            holder.recycle()
+            super.onViewRecycled(holder)
+        }
+
+        fun loadMedia() {
+            object : AsyncQueryHandler(resolver) {
+                override fun onQueryComplete(token: Int, cookie: Any?, result: Cursor?) {
+                    result ?: return
+                    cursor?.close()
+                    cursor = result
+                    idColumn = result.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
+                    nameColumn = result.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DISPLAY_NAME)
+                    typeColumn = result.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
+                    notifyDataSetChanged()
+                }
+            }.startQuery(
+                0,
+                null,
+                MediaStore.Files.getContentUri("external"),
+                arrayOf(
+                    MediaStore.Files.FileColumns._ID,
+                    MediaStore.Files.FileColumns.DISPLAY_NAME,
+                    MediaStore.Files.FileColumns.MEDIA_TYPE,
+                ),
+                "${MediaStore.Files.FileColumns.MEDIA_TYPE}=? OR ${MediaStore.Files.FileColumns.MEDIA_TYPE}=?",
+                arrayOf(
+                    MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
+                    MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString(),
+                ),
+                "${MediaStore.Files.FileColumns.DATE_ADDED} DESC",
+            )
+        }
+
+        private fun item(position: Int): Attachment<Any>? {
+            val cursor = cursor ?: return null
+            if (!cursor.moveToPosition(position)) return null
+            val id = cursor.getLong(idColumn)
+            val mediaType = cursor.getInt(typeColumn)
+            val base = if (mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO) {
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            } else {
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            }
+            return Attachment(
+                id,
+                ContentUris.withAppendedId(base, id),
+                cursor.getString(nameColumn) ?: "media-$id",
+                mediaType,
+            )
+        }
+
+        inner class Holder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+            private val preview = itemView.findViewById<com.facebook.drawee.view.SimpleDraweeView>(
+                com.lytefast.flexinput.R.id.content_iv,
+            )
+            private val selected = itemView.findViewById<View>(com.lytefast.flexinput.R.id.item_check_indicator)
+            private val videoIndicator = ImageView(itemView.context).apply {
+                setImageResource(R.drawable.ic_play_arrow_24dp)
+                setBackgroundResource(R.drawable.drawable_circle_black)
+                setPadding(dp(4), dp(4), dp(4), dp(4))
+                visibility = View.GONE
+                (itemView as FrameLayout).addView(
+                    this,
+                    FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER),
+                )
+            }
+            private var thumbnailJob: Job? = null
+            private var attachment: Attachment<Any>? = null
+
+            init {
+                itemView.setOnClickListener {
+                    bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION }
+                        ?.let { position -> selection.toggleItem(attachment, position) }
+                }
+            }
+
+            fun bind(item: Attachment<Any>?, position: Int) {
+                recycle()
+                attachment = item
+                setSelected(item != null && selection.isSelected(item, position), animate = false)
+                if (item == null) return
+                val isVideo = item.data == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
+                videoIndicator.visibility = if (isVideo) View.VISIBLE else View.GONE
+                if (isVideo) {
+                    preview.setImageURI(null as Uri?)
+                    preview.hierarchy.setPlaceholderImage(ColorDrawable(Color.DKGRAY))
+                    thumbnailJob = scope.launch {
+                        val bitmap = withContext(Dispatchers.IO) {
+                            runCatching {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                    resolver.loadThumbnail(item.uri, Size(thumbnailSize, thumbnailSize), null)
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    MediaStore.Video.Thumbnails.getThumbnail(
+                                        resolver,
+                                        item.id,
+                                        MediaStore.Video.Thumbnails.MINI_KIND,
+                                        null,
+                                    )
+                                }
+                            }.getOrNull()
+                        }
+                        if (attachment == item && bitmap != null) {
+                            preview.hierarchy.setPlaceholderImage(
+                                BitmapDrawable(preview.resources, bitmap),
+                                com.facebook.drawee.drawable.ScalingUtils.ScaleType.CENTER_CROP,
+                            )
+                        }
+                    }
+                } else {
+                    preview.hierarchy.setPlaceholderImage(ColorDrawable(Color.DKGRAY))
+                    preview.setImageURI(item.uri)
+                }
+            }
+
+            fun setSelected(isSelected: Boolean, animate: Boolean = true) {
+                selected.visibility = if (isSelected) View.VISIBLE else View.GONE
+                val scale = if (isSelected) 0.85f else 1f
+                preview.animate().cancel()
+                preview.animate()
+                    .scaleX(scale)
+                    .scaleY(scale)
+                    .setDuration(
+                        if (animate) itemView.resources.getInteger(android.R.integer.config_shortAnimTime).toLong() else 0L,
+                    )
+                    .start()
+            }
+
+            fun recycle() {
+                thumbnailJob?.cancel()
+                thumbnailJob = null
+                attachment = null
+                videoIndicator.visibility = View.GONE
+            }
+
+            private fun dp(value: Int) = (value * itemView.resources.displayMetrics.density).toInt()
         }
     }
 
@@ -615,9 +811,11 @@ class WidgetChatInputAttachments(
             textAlign = Paint.Align.CENTER
             typeface = Typeface.DEFAULT_BOLD
         }
+        private val videoBackgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(190, 0, 0, 0) }
+        private val videoIconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
 
         /** Resolved once per uri: a content lookup on every frame would stutter the strip. */
-        private val isImageByUri = mutableMapOf<String, Boolean>()
+        private val mimeByUri = mutableMapOf<String, String?>()
 
         override fun onDrawOver(canvas: Canvas, parent: RecyclerView, state: RecyclerView.State) {
             val density = parent.resources.displayMetrics.scaledDensity
@@ -628,8 +826,15 @@ class WidgetChatInputAttachments(
                 val position = parent.getChildAdapterPosition(child)
                 if (position == RecyclerView.NO_POSITION || position >= adapter.selectionAggregator.size) return@repeat
                 val attachment = adapter.selectionAggregator[position]
-                if (isImage(parent, attachment)) return@repeat
-                drawTile(canvas, child, attachment, density)
+                val mime = mimeByUri.getOrPut(attachment.uri.toString()) {
+                    runCatching { parent.context.contentResolver.getType(attachment.uri) }.getOrNull()
+                        ?: URLConnection.guessContentTypeFromName(attachment.displayName)
+                }
+                when {
+                    mime?.startsWith("video/") == true -> drawVideoIndicator(canvas, child, density)
+                    mime == null || mime.startsWith("image/") -> Unit
+                    else -> drawTile(canvas, child, attachment, density)
+                }
             }
         }
 
@@ -660,13 +865,17 @@ class WidgetChatInputAttachments(
             canvas.drawText(label, 0, label.length, centerX, child.bottom - 6f * density, namePaint)
         }
 
-        private fun isImage(parent: RecyclerView, attachment: Attachment<Any>): Boolean {
-            val key = attachment.uri?.toString() ?: return true
-            return isImageByUri.getOrPut(key) {
-                val mime = runCatching { parent.context.contentResolver.getType(attachment.uri) }.getOrNull()
-                    ?: URLConnection.guessContentTypeFromName(attachment.displayName.orEmpty())
-                mime == null || mime.startsWith("image/") || mime.startsWith("video/")
+        private fun drawVideoIndicator(canvas: Canvas, child: View, density: Float) {
+            val centerX = (child.left + child.right) / 2f
+            val centerY = (child.top + child.bottom) / 2f
+            canvas.drawCircle(centerX, centerY, 14f * density, videoBackgroundPaint)
+            val path = android.graphics.Path().apply {
+                moveTo(centerX - 4f * density, centerY - 7f * density)
+                lineTo(centerX + 8f * density, centerY)
+                lineTo(centerX - 4f * density, centerY + 7f * density)
+                close()
             }
+            canvas.drawPath(path, videoIconPaint)
         }
 
         private companion object {

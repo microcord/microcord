@@ -61,8 +61,13 @@ class AttachmentBottomSheet : AppBottomSheet() {
 
         binding.attachmentDuration.apply {
             val durationMs = videoDurationMs()
+            binding.attachmentVideoIndicator.visibility = if (durationMs == null) View.GONE else View.VISIBLE
             visibility = if (durationMs == null) View.GONE else View.VISIBLE
             if (durationMs != null) {
+                binding.attachmentPreview.layoutParams =
+                    (binding.attachmentPreview.layoutParams as ConstraintLayout.LayoutParams).apply {
+                        dimensionRatio = "1"
+                    }
                 text = if (durationMs > 0) {
                     TimeUtils.toFriendlyStringSimple(durationMs)
                 } else {
