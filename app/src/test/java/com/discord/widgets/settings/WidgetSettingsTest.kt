@@ -47,6 +47,7 @@ class WidgetSettingsTest {
             com.discord.R.id.accessibility,
             com.discord.R.id.behavior,
             com.discord.R.id.activity_status,
+            com.discord.R.id.feature_flags,
             com.discord.R.id.notifications,
             com.discord.R.id.privacy,
             com.discord.R.id.qr_scanner,

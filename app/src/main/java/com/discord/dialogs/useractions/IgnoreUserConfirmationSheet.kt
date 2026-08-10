@@ -15,6 +15,7 @@ import com.discord.utilities.rx.ui
 import com.discord.widgets.settings.SettingsStrings
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.button.MaterialButton
+import rx.subscriptions.CompositeSubscription
 
 /**
  * Explains what ignoring does before it happens, and offers blocking instead.
@@ -77,6 +78,11 @@ class IgnoreUserConfirmationSheet : AppBottomSheet() {
             dismiss()
         }
 
+    }
+
+    override fun bindSubscriptions(compositeSubscription: CompositeSubscription) {
+        super.bindSubscriptions(compositeSubscription)
+        val view = view ?: return
         StoreStream.getUsers().observeUser(userId)
             .ui(this)
             .appSubscribe(IgnoreUserConfirmationSheet::class.java) { user ->

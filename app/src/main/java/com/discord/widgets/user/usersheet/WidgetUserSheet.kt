@@ -65,6 +65,7 @@ import com.discord.widgets.user.profile.ProfileThemeColors
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.tabs.TabLayout
+import rx.subscriptions.CompositeSubscription
 
 /**
  * The user sheet: the bottom sheet that opens whenever an avatar or a name is tapped.
@@ -177,7 +178,10 @@ class WidgetUserSheet : AppBottomSheet() {
         bindVoiceSettings()
         bindProfileTabs()
         markAccessibilityHeadings()
+    }
 
+    override fun bindSubscriptions(compositeSubscription: CompositeSubscription) {
+        super.bindSubscriptions(compositeSubscription)
         viewModel.observeViewState()
             .ui(this)
             .appSubscribe(WidgetUserSheet::class.java) { render(it) }

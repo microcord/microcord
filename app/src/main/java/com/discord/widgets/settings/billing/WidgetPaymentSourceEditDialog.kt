@@ -74,6 +74,10 @@ class WidgetPaymentSourceEditDialog : AppDialog(R.layout.widget_payment_source_e
         makeDefault = view.findViewById(R.id.payment_source_edit_default)
 
         view.findViewById<Toolbar>(R.id.action_bar_toolbar).setNavigationOnClickListener { dismiss() }
+    }
+
+    override fun onViewBoundOrOnResume() {
+        super.onViewBoundOrOnResume()
         viewModel.observeViewState().ui(this).appSubscribe(javaClass) { viewState ->
             val item = (viewState as? SettingsBillingViewModel.ViewState.Loaded)
                 ?.paymentSourceItems

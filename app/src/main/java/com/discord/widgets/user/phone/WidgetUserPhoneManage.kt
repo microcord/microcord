@@ -104,17 +104,16 @@ class WidgetUserPhoneManage : WidgetUserAccountVerifyBase(R.layout.widget_user_p
         phoneInput.bind(this, onAfterTextChanged = { handlePhoneNumberTextChanged() })
         handlePhoneNumberTextChanged()
 
-        StoreStream.getPhone()
-            .observeCountryCode()
-            .ui(this)
-            .appSubscribe(WidgetUserPhoneManage::class.java) { phoneInput.setCountryCode(it) }
-
         nextButton.setOnClickListener { updatePhoneNumber() }
         removePhoneRow.setOnClickListener { removePhoneNumber() }
     }
 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
+        StoreStream.getPhone()
+            .observeCountryCode()
+            .ui(this)
+            .appSubscribe(WidgetUserPhoneManage::class.java) { phoneInput.setCountryCode(it) }
         StoreStream.getUsers()
             .observeMe()
             .ui(this)

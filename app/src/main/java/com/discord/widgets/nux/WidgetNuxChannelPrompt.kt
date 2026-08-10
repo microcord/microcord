@@ -62,10 +62,6 @@ class WidgetNuxChannelPrompt : AppFragment(R.layout.widget_nux_channel_prompt) {
         topicInput = view.findViewById(R.id.nuf_channel_prompt_topic_wrap)
         ctaButton = view.findViewById(R.id.nuf_channel_prompt_cta_button)
 
-        StoreStream.getGuilds().observeGuild(guildId)
-            .ui(this)
-            .appSubscribe(WidgetNuxChannelPrompt::class.java, context) { handleGuild(it) }
-
         view.findViewById<TextView>(R.id.nuf_channel_prompt_skip_button).setOnClickListener {
             finishActivity(guildId)
         }
@@ -78,6 +74,13 @@ class WidgetNuxChannelPrompt : AppFragment(R.layout.widget_nux_channel_prompt) {
         ctaButton.setIsLoading(false)
         ctaButton.setOnClickListener { handleSubmit(guildId) }
         topicInput.setOnImeActionDone(isEventConsumed = true) { handleSubmit(guildId) }
+    }
+
+    override fun onViewBoundOrOnResume() {
+        super.onViewBoundOrOnResume()
+        StoreStream.getGuilds().observeGuild(mostRecentIntent.getLongExtra(INTENT_EXTRA_GUILD_ID, 0L))
+            .ui(this)
+            .appSubscribe(WidgetNuxChannelPrompt::class.java, context) { handleGuild(it) }
     }
 
     /**

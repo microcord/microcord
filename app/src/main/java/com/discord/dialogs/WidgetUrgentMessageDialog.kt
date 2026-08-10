@@ -45,11 +45,15 @@ class WidgetUrgentMessageDialog : AppDialog(R.layout.widget_urgent_message_dialo
             }
         }
 
+    }
+
+    override fun onViewBoundOrOnResume() {
+        super.onViewBoundOrOnResume()
         viewModel.observeViewState()
             .bindToComponentLifecycle(this)
             .appSubscribe(WidgetUrgentMessageDialog::class.java) { state ->
-                view.findViewById<LoadingButton>(R.id.view_dialog_confirmation_confirm)
-                    .setIsLoading(state.isBusy)
+                view?.findViewById<LoadingButton>(R.id.view_dialog_confirmation_confirm)
+                    ?.setIsLoading(state.isBusy)
             }
         viewModel.observeEvents()
             .bindToComponentLifecycle(this)
