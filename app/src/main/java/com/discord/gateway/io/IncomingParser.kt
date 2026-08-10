@@ -51,6 +51,7 @@ import com.discord.models.domain.ModelMessageDelete
 import com.discord.api.notification.AccountNotificationSettings
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.domain.ModelPayload
+import com.discord.models.domain.ModelReadySupplemental
 import com.discord.models.domain.ModelReadState
 import com.discord.models.domain.ModelSession
 import com.discord.models.domain.ModelUserRelationship
@@ -194,6 +195,8 @@ class IncomingParser(private val gson: Gson) {
 
     private fun parseDispatchBody(type: String?, data: JsonReader): Any? = when (type) {
         "READY" -> gson.fromJson(data, ModelPayload::class.java)
+        "READY_SUPPLEMENTAL" -> gson.fromJson(data, ModelReadySupplemental::class.java)
+        "INITIAL_GUILD" -> gson.fromJson(data, ReadyGuild::class.java)
 
         // Current user
         "USER_UPDATE" -> gson.fromJson(data, User::class.java)

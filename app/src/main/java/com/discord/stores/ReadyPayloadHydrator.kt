@@ -103,7 +103,7 @@ internal class ReadyPayloadHydrator(
 
     private fun hydrateReadyGuild(sync: ReadyGuild): Guild? {
         val cached = cache[sync.id]
-        if (sync.dataMode == ReadyGuild.DATA_MODE_UNAVAILABLE) {
+        if (sync.unavailable || sync.dataMode == ReadyGuild.DATA_MODE_UNAVAILABLE) {
             return cached?.guild?.copy(unavailable = true) ?: unavailableGuild(sync.id)
         }
         val base = (sync.properties ?: cached?.guild ?: return null).withRequiredFields(cached?.guild)

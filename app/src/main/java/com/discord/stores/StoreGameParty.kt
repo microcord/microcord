@@ -36,6 +36,9 @@ class StoreGameParty(
     }
 
     @StoreThread
+    fun handleConnectionOpenSupplemental(presences: List<ApiPresence>) = handlePresences(presences)
+
+    @StoreThread
     fun handleGuildCreateOrSync(guild: Guild) {
         guild.presences?.let(::handlePresences)
     }

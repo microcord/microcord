@@ -17,6 +17,7 @@ enum class BootLogEvent(val line: String) {
     GATEWAY_HELLO("Gateway handshake received"),
     GATEWAY_IDENTIFY("Authenticating gateway session"),
     GATEWAY_DATA_READY("Gateway initial state received"),
+    INITIAL_GUILD_APPLIED("Initial guild applied ahead of ready"),
     CACHE_HYDRATION_STARTED("Hydrating account caches"),
     CACHE_HYDRATION_FINISHED("Account caches hydrated"),
     GATEWAY_CONNECTED("Gateway connection ready"),

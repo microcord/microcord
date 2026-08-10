@@ -124,9 +124,31 @@ class StoreChannels(
         markChanged()
     }
 
+    /**
+     * Adds the DMs READY left out because the client already had them cached.
+     *
+     * These are additive: READY carried whichever conversations the server judged hot, and this is
+     * the remainder, so the two together are the whole list.
+     */
+    @StoreThread
+    fun handleConnectionOpenSupplemental(channels: List<Channel>, readyUsers: Map<Long, User>) {
+        if (channels.isEmpty()) return
+        val privateChannels = channelsByGuild.getOrPut(PRIVATE_CHANNELS_ID) { HashMap() }
+        channels.filterNot(Channel::isManaged).forEach { channel ->
+            privateChannels[channel.id] = if (!channel.recipients.isNullOrEmpty()) channel else channel.copy(
+                recipients = channel.recipientIds.orEmpty().mapNotNull(readyUsers::get),
+            )
+        }
+        rebuildNames()
+        markChanged()
+    }
+
     @StoreThread
     fun handleGuildAdd(guild: Guild) {
         storeGuild(guild)
+        // A guild arriving before READY — the one asked for by `initial_guild_id` — is enough to
+        // render, so the screen does not have to wait out the rest of the payload.
+        updateInitializationState()
         markChanged()
     }
 

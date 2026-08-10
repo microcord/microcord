@@ -37,6 +37,12 @@ data class ReadyGuild(
     @SerializedName("member_count") val memberCount: Int? = null,
     @SerializedName("premium_subscription_count") val premiumSubscriptionCount: Int? = null,
     @SerializedName("unable_to_sync_deletes") val unableToSyncDeletes: Boolean = false,
+    /**
+     * READY reports an unavailable guild as a bare `{id, unavailable}` stub rather than giving it a
+     * [dataMode], so this and not [dataMode] is what identifies one. Only the HTTP background sync
+     * normalises them to [DATA_MODE_UNAVAILABLE].
+     */
+    val unavailable: Boolean = false,
 ) {
     data class PartialUpdates(
         val roles: List<GuildRole>? = null,

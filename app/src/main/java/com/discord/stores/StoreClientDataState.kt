@@ -42,6 +42,7 @@ class StoreClientDataState(
         val userGuildSettingsVersion: Int = -1,
         val privateChannelsVersion: Long? = null,
         val apiCodeVersion: Int? = null,
+        val initialGuildId: Long? = null,
     ) {
         fun toIdentifyData(): IdentifyClientState = IdentifyClientState(
             guildVersions = guildVersions,
@@ -49,6 +50,7 @@ class StoreClientDataState(
             readStateVersion = readStateVersion,
             userGuildSettingsVersion = userGuildSettingsVersion,
             privateChannelsVersion = privateChannelsVersion,
+            initialGuildId = initialGuildId,
             apiCodeVersion = apiCodeVersion,
         )
     }
@@ -59,6 +61,7 @@ class StoreClientDataState(
     private var userGuildSettingsVersion = -1
     private var privateChannelsVersion: Long? = null
     private var apiCodeVersion: Int? = null
+    private var initialGuildId: Long? = null
     private var pendingFastConnectCommit = false
 
     private var clientDataStateSnapshot = ClientDataState()
@@ -76,6 +79,7 @@ class StoreClientDataState(
         userGuildSettingsVersion = restored.userGuildSettingsVersion
         privateChannelsVersion = restored.privateChannelsVersion
         apiCodeVersion = restored.apiCodeVersion
+        initialGuildId = restored.initialGuildId
         markChanged()
     }
 
@@ -99,6 +103,7 @@ class StoreClientDataState(
             userGuildSettingsVersion,
             privateChannelsVersion,
             apiCodeVersion,
+            initialGuildId,
         )
 
     @StoreThread
@@ -119,8 +124,15 @@ class StoreClientDataState(
 
     @StoreThread
     fun handleConnectionOpen(payload: ModelPayload) {
+        // A guild that came back unavailable told us nothing about itself, so its version carries
+        // over; dropping it would ask for the whole guild again the moment it comes back.
+        val retained = HashMap(guildVersions)
         clear(persist = false)
         payload.guilds.orEmpty().forEach { guild ->
+            if (guild.unavailable) {
+                retained[guild.id]?.let { guildVersions[guild.id] = it }
+                return@forEach
+            }
             updateGuildVersion(guild)
             guild.channels.orEmpty().forEach { channel -> updateHighestLastMessageId(channel.lastMessageId) }
         }
@@ -129,6 +141,20 @@ class StoreClientDataState(
         payload.userGuildSettings?.let { userGuildSettingsVersion = it.version }
         apiCodeVersion = payload.apiCodeVersion
         pendingFastConnectCommit = true
+        markChanged()
+    }
+
+    /**
+     * Remembers which guild to ask the gateway to send ahead of READY.
+     *
+     * Only a real guild qualifies: 0 is the DM pseudo-guild, and asking for it would spend the one
+     * early guild slot on something the gateway cannot send.
+     */
+    @StoreThread
+    fun handleGuildSelected(guildId: Long) {
+        val selected = guildId.takeIf { it > 0L }
+        if (selected == initialGuildId) return
+        initialGuildId = selected
         markChanged()
     }
 

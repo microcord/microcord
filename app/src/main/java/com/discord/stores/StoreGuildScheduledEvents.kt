@@ -307,8 +307,9 @@ class StoreGuildScheduledEvents(
             guild.guildScheduledEvents?.forEach(::processGuildScheduledEventCreateOrUpdate)
         }
         // Guild-event read states key on the guild id, not a channel; without seeding these the
-        // events row starts every launch looking unread.
-        lastAckedGuildScheduledEventIds.clear()
+        // events row starts every launch looking unread. A partial read state only restates what
+        // changed, so clearing on one would mark every other guild's events unread again.
+        if (payload.readState?.isPartial != true) lastAckedGuildScheduledEventIds.clear()
         payload.readState?.entries.orEmpty()
             .filter { it.readStateType == ReadStateTypes.GUILD_EVENT }
             .forEach { lastAckedGuildScheduledEventIds[it.channelId] = it.lastMessageId }

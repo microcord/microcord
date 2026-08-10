@@ -71,6 +71,30 @@ class StoreUserPresence(
         markChanged()
     }
 
+    /**
+     * Applies the presences READY omitted: friends first, then one list per supplemental guild.
+     *
+     * Both arrive deduplicated against READY's `users`, so a presence identifies its subject by id
+     * alone and no user object is attached.
+     */
+    @StoreThread
+    fun handleConnectionOpenSupplemental(
+        friends: List<ApiPresence>,
+        byGuild: Map<Long, List<ApiPresence>>,
+    ) {
+        friends.forEach { presence ->
+            val userId = presence.user?.id ?: presence.userId ?: return@forEach
+            handlePresenceUpdate(ME_GUILD_ID, userId, presence.status, presence.clientStatus, presence.activities)
+        }
+        byGuild.forEach { (guildId, presences) ->
+            presences.forEach { presence ->
+                val userId = presence.user?.id ?: presence.userId ?: return@forEach
+                handlePresenceUpdate(guildId, userId, presence.status, presence.clientStatus, presence.activities)
+            }
+        }
+        markChanged()
+    }
+
     @StoreThread fun handleGuildAdd(guild: Guild) = guild.presences.orEmpty().forEach { presence ->
         val userId = presence.user?.id ?: presence.userId
         if (userId != null) handlePresenceUpdate(guild.id, userId, presence.status, presence.clientStatus, presence.activities)

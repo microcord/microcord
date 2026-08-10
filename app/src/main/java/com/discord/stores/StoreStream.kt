@@ -33,6 +33,7 @@ import com.discord.models.authentication.AuthState
 import com.discord.models.domain.ModelChannelUnreadUpdate
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.domain.ModelPayload
+import com.discord.models.domain.ModelReadySupplemental
 import com.discord.models.domain.ReadyGuild
 import com.discord.models.domain.ModelReadState
 import com.discord.models.domain.ModelSession
@@ -1059,6 +1060,12 @@ class StoreStream private constructor(
     private val initialized = BehaviorSubject.create(false)
     private val gatewayScheduler = RealGatewayScheduler()
     private var gateway: GatewaySocket? = null
+    /** READY's users, kept only until READY_SUPPLEMENTAL has resolved its ids against them. */
+    private var readySupplementalUsers: Map<Long, com.discord.api.user.User>? = null
+
+    /** The guild asked for by `initial_guild_id`, held until the READY it precedes arrives. */
+    private var initialGuild: Guild? = null
+
     private var gatewayInitTimeout: GatewayCancellable? = null
     private var gatewayToken: String? = null
     @Volatile private var authGeneration = 0
@@ -1601,7 +1608,10 @@ class StoreStream private constructor(
      */
     private fun installChatStoreWiring() {
         guildSelected.observeSelectedGuildId().distinctUntilChanged().subscribe { guildId ->
-            dispatcher.schedule { guildSubscriptions.handleGuildSelect(guildId) }
+            dispatcher.schedule {
+                guildSubscriptions.handleGuildSelect(guildId)
+                clientDataState.handleGuildSelected(guildId)
+            }
         }
         channelsSelected.observeResolvedSelectedChannel().distinctUntilChanged().subscribe(
             { selected -> dispatcher.schedule { handleChannelSelected(selected) } },
@@ -1788,6 +1798,8 @@ class StoreStream private constructor(
         dispatchSubscribe(events.getConnected(), "streamConnected", ::handleGatewayConnectedInternal)
         dispatchSubscribe(events.getConnectionReady(), "streamReady", ::handleGatewayConnectionReadyInternal)
         dispatchSubscribe(events.ready, "streamConnectionOpen", ::handleConnectionOpenInternal)
+        dispatchSubscribe(events.readySupplemental, "streamConnectionOpenSupplemental", ::handleConnectionOpenSupplementalInternal)
+        dispatchSubscribe(events.initialGuild, "streamInitialGuild", ::handleInitialGuildInternal)
         dispatchSubscribe(
             events.userSettingsProtoUpdate,
             "streamUserSettingsProtoUpdate",
@@ -3009,7 +3021,7 @@ class StoreStream private constructor(
     @StoreThread
     private fun handleConnectionOpenInternal(rawPayload: ModelPayload) {
         BootLog.record(BootLogEvent.CACHE_HYDRATION_STARTED)
-        val payload = when (val result = readyPayloadHydrator.hydrateReadyPayload(rawPayload)) {
+        val hydrated = when (val result = readyPayloadHydrator.hydrateReadyPayload(rawPayload)) {
             ReadyPayloadHydrator.HydrateResult.Error -> {
                 clientDataState.clear()
                 gatewayConnection.resetOnError()
@@ -3017,9 +3029,18 @@ class StoreStream private constructor(
             }
             is ReadyPayloadHydrator.HydrateResult.Success -> result.payload
         }
+        val early = initialGuild
+        initialGuild = null
+        val payload = if (early == null || hydrated.guilds.orEmpty().any { it.id == early.id }) {
+            hydrated
+        } else {
+            hydrated.withGuilds(hydrated.guilds.orEmpty() + early)
+        }
         gatewayInitTimeout?.cancel()
         gatewayInitTimeout = null
         payload.authToken?.let(authentication::setAuthed)
+        readySupplementalUsers =
+            (payload.users.orEmpty() + listOfNotNull(payload.me)).associateBy { it.id }
         authentication.handleConnectionOpen(payload)
         users.handleConnectionOpen(payload)
         payload.userSettings?.let {
@@ -3092,8 +3113,62 @@ class StoreStream private constructor(
         archivedThreads.handleConnectionOpen()
         connectionOpen.handleConnectionOpen()
         updateSortedGuilds()
+        // The flag rides on the pre-hydration envelope and does not survive into Guild, so the
+        // ids are taken from the raw payload and matched up once the stores hold the merge.
+        rawPayload.readyGuilds.orEmpty().filter { it.unableToSyncDeletes }.mapTo(HashSet()) { it.id }
+            .let { pending -> payload.guilds.orEmpty().filter { it.id in pending } }
+            .forEach(::requestDeletedGuildEntities)
         BootLog.record(BootLogEvent.CACHE_HYDRATION_FINISHED)
         navigation.updateAuthState(authentication.getAuthState())
+    }
+
+    /**
+     * Applies what READY left out under `PRIORITIZED_READY_PAYLOAD`.
+     *
+     * Its members and presences name their subject by id only, against the `users` READY carried,
+     * so that list is held from READY until this arrives and released afterwards.
+     */
+    /**
+     * The guild named by `initial_guild_id`, which the gateway sends ahead of READY.
+     *
+     * Applied straight away rather than held: on a start with no usable cache the screen otherwise
+     * waits out the whole READY before it has a channel to draw, and this guild is the one the user
+     * was last looking at. READY replaces it moments later, or folds this copy back in if it was
+     * left out of the payload.
+     */
+    @StoreThread
+    private fun handleInitialGuildInternal(sync: ReadyGuild) {
+        val guild = readyPayloadHydrator.hydratePostReadyGuild(sync) ?: return
+        initialGuild = guild
+        handleGuildCreateOrUpdateInternal(guild)
+        BootLog.record(BootLogEvent.INITIAL_GUILD_APPLIED)
+    }
+
+    @StoreThread
+    private fun handleConnectionOpenSupplementalInternal(payload: ModelReadySupplemental) {
+        val users = readySupplementalUsers.orEmpty()
+        readySupplementalUsers = null
+
+        val supplementalGuilds = payload.guilds.orEmpty()
+        supplementalGuilds.forEachIndexed { index, guild ->
+            payload.mergedMembers?.getOrNull(index)?.forEach { member ->
+                val user = runCatching { member.user }.getOrNull()
+                    ?: member.userId?.let(users::get) ?: return@forEach
+                guilds.handleGuildMember(member.copy(user = user), guild.id, isFullGuildMember = true)
+            }
+            guild.voiceStates?.let { voiceStates.handleVoiceStateUpdates(it) }
+            guild.activityInstances?.let { embeddedActivities.handleConnectionOpenSupplemental(guild.id, it) }
+        }
+
+        presences.handleConnectionOpenSupplemental(
+            friends = payload.mergedPresences?.friends.orEmpty(),
+            byGuild = supplementalGuilds.mapIndexedNotNull { index, guild ->
+                payload.mergedPresences?.guilds?.getOrNull(index)?.let { guild.id to it }
+            }.toMap(),
+        )
+        gameParty.handleConnectionOpenSupplemental(payload.mergedPresences?.friends.orEmpty())
+        channels.handleConnectionOpenSupplemental(payload.lazyPrivateChannels.orEmpty(), users)
+        updateSortedGuilds()
     }
 
     @StoreThread

@@ -60,6 +60,8 @@ import com.discord.models.domain.ModelMessageDelete
 import com.discord.api.notification.AccountNotificationSettings
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.domain.ModelPayload
+import com.discord.models.domain.ModelReadySupplemental
+import com.discord.models.domain.ReadyGuild
 import com.discord.models.domain.BackgroundSync
 import com.discord.gateway.io.DeletedEntityIds
 import com.discord.gateway.io.DeletedEntityIdsRequest
@@ -122,6 +124,8 @@ class StoreGatewayConnection(
 
     // Session
     val ready = behavior<ModelPayload>()
+    val readySupplemental = behavior<ModelReadySupplemental>()
+    val initialGuild = behavior<ReadyGuild>()
 
     // Current user
     val userUpdate = behavior<User>()
@@ -461,6 +465,8 @@ class StoreGatewayConnection(
         batches.flushBatches(type)
         when (type) {
             "READY" -> ready.emit(data)
+            "READY_SUPPLEMENTAL" -> readySupplemental.emit(data)
+            "INITIAL_GUILD" -> initialGuild.emit(data)
 
             // Current user
             "USER_UPDATE" -> userUpdate.emit(data)

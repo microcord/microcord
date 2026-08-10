@@ -370,28 +370,50 @@ private class ModelPayloadAdapter(private val gson: Gson) : TypeAdapter<ModelPay
         }
     }
 
+    /**
+     * Reads READY's `guilds`, which is versioned or legacy depending on what was negotiated.
+     *
+     * Only a guild carrying data the client asked to have diffed has `data_mode`; an unavailable
+     * one is a bare `{id, unavailable}` stub in either shape. So the mode is decided by the first
+     * guild that is not a stub, and the stubs seen before that are held until it is known.
+     */
     private fun readGuilds(reader: JsonReader, payload: ModelPayload) {
         reader.beginArray()
-        if (!reader.hasNext()) {
-            reader.endArray()
-            payload.guilds = emptyList()
-            return
-        }
-        val first = com.google.gson.JsonParser.parseReader(reader)
-        val isV2 = first.asJsonObject.has("data_mode")
-        if (isV2) {
-            payload.readyGuilds = buildList {
-                add(gson.fromJson(first, ReadyGuild::class.java))
-                while (reader.hasNext()) add(gson.fromJson(reader, ReadyGuild::class.java))
+        val unavailableIds = ArrayList<Long>()
+        val readyGuilds = ArrayList<ReadyGuild>()
+        val guilds = ArrayList<Guild>()
+        var isV2: Boolean? = null
+        while (reader.hasNext()) {
+            if (isV2 == null) {
+                val element = com.google.gson.JsonParser.parseReader(reader).asJsonObject
+                if (!element.has("data_mode") && element.get("unavailable")?.asBoolean == true) {
+                    unavailableIds += element.get("id").asLong
+                    continue
+                }
+                isV2 = element.has("data_mode")
+                if (isV2) readyGuilds += gson.fromJson(element, ReadyGuild::class.java)
+                else guilds += gson.fromJson(element, Guild::class.java)
+                unavailableIds.forEach { id ->
+                    if (isV2 == true) readyGuilds += ReadyGuild(id = id, unavailable = true)
+                    else guilds += unavailableGuild(id)
+                }
+                unavailableIds.clear()
+                continue
             }
-        } else {
-            payload.guilds = buildList {
-                add(gson.fromJson(first, Guild::class.java))
-                while (reader.hasNext()) add(gson.fromJson(reader, Guild::class.java))
-            }
+            if (isV2 == true) readyGuilds += gson.fromJson<ReadyGuild>(reader, ReadyGuild::class.java)
+            else guilds += gson.fromJson<Guild>(reader, Guild::class.java)
         }
         reader.endArray()
+        // An all-stub array tells us nothing, so it is read as legacy; either shape renders the same.
+        if (isV2 == true) {
+            payload.readyGuilds = readyGuilds
+        } else {
+            payload.guilds = guilds + unavailableIds.map(::unavailableGuild)
+        }
     }
+
+    private fun unavailableGuild(id: Long): Guild =
+        gson.fromJson("""{"id":$id,"unavailable":true,"name":""}""", Guild::class.java)
 
     private fun readTrace(reader: JsonReader): Any? {
         reader.beginArray()
