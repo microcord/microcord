@@ -19,5 +19,6 @@ object MessageSendLocation {
     const val GIF_REPLY = "gif_reply"
     const val STICKER_REPLY = "sticker_reply"
     const val GREET = "greet"
+    const val VOICE_MESSAGE = "voice_message"
     const val OTHER = "other"
 }

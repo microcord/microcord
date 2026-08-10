@@ -630,6 +630,7 @@ object RestAPIParams {
         val messageReference: MessageReference? = null,
         val allowedMentions: AllowedMentions? = null,
         val attachments: List<Attachment>? = null,
+        val flags: Long? = null,
         val poll: Poll? = null,
         // ponytail: remove with StoreStream's legacy upload call site; 126.21 never sends this field.
         @Transient
@@ -649,6 +650,8 @@ object RestAPIParams {
             val filename: String,
             @SerializedName("is_spoiler") val isSpoiler: Boolean,
             @SerializedName("uploaded_filename") val uploadedFilename: String? = null,
+            @SerializedName("duration_secs") val durationSecs: Double? = null,
+            val waveform: String? = null,
         )
 
         data class Poll(

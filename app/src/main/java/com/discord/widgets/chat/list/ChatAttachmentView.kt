@@ -49,6 +49,8 @@ class ChatAttachmentView @JvmOverloads constructor(
 
     private val binding = ChatAttachmentViewBinding.inflate(LayoutInflater.from(context), this)
     val inlineMedia: InlineMediaView = binding.chatListItemAttachmentInlineMedia
+    private val voiceMessage: VoiceMessageView = binding.chatListItemAttachmentVoiceMessage
+    private val audioPlayer: AudioAttachmentPlayerView = binding.chatListItemAttachmentAudioPlayer
     private val userSettings = StoreStream.getUserSettings()
     private val maxAttachmentImageWidth = EmbedResourceUtils.computeMaximumImageWidthPx(context)
     private var previewCall: Call? = null
@@ -74,9 +76,28 @@ class ChatAttachmentView @JvmOverloads constructor(
         onSpoilerBlocked: () -> Unit,
         onQuickDownload: (Uri, String) -> Boolean,
     ) {
+        if (entry.message.isVoiceMessage()) {
+            audioPlayer.releasePlayer()
+            audioPlayer.visibility = View.GONE
+            inlineMedia.visibility = View.GONE
+            binding.chatListItemAttachmentCard.visibility = View.GONE
+            binding.chatListItemAttachmentSpoiler.visibility = View.GONE
+            voiceMessage.visibility = View.VISIBLE
+            voiceMessage.configure(entry.attachment)
+            return
+        }
+        voiceMessage.releasePlayer()
+        voiceMessage.visibility = View.GONE
         val hiddenSpoiler = configureSpoiler(entry, isSpoilerClickAllowed, onSpoilerBlocked)
         configureMedia(entry.attachment, entry.autoPlayGifs)
         configureFileData(entry.attachment, onQuickDownload)
+        if (entry.attachment.isAudio) {
+            audioPlayer.visibility = View.VISIBLE
+            audioPlayer.configure(entry.attachment.url, entry.attachment.durationSecs)
+        } else {
+            audioPlayer.releasePlayer()
+            audioPlayer.visibility = View.GONE
+        }
 
         val openAttachment = OnClickListener { openAttachment(it.context, entry.attachment) }
         val previewsText = entry.attachment.type == MessageAttachmentType.FILE &&
@@ -85,6 +106,14 @@ class ChatAttachmentView @JvmOverloads constructor(
         binding.chatListItemAttachmentCard.setOnClickListener(if (previewsText) null else openAttachment)
         configureTextPreview(entry.attachment, previewsText && !hiddenSpoiler)
     }
+
+    fun onPause() {
+        inlineMedia.onPause()
+        voiceMessage.releasePlayer()
+        audioPlayer.releasePlayer()
+    }
+
+    fun onResume() = inlineMedia.onResume()
 
     private fun configureSpoiler(
         entry: AttachmentEntry,

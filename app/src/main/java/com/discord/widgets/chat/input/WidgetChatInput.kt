@@ -2,6 +2,9 @@ package com.discord.widgets.chat.input
 
 import android.content.Context
 import android.content.res.ColorStateList
+import android.graphics.drawable.GradientDrawable
+import android.net.Uri
+import android.os.SystemClock
 import android.text.Editable
 import android.text.Spanned
 import android.text.SpannableString
@@ -9,15 +12,18 @@ import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.view.View
+import android.view.ViewGroup
+import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
-import android.widget.ImageView
+import android.widget.Chronometer
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.widget.AppCompatImageButton
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModelProvider
-import androidx.recyclerview.widget.RecyclerView
 import androidx.appcompat.app.AlertDialog
 import com.discord.R
 import com.discord.activities.EmbeddedActivityLauncher
@@ -25,14 +31,17 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isAnnouncementChannel
 import com.discord.api.channel.isPendingMessageRequestChannel
+import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isSpamMessageRequestChannel
 import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.guild.GuildVerificationLevel
 import com.discord.api.permission.Permission
+import com.discord.api.message.MessageFlags
 import com.discord.app.AppFragment
 import com.discord.app.AppToast
 import com.discord.app.appActivityViewModels
 import com.discord.databinding.FlexInputWidgetBinding
+import com.discord.databinding.WidgetChatInputBinding
 import com.discord.i18n.FormatUtils
 import com.discord.models.domain.emoji.Emoji
 import com.discord.models.member.GuildMember
@@ -45,8 +54,10 @@ import com.discord.utilities.attachments.UploadAttachment
 import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.duration.humanizeCountdownDuration
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.messagesend.MessageResult
 import com.discord.utilities.messagesend.MessageSendCoordinator
+import com.discord.utilities.messagesend.MessageSendLocation
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
@@ -65,6 +76,7 @@ import com.discord.widgets.chat.input.applauncher.WidgetAppLauncher
 import com.discord.widgets.chat.input.emoji.EmojiPickerContextType
 import com.discord.widgets.chat.input.emoji.WidgetEmojiPicker
 import com.discord.widgets.chat.input.expression.WidgetExpressionTray
+import com.discord.widgets.chat.list.VoiceWaveformView
 import com.discord.widgets.forums.ForumPostCreateManager
 import com.discord.widgets.message_requests.setMessageRequestAccepted
 import com.discord.widgets.servers.member_verification.WidgetMemberVerification
@@ -85,6 +97,19 @@ internal fun FlexInputWidgetBinding.renderSendPermission(ableToSendMessages: Boo
     cannotSendText.visibility = if (ableToSendMessages) View.GONE else View.VISIBLE
 }
 
+internal enum class VoiceGestureState { SENDING, CANCELLING, LOCKING, LOCKED }
+
+internal fun resolveVoiceGestureState(
+    deltaX: Float,
+    deltaY: Float,
+    cancelThreshold: Float,
+    lockThreshold: Float,
+): VoiceGestureState = when {
+    deltaX < cancelThreshold -> VoiceGestureState.CANCELLING
+    deltaY <= -lockThreshold -> VoiceGestureState.LOCKING
+    else -> VoiceGestureState.SENDING
+}
+
 /**
  * The message composer.
  *
@@ -97,6 +122,13 @@ internal fun FlexInputWidgetBinding.renderSendPermission(ableToSendMessages: Boo
  * FlexInput child fragment's `EditText`, which does not exist until that fragment is laid out.
  */
 class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPicker.Host {
+    private data class VoiceRecordingUi(
+        val root: View,
+        val hint: TextView,
+        val waveform: VoiceWaveformView,
+        val cancel: View,
+        val send: View,
+    )
 
     data class UploadRequest(
         val channelId: Long,
@@ -107,6 +139,8 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
 
     private lateinit var viewModel: ChatInputViewModel
     private lateinit var autocompleteViewModel: AutocompleteViewModel
+    private var _binding: WidgetChatInputBinding? = null
+    private val binding get() = requireNotNull(_binding)
 
     private var sendResultSubscription: Subscription? = null
     private var mentionSubscription: Subscription? = null
@@ -116,6 +150,14 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     private var autocomplete: InputAutocomplete? = null
     private var attachments: WidgetChatInputAttachments? = null
     private var flexInputBinding: FlexInputWidgetBinding? = null
+    private var voiceMessageRecorder: VoiceMessageRecorder? = null
+    private var voiceRecordingUi: VoiceRecordingUi? = null
+    private var voiceRecordingChannelId: Long? = null
+    private var voiceGestureState = VoiceGestureState.SENDING
+    private var voiceGestureActive = false
+    private var voiceGestureStartX = 0f
+    private var voiceGestureStartY = 0f
+    private var pendingVoiceFinish: Boolean? = null
 
     /**
      * Owns whether the expression tray is open. Activity-scoped so the tray and its child pickers
@@ -152,6 +194,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        _binding = WidgetChatInputBinding.bind(view)
         // Stopgap until StoreEmoji exists; see ChatInputAutocompletables.installDefaultEmojiSetSource.
         viewModel = ViewModelProvider(this).get(ChatInputViewModel::class.java)
         autocompleteViewModel = ViewModelProvider(this).get(AutocompleteViewModel::class.java)
@@ -172,7 +215,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             input?.requestFocus()
         }
 
-        view.findViewById<View>(R.id.chat_input_context_cancel).apply {
+        binding.chatInputContextCancel.apply {
             contentDescription = getString(R.string.cancel)
             setOnClickListener {
                 val loaded = state ?: return@setOnClickListener
@@ -180,7 +223,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 else pendingRepliesStore?.onDeletePendingReply(loaded.channelId)
             }
         }
-        view.findViewById<View>(R.id.chat_input_context_reply_mention_button).setOnClickListener {
+        binding.chatInputContextReplyMentionButton.setOnClickListener {
             val loaded = state ?: return@setOnClickListener
             val replying = loaded.pendingReplyState as? ChatInputViewModel.ViewState.PendingReplyState.Replying
                 ?: return@setOnClickListener
@@ -236,6 +279,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 },
                 { /* keyboard state is best-effort */ },
             )
+        view?.post(::updateSendButtonVisibility)
     }
 
     override fun onStart() {
@@ -272,6 +316,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     }
 
     override fun onStop() {
+        cancelVoiceRecording()
         sendResultSubscription?.unsubscribe()
         sendResultSubscription = null
         mentionSubscription?.unsubscribe()
@@ -286,6 +331,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         autocomplete?.onDestroyView()
         autocomplete = null
         flexInputBinding = null
+        _binding = null
         input = null
         expressionTray = null
         attachments = null
@@ -295,8 +341,8 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     private fun bindFlexInput() {
         if (!isAdded || view == null) return
         val flex = childFragmentManager.findFragmentById(R.id.chat_input_widget) as? FlexInputFragment ?: return
-        val flexView = flex.view ?: return
-        flexInputBinding = FlexInputWidgetBinding.bind(flexView)
+        val flexBinding = FlexInputWidgetBinding.bind(flex.view ?: return)
+        flexInputBinding = flexBinding
         flex.setKeyboardManager(object : KeyboardManager {
             override fun requestDisplay(editText: EditText) {
                 editText.requestFocus()
@@ -317,7 +363,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             override fun toFileProviderUri(context: Context, file: File) =
                 FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         })
-        val editText = flexView.findViewById<FlexEditText>(com.lytefast.flexinput.R.id.text_input)
+        val editText = flexBinding.textInput
         input = editText
         editText.addTextChangedListener(watcher)
         // Public FlexInput also closes its own tray from a touch listener. Remove that competing
@@ -334,8 +380,9 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             override fun onSend(data: Editable, attachments: List<Attachment<*>>): Boolean =
                 submit(attachments)
         })
+        bindVoiceMessageButton(flexBinding)
         bindAutocomplete(editText)
-        bindExpressionTray(flex, flexView)
+        bindExpressionTray(flex, flexBinding)
         // The composer is bound from a `post`, so the first view state usually arrives before this
         // point and found no EditText to write into. Restore explicitly rather than relying on
         // configureLoaded, whose "channel changed" test is false when re-rendering the same state.
@@ -346,14 +393,13 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     }
 
     private fun bindAutocomplete(editText: EditText) {
-        val root = view ?: return
         autocomplete?.onDestroyView()
         autocomplete = InputAutocomplete(
             appComponent = this,
             editText = editText,
-            autocompleteHeader = root.findViewById(R.id.chat_input_emoji_matching_header),
-            autocompleteRecyclerView = root.findViewById<RecyclerView>(R.id.chat_input_mentions_recycler),
-            stickersContainer = root.findViewById(R.id.chat_input_stickers_container),
+            autocompleteHeader = binding.chatInputEmojiMatchingHeader,
+            autocompleteRecyclerView = binding.chatInputMentionsRecycler,
+            stickersContainer = binding.chatInputStickersContainer,
             viewModel = autocompleteViewModel,
         ).also {
             it.setChannelId(state?.channelId)
@@ -369,8 +415,8 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
      * tray's own children (a sticker sheet dismissing, a GIF being picked) have to close it and
      * have no reference to this fragment.
      */
-    private fun bindExpressionTray(flex: FlexInputFragment, flexView: View) {
-        val button = flexView.findViewById<AppCompatImageButton>(R.id.emoji_btn)
+    private fun bindExpressionTray(flex: FlexInputFragment, flexBinding: FlexInputWidgetBinding) {
+        val button = flexBinding.emojiBtn
 
         attachments = WidgetChatInputAttachments(
             flexInputFragment = flex,
@@ -396,22 +442,271 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         button.setOnClickListener { flexInputViewModel.toggleExpressionTray() }
     }
 
-    private fun renderExpressionTray(shown: Boolean) {
-        val flex = childFragmentManager.findFragmentById(R.id.chat_input_widget) as? FlexInputFragment ?: return
-        val flexView = flex.view ?: return
-        val button = flexView.findViewById<AppCompatImageButton>(R.id.emoji_btn) ?: return
+    private fun bindVoiceMessageButton(flexBinding: FlexInputWidgetBinding) {
+        flexBinding.voiceMessageButton.apply {
+            setOnTouchListener { _, event -> handleVoiceGesture(event) }
+            setOnClickListener {
+                if (voiceMessageRecorder == null) {
+                    voiceGestureActive = false
+                    updateVoiceGestureState(VoiceGestureState.LOCKED)
+                    startVoiceRecording()
+                }
+            }
+        }
+    }
 
-        flexView.findViewById<View>(R.id.emoji_container).visibility =
-            if (shown) View.VISIBLE else View.GONE
+    private fun shouldShowVoiceMessageButton(): Boolean {
+        val loaded = state ?: return false
+        return FeatureFlags.voiceMessagesEnabled() && loaded.isInputShowing && !loaded.isEditing &&
+            loaded.selectedThreadDraft == null
+    }
+
+    private fun canRecordVoiceMessage(): Boolean {
+        val loaded = state ?: return false
+        if (!shouldShowVoiceMessageButton() || loaded.isCommunicationDisabled) return false
+        if (loaded.channel.isPrivate()) return true
+        val permissions = StoreStream.getPermissions().getPermissionsByChannel()[loaded.channelId]
+        return PermissionUtils.can(Permission.ATTACH_FILES, permissions) &&
+            PermissionUtils.can(Permission.SEND_VOICE_MESSAGES, permissions)
+    }
+
+    private fun handleVoiceGesture(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                if (!canRecordVoiceMessage() || event.pointerCount > 1) return false
+                flexInputBinding?.voiceMessageButton?.parent?.requestDisallowInterceptTouchEvent(true)
+                voiceGestureActive = true
+                voiceGestureStartX = event.rawX
+                voiceGestureStartY = event.rawY
+                pendingVoiceFinish = null
+                updateVoiceGestureState(VoiceGestureState.SENDING)
+                startVoiceRecording()
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (!voiceGestureActive) return true
+                val deltaX = event.rawX - voiceGestureStartX
+                val deltaY = event.rawY - voiceGestureStartY
+                val cancelThreshold = -((flexInputBinding?.root?.width ?: resources.displayMetrics.widthPixels) * 0.5f)
+                updateVoiceGestureState(
+                    resolveVoiceGestureState(deltaX, deltaY, cancelThreshold, dp(40).toFloat()),
+                )
+            }
+            MotionEvent.ACTION_UP -> {
+                if (!voiceGestureActive) return true
+                flexInputBinding?.voiceMessageButton?.parent?.requestDisallowInterceptTouchEvent(false)
+                voiceGestureActive = false
+                when (voiceGestureState) {
+                    VoiceGestureState.CANCELLING -> completeVoiceGesture(send = false)
+                    VoiceGestureState.LOCKING -> updateVoiceGestureState(VoiceGestureState.LOCKED)
+                    VoiceGestureState.SENDING -> completeVoiceGesture(send = true)
+                    VoiceGestureState.LOCKED -> Unit
+                }
+            }
+            MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_CANCEL -> {
+                flexInputBinding?.voiceMessageButton?.parent?.requestDisallowInterceptTouchEvent(false)
+                if (voiceGestureActive) {
+                    voiceGestureActive = false
+                    completeVoiceGesture(send = false)
+                }
+            }
+        }
+        return true
+    }
+
+    private fun startVoiceRecording() {
+        if (voiceMessageRecorder != null || !canRecordVoiceMessage()) return
+        requestMicrophone(onFailure = null) {
+            val loaded = state ?: return@requestMicrophone
+            val recorder = VoiceMessageRecorder(requireContext())
+            runCatching {
+                recorder.start(
+                    onMaxDuration = { view?.post { finishVoiceRecording(send = true) } },
+                    onAmplitude = { sample -> voiceRecordingUi?.waveform?.addSample(sample) },
+                )
+            }.onFailure {
+                Toast.makeText(requireContext(), R.string.voice_message_recording_failed, Toast.LENGTH_SHORT).show()
+                return@requestMicrophone
+            }
+            voiceMessageRecorder = recorder
+            voiceRecordingChannelId = loaded.channelId
+            showVoiceRecordingBar()
+            pendingVoiceFinish?.let { send ->
+                pendingVoiceFinish = null
+                finishVoiceRecording(send)
+            }
+        }
+    }
+
+    private fun showVoiceRecordingBar() {
+        val container = _binding?.chatInputWidgetContainer ?: return
+        val bar = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(dp(8), 0, dp(8), 0)
+            setBackgroundColor(ColorCompat.getThemedColor(context, R.attr.colorBackgroundSecondary))
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56))
+        }
+        fun action(icon: Int, description: Int, click: () -> Unit) = AppCompatImageButton(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
+            setImageResource(icon)
+            imageTintList = ColorStateList.valueOf(ColorCompat.getThemedColor(context, R.attr.colorInteractiveNormal))
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            contentDescription = getString(description)
+            setOnClickListener { click() }
+        }
+        val cancel = action(R.drawable.ic_delete_24dp, R.string.cancel) { cancelVoiceRecording() }.apply {
+            visibility = View.GONE
+        }.also(bar::addView)
+        bar.addView(View(requireContext()).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(ColorCompat.getThemedColor(context, R.attr.colorError))
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(8), dp(8)).apply { marginStart = dp(8) }
+        })
+        bar.addView(Chronometer(requireContext()).apply {
+            base = SystemClock.elapsedRealtime()
+            setTextColor(ColorCompat.getThemedColor(context, R.attr.colorTextNormal))
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = dp(8)
+            }
+            start()
+        })
+        val waveform = VoiceWaveformView(requireContext(), recording = true).apply {
+            layoutParams = LinearLayout.LayoutParams(0, dp(36), 1f).apply { marginStart = dp(8) }
+        }.also(bar::addView)
+        val hint = TextView(requireContext()).apply {
+            setTextColor(ColorCompat.getThemedColor(context, R.attr.colorTextMuted))
+            gravity = android.view.Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = dp(8)
+            }
+        }.also(bar::addView)
+        val send = action(R.drawable.ic_send_24dp, R.string.send) { finishVoiceRecording(send = true) }.apply {
+            visibility = View.GONE
+        }.also(bar::addView)
+        container.addView(bar)
+        voiceRecordingUi = VoiceRecordingUi(bar, hint, waveform, cancel, send)
+        updateVoiceGestureState(voiceGestureState, haptic = false)
+    }
+
+    private fun completeVoiceGesture(send: Boolean) {
+        if (voiceMessageRecorder == null) pendingVoiceFinish = send else finishVoiceRecording(send)
+    }
+
+    private fun updateVoiceGestureState(state: VoiceGestureState, haptic: Boolean = true) {
+        if (state == voiceGestureState && haptic) return
+        voiceGestureState = state
+        if (haptic && state in setOf(VoiceGestureState.CANCELLING, VoiceGestureState.LOCKING, VoiceGestureState.LOCKED)) {
+            flexInputBinding?.voiceMessageButton?.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        }
+        voiceRecordingUi?.hint?.setText(
+            when (state) {
+                VoiceGestureState.SENDING -> R.string.voice_message_slide_cancel
+                VoiceGestureState.CANCELLING -> R.string.voice_message_release_cancel
+                VoiceGestureState.LOCKING -> R.string.voice_message_release_lock
+                VoiceGestureState.LOCKED -> R.string.voice_message_locked
+            },
+        )
+        val locked = state == VoiceGestureState.LOCKED
+        voiceRecordingUi?.cancel?.visibility = if (locked) View.VISIBLE else View.GONE
+        voiceRecordingUi?.send?.visibility = if (locked) View.VISIBLE else View.GONE
+        voiceRecordingUi?.root?.setBackgroundColor(
+            ColorCompat.getThemedColor(
+                requireContext(),
+                if (state == VoiceGestureState.CANCELLING) R.attr.colorBackgroundModifierSelected else R.attr.colorBackgroundSecondary,
+            ),
+        )
+    }
+
+    private fun finishVoiceRecording(send: Boolean) {
+        val recorder = voiceMessageRecorder ?: return
+        voiceMessageRecorder = null
+        val channelId = voiceRecordingChannelId
+        voiceRecordingChannelId = null
+        val recording = if (send) recorder.stop() else null.also { recorder.cancel() }
+        hideVoiceRecordingBar()
+        if (!send || recording == null) return
+        if (recording.durationSecs * 1000 < VoiceMessageRecorder.VOICE_RECORDING_MIN_DURATION_MILLIS) {
+            recording.file.delete()
+            Toast.makeText(requireContext(), R.string.voice_message_too_short, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val loaded = state?.takeIf { it.channelId == channelId } ?: run {
+            recording.file.delete()
+            return
+        }
+        val pendingReply =
+            (loaded.pendingReplyState as? ChatInputViewModel.ViewState.PendingReplyState.Replying)?.pendingReply
+        val upload = UploadAttachment(
+            id = System.currentTimeMillis(),
+            uri = Uri.fromFile(recording.file),
+            displayName = if (recording.mimeType == "audio/ogg") "voice-message.ogg" else "voice-message.m4a",
+            spoiler = false,
+            mimeType = recording.mimeType,
+            size = recording.file.length(),
+            permissionPersisted = false,
+            durationSecs = recording.durationSecs,
+            waveform = recording.waveform,
+        )
+        val submission = coordinatorProvider()?.send(
+            MessageSendCoordinator.Send(
+                channelId = loaded.channelId,
+                guildId = loaded.channel.guildId.takeUnless { it == 0L },
+                content = "",
+                author = loaded.me.synthesizeApiUser(),
+                canSend = loaded.ableToSendMessage,
+                communicationDisabled = loaded.isCommunicationDisabled,
+                systemDm = loaded.isSystemDM,
+                reply = pendingReply,
+                attachments = listOf(upload),
+                flags = MessageFlags.IS_VOICE_MESSAGE,
+                location = MessageSendLocation.VOICE_MESSAGE,
+            ),
+        )
+        if (submission is MessageSendCoordinator.Submission.Accepted) {
+            pendingRepliesStore?.onDeletePendingReply(loaded.channelId)
+        } else {
+            recording.file.delete()
+            val result = (submission as? MessageSendCoordinator.Submission.Rejected)?.result
+                ?: MessageResult.NoValidContent
+            Toast.makeText(requireContext(), validationMessage(result), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun cancelVoiceRecording() = finishVoiceRecording(send = false)
+
+    private fun hideVoiceRecordingBar() {
+        voiceRecordingUi?.root?.let { (it.parent as? ViewGroup)?.removeView(it) }
+        voiceRecordingUi = null
+        pendingVoiceFinish = null
+        voiceGestureActive = false
+        voiceGestureState = VoiceGestureState.SENDING
+        updateSendButtonVisibility()
+    }
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    private fun renderExpressionTray(shown: Boolean) {
+        val flexBinding = flexInputBinding ?: return
+        val button = flexBinding.emojiBtn
+
+        flexBinding.emojiContainer.visibility = if (shown) View.VISIBLE else View.GONE
         configureExpressionTrayButton(button, shown)
-        flexView.findViewById<View>(R.id.default_window_insets_handler)?.visibility =
+        flexBinding.defaultWindowInsetsHandler.visibility =
             if (shown) View.GONE else View.VISIBLE
         expressionTray?.takeIf { it.isAdded }?.isShown(shown)
     }
 
     private fun updateSendButtonVisibility() {
-        view?.findViewById<View>(R.id.send_btn_container)?.visibility =
-            if (!input?.text.isNullOrEmpty() || hasAttachments) View.VISIBLE else View.GONE
+        val hasSendContent = !input?.text.isNullOrEmpty() || hasAttachments
+        val showVoiceMessage = !hasSendContent && canRecordVoiceMessage()
+        flexInputBinding?.sendBtnContainer?.visibility =
+            if (hasSendContent || showVoiceMessage) View.VISIBLE else View.GONE
+        flexInputBinding?.sendBtn?.visibility =
+            if (hasSendContent) View.VISIBLE else View.GONE
+        flexInputBinding?.voiceMessageButton?.visibility =
+            if (showVoiceMessage) View.VISIBLE else View.GONE
     }
 
     override fun onEmojiPicked(emoji: Emoji) {
@@ -643,22 +938,23 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     private fun configureUI(viewState: ChatInputViewModel.ViewState) = when (viewState) {
         ChatInputViewModel.ViewState.Loading -> {
             state = null
-            requireView().findViewById<View>(R.id.chat_input_wrap).visibility = View.GONE
-            requireView().findViewById<View>(R.id.guard).visibility = View.GONE
-            requireView().findViewById<View>(R.id.guard_member_verification).visibility = View.GONE
-            requireView().findViewById<View>(R.id.guard_communication_disabled).visibility = View.GONE
+            binding.chatInputWrap.visibility = View.GONE
+            binding.guard.root.visibility = View.GONE
+            binding.guardMemberVerification.root.visibility = View.GONE
+            binding.guardCommunicationDisabled.root.visibility = View.GONE
         }
         is ChatInputViewModel.ViewState.Loaded -> configureLoaded(viewState)
     }
 
     private fun configureLoaded(next: ChatInputViewModel.ViewState.Loaded) {
         val previous = state
+        if (previous != null && previous.channelId != next.channelId) cancelVoiceRecording()
         if (previous != null && previous.channelId != next.channelId && !previous.isEditing) {
             drafts.setTextChannelInput(previous.channelId, input?.text)
         }
         state = next
 
-        requireView().findViewById<View>(R.id.chat_input_wrap).visibility =
+        binding.chatInputWrap.visibility =
             if (next.isInputShowing) View.VISIBLE else View.GONE
         val channelPermissions = StoreStream.getPermissions().getPermissionsByChannel()[next.channelId]
         val ableToSendMessages = when {
@@ -678,6 +974,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         if (channelChanged || previous?.editingMessage != next.editingMessage) restoreInput(next)
         input?.isEnabled = next.isInputShowing
         input?.hint = getHint(requireContext(), next.channel, next.isBlocked, next.ableToSendMessage)
+        updateSendButtonVisibility()
     }
 
     /**
@@ -692,12 +989,11 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
      * reference is avoiding.
      */
     private fun configureChatGuard(viewState: ChatInputViewModel.ViewState.Loaded) {
-        val root = requireView()
-        val guard = root.findViewById<View>(R.id.guard)
-        val guardText = root.findViewById<TextView>(R.id.chat_input_guard_text)
-        val guardSubtext = root.findViewById<TextView>(R.id.chat_input_guard_subtext)
-        val guardAction = root.findViewById<MaterialButton>(R.id.chat_input_guard_action)
-        val guardActionSecondary = root.findViewById<MaterialButton>(R.id.chat_input_guard_action_secondary)
+        val guard = binding.guard.root
+        val guardText = binding.guard.chatInputGuardText
+        val guardSubtext = binding.guard.chatInputGuardSubtext
+        val guardAction = binding.guard.chatInputGuardAction
+        val guardActionSecondary = binding.guard.chatInputGuardActionSecondary
 
         val showGuard = viewState.isLurking ||
             viewState.isVerificationLevelTriggered ||
@@ -705,9 +1001,9 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             viewState.shouldShowFollow ||
             viewState.channel.isPendingMessageRequestChannel()
         guard.visibility = if (showGuard) View.VISIBLE else View.GONE
-        root.findViewById<View>(R.id.guard_member_verification).visibility =
+        binding.guardMemberVerification.root.visibility =
             if (!showGuard && viewState.shouldShowVerificationGate) View.VISIBLE else View.GONE
-        root.findViewById<View>(R.id.guard_communication_disabled).visibility =
+        binding.guardCommunicationDisabled.root.visibility =
             if (!showGuard && !viewState.shouldShowVerificationGate && viewState.isCommunicationDisabled) {
                 View.VISIBLE
             } else {
@@ -750,11 +1046,11 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             }
 
             viewState.isCommunicationDisabled -> {
-                configureTimeoutGuard(root, viewState)
+                configureTimeoutGuard(viewState)
             }
 
             viewState.shouldShowVerificationGate -> {
-                configureMemberVerificationGuard(root, viewState)
+                configureMemberVerificationGuard(viewState)
             }
 
             else -> {
@@ -844,13 +1140,12 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         button.setOnClickListener { onClick() }
     }
 
-    private fun configureTimeoutGuard(root: View, viewState: ChatInputViewModel.ViewState.Loaded) {
-        val body = root.findViewById<TextView>(R.id.chat_input_communication_disabled_guard_text)
-        body.text = FormatUtils.format(
+    private fun configureTimeoutGuard(viewState: ChatInputViewModel.ViewState.Loaded) {
+        binding.guardCommunicationDisabled.chatInputCommunicationDisabledGuardText.text = FormatUtils.format(
             getString(R.string.guild_communication_disabled_chat_notice_description),
             "articleLink" to TIMEOUT_HELP_ARTICLE_URL,
         )
-        root.findViewById<TextView>(R.id.chat_input_communication_disabled_guard_timer_text).text =
+        binding.guardCommunicationDisabled.chatInputCommunicationDisabledGuardTimerText.text =
             humanizeCountdownDuration(requireContext(), viewState.timeoutLeftMs)
     }
 
@@ -862,16 +1157,16 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
      * so `joinRequestStatus` has no source and the reference's own default branch is the one that
      * runs.
      */
-    private fun configureMemberVerificationGuard(root: View, viewState: ChatInputViewModel.ViewState.Loaded) {
-        root.findViewById<MaterialButton>(R.id.chat_input_member_verification_guard_button).visibility = View.GONE
-        val action = root.findViewById<ImageView>(R.id.chat_input_member_verification_guard_action)
+    private fun configureMemberVerificationGuard(viewState: ChatInputViewModel.ViewState.Loaded) {
+        binding.guardMemberVerification.chatInputMemberVerificationGuardButton.visibility = View.GONE
+        val action = binding.guardMemberVerification.chatInputMemberVerificationGuardAction
         action.visibility = View.VISIBLE
         action.setImageResource(R.drawable.ic_arrow_right_24dp)
-        root.findViewById<TextView>(R.id.chat_input_member_verification_guard_text)
+        binding.guardMemberVerification.chatInputMemberVerificationGuardText
             .setText(R.string.member_verification_chat_blocker_text)
-        root.findViewById<ImageView>(R.id.chat_input_member_verification_guard_icon)
+        binding.guardMemberVerification.chatInputMemberVerificationGuardIcon
             .setImageResource(R.drawable.img_member_verification_started)
-        root.findViewById<View>(R.id.chat_input_member_verification_guard).setOnClickListener {
+        binding.guardMemberVerification.chatInputMemberVerificationGuard.setOnClickListener {
             WidgetMemberVerification.create(requireContext(), viewState.channel.guildId, "Chat Input")
         }
     }
@@ -924,13 +1219,13 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     }
 
     private fun configureContextBar(next: ChatInputViewModel.ViewState.Loaded) {
-        val bar = requireView().findViewById<View>(R.id.chat_input_context_bar)
+        val bar = binding.chatInputContextBar
         val replying = next.pendingReplyState as? ChatInputViewModel.ViewState.PendingReplyState.Replying
         bar.visibility = if (next.isEditing || replying != null) View.VISIBLE else View.GONE
         if (bar.visibility != View.VISIBLE) return
 
-        val mention = requireView().findViewById<View>(R.id.chat_input_context_reply_mention_button)
-        val description = requireView().findViewById<TextView>(R.id.chat_input_context_description)
+        val mention = binding.chatInputContextReplyMentionButton
+        val description = binding.chatInputContextDescription
 
         if (next.isEditing) {
             description.setText(R.string.editing_message)
@@ -975,9 +1270,9 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         mention.visibility = if (pending.showMentionToggle) View.VISIBLE else View.GONE
         val mentionColor =
             ColorCompat.getThemedColor(requireContext(), if (pending.shouldMention) R.attr.colorControlBrandForeground else R.attr.colorTextMuted)
-        requireView().findViewById<ImageView>(R.id.chat_input_context_reply_mention_button_image).imageTintList =
+        binding.chatInputContextReplyMentionButtonImage.imageTintList =
             ColorStateList.valueOf(mentionColor)
-        requireView().findViewById<TextView>(R.id.chat_input_context_reply_mention_button_text).apply {
+        binding.chatInputContextReplyMentionButtonText.apply {
             setTextColor(mentionColor)
             setText(if (pending.shouldMention) R.string.reply_mention_on else R.string.reply_mention_off)
         }

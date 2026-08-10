@@ -1,6 +1,7 @@
 package com.discord.api.message.attachment
 
 import java.util.Locale
+import java.net.URLConnection
 
 /** Filename suffixes the client renders inline as an image. */
 val IMAGE_MIME_TYPES: List<String> = listOf(".jpeg", ".jpg", ".gif", ".png", ".bmp", ".webp")
@@ -17,6 +18,9 @@ data class MessageAttachment(
     val width: Int?,
     val height: Int?,
     val flags: Int? = null,
+    val contentType: String? = null,
+    val durationSecs: Double? = null,
+    val waveform: String? = null,
 ) {
     val type: MessageAttachmentType
         get() {
@@ -30,6 +34,10 @@ data class MessageAttachment(
 
     val isSpoiler: Boolean
         get() = filename.startsWith(SPOILER_PREFIX) || flags?.and(FLAG_IS_SPOILER) == FLAG_IS_SPOILER
+
+    val isAudio: Boolean
+        get() = contentType?.startsWith("audio/", ignoreCase = true) == true ||
+            URLConnection.guessContentTypeFromName(filename)?.startsWith("audio/") == true
 
     companion object {
         const val SPOILER_PREFIX = "SPOILER_"

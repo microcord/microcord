@@ -64,6 +64,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
         val reply: StorePendingReplies.PendingReply? = null,
         val captcha: CaptchaSolution? = null,
         val attachments: List<UploadAttachment>? = null,
+        val flags: Long? = null,
         /**
          * Stickers to send with the message.
          *
@@ -182,6 +183,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
             stickers = input.stickers,
             hasLocalUploads = !input.attachments.isNullOrEmpty(),
             localAttachments = input.attachments?.map(UploadAttachment::toLocalAttachment),
+            flags = input.flags,
             initialAttemptTimestamp = now(),
         )
         val operation = Operation(

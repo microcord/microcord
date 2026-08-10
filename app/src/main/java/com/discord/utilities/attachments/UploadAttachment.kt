@@ -26,10 +26,20 @@ data class UploadAttachment(
     val mimeType: String,
     val size: Long,
     val permissionPersisted: Boolean,
+    val durationSecs: Double? = null,
+    val waveform: String? = null,
 ) {
     val fileName: String = sanitizeUploadFileName(displayName)
 
-    fun toLocalAttachment() = LocalAttachment(id, uri.toString(), fileName)
+    fun toLocalAttachment() = LocalAttachment(
+        id,
+        uri.toString(),
+        fileName,
+        mimeType,
+        size,
+        durationSecs,
+        waveform,
+    )
 
     companion object {
         fun from(
@@ -80,6 +90,11 @@ fun LocalAttachment.toUploadAttachment(resolver: ContentResolver, persistPermiss
         displayName = displayName,
         spoiler = displayName.startsWith(MessageAttachment.SPOILER_PREFIX),
         persistPermission = persistPermission,
+    ).copy(
+        mimeType = mimeType ?: "application/octet-stream",
+        size = size ?: -1L,
+        durationSecs = durationSecs,
+        waveform = waveform,
     )
 
 internal data class AttachmentMetadata(val name: String?, val size: Long?)

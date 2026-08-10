@@ -936,6 +936,7 @@ class StoreMessages @JvmOverloads constructor(
         captchaSolution: CaptchaSolution? = null,
         guildId: Long? = null,
         location: String = MessageSendLocation.OTHER,
+        flags: Long? = null,
     ): Observable<MessageResult> {
         val coordinator = sendCoordinator ?: return Observable.just(MessageResult.NoValidContent)
         val submission = coordinator.send(
@@ -949,6 +950,7 @@ class StoreMessages @JvmOverloads constructor(
                 attachments = attachments,
                 stickers = stickers,
                 location = location,
+                flags = flags,
             ),
         )
         return when (submission) {
@@ -1032,6 +1034,7 @@ class StoreMessages @JvmOverloads constructor(
             captchaSolution = captchaSolution,
             guildId = message.guildId,
             location = if (isAutoAttempt) MessageSendLocation.OTHER else MessageSendLocation.RETRY,
+            flags = message.flags,
         )
     }
 

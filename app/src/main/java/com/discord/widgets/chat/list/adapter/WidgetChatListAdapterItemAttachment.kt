@@ -51,7 +51,7 @@ class WidgetChatListAdapterItemAttachment(
         )
     }
 
-    override fun onPause() = attachmentView.inlineMedia.onPause()
+    override fun onPause() = attachmentView.onPause()
 
-    override fun onResume() = attachmentView.inlineMedia.onResume()
+    override fun onResume() = attachmentView.onResume()
 }

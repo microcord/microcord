@@ -231,6 +231,7 @@ class MessageQueue @JvmOverloads constructor(
                 )
             },
             allowedMentions = message.allowedMentions?.toRestApiParam(),
+            flags = message.flags,
         )
         val captchaPolicy = CaptchaRequestPolicy.preSolved(message.captchaSolution)
 

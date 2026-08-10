@@ -37,6 +37,8 @@ import com.discord.views.ThemedColor
 import com.discord.views.sticker.StickerView
 import com.discord.widgets.chat.list.FragmentLifecycleListener
 import com.discord.widgets.chat.list.InlineMediaView
+import com.discord.widgets.chat.list.VoiceMessageView
+import com.discord.widgets.chat.list.AudioAttachmentPlayerView
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.AttachmentEntry
 import com.discord.widgets.chat.list.entries.BotUiComponentEntry
@@ -52,6 +54,8 @@ class WidgetChatListAdapterItemForwardedMessage(
 ) : WidgetChatListItem(R.layout.widget_chat_list_adapter_item_forwarded_message, parentAdapter), FragmentLifecycleListener {
     private val binding = WidgetChatListAdapterItemForwardedMessageBinding.bind(itemView)
     private val mediaViews = ArrayList<InlineMediaView>()
+    private val voiceMessageViews = ArrayList<VoiceMessageView>()
+    private val audioPlayerViews = ArrayList<AudioAttachmentPlayerView>()
 
     override fun onConfigure(position: Int, data: ChatListEntry) {
         super.onConfigure(position, data)
@@ -158,6 +162,10 @@ class WidgetChatListAdapterItemForwardedMessage(
     private fun bindRows(entry: ForwardedMessageEntry) {
         mediaViews.forEach(InlineMediaView::onPause)
         mediaViews.clear()
+        voiceMessageViews.forEach(VoiceMessageView::releasePlayer)
+        voiceMessageViews.clear()
+        audioPlayerViews.forEach(AudioAttachmentPlayerView::releasePlayer)
+        audioPlayerViews.clear()
         binding.forwardedMessageRows.removeAllViews()
         if (entry.state != ForwardedMessageEntry.State.CONTENT) return
 
@@ -174,6 +182,14 @@ class WidgetChatListAdapterItemForwardedMessage(
 
     private fun bindAttachment(entry: AttachmentEntry) {
         val attachment = entry.attachment
+        if (entry.message.isVoiceMessage()) {
+            binding.forwardedMessageRows.addView(VoiceMessageView(itemView.context).also {
+                it.layoutParams = matchWidthParams()
+                it.configure(attachment)
+                voiceMessageViews += it
+            })
+            return
+        }
         val width = attachment.width ?: 0
         val height = attachment.height ?: 0
         if (attachment.type != MessageAttachmentType.FILE && width > 0 && height > 0) {
@@ -215,6 +231,13 @@ class WidgetChatListAdapterItemForwardedMessage(
                 }
             }
         })
+        if (attachment.isAudio) {
+            binding.forwardedMessageRows.addView(AudioAttachmentPlayerView(itemView.context).also {
+                it.layoutParams = matchWidthParams()
+                it.configure(attachment.url, attachment.durationSecs)
+                audioPlayerViews += it
+            })
+        }
     }
 
     private fun bindEmbed(entry: EmbedEntry) {
@@ -389,7 +412,11 @@ class WidgetChatListAdapterItemForwardedMessage(
         }
     }
 
-    override fun onPause() = mediaViews.forEach(InlineMediaView::onPause)
+    override fun onPause() {
+        mediaViews.forEach(InlineMediaView::onPause)
+        voiceMessageViews.forEach(VoiceMessageView::releasePlayer)
+        audioPlayerViews.forEach(AudioAttachmentPlayerView::releasePlayer)
+    }
 
     override fun onResume() = mediaViews.forEach(InlineMediaView::onResume)
 

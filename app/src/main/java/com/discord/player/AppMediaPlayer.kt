@@ -41,6 +41,7 @@ class AppMediaPlayer(
     private val rxPlayerEventListener: RxPlayerEventListener,
     private val dataSourceFactory: DataSource.Factory,
     private val timerScheduler: Scheduler,
+    private val positionPollIntervalMs: Long = DEFAULT_POSITION_POLL_INTERVAL_MS,
 ) {
 
     /** Everything the UI needs to know about playback, without exposing ExoPlayer's state ints. */
@@ -124,12 +125,29 @@ class AppMediaPlayer(
         initialSeekPositionMs: Long = 0L,
         playerControlView: PlayerControlView? = null,
     ) {
-        this.mediaSource = mediaSource
-
         // Fit rather than crop: the viewer letterboxes, and cropping would silently hide content.
         exoPlayer.setVideoScalingMode(C.VIDEO_SCALING_MODE_SCALE_TO_FIT)
         playerView.setPlayer(exoPlayer)
         playerControlView?.setPlayer(exoPlayer)
+
+        prepare(mediaSource, autoPlayWhenReady, loopMedia, initialSeekPositionMs)
+    }
+
+    /** Audio-only playback avoids constructing or attaching a video surface. */
+    @MainThread
+    fun playAudio(
+        mediaSource: MediaSource,
+        autoPlayWhenReady: Boolean = true,
+        initialSeekPositionMs: Long = 0L,
+    ) = prepare(mediaSource, autoPlayWhenReady, false, initialSeekPositionMs)
+
+    private fun prepare(
+        mediaSource: MediaSource,
+        autoPlayWhenReady: Boolean,
+        loopMedia: Boolean,
+        initialSeekPositionMs: Long,
+    ) {
+        this.mediaSource = mediaSource
 
         exoPlayer.setMediaSource(
             ProgressiveMediaSource.Factory(dataSourceFactory)
@@ -146,6 +164,16 @@ class AppMediaPlayer(
         exoPlayer.volume = volume
         volumeSubject.onNext(volume)
     }
+
+    @MainThread fun pause() = exoPlayer.pause()
+
+    @MainThread fun resume() = exoPlayer.play()
+
+    @MainThread fun seekTo(positionMs: Long) = exoPlayer.seekTo(positionMs)
+
+    @MainThread fun setPlaybackSpeed(speed: Float) = exoPlayer.setPlaybackSpeed(speed)
+
+    @MainThread fun durationMs(): Long = exoPlayer.duration.takeUnless { it == C.TIME_UNSET }?.coerceAtLeast(0L) ?: 0L
 
     /** Stops playback and releases the ExoPlayer. The instance is unusable afterwards. */
     @MainThread
@@ -170,7 +198,7 @@ class AppMediaPlayer(
                 eventSubject.onNext(Event.Ready)
                 positionPollingSubscription?.unsubscribe()
                 positionPollingSubscription = Observable
-                    .interval(POSITION_POLL_INTERVAL_MS, POSITION_POLL_INTERVAL_MS, TimeUnit.MILLISECONDS, timerScheduler)
+                    .interval(positionPollIntervalMs, positionPollIntervalMs, TimeUnit.MILLISECONDS, timerScheduler)
                     .onBackpressureLatest()
                     .observeOn(AndroidSchedulers.mainThread())
                     .subscribe(
@@ -189,7 +217,7 @@ class AppMediaPlayer(
 
     companion object {
         private const val TAG = "AppMediaPlayer"
-        private const val POSITION_POLL_INTERVAL_MS = 500L
+        private const val DEFAULT_POSITION_POLL_INTERVAL_MS = 500L
 
         /**
          * Buffer tuning, taken from the reference.
@@ -211,7 +239,7 @@ class AppMediaPlayer(
          * looper.
          */
         @MainThread
-        fun create(context: Context): AppMediaPlayer {
+        fun create(context: Context, positionPollIntervalMs: Long = DEFAULT_POSITION_POLL_INTERVAL_MS): AppMediaPlayer {
             val dataSourceFactory = CacheDataSourceFactory(
                 context = context,
                 upstreamFactory = DefaultDataSourceFactory(context),
@@ -230,7 +258,7 @@ class AppMediaPlayer(
                 .setLoadControl(loadControl)
                 .build()
                 .apply { addListener(eventListener) }
-            return AppMediaPlayer(exoPlayer, eventListener, dataSourceFactory, Schedulers.computation())
+            return AppMediaPlayer(exoPlayer, eventListener, dataSourceFactory, Schedulers.computation(), positionPollIntervalMs)
         }
     }
 }

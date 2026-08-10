@@ -3270,6 +3270,58 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   null-placeholder regression test was added. Debug assembly, A65 installation, and
   `git diff --check` pass; a second approved account is still required for live ring/answer/decline verification. The focused logger
   test is blocked by unrelated `ActivityMessageEntryTest.kt:113`, which omits its required `message` argument.
+- Voice messages now use the current React Native contract recovered from Hermes modules 11361/11479/11480: message flag 8192,
+  `voice_message` send location, `duration_secs`, a base64 waveform capped at 256 samples, 500 ms minimum, and 1,199,500 ms
+  maximum. The composer records Ogg/Opus on API 29+ (AAC/M4A fallback below API 29), sends through the existing cloud-upload and
+  per-channel message queue, preserves metadata for retries, and renders ordinary/forwarded voice attachments with waveform seek,
+  play/pause, duration, and the RN playback-rate cycle. User Settings now exposes a Feature Flags page whose persisted Voice
+  Messages switch removes the microphone button entirely. A focused payload/waveform contract test was added but remains blocked
+  before execution by unrelated `ActivityMessageEntryTest.kt:113`; debug assembly and A65 installation pass. Live backend send,
+  receive, and playback remain unverified.
+- The voice-message control now follows RN's gesture state machine instead of the temporary tap-only interaction: touch starts
+  recording, horizontal movement past half the composer enters cancel, upward movement past 40dp enters lock, release sends,
+  cancels, or locks according to that state, and locked recording exposes explicit trash/send controls. The mic and Send now swap
+  inside FlexInput's existing external `send_btn_container`; the rounded `main_input_container` remains its sibling and still owns
+  the emoji. The installed A65 hierarchy confirms non-overlapping bounds: input `[281,1296][901,1401]`, emoji
+  `[785,1296][890,1401]`, mic `[943,1296][1048,1401]`. The mic remains visible but disabled when channel permissions deny voice
+  messages, while the user Feature Flag removes it entirely.
+  Debug assembly, installation, and `git diff --check` pass; gesture/live-send device verification requires a channel granting
+  `SEND_VOICE_MESSAGES`.
+- Voice-message availability now matches RN's explicit `channel.isPrivate()` branch: DMs and group DMs do not consult guild
+  permission maps, while guild channels still require `ATTACH_FILES` and `SEND_VOICE_MESSAGES`. The recording overlay is attached
+  to a non-measuring `FrameLayout` around the FlexInput `FragmentContainerView`; adding it directly to
+  `FragmentContainerView` crashed after microphone permission because that class rejects non-fragment children. Debug assembly,
+  A65 installation, and `git diff --check` pass after both fixes.
+- The recording overlay now renders the recorder's live 100ms amplitude samples instead of a placeholder-only center. The mistaken
+  `ic_trash_outline` selector (an oval target background, not a trash glyph) was removed from the hold state; real delete/send
+  controls appear only after locking. The mic's touch stream disallows ancestor interception until release/cancel, preventing the
+  channel drawer from opening during RN's slide-left-to-cancel gesture. Debug assembly, A65 installation, and `git diff --check`
+  pass.
+- MediaRecorder waveform conversion now uses a calibrated linear 0.6 gain instead of mapping ordinary near-full-scale microphone
+  peaks through a -100..0dB curve that made nearly every bar tall. Playback downsamples the wire's 256 samples to RN's visible 6dp
+  bar spacing, caches active/inactive theme colors instead of resolving an attribute per bar per frame, and avoids duplicate
+  duration text layouts. Voice rows now use a tertiary surface with a 1dp interactive-muted outline so they remain distinct from
+  the message background. Debug assembly, A65 installation, and `git diff --check` pass; the focused contract tests remain blocked
+  by unrelated `ActivityMessageEntryTest.kt:113`.
+- Device feedback raised the MediaRecorder waveform calibration from 0.6 to 0.85 gain after the linear correction proved too
+  subdued. Voice-message cards now use a 16dp corner radius while retaining their tertiary fill and 1dp outline, matching the
+  rounder RN visual treatment. Debug assembly and A65 installation pass.
+- Voice-message playback now uses `AppMediaPlayer.playAudio`, which prepares ExoPlayer without constructing or attaching a hidden
+  `PlayerView`/video surface for every audio row. Waveform seeking claims parent touch interception on ACTION_DOWN and seeks on
+  ordinary move events, so dragging forward works immediately without a long press or opening the channel drawer. Debug assembly,
+  A65 installation, and `git diff --check` pass.
+- Voice playback position polling is configurable per player: video/GIF remains at 500ms, while voice rows update at 50ms so the
+  played waveform advances continuously instead of jumping between half-second chunks. Debug assembly and A65 installation pass.
+- The voice playback-rate label now uses a 56dp centered box with font padding disabled, keeping `0.75x` visually centered.
+  Non-voice audio attachments are detected from `content_type` or common music extensions and render a compact play/pause,
+  seek, and elapsed/total-time player beneath the normal filename/size/download row; they deliberately do not invent waveforms.
+  The same player is available in forwarded attachment rows, uses surface-free audio playback, releases with row lifecycle, and
+  claims seek-bar drags from parent panels. Debug assembly, A65 installation, and `git diff --check` pass.
+- Ponytail simplification consolidated voice/music ExoPlayer ownership into one `AudioPlaybackController` and recording/playback
+  bars into one `VoiceWaveformView`. Audio detection now uses `URLConnection` MIME inference, elapsed labels use Android
+  `DateUtils`, and music seeks use duration milliseconds directly as the native `SeekBar` range. `WidgetChatInput` now uses
+  generated root/FlexInput bindings throughout, with its five recording-overlay references collapsed into one lifecycle holder.
+  Debug assembly, A65 installation, and `git diff --check` pass.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each
@@ -3293,4 +3345,9 @@ Resumable task: `app/src/main/java/com/discord/app/AppActivity.kt` and
 `app/src/main/java/com/discord/widgets/voice/call/WidgetVoiceCallIncoming.kt` | reference `StoreNavigation.java` and
 `WidgetVoiceCallIncoming.java` | use two approved accounts to verify foreground incoming activity launch, ringtone stop on
 answer/decline/cancel, video answer, multiple incoming calls, and background FCM behavior.
+
+Resumable task: `app/src/main/java/com/discord/widgets/chat/input/VoiceMessageRecorder.kt` and
+`app/src/main/java/com/discord/widgets/chat/list/VoiceMessageView.kt` | RN Hermes modules 11361/11479/11480/11581 | use an
+approved account to verify Ogg upload acceptance, incoming waveform metadata, reply sends, retry after restart, playback/audio
+focus, background teardown, API 21-28 M4A fallback acceptance, and the Feature Flags visibility toggle on device.
 

@@ -92,6 +92,8 @@ object SendUtils {
                         id = index,
                         filename = attachment.fileName,
                         isSpoiler = attachment.spoiler,
+                        durationSecs = attachment.durationSecs,
+                        waveform = attachment.waveform,
                     )
                 },
             )
