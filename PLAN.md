@@ -3322,6 +3322,11 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   `DateUtils`, and music seeks use duration milliseconds directly as the native `SeekBar` range. `WidgetChatInput` now uses
   generated root/FlexInput bindings throughout, with its five recording-overlay references collapsed into one lifecycle holder.
   Debug assembly, A65 installation, and `git diff --check` pass.
+- `StoreGuilds.merge` no longer dereferences constructor-bypassed JVM nulls from partial guild payloads. Gson can allocate the
+  nominally non-null API model without its Kotlin constructor; omitted `name`, `features`, and `nsfw_level` now preserve the cached
+  guild values. This fixes the observed `api.name.ifEmpty` Main-StoreThread crash and prevents the next two equivalent null crashes.
+  A focused partial-update regression test was added; debug assembly and A65 installation pass, while unit-test compilation remains
+  blocked by unrelated `ActivityMessageEntryTest.kt:113`.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each

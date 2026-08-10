@@ -2,6 +2,8 @@ package com.discord.stores
 
 import android.content.Context
 import com.discord.api.guild.Guild as ApiGuild
+import com.discord.api.guild.GuildFeature
+import com.discord.api.guild.GuildNsfwLevel
 import com.discord.api.guild.GuildVerificationLevel
 import com.discord.api.guildmember.GuildMember as ApiGuildMember
 import com.discord.api.guildmember.GuildMembersChunk
@@ -433,48 +435,54 @@ class StoreGuilds(
     private fun <T> observe(source: ObservationDeck.UpdateSource, generator: () -> T): Observable<T> =
         observationDeck.connectRx(source, generator = generator)
 
-    private fun Guild.merge(api: ApiGuild) = Guild(
-        roles = emptyList(),
-        emojis = api.emojis.orEmpty(),
-        stickers = api.stickers.orEmpty(),
-        name = api.name.ifEmpty { name },
-        description = api.description ?: description,
-        defaultMessageNotifications = api.defaultMessageNotifications ?: defaultMessageNotifications,
-        id = api.id.takeUnless { it == 0L } ?: id,
-        region = api.region ?: region,
-        ownerId = api.ownerId.takeUnless { it == 0L } ?: ownerId,
-        icon = api.icon ?: icon,
-        verificationLevel = api.verificationLevel ?: verificationLevel,
-        explicitContentFilter = api.explicitContentFilter ?: explicitContentFilter,
-        unavailable = api.unavailable,
-        mfaLevel = api.mfaLevel,
-        afkTimeout = api.afkTimeout.takeUnless { it == 0 } ?: afkTimeout,
-        afkChannelId = api.afkChannelId,
-        systemChannelId = api.systemChannelId,
-        features = api.features.toSet(),
-        memberCount = api.memberCount,
-        banner = api.banner,
-        splash = api.splash ?: splash,
-        premiumTier = api.premiumTier,
-        premiumSubscriptionCount = api.premiumSubscriptionCount,
-        systemChannelFlags = api.systemChannelFlags,
-        joinedAt = api.joinedAt ?: joinedAt,
-        rulesChannelId = api.rulesChannelId ?: rulesChannelId,
-        publicUpdatesChannelId = api.publicUpdatesChannelId ?: publicUpdatesChannelId,
-        preferredLocale = api.preferredLocale ?: preferredLocale,
-        welcomeScreen = api.welcomeScreen ?: welcomeScreen,
-        maxVideoChannelUsers = api.maxVideoChannelUsers ?: maxVideoChannelUsers,
-        vanityUrlCode = api.vanityUrlCode ?: vanityUrlCode,
-        approximatePresenceCount = api.approximatePresenceCount.takeUnless { it == 0 } ?: approximatePresenceCount,
-        nsfw = api.nsfw,
-        hubType = api.hubType,
-        safetyAlertsChannelId = api.safetyAlertsChannelId,
-        premiumProgressBarEnabled = api.premiumProgressBarEnabled,
-        nsfwLevel = api.nsfwLevel,
-        ownerConfiguredContentLevel = api.ownerConfiguredContentLevel,
-        incidentsData = api.incidentsData ?: incidentsData,
-        officialMessageColor = api.officialMessageColor ?: officialMessageColor,
-    )
+    private fun Guild.merge(api: ApiGuild): Guild {
+        // Gson bypasses Kotlin constructors; omitted fields in partial guild payloads are JVM null.
+        val incomingName: String? = api.name
+        val incomingFeatures: List<GuildFeature>? = api.features
+        val incomingNsfwLevel: GuildNsfwLevel? = api.nsfwLevel
+        return Guild(
+            roles = emptyList(),
+            emojis = api.emojis.orEmpty(),
+            stickers = api.stickers.orEmpty(),
+            name = incomingName?.takeIf(String::isNotEmpty) ?: name,
+            description = api.description ?: description,
+            defaultMessageNotifications = api.defaultMessageNotifications ?: defaultMessageNotifications,
+            id = api.id.takeUnless { it == 0L } ?: id,
+            region = api.region ?: region,
+            ownerId = api.ownerId.takeUnless { it == 0L } ?: ownerId,
+            icon = api.icon ?: icon,
+            verificationLevel = api.verificationLevel ?: verificationLevel,
+            explicitContentFilter = api.explicitContentFilter ?: explicitContentFilter,
+            unavailable = api.unavailable,
+            mfaLevel = api.mfaLevel,
+            afkTimeout = api.afkTimeout.takeUnless { it == 0 } ?: afkTimeout,
+            afkChannelId = api.afkChannelId,
+            systemChannelId = api.systemChannelId,
+            features = incomingFeatures?.toSet() ?: features,
+            memberCount = api.memberCount,
+            banner = api.banner,
+            splash = api.splash ?: splash,
+            premiumTier = api.premiumTier,
+            premiumSubscriptionCount = api.premiumSubscriptionCount,
+            systemChannelFlags = api.systemChannelFlags,
+            joinedAt = api.joinedAt ?: joinedAt,
+            rulesChannelId = api.rulesChannelId ?: rulesChannelId,
+            publicUpdatesChannelId = api.publicUpdatesChannelId ?: publicUpdatesChannelId,
+            preferredLocale = api.preferredLocale ?: preferredLocale,
+            welcomeScreen = api.welcomeScreen ?: welcomeScreen,
+            maxVideoChannelUsers = api.maxVideoChannelUsers ?: maxVideoChannelUsers,
+            vanityUrlCode = api.vanityUrlCode ?: vanityUrlCode,
+            approximatePresenceCount = api.approximatePresenceCount.takeUnless { it == 0 } ?: approximatePresenceCount,
+            nsfw = api.nsfw,
+            hubType = api.hubType,
+            safetyAlertsChannelId = api.safetyAlertsChannelId,
+            premiumProgressBarEnabled = api.premiumProgressBarEnabled,
+            nsfwLevel = incomingNsfwLevel ?: nsfwLevel,
+            ownerConfiguredContentLevel = api.ownerConfiguredContentLevel,
+            incidentsData = api.incidentsData ?: incidentsData,
+            officialMessageColor = api.officialMessageColor ?: officialMessageColor,
+        )
+    }
 
     /**
      * Gateway member requests driven directly by a screen rather than by store state.

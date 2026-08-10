@@ -72,6 +72,25 @@ class GuildStoreGraphTest {
         assertNull(guilds.getMember(1, 7)?.bannerHash)
     }
 
+    @Test fun partialGuildUpdateKeepsConstructorBypassedFields() {
+        val users = StoreUser(dispatcher = dispatcher, observationDeck = deck)
+        val guilds = StoreGuilds(users, dispatcher, deck)
+        register(users, guilds)
+
+        dispatcher.schedule {
+            guilds.handleGuildAdd(guild(1, "Stable Name"))
+            guilds.handleGuildAdd(
+                gson.fromJson(
+                    """{"id":1,"owner_id":9,"unavailable":false}""",
+                    ApiGuild::class.java,
+                ),
+            )
+        }
+        scheduler.triggerActions()
+
+        assertEquals("Stable Name", guilds.getGuild(1)?.name)
+    }
+
     @Test fun timedOutMembersAreObservableAndClearingOneRecomputesOwnPermissions() {
         val users = StoreUser(dispatcher = dispatcher, observationDeck = deck)
         var permissionRecomputes = 0
