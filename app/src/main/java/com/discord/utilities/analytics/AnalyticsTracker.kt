@@ -284,6 +284,14 @@ object AnalyticsTracker {
         )
     }
 
+    fun reviewRequestTriggered() = openModal("App Store Ratings Prompt", "auto")
+
+    fun reviewRequestAccepted() =
+        dismissModal("App Store Ratings Prompt", "auto", "accepted")
+
+    fun reviewRequestDismissed() =
+        dismissModal("App Store Ratings Prompt", "auto", "dismissed")
+
     /** The gift-acceptance modal. */
     @JvmStatic
     fun openGiftModal(gift: ModelGift, channel: Channel?, location: String) {
@@ -392,6 +400,18 @@ object AnalyticsTracker {
 
     fun giftResolvedFailed(giftCode: String) {
         tracker.track("gift_code_resolved", mapOf("gift_code" to giftCode, "resolved" to false))
+    }
+
+    @JvmOverloads
+    fun guildBoostPromotionOpened(
+        guildId: Long,
+        locationTrait: Traits.Location,
+        channelId: Long? = null,
+    ) {
+        val properties = mutableMapOf<String, Any>("guild_id" to guildId)
+        channelId?.let { properties["channel_id"] = it }
+        locationTrait.serializeTo(properties)
+        tracker.track("premium_guild_promotion_opened", properties)
     }
 
     /** [snapshotProperties] and the invite fields both come from `StoreAnalytics`. */

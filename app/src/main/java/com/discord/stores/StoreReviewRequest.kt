@@ -18,7 +18,6 @@ class StoreReviewRequest(
     private val clock: Clock,
     private val notices: StoreNotices,
     private val sessionDurablePreferences: SharedPreferences,
-    /** `AnalyticsTracker.reviewRequestTriggered`; no analytics layer exists in this project yet. */
     private val trackReviewRequestTriggered: () -> Unit = {},
     private val trackReviewRequestAccepted: () -> Unit = {},
     private val trackReviewRequestDismissed: () -> Unit = {},

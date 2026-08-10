@@ -9,6 +9,7 @@ import com.discord.models.member.GuildMember
 import com.discord.utilities.time.Clock
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -208,6 +209,30 @@ class AnalyticsPipelineTest {
         assertEquals(true, event.properties["has_guild_member_avatar"])
         assertEquals(true, event.properties["has_guild_member_banner"])
         assertEquals(true, event.properties["has_guild_member_bio"])
+    }
+
+    @Test
+    fun `guild boost promotion opened carries the system message location`() {
+        val sink = RecordingSink()
+        AnalyticsSink.install(sink)
+        AnalyticsTracker.tracker.clear()
+        AnalyticsTracker.tracker.setTrackingData("token")
+
+        AnalyticsTracker.guildBoostPromotionOpened(
+            guildId = 42L,
+            locationTrait = Traits.Location(
+                section = Traits.Location.Section.CHANNEL_TEXT_AREA,
+                _object = Traits.Location.Obj.BOOST_GEM_ICON,
+            ),
+        )
+        AnalyticsTracker.tracker.setTrackingData("token")
+
+        val event = sink.events.single() as Science.Event.MapObject
+        assertEquals("premium_guild_promotion_opened", event.type)
+        assertEquals(42L, event.properties["guild_id"])
+        assertEquals("Channel Text Area", event.properties["location_section"])
+        assertEquals("Boost Gem Icon", event.properties["location_object"])
+        assertFalse(event.properties.containsKey("channel_id"))
     }
 
     private class TrackImpressionWithGuild :

@@ -6,12 +6,17 @@ import com.discord.api.channel.Channel
 import com.discord.api.commands.GuildApplicationCommands
 import com.discord.api.embeddedactivities.EmbeddedActivity
 import com.discord.api.embeddedactivities.EmbeddedActivityInboundUpdate
+import com.discord.api.guildjoinrequest.ApplicationStatus
+import com.discord.api.guildjoinrequest.GuildJoinRequest
 import com.discord.api.interaction.InteractionStateUpdate
 import com.discord.api.message.Message as ApiMessage
+import com.discord.api.science.Science
 import com.discord.models.commands.Application
 import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.models.domain.ModelPayload
+import com.discord.utilities.analytics.AnalyticsSink
+import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.time.Clock
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
@@ -20,6 +25,7 @@ import java.lang.reflect.Proxy
 import java.nio.file.Files
 import org.junit.AfterClass
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
 import org.junit.Test
@@ -33,6 +39,14 @@ import org.junit.Test
  */
 class StoreStreamWiringTest {
 
+    private class RecordingSink : AnalyticsSink {
+        val events = mutableListOf<Science.Event>()
+
+        override fun deliver(token: String?, events: List<Science.Event>, onFailure: () -> Unit) {
+            this.events += events
+        }
+    }
+
     @Test
     fun guildSelectionRequestsGatewayThreadStream() {
         val guildId = 9_999L
@@ -44,6 +58,118 @@ class StoreStreamWiringTest {
         } finally {
             subscription.unsubscribe()
         }
+    }
+
+    @Test
+    fun guildTimeoutUsesTheProductionPermissionCallback() {
+        val callback = StoreGuilds::class.java.getDeclaredField("onMeCommunicationEnabled").run {
+            isAccessible = true
+            get(StoreStream.getGuilds()) as Function1<*, *>
+        }
+
+        assertFalse("the production callback must capture StoreStream, not use the no-op default", callback.javaClass.declaredFields.isEmpty())
+    }
+
+    @Test
+    fun approvedJoinRequestQueuesTheReconstructedSuccessDialog() {
+        stream.handleConnectionOpen(gson.fromJson(READY_JSON, ModelPayload::class.java))
+        stream.dispatcher.schedule {
+            StoreStream.getGuildJoinRequests().handleGuildJoinRequestCreateOrUpdate(
+                1L,
+                GuildJoinRequest(
+                    userId = 7L,
+                    user = null,
+                    guildId = 1L,
+                    createdAt = "2026-08-10T00:00:00Z",
+                    applicationStatus = ApplicationStatus.APPROVED,
+                    rejectionReason = null,
+                    inviteCode = null,
+                    lastSeen = null,
+                    actionedAt = null,
+                ),
+            )
+        }
+
+        val queue = StoreNotices::class.java.getDeclaredField("noticeQueue").run {
+            isAccessible = true
+            @Suppress("UNCHECKED_CAST")
+            get(StoreStream.getNotices()) as Collection<StoreNotices.Notice>
+        }
+        assertTrue(queue.any { it.name == "GUILD_JOIN_REQUEST_SUCCESS_1" })
+    }
+
+    @Test
+    fun productionNavigationAndReviewCallbacksReachAnalytics() {
+        val sink = RecordingSink()
+        AnalyticsSink.install(sink)
+        try {
+            AnalyticsTracker.tracker.clear()
+            stream.handleConnectionOpen(gson.fromJson(READY_JSON, ModelPayload::class.java))
+            StoreStream.getAnalytics().handleFingerprint("wiring-test")
+
+            StoreStream.selectGuild(0L)
+            StoreStream.selectGuild(1L)
+            StoreStream.selectChannel(1L, 10L)
+            StoreStream.selectChannel(1L, 12L)
+            awaitSelectedChannel(12L)
+            StoreStream.getReviewRequest().onReviewRequestShown()
+            StoreStream.getReviewRequest().onUserAcceptedRequest()
+            StoreStream.getReviewRequest().onUserDismissedRequest()
+            StoreStream.getAnalytics().handleFingerprint("wiring-test")
+
+            val events = sink.events.filterIsInstance<Science.Event.MapObject>()
+            assertTrue(events.any { it.type == "guild_viewed" })
+            assertTrue(events.toString(), events.any { it.type == "channel_opened" && it.properties["channel_id"] == 12L })
+            assertTrue(events.toString(), events.any { it.type == "text_in_voice_opened" })
+            assertTrue(events.any { it.type == "open_modal" && it.properties["type"] == "App Store Ratings Prompt" })
+            assertTrue(events.any { it.type == "modal_dismissed" && it.properties["dismiss_type"] == "accepted" })
+            assertTrue(events.any { it.type == "modal_dismissed" && it.properties["dismiss_type"] == "dismissed" })
+        } finally {
+            AnalyticsSink.reset()
+            AnalyticsTracker.tracker.clear()
+            AnalyticsTracker.tracker.setTrackingData(null, fingerprinted = false)
+        }
+    }
+
+    @Test
+    fun guildSubscriptionsUseTheStoreStreamVoiceProvider() {
+        val provider = StoreGuildSubscriptions::class.java.getDeclaredField("getConnectedVoiceGuildId").run {
+            isAccessible = true
+            get(StoreStream.getGuildSubscriptions()) as Function0<*>
+        }
+
+        assertFalse("the production provider must capture StoreStream, not use the zero default", provider.javaClass.declaredFields.isEmpty())
+    }
+
+    @Test
+    fun typingAndChannelMembersUseProductionProviders() {
+        stream.handleConnectionOpen(gson.fromJson(READY_JSON, ModelPayload::class.java))
+
+        val typing = StoreStream.getUsersTyping()
+        val api = StoreUsersTyping::class.java.getDeclaredField("api").run {
+            isAccessible = true
+            get(typing) as Function0<*>
+        }
+        val onCooldown = StoreUsersTyping::class.java.getDeclaredField("onCooldown").run {
+            isAccessible = true
+            get(typing) as Function3<*, *, *, *>
+        }
+        assertFalse("typing must resolve StoreStream's REST client", api.javaClass.declaredFields.isEmpty())
+        assertFalse("typing cooldowns must reach StoreSlowMode", onCooldown.javaClass.declaredFields.isEmpty())
+
+        val members = StoreStream.getChannelMembers()
+        val memberDispatcher = StoreChannelMembers::class.java.getDeclaredField("dispatcher").run {
+            isAccessible = true
+            get(members)
+        }
+        val getChannel = provider<Function1<Long, Channel?>>(members, "getChannel")
+        val getGuildRoles = provider<Function1<Long, Map<Long, *>>>(members, "getGuildRoles")
+        val getGuildMemberCount = provider<Function1<Long, Int>>(members, "getGuildMemberCount")
+
+        assertTrue(memberDispatcher === stream.dispatcher)
+        assertEquals(10L, getChannel.invoke(10L)?.id)
+        assertTrue(1L in getGuildRoles.invoke(1L))
+        assertEquals(1, getGuildMemberCount.invoke(1L))
     }
 
     /** Thread and forum inputs reach the reactive read-state projection through their stores. */
@@ -271,9 +397,9 @@ class StoreStreamWiringTest {
         private const val RECENT_MESSAGE_ID = (1_650_000_000_000L - 1_420_070_400_000L) shl 22
 
         /**
-         * `@everyone` carries `VIEW_CHANNEL or SEND_MESSAGES` (3072) because `StoreReadStates`
-         * drops any channel the user cannot see, and the read state starts empty so every channel
-         * falls back to the guild's `joined_at` as its ack.
+         * `@everyone` carries `VIEW_CHANNEL or CONNECT` so read-state channels stay visible and the
+         * voice-channel analytics callback can resolve. `SEND_MESSAGES` is deliberately role-only
+         * for the timeout permission-recomputation test.
          */
         private const val READY_JSON = """
         {
@@ -282,14 +408,15 @@ class StoreStreamWiringTest {
           "private_channels": [],
           "read_state": {"version":1,"partial":false,"entries":[]},
           "guilds": [{
-            "id": 1, "name": "Guild", "owner_id": 9, "unavailable": false, "features": [],
+            "id": 1, "name": "Guild", "owner_id": 9, "member_count": 1, "unavailable": false, "features": [],
             "joined_at": "2020-01-01T00:00:00",
-            "roles": [{"id":1,"name":"@everyone","permissions":3072,"position":0,"color":0,
+            "roles": [{"id":1,"name":"@everyone","permissions":1049600,"position":0,"color":0,
                        "hoist":false,"managed":false,"mentionable":false}],
             "members": [{"guild_id":1,"user":{"id":7,"username":"me","discriminator":"0000"},
                          "roles":[],"pending":false,"joined_at":"2020-01-01T00:00:00"}],
             "channels": [
               {"id":10,"type":0,"guild_id":1,"name":"general"},
+              {"id":12,"type":2,"guild_id":1,"name":"voice"},
               {"id":30,"type":15,"guild_id":1,"name":"forum"}
             ]
           }]
@@ -322,6 +449,12 @@ class StoreStreamWiringTest {
                 "author":{"id":8,"username":"other","discriminator":"0001"},"content":"hi"}""",
             ApiMessage::class.java,
         )
+
+        private inline fun <reified T> provider(target: Any, name: String): T =
+            StoreChannelMembers::class.java.getDeclaredField(name).run {
+                isAccessible = true
+                get(target) as T
+            }
 
         private val directory = Files.createTempDirectory("store-stream-wiring")
 

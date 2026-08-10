@@ -5,7 +5,6 @@ import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
-import com.discord.utilities.permissions.SlowModeType
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.time.Clock
@@ -29,10 +28,8 @@ class StoreUsersTyping(
     /**
      * `StoreSlowMode.onCooldown`. `POST /channels/{id}/typing` is the only endpoint that reports
      * the *remaining* slow-mode window, so the typing ping doubles as the cooldown probe.
-     * `StoreSlowMode` is not reconstructed yet; until it is, the cooldown is discarded and the
-     * chat input will not pre-emptively disable itself.
      */
-    private val onCooldown: (channelId: Long, cooldownMs: Long, type: SlowModeType) -> Unit =
+    private val onCooldown: (channelId: Long, cooldownMs: Long, type: StoreSlowMode.Type) -> Unit =
         { _, _, _ -> },
 ) : StoreV2() {
     private val typingUsers = HashMap<Long, MutableSet<Long>>()
@@ -91,10 +88,10 @@ class StoreUsersTyping(
                 // Despite the reference's local name ("...CooldownSecs") the value forwarded is the
                 // raw millisecond field.
                 response.messageSendCooldownMs?.takeIf { it > 0L }?.let { cooldownMs ->
-                    dispatcher.schedule { onCooldown(channelId, cooldownMs, SlowModeType.MESSAGE_SEND) }
+                    dispatcher.schedule { onCooldown(channelId, cooldownMs, StoreSlowMode.Type.MessageSend) }
                 }
                 response.threadCreateCooldownMs?.takeIf { it > 0L }?.let { cooldownMs ->
-                    dispatcher.schedule { onCooldown(channelId, cooldownMs, SlowModeType.THREAD_CREATE) }
+                    dispatcher.schedule { onCooldown(channelId, cooldownMs, StoreSlowMode.Type.ThreadCreate) }
                 }
             }
     }

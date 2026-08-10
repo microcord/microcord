@@ -71,6 +71,7 @@ import com.discord.utilities.media.AppSoundManager
 import com.discord.utilities.networking.NetworkMonitor
 import com.discord.rtcconnection.VoiceTransport
 import com.discord.utilities.analytics.AnalyticSuperProperties
+import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.billing.BillingUtils
 import com.discord.utilities.logging.BootLog
@@ -110,6 +111,7 @@ import com.discord.widgets.home.WidgetHome
 import com.discord.widgets.home.WidgetHomeModel
 import com.discord.widgets.home.WidgetHomePanelLoading
 import com.discord.widgets.home.WidgetHomePanelNsfw
+import com.discord.widgets.servers.member_verification.MemberVerificationSuccessDialog
 import com.discord.widgets.stage.StageStoreAccess
 import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.models.domain.ModelCustomStatusSetting
@@ -183,11 +185,13 @@ class StoreStream private constructor(
     )
     private val userRelationships = StoreUserRelationships(observationDeck)
     private lateinit var lurking: StoreLurking
-    private val guilds = StoreGuilds(
+    private lateinit var analytics: StoreAnalytics
+    private val guilds: StoreGuilds = StoreGuilds(
         users,
         dispatcher,
         observationDeck,
         getLurkingGuildIds = { if (::lurking.isInitialized) lurking.getLurkingGuildIdsSync() else emptySet() },
+        onMeCommunicationEnabled = { permissions.handleGuildMemberAdd(it) },
     )
     private val channels = StoreChannels(
         dispatcher,
@@ -206,7 +210,7 @@ class StoreStream private constructor(
     private val threadMembers = StoreThreadMembers(observationDeck, channels)
     private val threadDraft = StoreThreadDraft(dispatcher)
     private val stageInstances = StoreStageInstances(observationDeck)
-    private val permissions = StorePermissions(
+    private val permissions: StorePermissions = StorePermissions(
         users, channels, guilds, observationDeck,
         storeStageInstances = stageInstances,
         storeThreadsJoined = threadsJoined,
@@ -217,7 +221,15 @@ class StoreStream private constructor(
     private val bans = StoreBans(dispatcher, observationDeck)
     /** Deliberately NOT a `StoreV2` — the reference implements it as a plain subject store. */
     private val guildIntegrations = StoreGuildIntegrations(dispatcher)
-    private val guildJoinRequests = StoreGuildJoinRequest(users, guilds, dispatcher, observationDeck)
+    private val guildJoinRequests = StoreGuildJoinRequest(
+        users,
+        guilds,
+        dispatcher,
+        observationDeck,
+        onJoinRequestApproved = { guildId ->
+            if (guilds.getGuild(guildId)?.name != null) MemberVerificationSuccessDialog.enqueue(guildId)
+        },
+    )
     private val guildTemplates = StoreGuildTemplates(dispatcher, observationDeck)
     private val guildMemberVerificationForm = StoreGuildMemberVerificationForm(dispatcher, observationDeck)
     private val auditLog = StoreAuditLog(dispatcher, observationDeck)
@@ -240,15 +252,26 @@ class StoreStream private constructor(
     private val readyPayloadHydrator = ReadyPayloadHydrator(guilds, channels) {
         clientDataState.getClientDataState().privateChannelsVersion
     }
-    private val guildSelected = StoreGuildSelected(
+    private val guildSelected: StoreGuildSelected = StoreGuildSelected(
         dispatcher,
         observationDeck,
         guildStore = guilds,
         getLurkingGuildIds = { if (::lurking.isInitialized) lurking.getLurkingGuildIdsSync() else emptySet() },
+        trackGuildViewed = { analytics.trackGuildViewed(it) },
         onSampleGuildIdSelected = { nux.handleSamplePremiumGuildSelected(it) },
     )
-    private val channelsSelected = StoreChannelsSelected(
-        channels, permissions, guildSelected, dispatcher, observationDeck,
+    private val channelsSelected: StoreChannelsSelected = StoreChannelsSelected(
+        channels,
+        permissions,
+        guildSelected,
+        dispatcher,
+        observationDeck,
+        trackChannelOpened = { channelId, viewType, location ->
+            analytics.trackChannelOpened(channelId, viewType, location)
+        },
+        trackTextInVoiceOpened = { channelId, location ->
+            analytics.trackTextInVoiceOpened(channelId, location)
+        },
     )
     private val guildsNsfw = StoreGuildsNsfw(dispatcher, channels, observationDeck)
     private val channelSpoilerAgree = StoreChannelSpoilerAgree(dispatcher, channels, users, observationDeck)
@@ -264,13 +287,22 @@ class StoreStream private constructor(
     private val expressionPickerNavigation = StoreExpressionPickerNavigation(observationDeck, dispatcher)
     private val expressionSuggestions = StoreExpressionSuggestions(observationDeck, dispatcher, clock)
     private val maskedLinks = StoreMaskedLinks(dispatcher, channelsSelected, userRelationships)
-    private val channelMembers = StoreChannelMembers(observationDeck) { guildId, roleId ->
-        guilds.getGuildRolesInternal()[guildId]?.get(roleId)
-    }
+    private val guildMemberCounts = StoreGuildMemberCounts(observationDeck)
+    private val channelMembers = StoreChannelMembers(
+        observationDeck = observationDeck,
+        dispatcher = dispatcher,
+        getChannel = channels::getChannel,
+        getGuildRoles = { guildId -> guilds.getRoles()[guildId].orEmpty() },
+        getGuildMemberCount = guildMemberCounts::getApproximateMemberCount,
+        getRole = { guildId, roleId -> guilds.getGuildRolesInternal()[guildId]?.get(roleId) },
+    )
     private val guildSubscriptions = StoreGuildSubscriptions(
         observationDeck,
         dispatcher,
         getSelectedGuildId = guildSelected::getSelectedGuildIdInternal,
+        getConnectedVoiceGuildId = {
+            if (::voiceTransport.isInitialized) voiceTransport.storeRtcConnection.connectedGuildId else 0L
+        },
     )
     private val guildsSorted = StoreGuildsSorted(observationDeck, dispatcher)
     private val expandedGuildFolders = StoreExpandedGuildFolders(dispatcher, observationDeck)
@@ -285,7 +317,6 @@ class StoreStream private constructor(
         getJoinedThreadFlags = { threadsJoined.getJoinedThread(it)?.flags ?: 0 },
     )
     private val debugOptions = StoreDebugOptions()
-    private val guildMemberCounts = StoreGuildMemberCounts(observationDeck)
     private val guildRoleMemberCounts = StoreGuildRoleMemberCounts(dispatcher, clock, observationDeck)
     private val experiments = StoreExperiments(
         clock,
@@ -304,7 +335,14 @@ class StoreStream private constructor(
     private val notices = StoreNotices(clock, sessionDurablePreferences)
     private val nux = StoreNux(dispatcher)
     private val guildOnboarding = StoreGuildOnboarding(dispatcher)
-    private val reviewRequest = StoreReviewRequest(clock, notices, sessionDurablePreferences)
+    private val reviewRequest = StoreReviewRequest(
+        clock,
+        notices,
+        sessionDurablePreferences,
+        trackReviewRequestTriggered = AnalyticsTracker::reviewRequestTriggered,
+        trackReviewRequestAccepted = AnalyticsTracker::reviewRequestAccepted,
+        trackReviewRequestDismissed = AnalyticsTracker::reviewRequestDismissed,
+    )
     private val emojiCustom = StoreEmojiCustom(guilds)
     private val emoji = StoreEmoji(
         emojiCustom,
@@ -571,7 +609,13 @@ class StoreStream private constructor(
     private val messageUploads = StoreMessageUploads(observationDeck)
     private val messageState = StoreMessageState(dispatcher)
     private val chatInputEditing = StoreChatInputEditing()
-    private val usersTyping = StoreUsersTyping(dispatcher, observationDeck, { users.getMeInternal().id })
+    private val usersTyping = StoreUsersTyping(
+        dispatcher = dispatcher,
+        observationDeck = observationDeck,
+        currentUserId = { users.getMeInternal().id },
+        api = { if (::restApi.isInitialized) restApi else null },
+        onCooldown = { channelId, cooldownMs, type -> slowMode.onCooldown(channelId, cooldownMs, type) },
+    )
     private lateinit var messageSendCoordinator: MessageSendCoordinator
     private lateinit var messageActionCoordinator: MessageActionCoordinator
     private val uploadNonceGenerator = NonceGenerator(System::currentTimeMillis)
@@ -838,8 +882,9 @@ class StoreStream private constructor(
         observeSelectedVoiceChannelId = { voiceChannelSelected.observeSelectedVoiceChannelId() },
         streamContextForUser = { userId -> streamContextService.getForUser(userId, true) },
     )
-    private val analytics = StoreAnalytics(
-        stores = object : StoreAnalytics.Stores {
+    init {
+        analytics = StoreAnalytics(
+            stores = object : StoreAnalytics.Stores {
             override fun getChannel(channelId: Long) = channels.findChannelById(channelId)
             override fun getChannelsForGuild(guildId: Long) = channels.getChannelsForGuild(guildId).values
             override fun getSelectedChannelId() = channelsSelected.getId()
@@ -872,10 +917,11 @@ class StoreStream private constructor(
             override fun getMaxViewersForStream(userId: Long, channelId: Long, guildId: Long?) =
                 applicationStreaming.getMaxViewersForStream(userId, channelId, guildId)
             override fun getTheme() = userSettingsSystem.getTheme()
-        },
-        dispatcher = dispatcher,
-        clock = clock,
-    )
+            },
+            dispatcher = dispatcher,
+            clock = clock,
+        )
+    }
 
     /**
      * `by lazy` because it takes the stores declared above it and is only touched once a voice
@@ -1154,6 +1200,7 @@ class StoreStream private constructor(
         BootLog.record(BootLogEvent.REST_READY)
         authentication.bindApi(api)
         userSettings.bindApi(api)
+        guildSettings.bindApi(api)
         guildProfiles.bindApi(api)
         guildWelcomeScreens.bindApi(api)
         lurking.bindApi(api)

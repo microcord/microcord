@@ -43,9 +43,7 @@ class StoreGuildJoinRequest(
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
     private val restApi: () -> RestAPIInterface? = { RestAPI.apiOrNull },
     /**
-     * Enqueues the member-verification success dialog. The reference calls
-     * `MemberVerificationSuccessDialog.enqueue(guildId)`; that screen does not exist in this
-     * target yet, so the hook is inert until it is installed.
+     * Enqueues the member-verification success dialog after production confirms the guild exists.
      */
     private val onJoinRequestApproved: (guildId: Long) -> Unit = {},
 ) : StoreV2() {

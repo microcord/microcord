@@ -16,6 +16,8 @@ import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
 import com.discord.models.user.CoreUser
 import com.discord.stores.StoreStream
+import com.discord.utilities.analytics.AnalyticsTracker
+import com.discord.utilities.analytics.Traits
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.message.MessageUtils
 import com.discord.utilities.time.TimeUtils
@@ -25,6 +27,7 @@ import com.discord.views.ThemedColor
 import com.discord.views.sticker.StickerView
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
+import com.discord.widgets.servers.guildboost.WidgetGuildBoost
 import com.facebook.drawee.view.SimpleDraweeView
 import kotlin.math.roundToInt
 
@@ -171,8 +174,15 @@ class WidgetChatListAdapterItemSystemMessage(
             TYPE_GUILD_MEMBER_SUBSCRIBED_TIER_2,
             TYPE_GUILD_MEMBER_SUBSCRIBED_TIER_3,
             -> {
-                // TODO(parity): the reference tracks `guildBoostPromotionOpened` and opens
-                //  WidgetGuildBoost here; neither AnalyticsTracker nor that screen exists yet.
+                val guildId = adapter.data.guildId
+                AnalyticsTracker.guildBoostPromotionOpened(
+                    guildId,
+                    Traits.Location(
+                        section = Traits.Location.Section.CHANNEL_TEXT_AREA,
+                        _object = Traits.Location.Obj.BOOST_GEM_ICON,
+                    ),
+                )
+                WidgetGuildBoost.create(systemText.context, guildId)
             }
         }
     }
