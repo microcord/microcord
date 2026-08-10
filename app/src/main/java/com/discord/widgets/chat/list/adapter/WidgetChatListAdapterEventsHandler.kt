@@ -82,7 +82,7 @@ class WidgetChatListAdapterEventsHandler(
             nonce,
         )
     },
-    private val openUrlActions: (String) -> Unit = {},
+    private val openUrlActions: (String) -> Unit,
 ) : WidgetChatListAdapter.EventHandler {
 
     private val fragmentManager get() = host.parentFragmentManager

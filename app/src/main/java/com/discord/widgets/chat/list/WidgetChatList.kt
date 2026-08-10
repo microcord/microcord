@@ -16,6 +16,7 @@ import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.widgets.chat.input.AppFlexInputViewModel
+import com.discord.widgets.chat.WidgetUrlActions
 import com.discord.widgets.chat.input.emoji.WidgetEmojiPickerSheet
 import com.discord.widgets.chat.list.actions.MessageActionCoordinator
 import com.discord.widgets.chat.list.actions.WidgetChatListActions
@@ -113,6 +114,7 @@ class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListAct
             messageActionCoordinator = coordinator,
             openPins = { channelId -> WidgetChannelPinnedMessages.show(requireContext(), channelId) },
             openCall = { channelId, status -> requireChatHost().openCallMessage(channelId, status) },
+            openUrlActions = { url -> WidgetUrlActions.launch(parentFragmentManager, url) },
         )
         val created = MGRecyclerAdapter.configure<ChatListEntry, WidgetChatListAdapter>(
             WidgetChatListAdapter(recycler, this, parentFragmentManager, eventHandler),
