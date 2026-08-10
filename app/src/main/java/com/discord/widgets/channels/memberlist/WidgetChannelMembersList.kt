@@ -167,6 +167,7 @@ class WidgetChannelMembersList : AppFragment(R.layout.widget_channel_members_lis
     }
 
     private fun defaultStateSource(): Observable<State> {
+        val privateChannelMembers = PrivateChannelMemberListService()
         val base = Observable.combineLatest(
         StoreStream.getChannelsSelected().observeSelectedChannel(),
         StoreStream.getNavigation().observeRightPanelState(),
@@ -174,26 +175,22 @@ class WidgetChannelMembersList : AppFragment(R.layout.widget_channel_members_lis
         .switchMap { (channel, panelOpen) ->
             when {
                 channel == null -> Observable.just(State(null, panelOpen, EmptyMemberList))
-                channel.type == Channel.DM || channel.type == Channel.GROUP_DM -> Observable.combineLatest(
-                    StoreStream.getUsers().observeAllUsers(),
-                    StoreStream.getPresences().observeAllPresences(),
-                    StoreStream.getUsers().observeMe(emitEmpty = true),
-                    StoreStream.getApplicationStreaming().observeStreamsByUser(),
-                ) { users, presences, me, streams ->
-                    val resolvedUsers = users + listOfNotNull(me).associateBy(User::id)
-                    State(
-                        channel,
-                        panelOpen,
-                        generateGroupDmMemberListItems(
+                channel.type == Channel.DM || channel.type == Channel.GROUP_DM ->
+                    privateChannelMembers.observeStateForGroupDm(channel).map { privateState ->
+                        val me = privateState.users[StoreStream.getUsers().getMe().id]
+                        State(
                             channel,
-                            resolvedUsers,
-                            presences,
-                            streams,
-                            canInvite = channel.type == Channel.GROUP_DM,
-                            currentUser = me,
-                        ),
-                    )
-                }
+                            panelOpen,
+                            generateGroupDmMemberListItems(
+                                channel,
+                                privateState.users,
+                                privateState.presences,
+                                privateState.applicationStreams,
+                                canInvite = channel.type == Channel.GROUP_DM,
+                                currentUser = me,
+                            ),
+                        )
+                    }
                 isThread(channel) -> Observable.combineLatest(
                     Observable.combineLatest(
                         Observable.combineLatest(
