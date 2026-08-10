@@ -122,6 +122,8 @@ class GatewaySocket(
     private var helloTimeoutTask: GatewayCancellable? = null
     private var reconnectTask: GatewayCancellable? = null
     private var failures = 0
+    private var resetsSinceReady = 0
+    private var resetHealthyTask: GatewayCancellable? = null
     private var backoffMs = MIN_BACKOFF_MS
     private var lastFrameReceivedNanos = 0L
 
@@ -253,8 +255,16 @@ class GatewaySocket(
         send(Opcode.REQUEST_SOUNDBOARD_SOUNDS, SoundboardSoundsRequest(guildIds))
     }
 
+    /**
+     * Drops the session and reconnects after the cached client state turned out to be unusable.
+     */
     fun resetOnError() {
-        scheduler.schedule(0) { reconnect("Reset on error", immediate = true) }
+        scheduler.schedule(0) {
+            resetHealthyTask?.cancel()
+            resetHealthyTask = null
+            clearSession()
+            reconnect("Reset on error", immediate = resetsSinceReady++ == 0)
+        }
     }
 
     fun simulateReconnectForTesting() {
@@ -486,6 +496,13 @@ class GatewaySocket(
         backoffMs = MIN_BACKOFF_MS
         reconnectTask?.cancel()
         reconnectTask = null
+        // Not cleared here: the payload this READY carries has not been hydrated yet, and clearing
+        // now would make every reset look like the first one and reconnect immediately forever.
+        resetHealthyTask?.cancel()
+        resetHealthyTask = scheduler.schedule(RESET_HEALTHY_MS) {
+            resetHealthyTask = null
+            resetsSinceReady = 0
+        }
         state = State.CONNECTED
         BootLog.record(BootLogEvent.GATEWAY_CONNECTED)
         logInfo("connection established")
@@ -588,6 +605,9 @@ class GatewaySocket(
         const val MIN_BACKOFF_MS = 1_000L
         const val MAX_BACKOFF_MS = 10_000L
         const val FAILURE_THRESHOLD = 4
+
+        /** How long a connection must survive before a further reset counts as the first again. */
+        const val RESET_HEALTHY_MS = 120_000L
         const val DEFAULT_MEMBER_REQUEST_LIMIT = 100
         val EXPECTED_NULL_DATA_EVENTS = setOf("USER_SUBSCRIPTIONS_UPDATE", "USER_PAYMENT_SOURCES_UPDATE")
     }

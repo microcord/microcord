@@ -99,6 +99,9 @@ internal class ReadyPayloadHydrator(
         val partial = sync.dataMode == ReadyGuild.DATA_MODE_PARTIAL
         val updates = sync.partialUpdates
         val roles = if (partial) merge(cached?.roles, updates?.roles, updates?.deletedRoleIds, { it.id }) else sync.roles
+        // Every guild has @everyone, so a partial merge landing on none means the cached roles the
+        // server assumed we still had are gone, and permissions would silently evaluate to nothing.
+        if (partial && roles.isNullOrEmpty()) return null
         val emojis = if (partial) merge(cached?.guild?.emojis, updates?.emojis, updates?.deletedEmojiIds, { it.id }) else sync.emojis
         val stickers = if (partial) merge(cached?.guild?.stickers, updates?.stickers, updates?.deletedStickerIds, { it.id }) else sync.stickers
         var channels = if (partial) {
