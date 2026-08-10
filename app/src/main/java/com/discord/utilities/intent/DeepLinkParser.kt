@@ -79,7 +79,10 @@ object DeepLinkParser {
                     parts.getOrNull(2)?.let(::positive)?.let { DeepLinkRoute.Lurk(guildId, it) }
                         ?: if (parts.size == 2) DeepLinkRoute.Lurk(guildId, null) else null
                 }
-            parts.firstOrNull() == "ra" && parts.size == 2 && code.matches(parts[1]) -> DeepLinkRoute.RemoteAuth(parts[1])
+            // A malformed `/ra/` link still routes: the reference sends it to the scanner rather
+            // than dropping it, because a half-read code is the likely cause.
+            parts.firstOrNull() == "ra" ->
+                DeepLinkRoute.RemoteAuth(parts.getOrNull(1)?.takeIf { parts.size == 2 && code.matches(it) })
             parts == listOf("login", "one-time") ->
                 query["token"]?.takeIf(String::isNotBlank)?.let(DeepLinkRoute::OneTimeLogin)
             parts.firstOrNull() == "guild" && parts.getOrNull(2) == "premiumguild" && parts.size == 3 -> when (parts[1]) {

@@ -30,6 +30,7 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.view.extensions.setForwardingWindowInsetsListener
 import com.discord.widgets.auth.WidgetOauth2Authorize
 import com.discord.widgets.auth.WidgetRemoteAuth
+import com.discord.widgets.media.WidgetQRScanner
 import com.discord.widgets.applicationdirectory.WidgetApplicationDirectory
 import com.discord.widgets.applicationdirectory.WidgetApplicationDirectoryDetail
 import com.discord.widgets.directories.WidgetDirectoriesSearch
@@ -385,8 +386,11 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
                 WidgetDirectoriesSearch.discoveryIntent(),
             )
             // A `/ra/<fingerprint>` link is a login waiting on another device; it opens the
-            // remote-auth confirmation screen.
-            is DeepLinkRoute.RemoteAuth -> WidgetRemoteAuth.launch(requireContext(), route.fingerprint)
+            // remote-auth confirmation screen. Without a fingerprint there is nothing to confirm,
+            // so the scanner opens instead and says to rescan the code.
+            is DeepLinkRoute.RemoteAuth -> route.fingerprint
+                ?.let { WidgetRemoteAuth.launch(requireContext(), it) }
+                ?: WidgetQRScanner.launch(requireContext(), showHelpChip = true)
             // `/oauth2/authorize` and `/connect/authorize` open the app-authorization screen.
             is DeepLinkRoute.Authorization -> WidgetOauth2Authorize.launch(
                 requireContext(),

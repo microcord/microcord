@@ -32,6 +32,8 @@ class WidgetSettingsTest {
      *    reading `StoreStream.getUserSettingsSystem()` and mirroring the change to the account
      *    through `RestAPI`.
      *  - `privacy` and `voice` are backed by their recovered settings fragments.
+     *  - `qr_scanner` -> `WidgetQRScanner`, which is launched through the screen router rather than
+     *    pushed into the tab, but is still a live destination this row must not hide.
      */
     @Test fun `main settings exposes only implemented recovered app routes`() {
         assertEquals(setOf(
@@ -47,6 +49,7 @@ class WidgetSettingsTest {
             com.discord.R.id.activity_status,
             com.discord.R.id.notifications,
             com.discord.R.id.privacy,
+            com.discord.R.id.qr_scanner,
             com.discord.R.id.voice,
             com.discord.R.id.developer_options,
         ), WidgetSettings.implementedRouteIds)

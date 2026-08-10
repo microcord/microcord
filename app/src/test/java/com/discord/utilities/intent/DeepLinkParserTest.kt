@@ -34,6 +34,9 @@ class DeepLinkParserTest {
             "discord://app/lurk/10" to DeepLinkRoute.Lurk(10, null),
             "discord://app/lurk/10/20" to DeepLinkRoute.Lurk(10, 20),
             "discord://app/ra/fingerprint" to DeepLinkRoute.RemoteAuth("fingerprint"),
+            // Still a route: the scanner reopens rather than the link being dropped.
+            "https://discord.com/ra/" to DeepLinkRoute.RemoteAuth(null),
+            "https://discord.com/ra/one/two" to DeepLinkRoute.RemoteAuth(null),
             "discord://app/guild/@me/premiumguild" to DeepLinkRoute.PremiumGuild(null),
             "discord://app/guild/10/premiumguild" to DeepLinkRoute.PremiumGuild(10),
             "https://discord.com/events/10/20" to DeepLinkRoute.Event(10, 20),

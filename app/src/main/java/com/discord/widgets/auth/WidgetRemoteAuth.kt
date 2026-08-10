@@ -10,7 +10,6 @@ import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.app.AppViewFlipper
 import com.discord.utilities.rx.appSubscribe
-import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.rx.ui
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.switchmaterial.SwitchMaterial
@@ -48,10 +47,25 @@ class WidgetRemoteAuth : AppFragment(R.layout.widget_remote_auth) {
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         flipper = view.findViewById(R.id.remote_auth_view_flipper)
+        // Leaving by the system back button has to revoke the handshake too, or a code the user
+        // declined stays live on the waiting device until it expires on its own.
+        setOnBackPressed(handler = {
+            viewModel.cancelLogin()
+            false
+        })
+    }
+
+    /**
+     * Resubscribes on every resume, because [AppFragment.unsubscribeSignal] fires on pause and the
+     * state this screen waits for arrives while it is not in front: verifying MFA sends the user to
+     * their authenticator, and the login completes in that window. The state is a `BehaviorSubject`,
+     * so resubscribing replays whatever was decided while we were away.
+     */
+    override fun onViewBoundOrOnResume() {
+        super.onViewBoundOrOnResume()
         viewModel.observeViewState()
             .distinctUntilChanged()
-            .ui()
-            .bindToComponentLifecycle(this)
+            .ui(this)
             .appSubscribe(errorClass = WidgetRemoteAuth::class.java, context = context, onNext = ::configureUI)
     }
 

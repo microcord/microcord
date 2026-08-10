@@ -20,6 +20,7 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.user.UserUtils.displayName
 import com.discord.widgets.debugging.WidgetDebugging
+import com.discord.widgets.media.WidgetQRScanner
 import com.discord.widgets.settings.account.WidgetSettingsAccount
 import com.discord.widgets.settings.developer.WidgetSettingsDeveloper
 import com.discord.widgets.notice.WidgetNoticeDialog
@@ -97,6 +98,10 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         // Voice persists every setting `StoreMediaSettings` backs; the OpenSL ES section and the
         // microphone test are hidden inside it because `StoreStream` publishes no media engine yet.
         bindRoute(binding.voice, ::WidgetSettingsVoice)
+
+        // Not a bindRoute: the scanner is a fullscreen screen with its own toolbar and status bar
+        // colour, so it is launched through the screen router rather than pushed into this tab.
+        binding.qrScanner.setOnClickListener { WidgetQRScanner.launch(requireContext()) }
 
         binding.support.setOnClickListener {
             UriHandler.handle(it.context, SUPPORT_URL)
@@ -263,6 +268,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
             R.id.feature_flags,
             R.id.notifications,
             R.id.privacy,
+            R.id.qr_scanner,
             R.id.voice,
             R.id.developer_options,
         )

@@ -578,8 +578,9 @@ classes every screen should inherit from do not exist. See
 - [ ] `StoreNavigation` is missing `ModelGlobalNavigation` (14 fields), the
       activity lifecycle callbacks, `init(Application)`, `launchNotice`, and 9 of
       its 12 navigation handlers.
-- [ ] OAuth authorize and remote-auth/QR login are missing.
-      `/ra/<fingerprint>` is parsed by `DeepLinkParser.kt:63` and dropped.
+- [x] OAuth authorize and remote-auth/QR login. `WidgetQRScanner` is reachable
+      from the settings `qr_scanner` row and from a `/ra/` link with no usable
+      fingerprint; `/ra/<fingerprint>` opens `WidgetRemoteAuth`.
 - [ ] `utilities/uri/UriHandler` absent — "safe external URI handling" is
       currently a raw `ACTION_VIEW` at `AppActivity.kt:134`, and the Chrome
       Custom Tabs user setting is read by nothing.

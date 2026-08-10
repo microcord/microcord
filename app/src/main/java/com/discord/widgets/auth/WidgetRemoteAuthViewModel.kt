@@ -61,9 +61,16 @@ class WidgetRemoteAuthViewModel(
         }
     }
 
-    /** Grants the waiting device a session. 126.21 always sends `temporary = false`. */
+    /**
+     * Grants the waiting device a session. 126.21 always sends `temporary = false`.
+     *
+     * The spinner goes up before the request, which is also what makes a double tap harmless: the
+     * second one no longer sees a [ViewState.Loaded] and returns. Without that the second request
+     * fails on an already-spent handshake and reports failure over a login that worked.
+     */
     fun remoteLogin() {
         val loaded = viewState as? ViewState.Loaded ?: return
+        updateViewState(ViewState.Loading)
         restAPI.postRemoteAuthFinish(RestAPIParams.RemoteAuthFinish(false, loaded.handshakeToken))
             .restSubscribeOn()
             .ui(this)

@@ -28,7 +28,8 @@ sealed interface DeepLinkRoute {
     data class Settings(val destination: String) : DeepLinkRoute
     data class Voice(val channelId: Long?) : DeepLinkRoute
     data class Lurk(val guildId: Long, val channelId: Long?) : DeepLinkRoute
-    data class RemoteAuth(val fingerprint: String) : DeepLinkRoute {
+    /** @param fingerprint null when the link carried nothing usable, which reopens the scanner. */
+    data class RemoteAuth(val fingerprint: String?) : DeepLinkRoute {
         override fun toString() = "RemoteAuth(fingerprint=<redacted>)"
     }
     /** `discord.com/login/one-time?token=`, the only credential recovery the app redeems itself. */
