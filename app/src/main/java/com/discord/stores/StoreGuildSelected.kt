@@ -89,7 +89,9 @@ class StoreGuildSelected(
 
     @StoreThread
     fun handleGuildRemove(guild: ApiGuild) {
-        if (guild.unavailable) return
+        // An outage keeps the selection so the user lands back where they were. A region block is
+        // not going to clear on its own, so the guild is deselected instead.
+        if (guild.unavailable && !guild.geoRestricted) return
         if (selectedGuildIds.remove(guild.id)) markChanged()
     }
 

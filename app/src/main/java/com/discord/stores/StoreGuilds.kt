@@ -12,6 +12,7 @@ import com.discord.api.thread.ThreadMemberListUpdate
 import com.discord.api.thread.ThreadMembersUpdate
 import com.discord.app.AppComponent
 import com.discord.models.domain.ModelPayload
+import com.discord.models.guild.GeoRestrictedGuild
 import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
 import com.discord.stores.updates.ObservationDeck
@@ -65,12 +66,14 @@ class StoreGuilds(
     private val guildMembersComputed = HashMap<Long, MutableMap<Long, GuildMember>>()
     private val guildRoles = HashMap<Long, MutableMap<Long, GuildRole>>()
     private val guildsUnavailable = HashSet<Long>()
+    private val geoRestrictedGuilds = LinkedHashMap<Long, GeoRestrictedGuild>()
     private val guildsJoinedAt = HashMap<Long, Long>()
 
     private var guildsSnapshot: Map<Long, Guild> = emptyMap()
     private var guildMembersComputedSnapshot: Map<Long, Map<Long, GuildMember>> = emptyMap()
     private var guildRolesSnapshot: Map<Long, Map<Long, GuildRole>> = emptyMap()
     private var guildsUnavailableSnapshot: Set<Long> = emptySet()
+    private var geoRestrictedGuildsSnapshot: List<GeoRestrictedGuild> = emptyList()
     private var guildsJoinedAtSnapshot: Map<Long, Long> = emptyMap()
 
     private var communicationDisabledSubscription: Subscription? = null
@@ -132,6 +135,7 @@ class StoreGuilds(
             // Lurked guilds are excluded from persistence only; the live map still holds them.
             guildsCache.set(guilds - getLurkingGuildIds())
             guildsUnavailableSnapshot = HashSet(guildsUnavailable)
+            geoRestrictedGuildsSnapshot = geoRestrictedGuilds.values.toList()
             guildRolesSnapshot = guildRoles.mapValues { HashMap(it.value) }
             guildRolesCache.set(guildRolesSnapshot)
         }
@@ -162,6 +166,7 @@ class StoreGuilds(
         guildMembersComputed.clear()
         guildRoles.clear()
         guildsUnavailable.clear()
+        geoRestrictedGuilds.clear()
         guildsJoinedAt.clear()
         guildsCache.clear()
         guildRolesCache.clear()
@@ -176,8 +181,11 @@ class StoreGuilds(
         guildMembersComputed.clear()
         guildRoles.clear()
         guildsUnavailable.clear()
+        geoRestrictedGuilds.clear()
         payload.guilds.orEmpty().forEach { guild ->
-            if (guild.unavailable) {
+            if (guild.geoRestricted) {
+                geoRestrictedGuilds[guild.id] = guild.toGeoRestricted()
+            } else if (guild.unavailable) {
                 guildsUnavailable.add(guild.id)
             } else {
                 putRoles(guild.id, guild.roles.orEmpty())
@@ -192,6 +200,8 @@ class StoreGuilds(
 
     @StoreThread
     fun handleGuildAdd(guild: ApiGuild) {
+        // Reachable again: the row goes back to being a normal guild rather than showing twice.
+        if (!guild.geoRestricted && geoRestrictedGuilds.remove(guild.id) != null) markChanged(GuildsUpdate)
         handleGuildUnavailable(guild.id, guild.unavailable, remove = false)
         if (guild.unavailable) return
         putRoles(guild.id, guild.roles.orEmpty())
@@ -203,6 +213,9 @@ class StoreGuilds(
 
     @StoreThread
     fun handleGuildRemove(guild: ApiGuild) {
+        // A region block arrives as a delete carrying the name and icon, which is all the row needs.
+        if (guild.geoRestricted) geoRestrictedGuilds[guild.id] = guild.toGeoRestricted()
+        else geoRestrictedGuilds.remove(guild.id)
         handleGuildUnavailable(guild.id, guild.unavailable, remove = true)
         if (guilds.remove(guild.id) != null) markChanged(GuildsUpdate)
         if (guildRoles.remove(guild.id) != null) markChanged(GuildsUpdate)
@@ -390,6 +403,11 @@ class StoreGuilds(
 
     fun observeUnavailableGuilds(): Observable<Set<Long>> = observe(GuildsUpdate) { guildsUnavailableSnapshot }
 
+    fun getGeoRestrictedGuilds(): List<GeoRestrictedGuild> = geoRestrictedGuildsSnapshot
+
+    fun observeGeoRestrictedGuilds(): Observable<List<GeoRestrictedGuild>> =
+        observe(GuildsUpdate) { geoRestrictedGuildsSnapshot }
+
     fun observeVerificationLevel(guildId: Long): Observable<GuildVerificationLevel> =
         observeGuild(guildId).map { it?.verificationLevel ?: GuildVerificationLevel.NONE }.distinctUntilChanged()
 
@@ -416,6 +434,8 @@ class StoreGuilds(
     }
 
     @StoreThread
+    private fun ApiGuild.toGeoRestricted() = GeoRestrictedGuild(id, name, icon)
+
     private fun handleGuildUnavailable(guildId: Long, unavailable: Boolean, remove: Boolean) {
         if (remove) {
             if (unavailable && guildsUnavailable.add(guildId)) markChanged(GuildsUpdate)

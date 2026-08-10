@@ -47,6 +47,7 @@ class WidgetGuildListAdapter(
         is GuildListItem.PrivateChannelItem -> GuildListItem.TYPE_DM
         is GuildListItem.GuildItem -> GuildListItem.TYPE_GUILD
         is GuildListItem.UnavailableItem -> GuildListItem.TYPE_UNAVAILABLE
+        is GuildListItem.GeoRestrictedItem -> GuildListItem.TYPE_GEO_RESTRICTED
         GuildListItem.CreateItem -> GuildListItem.TYPE_CREATE
         is GuildListItem.FolderItem -> GuildListItem.TYPE_FOLDER
         GuildListItem.HelpItem -> GuildListItem.TYPE_HELP
@@ -87,6 +88,10 @@ class WidgetGuildListAdapter(
             }
             GuildListItem.TYPE_UNAVAILABLE ->
                 GuildListViewHolder.SimpleViewHolder(inflate(R.layout.widget_guilds_list_item_guild_unavailable))
+            GuildListItem.TYPE_GEO_RESTRICTED ->
+                GuildListViewHolder.GeoRestrictedViewHolder(
+                    inflate(R.layout.widget_guilds_list_item_guild_geo_restricted),
+                )
             GuildListItem.TYPE_CREATE ->
                 GuildListViewHolder.SimpleViewHolder(inflate(R.layout.widget_guilds_list_item_guild_new))
             GuildListItem.TYPE_FOLDER -> {
@@ -115,6 +120,10 @@ class WidgetGuildListAdapter(
                 (holder as GuildListViewHolder.PrivateChannelViewHolder).configure(item)
             is GuildListItem.FolderItem -> (holder as GuildListViewHolder.FolderViewHolder).configure(item)
             // The chrome rows carry no state, so the click listener is all the binding they need.
+            is GuildListItem.GeoRestrictedItem -> {
+                (holder as GuildListViewHolder.GeoRestrictedViewHolder).configure(item)
+                holder.itemView.setOnClickListener { interactionListener.onItemClicked(holder.itemView, item) }
+            }
             is GuildListItem.UnavailableItem, GuildListItem.CreateItem, GuildListItem.HelpItem,
             GuildListItem.HubItem,
             ->

@@ -1,4 +1,5 @@
 package com.discord.api.guild
+import com.google.gson.annotations.SerializedName
 
 import com.discord.api.channel.Channel
 import com.discord.api.embeddedactivities.EmbeddedActivityInGuild
@@ -66,6 +67,8 @@ data class Guild(
     val ownerConfiguredContentLevel: GuildNsfwLevel? = null,
     val incidentsData: GuildIncidentsData? = null,
     val officialMessageColor: Int? = null,
+    /** Unreachable from where the user is rather than down, so [name] and [icon] are still sent. */
+    @SerializedName("geo_restricted") val geoRestricted: Boolean = false,
 ) {
     @Transient var version: Long = 0
 }

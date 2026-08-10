@@ -59,6 +59,23 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
     /** [wasMerge] is true when the drop created or joined a folder, so this row disappears. */
     open fun onDragEnded(wasMerge: Boolean) = Unit
 
+    /** A region-blocked guild: its own icon and name, with a warning badge and no unread state. */
+    class GeoRestrictedViewHolder(itemView: View) : GuildListViewHolder(itemView) {
+
+        private val avatar: SimpleDraweeView = itemView.findViewById(R.id.guilds_item_avatar)
+        private val avatarText: TextView = itemView.findViewById(R.id.guilds_item_avatar_text)
+
+        fun configure(data: GuildListItem.GeoRestrictedItem) {
+            val guild = data.guild
+            avatarText.text = if (guild.hasIcon()) null else guild.shortName
+            IconUtils.setIcon(
+                avatar,
+                IconUtils.getForGuild(guild.id, guild.icon, size = IconUtils.getMediaProxySize(avatar.layoutParams.height)),
+            )
+            itemView.contentDescription = guild.name
+        }
+    }
+
     /** Divider, unavailable, create and help rows: no state beyond the click listener. */
     class SimpleViewHolder(view: View) : GuildListViewHolder(view)
 

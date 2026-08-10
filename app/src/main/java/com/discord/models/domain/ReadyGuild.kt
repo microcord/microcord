@@ -43,6 +43,13 @@ data class ReadyGuild(
      * normalises them to [DATA_MODE_UNAVAILABLE].
      */
     val unavailable: Boolean = false,
+    /**
+     * The guild is unreachable from where the user is, rather than down. It is still theirs, so
+     * unlike an outage stub it carries [name] and [icon] and is worth rendering.
+     */
+    @SerializedName("geo_restricted") val geoRestricted: Boolean = false,
+    val name: String? = null,
+    val icon: String? = null,
 ) {
     data class PartialUpdates(
         val roles: List<GuildRole>? = null,

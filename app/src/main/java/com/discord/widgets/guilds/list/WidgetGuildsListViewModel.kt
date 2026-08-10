@@ -1,4 +1,5 @@
 package com.discord.widgets.guilds.list
+import com.discord.models.guild.GeoRestrictedGuild
 
 import android.content.Context
 import androidx.fragment.app.FragmentManager
@@ -111,6 +112,8 @@ class WidgetGuildsListViewModel(
             is GuildListItem.PrivateChannelItem -> ChannelSelector.getInstance().selectChannel(0L, item.channel.id)
             is GuildListItem.UnavailableItem ->
                 eventSubject.onNext(Event.ShowUnavailableGuilds(item.unavailableGuildCount))
+            is GuildListItem.GeoRestrictedItem ->
+                eventSubject.onNext(Event.ShowGeoRestrictedGuild(item.guild))
             is GuildListItem.FriendsItem -> if (item.isSelected) {
                 StoreStream.getNavigation().setNavigationPanelAction(StoreNavigation.PanelAction.CLOSE)
             } else {
@@ -339,6 +342,7 @@ class WidgetGuildsListViewModel(
     sealed class Event {
         data class ShowChannelActions(val channelId: Long) : Event()
         data class ShowUnavailableGuilds(val unavailableGuildCount: Int) : Event()
+        data class ShowGeoRestrictedGuild(val guild: GeoRestrictedGuild) : Event()
         data class AnnounceFolderToggleForAccessibility(val item: GuildListItem.FolderItem) : Event()
         object ShowCreateGuild : Event()
         object ShowHubVerification : Event()
@@ -385,6 +389,7 @@ class WidgetGuildsListViewModel(
         val accountNotificationSettings: AccountNotificationSettings,
         val channelIds: Map<Long, List<Long>>,
         val unavailableGuilds: Set<Long>,
+        val geoRestrictedGuilds: List<GeoRestrictedGuild>,
         val privateChannels: Map<Long, Channel>,
         val sortedGuilds: List<StoreGuildsSorted.Entry>,
         val guildJoinRequests: Map<Long, GuildJoinRequest>,
@@ -440,6 +445,7 @@ class WidgetGuildsListViewModel(
                 accountNotificationSettings = second.accountNotificationSettings,
                 channelIds = first.channelIds,
                 unavailableGuilds = first.unavailableGuilds,
+                geoRestrictedGuilds = first.geoRestrictedGuilds,
                 privateChannels = first.privateChannels,
                 sortedGuilds = first.sortedGuilds,
                 guildJoinRequests = second.guildJoinRequests,
@@ -468,11 +474,14 @@ class WidgetGuildsListViewModel(
                 .leadingEdgeThrottle(500L, TimeUnit.MILLISECONDS)
                 .distinctUntilChanged(),
             StoreStream.getChannels().observeIds(true),
-            StoreStream.getGuilds().observeUnavailableGuilds(),
+            Observable.combineLatest(
+                StoreStream.getGuilds().observeUnavailableGuilds(),
+                StoreStream.getGuilds().observeGeoRestrictedGuilds(),
+            ) { unavailable, geoRestricted -> unavailable to geoRestricted },
             StoreStream.getChannels().observePrivateChannels(),
             StoreStream.getGuildsSorted().observeEntries(),
         ) { selectedGuildId, selectedVoiceChannelId, guildSettings, unreadGuildIds, mentionCounts,
-            channelIds, unavailableGuilds, privateChannels, sortedGuilds ->
+            channelIds, availability, privateChannels, sortedGuilds ->
             Chunk(
                 selectedGuildId = selectedGuildId,
                 selectedVoiceChannelId = selectedVoiceChannelId,
@@ -480,7 +489,8 @@ class WidgetGuildsListViewModel(
                 unreadGuildIds = unreadGuildIds,
                 mentionCounts = mentionCounts,
                 channelIds = channelIds,
-                unavailableGuilds = unavailableGuilds,
+                unavailableGuilds = availability.first,
+                geoRestrictedGuilds = availability.second,
                 privateChannels = privateChannels,
                 sortedGuilds = sortedGuilds,
             )
@@ -520,6 +530,7 @@ class WidgetGuildsListViewModel(
             val unreadGuildIds: Set<Long>,
             val mentionCounts: Map<Long, Int>,
             val channelIds: Map<Long, List<Long>>,
+            val geoRestrictedGuilds: List<GeoRestrictedGuild>,
             val unavailableGuilds: Set<Long>,
             val privateChannels: Map<Long, Channel>,
             val sortedGuilds: List<StoreGuildsSorted.Entry>,

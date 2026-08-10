@@ -1,4 +1,5 @@
 package com.discord.widgets.guilds.list
+import com.discord.models.guild.GeoRestrictedGuild
 
 import com.discord.api.channel.Channel
 import com.discord.api.guildjoinrequest.ApplicationStatus
@@ -57,6 +58,12 @@ sealed class GuildListItem(val itemId: Long) {
     /** Aggregated "N servers are unavailable" row shown during a partial outage. */
     data class UnavailableItem(val unavailableGuildCount: Int) : GuildListItem(ID_UNIDENTIFIED)
 
+    /**
+     * A guild blocked in the user's region. It keeps its own row rather than joining the outage
+     * count because it has a name and an icon, and because it will not come back on its own.
+     */
+    data class GeoRestrictedItem(val guild: GeoRestrictedGuild) : GuildListItem(guild.id)
+
     /** The green "+" create-a-server button. */
     object CreateItem : GuildListItem(ID_CREATE)
 
@@ -102,6 +109,7 @@ sealed class GuildListItem(val itemId: Long) {
         const val TYPE_HELP = 7
         const val TYPE_BOTTOM_NAV_SPACE = 8
         const val TYPE_HUB = 9
+        const val TYPE_GEO_RESTRICTED = 10
 
         private const val ID_UNIDENTIFIED = -1L
         private const val ID_FRIENDS_LIST = -2L

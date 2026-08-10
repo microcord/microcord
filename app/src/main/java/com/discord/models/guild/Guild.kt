@@ -54,11 +54,16 @@ data class Guild(
     val incidentsData: GuildIncidentsData? = null,
     val officialMessageColor: Int? = null,
 ) {
-    val shortName: String = name.replace(Regex("'s "), " ")
-        .replace(Regex("(\\w)(\\w*)"), "$1")
-        .replace(Regex("\\s"), "")
+    val shortName: String = toShortName(name)
 
     fun hasIcon() = !icon.isNullOrEmpty()
+
+    companion object {
+        /** Initials shown in place of an icon, also used by rows that have no full guild record. */
+        fun toShortName(name: String): String = name.replace(Regex("'s "), " ")
+            .replace(Regex("(\\w)(\\w*)"), "$1")
+            .replace(Regex("\\s"), "")
+    }
     fun hasFeature(feature: GuildFeature) = feature in features
     fun isOwner(userId: Long) = ownerId == userId
     fun isHub() = hasFeature(GuildFeature.HUB)

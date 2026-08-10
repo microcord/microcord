@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android" style="@style/UiKit.GuildsListItem">
+    <include android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_centerInParent="true" layout="@layout/widget_guilds_list_item_guild"/>
+    <ImageView android:id="@+id/guilds_item_geo_restricted" android:layout_width="16dp" android:layout_height="16dp" android:layout_alignBottom="@+id/guilds_item_avatar_wrap" android:layout_alignEnd="@+id/guilds_item_avatar_wrap" android:src="@drawable/ic_warning_circle_24dp" android:importantForAccessibility="no"/>
+</RelativeLayout>

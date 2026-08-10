@@ -99,6 +99,7 @@ internal object GuildListItemBuilder {
         items.add(GuildListItem.DividerItem)
         items.addAll(guildItems)
 
+        storeState.geoRestrictedGuilds.forEach { items.add(GuildListItem.GeoRestrictedItem(it)) }
         if (storeState.unavailableGuilds.isNotEmpty()) {
             items.add(GuildListItem.UnavailableItem(storeState.unavailableGuilds.size))
         }

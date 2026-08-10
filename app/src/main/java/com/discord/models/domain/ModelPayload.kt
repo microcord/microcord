@@ -379,7 +379,7 @@ private class ModelPayloadAdapter(private val gson: Gson) : TypeAdapter<ModelPay
      */
     private fun readGuilds(reader: JsonReader, payload: ModelPayload) {
         reader.beginArray()
-        val unavailableIds = ArrayList<Long>()
+        val stubs = ArrayList<com.google.gson.JsonObject>()
         val readyGuilds = ArrayList<ReadyGuild>()
         val guilds = ArrayList<Guild>()
         var isV2: Boolean? = null
@@ -387,17 +387,17 @@ private class ModelPayloadAdapter(private val gson: Gson) : TypeAdapter<ModelPay
             if (isV2 == null) {
                 val element = com.google.gson.JsonParser.parseReader(reader).asJsonObject
                 if (!element.has("data_mode") && element.get("unavailable")?.asBoolean == true) {
-                    unavailableIds += element.get("id").asLong
+                    stubs += element
                     continue
                 }
                 isV2 = element.has("data_mode")
                 if (isV2) readyGuilds += gson.fromJson(element, ReadyGuild::class.java)
                 else guilds += gson.fromJson(element, Guild::class.java)
-                unavailableIds.forEach { id ->
-                    if (isV2 == true) readyGuilds += ReadyGuild(id = id, unavailable = true)
-                    else guilds += unavailableGuild(id)
+                stubs.forEach { stub ->
+                    if (isV2 == true) readyGuilds += gson.fromJson(stub, ReadyGuild::class.java)
+                    else guilds += gson.fromJson(stub, Guild::class.java)
                 }
-                unavailableIds.clear()
+                stubs.clear()
                 continue
             }
             if (isV2 == true) readyGuilds += gson.fromJson<ReadyGuild>(reader, ReadyGuild::class.java)
@@ -408,12 +408,9 @@ private class ModelPayloadAdapter(private val gson: Gson) : TypeAdapter<ModelPay
         if (isV2 == true) {
             payload.readyGuilds = readyGuilds
         } else {
-            payload.guilds = guilds + unavailableIds.map(::unavailableGuild)
+            payload.guilds = guilds + stubs.map { gson.fromJson(it, Guild::class.java) }
         }
     }
-
-    private fun unavailableGuild(id: Long): Guild =
-        gson.fromJson("""{"id":$id,"unavailable":true,"name":""}""", Guild::class.java)
 
     private fun readTrace(reader: JsonReader): Any? {
         reader.beginArray()

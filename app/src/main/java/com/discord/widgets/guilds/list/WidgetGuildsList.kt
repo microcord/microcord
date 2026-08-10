@@ -1,5 +1,11 @@
 package com.discord.widgets.guilds.list
 
+import com.discord.widgets.settings.SettingsStrings
+import com.discord.widgets.notice.WidgetNoticeDialog
+import com.discord.utilities.rx.restSubscribeOn
+import com.discord.utilities.rx.ui
+import com.discord.utilities.rest.RestAPI
+import com.discord.models.guild.GeoRestrictedGuild
 import android.content.Context
 import android.graphics.PointF
 import android.graphics.drawable.Drawable
@@ -110,6 +116,8 @@ class WidgetGuildsList : AppFragment(R.layout.widget_guilds_list), WidgetGuildLi
             GuildsListNavigation.showChannelActions(parentFragmentManager, event.channelId)
         is WidgetGuildsListViewModel.Event.ShowUnavailableGuilds ->
             showUnavailableGuildsToast(event.unavailableGuildCount)
+        is WidgetGuildsListViewModel.Event.ShowGeoRestrictedGuild ->
+            showGeoRestrictedDialog(event.guild)
         is WidgetGuildsListViewModel.Event.AnnounceFolderToggleForAccessibility ->
             announceFolderToggle(event.item)
         WidgetGuildsListViewModel.Event.ShowCreateGuild ->
@@ -134,6 +142,27 @@ class WidgetGuildsList : AppFragment(R.layout.widget_guilds_list), WidgetGuildLi
 
     private fun focusFirstElement() {
         guildList.getChildAt(0)?.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_FOCUSED)
+    }
+
+    /**
+     * A region-blocked guild cannot be opened, so the row explains why and offers the only action
+     * left: leaving it.
+     */
+    private fun showGeoRestrictedDialog(guild: GeoRestrictedGuild) {
+        val context = requireContext()
+        WidgetNoticeDialog.Builder(context)
+            .setTitle(R.string.geo_restricted_modal_title)
+            .setMessage(
+                SettingsStrings.render(context, R.string.geo_restricted_modal_body, "serverName" to guild.name),
+            )
+            .setNegativeButton(R.string.leave_server) {
+                RestAPI.api.leaveGuild(guild.id)
+                    .restSubscribeOn(retry = false)
+                    .ui(this)
+                    .appSubscribe(javaClass) { }
+            }
+            .setPositiveButton(R.string.okay)
+            .show(parentFragmentManager)
     }
 
     private fun showUnavailableGuildsToast(unavailableGuildCount: Int) {
