@@ -18,6 +18,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import com.discord.api.user.Nameplate
 import com.discord.stores.StoreStream
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.images.CollectibleAssets
 import com.discord.utilities.images.MGImages
 import com.facebook.drawee.drawable.ScalingUtils
@@ -92,7 +93,9 @@ class NameplateView @JvmOverloads constructor(
 
     fun bind(nameplate: Nameplate?, placement: Placement, selected: Boolean) {
         clearChannelAnimation()
-        this.nameplate = nameplate?.takeIf { it.isActive() && it.staticImageUrl() != null }
+        this.nameplate = nameplate
+            ?.takeIf { FeatureFlags.nameplatesEnabled() }
+            ?.takeIf { it.isActive() && it.staticImageUrl() != null }
         this.placement = placement
         hovered = false
         isSelected = selected

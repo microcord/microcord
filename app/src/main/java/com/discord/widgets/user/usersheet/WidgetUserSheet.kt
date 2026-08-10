@@ -38,6 +38,7 @@ import com.discord.api.collectibles.ProfileFrameItem
 import com.google.android.material.R as MaterialR
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUserNotes
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.color.ColorCompat
@@ -563,7 +564,9 @@ class WidgetUserSheet : AppBottomSheet() {
     private fun configureProfileFrame() {
         val sheet = dialog?.findViewById<View>(MaterialR.id.design_bottom_sheet) ?: return
         val decor = sheet.parent as? ViewGroup ?: return
-        val frame = equippedFrameSkuId?.let(profileFrames::get)
+        val frame = equippedFrameSkuId
+            ?.takeIf { FeatureFlags.profileFramesEnabled() }
+            ?.let(profileFrames::get)
         if (frame == null && frameViews == null) return
 
         val views = frameViews ?: FrameViews(

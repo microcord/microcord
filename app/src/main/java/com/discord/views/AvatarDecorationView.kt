@@ -8,6 +8,7 @@ import android.widget.ImageView
 import com.discord.R
 import com.discord.api.user.AvatarDecorationData
 import com.discord.stores.StoreStream
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.images.CollectibleAssets
 import com.discord.utilities.images.MGImages
 import com.facebook.drawee.view.SimpleDraweeView
@@ -83,7 +84,7 @@ class AvatarDecorationView @JvmOverloads constructor(
 
     @JvmOverloads
     fun bind(decoration: AvatarDecorationData?, animate: Boolean = false) {
-        this.decoration = decoration
+        this.decoration = decoration?.takeIf { FeatureFlags.avatarDecorationsEnabled() }
         this.animate = animate
         updateVisuals()
     }

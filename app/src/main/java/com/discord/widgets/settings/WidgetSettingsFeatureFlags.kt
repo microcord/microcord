@@ -28,5 +28,21 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.viewProfileImagesEnabled()
             setOnCheckedListener(FeatureFlags::setViewProfileImagesEnabled)
         }
+        binding.settingsFeatureAvatarDecorations.apply {
+            isChecked = FeatureFlags.avatarDecorationsEnabled()
+            setOnCheckedListener(FeatureFlags::setAvatarDecorationsEnabled)
+        }
+        binding.settingsFeatureNameplates.apply {
+            isChecked = FeatureFlags.nameplatesEnabled()
+            setOnCheckedListener(FeatureFlags::setNameplatesEnabled)
+        }
+        binding.settingsFeatureProfileEffects.apply {
+            isChecked = FeatureFlags.profileEffectsEnabled()
+            setOnCheckedListener(FeatureFlags::setProfileEffectsEnabled)
+        }
+        binding.settingsFeatureProfileFrames.apply {
+            isChecked = FeatureFlags.profileFramesEnabled()
+            setOnCheckedListener(FeatureFlags::setProfileFramesEnabled)
+        }
     }
 }

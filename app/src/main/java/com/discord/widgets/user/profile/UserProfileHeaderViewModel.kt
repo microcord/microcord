@@ -11,6 +11,7 @@ import com.discord.models.member.GuildMember
 import com.discord.models.presence.Presence
 import com.discord.models.user.MeUser
 import com.discord.models.user.User
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
@@ -97,8 +98,10 @@ class UserProfileHeaderViewModel @JvmOverloads constructor(
 
             val avatarDecoration = userProfile.guildMember?.avatarDecorationData
                 ?: userProfile.user.avatarDecorationData?.value
-            val profileEffect = userProfile.guildMemberProfile?.profileEffect
-                ?: userProfile.userProfile?.profileEffect
+            val profileEffect = (
+                userProfile.guildMemberProfile?.profileEffect
+                    ?: userProfile.userProfile?.profileEffect
+                )?.takeIf { FeatureFlags.profileEffectsEnabled() }
             val avatarColorId by lazy { user.avatar ?: user.discriminator.toString() }
             val guildMemberColorId by lazy { guildMember?.avatarHash ?: avatarColorId }
             val showAkas = guildMembersForAka.isNotEmpty() && !isMe
