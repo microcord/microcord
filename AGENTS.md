@@ -209,14 +209,30 @@ invalid decompiler constructs into the target.
 
 ## Build and Verification
 
-Use Windows wrapper commands from the project root:
+**Always build through `scripts/build.sh`, never `gradlew` directly.** Several agents share this
+checkout, and concurrent Gradle invocations fight over the daemon and the build directory until one
+of them dies of heap exhaustion. The script takes the same arguments as the wrapper:
 
-```powershell
-.\gradlew.bat assembleDebug
-.\gradlew.bat testDebugUnitTest
-.\gradlew.bat lintDebug
-.\gradlew.bat connectedDebugAndroidTest
+```bash
+scripts/build.sh :app:assembleDebug --offline
+scripts/build.sh :app:testDebugUnitTest --offline
+scripts/build.sh :app:installDebug --offline
 ```
+
+It serialises every invocation and answers a request with any build that started *after* the
+request was made, so asking for something another agent is already about to build costs nothing.
+A request that arrives while a build is less than `BUILD_YOUNG_SECS` (45) old restarts that build
+so it picks up the newer edits; against an older build it queues instead and takes the next slot.
+Output streams live for whichever agent is doing the work and is replayed to the others, and the
+exit code is the real Gradle exit code.
+
+It also retries once, after `--stop`, when a build dies of `OutOfMemoryError` or a disappeared
+daemon — those say nothing about the code and are usually a daemon left over from an earlier
+session. A compile failure is never retried.
+
+State lives in the gitignored `.buildlock/`; deleting that directory is always safe when nothing is
+building. `connectedDebugAndroidTest` and anything else that needs a device goes through the script
+too.
 
 Run `assembleRelease` before closing a release-oriented phase. State explicitly
 when a check was not run or no device was available.
