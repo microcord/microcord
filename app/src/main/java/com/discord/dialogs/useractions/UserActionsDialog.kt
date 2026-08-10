@@ -2,7 +2,9 @@ package com.discord.dialogs.useractions
 
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
 import android.widget.TextView
+import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentManager
 import com.discord.i18n.i18nFormat
 import com.discord.R
@@ -17,11 +19,11 @@ import com.discord.widgets.user.getSpannableForUserNameWithDiscrim
 import com.facebook.drawee.view.SimpleDraweeView
 
 /**
- * The long-press action sheet for another user: block, unblock, or remove friend.
+ * The overflow menu for another user, opened from the profile's ⋯ button or a long press.
  *
- * Exactly one of block/unblock is ever visible, and remove-friend only when there is a friendship to
- * remove, so the dialog is two rows tall at most. All three actions are terminal — the dialog toasts
- * the outcome and closes.
+ * Rows come in two groups, as the reference's context menu does: what you can do *with* someone,
+ * then what you can do *about* them. Which rows appear depends on the relationship — block and
+ * unblock are mutually exclusive, and most rows are terminal, toasting the outcome and closing.
  */
 class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
 
@@ -43,9 +45,17 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
     private lateinit var unignoreItem: TextView
     private lateinit var removeFriendItem: TextView
     private lateinit var friendNicknameItem: TextView
+    private lateinit var primaryGroup: ViewGroup
+    private lateinit var relationshipGroup: ViewGroup
+    private lateinit var groupSeparator: View
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        // The rounded surface has to clip, or a row's pressed highlight paints over its corners.
+        view.clipToOutline = true
+        primaryGroup = view.findViewById(R.id.user_actions_dialog_primary_group)
+        relationshipGroup = view.findViewById(R.id.user_actions_dialog_relationship_group)
+        groupSeparator = view.findViewById(R.id.user_actions_dialog_group_separator)
         avatar = view.findViewById(R.id.user_actions_dialog_avatar)
         userName = view.findViewById(R.id.user_actions_dialog_user_name)
         blockItem = view.findViewById(R.id.user_actions_dialog_block_item)
@@ -54,6 +64,9 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         unignoreItem = view.findViewById(R.id.user_actions_dialog_unignore_item)
         removeFriendItem = view.findViewById(R.id.user_actions_dialog_remove_friend_item)
         friendNicknameItem = view.findViewById(R.id.user_actions_dialog_friend_nickname_item)
+
+        listOf(blockItem, unblockItem, ignoreItem, unignoreItem, removeFriendItem, friendNicknameItem)
+            .forEach(::restoreIconOpacity)
 
         blockItem.setOnClickListener { viewModel.blockUser() }
         unblockItem.setOnClickListener {
@@ -113,6 +126,26 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         friendNicknameItem.setText(
             if (state.friendNickname == null) R.string.add_friend_nickname else R.string.change_friend_nickname,
         )
+
+        // The band between the two groups is only a separator, so it goes when either side of it
+        // has nothing left to separate.
+        primaryGroup.visibility = if (primaryGroup.hasVisibleChild()) View.VISIBLE else View.GONE
+        relationshipGroup.visibility =
+            if (relationshipGroup.hasVisibleChild()) View.VISIBLE else View.GONE
+        groupSeparator.visibility =
+            if (primaryGroup.isVisible && relationshipGroup.isVisible) View.VISIBLE else View.GONE
+    }
+
+    private fun ViewGroup.hasVisibleChild(): Boolean =
+        (0 until childCount).any { getChildAt(it).visibility == View.VISIBLE }
+
+    /**
+     * These icons carry `android:alpha="0.6"` in the asset, which a tint multiplies rather than
+     * replaces — so tinting them to the label colour still left them looking disabled. The
+     * reference draws its menu icons at the label's full strength.
+     */
+    private fun restoreIconOpacity(row: TextView) {
+        row.compoundDrawablesRelative.firstOrNull()?.mutate()?.alpha = 255
     }
 
     /**
