@@ -24,5 +24,9 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.fetchUncachedUsersEnabled()
             setOnCheckedListener(FeatureFlags::setFetchUncachedUsersEnabled)
         }
+        binding.settingsFeatureViewProfileImages.apply {
+            isChecked = FeatureFlags.viewProfileImagesEnabled()
+            setOnCheckedListener(FeatureFlags::setViewProfileImagesEnabled)
+        }
     }
 }

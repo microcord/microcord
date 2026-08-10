@@ -670,6 +670,10 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         fun launch(context: Context, attachment: MessageAttachment, viewerContext: MediaViewerContext) =
             launch(context, launchArgs(attachment), viewerContext)
 
+        @JvmStatic
+        fun launchImage(context: Context, url: String, title: String?) =
+            launch(context, launchArgs(url, title), null)
+
         /** Opens [embed]'s media fullscreen. */
         @JvmStatic
         fun launch(context: Context, embed: MessageEmbed) = launch(context, launchArgs(embed), null)
@@ -731,6 +735,9 @@ internal data class MediaLaunchArgs(
     val height: Int?,
     val mediaType: MediaType?,
 )
+
+internal fun launchArgs(imageUrl: String, title: String?) =
+    MediaLaunchArgs(title, imageUrl, null, imageUrl, null, null, null)
 
 internal fun launchArgs(attachment: MessageAttachment): MediaLaunchArgs {
     val isVideo = attachment.type == MessageAttachmentType.VIDEO

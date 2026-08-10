@@ -15,6 +15,7 @@ import com.discord.databinding.UserProfileHeaderViewBinding
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.presence.PresenceUtils
@@ -22,6 +23,7 @@ import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.utilities.user.UserUtils.getUserNameWithDiscriminator
 import com.discord.views.user.UserAvatarPresenceView
 import com.discord.widgets.user.Badge
+import com.discord.widgets.media.WidgetMedia
 import com.facebook.drawee.view.SimpleDraweeView
 
 class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayout(context, attrs) {
@@ -57,12 +59,26 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
             val pixel = bitmap.getPixel(bitmap.width / 2, bitmap.height / 2)
             onAvatarRepresentativeColorUpdated(pixel)
         }
-        binding.largeAvatar.setOnClickListener { if (state.editable) onAvatarEdit() }
+        binding.largeAvatar.setOnClickListener {
+            if (state.editable) onAvatarEdit()
+            else if (FeatureFlags.viewProfileImagesEnabled()) {
+                IconUtils.getForGuildMemberOrUser(state.user, state.guildMember, 2048, true)
+                    ?.let { WidgetMedia.launchImage(context, it, state.user.username) }
+            }
+        }
         binding.avatarEdit.setOnClickListener { if (state.editable) onAvatarEdit() }
         configureBanner(state)
         binding.largeAvatar.configure(UserAvatarPresenceView.ViewState(state.user, state.presence, state.showPresence, state.guildMember))
         binding.largeAvatar.setAvatarDecoration(state.avatarDecoration, animate = state.shouldAnimateBanner)
         configureNames(state.user, state.guildMember, state)
+        binding.userProfileHeaderSecondaryName.setOnClickListener(
+            if (!state.editable && state.showSmallAvatar && FeatureFlags.viewProfileImagesEnabled()) {
+                View.OnClickListener {
+                    IconUtils.getForUser(state.user, true, 2048)
+                        ?.let { WidgetMedia.launchImage(context, it, state.user.username) }
+                }
+            } else null,
+        )
         binding.userAka.visibility = if (state.showAkas) View.VISIBLE else View.GONE
         binding.userAka.configure(state.guildMembersForAka)
         setBadges(badgesFor(state))
@@ -123,7 +139,12 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
             autoPlayAnimations = state.shouldAutoPlayBanner,
         )
         updateBannerColor(state)
-        binding.banner.setOnClickListener { onBannerPress() }
+        binding.banner.setOnClickListener {
+            if (state.editable) onBannerPress()
+            else if (url != null && FeatureFlags.viewProfileImagesEnabled()) {
+                WidgetMedia.launchImage(context, url, state.user.username)
+            }
+        }
         binding.bannerEdit.setOnClickListener { onBannerPress() }
         binding.gifTag.visibility = if (state.shouldShowGIFTag) View.VISIBLE else View.GONE
     }

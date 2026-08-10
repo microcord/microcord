@@ -8,6 +8,7 @@
             <com.discord.views.CheckedSetting android:id="@+id/settings_feature_voice_messages" app:cs_text="@string/feature_voice_messages" app:cs_subtext="@string/feature_voice_messages_description" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
             <com.discord.views.CheckedSetting android:id="@+id/settings_feature_tap_tap" app:cs_text="@string/feature_tap_tap" app:cs_subtext="@string/feature_tap_tap_description" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
             <com.discord.views.CheckedSetting android:id="@+id/settings_feature_fetch_uncached_users" app:cs_text="@string/feature_fetch_uncached_users" app:cs_subtext="@string/feature_fetch_uncached_users_description" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+            <com.discord.views.CheckedSetting android:id="@+id/settings_feature_view_profile_images" app:cs_text="@string/feature_view_profile_images" app:cs_subtext="@string/feature_view_profile_images_description" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

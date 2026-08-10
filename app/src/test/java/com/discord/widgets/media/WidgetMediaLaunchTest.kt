@@ -18,6 +18,16 @@ import org.junit.Test
  */
 class WidgetMediaLaunchTest {
 
+    @Test
+    fun `profile image opens as the original fullscreen still`() {
+        val args = launchArgs("https://cdn.discordapp.com/avatars/1/hash.webp?size=2048", "user")
+
+        assertEquals(args.uri, args.previewImageUri)
+        assertEquals("user", args.title)
+        assertNull(args.progressiveMediaUri)
+        assertNull(args.mediaType)
+    }
+
     private fun attachment(url: String, width: Int? = 800, height: Int? = 600) = MessageAttachment(
         url = url,
         size = 1024L,

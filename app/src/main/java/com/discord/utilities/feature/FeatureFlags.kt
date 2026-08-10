@@ -6,6 +6,7 @@ object FeatureFlags {
     private const val VOICE_MESSAGES = "feature_voice_messages"
     private const val TAP_TAP = "feature_tap_tap"
     private const val FETCH_UNCACHED_USERS = "feature_fetch_uncached_users"
+    private const val VIEW_PROFILE_IMAGES = "feature_view_profile_images"
 
     fun voiceMessagesEnabled() = enabled(VOICE_MESSAGES, true)
     fun setVoiceMessagesEnabled(enabled: Boolean) = setEnabled(VOICE_MESSAGES, enabled)
@@ -13,6 +14,8 @@ object FeatureFlags {
     fun setTapTapEnabled(enabled: Boolean) = setEnabled(TAP_TAP, enabled)
     fun fetchUncachedUsersEnabled() = enabled(FETCH_UNCACHED_USERS)
     fun setFetchUncachedUsersEnabled(enabled: Boolean) = setEnabled(FETCH_UNCACHED_USERS, enabled)
+    fun viewProfileImagesEnabled() = enabled(VIEW_PROFILE_IMAGES)
+    fun setViewProfileImagesEnabled(enabled: Boolean) = setEnabled(VIEW_PROFILE_IMAGES, enabled)
 
     private fun enabled(key: String, default: Boolean = false) =
         SharedPreferencesProvider.getOrNull()?.getBoolean(key, default) ?: default

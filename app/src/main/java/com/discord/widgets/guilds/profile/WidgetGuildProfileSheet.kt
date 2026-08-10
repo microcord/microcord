@@ -17,6 +17,7 @@ import com.discord.databinding.WidgetGuildProfileSheetBinding
 import com.discord.databinding.WidgetGuildProfileActionsBinding
 import com.discord.i18n.i18nFormat
 import com.discord.i18n.i18nPlural
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.resources.getI18nPluralString
@@ -27,6 +28,7 @@ import com.discord.widgets.channels.WidgetCreateChannel
 import com.discord.widgets.guilds.contextmenu.ContextMenuNavigation
 import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
 import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventLocationSelect
+import com.discord.widgets.media.WidgetMedia
 import com.discord.widgets.servers.WidgetServerNotifications
 import com.discord.widgets.servers.WidgetServerSettings
 import com.discord.widgets.servers.WidgetServerSettingsEmojis
@@ -95,9 +97,16 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
             text = state.guildShortName
             visibility = if (state.guildIcon == null) View.VISIBLE else View.GONE
         }
-        IconUtils.setIcon(
-            binding.guildProfileSheetIcon,
-            IconUtils.getForGuild(state.guildId, state.guildIcon, "asset://asset/images/default_icon_selected.jpg", true),
+        IconUtils.setIcon(binding.guildProfileSheetIcon, IconUtils.getForGuild(
+            state.guildId, state.guildIcon, "asset://asset/images/default_icon_selected.jpg", true,
+        ))
+        binding.guildProfileSheetIcon.setOnClickListener(
+            if (state.guildIcon != null && FeatureFlags.viewProfileImagesEnabled()) {
+                View.OnClickListener {
+                    IconUtils.getForGuild(state.guildId, state.guildIcon, allowAnimation = true, size = 2048)
+                        ?.let { WidgetMedia.launchImage(requireContext(), it, state.guildName) }
+                }
+            } else null,
         )
         binding.guildProfileSheetDescription.apply {
             text = if (state.isPrivate) getString(R.string.guild_profile_private_description) else state.guildDescription
@@ -126,6 +135,19 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
             }
             visibility = if (url == null) View.GONE else View.VISIBLE
             if (url != null) MGImages.setImage(this, url)
+            setOnClickListener(
+                if (url != null && FeatureFlags.viewProfileImagesEnabled()) {
+                    View.OnClickListener {
+                        val fullUrl = when (state.banner.type) {
+                            WidgetGuildProfileSheetViewModel.Banner.Type.BANNER ->
+                                IconUtils.getBannerForGuild(state.banner.guildId, state.banner.hash, 2048, true)
+                            WidgetGuildProfileSheetViewModel.Banner.Type.SPLASH ->
+                                state.banner.hash?.let { IconUtils.getGuildSplashUrl(state.banner.guildId, it, 2048) }
+                        }
+                        fullUrl?.let { WidgetMedia.launchImage(requireContext(), it, state.guildName) }
+                    }
+                } else null,
+            )
             if (url == null) constrainIconToParent() else constrainIconToBanner()
         }
     }
