@@ -433,6 +433,10 @@ class WidgetChatListAdapter @JvmOverloads constructor(
 
         fun onReportIssueWithAutoMod(context: Context, message: Message) = Unit
 
+        fun onAutoModIncidentActions(guildId: Long, messageId: Long) = Unit
+
+        fun onAutoModUserActions(message: Message, guildId: Long) = Unit
+
         fun onRoleSubscriptionPurchaseTierClick(
             roleSubscriptionListingId: Long,
             guildId: Long,

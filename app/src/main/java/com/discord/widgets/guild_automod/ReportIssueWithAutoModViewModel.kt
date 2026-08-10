@@ -8,6 +8,7 @@ import com.discord.stores.StoreMessages
 import com.discord.stores.StoreStream
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
+import com.discord.utilities.analytics.AnalyticsTracker
 import rx.Observable
 
 /**
@@ -17,10 +18,7 @@ import rx.Observable
  * and does not survive a channel switch); [ViewState.Invalid] is that case and leaves the radio
  * group unbound so nothing can be submitted about a message we no longer hold.
  *
- * Submitting produces no REST call at all in the reference — the report is an analytics event
- * carrying the AutoMod `decision_id` lifted out of the block embed. That tracker does not exist in
- * this project yet, so the payload is assembled and handed to [reportSink]. **The submit button is
- * therefore inert until a tracker is installed**; see the handoff report.
+ * Submitting produces no REST call: it emits the reference `guild_automod_feedback` analytics event.
  */
 class ReportIssueWithAutoModViewModel(
     private val channelId: Long,
@@ -65,7 +63,7 @@ class ReportIssueWithAutoModViewModel(
             } else {
                 ViewState.Valid(
                     message = message,
-                    selectedOption = previous?.selectedOption ?: FeedbackType.ALLOWED.value,
+                    selectedOption = previous?.selectedOption ?: FeedbackType.BUG.value,
                 )
             },
         )
@@ -86,7 +84,7 @@ class ReportIssueWithAutoModViewModel(
                 decisionId = embed?.embedFieldValue(DECISION_ID_FIELD).orEmpty(),
                 messageId = current.message.id,
                 feedbackType = current.selectedOption,
-                messageContent = current.message.content.orEmpty(),
+                messageContent = embed?.description ?: current.message.content.orEmpty(),
             ),
         )
         onCompleted()
@@ -95,15 +93,15 @@ class ReportIssueWithAutoModViewModel(
     companion object {
         private const val DECISION_ID_FIELD = "decision_id"
 
-        /**
-         * Reference: `AnalyticsTracker.trackReportIssueWithAutoMod(decisionId, messageId,
-         * feedbackType, content)` → `track(TrackGuildAutomodFeedback(…))`.
-         * `AnalyticsTracker` exists in this project but does **not** declare that method, and it is
-         * outside this agent's file ownership, so the assembled report is handed here instead of
-         * being invented into some other transport. **Point this at the tracker when it lands.**
-         */
         @JvmStatic
-        var reportSink: (Report) -> Unit = { }
+        var reportSink: (Report) -> Unit = { report ->
+            AnalyticsTracker.guildAutoModFeedback(
+                report.decisionId,
+                report.messageId,
+                report.feedbackType,
+                report.messageContent,
+            )
+        }
 
         fun observeStores(
             channelId: Long,

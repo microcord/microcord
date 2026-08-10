@@ -1080,6 +1080,26 @@ object AnalyticsTracker {
         )
     }
 
+    fun guildAutoModFeedback(
+        decisionId: String,
+        messageId: Long,
+        feedbackType: String,
+        content: String,
+    ) = tracker.track(
+        "guild_automod_feedback",
+        mapOf(
+            "decision_id" to decisionId,
+            "message_id" to messageId,
+            "feedback_type" to feedbackType,
+            "content" to content,
+        ),
+    )
+
+    fun guildAutoModIncidentAction(guildId: Long, messageId: Long, action: String) = tracker.track(
+        "guild_automod_incident_action",
+        mapOf("guild_id" to guildId, "message_id" to messageId, "action" to action),
+    )
+
     private fun audioOutputDeviceTypeValue(type: DiscordAudioManager.DeviceTypes): String? = when (type) {
         DiscordAudioManager.DeviceTypes.DEFAULT -> "default"
         DiscordAudioManager.DeviceTypes.INVALID -> null

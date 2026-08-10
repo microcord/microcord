@@ -3327,6 +3327,29 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   guild values. This fixes the observed `api.name.ifEmpty` Main-StoreThread crash and prevents the next two equivalent null crashes.
   A focused partial-update regression test was added; debug assembly and A65 installation pass, while unit-test compilation remains
   blocked by unrelated `ActivityMessageEntryTest.kt:113`.
+- AutoMod message cards now consume the current RN field contract: all 18 message keys and 9 notification keys, including keyword
+  match, flagged message, timeout/quarantine, decision reason/outcome, app interaction, alert execution, raid/mention-raid, activity
+  alert, and suspicious-mention context. The card adds dynamic headers/badge, highlighted matched text, role dot/icon, timestamp,
+  reason/notification sections, permission-gated rounded channel chip, rule label, flagged-message jump, member validation, current-
+  user quarantine profile repair, and notification-specific incident actions. Raid actions use the existing incident endpoint for
+  24-hour invite/DM pauses and resolution. AutoMod feedback now defaults to RN's BUG option and emits live
+  `guild_automod_feedback` analytics with embed content/decision id. A full field-extraction test was added; debug assembly and A65
+  installation pass, while unit-test compilation remains blocked by unrelated `ActivityMessageEntryTest.kt:113`. Live incident
+  mutation and notification-card variants remain unverified against an approved guild.
+- AutoMod card author/timestamp rows now stay single-line: long usernames ellipsize while the timestamp retains a fixed
+  wrap-content slot, preventing localized dates from collapsing into multiple narrow lines. The `#channel` link remains clickable
+  but no longer has a persistent chip fill. Debug assembly and A65 installation pass.
+- AutoMod author metadata now stays grouped on the left with a bounded username; the timestamp consumes only the remaining row
+  width. The role dot is hidden unless the member actually has a colored role, eliminating the fallback gray dot. Debug assembly
+  and A65 installation pass.
+- The `AutoMod` badge now labels the alert header rather than the offending user. Rows explicitly show “No longer in server” when
+  the author is absent from current guild membership, and stale role dots/icons are hidden for those users. Debug assembly and A65
+  installation pass.
+- AutoMod's Actions link now opens a dedicated permission-aware moderator sheet instead of the user profile directly. It reuses
+  existing View Profile, Timeout, Kick, and Ban flows (including their confirmation dialogs) and adds Copy ID; unavailable
+  moderation operations stay hidden for insufficient permissions or self-targeting. Debug assembly and A65 installation pass.
+- Former-member AutoMod rows still expose View Profile, Copy ID, and Ban-by-ID when the moderator has `BAN_MEMBERS`; only Timeout
+  and Kick require current guild membership. Debug assembly and A65 installation pass.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each

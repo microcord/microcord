@@ -46,6 +46,8 @@ import com.discord.widgets.chat.list.actions.WidgetChatListActions
 import com.discord.widgets.chat.list.reactions.WidgetManageReactions
 import com.discord.widgets.chat.list.sheet.WidgetApplicationCommandBottomSheet
 import com.discord.widgets.guild_automod.WidgetReportIssueWithAutoMod
+import com.discord.widgets.guild_automod.WidgetAutoModIncidentActions
+import com.discord.widgets.guild_automod.WidgetAutoModUserActions
 import com.discord.widgets.guild_role_subscriptions.entrypoint.WidgetGuildRoleSubscriptionEntryPoint
 import com.discord.widgets.guilds.profile.WidgetGuildProfileSheet
 import com.discord.widgets.stickers.StickerSheets
@@ -274,6 +276,20 @@ class WidgetChatListAdapterEventsHandler(
 
     override fun onReportIssueWithAutoMod(context: Context, message: Message) =
         WidgetReportIssueWithAutoMod.launch(context, message.channelId, message.id)
+
+    override fun onAutoModIncidentActions(guildId: Long, messageId: Long) =
+        WidgetAutoModIncidentActions.show(fragmentManager, guildId, messageId)
+
+    override fun onAutoModUserActions(message: Message, guildId: Long) {
+        val author = message.author ?: return
+        WidgetAutoModUserActions.show(
+            fragmentManager,
+            guildId,
+            message.channelId,
+            author.id,
+            author.globalName?.takeIf(String::isNotBlank) ?: author.username,
+        )
+    }
 
     override fun onRoleSubscriptionPurchaseTierClick(
         roleSubscriptionListingId: Long,

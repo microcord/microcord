@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="vertical" android:paddingBottom="16dp" style="@style/UiKit.ViewGroup.LinearLayout">
+    <TextView android:id="@+id/title" android:paddingStart="16dp" android:paddingTop="16dp" android:paddingEnd="16dp" android:paddingBottom="8dp" android:accessibilityHeading="true" style="@style/UiKit.TextView.H1"/>
+    <TextView android:id="@+id/view_profile" android:text="@string/view_profile" style="@style/UiKit.ListItem"/>
+    <TextView android:id="@+id/timeout_user" android:text="@string/timeout_user" style="@style/UiKit.ListItem"/>
+    <TextView android:id="@+id/kick_user" android:text="@string/kick_from_server" style="@style/UiKit.ListItem"/>
+    <TextView android:id="@+id/ban_user" android:text="@string/ban" style="@style/UiKit.ListItem"/>
+    <TextView android:id="@+id/copy_id" android:text="@string/copy_id" style="@style/UiKit.ListItem"/>
+</LinearLayout>
