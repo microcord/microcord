@@ -16,6 +16,8 @@ import com.discord.models.domain.ModelUserSettings
 import com.discord.models.user.MeUser
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
+import com.discord.stores.UserSettings
+import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings.DmSpamFilterV2
 import com.discord.stores.StoreUserConnections
 import com.discord.stores.StoreUserSettings
 import com.discord.utilities.accessibility.AccessibilityUtils
@@ -72,6 +74,7 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
 
     private lateinit var dimmer: DimmerView
     private lateinit var explicitContentRadios: List<CheckedSetting>
+    private lateinit var spamFilterRadios: List<Pair<DmSpamFilterV2, CheckedSetting>>
     private lateinit var explicitContentRadioManager: RadioManager
     private lateinit var friendSourceSwitches: List<CheckedSetting>
     private lateinit var defaultRestrictedGuilds: CheckedSetting
@@ -98,15 +101,19 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
         setActionBarSubtitle(R.string.user_settings)
         SettingsNavigation.bindBack(this)
 
+        view.findViewById<View>(R.id.settings_privacy_sensitive_content).setOnClickListener {
+            SettingsNavigation.launch(requireContext(), WidgetSettingsSensitiveContent::class.java)
+        }
+
         dimmer = view.findViewById(R.id.dimmer_view)
         defaultRestrictedGuilds = view.findViewById(R.id.settings_privacy_default_restricted_guilds)
 
-        // Index is the filter value: 0 = off, 1 = non-friends only, 2 = everyone.
-        explicitContentRadios = listOf(
-            view.findViewById(R.id.settings_privacy_explicit_0),
-            view.findViewById(R.id.settings_privacy_explicit_1),
-            view.findViewById(R.id.settings_privacy_explicit_2),
+        spamFilterRadios = listOf(
+            DmSpamFilterV2.DM_SPAM_FILTER_V2_FRIENDS_AND_NON_FRIENDS to view.findViewById(R.id.settings_privacy_spam_all),
+            DmSpamFilterV2.DM_SPAM_FILTER_V2_NON_FRIENDS to view.findViewById(R.id.settings_privacy_spam_non_friends),
+            DmSpamFilterV2.DM_SPAM_FILTER_V2_DISABLED to view.findViewById(R.id.settings_privacy_spam_disabled),
         )
+        explicitContentRadios = spamFilterRadios.map { it.second }
         explicitContentRadioManager = RadioManager(explicitContentRadios)
 
         friendSourceSwitches = listOf(
@@ -242,9 +249,7 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
                 configureDefaultGuildsRestricted(viewState)
                 configureFriendSourceSwitches(viewState)
                 configureContactSync(viewState)
-                explicitContentRadios.forEachIndexed { filter, radio ->
-                    configureExplicitContentRadio(viewState, radio, filter)
-                }
+                configureSpamFilterRadios()
                 configurePrivacyControls(viewState)
                 configureRequestDataButton(viewState)
             }
@@ -253,17 +258,12 @@ class WidgetSettingsPrivacy : AppFragment(R.layout.widget_settings_privacy) {
 
     // region safe direct messaging
 
-    private fun configureExplicitContentRadio(
-        viewState: SettingsPrivacyViewModel.ViewState.Loaded,
-        radio: CheckedSetting,
-        explicitContentFilter: Int,
-    ) {
-        radio.setContainerClickListener {
-            StoreStream.getUserSettings().setExplicitContentFilter(appActivity, explicitContentFilter)
-        }
-        // The selection follows the store, not the tap: a rejected write leaves the old row checked.
-        if (viewState.explicitContentFilter == explicitContentFilter) {
-            explicitContentRadioManager.setChecked(radio)
+    private fun configureSpamFilterRadios() {
+        val current = UserSettings.dmSpamFilter.get()
+        spamFilterRadios.forEach { (filter, radio) ->
+            radio.setContainerClickListener { UserSettings.dmSpamFilter.set(filter) }
+            // The selection follows the store, not the tap: a rejected write leaves the old row checked.
+            if (current == filter) explicitContentRadioManager.setChecked(radio)
         }
     }
 

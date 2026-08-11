@@ -12,6 +12,7 @@ import com.discord.stores.CommandAutocompleteState
 import com.discord.stores.StoreStream
 import com.discord.utilities.rx.ui
 import com.discord.widgets.chat.input.AutocompleteStickerItem
+import com.discord.widgets.chat.input.autocomplete.sources.StickerAutocompletableSource
 import com.discord.utilities.applicationcommands.CommandPermissionContexts
 import com.discord.widgets.chat.input.WidgetChatInputDiscoveryCommandsModel
 import com.discord.widgets.chat.input.autocomplete.commands.buildRemoteCommandOptionRequest
@@ -46,12 +47,8 @@ class AutocompleteViewModel(
     channelId: Long? = null,
     private val autocompletablesSource: (Long) -> Observable<Map<LeadingIdentifier, Set<Autocompletable>>> =
         ChatInputAutocompletables::observeChannelAutocompletables,
-    /**
-     * Sticker suggestions for the current token. The reference sources these from `StoreStickers`
-     * via `StickerUtils.findStickerMatches`; neither exists in this project, so the default offers
-     * none and the sticker row stays hidden.
-     */
-    private val stickerSource: (MentionToken?) -> List<AutocompleteStickerItem> = { emptyList() },
+    private val stickerSource: (MentionToken?) -> List<AutocompleteStickerItem> =
+        StickerAutocompletableSource::findMatches,
     private val commandQuery: (channelId: Long, query: String) -> Unit = { id, query ->
         val channel = StoreStream.getChannels().getChannel(id)
         StoreStream.getApplicationCommands().requestApplicationCommandsQuery(channel?.guildId, query)
@@ -233,6 +230,20 @@ class AutocompleteViewModel(
     fun observeCommandBrowserState(): Observable<CommandBrowserState?> = commandBrowserState
 
     @MainThread
+    /** Sends [sticker] straight away, as the picker does; there is no text form to insert. */
+    fun sendSticker(sticker: com.discord.api.sticker.Sticker) {
+        val channelId = currentChannelId ?: return
+        val channel = StoreStream.getChannels().getChannel(channelId) ?: return
+        StoreStream.getStickers().onStickerUsed(sticker)
+        StoreStream.getMessages().sendMessage(
+            channelId = channelId,
+            author = StoreStream.getUsers().getMe(),
+            content = "",
+            stickers = listOf(sticker),
+            guildId = channel.guildId.takeIf { it != 0L },
+        ).subscribe({ }, { })
+    }
+
     fun selectAutocompleteItem(item: Autocompletable): Boolean {
         if (item !is ApplicationCommandAutocompletable) return true
         val application = item.application ?: return false

@@ -9,4 +9,55 @@
     <string name="manticord_login_with_token" translatable="false">Log in with token</string>
     <string name="manticord_token" translatable="false">Token</string>
     <string name="manticord_token_required" translatable="false">A token is required.</string>
+    <string name="sensitive_content_filters">Sensitive content filters</string>
+    <string name="sensitive_content_filters_help">Choose how you want to see image-based media detected by Discord\'s sensitive content filters.</string>
+    <string name="sensitive_content_explicit_header">Mature Sexual Media</string>
+    <string name="sensitive_content_explicit_help">Helps detect image-based media that may contain sexually explicit or suggestive material involving adults.</string>
+    <string name="sensitive_content_gore_header">Graphic Media</string>
+    <string name="sensitive_content_gore_help">Helps detect image-based media that may contain violent or potentially disturbing visual content.</string>
+    <string name="sensitive_content_friend_dm">Direct messages from friends</string>
+    <string name="sensitive_content_non_friend_dm">Direct messages from others</string>
+    <string name="sensitive_content_guilds">Messages in server channels</string>
+    <string name="sensitive_content_show">Show</string>
+    <string name="sensitive_content_blur">Blur</string>
+    <string name="sensitive_content_block">Block</string>
+    <string name="sensitive_content_blocked_media">Sensitive content hidden</string>
+    <string name="sensitive_content_blurred_media">Sensitive content. Tap to view.</string>
+    <string name="sensitive_content_self_harm_header">Self-Harm Themes</string>
+    <string name="sensitive_content_self_harm_help">Helps detect image-based media that may depict or promote self-harm.</string>
+    <string name="dm_spam_filter_header">Direct Message spam</string>
+    <string name="dm_spam_filter_help">Automatically send DMs that may contain spam into a separate spam inbox.</string>
+    <string name="dm_spam_filter_all">Filter all</string>
+    <string name="dm_spam_filter_all_help">All DMs will be filtered for spam</string>
+    <string name="dm_spam_filter_non_friends">Filter from non-friends</string>
+    <string name="dm_spam_filter_non_friends_help">DMs from non-friends will be filtered for spam</string>
+    <string name="dm_spam_filter_disabled">Do not filter</string>
+    <string name="dm_spam_filter_disabled_help">DMs will not be filtered for spam</string>
+    <string name="stickers_in_autocomplete">Stickers in Autocomplete</string>
+    <string name="stickers_in_autocomplete_help">Allows stickers to appear in your autocomplete results.</string>
+    <string name="emoji_settings_header">Emoji</string>
+    <string name="reaction_notifications_header">Reaction Notifications</string>
+    <string name="reaction_notifications_help">Receive notifications when your messages are reacted to.</string>
+    <string name="reaction_notifications_only_dms">Only Direct Messages</string>
+    <string name="reaction_notifications_never">Never</string>
+    <string name="notifications_friend_anniversary">Friendship Anniversary</string>
+    <string name="notifications_friend_anniversary_help">Receive a notification when you and a friend reach a friendship anniversary, so you can celebrate together.</string>
+    <string name="notifications_voice_activity">Voice Activity Notifications</string>
+    <string name="notifications_voice_activity_help">Receive a notification when your closest friends join voice channels in servers with 200 members or fewer.</string>
+    <string name="notifications_friends_online">Friends Online</string>
+    <string name="notifications_friends_online_help">Receive a notification when your friend comes online for more than a few minutes.</string>
+    <string name="notifications_status">Status Notifications</string>
+    <string name="notifications_status_help">Status updates from people you talk to.</string>
+    <string name="notifications_friend_gaming">Friend Gaming Activity</string>
+    <string name="notifications_friend_gaming_help">Receive notifications about your friends\' gaming activity.</string>
+    <string name="notifications_profile_updates">Profile Updates</string>
+    <string name="notifications_profile_updates_help">Receive a notification when a friend updates their profile.</string>
+    <string name="notifications_upcoming_events">Upcoming Server Events</string>
+    <string name="notifications_upcoming_events_help">Receive a notification when a server you are in has an upcoming event.</string>
+    <string name="notifications_share_header">What friends are told</string>
+    <string name="notifications_share_come_online">Share when I come online</string>
+    <string name="notifications_share_come_online_help">Allow friends to receive a push notification when you come online.</string>
+    <string name="notifications_share_profile_update">Share when I update my profile</string>
+    <string name="notifications_share_profile_update_help">Allow friends to receive a push notification when you update your profile.</string>
+    <string name="sticker_matching">STICKERS MATCHING {prefix}</string>
 </resources>

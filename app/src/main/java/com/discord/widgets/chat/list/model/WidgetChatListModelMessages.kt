@@ -15,6 +15,7 @@ import com.discord.stores.StoreInstantInvites
 import com.discord.stores.StoreMessageReplies
 import com.discord.stores.StoreMessageState
 import com.discord.stores.StoreStream
+import com.discord.stores.UserSettings
 import com.discord.stores.StoreThreadMessages
 import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.guilds.RoleUtils
@@ -436,7 +437,7 @@ data class WidgetChatListModelMessages(
                 rows += ThreadStarterDividerEntry(channel.id, message.id)
                 return rows
             }
-            if (message.getReactionsMap().isNotEmpty()) {
+            if (UserSettings.renderReactions.get() && message.getReactionsMap().isNotEmpty()) {
                 val canAdd = channel.threadMetadata?.archived != true
                 rows += ReactionsEntry(
                     message,

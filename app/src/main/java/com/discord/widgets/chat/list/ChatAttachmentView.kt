@@ -18,7 +18,12 @@ import com.discord.databinding.ChatAttachmentViewBinding
 import com.discord.simpleast.code.CodeRules
 import com.discord.simpleast.core.node.Node
 import com.discord.simpleast.core.parser.Parser
+import com.discord.models.domain.ModelUserRelationship
 import com.discord.stores.StoreStream
+import com.discord.stores.UserSettings
+import com.discord.utilities.media.ContentSurface
+import com.discord.utilities.media.Redaction
+import com.discord.utilities.media.SensitiveContentSettings
 import com.discord.utilities.embed.EmbedResourceUtils
 import com.discord.utilities.textprocessing.AstRenderer
 import com.discord.utilities.textprocessing.MessageParseState
@@ -120,8 +125,17 @@ class ChatAttachmentView @JvmOverloads constructor(
         isSpoilerClickAllowed: Boolean,
         onSpoilerBlocked: () -> Unit,
     ): Boolean {
+        val redaction = redactionFor(entry)
         val revealed = entry.messageState?.visibleSpoilerEmbedMap?.containsKey(entry.embedIndex) == true
-        val hidden = entry.attachment.isSpoiler && !revealed
+        val blocked = redaction == Redaction.BLOCK
+        val hidden = blocked || ((entry.attachment.isSpoiler || redaction == Redaction.BLUR) && !revealed)
+        binding.chatListItemAttachmentSpoilerLabel.setText(
+            when {
+                blocked -> R.string.sensitive_content_blocked_media
+                redaction == Redaction.BLUR && !entry.attachment.isSpoiler -> R.string.sensitive_content_blurred_media
+                else -> R.string.spoiler
+            },
+        )
         if (hidden) {
             binding.chatListItemAttachmentSpoiler.fadeIn(
                 SPOILER_FADE_IN_MS,
@@ -134,6 +148,9 @@ class ChatAttachmentView @JvmOverloads constructor(
             )
         }
         binding.chatListItemAttachmentSpoiler.setOnClickListener {
+            if (blocked) {
+                return@setOnClickListener
+            }
             if (isSpoilerClickAllowed) {
                 StoreStream.getMessageState().revealSpoilerEmbed(entry.message.id, entry.embedIndex)
             } else {
@@ -143,7 +160,27 @@ class ChatAttachmentView @JvmOverloads constructor(
         return hidden
     }
 
+    private fun redactionFor(entry: AttachmentEntry): Redaction = SensitiveContentSettings(
+        explicit = UserSettings.explicitContent.get(),
+        gore = UserSettings.goreContent.get(),
+        selfHarm = UserSettings.selfHarmContent.get(),
+    ).redactionFor(entry.attachment, surfaceFor(entry))
+
+    private fun surfaceFor(entry: AttachmentEntry): ContentSurface {
+        if (entry.guildId != 0L) return ContentSurface.GUILD
+        val authorId = entry.message.author?.id ?: return ContentSurface.NON_FRIEND_DM
+        if (authorId == StoreStream.getUsers().getMe().id) return ContentSurface.FRIEND_DM
+        val relationship = StoreStream.getUserRelationships().getRelationships()[authorId]
+        return if (relationship == ModelUserRelationship.TYPE_FRIEND) {
+            ContentSurface.FRIEND_DM
+        } else {
+            ContentSurface.NON_FRIEND_DM
+        }
+    }
+
     private fun configureMedia(attachment: MessageAttachment, autoPlayGifs: Boolean) {
+        inlineMedia.contentDescription = attachment.description
+            ?.takeIf { UserSettings.viewImageDescriptions.get() }
         val canInline = attachment.type != MessageAttachmentType.FILE && userSettings.getIsAttachmentMediaInline()
         val width = attachment.width ?: 0
         val height = attachment.height ?: 0

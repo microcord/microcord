@@ -10,11 +10,8 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
 /**
- * Which channels the account visits, and when the frecency proto is written at all.
- *
- * Frecency is recorded on every use but sent on a timer, so a session's worth of navigation costs
- * one request rather than one per jump. Leaving the foreground or losing the socket sends whatever
- * has accumulated, since neither is guaranteed to be followed by another tick.
+ * Which channels the account visits, and when the frecency proto is written at all. Use is recorded
+ * continuously but sent on a timer, plus whenever the app leaves the foreground.
  */
 class StoreFrecency(
     private val dispatcher: Dispatcher,
@@ -78,8 +75,7 @@ class StoreFrecency(
         const val SAVE_INTERVAL_SECONDS = 2 * 60 * 60L
         const val SAVE_INTERVAL_JITTER_SECONDS = 10 * 60L
 
-        /** Spreads every client's periodic write out, rather than having them all land together. */
-        fun jitter(bound: Long) = (Math.random() * bound).toLong()
+            fun jitter(bound: Long) = (Math.random() * bound).toLong()
 
         fun FrecencyUserSettings.FrecencyItem.toEntry() =
             FrecencyTracker.Entry(totalUses, recentUsesList.toList(), frecency, score)

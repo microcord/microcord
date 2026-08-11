@@ -3,15 +3,8 @@ package com.discord.stores
 import com.google.protobuf.Message
 import rx.Observable
 
-/**
- * How long a write may sit before it is sent.
- *
- * Settings are written far more often than they are read — a drag through a guild folder or a
- * frecency bump would otherwise be one request per gesture — so each setting declares how urgent
- * its own writes are and they coalesce until then.
- */
+/** How long a write may sit before it is sent, so a burst of gestures costs one request. */
 enum class UserSettingsDelay(val seconds: Long) {
-    /** Deliberate, visible changes: a theme switch should survive being killed a second later. */
     INFREQUENT_USER_ACTION(0),
     FREQUENT_USER_ACTION(10),
     SLOW_USER_ACTION(20),
@@ -20,11 +13,8 @@ enum class UserSettingsDelay(val seconds: Long) {
 }
 
 /**
- * One field of the settings proto, as the rest of the app sees it.
- *
- * The proto's default value is never the app's default: an unset `gif_auto_play` means "never
- * chosen", which renders as on. [fromProto] is where that lives, which is why reads go through
- * here rather than touching the proto.
+ * One field of the settings proto. An unset field means "never chosen", not the zero value, so
+ * [fromProto] owns the app's default rather than the proto.
  */
 class UserSettingsProtoSetting<P : Message, B : Message.Builder, T>(
     private val store: StoreUserSettingsProto<P>,
@@ -36,14 +26,13 @@ class UserSettingsProtoSetting<P : Message, B : Message.Builder, T>(
 ) {
     fun get(): T = fromProto(store.getSettings())
 
-    /** Reads out of [settings] rather than the store, for store-thread code running ahead of the snapshot. */
+    /** For store-thread code running ahead of the snapshot. */
     fun get(settings: P): T = fromProto(settings)
 
     fun observe(): Observable<T> = store.observeSettings().map(fromProto)
         .distinctUntilChanged { a, b -> areEqual(a, b) }
         .doOnSubscribe { store.loadIfNecessary() }
 
-    /** No-ops when the value already matches, so a redundant tap costs no request. */
     fun set(value: T) {
         if (areEqual(get(), value)) return
         writer.write(delay) { toProto(value) }

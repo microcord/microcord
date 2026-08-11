@@ -17,6 +17,8 @@ import com.discord.models.guild.Guild
 import com.discord.models.user.MeUser
 import com.discord.utilities.attachments.AttachmentLimits
 import com.discord.models.user.User
+import com.discord.stores.UserSettings
+import com.discord.utilities.textprocessing.Emoticons
 import com.discord.stores.StoreApplicationInteractions
 import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreGuilds
@@ -223,6 +225,7 @@ class MessageManager(
             return false
         }
 
+        val content = if (UserSettings.convertEmoticons.get()) Emoticons.convert(content) else content
         val targetChannelId = channelId ?: storeChannelsSelected.getId()
         reportShortcutUsed(targetChannelId)
         val pendingReply = if (consumePendingReply) storePendingReplies.getPendingReply(targetChannelId) else null

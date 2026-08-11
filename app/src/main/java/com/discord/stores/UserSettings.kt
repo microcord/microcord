@@ -4,6 +4,8 @@ import com.discord.api.presence.ClientStatus
 import com.discord.models.domain.ModelCustomStatusSetting
 import com.discord.models.domain.ModelGuildFolder
 import com.discord.models.domain.ModelUserSettings
+import com.discord.utilities.media.Redaction
+import com.discord.utilities.media.SensitiveContentSetting
 import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.time.TimeUtils
 import com.google.protobuf.BoolValue
@@ -13,22 +15,21 @@ import com.google.protobuf.UInt32Value
 import com.google.protobuf.UInt64Value
 import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings
 import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings.CustomStatus
+import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings.CustomStatusPushNotificationType
+import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings.DmSpamFilterV2
+import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings.ExplicitContentRedaction
 import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings.GuildFolder
 import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings.Theme
 import java.util.Locale
 
 /**
- * The settings the app reads, one declaration each.
- *
- * A wrapper type that is unset means the user has never chosen, which is not the same as choosing
- * the zero value — so every setting here states its own default rather than letting proto3 decide.
+ * The settings the app reads. An unset wrapper means the user has never chosen, so every setting
+ * states its own default rather than letting proto3 decide.
  */
 object UserSettings {
 
     private val store get() = StoreStream.getUserSettingsProto()
     private val writer get() = StoreStream.getUserSettingsProtoWriter()
-
-    // -- Text and images ---------------------------------------------------------------------
 
     val gifAutoPlay = bool(true, { it.textAndImages.run { hasGifAutoPlay() to gifAutoPlay.value } }) {
         textAndImagesBuilder.gifAutoPlay = it
@@ -62,11 +63,19 @@ object UserSettings {
         textAndImagesBuilder.convertEmoticons = it
     }
 
+    val viewImageDescriptions = bool(false, { it.textAndImages.run { hasViewImageDescriptions() to viewImageDescriptions.value } }) {
+        textAndImagesBuilder.viewImageDescriptions = it
+    }
+
+    val includeStickersInAutocomplete =
+        bool(false, { it.textAndImages.run { hasIncludeStickersInAutocomplete() to includeStickersInAutocomplete.value } }) {
+            textAndImagesBuilder.includeStickersInAutocomplete = it
+        }
+
     val viewNsfwGuilds = bool(false, { it.textAndImages.run { hasViewNsfwGuilds() to viewNsfwGuilds.value } }) {
         textAndImagesBuilder.viewNsfwGuilds = it
     }
 
-    /** Whether age-restricted commands are offered in DMs and group DMs. */
     val viewNsfwCommands = bool(false, { it.textAndImages.run { hasViewNsfwCommands() to viewNsfwCommands.value } }) {
         textAndImagesBuilder.viewNsfwCommands = it
     }
@@ -81,35 +90,139 @@ object UserSettings {
         { it.textAndImages.run { hasExplicitContentFilter() to explicitContentFilter.value } },
     ) { textAndImagesBuilder.explicitContentFilter = it }
 
-    // -- Appearance --------------------------------------------------------------------------
+    /** Never chosen falls back to the legacy filter, which is the answer the account already gave. */
+    val dmSpamFilter = setting(
+        { proto ->
+            val stored = proto.textAndImages.dmSpamFilterV2
+            if (stored != DmSpamFilterV2.DM_SPAM_FILTER_V2_DEFAULT_UNSET) {
+                stored
+            } else {
+                when (explicitContentFilter.get(proto)) {
+                    ModelUserSettings.EXPLICIT_CONTENT_FILTER_DISABLED -> DmSpamFilterV2.DM_SPAM_FILTER_V2_DISABLED
+                    ModelUserSettings.EXPLICIT_CONTENT_FILTER_FRIENDS_AND_NON_FRIENDS ->
+                        DmSpamFilterV2.DM_SPAM_FILTER_V2_FRIENDS_AND_NON_FRIENDS
+                    else -> DmSpamFilterV2.DM_SPAM_FILTER_V2_NON_FRIENDS
+                }
+            }
+        },
+    ) { textAndImagesBuilder.dmSpamFilterV2 = it }
+
+    val explicitContent = sensitiveContent(
+        { it.textAndImages.explicitContentSettings.run { Triple(explicitContentGuilds, explicitContentFriendDm, explicitContentNonFriendDm) } },
+        // Never chosen falls back to what the legacy filter said, so the account keeps its answer.
+        { proto ->
+            when (explicitContentFilter.get(proto)) {
+                ModelUserSettings.EXPLICIT_CONTENT_FILTER_DISABLED -> SensitiveContentSetting(Redaction.SHOW, Redaction.SHOW, Redaction.SHOW)
+                ModelUserSettings.EXPLICIT_CONTENT_FILTER_FRIENDS_AND_NON_FRIENDS ->
+                    SensitiveContentSetting(Redaction.SHOW, Redaction.BLOCK, Redaction.BLOCK)
+                else -> SensitiveContentSetting(Redaction.SHOW, Redaction.SHOW, Redaction.BLOCK)
+            }
+        },
+    ) { value ->
+        textAndImagesBuilder.explicitContentSettingsBuilder
+            .setExplicitContentGuilds(value.guilds.toProto())
+            .setExplicitContentFriendDm(value.friendDm.toProto())
+            .setExplicitContentNonFriendDm(value.nonFriendDm.toProto())
+    }
+
+    val goreContent = sensitiveContent(
+        { it.textAndImages.goreContentSettings.run { Triple(goreContentGuilds, goreContentFriendDm, goreContentNonFriendDm) } },
+    ) { value ->
+        textAndImagesBuilder.goreContentSettingsBuilder
+            .setGoreContentGuilds(value.guilds.toProto())
+            .setGoreContentFriendDm(value.friendDm.toProto())
+            .setGoreContentNonFriendDm(value.nonFriendDm.toProto())
+    }
+
+    val selfHarmContent = sensitiveContent(
+        { it.textAndImages.selfHarmContentSettings.run { Triple(selfHarmContentGuilds, selfHarmContentFriendDm, selfHarmContentNonFriendDm) } },
+    ) { value ->
+        textAndImagesBuilder.selfHarmContentSettingsBuilder
+            .setSelfHarmContentGuilds(value.guilds.toProto())
+            .setSelfHarmContentFriendDm(value.friendDm.toProto())
+            .setSelfHarmContentNonFriendDm(value.nonFriendDm.toProto())
+    }
+
+    val showInAppNotifications =
+        bool(true, { it.notifications.run { hasShowInAppNotifications() to showInAppNotifications.value } }) {
+            notificationsBuilder.showInAppNotifications = it
+        }
+
+    val reactionNotifications = setting({ it.notifications.reactionNotifications }) {
+        notificationsBuilder.reactionNotifications = it
+    }
+
+    /** The proto stores a tri-state whose unset value means enabled. */
+    val statusNotifications = setting(
+        { it.notifications.customStatusPushNotifications != CustomStatusPushNotificationType.CUSTOM_STATUS_PUSH_NOTIFICATION_TYPE_STATUS_PUSH_DISABLED },
+    ) { enabled ->
+        notificationsBuilder.customStatusPushNotifications = if (enabled) {
+            CustomStatusPushNotificationType.CUSTOM_STATUS_PUSH_NOTIFICATION_TYPE_STATUS_PUSH_ENABLED
+        } else {
+            CustomStatusPushNotificationType.CUSTOM_STATUS_PUSH_NOTIFICATION_TYPE_STATUS_PUSH_DISABLED
+        }
+    }
+
+    val friendOnlineNotifications =
+        bool(true, { it.notifications.run { hasEnableFriendOnlineNotifications() to enableFriendOnlineNotifications.value } }) {
+            notificationsBuilder.enableFriendOnlineNotifications = it
+        }
+
+    val voiceActivityNotifications =
+        bool(true, { it.notifications.run { hasEnableVoiceActivityNotifications() to enableVoiceActivityNotifications.value } }) {
+            notificationsBuilder.enableVoiceActivityNotifications = it
+        }
+
+    val friendAnniversaryNotifications =
+        bool(true, { it.notifications.run { hasEnableFriendAnniversaryNotifications() to enableFriendAnniversaryNotifications.value } }) {
+            notificationsBuilder.enableFriendAnniversaryNotifications = it
+        }
+
+    val profileUpdateNotifications =
+        bool(true, { it.notifications.run { hasEnableProfileUpdatesNotifications() to enableProfileUpdatesNotifications.value } }) {
+            notificationsBuilder.enableProfileUpdatesNotifications = it
+        }
+
+    val friendGamingActivityNotifications =
+        bool(true, { it.notifications.run { hasEnableFriendGamingActivityNotifications() to enableFriendGamingActivityNotifications.value } }) {
+            notificationsBuilder.enableFriendGamingActivityNotifications = it
+        }
+
+    val upcomingEventNotifications =
+        bool(true, { it.notifications.run { hasEnableUpcomingServerEventNotifications() to enableUpcomingServerEventNotifications.value } }) {
+            notificationsBuilder.enableUpcomingServerEventNotifications = it
+        }
+
+    val notifyFriendsOnComeOnline =
+        bool(true, { it.notifications.run { hasNotifyFriendsOnComeOnline() to notifyFriendsOnComeOnline.value } }) {
+            notificationsBuilder.notifyFriendsOnComeOnline = it
+        }
+
+    val notifyFriendsOnProfileUpdate =
+        bool(true, { it.notifications.run { hasNotifyFriendsOnProfileUpdate() to notifyFriendsOnProfileUpdate.value } }) {
+            notificationsBuilder.notifyFriendsOnProfileUpdate = it
+        }
+
+    val streamNotifications =
+        bool(true, { it.voiceAndVideo.run { hasStreamNotificationsEnabled() to streamNotificationsEnabled.value } }) {
+            voiceAndVideoBuilder.streamNotificationsEnabled = it
+        }
 
     val developerMode = setting({ it.appearance.developerMode }) { appearanceBuilder.developerMode = it }
 
-    /**
-     * The account theme, under the names the rest of the app uses; null while it has never been
-     * picked, which leaves the device following the system.
-     *
-     * `materialYou` has no counterpart in the enum, so it stays device-local; see
-     * `StoreUserSettingsSystem`.
-     */
+    /** Null until picked, leaving the device on the system theme. `materialYou` stays device-local. */
     val theme = setting({ THEMES[it.appearance.theme] }) { name ->
         appearanceBuilder.theme = THEMES.entries.firstOrNull { it.value == name }?.key ?: Theme.THEME_DARK
     }
 
-    // -- Localization ------------------------------------------------------------------------
-
-    /** Null while the account has never picked, which the app renders as the device locale. */
     val locale = setting({ it.localization.locale.value.takeIf(String::isNotEmpty) }) { value ->
         localizationBuilder.locale = StringValue.of(value.orEmpty())
     }
-
-    // -- Status ------------------------------------------------------------------------------
 
     val showCurrentGame = bool(true, { it.status.run { hasShowCurrentGame() to showCurrentGame.value } }) {
         statusBuilder.showCurrentGame = it
     }
 
-    /** The presence the account shows on every client; null until one has been chosen. */
     val status = setting({ statusOf(it.status.status.value) }) { value ->
         statusBuilder.status = StringValue.of(value?.name?.lowercase(Locale.ROOT).orEmpty())
     }
@@ -123,8 +236,6 @@ object UserSettings {
             statusBuilder.customStatus = status.toProto(ClockFactory.get().currentTimeMillis())
         }
     }
-
-    // -- Privacy -----------------------------------------------------------------------------
 
     val allowAccessibilityDetection =
         setting({ it.privacy.allowAccessibilityDetection }) { privacyBuilder.allowAccessibilityDetection = it }
@@ -146,7 +257,6 @@ object UserSettings {
         var bits = 0
         if (flags.all || flags.mutualFriends) bits = bits or FRIEND_SOURCE_MUTUAL_FRIENDS
         if (flags.all || flags.mutualGuilds) bits = bits or FRIEND_SOURCE_MUTUAL_GUILDS
-        // NO_RELATION is only honoured alongside the other two, so "everyone" is all three bits.
         if (flags.all) bits = bits or FRIEND_SOURCE_NO_RELATION
         privacyBuilder.friendSourceFlags = UInt32Value.of(bits)
     }
@@ -155,7 +265,7 @@ object UserSettings {
         privacyBuilder.friendDiscoveryFlags = it
     }
 
-    /** The v1 field is only read, and only until the account has answered in the v2 one. */
+    /** v1 is read only until the account has answered in v2. */
     val defaultGuildsRestricted = setting(
         { it.privacy.run { if (hasDefaultGuildsRestrictedV2()) defaultGuildsRestrictedV2.value else defaultGuildsRestricted } },
     ) { privacyBuilder.defaultGuildsRestrictedV2 = BoolValue.of(it) }
@@ -163,8 +273,6 @@ object UserSettings {
     val restrictedGuildIds = setting({ it.privacy.restrictedGuildIdsList.toList() }) { ids ->
         privacyBuilder.clearRestrictedGuildIds().addAllRestrictedGuildIds(ids)
     }
-
-    // -- Guild folders -----------------------------------------------------------------------
 
     val guildFolders = setting(
         fromProto = { proto ->
@@ -187,6 +295,33 @@ object UserSettings {
         read: (PreloadedUserSettings) -> Pair<Boolean, Boolean>,
         write: PreloadedUserSettings.Builder.(BoolValue) -> Unit,
     ) = setting({ proto -> read(proto).let { (isSet, value) -> if (isSet) value else default } }) { write(BoolValue.of(it)) }
+
+    private fun sensitiveContent(
+        read: (PreloadedUserSettings) -> Triple<ExplicitContentRedaction, ExplicitContentRedaction, ExplicitContentRedaction>,
+        unset: (PreloadedUserSettings) -> SensitiveContentSetting = { SensitiveContentSetting() },
+        write: PreloadedUserSettings.Builder.(SensitiveContentSetting) -> Unit,
+    ) = setting({ proto ->
+        val (guilds, friendDm, nonFriendDm) = read(proto)
+        val fallback = unset(proto)
+        SensitiveContentSetting(
+            guilds = guilds.toRedaction(fallback.guilds),
+            friendDm = friendDm.toRedaction(fallback.friendDm),
+            nonFriendDm = nonFriendDm.toRedaction(fallback.nonFriendDm),
+        )
+    }, toProto = write)
+
+    private fun ExplicitContentRedaction.toRedaction(unset: Redaction) = when (this) {
+        ExplicitContentRedaction.EXPLICIT_CONTENT_REDACTION_SHOW -> Redaction.SHOW
+        ExplicitContentRedaction.EXPLICIT_CONTENT_REDACTION_BLUR -> Redaction.BLUR
+        ExplicitContentRedaction.EXPLICIT_CONTENT_REDACTION_BLOCK -> Redaction.BLOCK
+        else -> unset
+    }
+
+    private fun Redaction.toProto() = when (this) {
+        Redaction.SHOW -> ExplicitContentRedaction.EXPLICIT_CONTENT_REDACTION_SHOW
+        Redaction.BLUR -> ExplicitContentRedaction.EXPLICIT_CONTENT_REDACTION_BLUR
+        Redaction.BLOCK -> ExplicitContentRedaction.EXPLICIT_CONTENT_REDACTION_BLOCK
+    }
 
     private fun uint32(
         default: Int,

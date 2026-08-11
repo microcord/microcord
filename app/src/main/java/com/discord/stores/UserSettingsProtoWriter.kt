@@ -19,11 +19,8 @@ import okio.ByteString.Companion.toByteString
 import retrofit2.HttpException
 
 /**
- * Sends settings changes for one proto, coalescing them per delay tier.
- *
- * A change is applied locally the moment it is made and only then sent, so the UI never waits on a
- * request. Whatever the server returns replaces local state wholesale, which is also how a rejected
- * write corrects itself.
+ * Sends settings changes for one proto, coalescing them per delay tier. A change applies locally
+ * before it is sent; the server's reply then replaces local state, correcting a rejected write.
  */
 class UserSettingsProtoWriter<T : Message, B : Message.Builder>(
     private val store: StoreUserSettingsProto<T>,
@@ -32,14 +29,10 @@ class UserSettingsProtoWriter<T : Message, B : Message.Builder>(
     private val newBuilder: () -> B,
     private val api: () -> RestAPIInterface? = RestAPI::apiOrNull,
 ) {
-    /**
-     * Fills in state that is tracked outside the proto and only serialised when something is
-     * already being sent — see [StoreFrecency].
-     */
+    /** State tracked outside the proto, serialised only when a write is already going out. */
     abstract class BeforeSend<B> {
         @Volatile private var dirty = false
 
-        /** Called when the tracked state changed, so the next write picks it up. */
         fun markDirty() { dirty = true }
 
         internal fun hasPendingChanges() = dirty
@@ -58,9 +51,8 @@ class UserSettingsProtoWriter<T : Message, B : Message.Builder>(
     fun addBeforeSend(callback: BeforeSend<B>) = beforeSend.add(callback)
 
     /**
-     * [populate] is handed the settings as they currently stand rather than an empty builder: the
-     * smallest change the wire format can express is a whole top-level message, so one built from
-     * scratch would clear every sibling field it did not mention.
+     * [populate] receives the current settings, not an empty builder: the smallest change the wire
+     * format can express is a whole top-level message.
      */
     @Suppress("UNCHECKED_CAST")
     fun write(delay: UserSettingsDelay, populate: B.() -> Unit) {
@@ -80,7 +72,6 @@ class UserSettingsProtoWriter<T : Message, B : Message.Builder>(
         dispatcher.schedule { store.handleLocalUpdate(change) }
     }
 
-    /** Sends anything pending immediately; called when the app is leaving the foreground. */
     fun flush() {
         if (synchronized(lock) { pending.isEmpty() } && beforeSend.none { it.hasPendingChanges() }) return
         send()
@@ -107,8 +98,7 @@ class UserSettingsProtoWriter<T : Message, B : Message.Builder>(
             scheduledDelaySeconds = Long.MAX_VALUE
             val builder = newBuilder()
             pending.forEach { (field, value) -> builder.setField(field, value) }
-            // Latched on rather than sent on their own: a frecency map rides along with whatever
-            // write was already going out.
+            // A frecency map rides along with whatever write was already going out.
             contributing.forEach { it.writeInto(builder) }
             val toSend = builder.build() as T
             if (toSend.allFields.isEmpty()) return
@@ -118,9 +108,8 @@ class UserSettingsProtoWriter<T : Message, B : Message.Builder>(
         }
         val api = api() ?: return
 
-        // No `required_data_version`: it guards a write composed against a proto the server has
-        // since moved past, which only happens to an edit held across a disconnect. Sending the
-        // current version on every write instead turns any concurrent change into a rejection.
+        // No `required_data_version`: sending it on every write turns any concurrent change
+        // into a rejection. It only guards edits held across a disconnect.
         api.patchUserSettingsProto(
             store.type,
             UserSettingsProtoPatch(settings = toSend.toByteArray().toByteString().base64()),
@@ -151,7 +140,6 @@ class UserSettingsProtoWriter<T : Message, B : Message.Builder>(
     private fun handleFailure(toSend: T, failure: Throwable) {
         synchronized(lock) {
             sending = false
-            // Put the change back so the retry, or the next write, carries it.
             toSend.allFields.forEach { (field, value) -> if (field !in pending) pending[field] = value }
         }
         val http = failure as? HttpException
@@ -161,7 +149,6 @@ class UserSettingsProtoWriter<T : Message, B : Message.Builder>(
             return
         }
         AppLog.e(TAG, "type ${store.type} write failed: ${failure.message}")
-        // The server rejected the proto itself; only its copy can say what the truth is now.
         if (http?.code() == BAD_REQUEST && errorCode(http) == INVALID_USER_SETTINGS_DATA) {
             synchronized(lock) { pending.clear() }
             store.loadIfNecessary(force = true)
@@ -169,7 +156,6 @@ class UserSettingsProtoWriter<T : Message, B : Message.Builder>(
     }
 
     private fun schedule(delaySeconds: Long, force: Boolean = false) {
-        // A more urgent change pulls an existing timer forward rather than queueing behind it.
         if (!force && scheduled != null && delaySeconds >= scheduledDelaySeconds) return
         scheduled?.cancel(false)
         scheduledDelaySeconds = delaySeconds
@@ -183,7 +169,7 @@ class UserSettingsProtoWriter<T : Message, B : Message.Builder>(
             .build() as T,
     )
 
-    // Peeked, not consumed: an error this does not recognise still has to classify downstream.
+    // Peeked, not consumed: an unrecognised error still has to classify downstream.
     private fun errorCode(error: HttpException): Int? = runCatching {
         JsonParser.parseString(error.response()?.errorBody()?.source()?.peek()?.readUtf8())
             .asJsonObject["code"].asInt

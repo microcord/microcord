@@ -14,6 +14,7 @@ import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
 import com.discord.stores.StoreMessageState
+import com.discord.stores.UserSettings
 import com.discord.stores.StoreMessagesLoader
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.permissions.PermissionUtils
@@ -186,7 +187,7 @@ object ChatListRows {
         rows += ChatListEntry.createGuildTemplateEntries(message)
         rows += ChatListEntry.createGiftEntries(message)
 
-        if (message.getReactionsMap().isNotEmpty()) {
+        if (UserSettings.renderReactions.get() && message.getReactionsMap().isNotEmpty()) {
             val canAddReactions = channel.threadMetadata?.archived != true
             rows += ReactionsEntry(
                 message = message,

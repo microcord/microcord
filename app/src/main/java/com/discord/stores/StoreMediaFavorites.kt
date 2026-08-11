@@ -12,12 +12,7 @@ import java.nio.charset.StandardCharsets
 import kotlin.reflect.KClass
 import rx.Observable
 
-/**
- * Favourite emoji and GIFs, and how often emoji are used.
- *
- * The account owns all three, in the frecency proto; this store is the app's view of them. Emoji
- * frecency is written by the periodic flush rather than on each use — see [beforeSend].
- */
+/** Favourite emoji and GIFs, and emoji frecency, as held in the account's frecency proto. */
 class StoreMediaFavorites(
     private val observationDeck: ObservationDeck,
     private val dispatcher: Dispatcher,
@@ -67,10 +62,7 @@ class StoreMediaFavorites(
     private var emojiKeyToLocal: (String) -> String = { it }
     private var emojiKeyToServer: (String) -> String = { it }
 
-    /**
-     * Emoji frecency is tracked here and only serialised when a type-2 write is already going out,
-     * so a burst of reactions costs no requests of its own.
-     */
+    /** Serialised only when a type-2 write is already going out. */
     val beforeSend = object : UserSettingsProtoWriter.BeforeSend<FrecencyUserSettings.Builder>() {
         override fun writeInto(builder: FrecencyUserSettings.Builder) {
             builder.emojiFrecencyBuilder.clearEmojis()

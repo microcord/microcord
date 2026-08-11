@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.ScrollView.Page">
+    <LinearLayout style="@style/UiKit.ViewGroup.LinearLayout">
+        <TextView android:id="@+id/sensitive_content_sheet_header" android:layout_marginTop="16dp" android:layout_marginBottom="16dp" android:layout_marginStart="16dp" style="@style/UiKit.Sheet.Header.Title"/>
+        <View style="@style/UiKit.Settings.Divider"/>
+        <com.discord.views.CheckedSetting android:id="@+id/sensitive_content_sheet_show" app:cs_text="@string/sensitive_content_show" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+        <com.discord.views.CheckedSetting android:id="@+id/sensitive_content_sheet_blur" app:cs_text="@string/sensitive_content_blur" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+        <com.discord.views.CheckedSetting android:id="@+id/sensitive_content_sheet_block" app:cs_text="@string/sensitive_content_block" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

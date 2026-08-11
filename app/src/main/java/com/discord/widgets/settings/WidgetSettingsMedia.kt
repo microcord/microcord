@@ -6,6 +6,7 @@ import androidx.core.view.ViewCompat
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.stores.StoreStream
+import com.discord.stores.UserSettings
 import com.discord.utilities.view.text.LinkifiedTextView
 import com.discord.views.CheckedSetting
 import rx.functions.Action1
@@ -57,12 +58,21 @@ class WidgetSettingsMedia : AppFragment(R.layout.widget_settings_media) {
             .bind(settings.getIsSyncTextAndImagesEnabled(), settings::setIsSyncTextAndImagesEnabled)
         view.findViewById<CheckedSetting>(R.id.stickers_suggestions)
             .bind(settings.getIsStickerSuggestionsEnabled(), settings::setIsStickerSuggestionsEnabled)
+        view.findViewById<CheckedSetting>(R.id.settings_text_images_descriptions_toggle)
+            .bind(UserSettings.viewImageDescriptions.get(), UserSettings.viewImageDescriptions::set)
+        view.findViewById<CheckedSetting>(R.id.settings_text_images_sticker_autocomplete_toggle)
+            .bind(UserSettings.includeStickersInAutocomplete.get(), UserSettings.includeStickersInAutocomplete::set)
+        view.findViewById<CheckedSetting>(R.id.settings_text_images_reactions_toggle)
+            .bind(UserSettings.renderReactions.get(), UserSettings.renderReactions::set)
+        view.findViewById<CheckedSetting>(R.id.settings_text_images_emoticons_toggle)
+            .bind(UserSettings.convertEmoticons.get(), UserSettings.convertEmoticons::set)
 
         listOf(
             R.id.settings_text_images_display_header,
             R.id.settings_text_images_preview_header,
             R.id.settings_text_images_compression_header,
             R.id.settings_text_images_stickers_header,
+            R.id.settings_text_images_emoji_header,
             R.id.settings_text_images_sync_header,
         ).forEach { id -> ViewCompat.setAccessibilityHeading(view.findViewById<TextView>(id), true) }
     }

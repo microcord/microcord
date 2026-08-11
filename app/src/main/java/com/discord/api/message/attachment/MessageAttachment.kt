@@ -21,6 +21,7 @@ data class MessageAttachment(
     val contentType: String? = null,
     val durationSecs: Double? = null,
     val waveform: String? = null,
+    val description: String? = null,
 ) {
     val type: MessageAttachmentType
         get() {
@@ -42,6 +43,10 @@ data class MessageAttachment(
     companion object {
         const val SPOILER_PREFIX = "SPOILER_"
         const val FLAG_IS_SPOILER = 1 shl 3
+
+        const val FLAG_CONTAINS_EXPLICIT_MEDIA = 1 shl 4
+        const val FLAG_CONTAINS_GORE_CONTENT = 1 shl 6
+        const val FLAG_CONTAINS_SELF_HARM_CONTENT = 1 shl 7
     }
 }
 

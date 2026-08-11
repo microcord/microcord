@@ -9,6 +9,9 @@ import com.discord.app.AppFragment
 import com.discord.models.notification.NotificationSettingsV2
 import com.discord.stores.StoreNotifications
 import com.discord.stores.StoreStream
+import com.discord.stores.UserSettings
+import com.discord.views.RadioManager
+import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings.ReactionNotificationType
 import com.discord.utilities.rx.ui
 import com.discord.views.CheckedSetting
 import rx.Observable
@@ -60,7 +63,8 @@ class WidgetSettingsNotifications : AppFragment(R.layout.widget_settings_notific
                 }
             })
         view.findViewById<CheckedSetting>(R.id.settings_inapp_notifs_switch)
-            .setOnCheckedListener(Action1 { store.setEnabledInApp(it) })
+            .setOnCheckedListener(Action1 { UserSettings.showInAppNotifications.set(it) })
+        bindAccountToggles(view)
         view.findViewById<CheckedSetting>(R.id.settings_notifications_blink)
             .setOnCheckedListener(Action1 { store.setNotificationLightDisabled(it) })
         view.findViewById<CheckedSetting>(R.id.settings_notifications_vibrations)
@@ -125,6 +129,38 @@ class WidgetSettingsNotifications : AppFragment(R.layout.widget_settings_notific
             .setChecked(settings.mentionOnAllMessages, false)
     }
 
+    private fun bindAccountToggles(view: View) {
+        listOf(
+            R.id.settings_notifications_stream to UserSettings.streamNotifications,
+            R.id.settings_notifications_friend_anniversary to UserSettings.friendAnniversaryNotifications,
+            R.id.settings_notifications_voice_activity to UserSettings.voiceActivityNotifications,
+            R.id.settings_notifications_friends_online to UserSettings.friendOnlineNotifications,
+            R.id.settings_notifications_status to UserSettings.statusNotifications,
+            R.id.settings_notifications_friend_gaming to UserSettings.friendGamingActivityNotifications,
+            R.id.settings_notifications_profile_updates to UserSettings.profileUpdateNotifications,
+            R.id.settings_notifications_upcoming_events to UserSettings.upcomingEventNotifications,
+            R.id.settings_notifications_share_online to UserSettings.notifyFriendsOnComeOnline,
+            R.id.settings_notifications_share_profile to UserSettings.notifyFriendsOnProfileUpdate,
+        ).forEach { (id, setting) ->
+            view.findViewById<CheckedSetting>(id).bind(setting.get(), setting::set)
+        }
+
+        val reactionRows = listOf(
+            ReactionNotificationType.REACTION_NOTIFICATION_TYPE_NOTIFICATIONS_ENABLED to
+                view.findViewById<CheckedSetting>(R.id.settings_notifications_reactions_all),
+            ReactionNotificationType.REACTION_NOTIFICATION_TYPE_ONLY_DMS to
+                view.findViewById<CheckedSetting>(R.id.settings_notifications_reactions_dms),
+            ReactionNotificationType.REACTION_NOTIFICATION_TYPE_NOTIFICATIONS_DISABLED to
+                view.findViewById<CheckedSetting>(R.id.settings_notifications_reactions_never),
+        )
+        val radios = RadioManager(reactionRows.map { it.second })
+        val current = UserSettings.reactionNotifications.get()
+        reactionRows.forEach { (type, radio) ->
+            if (type == current) radios.setChecked(radio)
+            radio.setContainerClickListener { UserSettings.reactionNotifications.set(type) }
+        }
+    }
+
     private fun configureUI(settings: NotificationSettingsV2) {
         val root = view ?: return
         root.findViewById<LinearLayout>(R.id.settings_notifications_wrap).visibility =
@@ -132,7 +168,7 @@ class WidgetSettingsNotifications : AppFragment(R.layout.widget_settings_notific
         root.findViewById<CheckedSetting>(R.id.settings_notifications_enabled)
             .setChecked(settings.isEnabled, false)
         root.findViewById<CheckedSetting>(R.id.settings_inapp_notifs_switch)
-            .setChecked(settings.isEnabledInApp, false)
+            .setChecked(UserSettings.showInAppNotifications.get(), false)
         root.findViewById<CheckedSetting>(R.id.settings_notifications_blink)
             .setChecked(settings.isDisableBlink, false)
         root.findViewById<CheckedSetting>(R.id.settings_notifications_vibrations)

@@ -10,6 +10,7 @@ import android.widget.EditText
 import android.widget.TextView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.discord.widgets.chat.input.WidgetChatInputAutocompleteStickerAdapter
 import com.discord.R
 import com.discord.api.commands.ApplicationCommandType
 import com.discord.app.AppComponent
@@ -47,6 +48,16 @@ class InputAutocomplete(
 ) {
 
     private val adapter = ChatInputAutocompleteAdapter()
+    private val stickersHeader: TextView? =
+        stickersContainer.findViewById(R.id.chat_input_stickers_matching_header)
+    private val stickerAdapter: WidgetChatInputAutocompleteStickerAdapter? =
+        stickersContainer.findViewById<RecyclerView>(R.id.chat_input_stickers_recycler)?.let { recycler ->
+            recycler.layoutManager = LinearLayoutManager(recycler.context, LinearLayoutManager.HORIZONTAL, false)
+            WidgetChatInputAutocompleteStickerAdapter(recycler) { sticker ->
+                viewModel.sendSticker(sticker)
+                clearAutocompleteToken()
+            }
+        }
     private val selectedCommandRoot: View? = autocompleteRecyclerView.rootView.findViewById(
         R.id.application_commands_root,
     )
@@ -175,6 +186,17 @@ class InputAutocomplete(
         AutocompleteViewState.Hidden -> hideAutocomplete()
     }
 
+    private fun configureStickers(viewState: AutocompleteViewState.Autocomplete) {
+        val adapter = stickerAdapter
+        if (adapter == null || viewState.stickers.isEmpty()) {
+            stickersContainer.visibility = View.GONE
+            return
+        }
+        stickersContainer.visibility = View.VISIBLE
+        stickersHeader?.setI18nText(R.string.sticker_matching, "prefix" to viewState.token)
+        adapter.setData(viewState.stickers)
+    }
+
     private fun showAutocomplete(viewState: AutocompleteViewState.Autocomplete) {
         adapter.setData(
             renderedItems(viewState),
@@ -182,7 +204,7 @@ class InputAutocomplete(
             sizeToMax = viewState.isLoading && !viewState.isError,
         )
         autocompleteRecyclerView.visibility = View.VISIBLE
-        stickersContainer.visibility = View.GONE
+        configureStickers(viewState)
         if (viewState.isAutocomplete) {
             autocompleteHeader.visibility = if (viewState.token.isBlank()) View.GONE else View.VISIBLE
             autocompleteHeader.setTextColor(
@@ -287,6 +309,24 @@ class InputAutocomplete(
      * captured when the popup was populated: an in-flight keystroke can arrive between render and
      * tap, and replacing a stale range corrupts the composer.
      */
+    /** Drops the `:query` the sticker row answered, since a sticker is sent rather than inserted. */
+    private fun clearAutocompleteToken() {
+        val editable = editText.editableText ?: return
+        val caret = editText.selectionStart.coerceAtLeast(0)
+        val token = AutocompleteModelUtils.getMessageAutocompleteToken(editable, caret..caret) ?: return
+        val start = token.startIndex
+        val end = (token.startIndex + token.token.length).coerceAtMost(editable.length)
+        if (start !in 0..end) return
+        applyingSelection = true
+        try {
+            editable.replace(start, end, "")
+            editText.setSelection(start.coerceAtMost(editable.length))
+        } finally {
+            applyingSelection = false
+        }
+        resyncAfterEdit()
+    }
+
     private fun applySelection(autocompletable: Autocompletable) {
         val editable = editText.editableText ?: return
         val caret = editText.selectionStart.coerceAtLeast(0)

@@ -1858,6 +1858,8 @@ class StoreStream private constructor(
     @StoreThread
     private fun handleUserSettingsProtoInternal(settings: PreloadedUserSettings) {
         userSettings.handleUserSettingsProto(settings)
+        // The delivery policy reads the device copy, so the account's answer is mirrored into it.
+        notifications.setEnabledInApp(UserSettings.showInAppNotifications.get(settings))
         userSettingsSystem.handleUserSettingsProto(settings)
         presences.handleUserSettingsUpdate(
             UserSettings.status.get(settings),

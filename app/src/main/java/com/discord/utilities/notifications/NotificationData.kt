@@ -131,7 +131,9 @@ data class NotificationData(
             PushType.RELATIONSHIP_ADD,
             PushType.STAGE_INSTANCE_CREATE,
             -> true
-            null -> false
+            // An unrecognised type is still worth showing: the server only pushes what the
+            // account opted into, and new notification kinds ship faster than this enum.
+            null -> !customTitle.isNullOrBlank() || !messageContent.isNullOrBlank()
         }
 
         override fun toString(): String = "PushPayload(type=$type, fields=<redacted>)"

@@ -22,10 +22,13 @@ import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import java.lang.reflect.Modifier
 import java.util.concurrent.TimeUnit
+import com.discord.utilities.persister.Persister
+import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import rx.Observable
 import rx.schedulers.TestScheduler
@@ -39,6 +42,12 @@ import rx.schedulers.TestScheduler
  * batch is what the stores do with a response, not how they ask for one.
  */
 class GuildAdminStoresTest {
+
+    // Self-sufficient rather than relying on whichever test class happened to run first.
+    @Before
+    fun initPersister() {
+        Persister.init(Files.createTempDirectory("guild-admin-stores-test").toFile())
+    }
 
     // -- StoreBans ----------------------------------------------------------------------------
 

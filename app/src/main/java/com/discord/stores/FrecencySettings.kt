@@ -2,11 +2,7 @@ package com.discord.stores
 
 import discord_protos.discord_users.v1.FrecencyUserSettingsOuterClass.FrecencyUserSettings
 
-/**
- * The account's frecency and favourites, one declaration each.
- *
- * Unlike [UserSettings] this proto is not in READY; the first read of any setting here fetches it.
- */
+/** The account's frecency and favourites. Unlike [UserSettings], the first read fetches it. */
 object FrecencySettings {
 
     private val store get() = StoreStream.getFrecencyProto()
@@ -44,7 +40,7 @@ object FrecencySettings {
         toProto: FrecencyUserSettings.Builder.(T) -> Unit,
     ) = UserSettingsProtoSetting(store, writer, fromProto, delay, toProto = toProto)
 
-    /** Frecency maps are written by the periodic flush, never on the gesture that changed them. */
+    /** Written by the periodic flush, never on the gesture that changed them. */
     private fun <K> frecency(
         fromProto: (FrecencyUserSettings) -> Map<K, FrecencyUserSettings.FrecencyItem>,
         toProto: FrecencyUserSettings.Builder.(Map<K, FrecencyUserSettings.FrecencyItem>) -> Unit,

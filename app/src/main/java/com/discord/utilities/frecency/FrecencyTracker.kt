@@ -17,7 +17,7 @@ abstract class FrecencyTracker<T : Any>(
     val minScoreThreshold: Int,
     val maxSamples: Int,
 ) {
-    /** One key's account-side record: lifetime uses plus the timestamps the score is derived from. */
+    /** One key as the account stores it. */
     data class Entry(
         val totalUses: Int,
         val recentUses: List<Long>,
@@ -30,7 +30,6 @@ abstract class FrecencyTracker<T : Any>(
     private var sortedKeys: List<T> = emptyList()
     private var dirty: Boolean = true
 
-    /** The score for one key, given the timestamps of its recorded uses. */
     protected abstract fun List<Long>.computeScore(currentTime: Long): Int
 
     @Synchronized
@@ -47,10 +46,7 @@ abstract class FrecencyTracker<T : Any>(
         dirty = true
     }
 
-    /**
-     * Replaces everything with the account's copy. Scores are recomputed rather than restored: the
-     * stored ones were current when some other client wrote them, and the decay has moved on since.
-     */
+    /** Scores are recomputed, not restored: the stored ones have since decayed. */
     @Synchronized
     fun restore(entries: Map<T, Entry>) {
         history.clear()
@@ -62,12 +58,7 @@ abstract class FrecencyTracker<T : Any>(
         dirty = true
     }
 
-    /**
-     * The [limit] most recently used keys, scored for the account.
-     *
-     * Trimming is by last use rather than by score, matching the reference: using [limit] other
-     * keys drops an entry however highly it once scored.
-     */
+    /** Trimmed by last use, not by score, as the reference does. */
     @Synchronized
     fun toEntries(limit: Int, now: Long = ClockFactory.get().currentTimeMillis()): Map<T, Entry> =
         history.entries
