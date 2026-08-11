@@ -193,6 +193,7 @@ class StoreGuilds(
                 putGuild(guild)
                 val members = guild.members.orEmpty().associateBy { it.user.id }
                 members.values.forEach { handleGuildMember(it, guild.id) }
+                putVoiceStateMembers(guild)
                 handleHasRoleAndJoinedAt(guild.id, members)
             }
         }
@@ -209,7 +210,20 @@ class StoreGuilds(
         putGuild(guild)
         val members = guild.members.orEmpty().associateBy { it.user.id }
         members.values.forEach { handleGuildMember(it, guild.id) }
+        putVoiceStateMembers(guild)
         handleHasRoleAndJoinedAt(guild.id, members)
+    }
+
+    /**
+     * A large guild's `members` carries the current user and little else, so the member behind a
+     * voice state arrives only on the state itself. Kept out of [handleHasRoleAndJoinedAt], which
+     * is about the guilds this user belongs to rather than who is in a call.
+     */
+    @StoreThread
+    private fun putVoiceStateMembers(guild: ApiGuild) {
+        guild.voiceStates.orEmpty().forEach { state ->
+            state.member?.let { handleGuildMember(it, guild.id) }
+        }
     }
 
     @StoreThread

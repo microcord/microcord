@@ -62,6 +62,7 @@ class StoreUser(
         payload.privateChannels.orEmpty().flatMap { it.recipients.orEmpty() }.forEach(::putUser)
         payload.relationships.orEmpty().mapNotNull(ModelUserRelationship::user).forEach(::putUser)
         payload.guilds.orEmpty().flatMap { it.members.orEmpty() }.map(GuildMember::user).forEach(::putUser)
+        payload.guilds.orEmpty().flatMap(::voiceStateUsers).forEach(::putUser)
         payload.users.orEmpty().forEach(::updateUser)
         markChanged(MeUpdate, UsersUpdate, UserFetchUpdate)
     }
@@ -75,7 +76,14 @@ class StoreUser(
     }
 
     @StoreThread fun handleChannelCreated(channel: Channel) = channel.recipients.orEmpty().forEach(::updateUser)
-    @StoreThread fun handleGuildAddOrSync(guild: Guild) = guild.members.orEmpty().forEach { updateUser(it.user) }
+    @StoreThread fun handleGuildAddOrSync(guild: Guild) {
+        guild.members.orEmpty().forEach { updateUser(it.user) }
+        voiceStateUsers(guild).forEach(::updateUser)
+    }
+
+    /** In a large guild the user behind a voice state arrives nowhere else. */
+    private fun voiceStateUsers(guild: Guild) =
+        guild.voiceStates.orEmpty().mapNotNull { it.member?.user }
     @StoreThread fun handleGuildMemberAdd(member: GuildMember) = updateUser(member.user)
     @StoreThread fun handleGuildMembersChunk(members: List<GuildMember>) = members.forEach { updateUser(it.user) }
     @StoreThread fun handleGuildScheduledEventUsersFetch(users: List<ApiUser>) = users.forEach(::updateUser)
