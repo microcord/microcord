@@ -1,6 +1,5 @@
 package com.discord.widgets.home
 
-import android.content.SharedPreferences
 import androidx.annotation.MainThread
 import com.discord.api.permission.Permission
 import com.discord.api.user.NsfwAllowance
@@ -19,7 +18,6 @@ import com.discord.stores.StorePermissions
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUser
 import com.discord.stores.StoreUserConnections
-import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
@@ -40,10 +38,8 @@ import rx.subjects.PublishSubject
  *   channel selected anywhere in the app lands the user on the chat with the list closed. The
  *   nav-drawer action stream ([StoreNavigation.PanelAction]) is translated into
  *   [Event.OpenLeftPanel] / [Event.ClosePanels] / [Event.UnlockLeftPanel].
- * * **First-run and upsell modals.** Exactly one modal may be offered per store emission, in a fixed
- *   order — channel onboarding, guild-event upsell, PlayStation upsell, guild-role-subscription
- *   upsell — so two sheets never stack. The guild welcome sheet is outside that chain because it is
- *   keyed to a *specific* guild being lurked rather than to the user.
+ * * **First-run modals.** Channel onboarding may be offered for a new guild member. The guild
+ *   welcome sheet is outside that chain because it is keyed to a *specific* guild being lurked.
  *
  * [Event.AnimatePeekIn] / [Event.AnimatePeekOut] fire on the transition into and out of a peeked
  * thread, which is why [wasThreadPeek] is remembered across emissions.
@@ -64,7 +60,6 @@ class WidgetHomeViewModel(
     navigationPanelActionObservable: Observable<StoreNavigation.PanelAction> =
         storeNavigation.getNavigationPanelAction(),
     private val channelOnboardingManager: ChannelOnboardingManager = ChannelOnboardingManager(),
-    private val sharedPreferences: SharedPreferences = SharedPreferencesProvider.get(),
     private val clock: Clock = ClockFactory.get(),
 ) : AppViewModel<WidgetHomeViewModel.ViewState>(
     ViewState(
@@ -115,7 +110,6 @@ class WidgetHomeViewModel(
         object AnimatePeekIn : Event()
         object AnimatePeekOut : Event()
         data class ShowGuildWelcomeSheet(val guildId: Long) : Event()
-        data class ShowGuildEventUpsell(val guildId: Long) : Event()
     }
 
     private val eventSubject: PublishSubject<Event> = PublishSubject.create()
@@ -205,11 +199,6 @@ class WidgetHomeViewModel(
             ) ->
                 eventSubject.onNext(Event.ShowChannelOnboardingSheet)
 
-            shouldShowGuildEventUpsell(storeState.guildInfo.canManageEvents) -> {
-                sharedPreferences.edit().putBoolean(GUILD_EVENT_UPSELL_CACHE_KEY, true).apply()
-                eventSubject.onNext(Event.ShowGuildEventUpsell(guildId))
-            }
-
         }
 
         previousLeftPanelState = leftPanelState
@@ -223,13 +212,7 @@ class WidgetHomeViewModel(
      * Channel onboarding is offered at the moment the guild list finishes opening for a new user in
      * a guild — never mid-swipe, which is why both the previous and the current panel state matter.
      */
-    private fun shouldShowGuildEventUpsell(canManageEvents: Boolean): Boolean =
-        canManageEvents && !sharedPreferences.getBoolean(GUILD_EVENT_UPSELL_CACHE_KEY, false)
-
     companion object {
-        /** Matches `WidgetGuildScheduledEventUpsellBottomSheet.GUILD_EVENT_UPSELL_CACHE_KEY`. */
-        const val GUILD_EVENT_UPSELL_CACHE_KEY = "CACHE_KEY_GUILD_EVENT_UPSELL"
-
         internal fun shouldShowChannelOnboardingSheet(
             previousLeftPanelState: PanelState?,
             leftPanelState: PanelState,
