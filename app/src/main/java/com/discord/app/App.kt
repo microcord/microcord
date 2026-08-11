@@ -1,6 +1,7 @@
 package com.discord.app
 
 import android.app.Application
+import android.os.Build
 import androidx.appcompat.app.AppCompatDelegate
 import com.discord.dialogs.WidgetMaskedLinksDialog
 import com.discord.stores.StoreStream
@@ -24,7 +25,9 @@ import com.discord.utilities.persister.PersisterConfig
 import com.discord.utilities.time.ClockFactory
 import com.discord.rtcconnection.mediaengine.KrispAssetPack
 import com.discord.utilities.voice.VoiceEngineServiceController
+import com.google.firebase.FirebaseApp
 import java.util.concurrent.atomic.AtomicBoolean
+import java.io.File
 
 class App : Application() {
     override fun onCreate() {
@@ -49,6 +52,10 @@ class App : Application() {
         PersisterConfig.init(this, ClockFactory.get())
         MGImagesConfig.init(this)
         CollectibleAssets.init(this)
+        if (isFcmProcess(currentProcessName(), packageName)) {
+            FirebaseApp.initializeApp(this)
+            return
+        }
         // The reference's UriHandler enqueues the masked-link notice itself; ours has no dependency
         // on the widget tree, so the confirmation dialog installs itself here instead. Without this
         // an untrusted masked link is dropped with no user-visible confirmation.
@@ -72,7 +79,15 @@ class App : Application() {
         MGImagesConfig.onTrimMemory(level)
     }
 
+    private fun currentProcessName(): String? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        getProcessName()
+    } else {
+        runCatching { File("/proc/self/cmdline").readText().trimEnd('\u0000') }.getOrNull()
+    }
+
     companion object {
         private val initialized = AtomicBoolean()
     }
 }
+
+internal fun isFcmProcess(processName: String?, packageName: String) = processName == "$packageName:fcm"

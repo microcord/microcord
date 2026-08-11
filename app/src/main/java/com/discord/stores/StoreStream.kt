@@ -122,7 +122,6 @@ import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.models.domain.ModelCustomStatusSetting
 import com.discord.api.presence.ClientStatus
 import com.discord.utilities.error.RestApiError
-import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.icon.IconUtils
 import com.discord.workers.MessageAckWorker
 import com.discord.widgets.chat.list.actions.MessageActionCoordinator
@@ -3578,9 +3577,7 @@ class StoreStream private constructor(
             BootLog.record(BootLogEvent.PERSISTENCE_READY)
             val preferences = SharedPreferencesProvider.get()
             val sessionDurablePreferences = SharedPreferencesProvider.getPrefsSessionDurable()
-            if (!FeatureFlags.disableHeadlessGatewayEnabled()) {
-                FastConnectBootstrap.start(preferences, sessionDurablePreferences)
-            }
+            FastConnectBootstrap.start(preferences, sessionDurablePreferences)
             return create(
                 StoreThreadScheduler.create(),
                 clock,

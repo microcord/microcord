@@ -82,7 +82,6 @@ import com.discord.models.thread.dto.ModelThreadListSync
 import com.discord.stores.utilities.BatchManager
 import com.discord.stores.utilities.Batched
 import com.discord.utilities.lifecycle.Backgrounded
-import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.time.Clock
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -122,7 +121,6 @@ class StoreGatewayConnection(
     private var tokenSubscription: Subscription? = null
     private var backgroundedSubscription: Subscription? = null
     private var guildSubscriptionsSubscription: Subscription? = null
-    private var hasForegrounded = false
 
     // Connection state
     private val connected = behavior(false)
@@ -265,7 +263,7 @@ class StoreGatewayConnection(
      * The socket is built by [StoreStream] because it needs REST for gateway discovery; everything
      * after construction belongs to this store.
      *
-     * A feature flag may defer the first connection until an activity has resumed. Once foregrounded,
+     * Fast Connect may already own the socket while the graph restores. Once foregrounded,
      * Android backgrounding follows the reference and leaves the socket up.
      */
     fun init(socket: GatewaySocket, awaitingRestoredToken: Boolean = false) {
@@ -287,7 +285,6 @@ class StoreGatewayConnection(
             .observeOn(scheduler)
             .subscribe({ backgrounded ->
                 if (!backgrounded) {
-                    hasForegrounded = true
                     this.socket?.resetBackoff()
                     if (token != null) this.socket?.connect()
                 }
@@ -311,7 +308,7 @@ class StoreGatewayConnection(
     private fun handleTokenUpdate(token: String?) {
         this.token = token
         if (token == null) socket?.close()
-        else if (shouldConnectGateway(FeatureFlags.disableHeadlessGatewayEnabled(), hasForegrounded)) socket?.connect()
+        else socket?.connect()
     }
 
     // region Outgoing
@@ -617,6 +614,3 @@ class StoreGatewayConnection(
         fun <T> SerializedSubject<T, T>.emit(data: Any) = (this as SerializedSubject<Any, Any>).onNext(data)
     }
 }
-
-internal fun shouldConnectGateway(disableHeadlessGateway: Boolean, hasForegrounded: Boolean): Boolean =
-    !disableHeadlessGateway || hasForegrounded

@@ -326,11 +326,18 @@
         <!-- Firebase resolves this by intent filter; it is never started directly. -->
         <service
             android:name="com.discord.utilities.fcm.FCMMessagingService"
-            android:exported="false">
+            android:exported="false"
+            android:process=":fcm">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+        <receiver
+            android:name="com.google.firebase.iid.FirebaseInstanceIdReceiver"
+            android:process=":fcm" />
+        <service
+            android:name="com.google.firebase.messaging.FirebaseMessagingService"
+            android:process=":fcm" />
 
         <service
             android:name="com.discord.utilities.voice.DiscordOverlayService"
