@@ -56,6 +56,7 @@ import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.ui.PlayerControlView
 import com.google.android.exoplayer2.ui.PlayerView
 import com.google.android.material.appbar.AppBarLayout
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.util.concurrent.TimeUnit
 import java.io.Serializable
 import kotlin.math.abs
@@ -264,13 +265,16 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
      * viewer draws one frame and a still is far smaller.
      */
     private fun Context.getFormattedUrl(uri: Uri): String {
+        val source = uri.toString()
+        if ("size" in uri.queryParameterNames) return source
         val extras = launchExtras
         val fitted = resizeToFitScreen(
             this,
             Rect(0, 0, extras.getInt(INTENT_WIDTH, 0), extras.getInt(INTENT_HEIGHT, 0)),
         )
         val format = mediaFormatQuery(uri.lastPathSegment, IconUtils.staticImageExtension)
-        return "$uri?width=${fitted.width()}&height=${fitted.height()}$format"
+        val separator = if ('?' in source) '&' else '?'
+        return "$source${separator}width=${fitted.width()}&height=${fitted.height()}$format"
     }
 
     /** A video keeps its spinner up until the player says otherwise; a still image is done here. */
@@ -736,8 +740,10 @@ internal data class MediaLaunchArgs(
     val mediaType: MediaType?,
 )
 
-internal fun launchArgs(imageUrl: String, title: String?) =
-    MediaLaunchArgs(title, imageUrl, null, imageUrl, null, null, null)
+internal fun launchArgs(imageUrl: String, title: String?): MediaLaunchArgs {
+    val source = profileImageUrl(imageUrl)
+    return MediaLaunchArgs(title, source, null, source, 3072, 3072, null)
+}
 
 internal fun launchArgs(attachment: MessageAttachment): MediaLaunchArgs {
     val isVideo = attachment.type == MessageAttachmentType.VIDEO
@@ -793,6 +799,13 @@ internal fun androidx.fragment.app.Fragment.setScreenStatusBarColor(color: Int) 
  */
 internal fun mediaFormatQuery(lastPathSegment: String?, staticImageExtension: String): String =
     if (lastPathSegment?.endsWith(".gif") == true) "" else "&format=$staticImageExtension"
+
+internal fun profileImageUrl(url: String): String =
+    url.toHttpUrl().newBuilder()
+        .setQueryParameter("quality", "lossless")
+        .setQueryParameter("size", "3072")
+        .build()
+        .toString()
 
 /**
  * Scales [input] down until it fits inside [bounds], preserving its aspect ratio. Never enlarges.

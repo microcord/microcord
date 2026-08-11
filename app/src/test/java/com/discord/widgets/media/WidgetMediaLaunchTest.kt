@@ -23,9 +23,20 @@ class WidgetMediaLaunchTest {
         val args = launchArgs("https://cdn.discordapp.com/avatars/1/hash.webp?size=2048", "user")
 
         assertEquals(args.uri, args.previewImageUri)
+        assertEquals("https://cdn.discordapp.com/avatars/1/hash.webp?quality=lossless&size=3072", args.uri)
+        assertEquals(3072, args.width)
+        assertEquals(3072, args.height)
         assertEquals("user", args.title)
         assertNull(args.progressiveMediaUri)
         assertNull(args.mediaType)
+    }
+
+    @Test
+    fun `profile quality replaces only quality and size`() {
+        assertEquals(
+            "https://cdn.discordapp.com/banner.webp?hash=value&quality=lossless&size=3072#frame",
+            profileImageUrl("https://cdn.discordapp.com/banner.webp?size=128&hash=value&quality=low#frame"),
+        )
     }
 
     private fun attachment(url: String, width: Int? = 800, height: Int? = 600) = MessageAttachment(
