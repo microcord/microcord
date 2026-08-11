@@ -209,6 +209,9 @@ object NotificationClient {
     fun displaySystem(context: Context, data: NotificationData, settings: SettingsV2 = getSettings()): Boolean =
         settings.isEnabled && renderer.render(context, data, settings)
 
+    fun renderLocal(context: Context, data: NotificationData) = renderer.renderLocal(context, data)
+    fun renderGateway(context: Context, data: NotificationData) = renderer.renderGateway(context, data)
+
     fun displaySent(context: Context, channelId: Long, channelName: String, success: Boolean) =
         renderer.displaySent(context, channelId, channelName, success)
 

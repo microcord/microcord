@@ -7,6 +7,7 @@ import android.content.SharedPreferences
 import android.os.Build
 import android.os.LocaleList
 import android.util.Log
+import com.discord.R
 import com.discord.utilities.messagesend.MessageSendLocation
 import com.discord.utilities.user.NicknameUtils
 import com.discord.api.activity.ActivityEmoji
@@ -53,6 +54,7 @@ import com.discord.gateway.GatewaySocket
 import com.discord.gateway.io.DeletedEntityIds
 import com.discord.gateway.io.DeletedEntityIdsRequest
 import com.discord.gateway.io.guildEntityIdsHash
+import com.discord.i18n.i18nFormat
 import com.discord.api.emoji.GuildEmojisUpdate
 import com.discord.api.sticker.GuildStickersUpdate
 import com.discord.api.guildhash.GuildHashes
@@ -91,7 +93,6 @@ import com.discord.models.message.Message as DomainMessage
 import com.discord.utilities.messagesend.MessageSendCoordinator
 import com.discord.utilities.notifications.NotificationData
 import com.discord.utilities.notifications.NotificationKind
-import com.discord.utilities.notifications.NotificationRenderer
 import com.discord.utilities.notifications.NotificationSource
 import com.discord.utilities.fcm.NotificationClient
 import com.discord.widgets.settings.NotificationStore
@@ -766,13 +767,12 @@ class StoreStream private constructor(
         storeUser = users,
         observationDeck = observationDeck,
     )
-    private val notificationRenderer = NotificationRenderer()
     private val notifications = StoreNotifications(
         dispatcher,
         clock,
         observationDeck,
         clearChannelNotifications = { channelId ->
-            if (::applicationContext.isInitialized) notificationRenderer.clearChannel(applicationContext, channelId)
+            if (::applicationContext.isInitialized) NotificationClient.clear(channelId, applicationContext)
         },
         onMessageCandidate = ::deliverNotification,
         // The default token registrar posts to `/users/@me/devices` through the shared REST client.
@@ -1770,6 +1770,19 @@ class StoreStream private constructor(
             Channel.GROUP_DM -> IconUtils.getForChannel(channel, 128)
             else -> IconUtils.getForGuild(guild?.id, guild?.icon, size = 128)
         }
+        val senderName = NicknameUtils.getName(channel.guildId.takeIf { it != 0L }, channel.id, message.author)
+        val sender = message.referencedMessage?.author?.let { repliedAuthor ->
+            applicationContext.i18nFormat(
+                R.string.message_tts_reply,
+                "username" to senderName,
+                "replyUsername" to NicknameUtils.getName(
+                    channel.guildId.takeIf { it != 0L },
+                    channel.id,
+                    repliedAuthor,
+                ),
+                "body" to "",
+            ).toString().trim()
+        } ?: senderName
         val data = NotificationData(
             kind = if (channel.guildId == 0L) NotificationKind.DIRECT_MESSAGE else NotificationKind.MESSAGE,
             channelId = message.channelId,
@@ -1782,7 +1795,7 @@ class StoreStream private constructor(
                 message.stickers?.firstOrNull()?.name ?: message.stickerItems?.firstOrNull()?.name,
                 message.attachments?.firstOrNull()?.filename ?: message.localAttachments?.firstOrNull()?.displayName,
             ),
-            sender = NicknameUtils.getName(channel.guildId.takeIf { it != 0L }, channel.id, message.author),
+            sender = sender,
             conversationTitle = title.takeUnless { channel.type == Channel.DM },
             isGroupConversation = channel.type in setOf(
                 Channel.GUILD_TEXT,
@@ -1807,9 +1820,9 @@ class StoreStream private constructor(
         )
         when (delivery) {
             NotificationPolicy.Delivery.FOREGROUND ->
-                notificationRenderer.renderLocal(applicationContext, data)
+                NotificationClient.renderLocal(applicationContext, data)
             NotificationPolicy.Delivery.SYSTEM ->
-                notificationRenderer.renderGateway(applicationContext, data)
+                NotificationClient.renderGateway(applicationContext, data)
         }
     }
 
