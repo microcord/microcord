@@ -3,6 +3,7 @@ package com.discord.dialogs.useractions
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
@@ -14,21 +15,10 @@ import com.discord.R
 import com.discord.app.AppDialog
 import com.discord.app.AppToast
 import com.discord.app.appViewModels
-import com.discord.utilities.icon.IconUtils
-import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
-import com.discord.widgets.user.getSpannableForUserNameWithDiscrim
-import com.facebook.drawee.view.SimpleDraweeView
 
-/**
- * The overflow menu for another user, opened from the profile's ⋯ button or a long press.
- *
- * Rows come in two groups, as the reference does: what you can copy or edit, then what you can do
- * about the relationship. Which rows appear depends on the relationship — block and unblock are
- * mutually exclusive — and the relationship group is empty for your own profile, which is opened
- * purely for the copy rows.
- */
+/** The overflow menu for a user, anchored under the profile's ⋯ button. */
 class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
 
     private val viewModel: UserActionsDialogViewModel by appViewModels {
@@ -38,16 +28,10 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         )
     }
 
-    /** The avatar URL rarely changes; skipping identical requests avoids a re-decode per emission. */
-    private val avatarChangeDetector = MGImages.DistinctChangeDetector()
-
-    private lateinit var avatar: SimpleDraweeView
-    private lateinit var userName: TextView
     private lateinit var blockItem: TextView
     private lateinit var unblockItem: TextView
     private lateinit var ignoreItem: TextView
     private lateinit var unignoreItem: TextView
-    private lateinit var removeFriendItem: TextView
     private lateinit var friendNicknameItem: TextView
     private lateinit var copyUsernameItem: TextView
     private lateinit var copyLinkItem: TextView
@@ -58,23 +42,21 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        anchorWindow()
         primaryGroup = view.findViewById(R.id.user_actions_dialog_primary_group)
         relationshipGroup = view.findViewById(R.id.user_actions_dialog_relationship_group)
         groupSeparator = view.findViewById(R.id.user_actions_dialog_group_separator)
-        avatar = view.findViewById(R.id.user_actions_dialog_avatar)
-        userName = view.findViewById(R.id.user_actions_dialog_user_name)
         blockItem = view.findViewById(R.id.user_actions_dialog_block_item)
         unblockItem = view.findViewById(R.id.user_actions_dialog_unblock_item)
         ignoreItem = view.findViewById(R.id.user_actions_dialog_ignore_item)
         unignoreItem = view.findViewById(R.id.user_actions_dialog_unignore_item)
-        removeFriendItem = view.findViewById(R.id.user_actions_dialog_remove_friend_item)
         friendNicknameItem = view.findViewById(R.id.user_actions_dialog_friend_nickname_item)
         copyUsernameItem = view.findViewById(R.id.user_actions_dialog_copy_username_item)
         copyLinkItem = view.findViewById(R.id.user_actions_dialog_copy_link_item)
         copyIdItem = view.findViewById(R.id.user_actions_dialog_copy_id_item)
 
         listOf(
-            blockItem, unblockItem, ignoreItem, unignoreItem, removeFriendItem, friendNicknameItem,
+            blockItem, unblockItem, ignoreItem, unignoreItem, friendNicknameItem,
             copyUsernameItem, copyLinkItem, copyIdItem,
         ).forEach(::restoreIconOpacity)
 
@@ -84,9 +66,6 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         }
         ignoreItem.setOnClickListener { confirmIgnore() }
         unignoreItem.setOnClickListener { viewModel.unignoreUser() }
-        removeFriendItem.setOnClickListener {
-            viewModel.removeRelationship(R.string.friend_has_been_deleted)
-        }
         friendNicknameItem.setOnClickListener {
             val state = loadedState() ?: return@setOnClickListener
             FriendNicknameDialog.show(parentFragmentManager, state.user.id, state.friendNickname)
@@ -106,10 +85,6 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
     private fun loadedState(): UserActionsDialogViewModel.ViewState.Loaded? =
         viewModel.viewState as? UserActionsDialogViewModel.ViewState.Loaded
 
-    /**
-     * Android 13 and up shows its own clipboard confirmation, so a toast there would be a second
-     * one saying the same thing.
-     */
     private fun copy(label: String, value: String) {
         requireContext().getSystemService<ClipboardManager>()
             ?.setPrimaryClip(ClipData.newPlainText(label, value))
@@ -117,6 +92,19 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
             AppToast.show(context, R.string.copied)
         }
         dismiss()
+    }
+
+    /** [Gravity.END] measures x from the right edge, so the anchor inset lines the two up. */
+    private fun anchorWindow() {
+        val window = dialog?.window ?: return
+        val top = argumentsOrDefault.getInt(ARG_ANCHOR_TOP, ANCHOR_UNSET)
+        if (top == ANCHOR_UNSET) return
+        window.setGravity(Gravity.TOP or Gravity.END)
+        window.setWindowAnimations(R.style.FadeInOut)
+        window.attributes = window.attributes.apply {
+            y = top
+            x = argumentsOrDefault.getInt(ARG_ANCHOR_END_INSET, 0)
+        }
     }
 
     override fun onViewBoundOrOnResume() {
@@ -132,38 +120,16 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
     }
 
     private fun updateView(state: UserActionsDialogViewModel.ViewState.Loaded) {
-        IconUtils.setIcon(
-            imageView = avatar,
-            url = IconUtils.getForUser(state.user, allowAnimation = true),
-            changeDetector = avatarChangeDetector,
-        )
-        userName.text = getSpannableForUserNameWithDiscrim(
-            user = state.user,
-            // The dialog already resolves the friend nickname for its add/change label; the name at
-            // the top used only the guild nick, so the same sheet showed two different names.
-            nickname = state.userNickname ?: state.friendNickname,
-            context = requireContext(),
-            primaryColorRes = R.attr.colorHeaderPrimary,
-            primaryFont = R.attr.font_primary_semibold,
-            primaryTextSizeSp = R.integer.uikit_textsize_large_sp,
-            secondaryColorRes = R.attr.colorTextMuted,
-            secondaryFont = R.attr.font_primary_normal,
-            secondaryTextSizeSp = R.integer.uikit_textsize_large_sp,
-        )
-
         blockItem.visibility = if (state.showBlockItem) View.VISIBLE else View.GONE
         unblockItem.visibility = if (state.showUnblockItem) View.VISIBLE else View.GONE
         ignoreItem.visibility = if (state.showIgnoreItem) View.VISIBLE else View.GONE
         unignoreItem.visibility = if (state.showUnignoreItem) View.VISIBLE else View.GONE
-        removeFriendItem.visibility = if (state.showRemoveFriendItem) View.VISIBLE else View.GONE
         friendNicknameItem.visibility = if (state.showFriendNicknameItem) View.VISIBLE else View.GONE
         copyIdItem.visibility = if (state.showCopyIdItem) View.VISIBLE else View.GONE
         friendNicknameItem.setText(
             if (state.friendNickname == null) R.string.add_friend_nickname else R.string.change_friend_nickname,
         )
 
-        // The band between the two groups is only a separator, so it goes when either side of it
-        // has nothing left to separate.
         primaryGroup.visibility = if (primaryGroup.hasVisibleChild()) View.VISIBLE else View.GONE
         relationshipGroup.visibility =
             if (relationshipGroup.hasVisibleChild()) View.VISIBLE else View.GONE
@@ -174,20 +140,11 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
     private fun ViewGroup.hasVisibleChild(): Boolean =
         (0 until childCount).any { getChildAt(it).visibility == View.VISIBLE }
 
-    /**
-     * These icons carry `android:alpha="0.6"` in the asset, which a tint multiplies rather than
-     * replaces — so tinting them to the label colour still left them looking disabled.
-     */
+    /** The assets bake in `alpha="0.6"`, which a tint multiplies rather than replaces. */
     private fun restoreIconOpacity(row: TextView) {
         row.compoundDrawablesRelative.firstOrNull()?.mutate()?.alpha = 255
     }
 
-    /**
-     * Ignoring is explained before it happens.
-     *
-     * The reference gates it behind a sheet listing what ignoring does and does not do, because it
-     * is easily mistaken for blocking, and offers the stronger action from inside that sheet.
-     */
     private fun confirmIgnore() {
         IgnoreUserConfirmationSheet.show(
             fragmentManager = parentFragmentManager,
@@ -215,12 +172,32 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         private const val ARG_USER_ID = "com.discord.intent.extra.EXTRA_USER_ID"
         private const val ARG_CHANNEL_ID = "com.discord.intent.extra.EXTRA_CHANNEL_ID"
 
-        /** @param channelId supplies the guild whose nickname is shown; pass 0 outside a guild. */
-        fun show(fragmentManager: FragmentManager, userId: Long, channelId: Long) {
+        private const val ARG_ANCHOR_TOP = "com.discord.intent.extra.EXTRA_ANCHOR_TOP"
+        private const val ARG_ANCHOR_END_INSET = "com.discord.intent.extra.EXTRA_ANCHOR_END_INSET"
+
+        private const val ANCHOR_UNSET = -1
+
+        private const val ANCHOR_GAP_DP = 8
+
+        /** @param anchor the button this hangs under; centred like any dialog without one. */
+        @JvmOverloads
+        fun show(
+            fragmentManager: FragmentManager,
+            userId: Long,
+            channelId: Long,
+            anchor: View? = null,
+        ) {
             UserActionsDialog().apply {
                 arguments = Bundle().apply {
                     putLong(ARG_USER_ID, userId)
                     putLong(ARG_CHANNEL_ID, channelId)
+                    anchor?.let { view ->
+                        val location = IntArray(2).also(view::getLocationOnScreen)
+                        val gap = (ANCHOR_GAP_DP * view.resources.displayMetrics.density).toInt()
+                        val screenWidth = view.resources.displayMetrics.widthPixels
+                        putInt(ARG_ANCHOR_TOP, location[1] + view.height + gap)
+                        putInt(ARG_ANCHOR_END_INSET, screenWidth - location[0] - view.width)
+                    }
                 }
             }.show(fragmentManager, UserActionsDialog::class.java.name)
         }

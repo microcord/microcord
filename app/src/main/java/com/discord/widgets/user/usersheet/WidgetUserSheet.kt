@@ -29,6 +29,8 @@ import com.discord.dialogs.useractions.UserActionsDialog
 import com.discord.app.AppLog
 import com.discord.app.appViewModels
 import com.discord.i18n.i18nFormat
+import com.discord.i18n.i18nRender
+import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.stores.StoreNavigation
 import android.view.ViewTreeObserver
 import com.discord.api.collectibles.ProfileFrameItem
@@ -358,7 +360,6 @@ class WidgetUserSheet : AppBottomSheet() {
         }
         val iconColor = colors?.textDefault
             ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorInteractiveNormal)
-        ImageViewCompat.setImageTintList(binding.userSheetMoreButton, ColorStateList.valueOf(iconColor))
         tintTaggedIcons(iconColor)
         profileActionButtons().forEach { button ->
             button.setTextColor(colors?.textDefault?.let(ColorStateList::valueOf) ?: defaultTextColors.getValue(button))
@@ -649,6 +650,7 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetIncomingFriendRequestHeader.show(visibility.showIncomingRequest)
         binding.userSheetFriendRequestIncomingContainer.show(visibility.showIncomingRequest)
         binding.userSheetMoreButton.show(visibility.showMore)
+        binding.userSheetRemoveFriendButton.show(visibility.showRemoveFriend)
         binding.userSheetProfileEditContainer.show(visibility.showEditProfile)
         binding.userSheetProfileEditButton.setOnClickListener {
             WidgetEditUserOrGuildMemberProfile.launch(requireContext())
@@ -809,13 +811,29 @@ class WidgetUserSheet : AppBottomSheet() {
         }
         binding.userSheetFriendRequestIgnoreButton
             .setOnClickListener { viewModel.removeRelationship(R.string.friend_request_ignored) }
-        binding.userSheetMoreButton.setOnClickListener {
+        binding.userSheetMoreButton.setOnClickListener { anchor ->
             UserActionsDialog.show(
                 parentFragmentManager,
                 argumentsOrDefault.getLong(ARG_USER_ID),
                 argumentsOrDefault.getLong(ARG_CHANNEL_ID),
+                anchor,
             )
         }
+        binding.userSheetRemoveFriendButton.setOnClickListener { confirmRemoveFriend() }
+    }
+
+    private fun confirmRemoveFriend() {
+        val state = viewModel.viewState as? WidgetUserSheetViewModel.ViewState.Loaded ?: return
+        val name = state.user.getDisplayName(state.guildMember?.nick)
+        WidgetNoticeDialog.Builder(requireContext())
+            .setTitle(requireContext().i18nRender(R.string.remove_friend_title, "name" to name))
+            .setMessage(requireContext().i18nRender(R.string.remove_friend_body, "name" to name))
+            .setNegativeButton(R.string.cancel)
+            .setPositiveButton(R.string.remove_friend) {
+                viewModel.removeRelationship(R.string.friend_has_been_deleted)
+            }
+            .setDialogAttrTheme(R.attr.notice_theme_positive_red)
+            .show(parentFragmentManager)
     }
 
     private fun configureStageActions(state: WidgetUserSheetViewModel.ViewState.Loaded) {

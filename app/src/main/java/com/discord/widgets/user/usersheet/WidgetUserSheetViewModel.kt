@@ -211,6 +211,7 @@ class WidgetUserSheetViewModel(
         val showPendingRequest: Boolean,
         val showIncomingRequest: Boolean,
         val showMore: Boolean,
+        val showRemoveFriend: Boolean,
         val showEditProfile: Boolean,
     )
 
@@ -766,9 +767,9 @@ class WidgetUserSheetViewModel(
                 ),
                 showIncomingRequest = showActions &&
                     relationshipType == ModelUserRelationship.TYPE_INVITE_INCOMING,
-                // Not gated on showActions: your own profile has no relationship rows but still
-                // offers the copy ones, which is the only place they live now.
                 showMore = !isSystemUser,
+                showRemoveFriend = showActions &&
+                    relationshipType == ModelUserRelationship.TYPE_FRIEND,
                 showEditProfile = isMe,
             )
         }
