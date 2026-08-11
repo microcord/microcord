@@ -1919,7 +1919,19 @@ class StoreStream private constructor(
             members.forEach { member -> channelMembers.handleGuildMemberUpdate(chunk.guildId, member) }
             guildMemberRequester.handleGuildMembersChunk(chunk)
         }
-        dispatchSubscribe(events.guildMemberListUpdate, "guildMemberListUpdate", channelMembers::handleGuildMemberListUpdate)
+        dispatchSubscribe(events.guildMemberListUpdate, "guildMemberListUpdate") { update ->
+            memberListMembers(update).forEach { rawMember ->
+                val member = rawMember.copy(guildId = update.guildId)
+                users.handleGuildMemberAdd(member)
+                guilds.handleGuildMember(member)
+                member.presence?.let { presence ->
+                    users.handlePresenceUpdate(presence)
+                    presences.handlePresenceUpdate(update.guildId, presence)
+                    gameParty.handlePresenceUpdate(presence)
+                }
+            }
+            channelMembers.handleGuildMemberListUpdate(update)
+        }
 
         // Guild administration
         dispatchSubscribe(events.guildBanAdd, "streamBanAdd", bans::handleBanAdd)
@@ -3836,3 +3848,9 @@ class StoreStream private constructor(
             }
     }
 }
+
+internal fun memberListMembers(update: ModelGuildMemberListUpdate): Sequence<GuildMember> =
+    update.ops.asSequence()
+        .flatMap { operation -> listOfNotNull(operation.item).asSequence() + operation.items.orEmpty() }
+        .filterIsInstance<ModelGuildMemberListUpdate.Item.MemberItem>()
+        .map(ModelGuildMemberListUpdate.Item.MemberItem::member)

@@ -1,6 +1,8 @@
 package com.discord.models.domain
 
+import com.discord.api.presence.ClientStatus
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
+import com.discord.stores.memberListMembers
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import java.io.StringReader
@@ -43,6 +45,8 @@ class ModelGuildMemberListUpdateTest {
         val member = sync.items[1] as ModelGuildMemberListUpdate.Item.MemberItem
         assertEquals(200L, member.member.user.id)
         assertEquals("Tester", member.member.nick)
+        assertEquals(ClientStatus.ONLINE, member.member.presence?.status)
+        assertEquals(listOf(200L, 201L, 200L), memberListMembers(update).map { it.user.id }.toList())
 
         val insert = update.ops[1] as ModelGuildMemberListUpdate.Operation.Insert
         assertEquals(1, insert.index)
@@ -149,7 +153,8 @@ class ModelGuildMemberListUpdateTest {
               "user": {"id": "$userId", "username": "user$userId", "discriminator": "0001"},
               "roles": [],
               "nick": "$nick",
-              "joined_at": "2021-01-01T00:00:00.000000+00:00"
+              "joined_at": "2021-01-01T00:00:00.000000+00:00",
+              "presence": {"user_id": "$userId", "status": "online", "activities": [], "client_status": {"web": "online"}}
             }
         """.trimIndent()
     }

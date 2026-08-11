@@ -9,6 +9,7 @@ import android.widget.ImageView
 import androidx.core.widget.ImageViewCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.api.presence.ClientStatus
 import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.presence.statusIcon
 import com.discord.databinding.WidgetChannelMembersListItemUserBinding
@@ -76,7 +77,9 @@ class ChannelMembersListViewHolderMember(private val binding: WidgetChannelMembe
         }
         binding.root.findViewById<StatusView>(R.id.channel_members_list_item_presence).apply {
             setPresence(data.presence)
-            visibility = if (data.presence == null) View.GONE else View.VISIBLE
+            visibility = if (data.presence?.status == null ||
+                data.presence.status == ClientStatus.OFFLINE || data.presence.status == ClientStatus.INVISIBLE
+            ) View.GONE else View.VISIBLE
         }
         val statusIcon = PresenceUtils.setStatusLine(
             data.presence,
