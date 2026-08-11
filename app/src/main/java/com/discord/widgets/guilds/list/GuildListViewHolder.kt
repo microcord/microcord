@@ -277,7 +277,7 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
         override fun onDragStarted() {
             isDragging = true
             folderView.background =
-                ContextCompat.getDrawable(folderView.context, R.drawable.drawable_squircle_primary_600)
+                ContextCompat.getDrawable(folderView.context, R.drawable.drawable_squircle_folder)
         }
 
         override fun onDragEnded(wasMerge: Boolean) {
