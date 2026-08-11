@@ -9,7 +9,6 @@ import com.discord.models.domain.ModelPayload
 import com.discord.models.embeddedactivities.EmbeddedActivity
 import com.discord.restapi.EmbeddedActivitiesAPI
 import com.discord.stores.updates.ObservationDeck
-import com.discord.api.embeddedactivities.EmbeddedActivityInGuild
 import com.discord.stores.updates.ObservationDeckProvider
 import rx.Observable
 
@@ -85,17 +84,13 @@ class StoreEmbeddedActivities(
     @StoreThread
     fun handleGuildCreate(guild: Guild) = handleEmbeddedActivitiesForGuild(guild)
 
+    /**
+     * READY_SUPPLEMENTAL sends whole instances, which already carry their own channel and guild,
+     * rather than the per-guild activity summaries READY puts on the guild itself.
+     */
     @StoreThread
-    fun handleConnectionOpenSupplemental(guildId: Long, instances: List<EmbeddedActivityInGuild>) {
-        instances.forEach { inGuild ->
-            handleEmbeddedActivityForChannel(
-                channelId = inGuild.channelId,
-                userIds = inGuild.users,
-                apiEmbeddedActivity = inGuild.embeddedActivity,
-                guildId = guildId,
-            )
-        }
-        markChanged()
+    fun handleConnectionOpenSupplemental(instances: List<EmbeddedActivityInstance>) {
+        instances.forEach(::handleEmbeddedActivityUpdateV2)
     }
 
     @StoreThread

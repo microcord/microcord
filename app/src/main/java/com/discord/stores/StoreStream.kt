@@ -3157,7 +3157,7 @@ class StoreStream private constructor(
                 guilds.handleGuildMember(member.copy(user = user), guild.id, isFullGuildMember = true)
             }
             guild.voiceStates?.let { voiceStates.handleVoiceStateUpdates(it) }
-            guild.activityInstances?.let { embeddedActivities.handleConnectionOpenSupplemental(guild.id, it) }
+            guild.activityInstances?.let(embeddedActivities::handleConnectionOpenSupplemental)
         }
 
         presences.handleConnectionOpenSupplemental(

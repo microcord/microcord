@@ -1,6 +1,6 @@
 package com.discord.models.domain
 
-import com.discord.api.embeddedactivities.EmbeddedActivityInGuild
+import com.discord.api.embeddedactivities.EmbeddedActivityInstance
 import com.discord.api.channel.Channel
 import com.discord.api.guildmember.GuildMember
 import com.discord.api.presence.Presence
@@ -26,7 +26,7 @@ data class ModelReadySupplemental(
     data class SupplementalGuild(
         val id: Long = 0,
         @SerializedName("voice_states") val voiceStates: List<VoiceState>? = null,
-        @SerializedName("activity_instances") val activityInstances: List<EmbeddedActivityInGuild>? = null,
+        @SerializedName("activity_instances") val activityInstances: List<EmbeddedActivityInstance>? = null,
     )
 
     /** [guilds] is positional against [ModelReadySupplemental.guilds], not keyed by guild id. */
