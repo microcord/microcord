@@ -2,7 +2,6 @@ package com.discord.api
 
 import com.discord.api.channel.Channel
 import com.discord.api.channel.ForumTag
-import com.discord.api.commands.ApplicationCommand
 import com.discord.api.commands.ApplicationCommandType
 import com.discord.api.commands.CommandTypeAdapter
 import com.discord.api.forum.ForumUnreads
@@ -146,39 +145,6 @@ class ApiDtoFieldParityTest {
         assertEquals(false, unreads.threads[0].missing)
         assertNull(unreads.threads[1].count)
         assertTrue(unreads.threads[1].missing)
-    }
-
-    @Test
-    fun applicationCommandParsesItsOptionTree() {
-        val command = gson.fromJson(
-            """
-            {
-              "id": "1", "application_id": "2", "name": "ban", "description": "Ban a member",
-              "version": "3", "guild_id": "4", "default_permissions": false,
-              "options": [
-                {"type": 6, "name": "user", "description": "Who", "required": true, "default": false,
-                 "choices": [], "autocomplete": false},
-                {"type": 1, "name": "sub", "description": "Sub", "required": false, "default": false,
-                 "choices": [], "autocomplete": false,
-                 "options": [{"type": 3, "name": "reason", "description": "Why", "required": false,
-                              "default": false, "choices": [{"name": "Spam", "value": "spam"}],
-                              "autocomplete": true}]}
-              ]
-            }
-            """.trimIndent(),
-            ApplicationCommand::class.java,
-        )
-
-        assertEquals(1L, command.id)
-        assertEquals(2L, command.applicationId)
-        assertEquals("4", command.guildId)
-        assertEquals(false, command.defaultPermissions)
-        assertEquals(ApplicationCommandType.USER, command.options?.get(0)?.type)
-        assertEquals(ApplicationCommandType.SUBCOMMAND, command.options?.get(1)?.type)
-        val nested = command.options?.get(1)?.options?.first()
-        assertEquals(ApplicationCommandType.STRING, nested?.type)
-        assertEquals(true, nested?.autocomplete)
-        assertEquals("spam", nested?.choices?.first()?.value)
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.discord.api.commands.ApplicationCommandType
 import com.discord.api.commands.ApplicationCommandAutocompleteChoice
 import com.discord.api.commands.CommandChoice
 import com.discord.models.commands.Application
+import com.discord.models.commands.CommandPermissionContext
 import com.discord.models.commands.ApplicationCommand
 import com.discord.models.commands.ApplicationCommandOption
 import com.discord.models.commands.ApplicationSubCommand
@@ -26,21 +27,14 @@ import java.util.concurrent.TimeUnit
 
 class CommandBrowserAndRemoteOptionTest {
     @Test
-    fun discoveryModelGroupsRowsAndAddsPagingPlaceholders() {
+    fun discoveryModelGroupsRowsAndTrailsPlaceholdersWhileLoading() {
         val application = Application(10L, "Tools", commandCount = 1)
         val model = WidgetChatInputDiscoveryCommandsModel.parseModelDiscoveryCommands(
-            myId = 1L,
-            myRoles = emptyList(),
+            permissionContext = CommandPermissionContext(userId = 1L),
             applications = listOf(application),
             discoveryCommands = DiscoverCommands(
                 commands = listOf(command("weather", listOf(option("city")))),
-                currentStartOffset = 2,
-                currentEndOffset = 2,
-                hasMoreBefore = true,
-                hasMoreAfter = true,
-                jumpedSequenceId = 4,
-                jumpedApplicationId = 10L,
-                loadState = LoadState.LoadingDown,
+                loadState = LoadState.Loading,
             ),
             includeHeaders = true,
             placeholdersCount = 3,
@@ -48,11 +42,9 @@ class CommandBrowserAndRemoteOptionTest {
         )
 
         val rows = model.commandsByApplication.single().second
-        assertTrue(rows.take(3).all { it is ApplicationCommandLoadingPlaceholder })
-        assertTrue(rows[3] is ApplicationPlaceholder)
-        assertTrue(rows[4] is ApplicationCommandAutocompletable)
+        assertTrue(rows[0] is ApplicationPlaceholder)
+        assertTrue(rows[1] is ApplicationCommandAutocompletable)
         assertTrue(rows.takeLast(3).all { it is ApplicationCommandLoadingPlaceholder })
-        assertEquals(10L, model.jumpedApplicationId)
     }
 
     @Test
@@ -61,10 +53,9 @@ class CommandBrowserAndRemoteOptionTest {
         val frequent = Application(-2L, "Frequently Used", commandCount = 0, builtIn = true)
         val command = command("weather", emptyList())
         val model = WidgetChatInputDiscoveryCommandsModel.parseModelDiscoveryCommands(
-            1L,
-            emptyList(),
+            CommandPermissionContext(userId = 1L),
             listOf(application, frequent),
-            DiscoverCommands(listOf(command), 0, 0, false, false, 0, null),
+            DiscoverCommands(listOf(command)),
             includeHeaders = true,
             placeholdersCount = 3,
             frecencyCommands = listOf(command),
@@ -241,10 +232,9 @@ class CommandBrowserAndRemoteOptionTest {
         val application = Application(10L, "Tools", commandCount = 1)
         val remote = command("weather", emptyList())
         val discovery = WidgetChatInputDiscoveryCommandsModel.parseModelDiscoveryCommands(
-            1L,
-            emptyList(),
+            CommandPermissionContext(userId = 1L),
             listOf(application),
-            DiscoverCommands(listOf(remote), 0, 0, false, false, 0, null),
+            DiscoverCommands(listOf(remote)),
             includeHeaders = true,
             placeholdersCount = 3,
             frecencyCommands = emptyList(),
@@ -364,7 +354,6 @@ class CommandBrowserAndRemoteOptionTest {
             options = options,
             guildId = 20L,
             version = "1",
-            defaultPermissions = true,
             untranslatedName = untranslatedName,
         )
 }

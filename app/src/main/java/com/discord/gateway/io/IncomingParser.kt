@@ -5,7 +5,6 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.ChannelPinsUpdate
 import com.discord.api.channel.ChannelRecipient
 import com.discord.api.commands.ApplicationCommandAutocompleteResult
-import com.discord.api.commands.GuildApplicationCommands
 import com.discord.api.commands.GuildApplicationCommandIndexUpdate
 import com.discord.api.embeddedactivities.EmbeddedActivityInboundUpdate
 import com.discord.api.embeddedactivities.EmbeddedActivityInstance
@@ -229,7 +228,6 @@ class IncomingParser(private val gson: Gson) {
         "GUILD_STICKERS_UPDATE" -> gson.fromJson(data, GuildStickersUpdate::class.java)
         "SOUNDBOARD_SOUNDS" -> gson.fromJson(data, SoundboardSounds::class.java)
         "GUILD_INTEGRATIONS_UPDATE" -> gson.fromJson(data, ModelGuildIntegration.Update::class.java)
-        "GUILD_APPLICATION_COMMANDS_UPDATE" -> gson.fromJson(data, GuildApplicationCommands::class.java)
         "GUILD_APPLICATION_COMMAND_INDEX_UPDATE" ->
             gson.fromJson(data, GuildApplicationCommandIndexUpdate::class.java)
         "APPLICATION_COMMAND_AUTOCOMPLETE_RESPONSE" ->

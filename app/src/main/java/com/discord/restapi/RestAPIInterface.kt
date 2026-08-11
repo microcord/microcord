@@ -668,11 +668,6 @@ interface RestAPIInterface {
         @Part files: Array<MultipartBody.Part>,
     ): Observable<Void>
 
-    @GET("applications/{botId}/commands")
-    fun getApplicationCommands(
-        @Path("botId") botId: Long,
-    ): Observable<List<com.discord.api.commands.ApplicationCommand>>
-
     // The index is built lazily server side; until it is ready these answer 202 with no body.
     @GET("guilds/{guildId}/application-command-index")
     fun getGuildApplicationCommandIndex(

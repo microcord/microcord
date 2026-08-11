@@ -3,7 +3,6 @@ package com.discord.gateway
 import android.content.SharedPreferences
 import com.discord.api.channel.ChannelRecipient
 import com.discord.api.commands.ApplicationCommandAutocompleteResult
-import com.discord.api.commands.GuildApplicationCommands
 import com.discord.api.embeddedactivities.EmbeddedActivityInboundUpdate
 import com.discord.api.emoji.GuildEmojisUpdate
 import com.discord.api.forum.ForumUnreads
@@ -105,15 +104,7 @@ class GatewayDispatchRoutingTest {
     }
 
     @Test
-    fun routesGuildApplicationCommandsAndAutocomplete() {
-        val commands = dispatch<GuildApplicationCommands>(
-            "GUILD_APPLICATION_COMMANDS_UPDATE",
-            """{"guild_id":10,"updated_at":1234,"nonce":"fixture-nonce","applications":[],"application_commands":[]}""",
-            gateway.guildApplicationCommands,
-        )
-        assertEquals(10L, commands.guildId)
-        assertEquals("fixture-nonce", commands.nonce)
-
+    fun routesApplicationCommandAutocomplete() {
         val autocomplete = dispatch<ApplicationCommandAutocompleteResult>(
             "APPLICATION_COMMAND_AUTOCOMPLETE_RESPONSE",
             """{"nonce":"fixture-nonce","choices":[{"name":"first","value":"1"}]}""",

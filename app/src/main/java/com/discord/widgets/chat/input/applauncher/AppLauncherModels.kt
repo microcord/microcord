@@ -1,10 +1,13 @@
 package com.discord.widgets.chat.input.applauncher
 
+import androidx.annotation.StringRes
+import com.discord.R
 import com.discord.api.applicationdirectory.ApplicationDirectoryApplication
 import com.discord.api.applicationdirectory.ApplicationDirectorySearchResult
 import com.discord.api.embeddedactivities.EmbeddedActivityShelf
 import com.discord.models.commands.Application
 import com.discord.models.commands.ApplicationCommand
+import com.discord.models.commands.sortedForSection
 
 enum class AppLauncherRoute(val routeName: String) {
     HOME("home"),
@@ -52,6 +55,12 @@ data class AppLauncherApplication(
     val searchResultType: AppLauncherSearchResultType = AppLauncherSearchResultType.APPLICATION,
     val promoted: Boolean = false,
     val imageUrl: String? = null,
+    /**
+     * Shown in place of the description when the activity cannot run here. The reference keeps
+     * the row tappable anyway when the cause is the developer's own platform list, so the app
+     * gets the chance to explain itself rather than the row silently vanishing.
+     */
+    @StringRes val unavailableReasonRes: Int? = null,
 )
 
 sealed interface AppLauncherRow {
@@ -238,7 +247,15 @@ internal object AppLauncherRows {
     ): List<AppLauncherRow> = buildList {
         add(AppLauncherRow.Banner(application, interactive = false))
         if (commands.isNotEmpty()) {
-            addAll(commandSection("Commands", AppLauncherSectionName.INSTALLED, commands, listOfNotNull(application.commandApplication), collapsed = false))
+            addAll(
+                commandSection(
+                    "Commands",
+                    AppLauncherSectionName.INSTALLED,
+                    commands.sortedForSection(),
+                    listOfNotNull(application.commandApplication),
+                    collapsed = false,
+                ),
+            )
         } else if (loading) {
             add(AppLauncherRow.Loading)
         }
@@ -311,7 +328,6 @@ internal object AppLauncherRows {
         if (shelf == null) return emptyList()
         val applications = shelf.applications.associateBy { it.id }
         return shelf.activities
-            .filter { "android" in it.supportedPlatforms }
             .sortedBy { it.shelfRank }
             .mapNotNull { config ->
                 val id = config.applicationId ?: return@mapNotNull null
@@ -333,6 +349,8 @@ internal object AppLauncherRows {
                     icon = application.icon,
                     directoryApplication = directoryApplication,
                     searchResultType = AppLauncherSearchResultType.ACTIVITY_APPLICATION,
+                    unavailableReasonRes = R.string.app_launcher_activity_not_available_on_device
+                        .takeIf { "android" !in config.supportedPlatforms },
                     imageUrl = shelf.assets[application.id]
                         ?.firstOrNull { (it.name ?: it.key) == "embedded_cover" }
                         ?.let { asset -> asset.id ?: asset.assetId?.toString() }

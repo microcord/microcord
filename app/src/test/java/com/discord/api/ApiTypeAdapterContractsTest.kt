@@ -4,8 +4,6 @@ import com.discord.api.application.ApplicationType
 import com.discord.api.application.ApplicationTypeAdapter
 import com.discord.api.auth.OAuthScope
 import com.discord.api.auth.OAuthScopeTypeAdapter
-import com.discord.api.commands.ApplicationCommandPermissionType
-import com.discord.api.commands.ApplicationCommandPermissionTypeTypeAdapter
 import com.discord.api.commands.ApplicationCommandType
 import com.discord.api.commands.CommandTypeAdapter
 import com.discord.api.friendsuggestions.AllowedInSuggestionsType
@@ -46,10 +44,6 @@ class ApiTypeAdapterContractsTest {
     private val gson = GsonBuilder()
         .registerTypeAdapter(EmbedType::class.java, EmbedTypeTypeAdapter())
         .registerTypeAdapter(ApplicationCommandType::class.java, CommandTypeAdapter())
-        .registerTypeAdapter(
-            ApplicationCommandPermissionType::class.java,
-            ApplicationCommandPermissionTypeTypeAdapter(),
-        )
         .registerTypeAdapter(AllowedInSuggestionsType::class.java, AllowedInSuggestionsTypeAdapter())
         .registerTypeAdapter(ApplicationType::class.java, ApplicationTypeAdapter())
         .registerTypeAdapter(PriceTierType::class.java, PriceTierTypeAdapter())
@@ -84,26 +78,6 @@ class ApiTypeAdapterContractsTest {
         assertEquals(ApplicationCommandType.ATTACHMENT, gson.fromJson("11", ApplicationCommandType::class.java))
         assertEquals(ApplicationCommandType.UNKNOWN, gson.fromJson("99", ApplicationCommandType::class.java))
         assertEquals("8", gson.toJson(ApplicationCommandType.ROLE, ApplicationCommandType::class.java))
-    }
-
-    @Test
-    fun applicationCommandPermissionTypeRoundTrips() {
-        assertEquals(
-            ApplicationCommandPermissionType.ROLE,
-            gson.fromJson("1", ApplicationCommandPermissionType::class.java),
-        )
-        assertEquals(
-            ApplicationCommandPermissionType.USER,
-            gson.fromJson("2", ApplicationCommandPermissionType::class.java),
-        )
-        assertEquals(
-            ApplicationCommandPermissionType.UNKNOWN,
-            gson.fromJson("7", ApplicationCommandPermissionType::class.java),
-        )
-        assertEquals(
-            "0",
-            gson.toJson(ApplicationCommandPermissionType.UNKNOWN, ApplicationCommandPermissionType::class.java),
-        )
     }
 
     @Test

@@ -6,7 +6,6 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.ChannelPinsUpdate
 import com.discord.api.channel.ChannelRecipient
 import com.discord.api.commands.ApplicationCommandAutocompleteResult
-import com.discord.api.commands.GuildApplicationCommands
 import com.discord.api.commands.GuildApplicationCommandIndexUpdate
 import com.discord.api.embeddedactivities.EmbeddedActivityInboundUpdate
 import com.discord.api.embeddedactivities.EmbeddedActivityInstance
@@ -50,7 +49,6 @@ import com.discord.api.voice.state.VoiceStateUpdateBatch
 import com.discord.gateway.GatewayEventHandler
 import com.discord.gateway.GatewaySocket
 import com.discord.gateway.IdentifyData
-import com.discord.gateway.io.ApplicationCommandRequest
 import com.discord.gateway.io.ForumUnreadsRequest
 import com.discord.gateway.io.ForumUnreadsRequestThread
 import com.discord.gateway.io.GuildSubscriptions
@@ -159,7 +157,6 @@ class StoreGatewayConnection(
     val guildEmojisUpdate = behavior<GuildEmojisUpdate>()
     val guildStickersUpdate = behavior<GuildStickersUpdate>()
     val soundboardSounds = publish<SoundboardSounds>()
-    val guildApplicationCommands = behavior<GuildApplicationCommands>()
     val guildApplicationCommandIndexUpdate = behavior<GuildApplicationCommandIndexUpdate>()
     val applicationCommandAutocompleteResult = behavior<ApplicationCommandAutocompleteResult>()
 
@@ -364,20 +361,6 @@ class StoreGatewayConnection(
     fun updateGuildSubscriptions(guildId: Long, guildSubscriptions: GuildSubscriptions): Boolean =
         requestIfSessionEstablished { it.updateGuildSubscriptions(guildId, guildSubscriptions) }
 
-    fun requestApplicationCommands(
-        guildId: Long,
-        nonce: String,
-        applications: Boolean,
-        query: String? = null,
-        offset: Int? = null,
-        commandLimit: Int,
-        commandIds: List<String>? = null,
-    ): Boolean = requestIfSessionEstablished {
-        it.requestApplicationCommands(
-            ApplicationCommandRequest(guildId, nonce, applications, commandLimit, query, offset, commandIds),
-        )
-    }
-
     fun requestForumUnreads(guildId: Long, channelId: Long, threadMessagePairs: List<Pair<Long, Long>>): Boolean =
         requestIfSessionEstablished {
             it.requestForumUnreads(
@@ -509,7 +492,6 @@ class StoreGatewayConnection(
             "GUILD_STICKERS_UPDATE" -> guildStickersUpdate.emit(data)
             "SOUNDBOARD_SOUNDS" -> soundboardSounds.emit(data)
             "GUILD_INTEGRATIONS_UPDATE" -> guildIntegrationsUpdate.emit(data)
-            "GUILD_APPLICATION_COMMANDS_UPDATE" -> guildApplicationCommands.emit(data)
             "GUILD_APPLICATION_COMMAND_INDEX_UPDATE" -> guildApplicationCommandIndexUpdate.emit(data)
             "APPLICATION_COMMAND_AUTOCOMPLETE_RESPONSE" -> applicationCommandAutocompleteResult.emit(data)
 

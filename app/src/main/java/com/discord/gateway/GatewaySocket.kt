@@ -5,7 +5,6 @@ import android.os.Trace
 import android.util.Log
 import com.discord.api.activity.Activity
 import com.discord.api.presence.ClientStatus
-import com.discord.gateway.io.ApplicationCommandRequest
 import com.discord.gateway.io.CreateStream
 import com.discord.gateway.io.DeleteStream
 import com.discord.gateway.io.ForumUnreadsRequest
@@ -238,10 +237,6 @@ class GatewaySocket(
     fun streamDelete(streamKey: String) = scheduleSend { send(Opcode.STREAM_DELETE, DeleteStream(streamKey)) }
 
     fun streamPing(streamKey: String) = scheduleSend { send(Opcode.OPCODE_STREAM_PING, StreamPing(streamKey)) }
-
-    fun requestApplicationCommands(request: ApplicationCommandRequest) = scheduleSend {
-        send(Opcode.REQUEST_GUILD_APPLICATION_COMMANDS, request, omitNulls = true)
-    }
 
     fun requestForumUnreads(request: ForumUnreadsRequest) = scheduleSend {
         send(Opcode.REQUEST_FORUM_UNREADS, request, omitNulls = true)

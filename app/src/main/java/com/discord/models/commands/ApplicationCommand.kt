@@ -1,6 +1,5 @@
 package com.discord.models.commands
 
-import com.discord.api.commands.ApplicationCommandPermission
 import com.discord.api.commands.ApplicationCommandContext
 import com.discord.api.commands.ApplicationCommandIndexPermissions
 import com.discord.api.commands.ApplicationCommandIndexCommand
@@ -8,9 +7,6 @@ import com.discord.api.commands.ApplicationCommandIndexCommand
 /**
  * A command the chat input can offer, whether it comes from an application ([RemoteApplicationCommand])
  * or from the client itself ([BuiltInCommand]).
- *
- * [permissions] is the flattened `id -> allowed` view of the API's permission overwrites; it is
- * consulted by [hasPermission] together with [defaultPermissions].
  */
 sealed class ApplicationCommand(
     val id: String,
@@ -22,8 +18,6 @@ sealed class ApplicationCommand(
     val builtIn: Boolean = false,
     val guildId: Long? = null,
     val version: String? = null,
-    val defaultPermissions: Boolean? = null,
-    val permissions: Map<Long, Boolean>? = null,
     val execute: ((Map<String, Any?>) -> String)? = null,
     val untranslatedName: String = name,
     val type: Int = 1,
@@ -34,24 +28,28 @@ sealed class ApplicationCommand(
     val integrationTypes: Set<Int>? = null,
     val installationType: Int? = null,
     val nsfw: Boolean = false,
+    val dmPermission: Boolean? = null,
+    val globalPopularityRank: Int? = null,
     val handler: Int? = null,
     val apiCommand: ApplicationCommandIndexCommand? = null,
 )
 
 /**
- * Whether [userId], holding [roles], may invoke this command.
+ * The order an application's own commands are listed in.
  *
- * A per-user overwrite wins outright; otherwise the first role overwrite that grants access wins;
- * otherwise the command's default applies. Commands without a default are unrestricted.
+ * Alphabetical until the server ranks at least one of them, at which point rank wins and
+ * alphabetical order only breaks ties.
  */
-fun ApplicationCommand.hasPermission(userId: Long, roles: List<Long>): Boolean {
-    val defaultPermissions = defaultPermissions ?: return true
-    val permissions = permissions
-    if (permissions != null) {
-        permissions[userId]?.let { return it }
-        roles.map { permissions[it] }.firstOrNull { it == true }?.let { return it }
-    }
-    return defaultPermissions
+fun List<ApplicationCommand>.sortedForSection(): List<ApplicationCommand> {
+    val alphabetical = sortedBy { it.name }
+    if (alphabetical.none { it.globalPopularityRank != null }) return alphabetical
+    return alphabetical.withIndex()
+        .sortedWith(
+            compareBy<IndexedValue<ApplicationCommand>, Int?>(nullsLast()) {
+                it.value.globalPopularityRank
+            }.thenBy { it.index },
+        )
+        .map(IndexedValue<ApplicationCommand>::value)
 }
 
 fun ApplicationCommand.isAvailableIn(guildId: Long, isBotDm: Boolean): Boolean {
@@ -64,33 +62,6 @@ fun ApplicationCommand.isAvailableIn(guildId: Long, isBotDm: Boolean): Boolean {
     return installationType == null || integrationTypes.isNullOrEmpty() || installationType in integrationTypes
 }
 
-fun ApplicationCommand.hasModernPermission(
-    userId: Long,
-    roles: List<Long>,
-    memberPermissions: Long?,
-    isGuildOwner: Boolean = false,
-    channelId: Long? = null,
-    guildId: Long? = null,
-): Boolean {
-    if (isGuildOwner || memberPermissions?.and(8L) == 8L) return true
-    fun ApplicationCommandIndexPermissions?.resolve(): Boolean? {
-        this ?: return null
-        val channelPermission = channelId?.let { channels?.get(it) }
-            ?: guildId?.let { channels?.get(it - 1L) }
-        if (channelPermission == false) return false
-        user?.let { return it }
-        val roleValues = roles.mapNotNull { roleId -> this.roles?.get(roleId) }
-        if (roleValues.any { it }) return true
-        if (roleValues.isNotEmpty()) return false
-        return null
-    }
-    commandPermissions.resolve()?.let { return it }
-    applicationPermissions.resolve()?.let { return it }
-    return defaultMemberPermissions?.let { required ->
-        required != 0L && memberPermissions?.let { it and required == required } == true
-    } ?: hasPermission(userId, roles)
-}
-
 /** A command supplied by an application and advertised over the gateway or REST. */
 class RemoteApplicationCommand(
     id: String,
@@ -100,8 +71,6 @@ class RemoteApplicationCommand(
     options: List<ApplicationCommandOption>,
     guildId: Long?,
     version: String?,
-    defaultPermissions: Boolean? = null,
-    permissions: List<ApplicationCommandPermission>? = null,
     execute: ((Map<String, Any?>) -> String)? = null,
     untranslatedName: String = name,
     type: Int = 1,
@@ -112,6 +81,8 @@ class RemoteApplicationCommand(
     integrationTypes: Set<Int>? = null,
     installationType: Int? = null,
     nsfw: Boolean = false,
+    dmPermission: Boolean? = null,
+    globalPopularityRank: Int? = null,
     handler: Int? = null,
     apiCommand: ApplicationCommandIndexCommand? = null,
 ) : ApplicationCommand(
@@ -122,8 +93,6 @@ class RemoteApplicationCommand(
     options = options,
     guildId = guildId,
     version = version,
-    defaultPermissions = defaultPermissions,
-    permissions = permissions?.associate { it.id to it.permission },
     execute = execute,
     untranslatedName = untranslatedName,
     type = type,
@@ -134,6 +103,8 @@ class RemoteApplicationCommand(
     integrationTypes = integrationTypes,
     installationType = installationType,
     nsfw = nsfw,
+    dmPermission = dmPermission,
+    globalPopularityRank = globalPopularityRank,
     handler = handler,
     apiCommand = apiCommand,
 )
@@ -172,8 +143,6 @@ class ApplicationSubCommand(
     descriptionRes: Int? = null,
     options: List<ApplicationCommandOption>,
     guildId: Long?,
-    defaultPermissions: Boolean? = null,
-    permissions: List<ApplicationCommandPermission>? = null,
     version: String?,
     untranslatedName: String = name,
 ) : ApplicationCommand(
@@ -189,8 +158,6 @@ class ApplicationSubCommand(
     options = options,
     guildId = guildId,
     version = version,
-    defaultPermissions = defaultPermissions,
-    permissions = permissions?.associate { it.id to it.permission },
     untranslatedName = untranslatedName,
     type = rootCommand.type,
     defaultMemberPermissions = rootCommand.defaultMemberPermissions,
@@ -200,5 +167,7 @@ class ApplicationSubCommand(
     integrationTypes = rootCommand.integrationTypes,
     installationType = rootCommand.installationType,
     nsfw = rootCommand.nsfw,
+    dmPermission = rootCommand.dmPermission,
+    globalPopularityRank = rootCommand.globalPopularityRank,
     apiCommand = rootCommand.apiCommand,
 )

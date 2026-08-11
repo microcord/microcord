@@ -12,6 +12,7 @@ import com.discord.stores.CommandAutocompleteState
 import com.discord.stores.StoreStream
 import com.discord.utilities.rx.ui
 import com.discord.widgets.chat.input.AutocompleteStickerItem
+import com.discord.utilities.applicationcommands.CommandPermissionContexts
 import com.discord.widgets.chat.input.WidgetChatInputDiscoveryCommandsModel
 import com.discord.widgets.chat.input.autocomplete.commands.buildRemoteCommandOptionRequest
 import com.discord.widgets.chat.input.autocomplete.commands.AutocompleteCommandUtils
@@ -90,7 +91,6 @@ class AutocompleteViewModel(
     private var commandState: CommandState = CommandState()
     private var pendingRemoteQuery: Pair<String, String>? = null
     private var sentRemoteQuery: Pair<String, String>? = null
-    private var lastJumpedSequenceId = -1
     private val remoteRequests = PublishSubject.create<RemoteOptionRequest>()
     private val events = PublishSubject.create<Event>()
     private val commandBrowserState = BehaviorSubject.create(null as CommandBrowserState?)
@@ -146,7 +146,6 @@ class AutocompleteViewModel(
         commandState = CommandState()
         pendingRemoteQuery = null
         sentRemoteQuery = null
-        lastJumpedSequenceId = -1
         inputMentionsMap = ChatInputMentionsMap("", emptyMap())
         updateViewState(AutocompleteViewState.Hidden)
         selectedCommandState.onNext(SelectedCommandViewState.Hidden)
@@ -361,24 +360,11 @@ class AutocompleteViewModel(
         }
     }
 
+    /** Everything is already loaded, so picking an application is only a scroll. */
     fun selectCommandBrowserApplication(application: Application) {
         val browser = commandState.browser ?: return
-        val position = getCommandBrowserCommandPositions(browser)[application.id]
-        val store = StoreStream.getApplicationCommands()
-        if (position != null && store.hasFetchedApplicationCommands(application.id)) {
-            events.onNext(Event.ScrollAutocompletablesToApplication(application.id, position))
-        } else {
-            store.requestDiscoverCommands(application.id)
-        }
-    }
-
-    fun onCommandsBrowserScroll(firstVisible: Int, lastVisible: Int, itemCount: Int) {
-        val browser = commandState.browser ?: return
-        when {
-            browser.hasMoreBefore && firstVisible <= 3 -> StoreStream.getApplicationCommands().requestLoadMoreUp()
-            browser.hasMoreAfter && lastVisible >= itemCount - 9 ->
-                StoreStream.getApplicationCommands().requestLoadMoreDown()
-        }
+        val position = getCommandBrowserCommandPositions(browser)[application.id] ?: return
+        events.onNext(Event.ScrollAutocompletablesToApplication(application.id, position))
     }
 
     @MainThread
@@ -447,7 +433,6 @@ class AutocompleteViewModel(
         if (selectedCommand == null && currentToken?.token == COMMAND_DISCOVER_TOKEN) {
             val browser = commandState.browser
             if (browser != null) {
-                maybeEmitBrowserJump(browser)
                 updateViewState(
                     AutocompleteViewState.Autocomplete(
                         isAutocomplete = false,
@@ -490,18 +475,6 @@ class AutocompleteViewModel(
         )
     }
 
-    private fun maybeEmitBrowserJump(browser: WidgetChatInputDiscoveryCommandsModel) {
-        val applicationId = browser.jumpedApplicationId ?: return
-        if (browser.jumpedSequenceId == lastJumpedSequenceId) return
-        lastJumpedSequenceId = browser.jumpedSequenceId
-        events.onNext(
-            Event.ScrollAutocompletablesToApplication(
-                applicationId,
-                getCommandBrowserCommandPositions(browser)[applicationId] ?: 3,
-            ),
-        )
-    }
-
     override fun onCleared() {
         subscription?.unsubscribe()
         commandSubscription?.unsubscribe()
@@ -521,22 +494,26 @@ class AutocompleteViewModel(
             val channel = StoreStream.getChannels().getChannel(channelId)
                 ?: return Observable.just(CommandState())
             val commands = StoreStream.getApplicationCommands()
+            val permissionContexts = CommandPermissionContexts(
+                StoreStream.getUsers(),
+                StoreStream.getGuilds(),
+                StoreStream.getChannels(),
+                StoreStream.getPermissions(),
+            )
             return Observable.combineLatest(
-                StoreStream.getUsers().observeMeId(),
-                StoreStream.getGuilds().observeComputed(channel.guildId),
+                permissionContexts.observe(channel),
                 commands.observeGuildApplications(channelId),
                 commands.observeQueryCommands(channelId),
                 commands.observeDiscoverCommands(channelId),
                 commands.observeFrecencyCommands(channel.guildId),
                 commands.observeAutocompleteResults(),
-            ) { myId, members, applications, queryCommands, discovery, frequent, remoteResults ->
+            ) { permissionContext, applications, queryCommands, discovery, frequent, remoteResults ->
                 CommandState(
                     AutocompleteApplicationCommands(
                         applications,
                         queryCommands,
                         WidgetChatInputDiscoveryCommandsModel.parseModelDiscoveryCommands(
-                            myId,
-                            members[myId]?.getRoles().orEmpty(),
+                            permissionContext,
                             applications,
                             discovery,
                             includeHeaders = true,

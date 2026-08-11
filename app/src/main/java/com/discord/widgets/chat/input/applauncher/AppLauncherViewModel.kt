@@ -11,6 +11,8 @@ import com.discord.api.embeddedactivities.EmbeddedActivityShelf
 import com.discord.api.permission.Permission
 import com.discord.models.commands.Application
 import com.discord.models.commands.ApplicationCommand
+import com.discord.models.commands.CommandPermissionContext
+import com.discord.models.commands.hasAccess
 import com.discord.restapi.ApplicationDirectoryAPI
 import com.discord.stores.StoreApplicationCommands
 import com.discord.stores.StoreApplicationDirectory
@@ -18,6 +20,7 @@ import com.discord.stores.StoreApplicationCommandFrecency
 import com.discord.stores.StoreEmbeddedActivities
 import com.discord.stores.StoreStream
 import com.discord.utilities.analytics.AnalyticsUtils
+import com.discord.utilities.applicationcommands.CommandPermissionContexts
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.restSubscribeOn
@@ -40,6 +43,8 @@ class AppLauncherViewModel(
     private val permissionsProvider: (Long) -> Long? = {
         StoreStream.getPermissions().getPermissionsByChannel()[it]
     },
+    private val permissionContextProvider: (Channel) -> CommandPermissionContext =
+        CommandPermissionContexts::snapshot,
     private val fetchShelf: (Long?) -> Observable<EmbeddedActivityShelf> = { guildId ->
         RestAPI.embeddedActivitiesApiOrNull?.let { embeddedActivitiesStore.fetchShelf(it, guildId, force = true) }
             ?: Observable.error(IllegalStateException("Embedded activities API unavailable"))
@@ -58,6 +63,7 @@ class AppLauncherViewModel(
 
     private val channel = channelProvider(channelId)
     private val guildId = channel?.guildId?.takeUnless { it == 0L }
+    private val permissionContext = channel?.let(permissionContextProvider)
     private var applications: List<Application> = emptyList()
     private var installedApplications: List<Application> = emptyList()
     private var serverApplications: List<Application> = emptyList()
@@ -113,7 +119,7 @@ class AppLauncherViewModel(
         subscriptions.add(
             commandsStore.observeQueryCommands(channelId).subscribe(
                 {
-                    commands = it
+                    commands = accessible(it)
                     commandsLoading = false
                     publish()
                 },
@@ -126,7 +132,7 @@ class AppLauncherViewModel(
         subscriptions.add(
             commandsStore.observeDiscoverCommands(channelId).subscribe(
                 {
-                    if (query.isBlank()) commands = it.commands
+                    if (query.isBlank()) commands = accessible(it.commands)
                     commandsLoading = it.loadState.isLoading()
                     publish()
                 },
@@ -139,7 +145,7 @@ class AppLauncherViewModel(
         subscriptions.add(
             commandsStore.observeFrecencyCommands(guildId ?: 0L).subscribe(
                 {
-                    frecentCommands = it
+                    frecentCommands = accessible(it)
                     publish()
                 },
                 { publish() },
@@ -218,7 +224,6 @@ class AppLauncherViewModel(
         selectedCommand = null
         route = AppLauncherRoute.APPLICATION_VIEW
         application.directoryApplication?.let { directoryStore.loadApplication(it.id) }
-        commandsStore.requestInitialApplicationCommands(guildId, application.id, channel?.isPrivate() == true)
         publish()
     }
 
@@ -304,7 +309,7 @@ class AppLauncherViewModel(
                     AppLauncherRows.home(
                         entrypoint,
                         applications,
-                        frecentCommands,
+                        pinnedFrecentCommands(),
                         frecentApplications(),
                         installedApplications,
                         serverApplications,
@@ -373,6 +378,17 @@ class AppLauncherViewModel(
         pendingRestoreCommandId = null
     }
 
+    /**
+     * The index hands back everything the guild has installed; the reference filters it against
+     * the viewer before any of it reaches a list.
+     */
+    private fun accessible(source: List<ApplicationCommand>): List<ApplicationCommand> {
+        val context = permissionContext ?: return source
+        val applicationsById =
+            (applications + installedApplications + serverApplications).associateBy(Application::id)
+        return source.filter { it.hasAccess(context, applicationsById[it.applicationId]) }
+    }
+
     private fun hasLauncherPermission(): Boolean {
         val currentChannel = channel ?: return false
         if (currentChannel.isPrivate()) return true
@@ -385,8 +401,20 @@ class AppLauncherViewModel(
         if (entrypoint != AppLauncherEntrypoint.TEXT) return false
         val currentChannel = channel ?: return false
         if (currentChannel.type !in ACTIVITY_CHANNEL_TYPES) return false
+        // A category is the only parent an activity-capable channel may have, which is what
+        // keeps threads and forum posts out.
+        val parent = currentChannel.parentId.takeIf { it != 0L }?.let(channelProvider)
+        if (parent != null && parent.type != Channel.CATEGORY) return false
         return currentChannel.isPrivate() ||
             PermissionUtils.can(Permission.USE_EMBEDDED_ACTIVITIES, permissionsProvider(channelId))
+    }
+
+    /** The command that was just run leads the row, ahead of the ranking. */
+    private fun pinnedFrecentCommands(): List<ApplicationCommand> {
+        val lastUsedId = applicationFrecencyStore.getLastUsedCommandId() ?: return frecentCommands
+        val lastUsed = (frecentCommands + commands).firstOrNull { it.id == lastUsedId }
+            ?: return frecentCommands
+        return listOf(lastUsed) + frecentCommands.filterNot { it.id == lastUsedId }
     }
 
     private fun frecentApplications(): List<Application> {

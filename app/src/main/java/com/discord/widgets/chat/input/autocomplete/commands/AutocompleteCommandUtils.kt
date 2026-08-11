@@ -5,7 +5,6 @@ import androidx.annotation.VisibleForTesting
 import com.discord.api.commands.ApplicationCommandType
 import com.discord.models.commands.ApplicationCommand
 import com.discord.models.commands.ApplicationCommandOption
-import com.discord.models.commands.hasPermission
 import com.discord.stores.flattenSubCommands
 import com.discord.widgets.chat.input.autocomplete.ApplicationCommandChoiceAutocompletable
 import com.discord.widgets.chat.input.autocomplete.Autocompletable
@@ -135,29 +134,6 @@ object AutocompleteCommandUtils {
         }
     }
 
-    fun getInputCommandContext(
-        input: CharSequence,
-        userId: Long,
-        userRoles: List<Long>,
-        applicationCommands: AutocompleteApplicationCommands,
-        selectedCommand: ApplicationCommand? = null,
-    ): InputCommandContext {
-        val prefix = input.getCommandPrefix() ?: return InputCommandContext()
-        val typed = prefix.drop(1).trimEnd()
-        val retained = selectedCommand?.takeIf {
-            typed == it.name || typed.startsWith("${it.name} ")
-        }
-        val command = retained ?: applicationCommands.queryCommands
-            .flattenSubCommands()
-            .filter { it.hasPermission(userId, userRoles) }
-            .filter { typed == it.name || typed.startsWith("${it.name} ") }
-            .maxByOrNull { it.name.length }
-        val application = command?.let { selected ->
-            applicationCommands.applications.firstOrNull { it.id == selected.applicationId }
-        }
-        return InputCommandContext(application, command)
-    }
-
     fun getInputValidity(
         selectedCommand: ApplicationCommand,
         parsedCommandOptions: Map<ApplicationCommandOption, CommandOptionValue>,
@@ -177,16 +153,6 @@ object AutocompleteCommandUtils {
             }
             put(option, option.isValid(parsed, inputMentionsMap))
         }
-    }
-
-    fun getSelectedCommand(
-        commands: List<ApplicationCommand>,
-        prefix: String,
-        input: String,
-        userId: Long,
-        roles: List<Long>,
-    ): ApplicationCommand? = if (prefix.isEmpty()) null else commands.firstOrNull {
-        input.startsWith("/${it.name} ") && it.hasPermission(userId, roles)
     }
 
     fun getSelectedCommandOption(

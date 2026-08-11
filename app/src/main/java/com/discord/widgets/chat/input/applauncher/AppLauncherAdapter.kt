@@ -134,8 +134,14 @@ class AppLauncherAdapter(
                 application.imageUrl ?: iconUrl(application.id, application.icon),
             )
             binding.appLauncherActivityName.text = application.name
-            binding.appLauncherActivityDescription.text = application.description
-            binding.root.contentDescription = listOf(application.name, application.description).filter(String::isNotBlank).joinToString(", ")
+            val description = application.unavailableReasonRes
+                ?.let(binding.root.context::getString)
+                ?: application.description
+            binding.appLauncherActivityDescription.text = description
+            binding.appLauncherActivityImage.alpha =
+                if (application.unavailableReasonRes == null) 1f else UNAVAILABLE_ALPHA
+            binding.root.contentDescription =
+                listOf(application.name, description).filter(String::isNotBlank).joinToString(", ")
             binding.root.setOnClickListener { onActivitySelected(application) }
         }
     }
@@ -185,6 +191,9 @@ class AppLauncherAdapter(
     companion object {
         private const val TYPE_ROW = 0
         private const val TYPE_ACTIVITY = 1
+
+        /** Dims the artwork of an activity that cannot run here. */
+        private const val UNAVAILABLE_ALPHA = 0.4f
         private const val TYPE_BANNER = 2
         private const val TYPE_STATE = 3
     }

@@ -23,12 +23,15 @@ class StoreApplicationCommandFrecency(
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
     private val frecencyCache: Persister<ApplicationCommandFrecencyTracker> =
         Persister(CACHE_KEY_APPLICATION_COMMANDS, ApplicationCommandFrecencyTracker()),
+    private val lastUsedCommandCache: Persister<String> =
+        Persister(CACHE_KEY_LAST_USED_COMMAND, ""),
 ) : StoreV2() {
 
     private val frecency: ApplicationCommandFrecencyTracker = frecencyCache.get()
 
     private var topCommandIds: MutableMap<Long, List<String>> = LinkedHashMap()
     private var topCommandIdsSnapshot: Map<Long, List<String>> = emptyMap()
+    private var lastUsedCommandIdSnapshot: String? = lastUsedCommandCache.get().takeIf(String::isNotEmpty)
 
     init {
         populateStore()
@@ -36,6 +39,12 @@ class StoreApplicationCommandFrecency(
 
     fun getTopCommandIds(guildId: Long?): List<String> =
         topCommandIdsSnapshot[guildId ?: NO_GUILD].orEmpty()
+
+    /**
+     * The reference pins the command you just ran to the front of the frecency row, ahead of the
+     * ranking, so the thing you are most likely to repeat is always first.
+     */
+    fun getLastUsedCommandId(): String? = lastUsedCommandIdSnapshot
 
     /**
      * Starts with the current value rather than waiting for a dispatch, so the picker never renders
@@ -48,6 +57,7 @@ class StoreApplicationCommandFrecency(
     fun onCommandUsed(guildId: Long?, commandId: String) = dispatcher.schedule {
         frecency.track(key(guildId, commandId))
         frecencyCache.set(frecency, true)
+        lastUsedCommandCache.set(commandId, true)
         topCommandIds[guildId ?: NO_GUILD] = allTopCommandIds(guildId)
         markChanged(this)
     }
@@ -55,6 +65,7 @@ class StoreApplicationCommandFrecency(
     @StoreThread
     fun handlePreLogout() {
         frecencyCache.clear()
+        lastUsedCommandCache.clear()
     }
 
     /** Decodes the persisted tracker into the per-guild view. */
@@ -100,10 +111,12 @@ class StoreApplicationCommandFrecency(
     @StoreThread
     override fun snapshotData() {
         topCommandIdsSnapshot = HashMap(topCommandIds)
+        lastUsedCommandIdSnapshot = lastUsedCommandCache.get().takeIf(String::isNotEmpty)
     }
 
     companion object {
         const val CACHE_KEY_APPLICATION_COMMANDS = "CACHE_KEY_APPLICATION_COMMANDS"
+        const val CACHE_KEY_LAST_USED_COMMAND = "CACHE_KEY_LAST_USED_APPLICATION_COMMAND"
 
         /** Slot for commands used outside any guild. */
         const val NO_GUILD = 0L

@@ -21,27 +21,6 @@ data class Hello(
 )
 
 sealed class OutgoingPayload private constructor() {
-    class ApplicationCommandRequest(
-        val guildId: Long,
-        val query: String? = null,
-        val offset: Int? = null,
-        val limit: Int? = null,
-        val applications: Boolean = false,
-        val nonce: String,
-        val commandIds: List<String>? = null,
-    ) : OutgoingPayload() {
-        constructor(
-            guildId: Long,
-            nonce: String,
-            applications: Boolean,
-            limit: Int?,
-            query: String?,
-            offset: Int?,
-            commandIds: List<String>?,
-        ) : this(guildId, query, offset, limit, applications, nonce, commandIds)
-    }
-
-
     class CreateStream(
         val type: String,
         val channelId: Long,
@@ -164,7 +143,6 @@ sealed class OutgoingPayload private constructor() {
     class WatchStream(val streamKey: String) : OutgoingPayload()
 }
 
-typealias ApplicationCommandRequest = OutgoingPayload.ApplicationCommandRequest
 typealias CreateStream = OutgoingPayload.CreateStream
 typealias DeleteStream = OutgoingPayload.DeleteStream
 typealias ForumUnreadsRequest = OutgoingPayload.ForumUnreadsRequest

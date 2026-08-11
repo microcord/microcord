@@ -58,6 +58,8 @@ sealed class EmbeddedActivityLaunchException(message: String) : IllegalStateExce
     class NitroRequired : EmbeddedActivityLaunchException("Activity requires Nitro")
     class MissingPermission : EmbeddedActivityLaunchException("Missing Use Activities permission")
     class VoiceJoinFailed : EmbeddedActivityLaunchException("Could not join the selected voice channel")
+    class AfkChannel : EmbeddedActivityLaunchException("Activities cannot run in the AFK channel")
+    class MissingConnect : EmbeddedActivityLaunchException("Missing Connect permission")
 }
 
 object EmbeddedActivitySessionManager {
@@ -195,11 +197,22 @@ object EmbeddedActivitySessionManager {
         if ((config.premiumTierRequirement ?: 0) > me.premiumTier.ordinal) {
             throw EmbeddedActivityLaunchException.NitroRequired()
         }
-        if (channel.guildId > 0L && !PermissionUtils.can(
-                Permission.USE_EMBEDDED_ACTIVITIES,
-                StoreStream.getPermissions().getPermissionsByChannel()[channel.id],
-            )
-        ) throw EmbeddedActivityLaunchException.MissingPermission()
+        if (channel.guildId <= 0L) return
+        if (StoreStream.getGuilds().getGuild(channel.guildId)?.afkChannelId == channel.id) {
+            throw EmbeddedActivityLaunchException.AfkChannel()
+        }
+        val permissions = StoreStream.getPermissions().getPermissionsByChannel()[channel.id]
+        if (!PermissionUtils.can(Permission.USE_EMBEDDED_ACTIVITIES, permissions)) {
+            throw EmbeddedActivityLaunchException.MissingPermission()
+        }
+        // Launching in a voice channel we are not already in means joining it first.
+        val alreadyConnected =
+            StoreStream.getVoiceChannelSelected().getSelectedVoiceChannelId() == channel.id
+        if (channel.isGuildVocalChannel() && !alreadyConnected &&
+            !PermissionUtils.can(Permission.CONNECT, permissions)
+        ) {
+            throw EmbeddedActivityLaunchException.MissingConnect()
+        }
     }
 
     internal fun buildUrl(

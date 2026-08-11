@@ -3,7 +3,6 @@ package com.discord.stores
 import android.content.SharedPreferences
 import com.discord.api.activity.ActivityType
 import com.discord.api.channel.Channel
-import com.discord.api.commands.GuildApplicationCommands
 import com.discord.api.embeddedactivities.EmbeddedActivity
 import com.discord.api.embeddedactivities.EmbeddedActivityInboundUpdate
 import com.discord.api.guildjoinrequest.ApplicationStatus
@@ -229,41 +228,6 @@ class StoreStreamWiringTest {
             "StoreChat interaction state must reach StoreMessagesLoader, saw $seen",
             seen.any(StoreMessagesLoader.ChannelLoadedState::isTouchedSinceLastJump),
         )
-    }
-
-    @Test
-    fun applicationCommandResultIsRoutedByNonce() {
-        val commands = StoreStream.getApplicationCommands()
-        commands.requestApplicationCommandsQuery(1L, "wir")
-        val nonce = StoreApplicationCommands::class.java.getDeclaredField("queryNonce").run {
-            isAccessible = true
-            get(commands) as String
-        }
-
-        stream.handleGatewayDispatch(
-            "GUILD_APPLICATION_COMMANDS_UPDATE",
-            GuildApplicationCommands(
-                guildId = 1L,
-                updatedAt = 0L,
-                applications = emptyList(),
-                nonce = nonce,
-                applicationCommands = listOf(
-                    com.discord.api.commands.ApplicationCommand(
-                        id = 44L,
-                        applicationId = 9L,
-                        name = "wired",
-                        description = null,
-                        options = null,
-                        version = "1",
-                        guildId = "1",
-                        defaultPermissions = null,
-                        permissions = null,
-                    ),
-                ),
-            ),
-        )
-
-        assertEquals(listOf("wired"), commands.getQueryCommands().map { it.name })
     }
 
     @Test

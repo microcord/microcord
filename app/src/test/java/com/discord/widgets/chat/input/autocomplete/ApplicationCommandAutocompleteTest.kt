@@ -1,10 +1,11 @@
 package com.discord.widgets.chat.input.autocomplete
 
 import com.discord.api.channel.Channel
-import com.discord.api.commands.ApplicationCommandPermission
-import com.discord.api.commands.ApplicationCommandPermissionType
 import com.discord.api.commands.ApplicationCommandType
+import com.discord.api.permission.Permission
+import com.discord.api.commands.ApplicationCommandIndexPermissions
 import com.discord.models.commands.Application
+import com.discord.models.commands.CommandPermissionContext
 import com.discord.models.commands.ApplicationCommandOption
 import com.discord.models.commands.RemoteApplicationCommand
 import com.discord.widgets.chat.input.models.MentionToken
@@ -18,16 +19,17 @@ class ApplicationCommandAutocompleteTest {
     @Test
     fun commandSourceAttachesApplicationsAndEvaluatesPermissions() {
         val application = Application(10L, "Tools", commandCount = 2)
-        val allowed = command(
-            "1",
-            defaultPermissions = false,
-            permissions = listOf(ApplicationCommandPermission(7L, ApplicationCommandPermissionType.ROLE, true)),
-        )
-        val denied = command("2", defaultPermissions = false)
+        val allowed = command("1", commandPermissions = ApplicationCommandIndexPermissions(roles = mapOf(7L to true)))
+        val denied = command("2", commandPermissions = ApplicationCommandIndexPermissions(roles = mapOf(7L to false)))
 
         val items = ApplicationCommandsAutocompletableSource.createAutocompletables(
-            meId = 1L,
-            roleIds = listOf(7L),
+            permissionContext = CommandPermissionContext(
+                userId = 1L,
+                roleIds = listOf(7L),
+                guildId = 5L,
+                computedPermissions = Permission.VIEW_CHANNEL or Permission.USE_APPLICATION_COMMANDS or
+                    Permission.SEND_MESSAGES,
+            ),
             applications = listOf(application),
             commands = listOf(allowed, denied),
         )[LeadingIdentifier.APP_COMMAND].orEmpty().filterIsInstance<ApplicationCommandAutocompletable>()
@@ -81,8 +83,7 @@ class ApplicationCommandAutocompleteTest {
 
     private fun command(
         id: String,
-        defaultPermissions: Boolean,
-        permissions: List<ApplicationCommandPermission>? = null,
+        commandPermissions: ApplicationCommandIndexPermissions? = null,
     ) = RemoteApplicationCommand(
         id = id,
         applicationId = 10L,
@@ -90,7 +91,6 @@ class ApplicationCommandAutocompleteTest {
         options = emptyList(),
         guildId = 20L,
         version = "1",
-        defaultPermissions = defaultPermissions,
-        permissions = permissions,
+        commandPermissions = commandPermissions,
     )
 }

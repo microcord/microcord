@@ -45,6 +45,7 @@ object ChatInputAutocompletables {
             storeGuilds = StoreStream.getGuilds(),
             storeApplicationCommands = StoreStream.getApplicationCommands(),
             storePermissions = StoreStream.getPermissions(),
+            storeChannels = StoreStream.getChannels(),
         )
     }
 

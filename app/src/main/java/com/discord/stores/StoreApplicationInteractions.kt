@@ -60,6 +60,7 @@ class StoreApplicationInteractions(
     private val dispatcher: Dispatcher,
     private val storeMessages: StoreMessages,
     private val storeLocalActionComponentState: StoreLocalActionComponentState,
+    private val storeApplicationCommandFrecency: StoreApplicationCommandFrecency? = null,
     private val sharedPrefs: SharedPreferences = SharedPreferencesProvider.get(),
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
     private val restApi: () -> RestAPIInterface? = { RestAPI.apiOrNull },
@@ -429,6 +430,7 @@ class StoreApplicationInteractions(
             version = version ?: data.applicationCommand.version,
             applicationCommand = data.applicationCommand.apiCommand,
         )
+        storeApplicationCommandFrecency?.onCommandUsed(guildId, data.applicationCommand.id)
         handleSendApplicationCommandRequest(localSendData, attachments, onSuccess, onFail)
     }
 

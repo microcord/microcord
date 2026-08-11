@@ -21,8 +21,6 @@ import com.discord.api.botuikit.gson.ComponentRuntimeTypeAdapter
 import com.discord.api.botuikit.gson.ComponentTypeTypeAdapter
 import com.discord.api.botuikit.TextStyle
 import com.discord.api.botuikit.TextStyleTypeAdapter
-import com.discord.api.commands.ApplicationCommandPermissionType
-import com.discord.api.commands.ApplicationCommandPermissionTypeTypeAdapter
 import com.discord.api.commands.ApplicationCommandType
 import com.discord.api.commands.CommandTypeAdapter
 import com.discord.api.friendsuggestions.AllowedInSuggestionsType
@@ -113,7 +111,6 @@ fun GsonBuilder.registerDiscordApiTypeAdapters(): GsonBuilder =
         .registerTypeAdapter(GuildScheduledEventStatus::class.java, GuildScheduledEventStatusTypeAdapter())
         .registerTypeAdapter(GuildScheduledEventEntityType::class.java, GuildScheduledEventEntityTypeTypeAdapter())
         .registerTypeAdapter(AllowedInSuggestionsType::class.java, AllowedInSuggestionsTypeAdapter())
-        .registerTypeAdapter(ApplicationCommandPermissionType::class.java, ApplicationCommandPermissionTypeTypeAdapter())
         .registerTypeAdapter(ApplicationCommandType::class.java, CommandTypeAdapter())
         .registerTypeAdapter(ApplicationStatus::class.java, ApplicationStatusTypeAdapter())
         .registerTypeAdapter(ApplicationType::class.java, ApplicationTypeAdapter())

@@ -9,7 +9,6 @@ import com.discord.api.commands.ApplicationCommandIndex
 import com.discord.api.commands.ApplicationCommandIndexCommand
 import com.discord.api.commands.ApplicationIntegrationType
 import com.discord.api.commands.ApplicationCommandType
-import com.discord.api.commands.GuildApplicationCommands
 import com.discord.api.permission.Permission
 import com.discord.models.commands.Application
 import com.discord.models.commands.ApplicationCommand
@@ -34,7 +33,11 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.user.UserUtils.synthesizeApiUser
 import com.discord.widgets.chat.input.models.ApplicationCommandValue
+import java.util.concurrent.TimeUnit
+import retrofit2.Response
 import rx.Observable
+import rx.Scheduler
+import rx.schedulers.Schedulers
 
 /**
  * Everything the slash-command surface reads: which applications a guild exposes, the paged
@@ -45,19 +48,9 @@ import rx.Observable
  * change at wildly different rates — an autocomplete keystroke must not invalidate the application
  * rail — and [snapshotData] copies only what actually changed.
  *
- * **The paging model is the subtle part.** The gateway answers a command request with a *window*
- * into the guild's flat command list, described by [currentStartOffset]/[currentEndOffset] and the
- * per-application starting indexes in [applicationCommandIndexes]. Three request shapes land in the
- * same handler and are told apart by [loadDirectionUp]/[loadDirectionDown]/[jumpedApplicationId]:
- *
- * - a **jump** to an application replaces the window outright and re-anchors the start offset,
- * - a **load-up** prepends the newly arrived commands and shifts the start offset back by however
- *   many were actually new,
- * - a **load-down** appends them,
- * - and a plain load replaces everything from offset zero.
- *
- * Built-in commands are appended only when the window reaches the end of the remote list, which is
- * why [numRemoteCommands] excludes them.
+ * Everything comes from the application command index, which answers with the whole catalogue for
+ * a context in one response, so the query, discover and frecency surfaces are all views over
+ * [indexedCommands] rather than separate requests.
  *
  * This file also carries the declarations the reference kept in `StoreApplicationCommands.kt`
  * ([LoadState], [DiscoverCommands], [CommandAutocompleteState], [CommandOptionAutocompleteQuery],
@@ -69,43 +62,18 @@ class StoreApplicationCommands(
     private val dispatcher: Dispatcher,
     private val storeApplicationCommandFrecency: StoreApplicationCommandFrecency,
     /**
-     * `StoreGatewayConnection::requestApplicationCommands`.
-     *
-     * A function seam rather than the store itself: `StoreGatewayConnection` takes `StoreStream` in
-     * its constructor, so depending on it directly would make this store impossible to exercise
-     * without standing up the whole graph. Returns false when there is no established session,
-     * which is what drives the built-ins-only fallback.
-     */
-    private val gatewayRequest: ApplicationCommandRequester,
-    /**
      * `null` while `StorePermissions` is not wired. Every channel is then treated as unrestricted,
      * which is the same answer the store gives for a DM.
      */
     private val storePermissions: StorePermissions? = null,
     private val restApi: () -> RestAPIInterface? = { RestAPI.apiOrNull },
-    private val applicationIndexRequest: (Long) -> Observable<ApplicationCommandIndex>? = { applicationId ->
-        RestAPI.applicationDirectoryApiOrNull?.applicationCommandIndex(applicationId)
-    },
     private val indexCachePersister: Persister<PersistedIndexCache> =
         Persister(INDEX_CACHE_KEY, PersistedIndexCache()),
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
     private val builtInCommandsProvider: BuiltInCommandsProvider = BuiltInCommands(),
     private val nonceGenerator: NonceGenerator = NonceGenerator(),
+    private val retryScheduler: Scheduler = Schedulers.computation(),
 ) : StoreV2() {
-
-    /** The one thing this store asks the socket to do. */
-    fun interface ApplicationCommandRequester {
-        @Suppress("LongParameterList")
-        fun requestApplicationCommands(
-            guildId: Long,
-            nonce: String,
-            applications: Boolean,
-            query: String?,
-            offset: Int?,
-            commandLimit: Int,
-            commandIds: List<String>?,
-        ): Boolean
-    }
 
     // -- Applications --------------------------------------------------------------------------
 
@@ -113,27 +81,11 @@ class StoreApplicationCommands(
     private var applicationsSnapshot: List<Application> = emptyList()
     private var applicationsMapSnapshot: Map<Long, Application> = emptyMap()
 
-    /** Application id → its first index in the guild's flat command list. */
-    private var applicationCommandIndexes: MutableMap<Long, Int> = LinkedHashMap()
-
-    /** Commands that came from a real application; built-ins are excluded so paging maths works. */
-    private var numRemoteCommands: Int = 0
-
     // -- Discover list -------------------------------------------------------------------------
 
     private var discoverCommands: DiscoverCommands = DiscoverCommands.defaultModelDiscoveryCommands()
     private var discoverCommandsSnapshot: DiscoverCommands = DiscoverCommands.defaultModelDiscoveryCommands()
     private var discoverGuildId: Long? = null
-    private var discoverApplicationId: Long? = null
-    private var isLoadingDiscoveryCommands: Boolean = false
-    private var currentStartOffset: Int = 0
-    private var currentEndOffset: Int = 0
-    private var loadDirectionUp: Boolean = false
-    private var loadDirectionDown: Boolean = false
-    private var jumpedApplicationId: Long? = null
-
-    /** Bumped on every jump so the list can distinguish "same target, asked again" from a no-op. */
-    private var jumpedSequenceId: Int = 0
 
     // -- Query ---------------------------------------------------------------------------------
 
@@ -142,7 +94,6 @@ class StoreApplicationCommands(
     private var queryGuildId: Long? = null
     private var query: String? = null
     private var indexedCommands: List<ApplicationCommand> = emptyList()
-    private val fetchedApplicationIds = LinkedHashSet<Long>()
     private var indexRequestGeneration: Long = 0L
     private var indexedChannelId: Long? = null
     private var indexedGuildId: Long? = null
@@ -157,7 +108,6 @@ class StoreApplicationCommands(
 
     private var frecencyCommands: MutableMap<Long, List<ApplicationCommand>> = LinkedHashMap()
     private var frecencyCommandsSnapshot: Map<Long, List<ApplicationCommand>> = emptyMap()
-    private var frecencyRequests: MutableMap<String, FrecencyRequest> = LinkedHashMap()
 
     // -- Autocomplete --------------------------------------------------------------------------
 
@@ -171,17 +121,7 @@ class StoreApplicationCommands(
 
     private var sessionId: String? = null
     private var connectionReady: Boolean = false
-    private var initialApplicationsRequested: Boolean = false
-    private var pendingGatewayGuildId: Long? = null
     private var pendingBotUser: User? = null
-
-    /** Nonces are correlated per request kind; only one of these matches an inbound payload. */
-    private var applicationNonce: String? = null
-    private var queryNonce: String? = null
-    private var discoverCommandsNonce: String? = null
-
-    /** A frecency request, remembered so the response can be re-ordered back into rank order. */
-    data class FrecencyRequest(val guildId: Long?, val applicationCommandIds: List<String>)
 
     // -- Reads ---------------------------------------------------------------------------------
 
@@ -199,9 +139,6 @@ class StoreApplicationCommands(
     fun getAutocompleteOptionResults(): Map<String, Map<String, CommandAutocompleteState>> =
         autocompleteOptionResultsSnapshot
 
-    /** True when [applicationId]'s slice of the flat list is inside the loaded window. */
-    fun hasFetchedApplicationCommands(applicationId: Long): Boolean = applicationId in fetchedApplicationIds
-
     // -- Observation ---------------------------------------------------------------------------
 
     /**
@@ -216,8 +153,7 @@ class StoreApplicationCommands(
         if (shouldReturnApplicationCommands(channelPermissions)) {
             discoveryCommands
         } else {
-            val builtIns = builtInCommandsProvider.getBuiltInCommands()
-            DiscoverCommands(builtIns, 0, builtIns.size, false, false, 0, null)
+            DiscoverCommands(builtInCommandsProvider.getBuiltInCommands())
         }
     }
 
@@ -265,44 +201,24 @@ class StoreApplicationCommands(
         }
     }
 
-    /**
-     * Flushes whatever was requested while the socket was down.
-     *
-     * [initialApplicationsRequested] latches for the lifetime of the store, so this only ever runs
-     * once — a reconnect does not re-request, matching the reference.
-     */
+    /** Replays the bot DM that arrived while the socket was down. */
     @StoreThread
     fun handleConnectionReady(connectionReady: Boolean) {
         this.connectionReady = connectionReady
-        if (!connectionReady || initialApplicationsRequested) return
-        requestFrecencyCommands(pendingGatewayGuildId ?: 0L)
-        pendingGatewayGuildId?.let(::requestApplications)
+        if (!connectionReady) return
         pendingBotUser?.let(::handleDmUserApplication)
-        if (pendingGatewayGuildId == null && pendingBotUser == null) requestApplications(null)
-        initialApplicationsRequested = true
-        pendingGatewayGuildId = null
         pendingBotUser = null
     }
 
     @StoreThread
     fun handlePreLogout() {
         applications = emptyList()
-        applicationCommandIndexes.clear()
-        numRemoteCommands = 0
         discoverCommands = DiscoverCommands.defaultModelDiscoveryCommands()
         discoverGuildId = null
-        discoverApplicationId = null
-        isLoadingDiscoveryCommands = false
-        currentStartOffset = 0
-        currentEndOffset = 0
-        loadDirectionUp = false
-        loadDirectionDown = false
-        jumpedApplicationId = null
         queryCommands.clear()
         queryGuildId = null
         query = null
         indexedCommands = emptyList()
-        fetchedApplicationIds.clear()
         indexRequestGeneration++
         indexedChannelId = null
         indexedGuildId = null
@@ -311,12 +227,9 @@ class StoreApplicationCommands(
         pendingIndexSources = 0
         loadedIndexSources.clear()
         frecencyCommands.clear()
-        frecencyRequests.clear()
         autocompleteNonceData.clear()
         autocompleteOptionResults.clear()
         connectionReady = false
-        initialApplicationsRequested = false
-        pendingGatewayGuildId = null
         pendingBotUser = null
         sessionId = null
         currentUserId = 0L
@@ -332,39 +245,6 @@ class StoreApplicationCommands(
     }
 
     // -- Gateway handlers ----------------------------------------------------------------------
-
-    /**
-     * `GUILD_APPLICATION_COMMANDS_UPDATE`, routed by nonce.
-     *
-     * The frecency check comes first because a frecency response carries commands *and* would
-     * otherwise match no nonce at all.
-     */
-    @StoreThread
-    fun handleApplicationCommandsUpdate(commandsGateway: GuildApplicationCommands) {
-        val nonce = commandsGateway.nonce
-        if (frecencyRequests.containsKey(nonce)) {
-            handleFrecencyCommandsUpdate(nonce, commandsGateway.applicationCommands.map { it.toSlashCommand() })
-            return
-        }
-        when (nonce) {
-            applicationNonce -> {
-                val remote = commandsGateway.applications
-                    .map { it.toDomainApplication() }
-                    .sortedBy(Application::name)
-                handleGuildApplicationsUpdate(
-                    listOf(builtInCommandsProvider.getFrecencyApplication()) +
-                        remote +
-                        builtInCommandsProvider.getBuiltInApplication(),
-                )
-            }
-
-            queryNonce ->
-                handleQueryCommandsUpdate(commandsGateway.applicationCommands.map { it.toSlashCommand() })
-
-            discoverCommandsNonce ->
-                handleDiscoverCommandsUpdate(commandsGateway.applicationCommands.map { it.toSlashCommand() })
-        }
-    }
 
     /**
      * `APPLICATION_COMMAND_AUTOCOMPLETE_RESPONSE`.
@@ -423,7 +303,6 @@ class StoreApplicationCommands(
         if (!preservePartialIndex) {
             loadedIndexSources.clear()
             indexedCommands = emptyList()
-            fetchedApplicationIds.clear()
             queryCommands.clear()
             discoverCommands = DiscoverCommands.defaultModelDiscoveryCommands().copy(loadState = LoadState.Loading)
             handleGuildApplicationsUpdate(
@@ -457,42 +336,66 @@ class StoreApplicationCommands(
             return@schedule
         }
         if (guildInstall !in loadedIndexSources) {
-            val location = if (guildId != null && guildId > 0L) {
-                api.getGuildApplicationCommandIndex(guildId)
-            } else {
-                api.getChannelApplicationCommandIndex(channelId)
+            requestIndexSource(generation, guildId, isBotDm, guildInstall) {
+                if (guildId != null && guildId > 0L) {
+                    api.getGuildApplicationCommandIndex(guildId)
+                } else {
+                    api.getChannelApplicationCommandIndex(channelId)
+                }
             }
-            requestIndexSource(generation, guildId, isBotDm, guildInstall, location)
         }
         if (userInstall !in loadedIndexSources) {
-            requestIndexSource(generation, guildId, isBotDm, userInstall, api.getUserApplicationCommandIndex())
+            requestIndexSource(generation, guildId, isBotDm, userInstall) {
+                api.getUserApplicationCommandIndex()
+            }
         }
     }
 
+    /**
+     * A cold index answers `202` with no body while the server builds it, so the reference waits
+     * and asks again rather than treating the empty answer as "this context has no commands".
+     */
     private fun requestIndexSource(
         generation: Long,
         guildId: Long?,
         isBotDm: Boolean,
         installationType: Int,
-        request: Observable<ApplicationCommandIndex>,
+        attempt: Int = 1,
+        request: () -> Observable<Response<ApplicationCommandIndex>>,
     ) {
-        request
+        fun finish(index: ApplicationCommandIndex) = dispatcher.schedule {
+            handleIndexSourceFinished(generation, IndexedSource(index, installationType), guildId, isBotDm)
+        }
+        request()
             .restSubscribeOn(false)
             .appSubscribe(
                 StoreApplicationCommands::class.java,
-                errorHandler = {
-                    dispatcher.schedule {
-                        handleIndexSourceFinished(
-                            generation,
-                            IndexedSource(ApplicationCommandIndex(), installationType),
-                            guildId,
-                            isBotDm,
+                errorHandler = { finish(ApplicationCommandIndex()) },
+            ) { response ->
+                val index = response.body()
+                if (response.code() == INDEX_NOT_READY || index == null) {
+                    if (attempt >= INDEX_MAX_TRIES) {
+                        finish(ApplicationCommandIndex())
+                    } else {
+                        retryScheduler.createWorker().schedule(
+                            {
+                                if (generation == indexRequestGeneration) {
+                                    requestIndexSource(
+                                        generation,
+                                        guildId,
+                                        isBotDm,
+                                        installationType,
+                                        attempt + 1,
+                                        request,
+                                    )
+                                }
+                            },
+                            INDEX_RETRY_MS,
+                            TimeUnit.MILLISECONDS,
                         )
                     }
-                },
-            ) { index ->
-                dispatcher.schedule {
-                    handleIndexSourceFinished(generation, IndexedSource(index, installationType), guildId, isBotDm)
+                } else {
+                    finish(index)
                 }
             }
     }
@@ -541,15 +444,8 @@ class StoreApplicationCommands(
         handleGuildApplicationsUpdate(
             listOf(builtInCommandsProvider.getFrecencyApplication(), builtInCommandsProvider.getBuiltInApplication()),
         )
-        val builtIns = builtInCommandsProvider.getBuiltInCommands()
         discoverCommands = DiscoverCommands(
-            commands = builtIns,
-            currentStartOffset = 0,
-            currentEndOffset = builtIns.lastIndex,
-            hasMoreBefore = false,
-            hasMoreAfter = false,
-            jumpedSequenceId = jumpedSequenceId,
-            jumpedApplicationId = null,
+            commands = builtInCommandsProvider.getBuiltInCommands(),
             loadState = LoadState.Failed,
         )
         markChanged(DiscoverCommandsUpdate)
@@ -595,8 +491,6 @@ class StoreApplicationCommands(
             }
         }
         indexedCommands = commands.values.toList()
-        fetchedApplicationIds.clear()
-        indexedCommands.mapTo(fetchedApplicationIds, ApplicationCommand::applicationId)
         val counts = indexedCommands.groupingBy(ApplicationCommand::applicationId).eachCount()
         val realApplications = applications.values.map { it.copy(commandCount = counts[it.id] ?: 0) }
             .sortedBy(Application::name)
@@ -604,7 +498,6 @@ class StoreApplicationCommands(
             listOf(builtInCommandsProvider.getFrecencyApplication()) +
                 realApplications + builtInCommandsProvider.getBuiltInApplication(),
         )
-        numRemoteCommands = indexedCommands.size
         discoverGuildId = guildId
         handleDiscoverCommandsUpdate(indexedCommands)
         query?.let { handleQueryCommandsUpdate(indexedCommands.filterForQuery(it)) }
@@ -629,45 +522,6 @@ class StoreApplicationCommands(
         requestApplicationCommandIndex(channelId, guildId, indexedIsBotDm)
     }
 
-    /**
-     * Asks for the applications available in [guildId] (`null` for a DM).
-     *
-     * Before the socket is ready the guild is parked in [pendingGatewayGuildId] and replayed by
-     * [handleConnectionReady]; without that a channel selected during connect would show an empty
-     * command picker forever.
-     */
-    fun requestApplications(guildId: Long?) {
-        if (!connectionReady) {
-            pendingGatewayGuildId = guildId
-            return
-        }
-        dispatcher.schedule {
-            val nonce = generateNonce()
-            applicationNonce = nonce
-            applications = emptyList()
-            applicationCommandIndexes.clear()
-            markChanged(GuildApplicationsUpdate)
-            if (guildId != null && guildId > 0L) {
-                gatewayRequest.requestApplicationCommands(
-                    guildId = guildId,
-                    nonce = nonce,
-                    applications = true,
-                    query = null,
-                    offset = null,
-                    commandLimit = COMMANDS_LIMIT_PER_REQUEST,
-                    commandIds = null,
-                )
-            } else {
-                handleGuildApplicationsUpdate(
-                    listOf(
-                        builtInCommandsProvider.getFrecencyApplication(),
-                        builtInCommandsProvider.getBuiltInApplication(),
-                    ),
-                )
-            }
-        }
-    }
-
     /** A DM with a bot exposes exactly one application: the bot itself. */
     fun handleDmUserApplication(botUser: User) {
         if (!botUser.isBot) return
@@ -677,9 +531,7 @@ class StoreApplicationCommands(
         }
         dispatcher.schedule {
             frecencyCommands[0L] = emptyList()
-            pendingGatewayGuildId = null
             applications = emptyList()
-            applicationCommandIndexes.clear()
             handleGuildApplicationsUpdate(
                 listOf(
                     builtInCommandsProvider.getFrecencyApplication(),
@@ -697,33 +549,15 @@ class StoreApplicationCommands(
         }
     }
 
+    /** The index holds the whole catalogue, so a query is a filter rather than a request. */
     fun requestApplicationCommandsQuery(guildId: Long?, query: String) = dispatcher.schedule {
-        val nonce = generateNonce()
-        queryNonce = nonce
         if (queryGuildId != guildId) {
             queryCommands.clear()
             markChanged(QueryCommandsUpdate)
         }
         queryGuildId = guildId
         this.query = query
-        if (indexedChannelId != null && indexedGuildId == guildId) {
-            handleQueryCommandsUpdate(indexedCommands.filterForQuery(query))
-            return@schedule
-        }
-        if (guildId != null && guildId > 0L) {
-            gatewayRequest.requestApplicationCommands(
-                guildId = guildId,
-                nonce = nonce,
-                applications = false,
-                query = query,
-                offset = null,
-                commandLimit = COMMANDS_LIMIT_PER_REQUEST,
-                commandIds = null,
-            )
-        } else {
-            // A DM has no server-side command search; only built-ins can match.
-            handleQueryCommandsUpdate(emptyList())
-        }
+        handleQueryCommandsUpdate(indexedCommands.filterForQuery(query))
     }
 
     fun clearQueryCommands() = dispatcher.schedule {
@@ -736,112 +570,9 @@ class StoreApplicationCommands(
         markChanged(AutocompleteResultsUpdate)
     }
 
-    /**
-     * Opens the discover list, optionally anchored at [applicationId].
-     *
-     * [forDmDiscover] suppresses the anchor: a DM's list is short enough to show whole, so jumping
-     * inside it would only scroll away from the top.
-     */
-    @JvmOverloads
-    fun requestInitialApplicationCommands(
-        guildId: Long?,
-        applicationId: Long?,
-        forDmDiscover: Boolean = false,
-    ) {
-        if (applicationId != null && hasFetchedApplicationCommands(applicationId)) return
-        var offset = 0
-        loadDirectionUp = false
-        loadDirectionDown = false
-        if (!forDmDiscover) jumpedApplicationId = applicationId
-        if (jumpedApplicationId != null) jumpedSequenceId++
-        if (applicationId != null) {
-            // Only `commands` is reset — the offsets are re-anchored just below and the jump
-            // bookkeeping must survive.
-            discoverCommands = discoverCommands.copy(commands = emptyList())
-            applicationCommandIndexes[applicationId]?.let { index ->
-                offset = index
-                currentStartOffset = index
-                currentEndOffset = index
-            }
-            if (applicationId == builtInCommandsProvider.getBuiltInApplication().id) {
-                // The built-in application never round-trips through the gateway.
-                dispatcher.schedule {
-                    handleDiscoverCommandsUpdate(builtInCommandsProvider.getBuiltInCommands())
-                }
-                return
-            }
-        }
-        requestApplicationCommands(guildId, offset, applicationId, COMMANDS_LIMIT_PER_REQUEST)
-    }
-
-    fun requestDiscoverCommands(applicationId: Long) {
-        requestInitialApplicationCommands(discoverGuildId, applicationId, discoverGuildId == null)
-    }
-
-    fun requestLoadMoreDown() {
-        val guildId = discoverGuildId ?: return
-        requestApplicationCommands(guildId, currentEndOffset + 1, null, COMMANDS_LIMIT_PER_REQUEST)
-        loadDirectionUp = false
-        loadDirectionDown = true
-        jumpedApplicationId = null
-        discoverCommands = discoverCommands.copy(loadState = LoadState.LoadingDown)
-    }
-
-    /**
-     * Walks the window back one page.
-     *
-     * When fewer than a page remain before the start, the offset clamps to zero and the *limit*
-     * shrinks to what is left, so the request never overlaps the already-loaded region.
-     */
-    fun requestLoadMoreUp() {
-        val guildId = discoverGuildId ?: return
-        val offset: Int
-        val limit: Int
-        if (currentStartOffset - COMMANDS_LIMIT_PER_REQUEST < 0) {
-            offset = 0
-            limit = currentStartOffset
-        } else {
-            offset = currentStartOffset - COMMANDS_LIMIT_PER_REQUEST
-            limit = COMMANDS_LIMIT_PER_REQUEST
-        }
-        requestApplicationCommands(guildId, offset, null, limit)
-        loadDirectionUp = true
-        loadDirectionDown = false
-        jumpedApplicationId = null
-        discoverCommands = discoverCommands.copy(loadState = LoadState.LoadingUp)
-    }
-
-    /**
-     * Re-requests the commands behind the frecency shortlist so their full definitions are known.
-     *
-     * Only numeric, positive ids are asked for: a negative id belongs to a built-in command and a
-     * non-numeric one to a sub-command, and neither exists server-side. If nothing survives that
-     * filter — or the socket rejects the request — the shortlist is resolved to empty rather than
-     * left pending.
-     */
-    fun requestFrecencyCommands(guildId: Long) {
-        val topCommandIds = storeApplicationCommandFrecency.getTopCommandIds(guildId)
-        val nonce = generateNonce()
-        val request = FrecencyRequest(guildId, topCommandIds)
-        if (frecencyRequests.containsValue(request)) return
-        frecencyRequests[nonce] = request
-
-        val remoteIds = topCommandIds
-            .map { it.substringBefore(' ') }
-            .filter { (it.toLongOrNull() ?: 0L) > 0L }
-            .distinct()
-
-        val requested = remoteIds.isNotEmpty() &&
-            gatewayRequest.requestApplicationCommands(
-                guildId = guildId,
-                nonce = nonce,
-                applications = false,
-                query = null,
-                offset = null,
-                commandLimit = COMMANDS_LIMIT_PER_REQUEST,
-                commandIds = remoteIds,
-            )
-        if (!requested) dispatcher.schedule { handleFrecencyCommandsUpdate(nonce, emptyList()) }
+    /** Resolves the frecency shortlist against the index, in rank order. */
+    fun requestFrecencyCommands(guildId: Long) = dispatcher.schedule {
+        handleFrecencyCommandsUpdate(guildId)
     }
 
     /**
@@ -944,224 +675,23 @@ class StoreApplicationCommands(
 
     // -- Internal state transitions ------------------------------------------------------------
 
-    /**
-     * Issues one page request against the gateway, or falls back to REST for a DM bot.
-     *
-     * De-duplicated on [isLoadingDiscoveryCommands]: paging is scroll-driven and would otherwise
-     * fire several overlapping requests per fling. Switching guild clears the list; staying in the
-     * same guild keeps it and only updates the load state, which is what makes "load more" append
-     * rather than flash empty.
-     */
-    private fun requestApplicationCommands(
-        guildId: Long?,
-        offset: Int = 0,
-        applicationId: Long? = null,
-        limit: Int = COMMANDS_LIMIT_PER_REQUEST,
-    ) = dispatcher.schedule {
-        if (isLoadingDiscoveryCommands) return@schedule
-        val nonce = generateNonce()
-        discoverCommandsNonce = nonce
-        val loadState =
-            if (loadDirectionDown || loadDirectionUp) discoverCommands.loadState else LoadState.Loading
-
-        discoverCommands = if (discoverGuildId != guildId) {
-            discoverCommands.copy(commands = emptyList(), loadState = loadState)
-        } else {
-            discoverCommands.copy(loadState = loadState)
-        }
-        markChanged(DiscoverCommandsUpdate)
-
-        discoverGuildId = guildId
-        when {
-            guildId != null && guildId > 0L -> {
-                val requested = gatewayRequest.requestApplicationCommands(
-                    guildId = guildId,
-                    nonce = nonce,
-                    applications = false,
-                    query = null,
-                    offset = offset,
-                    commandLimit = limit,
-                    commandIds = null,
-                )
-                isLoadingDiscoveryCommands = requested
-                if (!requested) handleDiscoverCommandsUpdate(builtInCommandsProvider.getBuiltInCommands())
-            }
-
-            applicationId != null -> {
-                val cached = indexedCommands.filter { it.applicationId == applicationId }
-                if (applicationId in fetchedApplicationIds) {
-                    handleRestApplicationCommands(applicationId, cached)
-                } else if (applicationId != discoverApplicationId) {
-                    isLoadingDiscoveryCommands = true
-                    getApplicationCommandsViaRest(applicationId)
-                }
-            }
-
-            else -> handleDiscoverCommandsUpdate(builtInCommandsProvider.getBuiltInCommands())
-        }
-        discoverApplicationId = applicationId
-    }
-
-    /**
-     * Per-app fallback uses the modern RN application-command index.
-     *
-     * The response rewrites the bot's entry in [applications] with the real command count and — a
-     * reference quirk worth knowing — with the *application id carried by the first command*, which
-     * is the same value in practice but is what gets stored.
-     */
-    private fun getApplicationCommandsViaRest(applicationId: Long) {
-        val request = applicationIndexRequest(applicationId)
-        if (request == null) {
-            dispatcher.schedule { isLoadingDiscoveryCommands = false }
-            return
-        }
-        request
-            .restSubscribeOn(false)
-            .appSubscribe(
-                StoreApplicationCommands::class.java,
-                errorHandler = { dispatcher.schedule { isLoadingDiscoveryCommands = false } },
-            ) { index ->
-                dispatcher.schedule { handleRestApplicationCommandIndex(applicationId, index) }
-            }
-    }
-
-    @StoreThread
-    private fun handleRestApplicationCommandIndex(
-        applicationId: Long,
-        index: ApplicationCommandIndex,
-    ) {
-        val indexedApplication = index.applications.firstOrNull { it.id == applicationId }
-        val commands = index.applicationCommands
-            .filter { it.applicationId == applicationId && it.type == ApplicationCommandIndexCommand.TYPE_CHAT_INPUT }
-            .map { it.toSlashCommand(indexedApplication?.permissions, installationType = null) }
-        handleRestApplicationCommands(applicationId, commands, indexedApplication)
-    }
-
-    @StoreThread
-    private fun handleRestApplicationCommands(
-        applicationId: Long,
-        commands: List<ApplicationCommand>?,
-        indexedApplication: com.discord.api.commands.ApplicationCommandIndexApplication? = null,
-    ) {
-        discoverApplicationId = null
-        isLoadingDiscoveryCommands = false
-        val commandCount = commands?.size ?: 0
-        val updated = ArrayList(applications)
-        val index = updated.indexOfFirst { it.id == applicationId }
-        val previous = if (index >= 0) updated.removeAt(index) else null
-        val application = Application(
-            id = applicationId,
-            name = indexedApplication?.bot?.username ?: indexedApplication?.name ?: previous?.name ?: return,
-            icon = indexedApplication?.icon ?: previous?.icon,
-            commandCount = commandCount,
-            bot = indexedApplication?.bot ?: previous?.bot,
-            builtIn = previous?.builtIn == true,
-            permissions = indexedApplication?.permissions ?: previous?.permissions,
-            installationTypes = previous?.installationTypes.orEmpty(),
-            botId = indexedApplication?.botId ?: indexedApplication?.bot?.id ?: previous?.botId,
-        )
-        updated.add(if (index >= 0) index else updated.indexOfLast(Application::builtIn).coerceAtLeast(0), application)
-        applications = updated
-
-        val slashCommands = commands.orEmpty()
-        indexedCommands = (indexedCommands.filterNot { it.applicationId == applicationId } + slashCommands)
-            .distinctBy(ApplicationCommand::id)
-        fetchedApplicationIds += applicationId
-        numRemoteCommands = indexedCommands.size
-        handleGuildApplicationsUpdate(applications.toList())
-
-        // Resolve the DM frecency shortlist locally; there is no gateway round-trip to do it.
-        val allCommands = slashCommands + builtInCommandsProvider.getBuiltInCommands()
-        val topIds = storeApplicationCommandFrecency.getTopCommandIds(0L)
-            .filter { id ->
-                val numeric = id.toIntOrNull() ?: 0
-                numeric < 0 || slashCommands.any { it.id == id }
-            }
-        frecencyCommands[0L] = topIds.mapNotNull { id -> allCommands.firstOrNull { it.id == id } }
-        markChanged(FrecencyCommandsUpdate)
-
-        handleDiscoverCommandsUpdate(indexedCommands)
-        handleQueryCommandsUpdate(indexedCommands.filterForQuery(query.orEmpty()))
-    }
-
     @StoreThread
     private fun handleGuildApplicationsUpdate(commands: List<Application>) {
         applications = commands
-        applicationCommandIndexes.clear()
-        numRemoteCommands = 0
-        var index = 0
-        commands.forEach { application ->
-            applicationCommandIndexes[application.id] = index
-            index += application.commandCount
-            if (!application.builtIn) numRemoteCommands += application.commandCount
-        }
         markChanged(GuildApplicationsUpdate)
     }
 
-    /**
-     * Merges an incoming page into the discover window. See the class doc for the three shapes.
-     *
-     * The built-in commands are appended only when the window's far edge reaches the end of the
-     * remote list, so they always sit last and are never duplicated by a subsequent page.
-     */
+    /** Built-ins sit after everything the index knows about. */
     @StoreThread
     private fun handleDiscoverCommandsUpdate(commands: List<ApplicationCommand>) {
-        isLoadingDiscoveryCommands = false
-        val jumpedTo = jumpedApplicationId
-        val existing = discoverCommands.commands.toMutableList()
-        val previousSize = existing.size
-
-        val merged: MutableList<ApplicationCommand> = when {
-            jumpedTo != null -> {
-                currentStartOffset = applicationCommandIndexes[jumpedTo] ?: 0
-                commands.toMutableList()
-            }
-
-            loadDirectionUp -> {
-                val existingIds = existing.map(ApplicationCommand::id)
-                val newOnes = commands.filterNot { it.id in existingIds }
-                newOnes.asReversed().forEach { existing.add(0, it) }
-                currentStartOffset -= existing.size - previousSize
-                existing
-            }
-
-            loadDirectionDown -> {
-                val existingIds = existing.map(ApplicationCommand::id)
-                (existing + commands.filterNot { it.id in existingIds }).toMutableList()
-            }
-
-            else -> {
-                currentStartOffset = 0
-                commands.toMutableList()
-            }
-        }
-
-        if (merged.size + currentStartOffset - 1 == numRemoteCommands - 1) {
-            merged.addAll(builtInCommandsProvider.getBuiltInCommands())
-        }
-        currentEndOffset = merged.size + currentStartOffset - 1
-
         discoverCommands = DiscoverCommands(
-            commands = merged,
-            currentStartOffset = currentStartOffset,
-            currentEndOffset = currentEndOffset,
-            hasMoreBefore = currentStartOffset > 0 && merged.isNotEmpty(),
-            hasMoreAfter = currentEndOffset < numRemoteCommands - 1,
-            jumpedSequenceId = jumpedSequenceId,
-            jumpedApplicationId = jumpedTo,
-            loadState = when {
-                loadDirectionUp -> LoadState.JustLoadedUp
-                loadDirectionDown -> LoadState.JustLoadedDown
-                else -> LoadState.JustLoadedAll
-            },
+            commands = commands + builtInCommandsProvider.getBuiltInCommands(),
+            loadState = LoadState.JustLoadedAll,
         )
         markChanged(DiscoverCommandsUpdate)
     }
 
-    /**
-     * The query result set: whatever the server matched, plus every built-in whose name starts with
-     * the query. Built-ins are matched locally because the server has never heard of them.
-     */
+    /** The matching indexed commands plus every built-in whose name starts with the query. */
     @StoreThread
     private fun handleQueryCommandsUpdate(commands: List<ApplicationCommand>) {
         queryCommands.clear()
@@ -1183,26 +713,23 @@ class StoreApplicationCommands(
         }
 
     /**
-     * Re-orders a frecency response back into rank order.
+     * Resolves ranked ids to commands, dropping any the index no longer carries.
      *
-     * The gateway answers in its own order, so each requested id is looked up again — negative ids
-     * against the built-in list, everything else against the flattened response — and unresolved
-     * ids are dropped.
+     * A negative id belongs to a built-in, which the index has never heard of.
      */
     @StoreThread
-    private fun handleFrecencyCommandsUpdate(nonce: String, commands: List<ApplicationCommand>) {
-        val request = frecencyRequests[nonce] ?: return
-        frecencyRequests.remove(nonce)
-        val flattened = commands.flattenSubCommands()
-        frecencyCommands[request.guildId ?: 0L] = request.applicationCommandIds.mapNotNull { id ->
-            val numeric = id.toIntOrNull()
-            if (numeric != null && numeric < 0) {
-                builtInCommandsProvider.getBuiltInCommands()
-                    .firstOrNull { it.id.toIntOrNull() == numeric }
-            } else {
-                flattened.firstOrNull { it.id == id }
+    private fun handleFrecencyCommandsUpdate(guildId: Long) {
+        val flattened = indexedCommands.flattenSubCommands()
+        frecencyCommands[guildId] = storeApplicationCommandFrecency.getTopCommandIds(guildId)
+            .mapNotNull { id ->
+                val numeric = id.toIntOrNull()
+                if (numeric != null && numeric < 0) {
+                    builtInCommandsProvider.getBuiltInCommands()
+                        .firstOrNull { it.id.toIntOrNull() == numeric }
+                } else {
+                    flattened.firstOrNull { it.id == id }
+                }
             }
-        }
         markChanged(FrecencyCommandsUpdate)
     }
 
@@ -1286,6 +813,11 @@ class StoreApplicationCommands(
         /** `RestAPIParams.ApplicationCommand.type` for an autocomplete request. */
         const val TYPE_APPLICATION_COMMAND_AUTOCOMPLETE = 4L
 
+        /** `202 Accepted`: the server is still building this index. */
+        private const val INDEX_NOT_READY = 202
+        private const val INDEX_MAX_TRIES = 3
+        private const val INDEX_RETRY_MS = 5000L
+
         private const val FRECENCY_LIMIT = 5
         private const val INDEX_CACHE_KEY = "STORE_APPLICATION_COMMAND_INDEX_CACHE_V1"
     }
@@ -1295,44 +827,23 @@ class StoreApplicationCommands(
 // Declarations the reference keeps in this same file.
 // ---------------------------------------------------------------------------------------------
 
-/**
- * Paging state of the discover list.
- *
- * The `JustLoaded*` variants exist so the list can decide whether to keep its scroll anchor: after
- * a load-up the adapter must compensate for the prepended rows, after a load-down it must not.
- */
+/** Whether the index behind the discover list has arrived. */
 sealed class LoadState {
-    fun isLoading(): Boolean = this is Loading || this is LoadingUp || this is LoadingDown
+    fun isLoading(): Boolean = this is Loading
 
     object None : LoadState()
     object Loading : LoadState()
-    object LoadingUp : LoadState()
-    object LoadingDown : LoadState()
     object JustLoadedAll : LoadState()
-    object JustLoadedUp : LoadState()
-    object JustLoadedDown : LoadState()
     object Failed : LoadState()
 }
 
-/**
- * The loaded window of a guild's command list.
- *
- * [jumpedSequenceId] increments on every jump so a repeat jump to the same application is still
- * observably a new value; [jumpedApplicationId] is what the list scrolls to.
- */
+/** Every command the context offers, built-ins last. */
 data class DiscoverCommands(
     val commands: List<ApplicationCommand>,
-    val currentStartOffset: Int,
-    val currentEndOffset: Int,
-    val hasMoreBefore: Boolean,
-    val hasMoreAfter: Boolean,
-    val jumpedSequenceId: Int,
-    val jumpedApplicationId: Long?,
     val loadState: LoadState = LoadState.None,
 ) {
     companion object {
-        fun defaultModelDiscoveryCommands() =
-            DiscoverCommands(emptyList(), 0, 0, false, false, 0, null)
+        fun defaultModelDiscoveryCommands() = DiscoverCommands(emptyList())
     }
 }
 
@@ -1512,37 +1023,6 @@ private fun ApplicationCommand.expandSubCommandGroup(
         )
     }
 
-fun com.discord.api.commands.Application.toDomainApplication(): Application = Application(
-    id = id,
-    name = name,
-    icon = icon,
-    commandCount = commandCount,
-    bot = bot,
-)
-
-fun List<com.discord.api.commands.ApplicationCommand>.toDomainCommands(): List<ApplicationCommand> =
-    map { it.toSlashCommand() }
-
-fun com.discord.api.commands.ApplicationCommand.toSlashCommand(): ApplicationCommand =
-    RemoteApplicationCommand(
-        id = id.toString(),
-        applicationId = applicationId,
-        name = nameLocalized ?: name,
-        untranslatedName = name,
-        description = descriptionLocalized ?: description,
-        options = options?.map { it.toSlashCommandOption() }.orEmpty(),
-        guildId = guildId?.toLongOrNull(),
-        version = version,
-        defaultPermissions = defaultPermissions,
-        permissions = permissions,
-        type = type,
-        defaultMemberPermissions = defaultMemberPermissions?.toLongOrNull(),
-        contexts = contexts?.toSet(),
-        integrationTypes = integrationTypes?.toSet(),
-        nsfw = nsfw,
-        handler = handler,
-    )
-
 fun ApplicationCommandIndexCommand.toSlashCommand(
     applicationPermissions: com.discord.api.commands.ApplicationCommandIndexPermissions?,
     installationType: Int?,
@@ -1563,6 +1043,8 @@ fun ApplicationCommandIndexCommand.toSlashCommand(
     integrationTypes = integrationTypes?.toSet(),
     installationType = installationType,
     nsfw = nsfw,
+    dmPermission = dmPermission,
+    globalPopularityRank = globalPopularityRank,
     handler = handler,
     apiCommand = this,
 )

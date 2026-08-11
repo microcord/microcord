@@ -692,7 +692,6 @@ class StoreStream private constructor(
     private val applicationCommands = StoreApplicationCommands(
         dispatcher = dispatcher,
         storeApplicationCommandFrecency = applicationCommandFrecency,
-        gatewayRequest = gatewayConnection::requestApplicationCommands,
         storePermissions = permissions,
         restApi = { if (::restApi.isInitialized) restApi else null },
         observationDeck = observationDeck,
@@ -2019,8 +2018,6 @@ class StoreStream private constructor(
             guildScheduledEvents::handleGuildScheduledEventUserAdd)
         dispatchSubscribe(events.guildScheduledEventUserRemove, "guildScheduledEventUserRemove",
             guildScheduledEvents::handleGuildScheduledEventUserRemove)
-        dispatchSubscribe(events.guildApplicationCommands, "guildApplicationCommands",
-            applicationCommands::handleApplicationCommandsUpdate)
         dispatchSubscribe(events.guildApplicationCommandIndexUpdate, "guildApplicationCommandIndexUpdate") {
             applicationCommands.handleApplicationCommandIndexUpdate(it.guildId)
         }
