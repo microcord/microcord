@@ -83,7 +83,7 @@ internal fun ChannelMemberListRow.toAdapterItem(guildId: Long? = null): ChannelM
         user.publicFlags and VERIFIED_BOT_FLAG != 0,
         presence,
         guildMember?.color,
-        IconUtils.getForUser(user),
+        IconUtils.getForGuildMemberOrUser(user, guildMember),
         isOwner,
         guildMember?.premiumSince,
         isApplicationStreaming,

@@ -145,9 +145,23 @@ class ChannelMemberListRowsTest {
         assertEquals(rows.size, rows.map { it.stableId }.distinct().size)
     }
 
+    @Test fun guildAvatarOverridesTheAccountAvatarInAdapterRows() {
+        val row = ChannelMemberListRow.Member(
+            user = CoreUser(1L, "Ada", avatar = "account-avatar"),
+            guildMember = member(1L, avatarHash = "guild-avatar"),
+            presence = online,
+            displayName = "Ada",
+            isOwner = false,
+        )
+
+        val item = row.toAdapterItem(1L) as ChannelMembersListAdapter.Item.Member
+
+        assertTrue(item.avatarUrl?.contains("/guilds/1/users/1/avatars/guild-avatar") == true)
+    }
+
     private fun role(id: Long, name: String) = GuildRole(1, name, id, 0x123456, true, 0, false, false, null, null, null)
-    private fun member(id: Long, hoistRoleId: Long = 0, nick: String? = null) =
-        GuildMember(0, hoistRoleId, if (hoistRoleId == 0L) null else listOf(hoistRoleId), nick, null, false, null, 1, id)
+    private fun member(id: Long, hoistRoleId: Long = 0, nick: String? = null, avatarHash: String? = null) =
+        GuildMember(0, hoistRoleId, if (hoistRoleId == 0L) null else listOf(hoistRoleId), nick, null, false, null, 1, id, avatarHash)
 
     private fun channel(
         type: Int = Channel.GROUP_DM,
