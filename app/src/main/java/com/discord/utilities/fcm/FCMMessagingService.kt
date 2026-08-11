@@ -1,5 +1,7 @@
 package com.discord.utilities.fcm
 
+import android.app.ActivityManager
+import android.content.Context
 import com.discord.api.channel.Channel
 import com.discord.app.AppLog
 import com.discord.utilities.SnowflakeUtils
@@ -28,6 +30,12 @@ class FCMMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
+        if ((getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).runningAppProcesses.orEmpty().any {
+            it.processName == packageName && it.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+        }) {
+            AppLog.d("Dropping FCM because the main app is foreground")
+            return
+        }
         AppLog.d(
             "FCM message received. type=${message.data["type"]} fields=${message.data.size} " +
                 "notification=${message.notification != null}",
