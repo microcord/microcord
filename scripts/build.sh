@@ -226,6 +226,9 @@ become_runner() {
   now >"$STATE/running.start"
   unlock
 
+  # An earlier runner may have drained our entry with a build that started before we asked, which
+  # left us unsatisfied and holding nothing to build. Restate the request so run_one has it.
+  printf '%s\n' "$REQUEST" >"$STATE/pending/$KEY"
   run_one "$KEY" "$id"
   [ "$?" -eq 130 ] && return 130
 
