@@ -41,7 +41,7 @@ class WidgetSettingsSessions : AppFragment(R.layout.widget_settings_sessions) {
         SessionViewHolder(inflater, parent, onLogOut = null)
     }
     private val othersAdapter = SimpleRecyclerAdapter<AuthSession, SessionViewHolder> { inflater, parent ->
-        SessionViewHolder(inflater, parent, onLogOut = ::confirmLogOut)
+        SessionViewHolder(inflater, parent, onLogOut = { logOut(listOf(it.idHash)) })
     }
 
     override fun onViewBound(view: View) {
@@ -86,20 +86,12 @@ class WidgetSettingsSessions : AppFragment(R.layout.widget_settings_sessions) {
             }
     }
 
-    private fun confirmLogOut(session: AuthSession) = confirm(
-        title = R.string.auth_sessions_session_log_out,
-        hashes = listOf(session.idHash),
-    )
-
-    private fun confirmLogOutAll(sessions: List<AuthSession>) = confirm(
-        title = R.string.auth_sessions_others_log_out_title,
-        hashes = sessions.map(AuthSession::idHash),
-    )
-
-    private fun confirm(title: Int, hashes: List<String>) {
+    /** Dropping one device is not worth a prompt; only the bulk action confirms. */
+    private fun confirmLogOutAll(sessions: List<AuthSession>) {
+        val hashes = sessions.map(AuthSession::idHash)
         if (hashes.isEmpty()) return
         WidgetNoticeDialog.Builder(requireContext())
-            .setTitle(title)
+            .setTitle(R.string.auth_sessions_others_log_out_title)
             .setMessage(R.string.auth_sessions_others_log_out_description)
             .setNegativeButton(R.string.cancel)
             .setPositiveButton(R.string.auth_sessions_others_log_out_action) { logOut(hashes) }

@@ -75,7 +75,14 @@ import com.otaliastudios.cameraview.PictureResult
 import com.otaliastudios.cameraview.controls.Facing
 import com.otaliastudios.cameraview.controls.Flash
 import java.net.URLConnection
+import com.discord.utilities.attachments.sanitizeUploadFileName
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.ui
 import java.io.File
+import java.io.FileNotFoundException
+import java.util.UUID
+import rx.Observable
+import rx.schedulers.Schedulers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -271,19 +278,50 @@ class WidgetChatInputAttachments(
             ?.findViewById<com.lytefast.flexinput.widget.FlexEditText>(com.lytefast.flexinput.R.id.text_input)
             ?: return
         editText.inputContentHandler = { info ->
-            fragment.context?.let { setAttachmentFromPicker(it, info) }
+            fragment.context?.let { setAttachmentFromPicker(fragment, it, info) }
         }
     }
 
-    private fun setAttachmentFromPicker(context: Context, inputContentInfoCompat: InputContentInfoCompat) {
+    /**
+     * Takes a copy of keyboard-supplied content before queueing it.
+     *
+     * The URI a keyboard commits is readable only for as long as the grant behind it lives, and
+     * that ends with the input session — so an upload that starts after the keyboard closes, or is
+     * retried later, finds nothing to read and never finishes. Keyboards also frequently report no
+     * size for that URI, and an unknown size reaches the attachment request as `-1`.
+     *
+     * Copying to the cache settles both: the file is ours, it outlives the keyboard, and its length
+     * is known. The copy runs off the main thread because clipboard images are not always small.
+     */
+    private fun setAttachmentFromPicker(
+        fragment: AppFragment,
+        context: Context,
+        inputContentInfoCompat: InputContentInfoCompat,
+    ) {
         val resolver = context.contentResolver ?: return
         val defaultName = context.getString(com.discord.R.string.attachment_filename_unknown)
-        flexInputFragment.addExternalAttachment(
-            SourcedAttachment(
-                inputContentInfoCompat.toAttachment(resolver, true, defaultName),
-                SOURCE_KEYBOARD,
-            ),
-        )
+        val attachment = inputContentInfoCompat.toAttachment(resolver, true, defaultName)
+        Observable
+            .fromCallable { copyToCache(context, attachment.uri, attachment.displayName ?: defaultName) }
+            .subscribeOn(Schedulers.io())
+            .ui(fragment)
+            .appSubscribe(
+                WidgetChatInputAttachments::class.java,
+                onTerminated = { runCatching { inputContentInfoCompat.releasePermission() } },
+            ) { copied ->
+                flexInputFragment.addExternalAttachment(
+                    SourcedAttachment(copied.toAttachment(), SOURCE_KEYBOARD),
+                )
+            }
+    }
+
+    private fun copyToCache(context: Context, uri: Uri, displayName: String): File {
+        val directory = File(context.cacheDir, KEYBOARD_ATTACHMENT_DIRECTORY).apply { mkdirs() }
+        val file = File(directory, "${UUID.randomUUID()}-${sanitizeUploadFileName(displayName)}")
+        val input = context.contentResolver.openInputStream(uri)
+            ?: throw FileNotFoundException("Keyboard attachment content is unavailable")
+        input.use { source -> file.outputStream().use(source::copyTo) }
+        return file
     }
 
     /**
@@ -913,6 +951,8 @@ class WidgetChatInputAttachments(
 
     private companion object {
         const val SOURCE_KEYBOARD = "keyboard"
+
+        private const val KEYBOARD_ATTACHMENT_DIRECTORY = "keyboard-attachments"
         const val SOURCE_MEDIA_PICKER = "media_picker"
         const val SOURCE_DOCUMENT_PICKER = "document_picker"
         const val MEDIA_GRID_COLUMNS = 3

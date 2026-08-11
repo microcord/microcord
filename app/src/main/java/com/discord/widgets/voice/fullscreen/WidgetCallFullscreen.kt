@@ -15,6 +15,7 @@ import androidx.core.app.ActivityOptionsCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -593,14 +594,34 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
             controls.visibility = View.INVISIBLE
         }.start()
         gridAdapter.notifyCallControlsVisibilityChanged(false)
-        WindowCompat.setDecorFitsSystemWindows(requireActivity().window, false)
+        setSystemBarsVisible(false)
     }
 
     private fun showControls() {
         controls.visibility = View.VISIBLE
         controls.animate().alpha(1f).setDuration(CONTROLS_FADE_DURATION).start()
         gridAdapter.notifyCallControlsVisibilityChanged(true)
-        WindowCompat.setDecorFitsSystemWindows(requireActivity().window, true)
+        setSystemBarsVisible(true)
+    }
+
+    /**
+     * Hides the system bars while the call controls are hidden.
+     *
+     * This used to toggle `setDecorFitsSystemWindows`, which does not hide anything — it only says
+     * whether the decor insets its content. Now that the activity turns it off once for edge to
+     * edge, flipping it back here switched edge to edge off for the whole app, and leaving the call
+     * with the controls up left it that way.
+     */
+    private fun setSystemBarsVisible(visible: Boolean) {
+        val view = view ?: return
+        val controller = WindowCompat.getInsetsController(requireActivity().window, view)
+        if (visible) {
+            controller.show(WindowInsetsCompat.Type.systemBars())
+        } else {
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+        }
     }
 
     private fun openTextInVoice() {
