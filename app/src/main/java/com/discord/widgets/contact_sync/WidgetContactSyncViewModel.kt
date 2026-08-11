@@ -11,6 +11,7 @@ import com.discord.models.phone.PhoneCountryCode
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
+import com.discord.stores.UserSettings
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
 import com.discord.utilities.error.RestApiError
@@ -359,15 +360,7 @@ class WidgetContactSyncViewModel(
 
         var friendDiscoveryFlags = if (viewState.allowPhone) FLAG_DISCOVERABLE_BY_PHONE else 0
         if (viewState.allowEmail) friendDiscoveryFlags = friendDiscoveryFlags or FLAG_DISCOVERABLE_BY_EMAIL
-        restAPI.updateUserSettings(
-            RestAPIParams.UserSettings.createWithFriendDiscoveryFlags(friendDiscoveryFlags),
-        )
-            .restSubscribeOn()
-            .ui(this)
-            .appSubscribe(
-                errorClass = WidgetContactSyncViewModel::class.java,
-                errorHandler = { handleContactsEnableError(it) },
-            ) { }
+        UserSettings.friendDiscoveryFlags.set(friendDiscoveryFlags)
     }
 
     /**

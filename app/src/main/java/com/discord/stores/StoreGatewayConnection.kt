@@ -73,7 +73,6 @@ import com.discord.models.domain.ModelReadState
 import com.discord.models.domain.ModelSession
 import com.discord.models.domain.ModelUserNote
 import com.discord.models.domain.ModelUserRelationship
-import com.discord.models.domain.ModelUserSettings
 import com.discord.models.domain.StreamCreateOrUpdate
 import com.discord.models.domain.StreamDelete
 import com.discord.models.domain.StreamServerUpdate
@@ -133,7 +132,6 @@ class StoreGatewayConnection(
 
     // Current user
     val userUpdate = behavior<User>()
-    val userSettingsUpdate = behavior<ModelUserSettings>()
     val userSettingsProtoUpdate = behavior<UserSettingsProtoUpdate>()
     val userGuildSettingsUpdate = behavior<ModelNotificationSettings>()
     val notificationSettingsUpdate = behavior<AccountNotificationSettings>()
@@ -302,7 +300,11 @@ class StoreGatewayConnection(
      * message, and folding it into the socket's lifecycle input churned it on each one.
      */
     fun getIdentifyData(): IdentifyData? = token?.let {
-        IdentifyData(it, stream.getClientDataStateInternal().getClientDataState().toIdentifyData())
+        IdentifyData(
+            it,
+            stream.getClientDataStateInternal().getClientDataState()
+                .toIdentifyData(stream.getUserSettingsProtoInternal().getDataVersion()),
+        )
     }
 
     private fun handleTokenUpdate(token: String?) {
@@ -477,7 +479,6 @@ class StoreGatewayConnection(
 
             // Current user
             "USER_UPDATE" -> userUpdate.emit(data)
-            "USER_SETTINGS_UPDATE" -> userSettingsUpdate.emit(data)
             "USER_SETTINGS_PROTO_UPDATE" -> userSettingsProtoUpdate.emit(data)
             "USER_GUILD_SETTINGS_UPDATE" -> userGuildSettingsUpdate.emit(data)
             "NOTIFICATION_SETTINGS_UPDATE" -> notificationSettingsUpdate.emit(data)

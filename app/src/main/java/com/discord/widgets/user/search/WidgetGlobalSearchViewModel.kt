@@ -44,18 +44,17 @@ class WidgetGlobalSearchViewModel : AppViewModel<WidgetGlobalSearchModel>() {
      * Channel frecency.
      *
      * The reference tracks this from `StoreChannelsSelected`. That store is outside this slice, so
-     * the tracker is fed here from the same observable instead — it produces the same series, but
-     * only while a quick switcher has existed this session. Move it into the store when that file is
-     * next touched.
+     * the tracker is fed here from the same observable instead; `StoreFrecency` holds it, so the
+     * series survives this screen and reaches the account.
      */
-    private val frecencyTracker = ChannelFrecencyTracker()
+    private val frecency = StoreStream.getFrecency()
 
     init {
         StoreStream.getChannelsSelected().observeId()
             .filter { it != 0L }
             .distinctUntilChanged()
             .ui(this)
-            .subscribe { channelId -> frecencyTracker.track(channelId) }
+            .subscribe { channelId -> frecency.trackChannel(channelId) }
 
         Observable
             .combineLatest(
@@ -223,7 +222,7 @@ class WidgetGlobalSearchViewModel : AppViewModel<WidgetGlobalSearchModel>() {
             }
         }
 
-        val frecencyChannels = frecencyTracker.getSortedKeys()
+        val frecencyChannels = frecency.getSortedChannelIds()
         val ranked = results
             .sortedByDescending { it.score(searchType, frecencyChannels) }
             .take(WidgetGlobalSearchModel.MAX_RESULTS)

@@ -281,19 +281,6 @@ class RestTransportTest {
     }
 
     @Test
-    fun guildFolderPatchContainsOnlyGuildFolders() {
-        server.enqueue(MockResponse().setBody("{}"))
-        val api = RestAPIBuilder(server.url("/api/").toString(), MemoryCookieJar()).build(RestAPIInterface::class.java)
-
-        api.updateUserSettings(RestAPIParams.GuildFoldersUpdate(listOf(ModelGuildFolder(null, listOf(1))))).toBlocking().first()
-
-        val request = server.takeRequest()
-        assertEquals("PATCH", request.method)
-        assertEquals("/api/v9/users/@me/settings", request.path)
-        assertEquals("{\"guild_folders\":[{\"guild_ids\":[1]}]}", request.body.readUtf8())
-    }
-
-    @Test
     fun parsesStructuredErrorsAndRedactsSecrets() {
         val request = Request.Builder().url("https://example.test/channels?token=query-secret").build()
         val raw = okhttp3.Response.Builder()

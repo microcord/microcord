@@ -4,14 +4,12 @@ import androidx.annotation.StringRes
 import com.discord.R
 import com.discord.app.AppViewModel
 import com.discord.models.domain.ModelGuildFolder
-import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreGuildsSorted
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUserSettings
-import com.discord.utilities.rest.RestAPI
+import com.discord.stores.UserSettings
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
-import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import rx.Observable
 import rx.subjects.PublishSubject
@@ -78,17 +76,8 @@ class WidgetGuildFolderSettingsViewModel(
                 entry.asModelGuildFolder()
             }
         }
-        RestAPI.api.updateUserSettings(RestAPIParams.UserSettings.createWithGuildFolders(folders))
-            .restSubscribeOn()
-            .ui(this)
-            .appSubscribe(
-                WidgetGuildFolderSettingsViewModel::class.java,
-                errorHandler = {
-                    eventSubject.onNext(Event.UpdateFolderSettingsFailure(R.string.default_failure_to_perform_action_message))
-                },
-            ) {
-                eventSubject.onNext(Event.UpdateFolderSettingsSuccess(R.string.guild_folder_updated_success))
-            }
+        UserSettings.guildFolders.set(folders)
+        eventSubject.onNext(Event.UpdateFolderSettingsSuccess(R.string.guild_folder_updated_success))
     }
 
     private fun updateFormState(change: FormState.() -> FormState) {

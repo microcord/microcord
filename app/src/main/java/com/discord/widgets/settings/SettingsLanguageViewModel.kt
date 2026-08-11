@@ -2,13 +2,8 @@ package com.discord.widgets.settings
 
 import androidx.annotation.MainThread
 import com.discord.app.AppViewModel
-import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
-import com.discord.stores.StoreUserSettings
 import com.discord.stores.StoreUserSettingsSystem
-import com.discord.utilities.rest.RestAPI
-import com.discord.utilities.rx.appSubscribe
-import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import rx.Observable
 import rx.subjects.PublishSubject
@@ -52,13 +47,7 @@ class SettingsLanguageViewModel(
     @MainThread
     fun selectLocale(locale: String) {
         userSettingsSystem.setLocale(locale, apiSync = true) {
-            val api = RestAPI.apiOrNull ?: return@setLocale
-            api.updateUserSettings(RestAPIParams.UserSettings.createWithLocale(locale))
-                .restSubscribeOn()
-                .ui(this)
-                .appSubscribe(StoreUserSettings::class.java) {
-                    eventSubject.onNext(Event.LocaleUpdated)
-                }
+            eventSubject.onNext(Event.LocaleUpdated)
         }
     }
 

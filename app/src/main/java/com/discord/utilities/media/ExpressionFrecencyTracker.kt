@@ -1,6 +1,6 @@
 package com.discord.utilities.media
 
-import com.discord.models.domain.FrecencyUserSettings
+import com.discord.utilities.frecency.FrecencyTracker
 import com.discord.utilities.time.ClockFactory
 import kotlin.math.ceil
 
@@ -25,7 +25,7 @@ class ExpressionFrecencyTracker {
             .map { it.first }
 
     @Synchronized
-    fun replace(values: Map<String, FrecencyUserSettings.FrecencyItem>) {
+    fun replace(values: Map<String, FrecencyTracker.Entry>) {
         entries.clear()
         values.forEach { (key, value) ->
             entries[key] = Entry(value.totalUses, value.recentUses.takeLast(MAX_SAMPLES))
@@ -33,15 +33,15 @@ class ExpressionFrecencyTracker {
     }
 
     @Synchronized
-    fun toProtoEntries(now: Long = ClockFactory.get().currentTimeMillis()): Map<String, FrecencyUserSettings.FrecencyItem> =
+    fun toProtoEntries(now: Long = ClockFactory.get().currentTimeMillis()): Map<String, FrecencyTracker.Entry> =
         entries.entries
-            .sortedByDescending { score(it.value, now) ?: 0.0 }
+            .sortedByDescending { it.value.recentUses.lastOrNull() ?: 0L }
             .take(MAX_PROTO_ENTRIES)
             .associateTo(LinkedHashMap()) { (key, entry) ->
                 val weightedScore = entry.recentUses.take(MAX_SAMPLES).sumOf { timestamp ->
                     weight((now - timestamp) / MILLIS_PER_DAY)
                 }
-                key to FrecencyUserSettings.FrecencyItem(
+                key to FrecencyTracker.Entry(
                     totalUses = entry.totalUses,
                     recentUses = entry.recentUses,
                     frecency = if (entry.recentUses.isEmpty()) entry.totalUses else

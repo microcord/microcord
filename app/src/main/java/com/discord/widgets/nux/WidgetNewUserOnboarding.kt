@@ -25,6 +25,7 @@ import com.discord.nullserializable.NullSerializable
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreNux
 import com.discord.stores.StoreStream
+import com.discord.stores.UserSettings
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rest.RestAPI
@@ -220,26 +221,14 @@ class WidgetNewUserOnboarding : AppFragment(R.layout.widget_new_user_onboarding)
     }
 
     private fun saveDiscoverability() {
-        val api = RestAPI.apiOrNull ?: return
         binding.newUserDiscoverabilityNext.setIsLoading(true)
         val flags = if (binding.newUserDiscoverabilityToggle.isChecked) DISCOVERABLE_BY_PHONE or DISCOVERABLE_BY_EMAIL else 0
-        api.updateUserSettings(RestAPIParams.UserSettings.createWithFriendDiscoveryFlags(flags))
-            .restSubscribeOn(false)
-            .ui(this)
-            .appSubscribe(
-                WidgetNewUserOnboarding::class.java,
-                context = context,
-                errorHandler = {
-                    binding.newUserDiscoverabilityNext.setIsLoading(false)
-                    it.showErrorToasts = true
-                },
-            ) {
-                binding.newUserDiscoverabilityNext.setIsLoading(false)
-                val needsName = binding.newUserDiscoverabilityToggle.isChecked && StoreStream.getUsers().getMe().phoneNumber != null &&
-                    StoreStream.getUserConnections().getConnectedAccounts().none { it.type == CONTACTS_CONNECTION }
-                if (needsName) binding.newUserOnboardingFlipper.displayedChild = PAGE_DISCOVERABILITY_NAME
-                else complete(StoreNux.NewUserStep.DISCOVERABILITY)
-            }
+        UserSettings.friendDiscoveryFlags.set(flags)
+        binding.newUserDiscoverabilityNext.setIsLoading(false)
+        val needsName = binding.newUserDiscoverabilityToggle.isChecked && StoreStream.getUsers().getMe().phoneNumber != null &&
+            StoreStream.getUserConnections().getConnectedAccounts().none { it.type == CONTACTS_CONNECTION }
+        if (needsName) binding.newUserOnboardingFlipper.displayedChild = PAGE_DISCOVERABILITY_NAME
+        else complete(StoreNux.NewUserStep.DISCOVERABILITY)
     }
 
     private fun saveDiscoverabilityName() {

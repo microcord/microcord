@@ -87,6 +87,10 @@ class ModelPayload() {
         internal set
     var friendSuggestionCount: Int = 0
         internal set
+    /** Base64 `PreloadedUserSettings`; absent when the client state version says ours is current. */
+    var userSettingsProto: String? = null
+        internal set
+
     var apiCodeVersion: Int? = null
         internal set
 
@@ -120,6 +124,7 @@ class ModelPayload() {
         trace = other.trace
         userSurvey = other.userSurvey
         friendSuggestionCount = other.friendSuggestionCount
+        userSettingsProto = other.userSettingsProto
         apiCodeVersion = other.apiCodeVersion
     }
 
@@ -160,7 +165,7 @@ class ModelPayload() {
         guilds, readyGuilds, guildJoinRequests, presences, analyticsToken, authToken, authSessionIdHash,
         requiredAction, experiments,
         guildExperiments, connectedAccounts, sessions, users, guildPresences, guildMembers, countryCode,
-        trace, userSurvey, friendSuggestionCount, apiCodeVersion,
+        trace, userSurvey, friendSuggestionCount, apiCodeVersion, userSettingsProto,
     )
 
     abstract class VersionedModel<T> {
@@ -297,6 +302,7 @@ private class ModelPayloadAdapter(private val gson: Gson) : TypeAdapter<ModelPay
                     "_trace" -> payload.trace = readTrace(reader)
                     "user_survey" -> payload.userSurvey = gson.fromJson(reader, UserSurvey::class.java)
                     "friend_suggestion_count" -> payload.friendSuggestionCount = reader.nextInt()
+                    "user_settings_proto" -> payload.userSettingsProto = reader.nextString()
                     "api_code_version" -> payload.apiCodeVersion = reader.nextInt()
                     else -> reader.skipValue()
             }

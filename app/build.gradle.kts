@@ -52,6 +52,12 @@ android {
         }
     }
 
+    sourceSets {
+        // Checked-in protoc output: no protobuf Gradle plugin supports this AGP yet, so the
+        // generated Java is vendored alongside the .proto it came from. See src/main/proto.
+        getByName("main").java.srcDir("src/main/generated-proto")
+    }
+
     buildTypes {
         debug {
             signingConfig = signingConfigs.getByName("manticord")
@@ -135,6 +141,7 @@ dependencies {
     implementation(libs.fresco.animated.webp)
     implementation(libs.photo.drawee.view)
     implementation(libs.firebase.messaging)
+    implementation(libs.protobuf.java)
     implementation(libs.gson)
     implementation(libs.kronos.android)
     implementation(libs.kryo)

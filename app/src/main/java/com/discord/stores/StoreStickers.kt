@@ -6,7 +6,10 @@ import com.discord.models.sticker.dto.ModelStickerPack
 import com.discord.restapi.RestAPIInterface
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
+import com.discord.stores.StoreMediaFavorites.Companion.toEntry
+import com.discord.stores.StoreMediaFavorites.Companion.toProto
 import com.discord.utilities.media.MediaFrecencyTracker
+import discord_protos.discord_users.v1.FrecencyUserSettingsOuterClass.FrecencyUserSettings
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
@@ -43,6 +46,23 @@ class StoreStickers(
 ) : StoreV2(), StickerStore {
 
     private val frecency: MediaFrecencyTracker = frecencyCache.get()
+
+    /** Sticker frecency is the account's, but is only serialised when a write is already going out. */
+    val beforeSend = object : UserSettingsProtoWriter.BeforeSend<FrecencyUserSettings.Builder>() {
+        override fun writeInto(builder: FrecencyUserSettings.Builder) {
+            builder.stickerFrecencyBuilder.clearStickers().putAllStickers(
+                frecency.toEntries(MAX_SYNCED_STICKERS)
+                    .mapNotNull { (key, entry) -> key.toLongOrNull()?.to(entry.toProto()) }
+                    .toMap(),
+            )
+        }
+    }
+
+    @StoreThread
+    fun handleFrecencySettings(settings: FrecencyUserSettings) {
+        frecency.restore(settings.stickerFrecency.stickersMap.mapKeys { it.key.toString() }.mapValues { it.value.toEntry() })
+        frecencyCache.set(frecency, persist = true)
+    }
 
     private var stickerPacks: Map<Long, StickerPackState> = emptyMap()
     private var stickerPacksSnapshot: Map<Long, StickerPackState> = emptyMap()
@@ -141,6 +161,7 @@ class StoreStickers(
     override fun onStickerUsed(sticker: Sticker) = dispatcher.schedule {
         frecency.track(sticker.id.toString())
         frecencyCache.set(frecency, persist = true)
+        beforeSend.markDirty()
     }
 
     /**
@@ -150,6 +171,7 @@ class StoreStickers(
     fun handleDeletedStickers(stickerIds: List<Long>) = dispatcher.schedule {
         stickerIds.forEach { frecency.removeEntry(it.toString()) }
         frecencyCache.set(frecency, persist = true)
+        beforeSend.markDirty()
     }
 
     @StoreThread
@@ -216,6 +238,9 @@ class StoreStickers(
 
         private const val FETCH_ENABLED_STICKER_PACKS_DELAY_MS = 300_000L
         private const val MAX_FREQUENTLY_USED_STICKERS = 20
+
+        /** What the account keeps, as opposed to what one picker row shows. */
+        private const val MAX_SYNCED_STICKERS = 100
 
         /**
          * One, not the emoji tracker's seventy: a sticker is sent far less often than an emoji, so

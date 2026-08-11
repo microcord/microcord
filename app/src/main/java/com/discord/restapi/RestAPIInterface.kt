@@ -442,21 +442,21 @@ interface RestAPIInterface {
         @Body leaveGuildBody: RestAPIParams.LeaveGuildBody,
     ): Observable<Void>
 
-    @PATCH("users/@me/settings")
-    fun updateUserSettings(
-        @Body userSettings: RestAPIParams.UserSettings,
-    ): Observable<ModelUserSettings>
-
-    @PATCH("users/@me/settings")
-    fun updateUserSettingsCustomStatus(
-        @Body userSettingsCustomStatus: RestAPIParams.UserSettingsCustomStatus,
-    ): Observable<ModelUserSettings>
-
     @GET("users/@me/settings-proto/2")
     fun getFrecencyUserSettings(): Observable<UserSettingsProtoResponse>
 
     @PATCH("users/@me/settings-proto/2")
     fun patchFrecencyUserSettings(
+        @Body body: UserSettingsProtoPatch,
+    ): Observable<UserSettingsProtoResponse>
+
+    /** @param type a `UserSettingsProtoType`; 1 is the preloaded settings, 2 the frecency ones. */
+    @GET("users/@me/settings-proto/{type}")
+    fun getUserSettingsProto(@Path("type") type: Int): Observable<UserSettingsProtoResponse>
+
+    @PATCH("users/@me/settings-proto/{type}")
+    fun patchUserSettingsProto(
+        @Path("type") type: Int,
         @Body body: UserSettingsProtoPatch,
     ): Observable<UserSettingsProtoResponse>
 
@@ -673,18 +673,20 @@ interface RestAPIInterface {
         @Path("botId") botId: Long,
     ): Observable<List<com.discord.api.commands.ApplicationCommand>>
 
+    // The index is built lazily server side; until it is ready these answer 202 with no body.
     @GET("guilds/{guildId}/application-command-index")
     fun getGuildApplicationCommandIndex(
         @Path("guildId") guildId: Long,
-    ): Observable<com.discord.api.commands.ApplicationCommandIndex>
+    ): Observable<Response<com.discord.api.commands.ApplicationCommandIndex>>
 
     @GET("channels/{channelId}/application-command-index")
     fun getChannelApplicationCommandIndex(
         @Path("channelId") channelId: Long,
-    ): Observable<com.discord.api.commands.ApplicationCommandIndex>
+    ): Observable<Response<com.discord.api.commands.ApplicationCommandIndex>>
 
     @GET("users/@me/application-command-index")
-    fun getUserApplicationCommandIndex(): Observable<com.discord.api.commands.ApplicationCommandIndex>
+    fun getUserApplicationCommandIndex():
+        Observable<Response<com.discord.api.commands.ApplicationCommandIndex>>
 
     @GET("channels/{channelId}/messages/{messageId}/interaction-data")
     fun getInteractionData(
@@ -1523,9 +1525,17 @@ interface RestAPIInterface {
         @Body body: GuildOnboardingResponses,
     ): Observable<Response<GuildOnboarding>>
 
+    /**
+     * @param withGuild asks for the partial guild alongside the form. Set when the user is not a
+     *   member, because nothing else will tell the client the guild's name or icon.
+     * @param inviteCode required to read the form of a guild that already rejected the user;
+     *   without it the request 403s and reapplying is impossible.
+     */
     @GET("guilds/{guildId}/member-verification")
     fun getGuildMemberVerificationForm(
         @Path("guildId") guildId: Long,
+        @Query("with_guild") withGuild: Boolean,
+        @Query("invite_code") inviteCode: String? = null,
     ): Observable<ModelMemberVerificationForm>
 
     @PUT("guilds/{guildId}/requests/@me")
@@ -1544,8 +1554,11 @@ interface RestAPIInterface {
         @Path("guildId") guildId: Long,
     ): Observable<ModelMemberVerificationFormResponse>
 
-    @PATCH("guilds/{guildId}/requests/@me/ack")
-    fun ackGuildJoinRequest(@Path("guildId") guildId: Long): Observable<Void>
+    @POST("guilds/{guildId}/requests/{joinRequestId}/ack")
+    fun ackGuildJoinRequest(
+        @Path("guildId") guildId: Long,
+        @Path("joinRequestId") joinRequestId: Long,
+    ): Observable<Void>
 
     @GET("users/@me/join-request-guilds")
     fun getUserJoinRequestGuilds(): Observable<List<Guild>>
@@ -2137,12 +2150,6 @@ interface RestAPIInterface {
 
     @GET("gateway")
     fun getGateway(): Observable<ModelGateway>
-
-    @PATCH("users/@me/settings")
-    fun updateUserSettings(@Body body: RestAPIParams.GuildFoldersUpdate): Observable<ModelUserSettings>
-
-    @PATCH("users/@me/settings")
-    fun updateUserSettingsStatus(@Body body: RestAPIParams.UserSettingsStatus): Observable<ModelUserSettings>
 
     /**
      * Adopts a guild's server tag, or clears it. Named `clan` after the feature's original name.

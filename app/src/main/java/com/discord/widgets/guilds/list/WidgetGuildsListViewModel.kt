@@ -11,16 +11,14 @@ import com.discord.models.domain.ModelApplicationStream
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.guild.Guild
 import com.discord.panels.PanelState
-import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreGuildsSorted
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
+import com.discord.stores.UserSettings
 import com.discord.utilities.channel.ChannelSelector
-import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.leadingEdgeThrottle
-import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.time.Clock
 import com.discord.utilities.time.ClockFactory
@@ -286,10 +284,7 @@ class WidgetGuildsListViewModel(
         }
 
         StoreStream.getGuildsSorted().setPositions(entries)
-        RestAPI.api
-            .updateUserSettings(RestAPIParams.UserSettings.createWithGuildFolders(entries.map { it.asModelGuildFolder() }))
-            .restSubscribeOn()
-            .appSubscribe(WidgetGuildsListViewModel::class.java) { }
+        UserSettings.guildFolders.set(entries.map { it.asModelGuildFolder() })
 
         return targetOperation != null
     }

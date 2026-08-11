@@ -11,17 +11,15 @@ import com.discord.models.domain.ModelCustomStatusSetting
 import com.discord.models.domain.ModelGuildFolder
 import com.discord.models.domain.ModelUserSettings
 import com.discord.restapi.RestAPIInterface
-import com.discord.restapi.RestAPIParams
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.rest.RestAPI
-import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
-import com.discord.utilities.rx.ui
 import com.discord.utilities.time.Clock
 import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.time.TimeUtils
+import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings
 import java.util.concurrent.TimeUnit
 import rx.Observable
 import rx.Subscriber
@@ -32,18 +30,17 @@ import rx.subjects.SerializedSubject
 /**
  * The account's user settings, both the device-local ones and the ones the server owns.
  *
- * Every server-owned toggle is written twice: locally so the UI reacts immediately, and through
- * `PATCH users/@me/settings` so other clients agree. The REST half is gated on
- * [getIsSyncTextAndImagesEnabled] for the media/animation group only — that is the "sync across
- * devices" switch, and turning it off must leave those preferences device-local.
+ * Server-owned settings live in [UserSettings]; this store keeps the local mirror the app reads
+ * from, so a value survives a cold start before the settings proto has been decoded. Writes update
+ * both, and [handleUserSettingsProto] brings inbound changes back the other way.
  *
- * The `activity` parameter on the setters is what makes a write reach the server: with a null
- * activity the setter degenerates to a local write. `READY` and `USER_SETTINGS_UPDATE` therefore
- * pass null, so applying an inbound settings payload never echoes it back.
+ * The media/animation group is gated on [getIsSyncTextAndImagesEnabled] in both directions — that
+ * is the "sync across devices" switch, and turning it off must leave those preferences
+ * device-local, holding whatever value they last synced at.
  *
  * NOTE: the reference puts `activity` first; here it is a trailing defaulted parameter so the
- * existing local-only call sites (and `::setter` method references in the settings screens) keep
- * working. Semantics are otherwise identical.
+ * existing call sites (and `::setter` method references in the settings screens) keep working. A
+ * write no longer needs it — it is only where a confirmation toast is shown.
  */
 class StoreUserSettings(
     private val dispatcher: Dispatcher,
@@ -116,7 +113,7 @@ class StoreUserSettings(
     fun getIsAttachmentMediaInline() = preferences.getBoolean(KEY_INLINE_ATTACHMENT_MEDIA, true)
     fun getIsAnimatedEmojisEnabled() = allowAnimatedEmojisPublisher.get()
     fun getIsAutoImageCompressionEnabled() = preferences.getBoolean(KEY_IMAGE_COMPRESSION, false)
-    fun getIsAutoPlayGifsEnabled() = preferences.getBoolean(KEY_AUTO_PLAY_GIFS, true)
+    fun getIsAutoPlayGifsEnabled() = autoPlayGifsPublisher.get()
     fun getIsChromeCustomTabsEnabled() = preferences.getBoolean(KEY_CHROME_CUSTOM_TABS, true)
     fun getIsDeveloperMode() = preferences.getBoolean(KEY_DEVELOPER_MODE, false)
     fun getIsEmbedMediaInlined() = preferences.getBoolean(KEY_INLINE_EMBED_MEDIA, true)
@@ -201,39 +198,34 @@ class StoreUserSettings(
     // region gateway input
 
     @StoreThread
-    fun handleConnectionOpen(userSettings: ModelUserSettings) {
-        handleUserSettings(userSettings)
+    fun handleConnectionOpen(settings: PreloadedUserSettings) {
+        handleUserSettingsProto(settings)
         fetchConsents()
     }
 
+    /** Mirrors the settings proto into the local copies the app reads from. */
     @StoreThread
-    fun handleUserSettingsUpdate(userSettings: ModelUserSettings) = handleUserSettings(userSettings)
-
-    /**
-     * Applies an inbound settings payload. Every write goes through the public setters with a null
-     * activity, which is what keeps this from echoing the payload straight back to the server.
-     */
-    @StoreThread
-    private fun handleUserSettings(settings: ModelUserSettings) {
+    fun handleUserSettingsProto(settings: PreloadedUserSettings) {
         StoreThreadScheduler.assertCurrentThread()
         if (getIsSyncTextAndImagesEnabled()) {
-            settings.inlineEmbedMedia?.let { setIsEmbedMediaInlined(it) }
-            settings.inlineAttachmentMedia?.let { setIsAttachmentMediaInline(it) }
-            settings.renderEmbeds?.let { setIsRenderEmbedsEnabled(it) }
-            settings.animateEmoji?.let { setIsAnimatedEmojisEnabled(it) }
-            settings.animateStickers?.let { setStickerAnimationSettings(it) }
+            putBoolean(KEY_INLINE_EMBED_MEDIA, UserSettings.inlineEmbedMedia.get(settings))
+            putBoolean(KEY_INLINE_ATTACHMENT_MEDIA, UserSettings.inlineAttachmentMedia.get(settings))
+            setIsRenderEmbedsLocal(UserSettings.renderEmbeds.get(settings))
+            allowAnimatedEmojisPublisher.set(UserSettings.animateEmoji.get(settings), persist = true)
+            stickerAnimationSettingsPublisher.set(UserSettings.animateStickers.get(settings), persist = true)
+            autoPlayGifsPublisher.set(UserSettings.gifAutoPlay.get(settings), persist = true)
         }
-        settings.guildFolders?.let { guildFoldersPublisher.set(ArrayList(it)) }
-        settings.restrictedGuilds?.let { restrictedGuildIdsPublisher.set(ArrayList(it)) }
-        settings.developerMode?.let { putBoolean(KEY_DEVELOPER_MODE, it) }
-        settings.showCurrentGame?.let(showCurrentGame::set)
-        settings.explicitContentFilter?.let(explicitContentFilterSubject::onNext)
-        settings.friendSourceFlags?.let(friendSourceFlagsSubject::onNext)
-        settings.defaultGuildsRestricted?.let(defaultGuildsRestrictedSubject::onNext)
-        settings.customStatus?.let(::updateCustomStatusLocal)
-        settings.friendDiscoveryFlags?.let(friendDiscoveryFlagsSubject::onNext)
-        settings.contactSyncUpsellShown?.let { contactSyncUpsellShown = it }
-        settings.allowAccessibilityDetection?.let(::updateAllowAccessibilityDetectionInternal)
+        guildFoldersPublisher.set(ArrayList(UserSettings.guildFolders.get(settings)))
+        restrictedGuildIdsPublisher.set(ArrayList(UserSettings.restrictedGuildIds.get(settings)))
+        putBoolean(KEY_DEVELOPER_MODE, UserSettings.developerMode.get(settings))
+        showCurrentGame.set(UserSettings.showCurrentGame.get(settings))
+        explicitContentFilterSubject.onNext(UserSettings.explicitContentFilter.get(settings))
+        friendSourceFlagsSubject.onNext(UserSettings.friendSourceFlags.get(settings))
+        defaultGuildsRestrictedSubject.onNext(UserSettings.defaultGuildsRestricted.get(settings))
+        friendDiscoveryFlagsSubject.onNext(UserSettings.friendDiscoveryFlags.get(settings))
+        contactSyncUpsellShown = UserSettings.contactSyncEnabled.get(settings)
+        updateAllowAccessibilityDetectionInternal(UserSettings.allowAccessibilityDetection.get(settings))
+        updateCustomStatusLocal(UserSettings.customStatus.get(settings))
     }
 
     // endregion
@@ -242,11 +234,24 @@ class StoreUserSettings(
 
     fun setContactSyncUpsellShown(shown: Boolean?) { contactSyncUpsellShown = shown }
     fun setIsAutoImageCompressionEnabled(enabled: Boolean) = putBoolean(KEY_IMAGE_COMPRESSION, enabled)
-    fun setIsAutoPlayGifsEnabled(enabled: Boolean) = autoPlayGifsPublisher.set(enabled)
     fun setIsChromeCustomTabsEnabled(enabled: Boolean) = putBoolean(KEY_CHROME_CUSTOM_TABS, enabled)
     fun setIsShiftEnterToSendEnabled(enabled: Boolean) = putBoolean(KEY_SHIFT_ENTER_TO_SEND, enabled)
     fun setIsStickerSuggestionsEnabled(enabled: Boolean) = stickerSuggestionsPublisher.set(enabled, persist = true)
-    fun setIsSyncTextAndImagesEnabled(enabled: Boolean) = putBoolean(KEY_SYNC_TEXT_AND_IMAGES, enabled)
+
+    /**
+     * Turning sync back on pushes what the device is holding, rather than waiting for the next
+     * inbound change to decide the question.
+     */
+    fun setIsSyncTextAndImagesEnabled(enabled: Boolean) {
+        putBoolean(KEY_SYNC_TEXT_AND_IMAGES, enabled)
+        if (!enabled) return
+        UserSettings.inlineEmbedMedia.set(getIsEmbedMediaInlined())
+        UserSettings.inlineAttachmentMedia.set(getIsAttachmentMediaInline())
+        UserSettings.renderEmbeds.set(getIsRenderEmbedsEnabled())
+        UserSettings.animateEmoji.set(getIsAnimatedEmojisEnabled())
+        UserSettings.animateStickers.set(getStickerAnimationSettings())
+        UserSettings.gifAutoPlay.set(getIsAutoPlayGifsEnabled())
+    }
 
     fun setIsMobileOverlayEnabled(enabled: Boolean) {
         if (getIsMobileOverlayEnabled() == enabled) return
@@ -260,88 +265,88 @@ class StoreUserSettings(
     // region server-synced settings
 
     @JvmOverloads
+    fun setIsAutoPlayGifsEnabled(enabled: Boolean, activity: AppActivity? = null) {
+        autoPlayGifsPublisher.set(enabled, persist = true)
+        syncTextAndImages { UserSettings.gifAutoPlay.set(enabled) }
+    }
+
+    @JvmOverloads
     fun setIsAttachmentMediaInline(enabled: Boolean, activity: AppActivity? = null) {
         putBoolean(KEY_INLINE_ATTACHMENT_MEDIA, enabled)
-        syncTextAndImages(activity, RestAPIParams.UserSettings.createWithInlineAttachmentMedia(enabled))
+        syncTextAndImages { UserSettings.inlineAttachmentMedia.set(enabled) }
     }
 
     @JvmOverloads
     fun setIsEmbedMediaInlined(enabled: Boolean, activity: AppActivity? = null) {
         putBoolean(KEY_INLINE_EMBED_MEDIA, enabled)
-        syncTextAndImages(activity, RestAPIParams.UserSettings.createWithInlineEmbedMedia(enabled))
+        syncTextAndImages { UserSettings.inlineEmbedMedia.set(enabled) }
     }
 
     @JvmOverloads
     fun setIsRenderEmbedsEnabled(enabled: Boolean, activity: AppActivity? = null) {
-        if (getIsRenderEmbedsEnabled() != enabled) {
-            putBoolean(KEY_RENDER_EMBEDS, enabled)
-            shouldRenderEmbedsSubject.onNext(enabled)
-        }
-        syncTextAndImages(activity, RestAPIParams.UserSettings.createWithRenderEmbeds(enabled))
+        setIsRenderEmbedsLocal(enabled)
+        syncTextAndImages { UserSettings.renderEmbeds.set(enabled) }
     }
 
     @JvmOverloads
     fun setIsAnimatedEmojisEnabled(enabled: Boolean, activity: AppActivity? = null) {
         allowAnimatedEmojisPublisher.set(enabled, persist = true)
-        syncTextAndImages(activity, RestAPIParams.UserSettings.createWithAllowAnimatedEmojis(enabled))
+        syncTextAndImages { UserSettings.animateEmoji.set(enabled) }
     }
 
     @JvmOverloads
     fun setStickerAnimationSettings(setting: Int, activity: AppActivity? = null) {
         require(setting in ModelUserSettings.STICKER_ANIMATION_ALWAYS_ANIMATE..ModelUserSettings.STICKER_ANIMATION_NEVER_ANIMATE)
         stickerAnimationSettingsPublisher.set(setting, persist = true)
-        syncTextAndImages(activity, RestAPIParams.UserSettings.createWithStickerAnimationSettings(setting))
+        syncTextAndImages { UserSettings.animateStickers.set(setting) }
     }
 
     /** Not gated on the sync switch: "display current activity" is an account-level privacy choice. */
     @JvmOverloads
     fun setIsShowCurrentGameEnabled(enabled: Boolean, activity: AppActivity? = null) {
         showCurrentGame.set(enabled, persist = true)
-        updateUserSettings(activity, RestAPIParams.UserSettings.createWithShowCurrentGame(enabled))
+        UserSettings.showCurrentGame.set(enabled)
     }
 
     @JvmOverloads
     fun setIsDeveloperMode(enabled: Boolean, activity: AppActivity? = null) {
         if (getIsDeveloperMode() == enabled) return
-        updateUserSettings(
-            activity,
-            RestAPIParams.UserSettings.createWithDeveloperMode(enabled),
-            R.string.theme_updated,
-        )
         putBoolean(KEY_DEVELOPER_MODE, enabled)
+        UserSettings.developerMode.set(enabled)
+        activity?.let { Toast.makeText(it, R.string.theme_updated, Toast.LENGTH_SHORT).show() }
     }
 
-    /**
-     * @return the server's acknowledgement. The local persister is only written from the success
-     *   path — this controls whether the app reports its own accessibility services to Discord, so
-     *   it must never claim consent the server did not record.
-     */
-    fun setIsAccessibilityDetectionAllowed(allowed: Boolean): Observable<ModelUserSettings> {
-        val api = api() ?: return Observable.empty()
-        return api.updateUserSettings(RestAPIParams.UserSettings.createWithAllowAccessibilityDetection(allowed))
-            .doOnNext { updateAllowAccessibilityDetectionInternal(allowed) }
+    fun setIsAccessibilityDetectionAllowed(allowed: Boolean): Observable<Unit> {
+        UserSettings.allowAccessibilityDetection.set(allowed)
+        updateAllowAccessibilityDetectionInternal(allowed)
+        return Observable.just(Unit)
     }
 
     fun setExplicitContentFilter(activity: AppActivity?, explicitContentFilter: Int) =
-        updateUserSettings(activity, RestAPIParams.UserSettings.createWithExplicitContentFilter(explicitContentFilter))
+        UserSettings.explicitContentFilter.set(explicitContentFilter)
 
     fun setFriendDiscoveryFlags(activity: AppActivity?, flags: Int) =
-        updateUserSettings(activity, RestAPIParams.UserSettings.createWithFriendDiscoveryFlags(flags))
+        UserSettings.friendDiscoveryFlags.set(flags)
 
-    fun setFriendSourceFlags(activity: AppActivity?, all: Boolean?, mutualGuilds: Boolean?, mutualFriends: Boolean?) =
-        updateUserSettings(
-            activity,
-            RestAPIParams.UserSettings.createWithFriendSourceFlags(all, mutualGuilds, mutualFriends),
+    fun setFriendSourceFlags(activity: AppActivity?, all: Boolean?, mutualGuilds: Boolean?, mutualFriends: Boolean?) {
+        val current = UserSettings.friendSourceFlags.get()
+        UserSettings.friendSourceFlags.set(
+            ModelUserSettings.FriendSourceFlags(
+                all = all ?: current.all,
+                mutualFriends = mutualFriends ?: current.mutualFriends,
+                mutualGuilds = mutualGuilds ?: current.mutualGuilds,
+            ),
         )
+    }
 
     fun setDefaultGuildsRestricted(
         activity: AppActivity?,
         defaultGuildsRestricted: Boolean,
         restrictedGuilds: Collection<Long>?,
-    ) = updateUserSettings(
-        activity,
-        RestAPIParams.UserSettings.createWithRestrictedGuilds(defaultGuildsRestricted, restrictedGuilds?.toList()),
-    )
+    ) {
+        UserSettings.defaultGuildsRestricted.set(defaultGuildsRestricted)
+        restrictedGuilds?.let { UserSettings.restrictedGuildIds.set(it.toList()) }
+    }
 
     fun setRestrictedGuildId(activity: AppActivity?, guildId: Long, restricted: Boolean) =
         setRestrictedGuildIds(activity, restrictedGuildIdsPublisher.get(), guildId, restricted)
@@ -359,30 +364,16 @@ class StoreUserSettings(
         val updated = ArrayList(restrictedGuilds.orEmpty())
         if (restricted && !updated.contains(guildId)) updated.add(guildId)
         if (!restricted) updated.remove(guildId)
-        updateUserSettings(activity, RestAPIParams.UserSettings.createWithRestrictedGuilds(null, updated))
+        UserSettings.restrictedGuildIds.set(updated)
     }
 
     /** Records server-side that the contact-sync upsell has been shown, so no other client repeats it. */
-    fun updateContactSyncShown() {
-        val api = api() ?: return
-        api.updateUserSettings(RestAPIParams.UserSettings.createWithContactSyncUpsellShown())
-            .restSubscribeOn()
-            .appSubscribe(StoreUserSettings::class.java) {}
-    }
+    fun updateContactSyncShown() = UserSettings.contactSyncEnabled.set(true)
 
-    /**
-     * Sets or clears the custom status.
-     *
-     * A null [customStatus] must serialise as an explicit JSON null, not be omitted, or the server
-     * treats the PATCH as "leave unchanged"; `RestAPIParams.CustomStatusValue` forces the null
-     * through its own adapter.
-     */
-    fun updateCustomStatus(customStatus: ModelCustomStatusSetting?): Observable<ModelUserSettings> {
-        val api = api() ?: return Observable.empty()
-        return api.updateUserSettingsCustomStatus(
-            customStatus?.let(RestAPIParams.UserSettingsCustomStatus::set)
-                ?: RestAPIParams.UserSettingsCustomStatus.clear(),
-        )
+    /** Sets or clears the custom status; a null [customStatus] clears it. */
+    fun updateCustomStatus(customStatus: ModelCustomStatusSetting?): Observable<Unit> {
+        UserSettings.customStatus.set(customStatus ?: ModelCustomStatusSetting.CLEAR)
+        return Observable.just(Unit)
     }
 
     // endregion
@@ -452,40 +443,23 @@ class StoreUserSettings(
             .subscribe(subscriber)
     }
 
-    /**
-     * Pushes [settings] to `PATCH users/@me/settings`.
-     *
-     * With a null [activity] the write is skipped entirely — that is how an inbound payload is
-     * applied locally without being echoed back. The reference keeps this on the companion as an
-     * `AppActivity` extension using the global `RestAPI`; here it is an instance method because
-     * the REST client is injected.
-     */
-    private fun updateUserSettings(
-        activity: AppActivity?,
-        settings: RestAPIParams.UserSettings,
-        successStringResId: Int? = null,
-    ) {
-        if (activity == null) return
-        val api = api() ?: return
-        api.updateUserSettings(settings)
-            .restSubscribeOn()
-            .ui(activity)
-            .appSubscribe(errorClass = StoreUserSettings::class.java, context = activity) {
-                successStringResId?.let { Toast.makeText(activity, it, Toast.LENGTH_SHORT).show() }
-            }
+    /** The media/animation group only reaches the account while "sync across devices" is on. */
+    private fun syncTextAndImages(write: () -> Unit) {
+        if (getIsSyncTextAndImagesEnabled()) write()
     }
 
-    /** The media/animation group only syncs while "sync across devices" is on. */
-    private fun syncTextAndImages(activity: AppActivity?, settings: RestAPIParams.UserSettings) {
-        if (getIsSyncTextAndImagesEnabled()) updateUserSettings(activity, settings)
+    private fun setIsRenderEmbedsLocal(enabled: Boolean) {
+        if (getIsRenderEmbedsEnabled() == enabled) return
+        putBoolean(KEY_RENDER_EMBEDS, enabled)
+        shouldRenderEmbedsSubject.onNext(enabled)
     }
 
     /**
-     * Clears an expired custom status server-side. Local expiry alone would leave the status up on
-     * every other client the account is signed in to.
+     * Clears an expired custom status. Local expiry alone would leave the status up on every other
+     * client the account is signed in to.
      */
     private fun expireCustomStatus() {
-        updateCustomStatus(null).restSubscribeOn().appSubscribe(StoreUserSettings::class.java) {}
+        UserSettings.customStatus.set(ModelCustomStatusSetting.CLEAR)
     }
 
     private fun updateAllowAccessibilityDetectionInternal(allowed: Boolean) {
@@ -531,7 +505,6 @@ class StoreUserSettings(
     companion object {
         private const val KEY_INLINE_ATTACHMENT_MEDIA = "CACHE_KEY_INLINE_ATTACHMENT_MEDIA"
         private const val KEY_IMAGE_COMPRESSION = "CACHE_KEY_IMAGE_COMPRESSION"
-        private const val KEY_AUTO_PLAY_GIFS = "STORE_SETTINGS_AUTO_PLAY_GIFS"
         private const val KEY_CHROME_CUSTOM_TABS = "CACHE_KEY_USE_CHROME_CUSTOM_TABS"
         private const val KEY_DEVELOPER_MODE = "CACHE_KEY_DEVELOPER_MODE"
         private const val KEY_INLINE_EMBED_MEDIA = "CACHE_KEY_INLINE_EMBED_MEDIA"

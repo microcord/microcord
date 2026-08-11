@@ -34,6 +34,7 @@ rxjava = "1.3.8"
 rxandroid = "1.2.1"
 simpleast = "2.8.0"
 firebaseMessaging = "24.1.0"
+protobufJava = "3.25.5"
 googleServices = "4.4.2"
 gson = "2.14.0"
 kryo = "4.0.2"
@@ -99,6 +100,7 @@ rxjava = { group = "io.reactivex", name = "rxjava", version.ref = "rxjava" }
 rxandroid = { group = "io.reactivex", name = "rxandroid", version.ref = "rxandroid" }
 simpleast = { group = "com.github.discord", name = "SimpleAST", version.ref = "simpleast" }
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging", version.ref = "firebaseMessaging" }
+protobuf-java = { group = "com.google.protobuf", name = "protobuf-java", version.ref = "protobufJava" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 kryo = { group = "com.esotericsoftware", name = "kryo", version.ref = "kryo" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }

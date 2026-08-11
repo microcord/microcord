@@ -319,9 +319,12 @@ class StoreStreamTest {
         val stages = StoreStream.getStageInstances()
         prefs.edit().putString("private-default", "value").commit()
         durablePrefs.edit().putString("private-durable", "value").commit()
+        // Held, not created inline: `Persister.reset` only reaches persisters still strongly
+        // referenced somewhere, so a temporary can be collected before logout ever sees it.
         Persister("logout-survival", arrayListOf<String>()).set(arrayListOf("persisted"), persist = true)
         Persister.init(directory.toFile())
-        assertEquals(listOf("persisted"), Persister("logout-survival", arrayListOf<String>()).get())
+        val survival = Persister("logout-survival", arrayListOf<String>())
+        assertEquals(listOf("persisted"), survival.get())
 
         settings.setContactSyncUpsellShown(true)
         settings.setIsStickerSuggestionsEnabled(false)
@@ -347,7 +350,7 @@ class StoreStreamTest {
         assertEquals(emptyMap<String, Any?>(), prefs.all)
         assertEquals(emptyMap<String, Any?>(), durablePrefs.all)
         Persister.init(directory.toFile())
-        assertEquals(emptyList<String>(), Persister("logout-survival", arrayListOf<String>()).get())
+        assertEquals(emptyList<String>(), survival.get())
 
         stream.resetForLogout()
         assertEquals(emptyMap<String, Any?>(), prefs.all)

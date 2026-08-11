@@ -24,6 +24,9 @@ import retrofit2.Response
 import rx.Observable
 import rx.schedulers.Schedulers
 import rx.subjects.PublishSubject
+import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings
+import com.google.protobuf.UInt32Value
+import com.google.protobuf.BoolValue
 
 class StoreUserSettingsPrivacyTest {
     private val expected = Consents(Consent(true, "usage"), Consent(false, "personalization"))
@@ -125,7 +128,10 @@ class StoreUserSettingsPrivacyTest {
 
         assertEquals(ModelUserSettings.EXPLICIT_CONTENT_FILTER_NON_FRIENDS, store.observeExplicitContentFilter().take(1).toBlocking().single())
         assertEquals(true, store.observeIsDefaultGuildsRestricted().take(1).toBlocking().single())
-        assertEquals(settings().friendSourceFlags, store.observeFriendSourceFlags().take(1).toBlocking().single())
+        assertEquals(
+            ModelUserSettings.FriendSourceFlags(mutualGuilds = true),
+            store.observeFriendSourceFlags().take(1).toBlocking().single(),
+        )
         assertEquals(6, store.observeFriendDiscoveryFlags().take(1).toBlocking().single())
     }
 
@@ -149,12 +155,13 @@ class StoreUserSettingsPrivacyTest {
         return requireNotNull(result)
     }
 
-    private fun settings() = ModelUserSettings(
-        explicitContentFilter = ModelUserSettings.EXPLICIT_CONTENT_FILTER_NON_FRIENDS,
-        defaultGuildsRestricted = true,
-        friendSourceFlags = ModelUserSettings.FriendSourceFlags(false, true, false),
-        friendDiscoveryFlags = 6,
-    )
+    private fun settings(): PreloadedUserSettings = PreloadedUserSettings.newBuilder().apply {
+        textAndImagesBuilder.explicitContentFilter =
+            UInt32Value.of(ModelUserSettings.EXPLICIT_CONTENT_FILTER_NON_FRIENDS)
+        privacyBuilder.defaultGuildsRestrictedV2 = BoolValue.of(true)
+        privacyBuilder.friendSourceFlags = UInt32Value.of(0b0100)
+        privacyBuilder.friendDiscoveryFlags = UInt32Value.of(6)
+    }.build()
 
     private fun store(api: () -> RestAPIInterface?): StoreUserSettings {
         val dispatcher = Dispatcher(Schedulers.immediate())
@@ -177,15 +184,35 @@ class StoreUserSettingsPrivacyTest {
         }
     } as RestAPIInterface
 
-    private fun memoryPreferences() = Proxy.newProxyInstance(
-        SharedPreferences::class.java.classLoader,
-        arrayOf(SharedPreferences::class.java),
-    ) { _, method, args ->
-        when (method.name) {
-            "getBoolean", "getInt", "getLong", "getFloat", "getString", "getStringSet" -> args[1]
-            "contains" -> false
-            "getAll" -> emptyMap<String, Any?>()
-            else -> null
+    private fun memoryPreferences(): SharedPreferences {
+        val values = linkedMapOf<String, Any?>()
+        lateinit var editor: Any
+        editor = Proxy.newProxyInstance(
+            SharedPreferences.Editor::class.java.classLoader,
+            arrayOf(SharedPreferences.Editor::class.java),
+        ) { _, method, args ->
+            when (method.name) {
+                "putBoolean", "putInt", "putLong", "putFloat", "putString", "putStringSet" ->
+                    editor.also { values[args[0] as String] = args[1] }
+                "remove" -> editor.also { values.remove(args[0] as String) }
+                "clear" -> editor.also { values.clear() }
+                "commit" -> true
+                "apply" -> null
+                else -> editor
+            }
         }
-    } as SharedPreferences
+        return Proxy.newProxyInstance(
+            SharedPreferences::class.java.classLoader,
+            arrayOf(SharedPreferences::class.java),
+        ) { _, method, args ->
+            when (method.name) {
+                "getBoolean", "getInt", "getLong", "getFloat", "getString", "getStringSet" ->
+                    values[args[0]] ?: args[1]
+                "contains" -> values.containsKey(args[0])
+                "getAll" -> values.toMap()
+                "edit" -> editor
+                else -> null
+            }
+        } as SharedPreferences
+    }
 }

@@ -8,6 +8,7 @@ import com.discord.models.domain.ModelUserSettings
 import com.discord.models.domain.auth.ModelLoginResult
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.cache.SharedPreferencesProvider
+import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings
 import rx.Observable
 
 class StoreUserSettingsSystem(
@@ -68,20 +69,29 @@ class StoreUserSettingsSystem(
         )
     }
 
-    fun setTheme(theme: String, apiSync: Boolean, onRequestApiSync: (() -> Unit)? = null) = dispatcher.schedule {
-        require(!getIsThemeSyncEnabled() || !apiSync || onRequestApiSync != null) { "API callback required." }
-        onRequestApiSync?.takeIf { getIsThemeSyncEnabled() && apiSync }?.invoke()
-        settings = settings.copy(theme = theme)
-        sessionDurablePreferences.edit { putString(KEY_THEME, theme) }
-        markChanged()
+    /** [onSynced] runs only when the choice reached the account, so callers can confirm it. */
+    fun setTheme(theme: String, apiSync: Boolean, onSynced: (() -> Unit)? = null) {
+        if (apiSync && getIsThemeSyncEnabled()) {
+            UserSettings.theme.set(theme)
+            onSynced?.invoke()
+        }
+        dispatcher.schedule {
+            settings = settings.copy(theme = theme)
+            sessionDurablePreferences.edit { putString(KEY_THEME, theme) }
+            markChanged()
+        }
     }
 
-    fun setLocale(locale: String?, apiSync: Boolean, onRequestApiSync: (() -> Unit)? = null) = dispatcher.schedule {
-        require(!getIsLocaleSyncEnabled() || !apiSync || onRequestApiSync != null) { "API callback required." }
-        onRequestApiSync?.takeIf { getIsLocaleSyncEnabled() && apiSync }?.invoke()
-        settings = settings.copy(_locale = locale)
-        preferences.edit { putString(KEY_LOCALE, locale) }
-        markChanged()
+    fun setLocale(locale: String?, apiSync: Boolean, onSynced: (() -> Unit)? = null) {
+        if (apiSync && getIsLocaleSyncEnabled()) {
+            UserSettings.locale.set(locale)
+            onSynced?.invoke()
+        }
+        dispatcher.schedule {
+            settings = settings.copy(_locale = locale)
+            preferences.edit { putString(KEY_LOCALE, locale) }
+            markChanged()
+        }
     }
 
     fun setFontScale(fontScale: Int) {
@@ -96,10 +106,6 @@ class StoreUserSettingsSystem(
     fun setIsSyncThemeEnabled(enabled: Boolean) = sessionDurablePreferences.edit { putBoolean(KEY_THEME_SYNC, enabled) }
     fun setIsLocaleSyncEnabled(enabled: Boolean) = preferences.edit { putBoolean(KEY_LOCALE_SYNC, enabled) }
 
-    @StoreThread
-    fun handleConnectionOpen(userSettings: ModelUserSettings) = handleUserSettings(userSettings)
-    @StoreThread
-    fun handleUserSettingsUpdate(userSettings: ModelUserSettings) = handleUserSettings(userSettings)
     @StoreThread
     internal fun handleLoginResult(loginResult: ModelLoginResult) {
         StoreThreadScheduler.assertCurrentThread()
@@ -146,13 +152,13 @@ class StoreUserSettingsSystem(
         getIsThemeSyncEnabled() && settings.theme != ModelUserSettings.THEME_MATERIAL_YOU
 
     @StoreThread
-    private fun handleUserSettings(userSettings: ModelUserSettings) {
+    fun handleUserSettingsProto(proto: PreloadedUserSettings) {
         StoreThreadScheduler.assertCurrentThread()
         var updated = settings
         if (acceptsSyncedTheme()) {
-            userSettings.theme?.let { updated = updated.copy(theme = it) }
+            UserSettings.theme.get(proto)?.let { updated = updated.copy(theme = it) }
         }
-        if (getIsLocaleSyncEnabled()) userSettings.locale?.let { updated = updated.copy(_locale = it) }
+        if (getIsLocaleSyncEnabled()) UserSettings.locale.get(proto)?.let { updated = updated.copy(_locale = it) }
         if (updated != settings) {
             settings = updated
             sessionDurablePreferences.edit { putString(KEY_THEME, updated.theme) }

@@ -7,13 +7,8 @@ import com.discord.R
 import com.discord.app.AppViewModel
 import com.discord.models.domain.ModelUserSettings
 import com.discord.models.user.MeUser
-import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
-import com.discord.stores.StoreUserSettings
 import com.discord.stores.StoreUserSettingsSystem
-import com.discord.utilities.rest.RestAPI
-import com.discord.utilities.rx.appSubscribe
-import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.user.UserUtils.isStaff
 import java.util.concurrent.TimeUnit
@@ -151,13 +146,7 @@ class SettingsAppearanceViewModel(
     @MainThread
     private fun updateTheme(theme: String) {
         userSettingsSystem.setTheme(theme, apiSync = true) {
-            val api = RestAPI.apiOrNull ?: return@setTheme
-            api.updateUserSettings(RestAPIParams.UserSettings.createWithTheme(theme))
-                .restSubscribeOn()
-                .ui(this)
-                .appSubscribe(StoreUserSettings::class.java) {
-                    eventSubject.onNext(Event.ThemeUpdated(R.string.theme_updated))
-                }
+            eventSubject.onNext(Event.ThemeUpdated(R.string.theme_updated))
         }
     }
 

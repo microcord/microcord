@@ -10,7 +10,6 @@ import com.discord.api.presence.Presence as ApiPresence
 import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelCustomStatusSetting
 import com.discord.models.domain.ModelSession
-import com.discord.models.domain.ModelUserSettings
 import com.discord.models.presence.Presence
 import com.discord.models.user.MeUser
 import com.discord.stores.updates.ObservationDeck
@@ -58,7 +57,7 @@ class StoreUserPresence(
     @StoreThread internal fun getLocalPresenceInternal(): Presence = localPresence
 
     @StoreThread
-    fun handleConnectionOpen(payload: ModelPayload) {
+    fun handleConnectionOpen(payload: ModelPayload, status: ClientStatus?, customStatus: ModelCustomStatusSetting?) {
         StoreThreadScheduler.assertCurrentThread()
         userGuildPresences.clear()
         presences.clear()
@@ -67,7 +66,7 @@ class StoreUserPresence(
         payload.presences.orEmpty().forEach { presence ->
             presence.user?.let { handlePresenceUpdate(ME_GUILD_ID, it.id, presence.status, presence.clientStatus, presence.activities) }
         }
-        updateSelfPresence(payload.userSettings, payload.sessions, false)
+        updateSelfPresence(status, customStatus, payload.sessions, false)
         markChanged()
     }
 
@@ -136,8 +135,9 @@ class StoreUserPresence(
             TimestampedPresence(Presence(status, clientStatuses, activities), clock.currentTimeMillis())
         flattenPresence(userId)
     }
-    @StoreThread fun handleSessionsReplace(sessions: List<ModelSession>) = updateSelfPresence(null, sessions, true)
-    @StoreThread fun handleUserSettingsUpdate(settings: ModelUserSettings) = updateSelfPresence(settings, null, true)
+    @StoreThread fun handleSessionsReplace(sessions: List<ModelSession>) = updateSelfPresence(null, null, sessions, true)
+    @StoreThread fun handleUserSettingsUpdate(status: ClientStatus?, customStatus: ModelCustomStatusSetting?) =
+        updateSelfPresence(status, customStatus, null, true)
     @StoreThread fun handleThreadMemberListUpdate(guildId: Long, presences: List<ApiPresence>) =
         presences.forEach { handlePresenceUpdate(guildId, it) }
     @StoreThread fun handleThreadMembersUpdate(guildId: Long, presences: List<ApiPresence>) =
@@ -223,14 +223,18 @@ class StoreUserPresence(
     }
 
     @StoreThread
-    private fun updateSelfPresence(settings: ModelUserSettings?, sessions: List<ModelSession>?, markLocal: Boolean) {
+    private fun updateSelfPresence(
+        settingsStatus: ClientStatus?,
+        customStatusSetting: ModelCustomStatusSetting?,
+        sessions: List<ModelSession>?,
+        markLocal: Boolean,
+    ) {
         StoreThreadScheduler.assertCurrentThread()
         val userId = meUser?.id ?: return
-        val status = settings?.status ?: localPresence.status
+        val status = settingsStatus ?: localPresence.status
         val remoteActivities = sessions?.firstOrNull(ModelSession::active)?.activities
             ?: presences[userId]?.activities
             ?: localPresence.activities
-        val customStatusSetting = settings?.customStatus
         val localActivities = if (customStatusSetting == null) {
             localPresence.activities
         } else {

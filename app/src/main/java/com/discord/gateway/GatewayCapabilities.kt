@@ -37,6 +37,9 @@ object GatewayCapabilities {
     /** Allows READY to carry a replacement `auth_token`. */
     const val AUTH_TOKEN_REFRESH = 1L shl 8
 
+    /** Drops `user_settings` from READY and stops USER_SETTINGS_UPDATE; the proto replaces both. */
+    const val NO_LEGACY_USER_SETTINGS = 1L shl 9
+
     /** Versioned guild data: `data_mode`, `partial_updates` and per-guild `version`. */
     const val USE_GUILD_VERSIONING = 1L shl 10
 
@@ -67,6 +70,7 @@ object GatewayCapabilities {
         MULTIPLE_GUILD_EXPERIMENT_POPULATIONS or
         NON_CHANNEL_READ_STATES or
         AUTH_TOKEN_REFRESH or
+        NO_LEGACY_USER_SETTINGS or
         USE_GUILD_VERSIONING or
         PASSIVE_CALLS_V1 or
         REACTION_BATCHING or

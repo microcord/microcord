@@ -1,0 +1,5 @@
+Vendored from https://github.com/discord-userdoccers/discord-protos
+Commit: de0c0ff22a44bfb3615c2773849bf785cafe6c36 (2026-08-11)
+
+Only discord_users/v1 is copied: the settings protos the client reads and writes.
+Regenerate by re-copying those files; do not hand-edit them.

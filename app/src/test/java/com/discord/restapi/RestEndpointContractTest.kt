@@ -127,31 +127,6 @@ class RestEndpointContractTest {
 
     // -- Invites -------------------------------------------------------------------------------------
 
-    // -- Account settings ------------------------------------------------------------------------------
-
-    @Test
-    fun userSettingsPatchesCarryExactlyOneChangedValue() {
-        enqueueObject()
-        api.updateUserSettings(RestAPIParams.UserSettings.createWithTheme("dark")).toBlocking().first()
-        val theme = takeRequest("PATCH", "/api/v9/users/@me/settings")
-        assertEquals("{\"theme\":\"dark\"}", theme.body.readUtf8())
-
-        enqueueObject()
-        api.updateUserSettings(RestAPIParams.UserSettings.createWithStatus(ClientStatus.DND))
-            .toBlocking().first()
-        assertEquals(
-            "{\"status\":\"dnd\"}",
-            takeRequest("PATCH", "/api/v9/users/@me/settings").body.readUtf8(),
-        )
-
-        enqueueObject()
-        api.updateUserSettings(RestAPIParams.UserSettings.createWithFriendSourceFlags(true, null, null))
-            .toBlocking().first()
-        val flags = json(takeRequest("PATCH", "/api/v9/users/@me/settings"))
-        assertEquals(setOf("friend_source_flags"), flags.keySet())
-        assertTrue(flags["friend_source_flags"].asJsonObject["all"].asBoolean)
-    }
-
     // -- Search ----------------------------------------------------------------------------------------------
 
     @Test

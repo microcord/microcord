@@ -214,7 +214,7 @@ class ReadyUserSocialStoresTest {
         dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
 
         dispatcher.schedule {
-            store.handleConnectionOpen(readyPayload())
+            store.handleConnectionOpen(readyPayload(), null, null)
             store.handlePresenceUpdate(10, 9, ClientStatus.ONLINE, null, null)
             now = 2
             store.handlePresenceUpdate(20, 9, ClientStatus.IDLE, null, null)
@@ -230,10 +230,8 @@ class ReadyUserSocialStoresTest {
 
         dispatcher.schedule {
             store.handleUserSettingsUpdate(
-                ModelUserSettings(
-                    status = ClientStatus.DND,
-                    customStatus = ModelCustomStatusSetting("working", null, "test", null),
-                ),
+                ClientStatus.DND,
+                ModelCustomStatusSetting("working", null, "test", null),
             )
         }
         scheduler.triggerActions()
@@ -259,7 +257,7 @@ class ReadyUserSocialStoresTest {
         )
 
         dispatcher.schedule {
-            store.handleConnectionOpen(readyPayload())
+            store.handleConnectionOpen(readyPayload(), null, null)
             store.handlePresenceUpdate(1, 91, ClientStatus.ONLINE, null, listOf(plain) + richValues)
         }
         scheduler.triggerActions()

@@ -58,7 +58,6 @@ import com.discord.api.sticker.GuildStickersUpdate
 import com.discord.api.guildhash.GuildHashes
 import com.discord.gateway.RealGatewayScheduler
 import com.discord.models.domain.ModelUserRelationship
-import com.discord.models.domain.ModelUserSettings
 import com.discord.models.domain.auth.ModelLoginResult
 import com.discord.restapi.RequiredHeadersInterceptor
 import com.discord.restapi.http.RateLimitInterceptor
@@ -83,6 +82,8 @@ import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
 import com.discord.utilities.logging.AppGatewaySocketLogger
 import com.discord.utilities.persister.Persister
+import discord_protos.discord_users.v1.FrecencyUserSettingsOuterClass.FrecencyUserSettings
+import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings
 import com.discord.utilities.time.Clock
 import com.discord.utilities.websocket.GatewayCompression
 import com.discord.utilities.websocket.OkHttpGatewayWebSocketFactory
@@ -289,6 +290,41 @@ class StoreStream private constructor(
     private val channelSpoilerAgree = StoreChannelSpoilerAgree(dispatcher, channels, users, observationDeck)
     private val search = StoreSearch(this, dispatcher, guildsNsfw, users, observationDeck, channels, guilds)
     private val mediaFavorites = StoreMediaFavorites(observationDeck, dispatcher)
+    private val settingsProtoScheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { runnable ->
+        Thread(runnable, "SettingsProtoWriter").apply { isDaemon = true }
+    }
+    private val userSettingsProto = StoreUserSettingsProto(
+        type = StoreUserSettingsProto.TYPE_PRELOADED,
+        dispatcher = dispatcher,
+        empty = PreloadedUserSettings.getDefaultInstance(),
+        parse = PreloadedUserSettings::parseFrom,
+        dataVersionOf = { it.versions.dataVersion },
+        cacheKey = StoreUserSettingsProto.PRELOADED_CACHE_KEY,
+        observationDeck = observationDeck,
+    )
+    private val userSettingsProtoWriter = UserSettingsProtoWriter(
+        userSettingsProto,
+        dispatcher,
+        settingsProtoScheduler,
+        PreloadedUserSettings::newBuilder,
+    )
+    private val frecencyProto = StoreUserSettingsProto(
+        type = StoreUserSettingsProto.TYPE_FRECENCY,
+        dispatcher = dispatcher,
+        empty = FrecencyUserSettings.getDefaultInstance(),
+        parse = FrecencyUserSettings::parseFrom,
+        dataVersionOf = { it.versions.dataVersion },
+        cacheKey = StoreUserSettingsProto.FRECENCY_CACHE_KEY,
+        lazy = true,
+        observationDeck = observationDeck,
+    )
+    private val frecencyProtoWriter = UserSettingsProtoWriter(
+        frecencyProto,
+        dispatcher,
+        settingsProtoScheduler,
+        FrecencyUserSettings::newBuilder,
+    )
+    private val frecency = StoreFrecency(dispatcher, settingsProtoScheduler, { frecencyProtoWriter }, observationDeck)
     private val gifPicker = StoreGifPicker(
         dispatcher,
         userSettingsSystem,
@@ -320,7 +356,6 @@ class StoreStream private constructor(
     private val expandedGuildFolders = StoreExpandedGuildFolders(dispatcher, observationDeck)
     private val collapsedChannelCategories = StoreCollapsedChannelCategories(dispatcher, observationDeck)
     private var guildFolders: List<ModelGuildFolder> = emptyList()
-    private var guildFolderUpdateVersion = 0
     private val guildSettings = StoreUserGuildSettings(
         dispatcher,
         clock,
@@ -372,6 +407,13 @@ class StoreStream private constructor(
     )
     private val emojiGuild = StoreEmojiGuild(observationDeck, dispatcher)
     private val stickers = StoreStickers(dispatcher, observationDeck = observationDeck, clock = clock)
+
+    init {
+        // Declared here rather than beside each store: the writer outlives them all and they are
+        // constructed before it.
+        listOf(frecency.beforeSend, mediaFavorites.beforeSend, stickers.beforeSend)
+            .forEach(frecencyProtoWriter::addBeforeSend)
+    }
     private val guildStickers = StoreGuildStickers(dispatcher, observationDeck) { stickerIds ->
         stickers.handleDeletedStickers(stickerIds)
     }
@@ -660,6 +702,7 @@ class StoreStream private constructor(
         dispatcher = dispatcher,
         storeMessages = messages,
         storeLocalActionComponentState = localActionComponentState,
+        storeApplicationCommandFrecency = applicationCommandFrecency,
         sharedPrefs = preferences,
         observationDeck = observationDeck,
         restApi = { if (::restApi.isInitialized) restApi else null },
@@ -1031,6 +1074,9 @@ class StoreStream private constructor(
         expressionSuggestions,
         maskedLinks,
         mediaFavorites,
+        userSettingsProto,
+        frecencyProto,
+        frecency,
         notificationUpsells,
         notifications,
         gameParty,
@@ -1526,6 +1572,8 @@ class StoreStream private constructor(
         com.discord.utilities.lifecycle.Backgrounded.observe().subscribe(
             { backgrounded ->
                 AnalyticSuperProperties.setBackgrounded(backgrounded)
+                frecency.handleBackgrounded(backgrounded)
+                userSettingsProtoWriter.flush()
                 dispatcher.schedule {
                     connectivity.handleBackgrounded(backgrounded)
                     messagesLoader.handleBackgrounded(backgrounded)
@@ -1538,7 +1586,7 @@ class StoreStream private constructor(
         accessibility.init(context)
         userSettings.init(context)
         userSettings.observeCustomStatus().subscribe { status ->
-            dispatcher.schedule { presences.handleUserSettingsUpdate(ModelUserSettings(customStatus = status)) }
+            dispatcher.schedule { presences.handleUserSettingsUpdate(null, status) }
         }
         BootLog.record(BootLogEvent.CACHE_RESTORE_STARTED)
         dispatcher.schedule {
@@ -1553,6 +1601,8 @@ class StoreStream private constructor(
             collapsedChannelCategories.restore()
             guildSettings.restore()
             clientDataState.init()
+            userSettings.handleUserSettingsProto(userSettingsProto.init())
+            handleFrecencyProtoInternal(frecencyProto.init())
             unreadSettingNotice.restore()
             messages.restore()
             guildFolders = userSettings.getGuildFolders()
@@ -1597,6 +1647,8 @@ class StoreStream private constructor(
             collapsedChannelCategories.restore()
             guildSettings.restore()
             clientDataState.init()
+            userSettings.handleUserSettingsProto(userSettingsProto.init())
+            frecencyProto.init()
             messages.restore()
             guildFolders = userSettings.getGuildFolders()
             updateSortedGuilds()
@@ -1765,9 +1817,8 @@ class StoreStream private constructor(
     private fun accessibilityMonitorBind(context: Context) =
         com.discord.utilities.accessibility.AccessibilityMonitor.INSTANCE.bindContext(context)
 
-    fun handleConnectionOpen(userSettings: ModelUserSettings, guilds: List<Guild>) = dispatcher.schedule {
-        this.userSettings.handleConnectionOpen(userSettings)
-        userSettingsSystem.handleConnectionOpen(userSettings)
+    fun handleConnectionOpen(settings: PreloadedUserSettings, guilds: List<Guild>) = dispatcher.schedule {
+        handleUserSettingsProtoInternal(settings)
         stageInstances.handleConnectionOpen(guilds)
     }
 
@@ -1785,10 +1836,22 @@ class StoreStream private constructor(
         threadsJoined.handleSearchFinish(searchState.threads, searchState.threadMembers)
     }
 
-    fun handleUserSettingsUpdate(userSettings: ModelUserSettings) = dispatcher.schedule {
-        this.userSettings.handleUserSettingsUpdate(userSettings)
-        userSettingsSystem.handleUserSettingsUpdate(userSettings)
-        userSettings.guildFolders?.let { guildFolders = it }
+    @StoreThread
+    private fun handleFrecencyProtoInternal(settings: FrecencyUserSettings) {
+        mediaFavorites.handleFrecencySettings(settings)
+        stickers.handleFrecencySettings(settings)
+        frecency.handleFrecencySettings(settings)
+    }
+
+    @StoreThread
+    private fun handleUserSettingsProtoInternal(settings: PreloadedUserSettings) {
+        userSettings.handleUserSettingsProto(settings)
+        userSettingsSystem.handleUserSettingsProto(settings)
+        presences.handleUserSettingsUpdate(
+            UserSettings.status.get(settings),
+            UserSettings.customStatus.get(settings),
+        )
+        guildFolders = userSettings.getGuildFolders()
         updateSortedGuilds()
     }
 
@@ -1844,11 +1907,10 @@ class StoreStream private constructor(
         dispatchSubscribe(events.ready, "streamConnectionOpen", ::handleConnectionOpenInternal)
         dispatchSubscribe(events.readySupplemental, "streamConnectionOpenSupplemental", ::handleConnectionOpenSupplementalInternal)
         dispatchSubscribe(events.initialGuild, "streamInitialGuild", ::handleInitialGuildInternal)
-        dispatchSubscribe(
-            events.userSettingsProtoUpdate,
-            "streamUserSettingsProtoUpdate",
-            mediaFavorites::handleGatewayUpdate,
-        )
+        dispatchSubscribe(events.userSettingsProtoUpdate, "streamUserSettingsProtoUpdate") { update ->
+            handleFrecencyProtoInternal(frecencyProto.handleUserSettingsProtoUpdate(update))
+            handleUserSettingsProtoInternal(userSettingsProto.handleUserSettingsProtoUpdate(update))
+        }
 
         // Guilds
         dispatchSubscribe(events.guildCreate, "streamGuildCreate", ::handleGuildCreatePayloadInternal)
@@ -2223,13 +2285,6 @@ class StoreStream private constructor(
         }
 
         // Settings
-        dispatchSubscribe(events.userSettingsUpdate, "streamUserSettingsUpdate") { settings ->
-            userSettings.handleUserSettingsUpdate(settings)
-            userSettingsSystem.handleUserSettingsUpdate(settings)
-            presences.handleUserSettingsUpdate(settings)
-            settings.guildFolders?.let { folders -> guildFolders = folders }
-            updateSortedGuilds()
-        }
         dispatchSubscribe(events.userGuildSettingsUpdate, "streamGuildSettingUpdated") { settings ->
             guildSettings.handleGuildSettingUpdated(listOf(settings))
             clientDataState.handleGuildSettingUpdated(settings)
@@ -2274,7 +2329,7 @@ class StoreStream private constructor(
         applicationCommands.handleConnectionReady(ready)
         applicationInteractions.handleConnectionReady(ready)
         spotify.handleConnectionReady(ready)
-        mediaFavorites.handleConnectionReady(ready)
+
     }
 
     @StoreThread
@@ -2490,13 +2545,9 @@ class StoreStream private constructor(
                 WidgetUserStatusSheet.State(state)
             }
         }
-        WidgetUserStatusSheet.onStatusSelected = { status ->
-            restApi.updateUserSettingsStatus(RestAPIParams.UserSettingsStatus(status))
-                .subscribeOn(Schedulers.io()).subscribe(::handleUserSettingsUpdate, {})
-        }
+        WidgetUserStatusSheet.onStatusSelected = { status -> UserSettings.status.set(status) }
         WidgetUserStatusSheet.onClearCustomStatus = {
-            restApi.updateUserSettingsCustomStatus(RestAPIParams.UserSettingsCustomStatus.clear())
-                .subscribeOn(Schedulers.io()).subscribe(::handleUserSettingsUpdate, {})
+            UserSettings.customStatus.set(ModelCustomStatusSetting.CLEAR)
         }
         WidgetUserSetCustomStatus.initialState = {
             val current = userSettings.getCustomStatus()
@@ -2508,13 +2559,12 @@ class StoreStream private constructor(
             )
         }
         WidgetUserSetCustomStatus.onSave = { submission ->
-            val value = if (submission.text == null && submission.emojiUri == null) null else ModelCustomStatusSetting(
-                submission.text, null, submission.emojiUri, submission.expiresAtUtc,
-            )
-            val body = value?.let(RestAPIParams.UserSettingsCustomStatus::set)
-                ?: RestAPIParams.UserSettingsCustomStatus.clear()
-            restApi.updateUserSettingsCustomStatus(body).subscribeOn(Schedulers.io())
-                .subscribe(::handleUserSettingsUpdate, {})
+            val value = if (submission.text == null && submission.emojiUri == null) {
+                ModelCustomStatusSetting.CLEAR
+            } else {
+                ModelCustomStatusSetting(submission.text, null, submission.emojiUri, submission.expiresAtUtc)
+            }
+            UserSettings.customStatus.set(value)
         }
         WidgetUserSetCustomStatus.onClear = WidgetUserStatusSheet.onClearCustomStatus
     }
@@ -2871,30 +2921,13 @@ class StoreStream private constructor(
         guildSubscriptions.handleViewportChanged(channel.guildId, channel.id, range)
     }
 
-    @Synchronized
     private fun updateGuildFoldersInternal(entries: List<StoreGuildsSorted.Entry>) {
         val folders = entries.map(StoreGuildsSorted.Entry::asModelGuildFolder)
-        val previous = guildFolders
-        val version = ++guildFolderUpdateVersion
         dispatcher.schedule {
             guildFolders = folders
             guildsSorted.handlePositions(entries)
-            userSettings.handleUserSettingsUpdate(ModelUserSettings(guildFolders = folders))
         }
-        if (::restApi.isInitialized) restApi.updateUserSettings(RestAPIParams.GuildFoldersUpdate(folders))
-            .subscribeOn(Schedulers.io()).subscribe(
-            ::handleUserSettingsUpdate,
-            {
-                dispatcher.schedule {
-                    synchronized(this) {
-                        if (version != guildFolderUpdateVersion) return@schedule
-                        guildFolders = previous
-                    }
-                    userSettings.handleUserSettingsUpdate(ModelUserSettings(guildFolders = previous))
-                    updateSortedGuilds()
-                }
-            },
-        )
+        UserSettings.guildFolders.set(folders)
     }
 
     @StoreThread
@@ -3071,6 +3104,12 @@ class StoreStream private constructor(
         fun resetStore(name: String, action: () -> Unit) {
             runCatching(action).onFailure { Log.e("StoreStream", "Logout reset failed for $name", it) }
         }
+        // Before anything else, so a settings write still in flight cannot repopulate the cache.
+        resetStore("userSettingsProtoWriter", userSettingsProtoWriter::handlePreLogout)
+        resetStore("userSettingsProto", userSettingsProto::handlePreLogout)
+        resetStore("frecencyProtoWriter", frecencyProtoWriter::handlePreLogout)
+        resetStore("frecencyProto", frecencyProto::handlePreLogout)
+        resetStore("frecency", frecency::handlePreLogout)
         resetStore("userSettingsSystem.preLogout", userSettingsSystem::handlePreLogout)
         resetStore("accessibility", accessibility::reset)
         resetStore("userSettings", userSettings::reset)
@@ -3140,11 +3179,12 @@ class StoreStream private constructor(
             (payload.users.orEmpty() + listOfNotNull(payload.me)).associateBy { it.id }
         authentication.handleConnectionOpen(payload)
         users.handleConnectionOpen(payload)
-        payload.userSettings?.let {
-            userSettings.handleConnectionOpen(it)
-            userSettingsSystem.handleConnectionOpen(it)
-            it.guildFolders?.let { folders -> guildFolders = folders }
-        }
+        handleFrecencyProtoInternal(frecencyProto.handleConnectionOpen(null))
+        frecency.handleConnectionOpen()
+        val settingsProto = userSettingsProto.handleConnectionOpen(payload.userSettingsProto)
+        userSettings.handleConnectionOpen(settingsProto)
+        userSettingsSystem.handleUserSettingsProto(settingsProto)
+        guildFolders = userSettings.getGuildFolders()
         userRelationships.handleConnectionOpen(payload)
         guilds.handleConnectionOpen(payload)
         guildSettings.handleConnectionOpen(payload)
@@ -3159,7 +3199,11 @@ class StoreStream private constructor(
         channelsSelected.handleConnectionOpen(payload)
         collapsedChannelCategories.handleConnectionOpen(payload)
         stageInstances.handleConnectionOpen(payload.guilds.orEmpty())
-        presences.handleConnectionOpen(payload)
+        presences.handleConnectionOpen(
+            payload,
+            UserSettings.status.get(settingsProto),
+            UserSettings.customStatus.get(settingsProto),
+        )
         mentions.handleConnectionOpen(payload)
         messages.handleConnectionOpen(payload)
         messagesMostRecent.handleConnectionOpen(payload)
@@ -3503,6 +3547,7 @@ class StoreStream private constructor(
     // Accessors used by StoreGatewayConnection to assemble IDENTIFY and outgoing traffic.
     internal fun getAuthenticationInternal() = authentication
     internal fun getClientDataStateInternal() = clientDataState
+    internal fun getUserSettingsProtoInternal() = userSettingsProto
     internal fun getGuildSubscriptionsInternal() = guildSubscriptions
 
     private lateinit var restApi: RestAPIInterface
@@ -3778,6 +3823,11 @@ class StoreStream private constructor(
         // Emoji, stickers and notices
         @JvmStatic fun getEmojis() = requireInstance().emoji
         @JvmStatic fun getCustomEmojis() = requireInstance().emojiCustom
+        @JvmStatic fun getUserSettingsProto() = requireInstance().userSettingsProto
+        @JvmStatic fun getUserSettingsProtoWriter() = requireInstance().userSettingsProtoWriter
+        @JvmStatic fun getFrecency() = requireInstance().frecency
+        @JvmStatic fun getFrecencyProto() = requireInstance().frecencyProto
+        @JvmStatic fun getFrecencyProtoWriter() = requireInstance().frecencyProtoWriter
         @JvmStatic fun getGuildEmojis() = requireInstance().emojiGuild
         @JvmStatic fun getStickers() = requireInstance().stickers
         @JvmStatic fun getGuildStickers() = requireInstance().guildStickers

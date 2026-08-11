@@ -5,10 +5,10 @@ import com.discord.api.presence.ClientStatus
 import com.discord.app.AppViewModel
 import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.restapi.RestAPIInterface
-import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUserPresence
 import com.discord.stores.StoreUserSettings
+import com.discord.stores.UserSettings
 import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
@@ -39,11 +39,7 @@ class WidgetUserStatusSheetViewModel(
             .appSubscribe(WidgetUserStatusSheetViewModel::class.java) {}
     }
 
-    fun setStatus(status: ClientStatus) {
-        restAPI.updateUserSettings(RestAPIParams.UserSettings.createWithStatus(status))
-            .restSubscribeOn()
-            .appSubscribe(WidgetUserStatusSheetViewModel::class.java) {}
-    }
+    fun setStatus(status: ClientStatus) = UserSettings.status.set(status)
 
     private fun handleStoreState(storeState: StoreState) {
         val activity = storeState.customStatusActivity

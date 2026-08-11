@@ -45,7 +45,7 @@ class PrivateChannelMemberListServiceTest {
         }
         dispatcher.schedule {
             users.handleConnectionOpen(payload)
-            presences.handleConnectionOpen(payload)
+            presences.handleConnectionOpen(payload, null, null)
         }
         scheduler.triggerActions()
 
@@ -81,7 +81,7 @@ class PrivateChannelMemberListServiceTest {
         }
         dispatcher.schedule {
             users.handleConnectionOpen(payload)
-            presences.handleConnectionOpen(payload)
+            presences.handleConnectionOpen(payload, null, null)
         }
         scheduler.triggerActions()
 

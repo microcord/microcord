@@ -44,11 +44,16 @@ class StoreClientDataState(
         val apiCodeVersion: Int? = null,
         val initialGuildId: Long? = null,
     ) {
-        fun toIdentifyData(): IdentifyClientState = IdentifyClientState(
+        /**
+         * [userSettingsVersion] is not cached here: the settings proto owns it, and omitting it
+         * only costs a copy of the proto in READY.
+         */
+        fun toIdentifyData(userSettingsVersion: Int? = null): IdentifyClientState = IdentifyClientState(
             guildVersions = guildVersions,
             highestLastMessageId = highestLastMessageId,
             readStateVersion = readStateVersion,
             userGuildSettingsVersion = userGuildSettingsVersion,
+            userSettingsVersion = userSettingsVersion,
             privateChannelsVersion = privateChannelsVersion,
             initialGuildId = initialGuildId,
             apiCodeVersion = apiCodeVersion,
