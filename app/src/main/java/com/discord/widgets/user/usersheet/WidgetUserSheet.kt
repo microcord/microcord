@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.animation.ValueAnimator
 import android.content.res.ColorStateList
-import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
 import android.view.View
@@ -14,7 +13,6 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.cardview.widget.CardView
-import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
 import androidx.core.widget.ImageViewCompat
 import androidx.core.widget.TextViewCompat
@@ -160,6 +158,7 @@ class WidgetUserSheet : AppBottomSheet() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         _binding = WidgetUserSheetBinding.bind(view)
+        binding.userSheetProfileHeaderView.paintsProfileSurface = false
         profileButtons().also { buttons ->
             defaultButtonBackgroundTints = buttons.associateWith(MaterialButton::getBackgroundTintList)
             defaultButtonTextColors = buttons.associateWith(MaterialButton::getTextColors)
@@ -282,7 +281,8 @@ class WidgetUserSheet : AppBottomSheet() {
     }
 
     private fun configureHeader(state: WidgetUserSheetViewModel.ViewState.Loaded) {
-        val reducedMotion = StoreStream.getAccessibility().isReducedMotionEnabled()
+        val accessibility = StoreStream.getAccessibility()
+        val reducedMotion = accessibility.isReducedMotionEnabled()
         val headerState = UserProfileHeaderViewModel.ViewState.Loaded(
             state.user,
             state.guildMember?.bannerHash
@@ -303,6 +303,7 @@ class WidgetUserSheet : AppBottomSheet() {
             allowAnimationInReducedMotion = false,
             isMe = state.isMe,
             channelId = state.channel?.id,
+            syncProfileThemeWithUserTheme = accessibility.isSyncProfileThemeWithUserThemeEnabled(),
         )
         val header = binding.userSheetProfileHeaderView
         header.updateViewState(headerState)
@@ -323,13 +324,23 @@ class WidgetUserSheet : AppBottomSheet() {
         val card = colors?.sectionOverlay
             ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundPrimary)
 
-        binding.root.setBackgroundColor(body)
-        binding.userSheetContent.setBackgroundColor(body)
-        binding.userSheetHeaderContainer.setBackgroundColor(header)
-        binding.userSheetProfileAddToServerContainer.setBackgroundColor(header)
-        binding.userSheetProfileEditContainer.setBackgroundColor(header)
-        binding.userSheetProfileActionsContainer.setBackgroundColor(header)
-        binding.userSheetProfileTabs.setBackgroundColor(header)
+        // The reference runs a primary-to-secondary gradient behind the whole profile, so the blocks
+        // that used to carry their own fill go transparent and let it through.
+        if (colors != null) {
+            binding.root.background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(colors.gradientTop, colors.gradientBottom),
+            )
+        } else {
+            binding.root.setBackgroundColor(body)
+        }
+        val block = if (colors != null) Color.TRANSPARENT else header
+        binding.userSheetContent.setBackgroundColor(if (colors != null) Color.TRANSPARENT else body)
+        binding.userSheetHeaderContainer.setBackgroundColor(block)
+        binding.userSheetProfileAddToServerContainer.setBackgroundColor(block)
+        binding.userSheetProfileEditContainer.setBackgroundColor(block)
+        binding.userSheetProfileActionsContainer.setBackgroundColor(block)
+        binding.userSheetProfileTabs.setBackgroundColor(block)
         val tabText = colors?.textDefault
             ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorHeaderPrimary)
         val tabMuted = colors?.textMuted
@@ -508,8 +519,10 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetMainTabContent.animate().translationX(mainTarget).setDuration(PAGE_SETTLE_MS).start()
         binding.userSheetWidgetsView.animate().translationX(widgetsTarget).setDuration(PAGE_SETTLE_MS).withEndAction {
             settlingProfilePage = false
+            // The sheet can be dismissed mid-settle, and the animator still delivers this.
+            val settled = _binding ?: return@withEndAction
             selectingTabFromSwipe = true
-            binding.userSheetProfileTabs.getTabAt(if (showingWidgets) BOARD_TAB else MAIN_TAB)?.select()
+            settled.userSheetProfileTabs.getTabAt(if (showingWidgets) BOARD_TAB else MAIN_TAB)?.select()
             selectingTabFromSwipe = false
             showSelectedProfileTab()
         }.start()
@@ -540,8 +553,7 @@ class WidgetUserSheet : AppBottomSheet() {
         collect(binding.userSheetContent)
     }
 
-    private fun isDarkTheme() =
-        resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+    private fun isDarkTheme() = StoreStream.getUserSettingsSystem().isDarkTheme()
 
     private fun configureProfileEffect(state: UserProfileHeaderViewModel.ViewState.Loaded) {
         val effect = requireNotNull(binding.userSheetProfileEffect)
@@ -1101,12 +1113,13 @@ internal fun applyUserSheetNoteTheme(
     colors: ProfileThemeColors?,
     defaults: UserSheetNoteTheme,
 ) {
-    val note = colors?.let { ColorUtils.compositeColors(it.noteOverlay, it.bodySurface) }
-    binding.userSheetNoteCard.setCardBackgroundColor(note ?: defaults.cardBackgroundColor)
+    // Left translucent, as every other profile card is: flattening it against one point of the
+    // gradient makes an opaque block that only matches the background at that point.
+    binding.userSheetNoteCard.setCardBackgroundColor(colors?.noteOverlay ?: defaults.cardBackgroundColor)
     (binding.userSheetNoteCard as? MaterialCardView)?.strokeColor =
         colors?.borderOverlay ?: defaults.cardStrokeColor
     binding.userSheetNoteTextFieldWrap.setBoxBackgroundColorStateList(
-        ColorStateList.valueOf(note ?: defaults.boxBackgroundColor),
+        ColorStateList.valueOf(if (colors != null) Color.TRANSPARENT else defaults.boxBackgroundColor),
     )
     binding.userSheetNoteTextFieldWrap.boxStrokeColor =
         colors?.borderOverlay ?: defaults.boxStrokeColor

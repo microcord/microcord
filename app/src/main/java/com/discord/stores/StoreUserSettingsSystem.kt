@@ -25,6 +25,13 @@ class StoreUserSettingsSystem(
     private var defaultTheme = ModelUserSettings.THEME_LIGHT
 
     fun getTheme() = settings.theme
+
+    /**
+     * Light is the only light theme; Material You inherits the dark palette and none of them follow
+     * the OS night mode, so `Configuration.UI_MODE_NIGHT_MASK` says nothing about how the app looks.
+     */
+    fun isDarkTheme() = settings.theme != ModelUserSettings.THEME_LIGHT
+
     fun getLocale() = settings.locale
     fun getFontScale() = settings.fontScale
     fun getIsThemeSyncEnabled() = sessionDurablePreferences.getBoolean(KEY_THEME_SYNC, true)

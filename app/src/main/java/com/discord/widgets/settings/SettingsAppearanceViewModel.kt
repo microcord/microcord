@@ -39,6 +39,7 @@ class SettingsAppearanceViewModel(
     data class StoreState(
         val meUser: MeUser,
         val settings: StoreUserSettingsSystem.Settings,
+        val syncProfileThemes: Boolean,
     )
 
     sealed class ViewState {
@@ -49,6 +50,7 @@ class SettingsAppearanceViewModel(
             val currentTheme: String,
             val fontScale: Int,
             val isThemeSyncEnabled: Boolean,
+            val syncProfileThemes: Boolean,
         ) : ViewState()
     }
 
@@ -77,6 +79,7 @@ class SettingsAppearanceViewModel(
                     currentTheme = storeState.settings.theme,
                     fontScale = storeState.settings.fontScale,
                     isThemeSyncEnabled = userSettingsSystem.getIsThemeSyncEnabled(),
+                    syncProfileThemes = storeState.syncProfileThemes,
                 )
             }
             .distinctUntilChanged()
@@ -129,6 +132,10 @@ class SettingsAppearanceViewModel(
     }
 
     @MainThread
+    fun setSyncProfileThemes(enabled: Boolean) {
+        StoreStream.getAccessibility().setSyncProfileThemeWithUserTheme(enabled)
+    }
+
     fun setThemeSyncEnabled(enabled: Boolean) {
         userSettingsSystem.setIsSyncThemeEnabled(enabled)
     }
@@ -169,7 +176,10 @@ class SettingsAppearanceViewModel(
         fun observeStoreState(): Observable<StoreState> = Observable.combineLatest(
             StoreStream.getUsers().observeMe(),
             StoreStream.getUserSettingsSystem().observeSettings(false),
-        ) { meUser, settings -> StoreState(meUser, settings) }
+            StoreStream.getAccessibility().observeSyncProfileThemeWithUserTheme(),
+        ) { meUser, settings, syncProfileThemes ->
+            StoreState(meUser, settings, syncProfileThemes)
+        }
 
         /** Percentage form of the device's own font scale, for the "use OS setting" label. */
         fun systemFontScalePercent(context: Context): Int = Math.round(

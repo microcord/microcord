@@ -119,6 +119,10 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
         binding.settingsAppearanceSyncSwitch.setOnCheckedListener(null)
         binding.settingsAppearanceSyncSwitch.isChecked = viewState.isThemeSyncEnabled
         binding.settingsAppearanceSyncSwitch.setOnCheckedListener(Action1 { viewModel.setThemeSyncEnabled(it) })
+        binding.settingsAppearanceSyncProfileThemesSwitch.setOnCheckedListener(null)
+        binding.settingsAppearanceSyncProfileThemesSwitch.isChecked = viewState.syncProfileThemes
+        binding.settingsAppearanceSyncProfileThemesSwitch
+            .setOnCheckedListener(Action1 { viewModel.setSyncProfileThemes(it) })
 
         configureFontScalingUI(viewState.fontScale)
         setupPreviewMessage(viewState)

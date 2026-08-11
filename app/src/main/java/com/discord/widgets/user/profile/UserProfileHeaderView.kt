@@ -1,7 +1,6 @@
 package com.discord.widgets.user.profile
 
 import android.content.Context
-import android.content.res.Configuration
 import android.graphics.Color
 import android.util.AttributeSet
 import android.graphics.drawable.GradientDrawable
@@ -14,6 +13,7 @@ import com.discord.R
 import com.discord.databinding.UserProfileHeaderViewBinding
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
+import com.discord.stores.StoreStream
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.icon.IconUtils
@@ -34,6 +34,13 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
     private var onBannerPress: () -> Unit = {}
     private var onBadgeClick: (Badge) -> Unit = {}
     private var onAvatarRepresentativeColorUpdated: (Int) -> Unit = {}
+
+    /**
+     * False when the host already paints the profile gradient behind this view. Filling our own
+     * surface then lays a flat block over a gradient that keeps moving, which seams against
+     * whatever sits below us.
+     */
+    var paintsProfileSurface = true
 
     init {
         backgroundColor = context.obtainStyledAttributes(attrs, intArrayOf(R.attr.user_profile_header_background_color)).run {
@@ -92,16 +99,20 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
     }
 
     fun updateBannerColor(state: UserProfileHeaderViewModel.ViewState.Loaded) {
-        val color = state.profileThemeColors(isDarkTheme())?.primary
-            ?: runCatching { state.bannerColorHex?.let(Color::parseColor) }.getOrNull()
-            ?: backgroundColor
+        val colors = state.profileThemeColors(isDarkTheme())
+        val color = when {
+            colors == null -> runCatching { state.bannerColorHex?.let(Color::parseColor) }.getOrNull()
+                ?: backgroundColor
+            paintsProfileSurface -> colors.primary
+            else -> Color.TRANSPARENT
+        }
         binding.banner.setBackgroundColor(color)
     }
 
     private fun configureTheme(state: UserProfileHeaderViewModel.ViewState.Loaded) {
         val colors = state.profileThemeColors(isDarkTheme())
         val surface = colors?.headerSurface ?: backgroundColor
-        setBackgroundColor(surface)
+        setBackgroundColor(if (colors != null && !paintsProfileSurface) Color.TRANSPARENT else surface)
         binding.largeAvatar.setAvatarBackgroundColor(surface)
         binding.userProfileHeaderPrimaryName.setGuildTagProfileColors(colors?.rolePillSurface, colors?.textDefault)
         colors?.let {
@@ -117,8 +128,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
-    private fun isDarkTheme() =
-        resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+    private fun isDarkTheme() = StoreStream.getUserSettingsSystem().isDarkTheme()
 
     private fun configureBanner(state: UserProfileHeaderViewModel.ViewState.Loaded) {
         val hash = state.effectiveBanner

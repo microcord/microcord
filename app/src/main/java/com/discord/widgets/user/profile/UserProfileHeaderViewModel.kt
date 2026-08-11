@@ -10,6 +10,7 @@ import com.discord.app.AppViewModel
 import com.discord.models.member.GuildMember
 import com.discord.models.presence.Presence
 import com.discord.models.user.MeUser
+import com.discord.stores.StoreStream
 import com.discord.models.user.User
 import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.icon.IconUtils
@@ -61,6 +62,7 @@ class UserProfileHeaderViewModel @JvmOverloads constructor(
             val channelId: Long? = null,
             val bannerGuildId: Long? = null,
             val themeColors: List<Int>? = null,
+            val syncProfileThemeWithUserTheme: Boolean = false,
         ) : ViewState() {
             val hasGuildMemberAvatar = guildMember?.hasAvatar() == true
             val hasNickname = !guildMember?.nick.isNullOrBlank()
@@ -107,7 +109,9 @@ class UserProfileHeaderViewModel @JvmOverloads constructor(
             val showAkas = guildMembersForAka.isNotEmpty() && !isMe
 
             internal fun profileThemeColors(isDarkTheme: Boolean): ProfileThemeColors? =
-                themeGradientColors?.let { ProfileThemeColors.from(it[0], it[1], isDarkTheme) }
+                themeGradientColors?.let {
+                    ProfileThemeColors.from(it[0], it[1], isDarkTheme, syncProfileThemeWithUserTheme)
+                }
         }
     }
 
@@ -168,6 +172,8 @@ class UserProfileHeaderViewModel @JvmOverloads constructor(
                     (currentState as? ViewState.Loaded)?.allowAnimationInReducedMotion ?: false,
                 isMe = userId == storeState.me.id,
                 channelId = storeState.channel?.id,
+                syncProfileThemeWithUserTheme =
+                    StoreStream.getAccessibility().isSyncProfileThemeWithUserThemeEnabled(),
             )
         }
     }
@@ -177,6 +183,8 @@ internal data class ProfileThemeColors(
     val primary: Int,
     val headerSurface: Int,
     val bodySurface: Int,
+    val gradientTop: Int,
+    val gradientBottom: Int,
     val sectionOverlay: Int,
     val noteOverlay: Int,
     val borderOverlay: Int,
@@ -188,6 +196,10 @@ internal data class ProfileThemeColors(
     val isDark: Boolean,
 ) {
     companion object {
+        /** `PROFILE_GRADIENT_OVERLAY` is 60% black or white; the synced variant is 80%. */
+        private const val OVERLAY_ALPHA = 153
+        private const val OVERLAY_ALPHA_SYNCED = 204
+
         private const val DARK_SECTION = 0x29000000
         private const val LIGHT_SECTION = 0x3DFFFFFF
         private const val DARK_NOTE = 0x4D000000
@@ -195,15 +207,27 @@ internal data class ProfileThemeColors(
         private const val DARK_BORDER = 0x14FFFFFF
         private const val LIGHT_BORDER = 0x14000000
 
-        fun from(primary: Int, secondary: Int, isDarkTheme: Boolean): ProfileThemeColors {
+        fun from(
+            primary: Int,
+            secondary: Int,
+            isDarkTheme: Boolean,
+            syncWithUserTheme: Boolean = false,
+        ): ProfileThemeColors {
             // Desktop chooses the custom profile's mode from the primary color, independently of
-            // the app theme. Dark profiles get a dark derived surface and light text.
-            val profileIsDark = perceivedDarkness(primary) > 0.5
-            val surface = modalSurface(primary, secondary, profileIsDark)
+            // the app theme. Dark profiles get a dark derived surface and light text. The
+            // accessibility setting overrides that with the reader's own theme.
+            val profileIsDark =
+                if (syncWithUserTheme) isDarkTheme else perceivedDarkness(primary) > 0.5
+            val overlay = if (profileIsDark) 0x000000 else 0xFFFFFF
+            val alpha = if (syncWithUserTheme) OVERLAY_ALPHA_SYNCED else OVERLAY_ALPHA
+            val top = overlayed(primary, overlay, alpha)
+            val bottom = overlayed(secondary, overlay, alpha)
             return ProfileThemeColors(
                 primary = primary,
-                headerSurface = surface,
-                bodySurface = surface,
+                headerSurface = top,
+                bodySurface = top,
+                gradientTop = top,
+                gradientBottom = bottom,
                 sectionOverlay = if (profileIsDark) DARK_SECTION else LIGHT_SECTION,
                 noteOverlay = if (profileIsDark) DARK_NOTE else LIGHT_NOTE,
                 borderOverlay = if (profileIsDark) DARK_BORDER else LIGHT_BORDER,
@@ -309,53 +333,18 @@ internal data class ProfileThemeColors(
             return doubleArrayOf(red, green, blue)
         }
 
-        private fun modalSurface(primary: Int, secondary: Int, dark: Boolean): Int {
-            val first = colorToLab(primary)
-            val second = colorToLab(secondary)
-            val mixed = labToRgb(DoubleArray(3) { (first[it] + second[it]) / 2.0 })
-            val hsl = rgbToHsl(mixed[0], mixed[1], mixed[2])
-            val roundedLightness = Math.round(hsl[2] * 100.0) / 100.0
-            hsl[2] = if (dark) roundedLightness.coerceIn(0.0, 0.1)
-            else roundedLightness.coerceIn(0.8, 1.0)
-            return hslToColor(hsl)
-        }
-
-        private fun colorToHsl(color: Int): DoubleArray {
-            val red = ((color ushr 16) and 0xFF) / 255.0
-            val green = ((color ushr 8) and 0xFF) / 255.0
-            val blue = (color and 0xFF) / 255.0
-            return rgbToHsl(red, green, blue)
-        }
-
-        private fun rgbToHsl(red: Double, green: Double, blue: Double): DoubleArray {
-            val max = maxOf(red, green, blue)
-            val min = minOf(red, green, blue)
-            val delta = max - min
-            val lightness = (max + min) / 2.0
-            if (delta == 0.0) return doubleArrayOf(0.0, 0.0, lightness)
-            val saturation = delta / (1.0 - kotlin.math.abs(2.0 * lightness - 1.0))
-            val hue = when (max) {
-                red -> 60.0 * (((green - blue) / delta) % 6.0)
-                green -> 60.0 * ((blue - red) / delta + 2.0)
-                else -> 60.0 * ((red - green) / delta + 4.0)
+        /**
+         * `calculateOverlayedColor`: source-over in non-linear sRGB, per channel, floored.
+         * [alpha] is the 0-255 form the reference quantises its token opacity to before mixing.
+         */
+        private fun overlayed(base: Int, overlay: Int, alpha: Int): Int {
+            val opacity = alpha / 255.0
+            fun channel(shift: Int): Int {
+                val over = (overlay ushr shift) and 0xFF
+                val under = (base ushr shift) and 0xFF
+                return Math.floor(opacity * over + (1 - opacity) * under).toInt()
             }
-            return doubleArrayOf(if (hue < 0) hue + 360.0 else hue, saturation, lightness)
-        }
-
-        private fun hslToColor(hsl: DoubleArray): Int {
-            val chroma = (1.0 - kotlin.math.abs(2.0 * hsl[2] - 1.0)) * hsl[1]
-            val x = chroma * (1.0 - kotlin.math.abs((hsl[0] / 60.0) % 2.0 - 1.0))
-            val (red, green, blue) = when (hsl[0]) {
-                in 0.0..<60.0 -> Triple(chroma, x, 0.0)
-                in 60.0..<120.0 -> Triple(x, chroma, 0.0)
-                in 120.0..<180.0 -> Triple(0.0, chroma, x)
-                in 180.0..<240.0 -> Triple(0.0, x, chroma)
-                in 240.0..<300.0 -> Triple(x, 0.0, chroma)
-                else -> Triple(chroma, 0.0, x)
-            }
-            val match = hsl[2] - chroma / 2.0
-            fun channel(value: Double) = Math.round((value + match) * 255.0).toInt().coerceIn(0, 255)
-            return (0xFF shl 24) or (channel(red) shl 16) or (channel(green) shl 8) or channel(blue)
+            return 0xFF000000.toInt() or (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
         }
 
         internal fun contrastRatio(first: Int, second: Int) = contrast(first, second)
