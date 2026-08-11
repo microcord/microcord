@@ -79,6 +79,9 @@ import com.discord.widgets.chat.input.expression.WidgetExpressionTray
 import com.discord.widgets.chat.list.VoiceWaveformView
 import com.discord.widgets.forums.ForumPostCreateManager
 import com.discord.widgets.message_requests.setMessageRequestAccepted
+import com.discord.api.guildjoinrequest.ApplicationStatus
+import com.discord.widgets.servers.member_verification.MemberVerificationPendingDialog
+import com.discord.widgets.servers.member_verification.MemberVerificationPendingViewModel
 import com.discord.widgets.servers.member_verification.WidgetMemberVerification
 import com.google.android.material.button.MaterialButton
 import com.lytefast.flexinput.InputListener
@@ -1166,12 +1169,41 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val action = binding.guardMemberVerification.chatInputMemberVerificationGuardAction
         action.visibility = View.VISIBLE
         action.setImageResource(R.drawable.ic_arrow_right_24dp)
-        binding.guardMemberVerification.chatInputMemberVerificationGuardText
-            .setText(R.string.member_verification_chat_blocker_text)
-        binding.guardMemberVerification.chatInputMemberVerificationGuardIcon
-            .setImageResource(R.drawable.img_member_verification_started)
-        binding.guardMemberVerification.chatInputMemberVerificationGuard.setOnClickListener {
-            WidgetMemberVerification.create(requireContext(), viewState.channel.guildId, "Chat Input")
+        val guildId = viewState.channel.guildId
+        val text = binding.guardMemberVerification.chatInputMemberVerificationGuardText
+        val icon = binding.guardMemberVerification.chatInputMemberVerificationGuardIcon
+        // An application that is already submitted or turned down must not reopen the form: the
+        // only actions left are withdrawing it or reading why it was refused.
+        when (viewState.joinRequestStatus) {
+            ApplicationStatus.PENDING -> {
+                text.setText(R.string.member_verification_application_confirmation_title)
+                icon.setImageResource(R.drawable.img_member_verification_pending)
+                binding.guardMemberVerification.chatInputMemberVerificationGuard.setOnClickListener {
+                    MemberVerificationPendingDialog.show(
+                        parentFragmentManager,
+                        guildId,
+                        MemberVerificationPendingViewModel.DialogState.CANCEL,
+                    )
+                }
+            }
+            ApplicationStatus.REJECTED -> {
+                text.setText(R.string.member_verification_rejected_title)
+                icon.setImageResource(R.drawable.img_member_verification_denied)
+                binding.guardMemberVerification.chatInputMemberVerificationGuard.setOnClickListener {
+                    MemberVerificationPendingDialog.show(
+                        parentFragmentManager,
+                        guildId,
+                        MemberVerificationPendingViewModel.DialogState.REJECTED,
+                    )
+                }
+            }
+            else -> {
+                text.setText(R.string.member_verification_chat_blocker_text)
+                icon.setImageResource(R.drawable.img_member_verification_started)
+                binding.guardMemberVerification.chatInputMemberVerificationGuard.setOnClickListener {
+                    WidgetMemberVerification.create(requireContext(), guildId, "Chat Input")
+                }
+            }
         }
     }
 

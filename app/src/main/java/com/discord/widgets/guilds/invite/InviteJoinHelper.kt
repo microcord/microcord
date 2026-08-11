@@ -93,9 +93,28 @@ object InviteJoinHelper {
                 errorHandler = { error -> onInvitePostError(error) },
             ) { joinedInvite ->
                 if (receivedInstallationId != null) instantInvites.clearReceivedInstallationId(code)
+                StoreStream.getGuildJoinRequests().handleInviteAccepted(joinedInvite)
                 onInvitePostSuccess(joinedInvite)
                 completeJoin(fragment, joinedInvite, location, onInviteFlowFinished)
             }
+    }
+
+    /**
+     * Whether accepting produced an application rather than a membership.
+     *
+     * `show_verification_form` is the server's own verdict and is trusted first. The feature pair
+     * is the fallback for a response that predates it, and is checked against the invite's guild
+     * because a guild that screens members manually is not one this client holds a record of.
+     */
+    private fun routesToApplication(invite: ModelInvite): Boolean {
+        val guildId = invite.guild?.id ?: return false
+        // Re-accepting an invite to a guild already joined must not divert to an application, no
+        // matter what the response says about screening.
+        if (StoreStream.getGuilds().getGuild(guildId) != null) return false
+        if (invite.bypassesMemberVerification()) return false
+        return invite.getShowVerificationForm() ||
+            invite.getJoinRequest() != null ||
+            invite.requiresApplication()
     }
 
     private fun completeJoin(
@@ -104,6 +123,16 @@ object InviteJoinHelper {
         location: String,
         onInviteFlowFinished: (ModelInvite) -> Unit,
     ) {
+        // Checked before anything that navigates: there is no guild to navigate to, and no channel
+        // hydration or join-request event will ever arrive to end the race below.
+        if (routesToApplication(invite)) {
+            invite.guild?.id?.let { guildId ->
+                WidgetMemberVerification.create(fragment.requireContext(), guildId, location, invite)
+            }
+            onInviteFlowFinished(invite)
+            return
+        }
+
         val channel = invite.channel
         if (channel == null) {
             navigateToGuild(invite)
@@ -115,10 +144,13 @@ object InviteJoinHelper {
         }
 
         val guild = invite.guild
+        // Only the rules-gate shape is raced here. A guild that screens members manually has
+        // already returned above, and the cases that get past that check — an existing membership,
+        // or an invite that bypasses screening — produce no application to wait for.
         val joinRequests = if (
             guild != null &&
-            (invite.requiresApplication() ||
-                GuildFeature.MEMBER_VERIFICATION_GATE_ENABLED in guild.features && GuildFeature.COMMUNITY in guild.features)
+            GuildFeature.MEMBER_VERIFICATION_GATE_ENABLED in guild.features &&
+            GuildFeature.COMMUNITY in guild.features
         ) {
             StoreStream.getGuildJoinRequests().observeGuildJoinRequest(guild.id)
         } else {

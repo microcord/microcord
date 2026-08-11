@@ -32,8 +32,9 @@ class WidgetMemberVerification : AppFragment(R.layout.widget_member_verification
         mostRecentIntent.getStringExtra(INTENT_EXTRA_INVITE_GUILD)
             ?.let { Gson().fromJson(it, Guild::class.java) }
     }
+    private val inviteCode: String? get() = mostRecentIntent.getStringExtra(INTENT_EXTRA_INVITE_CODE)
     private val viewModel: WidgetMemberVerificationViewModel by appViewModels {
-        WidgetMemberVerificationViewModel(guildId, location, inviteGuild)
+        WidgetMemberVerificationViewModel(guildId, location, inviteGuild, inviteCode)
     }
 
     private var _binding: WidgetMemberVerificationBinding? = null
@@ -165,6 +166,7 @@ class WidgetMemberVerification : AppFragment(R.layout.widget_member_verification
     companion object {
         private const val INTENT_EXTRA_GUILD_ID = "INTENT_EXTRA_GUILD_ID"
         private const val INTENT_EXTRA_INVITE_GUILD = "INTENT_EXTRA_INVITE_GUILD"
+        private const val INTENT_EXTRA_INVITE_CODE = "INTENT_EXTRA_INVITE_CODE"
         private const val INTENT_EXTRA_LOCATION = "INTENT_EXTRA_LOCATION"
 
         @JvmOverloads
@@ -176,6 +178,9 @@ class WidgetMemberVerification : AppFragment(R.layout.widget_member_verification
                     putExtra(INTENT_EXTRA_GUILD_ID, guildId)
                     putExtra(INTENT_EXTRA_LOCATION, location)
                     invite?.guild?.let { putExtra(INTENT_EXTRA_INVITE_GUILD, Gson().toJson(it)) }
+                    // Carried so a rejected applicant can read the form again: the server serves it
+                    // to them only when the invite they arrived on is presented alongside.
+                    invite?.code?.let { putExtra(INTENT_EXTRA_INVITE_CODE, it) }
                 },
             )
         }

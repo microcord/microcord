@@ -11,14 +11,10 @@ import org.junit.Test
 class MemberVerificationDialogViewModelsTest {
 
     @Test
-    fun `pending dialog state follows application preview and outdated form`() {
+    fun `pending dialog state follows application status and outdated form`() {
         assertEquals(
             MemberVerificationPendingViewModel.DialogState.PENDING,
             pending(ApplicationStatus.PENDING).dialogState,
-        )
-        assertEquals(
-            MemberVerificationPendingViewModel.DialogState.CANCEL,
-            pending(ApplicationStatus.PENDING, preview = true).dialogState,
         )
         assertEquals(
             MemberVerificationPendingViewModel.DialogState.REJECTED,
@@ -34,7 +30,13 @@ class MemberVerificationDialogViewModelsTest {
     fun `pending dialog has no state for an application that is not pending or rejected`() {
         assertNull(
             MemberVerificationPendingViewModel.reduce(
-                MemberVerificationPendingViewModel.StoreState(false, false, ApplicationStatus.STARTED, null),
+                MemberVerificationPendingViewModel.StoreState(
+                    isFormOutdated = false,
+                    isMember = false,
+                    isPendingMember = false,
+                    applicationStatus = ApplicationStatus.STARTED,
+                    rejectionReason = null,
+                ),
                 null,
             ),
         )
@@ -45,13 +47,13 @@ class MemberVerificationDialogViewModelsTest {
         assertEquals(
             MemberVerificationSuccessViewModel.ViewState.Loaded("Manticord"),
             MemberVerificationSuccessViewModel.reduce(
-                MemberVerificationSuccessViewModel.StoreState(null, "Manticord"),
+                MemberVerificationSuccessViewModel.StoreState(null, "Manticord", 7L),
             ),
         )
         assertSame(
             MemberVerificationSuccessViewModel.ViewState.Acked,
             MemberVerificationSuccessViewModel.reduce(
-                MemberVerificationSuccessViewModel.StoreState("2026-07-30T00:00:00Z", "Manticord"),
+                MemberVerificationSuccessViewModel.StoreState("2026-07-30T00:00:00Z", "Manticord", 7L),
             ),
         )
     }
@@ -64,13 +66,25 @@ class MemberVerificationDialogViewModelsTest {
         assertFalse(WidgetMemberVerificationViewModel.areResponsesValid(listOf("")))
     }
 
+    @Test
+    fun `only a member is offered the option to leave the server`() {
+        assertTrue(pending(ApplicationStatus.PENDING, isMember = true).showTertiaryButton)
+        assertFalse(pending(ApplicationStatus.PENDING).showTertiaryButton)
+    }
+
     private fun pending(
         status: ApplicationStatus,
-        preview: Boolean = false,
+        isMember: Boolean = false,
         outdated: Boolean = false,
     ) = requireNotNull(
         MemberVerificationPendingViewModel.reduce(
-            MemberVerificationPendingViewModel.StoreState(outdated, preview, status, "reason"),
+            MemberVerificationPendingViewModel.StoreState(
+                isFormOutdated = outdated,
+                isMember = isMember,
+                isPendingMember = isMember,
+                applicationStatus = status,
+                rejectionReason = "reason",
+            ),
             null,
         ),
     )

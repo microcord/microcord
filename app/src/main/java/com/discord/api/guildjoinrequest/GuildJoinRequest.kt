@@ -42,7 +42,22 @@ data class GuildJoinRequest(
     @SerializedName("invite_code") val inviteCode: String?,
     @SerializedName("last_seen") val lastSeen: String?,
     @SerializedName("actioned_at") val actionedAt: String?,
-)
+    /** Identifies the application itself; the ack endpoint is addressed by it, not by guild. */
+    @SerializedName("join_request_id") val joinRequestId: Long? = null,
+    /**
+     * The group DM moderators opened to interview the applicant, once one exists. Shares its
+     * snowflake with [joinRequestId].
+     */
+    @SerializedName("interview_channel_id") val interviewChannelId: Long? = null,
+) {
+    /**
+     * An approval the user has already been shown. The reference drops these rather than keeping
+     * them, so the row for the guild leaves the pending folder once the "you're in" dialog is
+     * confirmed instead of lingering as a permanently approved application.
+     */
+    val isApprovedAndAcked: Boolean
+        get() = applicationStatus == ApplicationStatus.APPROVED && lastSeen != null
+}
 
 data class GuildJoinRequestCreateOrUpdate(
     @SerializedName("guild_id") val guildId: Long,

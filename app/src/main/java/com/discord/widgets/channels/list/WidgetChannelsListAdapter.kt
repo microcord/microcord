@@ -72,6 +72,7 @@ import com.discord.widgets.channels.list.items.ChannelListItemAddServer
 import com.discord.widgets.channels.list.items.ChannelListItemCategory
 import com.discord.widgets.channels.list.items.ChannelListItemDirectory
 import com.discord.widgets.channels.list.items.ChannelListItemGuildJoinRequest
+import com.discord.widgets.servers.member_verification.MemberVerificationPendingViewModel
 import com.discord.widgets.channels.list.items.ChannelListItemGuildScheduledEvents
 import com.discord.widgets.channels.list.items.ChannelListItemHeader
 import com.discord.widgets.channels.list.items.ChannelListItemInvite
@@ -141,6 +142,12 @@ class WidgetChannelsListAdapter(
 
     /** Opens the membership-screening gate for the selected guild. */
     var onOpenMemberVerification: () -> Unit = {}
+
+    /**
+     * Opens the dialog for an application that has already been submitted or turned down, which is
+     * a different destination from the form [onOpenMemberVerification] opens.
+     */
+    var onShowApplicationStatus: (MemberVerificationPendingViewModel.DialogState) -> Unit = {}
 
     /** Opens the detail sheet for a scheduled event that is not tied to a channel. */
     var onViewGuildScheduledEventDetails: (eventId: Long) -> Unit = {}
@@ -1256,8 +1263,6 @@ class WidgetChannelsListAdapter(
             if (data !is ChannelListItemGuildJoinRequest) return
             val context = itemView.context
 
-            button.setOnClickListener { adapter.onOpenMemberVerification() }
-
             // A member who is no longer pending has nothing left to review.
             if (!data.member.pending) {
                 card.visibility = View.GONE
@@ -1268,6 +1273,7 @@ class WidgetChannelsListAdapter(
                     label.setText(R.string.member_verification_notice_text)
                     button.setText(R.string.member_verification_notice_cta)
                     button.setBackgroundColor(ThemedColor.resolve(context, R.attr.color_brand))
+                    button.setOnClickListener { adapter.onOpenMemberVerification() }
                     card.visibility = View.VISIBLE
                 }
                 ApplicationStatus.PENDING -> {
@@ -1276,6 +1282,11 @@ class WidgetChannelsListAdapter(
                     button.setBackgroundColor(
                         ThemedColor.resolve(context, R.attr.colorBackgroundAccent),
                     )
+                    // The form is already submitted; re-opening it would let the user overwrite an
+                    // application under review, so this asks about withdrawing instead.
+                    button.setOnClickListener {
+                        adapter.onShowApplicationStatus(MemberVerificationPendingViewModel.DialogState.CANCEL)
+                    }
                     card.visibility = View.VISIBLE
                 }
                 ApplicationStatus.REJECTED -> {
@@ -1284,6 +1295,9 @@ class WidgetChannelsListAdapter(
                     button.setBackgroundColor(
                         ThemedColor.resolve(context, R.attr.colorBackgroundAccent),
                     )
+                    button.setOnClickListener {
+                        adapter.onShowApplicationStatus(MemberVerificationPendingViewModel.DialogState.REJECTED)
+                    }
                     card.visibility = View.VISIBLE
                 }
                 else -> card.visibility = View.GONE

@@ -39,6 +39,7 @@ class WidgetMemberVerificationViewModel(
     private val guildId: Long,
     private val location: String,
     private val inviteGuild: Guild? = null,
+    private val inviteCode: String? = null,
     private val formStore: StoreGuildMemberVerificationForm = StoreStream.getGuildMemberVerificationForm(),
     private val restAPI: RestAPIInterface = RestAPI.api,
     private val rulesParser: Parser<MessageRenderContext, Node<MessageRenderContext>, MessageParseState> =
@@ -94,7 +95,7 @@ class WidgetMemberVerificationViewModel(
         AnalyticsTracker.openModal("Membership Gating", location, guildId)
         storeObservable.computationLatest().ui(this)
             .appSubscribe(WidgetMemberVerificationViewModel::class.java, onNext = ::handleStoreState)
-        formStore.fetchMemberVerificationForm(guildId)
+        formStore.fetchMemberVerificationForm(guildId, inviteCode)
     }
 
     fun observeEvents(): Observable<Event> = eventSubject
@@ -287,6 +288,9 @@ class WidgetMemberVerificationViewModel(
                     add(MemberVerificationItemHeader(field.label))
                     add(MemberVerificationItemMultipleChoice(fieldIndex, field.choices, response as? Int))
                 }
+                // The screen prompts for a missing email or phone from the guild's verification
+                // level rather than from a form row, so this field has nothing of its own to draw.
+                ModelMemberVerificationForm.MemberVerificationFieldType.VERIFICATION -> Unit
                 ModelMemberVerificationForm.MemberVerificationFieldType.UNKNOWN -> Unit
             }
         }
@@ -297,15 +301,21 @@ class WidgetMemberVerificationViewModel(
             it == null || it is String && it.isEmpty()
         }
 
+        /**
+         * The guild is resolved through three sources because a manual-approval guild is not one
+         * the user is in: `StoreGuilds` holds nothing for it, and the only records that ever name
+         * it are the one attached to the membership form and the one the invite carried.
+         */
         private fun observeStores(guildId: Long, inviteGuild: Guild?): Observable<StoreState> = Observable.combineLatest(
             StoreStream.getUsers().observeMe(true),
             StoreStream.getGuilds().observeGuild(guildId),
+            StoreStream.getGuildJoinRequests().observePendingGuild(guildId),
             StoreStream.getGuildMemberVerificationForm().observeMemberVerificationFormData(guildId),
             StoreStream.getChannels().observeNames(),
             StoreStream.getGuilds().observeRoles(guildId),
             StoreStream.getUserSettings().observeIsAnimatedEmojisEnabled(false),
-        ) { me, guild, formData, channels, roles, animated ->
-            StoreState(me, guild ?: inviteGuild, formData, channels, roles, animated)
+        ) { me, guild, pendingGuild, formData, channels, roles, animated ->
+            StoreState(me, guild ?: pendingGuild ?: inviteGuild, formData, channels, roles, animated)
         }
     }
 }

@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.fragment.app.FragmentManager
 import com.discord.api.guildjoinrequest.GuildJoinRequest
 import com.discord.models.guild.Guild
+import com.discord.stores.StoreStream
+import com.discord.utilities.guilds.MemberVerificationUtils
 import rx.Observable
 
 /**
@@ -38,7 +40,7 @@ object GuildsListStoreHooks {
     @Volatile
     var selectedVoiceChannelId: () -> Observable<Long> = { Observable.just(0L) }
 
-    /** `StoreGuildJoinRequest.observeGuildJoinRequests()`; that store does not exist yet. */
+    /** `StoreGuildJoinRequest.observeGuildJoinRequests()`. Installed by [install]. */
     @Volatile
     var guildJoinRequests: () -> Observable<Map<Long, GuildJoinRequest>> = { Observable.just(emptyMap()) }
 
@@ -78,12 +80,30 @@ object GuildsListStoreHooks {
      * `MemberVerificationUtils.maybeShowVerificationGate(...)`, returning whether a gate was shown.
      *
      * Tapping a guild whose join request is still pending must land on the membership-screening
-     * gate, never on the guild itself. Until that utility exists the default returns `false` and
-     * the tap is dropped — the guild does not open.
+     * gate, never on the guild itself. The default returns `false`, which drops the tap rather than
+     * opening a guild the user has not been admitted to; [install] replaces it.
      */
     @Volatile
     var showMemberVerificationGate: (Context, FragmentManager, Long) -> Boolean = { _, _, _ -> false }
 
     /** One live application stream, reduced to what the sidebar needs. */
     data class GuildStream(val guildId: Long, val channelId: Long)
+
+    /**
+     * Points the membership-application entries at their real sources.
+     *
+     * Called once from application start-up, after `StoreStream.initialize`. Until it runs the
+     * sidebar has no pending-applications folder at all, because every default above is inert.
+     */
+    fun install() {
+        guildJoinRequests = { StoreStream.getGuildJoinRequests().observeGuildJoinRequests() }
+        pendingGuilds = {
+            StoreStream.getGuildJoinRequests().observePendingGuilds()
+                .map { guilds -> guilds.values.sortedBy { it.name.lowercase() } }
+        }
+        fetchPendingGuilds = { StoreStream.getGuildJoinRequests().fetchPendingGuilds() }
+        showMemberVerificationGate = { context, fragmentManager, guildId ->
+            MemberVerificationUtils.maybeShowVerificationGate(context, fragmentManager, guildId)
+        }
+    }
 }

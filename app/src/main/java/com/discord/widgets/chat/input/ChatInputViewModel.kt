@@ -25,6 +25,8 @@ import com.discord.stores.StoreThreadDraft
 import com.discord.stores.StoreUser
 import com.discord.stores.StoreUserRelationships
 import com.discord.utilities.guilds.GuildVerificationLevelUtils
+import com.discord.api.guildjoinrequest.ApplicationStatus
+import com.discord.stores.StoreGuildJoinRequest
 import com.discord.utilities.guilds.MemberVerificationUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.attachments.AttachmentLimits
@@ -54,6 +56,7 @@ class ChatInputViewModel(
     private val storePermissions: StorePermissions = StoreStream.getPermissions(),
     private val storePendingReplies: StorePendingReplies = StoreStream.getPendingReplies(),
     private val storeChatInputEditing: StoreChatInputEditing = StoreStream.getChatInputEditing(),
+    private val storeGuildJoinRequests: StoreGuildJoinRequest = StoreStream.getGuildJoinRequests(),
     private val clock: Clock = ClockFactory.get(),
 ) : AppViewModel<ChatInputViewModel.ViewState>(ViewState.Loading) {
 
@@ -86,6 +89,8 @@ class ChatInputViewModel(
             val timeoutLeftMs: Long,
             val selectedThreadDraft: StoreChannelsSelected.ResolvedSelectedChannel.ThreadDraft?,
             val shouldShowVerificationGate: Boolean,
+            /** Drives which copy the membership guard shows; null when there is no application. */
+            val joinRequestStatus: ApplicationStatus?,
             val threadDraftState: StoreThreadDraft.ThreadDraftState,
             val showCreateThreadOption: Boolean,
         ) : ViewState()
@@ -130,8 +135,9 @@ class ChatInputViewModel(
                 storeChatInputEditing.observe(channel.id),
                 storeUserRelationships.observe(channel.getDMRecipient()?.id ?: 0L),
                 storeGuilds.observeComputedMember(guildId, storeUsers.getMe().id),
-            ) { me, editing, relationshipType, meGuildMember ->
-                IdentityState(me, editing, relationshipType, meGuildMember)
+                storeGuildJoinRequests.observeGuildJoinRequest(guildId).map { it?.applicationStatus },
+            ) { me, editing, relationshipType, meGuildMember, joinRequestStatus ->
+                IdentityState(me, editing, relationshipType, meGuildMember, joinRequestStatus)
             }
             val access = Observable.combineLatest(
                 storePermissions.observePermissionsForChannel(channel.id),
@@ -161,6 +167,7 @@ class ChatInputViewModel(
                     guild = where.guild,
                     pendingReply = where.pendingReply,
                     meGuildMember = who.meGuildMember,
+                    joinRequestStatus = who.joinRequestStatus,
                     threadDraftState = where.threadDraftState,
                 )
             }
@@ -172,6 +179,7 @@ class ChatInputViewModel(
         val editingMessage: Message?,
         val relationshipType: Int?,
         val meGuildMember: GuildMember?,
+        val joinRequestStatus: ApplicationStatus?,
     )
 
     /** Where they are typing, and what that place currently permits. */
@@ -202,6 +210,7 @@ class ChatInputViewModel(
         guild: Guild?,
         pendingReply: StorePendingReplies.PendingReply?,
         meGuildMember: GuildMember?,
+        joinRequestStatus: ApplicationStatus?,
         threadDraftState: StoreThreadDraft.ThreadDraftState,
     ): ViewState {
         // A thread draft is not yet a channel, so write access is decided by the thread permission
@@ -272,6 +281,7 @@ class ChatInputViewModel(
             timeoutLeftMs = calculateTimeoutLeftMs(meGuildMember),
             selectedThreadDraft = selectedThreadDraft,
             shouldShowVerificationGate = shouldShowVerificationGate,
+            joinRequestStatus = joinRequestStatus,
             threadDraftState = threadDraftState,
             // Reference: `ThreadUtils.canCreateThread(permissions, channel, null, guild)`.
             // `utilities/threads/ThreadUtils` does not exist in this project, so the composer's

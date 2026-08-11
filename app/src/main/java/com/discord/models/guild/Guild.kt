@@ -12,6 +12,7 @@ import com.discord.api.guild.GuildVerificationLevel
 import com.discord.api.guild.welcome.GuildWelcomeScreen
 import com.discord.api.role.GuildRole
 import com.discord.api.sticker.Sticker
+import com.discord.api.guild.Guild as ApiGuild
 
 data class Guild(
     val roles: List<GuildRole> = emptyList(),
@@ -66,6 +67,17 @@ data class Guild(
         fun toShortName(name: String): String = name.replace(Regex("'s "), " ")
             .replace(Regex("(\\w)(\\w*)"), "$1")
             .replace(Regex("\\s"), "")
+
+        /**
+         * A record built from a payload that is not a guild the user is in.
+         *
+         * The membership-screening screens and the pending-applications folder both have to render
+         * a guild the client has never received a `GUILD_CREATE` for, from whatever partial shape
+         * carried it — the verification form's `guild`, or `GET /users/@me/join-request-guilds`.
+         * Every absent field falls back to the [Guild] default rather than to a previous record,
+         * because there is no previous record.
+         */
+        fun fromPartial(api: ApiGuild): Guild = Guild().merge(api)
     }
     fun hasFeature(feature: GuildFeature) = feature in features
     fun isOwner(userId: Long) = ownerId == userId
@@ -85,4 +97,61 @@ data class Guild(
     fun canHaveVanityURL() =
         hasFeature(GuildFeature.VANITY_URL) ||
             (hasFeature(GuildFeature.GUILD_WEB_PAGE_VANITY_URL) && !vanityUrlCode.isNullOrEmpty())
+}
+
+/**
+ * Folds a wire guild onto the record already held for it.
+ *
+ * Lives here rather than on the store because partial guilds reach the client from places that are
+ * not the guild stream — the membership-screening form and the join-request guild list both carry
+ * one for a guild the user has not joined.
+ */
+fun Guild.merge(api: ApiGuild): Guild {
+    // Gson bypasses Kotlin constructors; omitted fields in partial guild payloads are JVM null.
+    val incomingName: String? = api.name
+    val incomingFeatures: List<GuildFeature>? = api.features
+    val incomingNsfwLevel: GuildNsfwLevel? = api.nsfwLevel
+    return Guild(
+        roles = emptyList(),
+        emojis = api.emojis.orEmpty(),
+        stickers = api.stickers.orEmpty(),
+        name = incomingName?.takeIf(String::isNotEmpty) ?: name,
+        description = api.description ?: description,
+        defaultMessageNotifications = api.defaultMessageNotifications ?: defaultMessageNotifications,
+        id = api.id.takeUnless { it == 0L } ?: id,
+        region = api.region ?: region,
+        ownerId = api.ownerId.takeUnless { it == 0L } ?: ownerId,
+        icon = api.icon ?: icon,
+        verificationLevel = api.verificationLevel ?: verificationLevel,
+        explicitContentFilter = api.explicitContentFilter ?: explicitContentFilter,
+        unavailable = api.unavailable,
+        mfaLevel = api.mfaLevel,
+        afkTimeout = api.afkTimeout.takeUnless { it == 0 } ?: afkTimeout,
+        afkChannelId = api.afkChannelId,
+        systemChannelId = api.systemChannelId,
+        features = incomingFeatures?.toSet() ?: features,
+        memberCount = api.memberCount,
+        banner = api.banner,
+        splash = api.splash ?: splash,
+        premiumTier = api.premiumTier,
+        premiumSubscriptionCount = api.premiumSubscriptionCount,
+        systemChannelFlags = api.systemChannelFlags,
+        joinedAt = api.joinedAt ?: joinedAt,
+        rulesChannelId = api.rulesChannelId ?: rulesChannelId,
+        publicUpdatesChannelId = api.publicUpdatesChannelId ?: publicUpdatesChannelId,
+        preferredLocale = api.preferredLocale ?: preferredLocale,
+        welcomeScreen = api.welcomeScreen ?: welcomeScreen,
+        profile = api.profile ?: profile,
+        maxVideoChannelUsers = api.maxVideoChannelUsers ?: maxVideoChannelUsers,
+        vanityUrlCode = api.vanityUrlCode ?: vanityUrlCode,
+        approximatePresenceCount = api.approximatePresenceCount.takeUnless { it == 0 } ?: approximatePresenceCount,
+        nsfw = api.nsfw,
+        hubType = api.hubType,
+        safetyAlertsChannelId = api.safetyAlertsChannelId,
+        premiumProgressBarEnabled = api.premiumProgressBarEnabled,
+        nsfwLevel = incomingNsfwLevel ?: nsfwLevel,
+        ownerConfiguredContentLevel = api.ownerConfiguredContentLevel,
+        incidentsData = api.incidentsData ?: incidentsData,
+        officialMessageColor = api.officialMessageColor ?: officialMessageColor,
+    )
 }

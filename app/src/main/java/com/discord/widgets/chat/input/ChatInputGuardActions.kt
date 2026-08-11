@@ -16,7 +16,7 @@ import com.discord.api.guild.GuildVerificationLevel
  * | [joinGuildAsMember] | `StoreLurking.postJoinGuildAsMember` | the store exists but `StoreStream` never constructs it |
  * | [showFollowSheet] | `WidgetChannelFollowSheet` | not reconstructed |
  * | [launchAccountVerification] | `WidgetUserEmailVerify` / `WidgetUserPhoneManage` | not reconstructed |
- * | [showMemberVerificationGate] | `MemberVerificationUtils.maybeShowVerificationGate` → `WidgetGuildJoinRequest` | not reconstructed |
+ * | [showMemberVerificationGate] | `MemberVerificationUtils.maybeShowVerificationGate` | reconstructed; `WidgetChatInput` routes the guard itself |
  *
  * They are nullable rather than no-op lambdas on purpose: the guard **hides the button** when the
  * action is unset, instead of showing a control that does nothing when pressed. Install one and the

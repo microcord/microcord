@@ -27,9 +27,15 @@ class MemberVerificationPendingViewModel(
         object Success : Event()
     }
 
+    /**
+     * @property isMember whether the user is actually in the guild. A guild that screens members
+     *   manually admits nobody until approval, so withdrawing there deletes an application, while
+     *   in a rules-gated guild the user is already a pending *member* and has a server to leave.
+     */
     data class StoreState(
         val isFormOutdated: Boolean,
-        val isPreviewEnabled: Boolean,
+        val isMember: Boolean,
+        val isPendingMember: Boolean,
         val applicationStatus: ApplicationStatus,
         val rejectionReason: String?,
     )
@@ -39,7 +45,8 @@ class MemberVerificationPendingViewModel(
             val dialogState: DialogState,
             val showPendingImage: Boolean,
             val showTertiaryButton: Boolean,
-            val isPreviewEnabled: Boolean,
+            val isMember: Boolean,
+            val isPendingMember: Boolean,
             val rejectionReason: String?,
         ) : ViewState()
     }
@@ -60,8 +67,8 @@ class MemberVerificationPendingViewModel(
             loaded.copy(
                 dialogState = dialogState,
                 showPendingImage = pending,
-                showTertiaryButton = pending && !loaded.isPreviewEnabled,
-                isPreviewEnabled = false,
+                // Only a member has a server to leave, so only they get the third button.
+                showTertiaryButton = pending && loaded.isMember,
                 rejectionReason = null,
             ),
         )
@@ -70,6 +77,18 @@ class MemberVerificationPendingViewModel(
     fun resetGuildJoinRequest() = request(restAPI.resetGuildJoinRequest(guildId))
 
     fun deleteGuildJoinRequest() = request(restAPI.deleteGuildJoinRequest(guildId))
+
+    /**
+     * Clears a rejected application so a fresh one can be started.
+     *
+     * A pending member's application is *deleted*, because the membership it hangs off still
+     * exists; an applicant who never became a member has theirs *restarted* instead. Sending the
+     * wrong one leaves the old rejection in place and the new form refuses to submit.
+     */
+    fun reapply() {
+        val loaded = viewState as? ViewState.Loaded
+        if (loaded?.isPendingMember == true) deleteGuildJoinRequest() else resetGuildJoinRequest()
+    }
 
     fun leaveGuild() = request(restAPI.leaveGuild(guildId))
 
@@ -88,7 +107,7 @@ class MemberVerificationPendingViewModel(
     companion object {
         internal fun reduce(storeState: StoreState, requestedState: DialogState?): ViewState.Loaded? {
             val resolvedState = requestedState ?: when (storeState.applicationStatus) {
-                ApplicationStatus.PENDING -> if (storeState.isPreviewEnabled) DialogState.CANCEL else DialogState.PENDING
+                ApplicationStatus.PENDING -> DialogState.PENDING
                 ApplicationStatus.REJECTED -> DialogState.REJECTED
                 else -> null
             }
@@ -96,8 +115,9 @@ class MemberVerificationPendingViewModel(
             return ViewState.Loaded(
                 dialogState = state,
                 showPendingImage = true,
-                showTertiaryButton = false,
-                isPreviewEnabled = storeState.isPreviewEnabled,
+                showTertiaryButton = state == DialogState.PENDING && storeState.isMember,
+                isMember = storeState.isMember,
+                isPendingMember = storeState.isPendingMember,
                 rejectionReason = storeState.rejectionReason,
             )
         }
@@ -109,7 +129,11 @@ class MemberVerificationPendingViewModel(
         ) { formData, guild, joinRequest ->
             StoreState(
                 isFormOutdated = formData?.form?.isFormOutdated() == true,
-                isPreviewEnabled = guild?.hasFeature(GuildFeature.PREVIEW_ENABLED) == true,
+                // Presence in the guild store *is* membership: a manual-approval guild never sends
+                // a GUILD_CREATE to someone whose application has not been approved.
+                isMember = guild != null,
+                isPendingMember = StoreStream.getGuilds()
+                    .getMember(guildId, StoreStream.getUsers().getMe().id)?.pending == true,
                 applicationStatus = joinRequest?.applicationStatus ?: ApplicationStatus.STARTED,
                 rejectionReason = joinRequest?.rejectionReason,
             )

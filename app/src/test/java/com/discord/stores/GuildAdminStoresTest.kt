@@ -469,7 +469,7 @@ class GuildAdminStoresTest {
         description = "",
     )
 
-    private fun verificationForm() = ModelMemberVerificationForm("1", emptyList())
+    private fun verificationForm() = ModelMemberVerificationForm(version = "1", formFields = emptyList())
 
     private fun boostSlot(id: Long, guildId: Long?) = ModelGuildBoostSlot(
         cooldownEndsAt = null,

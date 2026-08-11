@@ -2,7 +2,9 @@ package com.discord.stores
 
 import com.discord.api.guildjoinrequest.ApplicationStatus
 import com.discord.api.guildjoinrequest.GuildJoinRequest
-import com.discord.api.guild.Guild
+import com.discord.models.guild.Guild
+import com.discord.models.guild.merge
+import com.discord.models.domain.ModelInvite
 import com.discord.models.domain.ModelPayload
 import com.discord.restapi.RestAPIInterface
 import com.discord.stores.updates.ObservationDeck
@@ -11,6 +13,7 @@ import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import rx.Observable
+import com.discord.api.guild.Guild as ApiGuild
 
 /**
  * The current user's membership applications ("join requests") to gated community guilds.
@@ -21,20 +24,18 @@ import rx.Observable
  *   maintained by `GUILD_JOIN_REQUEST_CREATE/UPDATE/DELETE`. Every handler filters on
  *   `userId == me`, because the same events are broadcast to guild moderators for *other* people's
  *   applications and those must not overwrite the user's own state.
- * - [pendingGuilds] is the guild a pending application points at. While an application is pending
- *   the user is not a member, so `StoreGuilds` has nothing for that id and the "pending" row in the
- *   guild list would render blank. [fetchPendingGuilds] fills that gap from
- *   `GET /users/@me/join-request-guilds`, and only when at least one request references a guild
- *   that is neither joined nor already fetched.
- *
- * **Divergence:** [pendingGuilds] holds the wire [Guild] rather than the reference's
- * `com.discord.models.guild.Guild`. The api-to-model conversion in this target is
- * `StoreGuilds.merge`, which is private; switch the value type once that conversion is exposed.
+ * - [pendingGuilds] is the guild a pending application points at. A guild that screens members
+ *   manually never sends a `GUILD_CREATE` — the user is not a member of it, only an applicant — so
+ *   `StoreGuilds` has nothing and every screen that names the guild would render blank. Two
+ *   payloads carry the missing record and both are folded in here: `GET
+ *   /users/@me/join-request-guilds` ([fetchPendingGuilds]) and the guild attached to the
+ *   membership-screening form ([handleMemberVerificationGuild]).
  *
  * An application flipping to [ApplicationStatus.APPROVED] with `lastSeen == null` is the moment the
  * "you're in" dialog should be shown exactly once; that is delegated to [onJoinRequestApproved] so
  * this store stays free of UI. `lastSeen` is what makes it once-only — the server records that the
- * user has seen the approval and subsequent payloads carry a non-null value.
+ * user has seen the approval, and an application that comes back already acked is dropped outright
+ * rather than kept, which is what retires the guild's row from the pending folder.
  */
 class StoreGuildJoinRequest(
     private val userStore: StoreUser,
@@ -59,6 +60,9 @@ class StoreGuildJoinRequest(
 
     fun getPendingGuilds(): Map<Long, Guild> = pendingGuildsSnapshot
 
+    /** The guild behind an application, for screens that run while the user is not a member. */
+    fun getPendingGuild(guildId: Long): Guild? = pendingGuildsSnapshot[guildId]
+
     fun observeGuildJoinRequest(guildId: Long): Observable<GuildJoinRequest?> =
         observationDeck.connectRx(this) { guildJoinRequestsSnapshot[guildId] }.distinctUntilChanged()
 
@@ -67,6 +71,9 @@ class StoreGuildJoinRequest(
 
     fun observePendingGuilds(): Observable<Map<Long, Guild>> =
         observationDeck.connectRx(this) { pendingGuildsSnapshot }.distinctUntilChanged()
+
+    fun observePendingGuild(guildId: Long): Observable<Guild?> =
+        observationDeck.connectRx(this) { pendingGuildsSnapshot[guildId] }.distinctUntilChanged()
 
     /**
      * Fetches the guilds behind pending applications, but only if at least one application points
@@ -85,9 +92,46 @@ class StoreGuildJoinRequest(
     }
 
     @StoreThread
-    internal fun handlePendingGuildsLoaded(results: List<Guild>) {
-        results.forEach { guild -> pendingGuilds[guild.id] = guild }
+    internal fun handlePendingGuildsLoaded(results: List<ApiGuild>) {
+        results.forEach { guild -> putPendingGuild(guild) }
         markChanged()
+    }
+
+    /**
+     * Accepting an invite to a guild that screens members manually.
+     *
+     * The accept response already carries the application it created and the guild it belongs to,
+     * so seeding them here means the screen the user is about to land on has both immediately
+     * rather than after `GUILD_JOIN_REQUEST_CREATE` and a round trip for the guild.
+     */
+    fun handleInviteAccepted(invite: ModelInvite) = dispatcher.schedule {
+        val request = invite.getJoinRequest()
+        val guild = invite.guild
+        if (request == null && guild == null) return@schedule
+        if (request != null && request.userId == userStore.getMeInternal().id && !request.isApprovedAndAcked) {
+            guildJoinRequests[request.guildId] = request
+        }
+        if (guild != null && guildsStore.getGuild(guild.id) == null) putPendingGuild(guild)
+        markChanged()
+    }
+
+    /**
+     * The partial guild the membership-screening form carries.
+     *
+     * For a manual-approval guild this arrives before — and often instead of — the join-request
+     * guild list, so the screen that asked for the form can name the guild it is asking about.
+     */
+    @StoreThread
+    fun handleMemberVerificationGuild(guild: ApiGuild) {
+        putPendingGuild(guild)
+        markChanged()
+    }
+
+    @StoreThread
+    private fun putPendingGuild(guild: ApiGuild) {
+        // Merged onto whatever is already held: the two payloads carry different subsets, and the
+        // later one must not blank a field the earlier one supplied.
+        pendingGuilds[guild.id] = (pendingGuilds[guild.id] ?: Guild()).merge(guild)
     }
 
     /**
@@ -98,7 +142,11 @@ class StoreGuildJoinRequest(
     @StoreThread
     fun handleConnectionOpen(payload: ModelPayload) {
         payload.guildJoinRequests?.forEach { request ->
-            guildJoinRequests[request.guildId] = request
+            if (request.isApprovedAndAcked) {
+                guildJoinRequests.remove(request.guildId)
+            } else {
+                guildJoinRequests[request.guildId] = request
+            }
         }
         markChanged()
     }
@@ -114,6 +162,12 @@ class StoreGuildJoinRequest(
     @StoreThread
     fun handleGuildJoinRequestCreateOrUpdate(guildId: Long, request: GuildJoinRequest) {
         if (request.userId != userStore.getMeInternal().id) return
+        if (request.isApprovedAndAcked) {
+            guildJoinRequests.remove(guildId)
+            pendingGuilds.remove(guildId)
+            markChanged()
+            return
+        }
         guildJoinRequests[guildId] = request
         if (request.applicationStatus == ApplicationStatus.APPROVED && request.lastSeen == null) {
             onJoinRequestApproved(guildId)

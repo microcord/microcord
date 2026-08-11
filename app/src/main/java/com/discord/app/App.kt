@@ -20,6 +20,7 @@ import com.discord.utilities.images.MGImagesConfig
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
 import com.discord.utilities.notices.NoticeBuilders
+import com.discord.widgets.guilds.list.GuildsListStoreHooks
 import com.discord.widgets.notice.NoticePopupChannel
 import com.discord.utilities.persister.PersisterConfig
 import com.discord.utilities.time.ClockFactory
@@ -70,6 +71,9 @@ class App : Application() {
         System.loadLibrary("dsti")
         BootLog.record(BootLogEvent.NATIVE_READY)
         StoreStream.initialize(this)
+        // Without this the sidebar has no pending-applications folder and a guild the user has
+        // applied to cannot be tapped at all.
+        GuildsListStoreHooks.install()
         GooglePlayBillingManager.init(this)
         VoiceEngineServiceController.INSTANCE.init(this)
     }

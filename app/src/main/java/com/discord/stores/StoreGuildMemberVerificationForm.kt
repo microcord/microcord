@@ -21,6 +21,10 @@ class StoreGuildMemberVerificationForm(
     private val dispatcher: Dispatcher,
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
     private val restApi: () -> RestAPIInterface? = { RestAPI.apiOrNull },
+    /** Whether the user is already in the guild, which decides whether to ask for its record. */
+    private val isMember: (guildId: Long) -> Boolean = { false },
+    /** Hands the partial guild to the store that renders applications for non-members. */
+    private val onGuildReceived: (com.discord.api.guild.Guild) -> Unit = {},
 ) : StoreV2() {
 
     /**
@@ -43,11 +47,17 @@ class StoreGuildMemberVerificationForm(
     fun observeMemberVerificationFormData(guildId: Long): Observable<MemberVerificationFormData?> =
         observationDeck.connectRx(this) { getMemberVerificationFormData(guildId) }.distinctUntilChanged()
 
-    fun fetchMemberVerificationForm(guildId: Long) = dispatcher.schedule {
+    /**
+     * @param inviteCode the invite the user arrived on, when one is known. The server refuses to
+     *   serve the form to an applicant it has already rejected unless the invite is presented, so
+     *   omitting it makes reapplying impossible.
+     */
+    @JvmOverloads
+    fun fetchMemberVerificationForm(guildId: Long, inviteCode: String? = null) = dispatcher.schedule {
         if (memberVerificationFormState[guildId]?.fetchState == FetchStates.FETCHING) return@schedule
         handleMemberVerificationFormFetchStart(guildId)
         val api = restApi() ?: return@schedule handleMemberVerificationFormFetchFailed(guildId)
-        api.getGuildMemberVerificationForm(guildId)
+        api.getGuildMemberVerificationForm(guildId, withGuild = !isMember(guildId), inviteCode = inviteCode)
             .restSubscribeOn(false)
             .appSubscribe(
                 StoreGuildMemberVerificationForm::class.java,
@@ -78,6 +88,7 @@ class StoreGuildMemberVerificationForm(
     ) {
         memberVerificationFormState[guildId] =
             MemberVerificationFormData(FetchStates.SUCCEEDED, memberVerificationForm)
+        memberVerificationForm.guild?.let(onGuildReceived)
         markChanged()
     }
 

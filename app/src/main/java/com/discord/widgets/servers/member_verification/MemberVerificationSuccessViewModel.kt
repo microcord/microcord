@@ -22,7 +22,7 @@ class MemberVerificationSuccessViewModel(
         object Success : Event()
     }
 
-    data class StoreState(val lastSeen: String?, val guildName: String?)
+    data class StoreState(val lastSeen: String?, val guildName: String?, val joinRequestId: Long?)
 
     sealed class ViewState {
         object Acked : ViewState()
@@ -30,10 +30,12 @@ class MemberVerificationSuccessViewModel(
     }
 
     private val eventSubject = PublishSubject.create<Event>()
+    private var joinRequestId: Long? = null
 
     init {
         storeObservable.computationLatest().ui(this)
             .appSubscribe(MemberVerificationSuccessViewModel::class.java) { storeState ->
+                joinRequestId = storeState.joinRequestId
                 updateViewState(reduce(storeState))
             }
     }
@@ -41,7 +43,10 @@ class MemberVerificationSuccessViewModel(
     fun observeEvents(): Observable<Event> = eventSubject
 
     fun ackGuildJoinRequest() {
-        restAPI.ackGuildJoinRequest(guildId).restSubscribeOn().ui(this).appSubscribe(
+        // The application is gone the moment another client acks it, and then there is nothing left
+        // to acknowledge — treat that as done rather than as a failure.
+        val joinRequestId = joinRequestId ?: return eventSubject.onNext(Event.Success)
+        restAPI.ackGuildJoinRequest(guildId, joinRequestId).restSubscribeOn().ui(this).appSubscribe(
             errorClass = MemberVerificationSuccessViewModel::class.java,
             errorHandler = { eventSubject.onNext(Event.Error) },
             onCompleted = { eventSubject.onNext(Event.Success) },
@@ -56,6 +61,8 @@ class MemberVerificationSuccessViewModel(
         private fun observeStores(guildId: Long): Observable<StoreState> = Observable.combineLatest(
             StoreStream.getGuildJoinRequests().observeGuildJoinRequest(guildId),
             StoreStream.getGuilds().observeGuild(guildId),
-        ) { joinRequest, guild -> StoreState(joinRequest?.lastSeen, guild?.name) }
+        ) { joinRequest, guild ->
+            StoreState(joinRequest?.lastSeen, guild?.name, joinRequest?.joinRequestId)
+        }
     }
 }

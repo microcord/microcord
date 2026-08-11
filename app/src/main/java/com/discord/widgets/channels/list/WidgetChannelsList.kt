@@ -54,6 +54,8 @@ import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.appbar.CollapsingToolbarLayout
+import com.discord.widgets.servers.member_verification.MemberVerificationPendingDialog
+import com.discord.widgets.servers.member_verification.MemberVerificationPendingViewModel
 
 /**
  * The channels sidebar: the guild banner and header, the channel list itself, the sticky
@@ -245,6 +247,11 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
         }
         adapter.onOpenMemberVerification = {
             selectedGuildId?.let { ChannelListNavigation.showMemberVerification(this, it) }
+        }
+        adapter.onShowApplicationStatus = { dialogState ->
+            selectedGuildId?.let {
+                MemberVerificationPendingDialog.show(parentFragmentManager, it, dialogState)
+            }
         }
         adapter.onAddServer = { ChannelListNavigation.addServerToHub(this) }
     }

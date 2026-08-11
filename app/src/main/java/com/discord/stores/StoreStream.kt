@@ -238,7 +238,12 @@ class StoreStream private constructor(
         },
     )
     private val guildTemplates = StoreGuildTemplates(dispatcher, observationDeck)
-    private val guildMemberVerificationForm = StoreGuildMemberVerificationForm(dispatcher, observationDeck)
+    private val guildMemberVerificationForm = StoreGuildMemberVerificationForm(
+        dispatcher,
+        observationDeck,
+        isMember = { guilds.getGuild(it) != null },
+        onGuildReceived = { guildJoinRequests.handleMemberVerificationGuild(it) },
+    )
     private val auditLog = StoreAuditLog(dispatcher, observationDeck)
     private val guildRoleSubscriptions = StoreGuildRoleSubscriptions(
         dispatcher,

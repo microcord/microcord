@@ -81,7 +81,7 @@ class MemberVerificationPendingDialog : AppDialog(R.layout.widget_member_verific
             MemberVerificationPendingViewModel.DialogState.PENDING -> configurePending(state)
             MemberVerificationPendingViewModel.DialogState.CANCEL -> configureCancel()
             MemberVerificationPendingViewModel.DialogState.REJECTED -> configureRejected(state.rejectionReason)
-            MemberVerificationPendingViewModel.DialogState.LEAVE -> configureLeave(state.isPreviewEnabled)
+            MemberVerificationPendingViewModel.DialogState.LEAVE -> configureLeave(state.isMember)
         }
     }
 
@@ -101,24 +101,22 @@ class MemberVerificationPendingDialog : AppDialog(R.layout.widget_member_verific
         description.setText(R.string.member_verification_pending_application_modal_desc)
         primary.setText(R.string.got_it)
         primary.setOnClickListener { dismiss() }
-        if (state.isPreviewEnabled) {
-            secondary.visibility = View.GONE
-            tertiary.visibility = View.GONE
-        } else {
-            secondary.setText(R.string.member_verification_cancel_application)
-            secondary.setOnClickListener {
-                viewModel.updateDialogState(MemberVerificationPendingViewModel.DialogState.CANCEL)
-            }
-            tertiary.setText(R.string.leave_server)
-            tertiary.setOnClickListener {
-                viewModel.updateDialogState(MemberVerificationPendingViewModel.DialogState.LEAVE)
-            }
+        secondary.setText(R.string.member_verification_cancel_application)
+        secondary.setOnClickListener {
+            viewModel.updateDialogState(MemberVerificationPendingViewModel.DialogState.CANCEL)
+        }
+        // Leaving is only offered to someone who actually joined; an applicant to a manual-approval
+        // guild has nothing to leave, only an application to withdraw.
+        tertiary.visibility = if (state.isMember) View.VISIBLE else View.GONE
+        tertiary.setText(R.string.leave_server)
+        tertiary.setOnClickListener {
+            viewModel.updateDialogState(MemberVerificationPendingViewModel.DialogState.LEAVE)
         }
     }
 
     private fun configureCancel() {
         title.setText(R.string.member_verification_pending_application_cancel_modal_title)
-        description.setText(R.string.member_verification_pending_application_leave_server_modal_desc)
+        description.setText(R.string.member_verification_cancel_pending_application_modal_desc)
         primary.setText(R.string.member_verification_pending_application_modal_cancel)
         secondary.setText(R.string.member_verification_pending_application_modal_dismiss)
         primary.setOnClickListener {
@@ -137,18 +135,21 @@ class MemberVerificationPendingDialog : AppDialog(R.layout.widget_member_verific
         secondary.setText(R.string.member_verification_application_reapply)
         primary.setOnClickListener { dismiss() }
         secondary.setOnClickListener {
-            viewModel.resetGuildJoinRequest()
+            viewModel.reapply()
+            // The cleared application leaves nothing to look at, so the form opens straight away
+            // rather than dropping the user back where they came from.
+            WidgetMemberVerification.create(requireContext(), guildId, "Membership Gating")
             dismiss()
         }
     }
 
-    private fun configureLeave(previewEnabled: Boolean) {
+    private fun configureLeave(isMember: Boolean) {
         title.setText(R.string.member_verification_pending_application_leave_server_modal_title)
         description.setText(R.string.member_verification_pending_application_leave_server_modal_desc)
         primary.setText(R.string.member_verification_pending_application_modal_leave)
         secondary.setText(R.string.member_verification_pending_application_modal_dismiss)
         primary.setOnClickListener {
-            if (previewEnabled) viewModel.deleteGuildJoinRequest() else viewModel.leaveGuild()
+            if (isMember) viewModel.leaveGuild() else viewModel.deleteGuildJoinRequest()
             dismiss()
         }
         secondary.setOnClickListener { dismiss() }

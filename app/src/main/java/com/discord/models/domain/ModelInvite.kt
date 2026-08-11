@@ -4,6 +4,7 @@ import android.content.res.Resources
 import com.discord.api.application.Application
 import com.discord.api.channel.Channel
 import com.discord.api.guild.Guild
+import com.discord.api.guildjoinrequest.GuildJoinRequest
 import com.discord.api.guildscheduledevent.GuildScheduledEvent
 import com.discord.api.user.User
 import java.io.Serializable
@@ -27,6 +28,21 @@ class ModelInvite private constructor(
     private var maxUses: Int = 0
     private var memberVerificationForm: ModelMemberVerificationForm? = null
     private var newMember: Boolean = false
+
+    /**
+     * The server's own answer to "does this guild admit the user, or only their application?".
+     *
+     * Set on the accept response for a guild that screens members manually. It is authoritative in
+     * a way the guild's feature list is not: the features arrive on a partial guild that may be
+     * absent entirely, whereas this is decided server-side for this user on this invite.
+     */
+    private var showVerificationForm: Boolean = false
+
+    /** The application the accept created, when the guild routed the user into one. */
+    private var joinRequest: GuildJoinRequest? = null
+
+    /** [InviteFlags]. */
+    private var flags: Int = 0
     private var revoked: Boolean = false
     private var targetType: Int = 0
     private var targetApplication: Application? = null
@@ -43,6 +59,16 @@ class ModelInvite private constructor(
     fun getMaxAge() = maxAge
     fun getMaxUses() = maxUses
     fun getMemberVerificationForm() = memberVerificationForm
+    fun getShowVerificationForm() = showVerificationForm
+    fun getJoinRequest() = joinRequest
+    fun hasFlag(flag: Int) = flags and flag != 0
+
+    /**
+     * Invites that admit the user without an application: a guest gets limited access instead of
+     * membership, and a bypass invite is one a moderator minted precisely to skip the queue.
+     */
+    fun bypassesMemberVerification() =
+        hasFlag(InviteFlags.IS_GUEST_INVITE) || hasFlag(InviteFlags.IS_APPLICATION_BYPASS)
     fun getTargetType() = targetType
     fun getTargetApplication() = targetApplication
     fun getTimeToExpirationMillis() = getExpirationTime() - System.currentTimeMillis()
@@ -126,6 +152,14 @@ class ModelInvite private constructor(
         ?.takeIf { event -> channel?.let { event.isInChannel(it.id) } == true }
         ?.let { "$baseUrl/$code?event=${it.id}" }
         ?: "$baseUrl/$code"
+
+    object InviteFlags {
+        const val IS_GUEST_INVITE = 1
+        const val IS_VIEWED = 2
+        const val IS_ENHANCED = 4
+        const val IS_APPLICATION_BYPASS = 8
+        const val HAS_TARGET_USERS_JOB_STATUS = 16
+    }
 
     enum class InviteTargetTypes(val code: Int, val displayName: String) {
         STREAM(1, "Stream"),

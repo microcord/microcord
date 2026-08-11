@@ -13,6 +13,7 @@ import com.discord.app.AppComponent
 import com.discord.app.AppFragment
 import com.discord.app.AppPermissionsRequests
 import com.discord.stores.StoreStream
+import com.discord.utilities.guilds.MemberVerificationUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.user.UserUtils.isNewUser
 import com.discord.widgets.stage.StageChannelAPI
@@ -61,11 +62,19 @@ object VoiceUtils {
         context: Context,
         fragmentManager: FragmentManager,
     ) {
-        // The reference wraps this in `MemberVerificationUtils.maybeShowVerificationGate`, which
-        // interposes the guild's member-verification sheet for a lurker. Only
-        // `MemberVerificationUtils.hasVerificationGate` is reconstructed — there is no sheet to
-        // show yet — so a gated lurker falls through to the join attempt and is refused by
-        // `VoiceChannelJoinabilityUtils` instead of being offered the gate.
+        // Screening is interposed before the join rather than after: falling through would have the
+        // connection refused with no explanation, where the gate says what to do about it.
+        if (
+            channel.guildId != 0L &&
+            MemberVerificationUtils.maybeShowVerificationGate(
+                context,
+                fragmentManager,
+                channel.guildId,
+                location = "Voice Channel",
+            )
+        ) {
+            return
+        }
         when {
             channel.isPrivate() -> callAndLaunch(
                 channelId = channel.id,
@@ -106,10 +115,8 @@ object VoiceUtils {
                 PermissionUtils.can(Permission.MODERATE_STAGE_CHANNEL, myPermissions) ->
                 WidgetModeratorStartStage.launch(context, channel.id, channel.guildId)
 
-            // The reference interposes `MemberVerificationUtils.maybeShowVerificationGate` here.
-            // Only `hasVerificationGate` is reconstructed — there is no sheet to show — so a gated
-            // lurker falls through to the join attempt and is refused by
-            // `VoiceChannelJoinabilityUtils` instead of being offered the gate.
+            // No screening check here: the only caller is [handleCallChannel], which has already
+            // interposed the gate for every channel kind.
             else -> StageChannelJoinHelper.connectToStage(context, fragmentManager, channel.id)
         }
     }
@@ -158,6 +165,18 @@ object VoiceUtils {
         onEventStarted: () -> Unit,
     ) {
         if (!channel.isGuildVocalChannel()) return
+        // Entering through an event is still entering: a screened member is gated here too, and
+        // this path does not go through [handleCallChannel].
+        if (
+            MemberVerificationUtils.maybeShowVerificationGate(
+                context,
+                fragmentManager,
+                channel.guildId,
+                location = "Guild Event",
+            )
+        ) {
+            return
+        }
         if (channel.isStageVoiceChannel()) {
             StageChannelJoinHelper.connectToStage(context, fragmentManager, channel.id) {
                 StageChannelAPI.setUserSuppressedInChannel(
