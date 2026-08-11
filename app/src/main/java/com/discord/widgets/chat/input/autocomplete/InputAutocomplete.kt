@@ -3,6 +3,7 @@ package com.discord.widgets.chat.input.autocomplete
 import android.text.Editable
 import android.text.Spanned
 import android.text.TextWatcher
+import android.text.style.BackgroundColorSpan
 import android.text.style.CharacterStyle
 import android.view.View
 import android.widget.EditText
@@ -224,6 +225,9 @@ class InputAutocomplete(
         private const val REMOTE_LOADING_ITEMS = 4
         private val MENTION_TOKEN = Regex("<@!?(\\d+)>")
 
+        /** A shortcode as the composer leaves it once an emoji has been picked. */
+        private val EMOJI_TOKEN = Regex(":([a-zA-Z0-9_+~-]+):")
+
         internal fun renderedItems(state: AutocompleteViewState.Autocomplete): List<Autocompletable> =
             if (state.isLoading && !state.isError) {
                 List(REMOTE_LOADING_ITEMS) { ApplicationCommandLoadingPlaceholder() }
@@ -368,9 +372,27 @@ class InputAutocomplete(
         viewModel.onInputChanged(editText.text ?: "", caret..caret)
     }
 
+    /**
+     * Marks up the tokens the composer produced, so a completed mention or emoji reads differently
+     * to the same characters typed by hand.
+     *
+     * A shortcode only counts once it names an emoji that exists — half-typed text such as `:jo`,
+     * or a name nothing resolves to, is left plain.
+     */
     private fun replaceMentionPills() {
         val editable = editText.editableText ?: return
         val spans = buildMap<IntRange, List<CharacterStyle>> {
+            EMOJI_TOKEN.findAll(editable).forEach { match ->
+                if (!isKnownEmoji(match.groupValues[1])) return@forEach
+                put(
+                    match.range,
+                    listOf(
+                        BackgroundColorSpan(
+                            ColorCompat.getThemedColor(editText, R.attr.colorBackgroundModifierAccent),
+                        ),
+                    ),
+                )
+            }
             MENTION_TOKEN.findAll(editable).forEach { match ->
                 val userId = match.groupValues[1].toLongOrNull() ?: return@forEach
                 val username = StoreStream.getUsers().getUsers()[userId]?.username ?: return@forEach
@@ -390,6 +412,15 @@ class InputAutocomplete(
         applyEditTextAction(InputEditTextAction.ReplacePillSpans(editable.toString(), spans))
     }
 
+    private fun isKnownEmoji(name: String): Boolean {
+        // A custom emoji shares its name across guilds, so the composer disambiguates with a ~N suffix.
+        val undisambiguated = name.substringBefore('~')
+        if (StoreStream.getEmojis().unicodeEmojisNamesMap.containsKey(undisambiguated)) return true
+        return StoreStream.getCustomEmojis().getAllGuildEmoji().values.any { guildEmoji ->
+            guildEmoji.values.any { it.name == undisambiguated }
+        }
+    }
+
     private fun applyEditTextAction(action: InputEditTextAction) {
         val editable = editText.editableText ?: return
         if (editable.toString() != action.assumedInput.toString()) return
@@ -406,6 +437,7 @@ class InputAutocomplete(
             }
             is InputEditTextAction.ReplacePillSpans -> {
                 editable.getSpans(0, editable.length, ComposerMentionSpan::class.java).forEach(editable::removeSpan)
+                editable.getSpans(0, editable.length, BackgroundColorSpan::class.java).forEach(editable::removeSpan)
                 action.spans.forEach { (range, styles) ->
                     styles.forEach { style ->
                         editable.setSpan(style, range.first, range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
