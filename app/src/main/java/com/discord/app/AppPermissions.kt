@@ -23,11 +23,12 @@ class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRe
     private var onGranted: (() -> Unit)? = null
     private var onDenied: ((Map<String, Boolean>) -> Unit)? = null
     private var requestStartedAtMillis: Long = 0L
+    private var requiredOfRequest: Array<String> = emptyArray()
 
     private val launcher = activity.registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { grantResults ->
-        val granted = areAllGranted(grantResults)
+        val granted = areRequiredGranted(requiredOfRequest, grantResults, ::isGranted)
         val grantedCallback = onGranted
         val deniedCallback = onDenied
         onDenied = null
@@ -47,7 +48,7 @@ class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRe
 
     @MainThread
     override fun requestVideoCallPermissions(onSuccess: () -> Unit) {
-        request(VIDEO_CALL, onSuccess) { grantResults ->
+        request(VIDEO_CALL, bluetoothPermissions(Build.VERSION.SDK_INT), onSuccess) { grantResults ->
             when {
                 grantResults[Manifest.permission.RECORD_AUDIO] != true -> toast(R.string.permission_microphone_denied)
                 else -> toast(R.string.no_camera_access)
@@ -77,7 +78,7 @@ class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRe
 
     @MainThread
     override fun requestMicrophone(onFailure: (() -> Unit)?, onSuccess: () -> Unit) {
-        request(MICROPHONE, onSuccess) {
+        request(MICROPHONE, bluetoothPermissions(Build.VERSION.SDK_INT), onSuccess) {
             if (onFailure == null) toast(R.string.permission_microphone_denied) else onFailure()
         }
     }
@@ -110,17 +111,35 @@ class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRe
         permissions: Array<String>,
         onSuccess: () -> Unit,
         onFailure: (Map<String, Boolean>) -> Unit,
+    ) = request(permissions, emptyArray(), onSuccess, onFailure)
+
+    /**
+     * @param optional asked for in the same dialog but not required to succeed. Bluetooth is the
+     *   case this exists for: a call still connects without it, it just cannot route to a headset,
+     *   so refusing it must not stop the user joining.
+     */
+    private fun request(
+        required: Array<String>,
+        optional: Array<String>,
+        onSuccess: () -> Unit,
+        onFailure: (Map<String, Boolean>) -> Unit,
     ) {
+        val permissions = required + optional
         if (hasPermissions(permissions)) {
             onSuccess()
             return
         }
         if (SystemClock.elapsedRealtime() - requestStartedAtMillis < REQUEST_DEBOUNCE_MILLIS) return
+        requiredOfRequest = required
         onGranted = onSuccess
         onDenied = onFailure
         requestStartedAtMillis = SystemClock.elapsedRealtime()
         launcher.launch(permissions)
     }
+
+    private fun isGranted(permission: String): Boolean =
+        ContextCompat.checkSelfPermission(activity, permission) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
 
     private fun hasPermissions(permissions: Array<String>): Boolean = permissions.all {
         ContextCompat.checkSelfPermission(activity, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -137,6 +156,14 @@ class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRe
         const val REQUEST_DEBOUNCE_MILLIS = 350L
 
         val MICROPHONE = arrayOf(Manifest.permission.RECORD_AUDIO)
+
+        /**
+         * Routing a call to a Bluetooth headset needs this from API 31; before that the install-time
+         * `BLUETOOTH` covers it. Without it every call lands on the speaker or the earpiece.
+         */
+        fun bluetoothPermissions(sdkInt: Int): Array<String> =
+            if (sdkInt >= Build.VERSION_CODES.S) arrayOf(Manifest.permission.BLUETOOTH_CONNECT)
+            else emptyArray()
         val VIDEO_CALL = arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
         val CAMERA = arrayOf(Manifest.permission.CAMERA)
         val CONTACTS = arrayOf(Manifest.permission.READ_CONTACTS)
@@ -158,5 +185,14 @@ class AppPermissions(private val activity: ComponentActivity) : AppPermissionsRe
 
         internal fun areAllGranted(grantResults: Map<String, Boolean>): Boolean =
             grantResults.isNotEmpty() && grantResults.values.all { it }
+
+        /** A permission absent from the results was never asked for, so its existing state stands. */
+        internal fun areRequiredGranted(
+            required: Array<String>,
+            grantResults: Map<String, Boolean>,
+            isGranted: (String) -> Boolean,
+        ): Boolean = if (required.isEmpty()) areAllGranted(grantResults) else required.all {
+            grantResults[it] ?: isGranted(it)
+        }
     }
 }
