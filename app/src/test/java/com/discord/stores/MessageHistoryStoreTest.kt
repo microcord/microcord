@@ -3,6 +3,8 @@ package com.discord.stores
 import com.discord.api.channel.Channel
 import com.discord.api.interaction.Interaction
 import com.discord.api.interaction.InteractionStateUpdate
+import com.discord.api.user.User
+import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.commands.Application
 import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.models.domain.ModelChannelUnreadUpdate
@@ -349,7 +351,17 @@ class MessageHistoryStoreTest {
             first.store.restore()
             first.store.handleChannelSelected(5)
             first.store.handleMessageCreate(5, message(300, "cached"))
-            first.store.handleLocalMessageCreate(5, "pending", message(301, "pending"))
+            first.store.handleLocalMessageCreate(
+                5,
+                "pending",
+                message(301, "pending").copy(
+                    channelId = 5,
+                    author = User(7, "me"),
+                    timestamp = UtcDateTime(now),
+                    nonce = "pending",
+                    type = -2,
+                ),
+            )
         }
         first.scheduler.triggerActions()
         // Push past the synced holder's persist throttle, then force one more publish.
@@ -380,6 +392,35 @@ class MessageHistoryStoreTest {
         }
         afterLogout.scheduler.triggerActions()
         assertTrue(afterLogout.store.getMessages(5).isEmpty())
+    }
+
+    @Test
+    fun malformedLocalMessagesAreRemovedWhileValidPendingMessagesSurvive() {
+        val key = "local-repair-${System.nanoTime()}"
+        val cache = Persister<Map<Long, List<StoreLocalMessagesHolder.LocalEntry>>>(key, emptyMap())
+        val valid = Message(
+            id = 2L,
+            channelId = 5L,
+            author = User(7L, "me"),
+            content = "pending",
+            timestamp = UtcDateTime(1L),
+            nonce = "valid",
+            type = -2,
+        )
+        val malformed = Message(id = 1L, channelId = 5L, nonce = "broken", type = -2)
+        cache.set(
+            mapOf(5L to listOf(
+                StoreLocalMessagesHolder.LocalEntry("broken", malformed),
+                StoreLocalMessagesHolder.LocalEntry("valid", valid),
+            )),
+            persist = true,
+        )
+
+        val holder = StoreLocalMessagesHolder(cache)
+        holder.restore()
+
+        assertEquals(listOf(valid), holder.getMessages(5L))
+        assertEquals(listOf(valid), cache.get().getValue(5L).map { it.message })
     }
 
     @Test

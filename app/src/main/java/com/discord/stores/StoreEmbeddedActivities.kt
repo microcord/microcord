@@ -183,9 +183,10 @@ class StoreEmbeddedActivities(
     private fun handleEmbeddedActivityForChannel(
         channelId: Long,
         userIds: List<Long>,
-        apiEmbeddedActivity: com.discord.api.embeddedactivities.EmbeddedActivity,
+        apiEmbeddedActivity: com.discord.api.embeddedactivities.EmbeddedActivity?,
         guildId: Long,
     ) {
+        if (apiEmbeddedActivity == null) return
         val url = urlForApplication(apiEmbeddedActivity.applicationId) ?: return
         val activity = EmbeddedActivity.fromApiEmbeddedActivity(
             apiEmbeddedActivity,

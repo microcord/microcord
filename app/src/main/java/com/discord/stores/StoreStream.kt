@@ -30,6 +30,7 @@ import com.discord.api.role.GuildRoleUpdate
 import com.discord.api.stageinstance.StageInstance
 import com.discord.api.thread.ThreadListing
 import com.discord.api.user.User
+import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.api.user.TypingUser
 import com.discord.api.message.reaction.MessageReactionUpdate
 import com.discord.models.authentication.AuthState
@@ -153,6 +154,7 @@ import rx.Scheduler
 import rx.subjects.BehaviorSubject
 import rx.schedulers.Schedulers
 import com.discord.utilities.user.UserUtils.displayName
+import com.discord.utilities.user.UserUtils.synthesizeApiUser
 
 class StoreStream private constructor(
     val dispatcher: Dispatcher,
@@ -2577,7 +2579,9 @@ class StoreStream private constructor(
                 DomainMessage(
                     id = nonce.toLong(), channelId = request.channelId,
                     guildId = channels.getChannel(request.channelId)?.guildId?.takeUnless { it == 0L },
+                    author = users.getMeInternal().synthesizeApiUser(),
                     content = request.content, nonce = nonce, type = -1, hasLocalUploads = true,
+                    timestamp = UtcDateTime(clock.currentTimeMillis()),
                     localAttachments = localAttachments,
                     messageReference = request.pendingReply?.messageReference,
                 ),
@@ -2600,7 +2604,9 @@ class StoreStream private constructor(
                     messages.handleLocalMessageDelete(request.channelId, nonce)
                     messages.handleLocalMessageCreate(request.channelId, nonce, DomainMessage(
                         id = nonce.toLong(), channelId = request.channelId, content = request.content,
+                        author = users.getMeInternal().synthesizeApiUser(),
                         nonce = nonce, type = -3, hasLocalUploads = true, localAttachments = localAttachments,
+                        timestamp = UtcDateTime(clock.currentTimeMillis()),
                     ))
                     messageUploads.onFailure(nonce)
                 }
@@ -2637,7 +2643,9 @@ class StoreStream private constructor(
                 messages.handleLocalMessageDelete(channelId, nonce)
                 messages.handleLocalMessageCreate(channelId, nonce, DomainMessage(
                     id = nonce.toLong(), channelId = channelId, content = content, nonce = nonce,
+                    author = users.getMeInternal().synthesizeApiUser(),
                     type = -2, hasLocalUploads = true,
+                    timestamp = UtcDateTime(clock.currentTimeMillis()),
                     localAttachments = attachments.map(UploadAttachment::toLocalAttachment),
                 ))
                 messageUploads.onFailure(nonce)
@@ -2647,7 +2655,9 @@ class StoreStream private constructor(
         val optimistic = DomainMessage(
             id = nonce.toLong(), channelId = channelId,
             guildId = channels.getChannel(channelId)?.guildId?.takeUnless { it == 0L },
+            author = users.getMeInternal().synthesizeApiUser(),
             content = content, nonce = nonce, type = -1, hasLocalUploads = true,
+            timestamp = UtcDateTime(clock.currentTimeMillis()),
             localAttachments = attachments.map(UploadAttachment::toLocalAttachment),
             messageReference = reference,
         )

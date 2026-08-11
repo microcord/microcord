@@ -49,6 +49,21 @@ class StoreEmbeddedActivitiesTest {
         assertTrue(store.getEmbeddedActivities().isEmpty())
     }
 
+    @Test
+    fun guildPayloadSkipsMissingEmbeddedActivity() {
+        val deck = ObservationDeck()
+        val dispatcher = Dispatcher(storeTestScheduler("embedded-activities-null-test"))
+        val store = StoreEmbeddedActivities(deck)
+        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
+        val malformed = guild(
+            """{"id":1,"embedded_activities":[{"channel_id":20,"users":[2]}]}""",
+        )
+
+        dispatcher.schedule { store.handleGuildCreate(malformed) }
+
+        assertTrue(store.getEmbeddedActivities().isEmpty())
+    }
+
     private fun payload(guildJson: String): ModelPayload = gson.fromJson(
         "{\"guilds\":[$guildJson]}",
         ModelPayload::class.java,

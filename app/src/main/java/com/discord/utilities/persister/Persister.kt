@@ -75,8 +75,11 @@ class Persister<T : Any>(val key: String, private val defaultValue: T) {
         val backup = File(filesDir, "$key.bak")
         try {
             restoreBackup(file, backup)
-            Output(temporary.outputStream()).use { output ->
+            val stream = temporary.outputStream()
+            Output(stream).use { output ->
                 requireNotNull(kryo.get()).writeClassAndObject(output, value)
+                output.flush()
+                stream.fd.sync()
             }
             if (file.exists() && !file.renameTo(backup)) error("Unable to back up preference")
             if (!temporary.renameTo(file)) error("Unable to replace preference")

@@ -791,7 +791,9 @@ private val UI_THREAD_FIELD_VALUE_IMPROVED_PARSER = DiscordParser.createParser(
 
 private fun Parser<MessageRenderContext, Node<MessageRenderContext>, MessageParseState>.parseText(
     text: String,
-): MutableList<Node<MessageRenderContext>> = ArrayList(parse(text, MessageParseState.initialState))
+): MutableList<Node<MessageRenderContext>> = parseEmbedTextSafely(text) {
+    ArrayList(parse(text, MessageParseState.initialState))
+}
 
 /** A media embed shows its image where a description would go. */
 private fun MessageEmbed.showsDescription(): Boolean = when (type) {

@@ -137,9 +137,6 @@ class WidgetChatListAdapterItemMessage(
     override fun onConfigure(position: Int, data: ChatListEntry) {
         super.onConfigure(position, data)
         val entry = data as MessageEntry
-        // Without a viewer there is no "me" to resolve mentions or permissions against, so the row
-        // is left as it was rather than rendered against a half-built model.
-        if (adapter.data.userId == 0L) return
 
         val message = entry.message
         val isThreadStarterMessage = entry.isThreadStarterMessage

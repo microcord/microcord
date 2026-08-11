@@ -67,8 +67,10 @@ class WidgetChatListAdapter @JvmOverloads constructor(
      */
     var data: Data = EmptyData()
         set(value) {
+            val viewerChanged = field.userId != value.userId
             field = value
             setData(value.list)
+            if (viewerChanged && itemCount > 0) notifyItemRangeChanged(0, itemCount)
         }
 
     /**

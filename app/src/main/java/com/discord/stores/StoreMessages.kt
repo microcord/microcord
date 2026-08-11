@@ -542,13 +542,24 @@ class StoreLocalMessagesHolder @JvmOverloads constructor(
     @JvmOverloads
     fun restore(enabled: Boolean = true) {
         messages.clear()
+        updatedChannels.clear()
         if (enabled) {
             try {
+                var repaired = false
                 cache.get().forEach { (channelId, entries) ->
-                    messages[channelId] = TreeMap<Long, LocalEntry>().apply {
-                        entries.forEach { put(it.message.id, it) }
+                    val restored = TreeMap<Long, LocalEntry>().apply {
+                        entries.forEach { entry ->
+                            if (entry.isRestorable(channelId)) put(entry.message.id, entry)
+                            else repaired = true
+                        }
                     }
-                    updatedChannels += channelId
+                    if (restored.isNotEmpty()) {
+                        messages[channelId] = restored
+                        updatedChannels += channelId
+                    }
+                }
+                if (repaired) {
+                    cache.set(messages.mapValues { it.value.values.toList() }, persist = true)
                 }
             } catch (failure: RuntimeException) {
                 Log.e(javaClass.name, "Error restoring cached local messages", failure)
@@ -564,9 +575,10 @@ class StoreLocalMessagesHolder @JvmOverloads constructor(
 
     @Synchronized
     fun addMessage(channelId: Long, nonce: String, message: Message) {
+        val normalized = message.copy(channelId = channelId, nonce = nonce)
         val channelMessages = messages.getOrPut(channelId) { TreeMap() }
         channelMessages.entries.removeAll { it.value.nonce == nonce }
-        channelMessages[message.id] = LocalEntry(nonce, message)
+        channelMessages[normalized.id] = LocalEntry(nonce, normalized)
         updatedChannels += channelId
         publishIfUpdated()
     }
@@ -615,6 +627,13 @@ class StoreLocalMessagesHolder @JvmOverloads constructor(
     @Synchronized fun getAll(): Map<Long, List<Message>> = snapshot
     @Synchronized fun getFlattenedMessages(): List<Message> = snapshot.values.flatten()
     fun observeMessages(): Observable<Map<Long, List<Message>>> = subject.distinctUntilChanged()
+
+    private fun LocalEntry.isRestorable(channelId: Long): Boolean {
+        val author = message.author ?: return false
+        return channelId > 0L && nonce.isNotBlank() && message.id != 0L &&
+            message.channelId == channelId && message.nonce == nonce && message.isLocal() &&
+            author.id > 0L && author.username.isNotBlank() && message.timestamp != null
+    }
 
     private fun publishIfUpdated(force: Boolean = false) {
         if (updatedChannels.isEmpty() && !force) return
