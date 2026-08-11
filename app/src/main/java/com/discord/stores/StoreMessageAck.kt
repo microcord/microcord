@@ -266,7 +266,13 @@ class StoreMessageAck @JvmOverloads constructor(
                 .forEach { acks[it.id] = Ack(it.lastMessageId, false, false) }
         }
 
-        pruneAcks()
+        // Deliberately no pruneAcks() here. Both thread stores clear themselves earlier in this
+        // same dispatch and repopulate later from THREAD_LIST_SYNC, so every thread read state the
+        // payload just seeded would look like an ack for a channel that no longer exists and be
+        // dropped, marking every thread unread. It only survived at all when the payload carried an
+        // unavailable guild, which is what made the loss look random. Channels that really did go
+        // away are pruned by handleGuildCreate, and threads leaving the active set are handled by
+        // updateThreadAcks.
         threadSyncSubscription?.unsubscribe()
         threadSyncSubscription = observeActiveThreadIdsWithPrevious()
             .computationLatest()
