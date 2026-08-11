@@ -146,6 +146,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     private var mentionSubscription: Subscription? = null
     private var chatEventSubscription: Subscription? = null
     private var input: FlexEditText? = null
+    private var truncatedHint: WidgetChatInputTruncatedHint? = null
     private var expressionTray: WidgetExpressionTray? = null
     private var autocomplete: InputAutocomplete? = null
     private var attachments: WidgetChatInputAttachments? = null
@@ -333,6 +334,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         flexInputBinding = null
         _binding = null
         input = null
+        truncatedHint = null
         expressionTray = null
         attachments = null
         super.onDestroyView()
@@ -365,6 +367,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         })
         val editText = flexBinding.textInput
         input = editText
+        truncatedHint = WidgetChatInputTruncatedHint(editText).also { it.addBindedTextWatcher(this) }
         editText.addTextChangedListener(watcher)
         // Public FlexInput also closes its own tray from a touch listener. Remove that competing
         // state writer; every close now routes through AppFlexInputViewModel.
@@ -973,7 +976,8 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         // entering/leaving edit mode. Any other state change must leave what the user typed alone.
         if (channelChanged || previous?.editingMessage != next.editingMessage) restoreInput(next)
         input?.isEnabled = next.isInputShowing
-        input?.hint = getHint(requireContext(), next.channel, next.isBlocked, next.ableToSendMessage)
+        val hint = getHint(requireContext(), next.channel, next.isBlocked, next.ableToSendMessage)
+        truncatedHint?.setHint(hint) ?: run { input?.hint = hint }
         updateSendButtonVisibility()
     }
 
