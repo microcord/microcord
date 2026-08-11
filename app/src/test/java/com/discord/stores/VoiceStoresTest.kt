@@ -157,7 +157,6 @@ class VoiceStoresTest {
     fun ringWaitsForCallCreateInsteadOfConsumingNullPlaceholder() {
         val rings = mutableListOf<Triple<Long, Long, List<Long>?>>()
         val store = StoreCalls(
-            callConnectRequest = {},
             ringRequest = { channelId, messageId, recipients ->
                 rings += Triple(channelId, messageId, recipients)
             },

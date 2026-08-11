@@ -14,6 +14,7 @@ import com.discord.api.forum.ForumUnreads
 import com.discord.api.friendsuggestions.FriendSuggestion
 import com.discord.api.friendsuggestions.FriendSuggestionDelete
 import com.discord.api.guild.Guild
+import com.discord.api.guild.PassiveUpdateV2
 import com.discord.api.guildjoinrequest.GuildJoinRequestCreateOrUpdate
 import com.discord.api.guildjoinrequest.GuildJoinRequestDelete
 import com.discord.api.guildmember.GuildMember
@@ -24,7 +25,9 @@ import com.discord.api.guildscheduledevent.GuildScheduledEventUserUpdate
 import com.discord.api.interaction.InteractionModalCreate
 import com.discord.api.interaction.InteractionStateUpdate
 import com.discord.api.message.Message
+import com.discord.api.message.PollVoteAddMany
 import com.discord.api.message.PollVoteEvent
+import com.discord.api.message.reaction.MessageReactionAddMany
 import com.discord.api.message.reaction.MessageReactionUpdate
 import com.discord.api.presence.Presence
 import com.discord.api.requiredaction.UserRequiredActionUpdate
@@ -41,6 +44,7 @@ import com.discord.api.user.User
 import com.discord.api.user.TypingUser
 import com.discord.api.voice.server.VoiceServer
 import com.discord.api.voice.state.VoiceState
+import com.discord.api.voice.state.VoiceStateUpdateBatch
 import com.discord.gateway.opcodes.Opcode
 import com.discord.models.domain.ModelBan
 import com.discord.models.domain.ModelCall
@@ -256,6 +260,7 @@ class IncomingParser(private val gson: Gson) {
         "THREAD_CREATE", "THREAD_UPDATE", "THREAD_DELETE" -> gson.fromJson(data, Channel::class.java)
         "CHANNEL_RECIPIENT_ADD", "CHANNEL_RECIPIENT_REMOVE" -> gson.fromJson(data, ChannelRecipient::class.java)
         "CHANNEL_UNREAD_UPDATE" -> gson.fromJson(data, ModelChannelUnreadUpdate::class.java)
+        "PASSIVE_UPDATE_V2" -> gson.fromJson(data, PassiveUpdateV2::class.java)
         "CHANNEL_PINS_UPDATE" -> gson.fromJson(data, ChannelPinsUpdate::class.java)
         "THREAD_LIST_SYNC" -> gson.fromJson(data, ModelThreadListSync::class.java)
         "THREAD_MEMBER_UPDATE" -> gson.fromJson(data, ThreadMemberUpdate::class.java)
@@ -268,10 +273,12 @@ class IncomingParser(private val gson: Gson) {
         "MESSAGE_DELETE", "MESSAGE_DELETE_BULK" -> gson.fromJson(data, ModelMessageDelete::class.java)
         "MESSAGE_ACK" -> gson.fromJson(data, ModelReadState::class.java)
         // All four reaction events share one payload type. REMOVE_ALL carries no user or emoji and
+        "MESSAGE_REACTION_ADD_MANY" -> gson.fromJson(data, MessageReactionAddMany::class.java)
         // REMOVE_EMOJI carries no user, so those members are absent on the wire for them.
         "MESSAGE_REACTION_ADD", "MESSAGE_REACTION_REMOVE",
         "MESSAGE_REACTION_REMOVE_ALL", "MESSAGE_REACTION_REMOVE_EMOJI" ->
             gson.fromJson(data, MessageReactionUpdate::class.java)
+        "MESSAGE_POLL_VOTE_ADD_MANY" -> gson.fromJson(data, PollVoteAddMany::class.java)
         "MESSAGE_POLL_VOTE_ADD", "MESSAGE_POLL_VOTE_REMOVE" ->
             gson.fromJson(data, PollVoteEvent::class.java)
 
@@ -282,6 +289,7 @@ class IncomingParser(private val gson: Gson) {
 
         // Voice, calls and streams
         "VOICE_STATE_UPDATE" -> gson.fromJson(data, VoiceState::class.java)
+        "VOICE_STATE_UPDATE_BATCH" -> gson.fromJson(data, VoiceStateUpdateBatch::class.java)
         "VOICE_SERVER_UPDATE" -> gson.fromJson(data, VoiceServer::class.java)
         "CALL_CREATE", "CALL_UPDATE", "CALL_DELETE" -> gson.fromJson(data, ModelCall::class.java)
         "STREAM_CREATE", "STREAM_UPDATE" -> gson.fromJson(data, StreamCreateOrUpdate::class.java)

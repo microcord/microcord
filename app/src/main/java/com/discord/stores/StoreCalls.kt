@@ -11,16 +11,14 @@ import rx.subjects.SerializedSubject
 /**
  * The private/group calls the client knows about, keyed by channel.
  *
- * A `null` value is meaningful and different from an absent key: it means "we asked the gateway for
- * this channel's call and it told us there isn't one". [callConnect] relies on that distinction so a
- * channel is only ever subscribed once per session.
+ * A `null` value is meaningful and different from an absent key: it means the channel is known to
+ * have no call, rather than never having been mentioned.
  *
- * The store subscribes to a call as soon as the selected channel is a private one and the gateway
- * session is ready; guild channels never carry a call object.
+ * Nothing is ever requested. `PASSIVE_CALLS_V1` has the gateway connect the client to every DM and
+ * group DM call as it learns of them, so the map is filled entirely by CALL_CREATE; guild channels
+ * never carry a call object.
  */
 class StoreCalls(
-    /** Sends gateway opcode 13. Reference: `StoreStream.gatewaySocket.callConnect`. */
-    private val callConnectRequest: (channelId: Long) -> Unit,
     /** `GET /channels/{id}/call` — reports whether the channel may be rung. */
     private val ringRequest: (channelId: Long, messageId: Long, recipients: List<Long>?) -> Unit,
     private val stopRingingRequest: (channelId: Long, messageId: Long, recipients: List<Long>?) -> Unit,
@@ -30,25 +28,6 @@ class StoreCalls(
     private val calls = HashMap<Long, ModelCall?>()
     private val callsSubject =
         SerializedSubject<HashMap<Long, ModelCall?>, HashMap<Long, ModelCall?>>(BehaviorSubject.create())
-
-    private var connectionReady = false
-    private var selectedChannelId = 0L
-    private var selectedGuildId = 0L
-
-    /**
-     * Asks the gateway to stream this channel's call state.
-     *
-     * Guarded on all four inputs because the gateway rejects a duplicate subscription: the session
-     * must be ready, the selection must be a private channel (no guild), and we must not already
-     * have an entry — including the `null` placeholder written right here.
-     */
-    private fun callConnect() {
-        if (!connectionReady) return
-        if (selectedGuildId != 0L || selectedChannelId <= 0L) return
-        if (calls.containsKey(selectedChannelId)) return
-        calls[selectedChannelId] = null
-        callConnectRequest(selectedChannelId)
-    }
 
     private fun callSubjectUpdate(updated: Boolean = true) {
         if (updated) callsSubject.onNext(HashMap(calls))
@@ -78,35 +57,17 @@ class StoreCalls(
         callSubjectUpdate(changed)
     }
 
-    /**
-     * Keeps the key with a `null` value so [callConnect] does not re-subscribe to a channel whose
-     * call just ended.
-     */
+    /** Keeps the key with a `null` value: the channel is known to have no call, which is not the
+     * same as never having been told about it. */
     fun handleCallDelete(callDelete: ModelCall) {
         if (!calls.containsKey(callDelete.channelId)) return
         calls[callDelete.channelId] = null
         callSubjectUpdate()
     }
 
-    fun handleChannelSelect(channelId: Long) {
-        selectedChannelId = channelId
-        callConnect()
-    }
-
     fun handleConnectionOpen() {
         calls.clear()
         callSubjectUpdate()
-        callConnect()
-    }
-
-    fun handleConnectionReady(connectionReady: Boolean) {
-        this.connectionReady = connectionReady
-        callConnect()
-    }
-
-    fun handleGuildSelect(guildId: Long) {
-        selectedGuildId = guildId
-        callConnect()
     }
 
     @JvmOverloads

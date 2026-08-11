@@ -41,7 +41,6 @@ sealed class OutgoingPayload private constructor() {
         ) : this(guildId, query, offset, limit, applications, nonce, commandIds)
     }
 
-    class CallConnect(private val channelId: Long) : OutgoingPayload()
 
     class CreateStream(
         val type: String,
@@ -166,7 +165,6 @@ sealed class OutgoingPayload private constructor() {
 }
 
 typealias ApplicationCommandRequest = OutgoingPayload.ApplicationCommandRequest
-typealias CallConnect = OutgoingPayload.CallConnect
 typealias CreateStream = OutgoingPayload.CreateStream
 typealias DeleteStream = OutgoingPayload.DeleteStream
 typealias ForumUnreadsRequest = OutgoingPayload.ForumUnreadsRequest

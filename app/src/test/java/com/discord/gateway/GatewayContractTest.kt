@@ -93,7 +93,7 @@ class GatewayContractTest {
     @Test
     fun exactGatewayJvmClassesAreConsolidatedAndLogsAreRedacted() {
         val nestedPayloads = listOf(
-            "ApplicationCommandRequest", "CallConnect", "CreateStream", "DeleteStream",
+            "ApplicationCommandRequest", "CreateStream", "DeleteStream",
             "ForumUnreadsRequest", "ForumUnreadsRequestThread", "GuildMembersRequest",
             "GuildSubscriptions", "GuildSubscriptionsUpdate", "Identify", "IdentifyClientState",
             "PresenceUpdate", "Resume", "StreamPing", "VoiceStateUpdate",

@@ -104,8 +104,10 @@ class GatewaySocketTest {
         assertEquals(2, identify["op"].asInt)
         // Dropped: current Discord does not send it.
         assertFalse(identify["d"].asJsonObject.has("large_threshold"))
-        // 1503 = the legacy 479 set plus CLIENT_STATE_V2 (1 shl 10).
-        assertEquals(1503, identify["d"].asJsonObject["capabilities"].asInt)
+        assertEquals(
+            GatewayCapabilities.ENABLED.toInt(),
+            identify["d"].asJsonObject["capabilities"].asInt,
+        )
         assertFalse(harness.handler.readyStates.last())
     }
 

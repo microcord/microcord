@@ -6,7 +6,6 @@ import android.util.Log
 import com.discord.api.activity.Activity
 import com.discord.api.presence.ClientStatus
 import com.discord.gateway.io.ApplicationCommandRequest
-import com.discord.gateway.io.CallConnect
 import com.discord.gateway.io.CreateStream
 import com.discord.gateway.io.DeleteStream
 import com.discord.gateway.io.ForumUnreadsRequest
@@ -204,10 +203,6 @@ class GatewaySocket(
     }
 
     fun voiceServerPing() = scheduleSend { send<Unit>(Opcode.VOICE_SERVER_PING, null) }
-
-    fun callConnect(channelId: Long) = scheduleSend {
-        send(Opcode.CALL_CONNECT, CallConnect(channelId))
-    }
 
     fun requestGuildMembers(
         guildIds: List<Long>,

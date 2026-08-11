@@ -40,6 +40,24 @@ object GatewayCapabilities {
     /** Versioned guild data: `data_mode`, `partial_updates` and per-guild `version`. */
     const val USE_GUILD_VERSIONING = 1L shl 10
 
+    /** Connects to DM and group DM calls already running when the session starts. */
+    const val PASSIVE_CALLS_V1 = 1L shl 12
+
+    /** MESSAGE_REACTION_ADD_MANY in place of a burst of MESSAGE_REACTION_ADD. */
+    const val REACTION_BATCHING = 1L shl 13
+
+    /** Periodic PASSIVE_UPDATE_V2 carrying unread and voice state for unsubscribed guilds. */
+    const val PASSIVE_UPDATE_V2 = 1L shl 14
+
+    /** MESSAGE_POLL_VOTE_ADD_MANY in place of a burst of MESSAGE_POLL_VOTE_ADD. */
+    const val POLL_VOTE_BATCHING = 1L shl 19
+
+    /**
+     * VOICE_STATE_UPDATE_BATCH in place of a burst of VOICE_STATE_UPDATE. Bit 18 is the withdrawn
+     * first version and must stay clear.
+     */
+    const val VOICE_STATE_BATCHING_V2 = 1L shl 20
+
     val ENABLED: Long = LAZY_USER_NOTES or
         NO_AFFINE_USER_IDS or
         VERSIONED_READ_STATES or
@@ -49,5 +67,10 @@ object GatewayCapabilities {
         MULTIPLE_GUILD_EXPERIMENT_POPULATIONS or
         NON_CHANNEL_READ_STATES or
         AUTH_TOKEN_REFRESH or
-        USE_GUILD_VERSIONING
+        USE_GUILD_VERSIONING or
+        PASSIVE_CALLS_V1 or
+        REACTION_BATCHING or
+        PASSIVE_UPDATE_V2 or
+        POLL_VOTE_BATCHING or
+        VOICE_STATE_BATCHING_V2
 }

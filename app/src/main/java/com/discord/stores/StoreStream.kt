@@ -14,6 +14,9 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isThread
 import com.discord.api.guild.Guild
+import com.discord.api.message.PollVoteEvent
+import com.discord.api.voice.state.VoiceState
+import com.discord.api.guild.PassiveUpdateV2
 import com.discord.api.guild.GuildMaxVideoChannelUsers
 import com.discord.api.friendsuggestions.FriendSuggestion
 import com.discord.api.guildmember.GuildMember
@@ -809,7 +812,6 @@ class StoreStream private constructor(
     )
     private val callsIncoming = StoreCallsIncoming(dispatcher, users, observationDeck)
     private val calls = StoreCalls(
-        callConnectRequest = { channelId -> gatewayConnection.callConnect(channelId) },
         ringRequest = { channelId, messageId, recipients ->
             RestAPI.apiOrNull?.ring(
                 channelId, RestAPIParams.Ring(recipients), callContext(messageId),
@@ -1915,6 +1917,7 @@ class StoreStream private constructor(
         dispatchSubscribe(events.channelUnreadUpdate, "streamChannelUnreadUpdate") { update ->
             messagesMostRecent.handleChannelUnreadUpdate(update)
         }
+        dispatchSubscribe(events.passiveUpdateV2, "streamPassiveUpdateV2", ::handlePassiveUpdateV2Internal)
         dispatchSubscribe(events.channelPinsUpdate, "streamChannelPinsUpdate") { update ->
             pinnedMessages.handlePinsUpdate(update.channelId)
             messageAck.handlePinsUpdate(update)
@@ -2035,6 +2038,22 @@ class StoreStream private constructor(
             messageReactions.handleReactionAdd(reaction)
             forumPostMessages.handleReactionAdd(reaction)
         }
+        dispatchSubscribe(events.messageReactionAddMany, "streamReactionAddMany") { batch ->
+            val meId = users.getMeInternal().id
+            batch.reactions.forEach { debounced ->
+                debounced.users.forEach { userId ->
+                    val reaction = MessageReactionUpdate(
+                        userId = userId,
+                        channelId = batch.channelId,
+                        messageId = batch.messageId,
+                        emoji = debounced.emoji,
+                    )
+                    messages.handleReaction(reaction, true, meId)
+                    messageReactions.handleReactionAdd(reaction)
+                    forumPostMessages.handleReactionAdd(reaction)
+                }
+            }
+        }
         dispatchSubscribe(events.messageReactionRemove, "streamReactionRemove") { reaction ->
             messages.handleReaction(reaction, false, users.getMeInternal().id)
             messageReactions.handleReactionRemove(reaction)
@@ -2055,6 +2074,23 @@ class StoreStream private constructor(
             messages.handlePollVote(vote, true, meUserId)
             pinnedMessages.handlePollVote(vote, true, meUserId)
             forumPostMessages.handlePollVote(vote, true, meUserId)
+        }
+        dispatchSubscribe(events.pollVoteAddMany, "streamMessagePollVoteAddMany") { batch ->
+            val meUserId = users.getMeInternal().id
+            batch.votes.forEach { entry ->
+                entry.users.forEach { userId ->
+                    val vote = PollVoteEvent(
+                        userId = userId,
+                        channelId = batch.channelId,
+                        messageId = batch.messageId,
+                        guildId = batch.guildId,
+                        answerId = entry.answerId,
+                    )
+                    messages.handlePollVote(vote, true, meUserId)
+                    pinnedMessages.handlePollVote(vote, true, meUserId)
+                    forumPostMessages.handlePollVote(vote, true, meUserId)
+                }
+            }
         }
         dispatchSubscribe(events.messagePollVoteRemove, "streamMessagePollVoteRemove") { vote ->
             val meUserId = users.getMeInternal().id
@@ -2180,7 +2216,6 @@ class StoreStream private constructor(
         if (::voiceTransport.isInitialized) voiceTransport.storeRtcConnection.handleConnectionReady(ready)
         connectivity.handleConnectionReady(ready)
         guildSubscriptions.handleConnectionReady(ready)
-        calls.handleConnectionReady(ready)
         guildMemberRequester.handleConnectionReady(ready)
         applicationCommands.handleConnectionReady(ready)
         applicationInteractions.handleConnectionReady(ready)
@@ -2729,7 +2764,6 @@ class StoreStream private constructor(
     private fun selectGuildInternal(guildId: Long) = dispatcher.schedule {
         guildSelected.handleGuildSelected(guildId)
         channelsSelected.handleGuildSelected()
-        calls.handleGuildSelect(guildId)
         guildSubscriptions.handleGuildSelect(guildId)
         lurking.handleGuildSelected(guildId)
         nux.handleGuildSelected(guildId)
@@ -2740,7 +2774,6 @@ class StoreStream private constructor(
         if (guildSelected.getSelectedGuildIdInternal() != guildId) {
             guildSelected.handleGuildSelected(guildId)
             channelsSelected.handleGuildSelected()
-            calls.handleGuildSelect(guildId)
             guildSubscriptions.handleGuildSelect(guildId)
             lurking.handleGuildSelected(guildId)
             nux.handleGuildSelected(guildId)
@@ -2756,7 +2789,6 @@ class StoreStream private constructor(
     private fun handleChannelSelected(selected: StoreChannelsSelected.ResolvedSelectedChannel) {
         val channelId = selected.id
         channelConversions.handleChannelSelected(channelId)
-        calls.handleChannelSelect(channelId)
         mentions.handleChannelSelected(channelId)
         messages.handleChannelSelected(channelId)
         messagesLoader.handleChannelSelected(selected.maybeChannel)
@@ -3243,6 +3275,56 @@ class StoreStream private constructor(
             )
         }
     }
+
+    /**
+     * Unread and voice state for a guild the client is not subscribed to.
+     *
+     * Expanded into the per-entry events the stores already handle rather than given its own
+     * paths: a departure is a voice state with no channel, which is exactly what a leave looks
+     * like on the unbatched event.
+     */
+    @StoreThread
+    private fun handlePassiveUpdateV2Internal(update: PassiveUpdateV2) {
+        if (update.updatedChannels.isNotEmpty()) {
+            messagesMostRecent.handleChannelUnreadUpdate(ModelChannelUnreadUpdate(update.updatedChannels))
+        }
+        update.updatedMembers.forEach { member ->
+            users.handleGuildMemberAdd(member)
+            guilds.handleGuildMember(member, update.guildId)
+            channelMembers.handleGuildMemberUpdate(update.guildId, member)
+        }
+        update.updatedVoiceStates.forEach(::handlePassiveVoiceState)
+        update.removedVoiceStates.forEach { userId ->
+            handlePassiveVoiceState(leftVoiceState(userId, update.guildId))
+        }
+    }
+
+    @StoreThread
+    private fun handlePassiveVoiceState(voiceState: VoiceState) {
+        voiceStates.handleVoiceStateUpdate(voiceState)
+        if (::voiceTransport.isInitialized) voiceTransport.storeRtcConnection.handleVoiceStateUpdate(voiceState)
+        stageChannelSelfPresence.handleVoiceStateUpdate(voiceState)
+        voiceChannelSelected.handleVoiceStateUpdates(voiceState)
+        videoStreams.handleVoiceStateUpdates(voiceState)
+        applicationStreaming.handleVoiceStateUpdate(voiceState)
+    }
+
+    /** A voice state with no channel is how the gateway says someone left. */
+    private fun leftVoiceState(userId: Long, guildId: Long) = VoiceState(
+        userId = userId,
+        suppress = false,
+        sessionId = null,
+        selfMute = false,
+        selfDeaf = false,
+        selfVideo = false,
+        selfStream = false,
+        mute = false,
+        guildId = guildId,
+        deaf = false,
+        member = null,
+        requestToSpeakTimestamp = null,
+        channelId = null,
+    )
 
     @StoreThread
     private fun handleGuildCreateOrUpdateInternal(guild: Guild) {

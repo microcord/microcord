@@ -15,6 +15,7 @@ import com.discord.api.forum.ForumUnreads
 import com.discord.api.friendsuggestions.FriendSuggestion
 import com.discord.api.friendsuggestions.FriendSuggestionDelete
 import com.discord.api.guild.Guild
+import com.discord.api.guild.PassiveUpdateV2
 import com.discord.api.guildjoinrequest.GuildJoinRequestCreateOrUpdate
 import com.discord.api.guildjoinrequest.GuildJoinRequestDelete
 import com.discord.api.guildmember.GuildMember
@@ -25,8 +26,10 @@ import com.discord.api.guildscheduledevent.GuildScheduledEventUserUpdate
 import com.discord.api.interaction.InteractionModalCreate
 import com.discord.api.interaction.InteractionStateUpdate
 import com.discord.api.message.Message
+import com.discord.api.message.PollVoteAddMany
 import com.discord.api.message.PollVoteEvent
 import com.discord.api.message.reaction.MessageReactionUpdate
+import com.discord.api.message.reaction.MessageReactionAddMany
 import com.discord.api.presence.ClientStatus
 import com.discord.api.presence.Presence
 import com.discord.api.requiredaction.UserRequiredActionUpdate
@@ -43,6 +46,7 @@ import com.discord.api.user.TypingUser
 import com.discord.api.user.User
 import com.discord.api.voice.server.VoiceServer
 import com.discord.api.voice.state.VoiceState
+import com.discord.api.voice.state.VoiceStateUpdateBatch
 import com.discord.gateway.GatewayEventHandler
 import com.discord.gateway.GatewaySocket
 import com.discord.gateway.IdentifyData
@@ -193,6 +197,7 @@ class StoreGatewayConnection(
     val channelRecipientAdd = behavior<ChannelRecipient>()
     val channelRecipientRemove = behavior<ChannelRecipient>()
     val channelUnreadUpdate = behavior<ModelChannelUnreadUpdate>()
+    val passiveUpdateV2 = behavior<PassiveUpdateV2>()
     val threadCreateOrUpdate = behavior<Channel>()
     val threadDelete = behavior<Channel>()
     val threadListSync = behavior<ModelThreadListSync>()
@@ -207,6 +212,8 @@ class StoreGatewayConnection(
     val messageDelete = behavior<ModelMessageDelete>()
     val messageAck = behavior<ModelReadState>()
     val messageReactionAdd = behavior<MessageReactionUpdate>()
+    val messageReactionAddMany = behavior<MessageReactionAddMany>()
+    val pollVoteAddMany = behavior<PollVoteAddMany>()
     val messageReactionRemove = behavior<MessageReactionUpdate>()
     val messageReactionRemoveAll = behavior<MessageReactionUpdate>()
     val messageReactionRemoveEmoji = behavior<MessageReactionUpdate>()
@@ -339,8 +346,6 @@ class StoreGatewayConnection(
     ): Boolean = requestIfSessionEstablished {
         it.voiceStateUpdate(guildId, channelId, selfMute, selfDeaf, selfVideo, preferredRegion, shouldIncludePreferredRegion)
     }
-
-    fun callConnect(channelId: Long): Boolean = requestIfSessionEstablished { it.callConnect(channelId) }
 
     @JvmOverloads
     fun requestGuildMembers(
@@ -533,6 +538,7 @@ class StoreGatewayConnection(
             "CHANNEL_RECIPIENT_ADD" -> channelRecipientAdd.emit(data)
             "CHANNEL_RECIPIENT_REMOVE" -> channelRecipientRemove.emit(data)
             "CHANNEL_UNREAD_UPDATE" -> channelUnreadUpdate.emit(data)
+            "PASSIVE_UPDATE_V2" -> passiveUpdateV2.emit(data)
             "THREAD_CREATE", "THREAD_UPDATE" -> threadCreateOrUpdate.emit(data)
             "THREAD_DELETE" -> threadDelete.emit(data)
             "THREAD_LIST_SYNC" -> threadListSync.emit(data)
@@ -547,6 +553,8 @@ class StoreGatewayConnection(
             "MESSAGE_DELETE", "MESSAGE_DELETE_BULK" -> messageDelete.emit(data)
             "MESSAGE_ACK" -> messageAck.emit(data)
             "MESSAGE_REACTION_ADD" -> messageReactionAdd.emit(data)
+            "MESSAGE_REACTION_ADD_MANY" -> messageReactionAddMany.emit(data)
+            "MESSAGE_POLL_VOTE_ADD_MANY" -> pollVoteAddMany.emit(data)
             "MESSAGE_REACTION_REMOVE" -> messageReactionRemove.emit(data)
             "MESSAGE_REACTION_REMOVE_ALL" -> messageReactionRemoveAll.emit(data)
             "MESSAGE_REACTION_REMOVE_EMOJI" -> messageReactionRemoveEmoji.emit(data)
@@ -560,6 +568,9 @@ class StoreGatewayConnection(
 
             // Voice, calls and streams
             EVENT_VOICE_STATE_UPDATE -> voiceStateUpdate.onNextAny(data)
+            // Replayed one by one so the batch is indistinguishable downstream.
+            "VOICE_STATE_UPDATE_BATCH" ->
+                (data as VoiceStateUpdateBatch).voiceStates.forEach(voiceStateUpdate::onNext)
             "VOICE_SERVER_UPDATE" -> voiceServerUpdate.emit(data)
             "CALL_CREATE", "CALL_UPDATE" -> callCreateOrUpdate.emit(data)
             "CALL_DELETE" -> callDelete.emit(data)

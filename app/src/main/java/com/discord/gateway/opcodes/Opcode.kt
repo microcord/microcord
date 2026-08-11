@@ -14,7 +14,6 @@ enum class Opcode(val apiInt: Int) {
     INVALID_SESSION(9),
     HELLO(10),
     HEARTBEAT_ACK(11),
-    CALL_CONNECT(13),
     GUILD_SUBSCRIPTIONS(14),
     STREAM_CREATE(18),
     STREAM_DELETE(19),
