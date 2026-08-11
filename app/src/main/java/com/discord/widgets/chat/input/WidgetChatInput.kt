@@ -1,6 +1,7 @@
 package com.discord.widgets.chat.input
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
@@ -19,10 +20,12 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.Chronometer
 import android.widget.LinearLayout
+import android.widget.RelativeLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.widget.AppCompatImageButton
 import androidx.core.content.FileProvider
+import androidx.core.widget.ImageViewCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.appcompat.app.AlertDialog
 import com.discord.R
@@ -52,9 +55,13 @@ import com.discord.stores.StoreSlowMode
 import com.discord.stores.StoreStream
 import com.discord.utilities.attachments.UploadAttachment
 import com.discord.utilities.channel.ChannelSelector
+import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.duration.humanizeCountdownDuration
 import com.discord.utilities.feature.FeatureFlags
+import com.discord.utilities.feature.ChatInputCustomization
+import com.discord.utilities.feature.ChatInputCustomization.Button
+import com.discord.utilities.feature.ChatInputCustomization.Zone
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.messagesend.MessageResult
@@ -166,6 +173,15 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     private var voiceGestureStartX = 0f
     private var voiceGestureStartY = 0f
     private var pendingVoiceFinish: Boolean? = null
+    private val customizationListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == ChatInputCustomization.LAYOUT_KEY) {
+            view?.post {
+                flexInputBinding?.let(::configureChatboxCustomizations)
+                state?.let(::updateChatboxCustomizationAvatar)
+                updateSendButtonVisibility()
+            }
+        }
+    }
 
     /**
      * Owns whether the expression tray is open. Activity-scoped so the tray and its child pickers
@@ -203,6 +219,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         _binding = WidgetChatInputBinding.bind(view)
+        SharedPreferencesProvider.get().registerOnSharedPreferenceChangeListener(customizationListener)
         // Stopgap until StoreEmoji exists; see ChatInputAutocompletables.installDefaultEmojiSetSource.
         viewModel = ViewModelProvider(this).get(ChatInputViewModel::class.java)
         autocompleteViewModel = ViewModelProvider(this).get(AutocompleteViewModel::class.java)
@@ -337,6 +354,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     override fun onDestroyView() {
         input?.removeTextChangedListener(watcher)
         autocomplete?.onDestroyView()
+        SharedPreferencesProvider.get().unregisterOnSharedPreferenceChangeListener(customizationListener)
         autocomplete = null
         flexInputBinding = null
         _binding = null
@@ -352,7 +370,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val flex = childFragmentManager.findFragmentById(R.id.chat_input_widget) as? FlexInputFragment ?: return
         val flexBinding = FlexInputWidgetBinding.bind(flex.view ?: return)
         flexInputBinding = flexBinding
-        configureBetterChatbox(flexBinding)
+        configureChatboxCustomizations(flexBinding)
         flex.setKeyboardManager(object : KeyboardManager {
             override fun requestDisplay(editText: EditText) {
                 editText.requestFocus()
@@ -403,35 +421,137 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         }
     }
 
-    private fun configureBetterChatbox(flex: FlexInputWidgetBinding) {
-        val enabled = FeatureFlags.betterChatboxEnabled()
-        val target = if (enabled) flex.mainInputContainer else flex.leftBtnsContainer
-        if (flex.addBtn.parent !== target) {
-            (flex.addBtn.parent as? ViewGroup)?.removeView(flex.addBtn)
-            target.addView(flex.addBtn, if (enabled) 0 else target.indexOfChild(flex.giftBtn).coerceAtLeast(0))
-        }
+    private fun configureChatboxCustomizations(flex: FlexInputWidgetBinding) {
+        if (!FeatureFlags.chatboxCustomizationsEnabled()) return
+        flex.leftBtnsContainer.layoutTransition = null
+        flex.mainInputContainer.layoutTransition = null
+        flex.rightBtnsContainer.layoutTransition = null
+        val views = mapOf(
+            Button.PROFILE to flex.chatboxCustomizationAvatar,
+            Button.ATTACHMENT to flex.addBtn,
+            Button.APPS to flex.giftBtn,
+            Button.EXPAND to flex.expandBtn,
+            Button.EXPRESSION to flex.expressionBtnContainer,
+            Button.SEND to flex.sendBtnContainer,
+        )
+        val layout = ChatInputCustomization.get()
+        val attachmentInside = layout.first { it.button == Button.ATTACHMENT }.zone in
+            setOf(Zone.INSIDE, Zone.INSIDE_END)
+        val sendInside = layout.first { it.button == Button.SEND }.zone in
+            setOf(Zone.INSIDE, Zone.INSIDE_END)
+        views.values.forEach { (it.parent as? ViewGroup)?.removeView(it) }
         flex.addBtn.apply {
-            setImageResource(if (enabled) R.drawable.ic_add_circle else R.drawable.ic_add_24dp)
-            if (enabled) background = null else setBackgroundResource(R.drawable.drawable_circle_black)
+            setImageResource(if (attachmentInside) R.drawable.ic_add_circle else R.drawable.ic_add_24dp)
+            ImageViewCompat.setImageTintList(
+                this,
+                ColorStateList.valueOf(ColorCompat.getThemedColor(context, R.attr.colorInteractiveNormal)),
+            )
+            if (attachmentInside) background = null else setBackgroundResource(R.drawable.drawable_circle_black)
             setPadding(dp(8), dp(8), dp(8), dp(8))
-            layoutParams = if (enabled) {
-                LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginStart = -dp(8) }
-            } else {
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                    marginStart = dp(6)
-                    marginEnd = dp(8)
-                }
-            }
         }
-        flex.betterChatboxAvatar.apply {
-            visibility = if (enabled) View.VISIBLE else View.GONE
+        flex.chatboxCustomizationAvatar.apply {
             MGImages.setRoundingParams(this, cornerRadius = 0f, circle = true)
         }
-        if (enabled) state?.let(::updateBetterChatboxAvatar)
+        flex.sendBtnContainer.apply {
+            if (sendInside) background = null else setBackgroundResource(R.drawable.drawable_circle_black)
+        }
+        layout.forEach { entry ->
+            val button = views.getValue(entry.button)
+            if (entry.zone == Zone.HIDDEN) {
+                button.visibility = View.GONE
+                return@forEach
+            }
+            button.visibility = View.VISIBLE
+            val margin = if (entry.zone == Zone.INSIDE || entry.zone == Zone.INSIDE_END) 0 else dp(4)
+            button.layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply {
+                marginStart = margin
+                marginEnd = margin
+            }
+            (button.parent as? ViewGroup)?.removeView(button)
+            when (entry.zone) {
+                Zone.LEFT -> flex.leftBtnsContainer.addView(button)
+                Zone.INSIDE -> flex.mainInputContainer.addView(
+                    button,
+                    flex.mainInputContainer.indexOfChild(flex.textInput).coerceAtLeast(0),
+                )
+                Zone.INSIDE_END -> flex.mainInputContainer.addView(button)
+                Zone.RIGHT -> flex.rightBtnsContainer.addView(button)
+                Zone.HIDDEN -> Unit
+            }
+        }
+        layout.firstOrNull { it.button == Button.EXPAND && it.zone != Zone.HIDDEN }?.let { expand ->
+            val siblings = layout.filter {
+                it.zone == Zone.LEFT || it.zone == Zone.RIGHT
+            }.filter {
+                it.button != expand.button && it.button != Button.SEND
+            }
+                .map { views.getValue(it.button) }
+            var savedVisibility = emptyMap<View, Int>()
+            flex.expandBtn.rotation = 180f
+            flex.expandBtn.setOnClickListener {
+                if (savedVisibility.isEmpty()) {
+                    savedVisibility = siblings.associateWith(View::getVisibility)
+                    siblings.forEach { it.visibility = View.GONE }
+                    flex.expandBtn.rotation = 0f
+                } else {
+                    savedVisibility.forEach { (view, visibility) -> view.visibility = visibility }
+                    savedVisibility = emptyMap()
+                    flex.expandBtn.rotation = 180f
+                }
+                updateChatboxCustomizationGeometry(flex)
+            }
+        }
+        updateChatboxCustomizationGeometry(flex)
+        state?.let(::updateChatboxCustomizationAvatar)
     }
 
-    private fun updateBetterChatboxAvatar(state: ChatInputViewModel.ViewState.Loaded) {
-        val avatar = flexInputBinding?.betterChatboxAvatar ?: return
+    private fun updateChatboxCustomizationGeometry(flex: FlexInputWidgetBinding) {
+        fun ViewGroup.hasVisibleChild() = (0 until childCount).any { getChildAt(it).visibility != View.GONE }
+        val leftVisible = flex.leftBtnsContainer.hasVisibleChild()
+        val rightVisible = flex.rightBtnsContainer.hasVisibleChild()
+        flex.leftBtnsContainer.visibility = if (leftVisible) View.VISIBLE else View.GONE
+        flex.rightBtnsContainer.visibility = if (rightVisible) View.VISIBLE else View.GONE
+        val textIndex = flex.mainInputContainer.indexOfChild(flex.textInput).coerceAtLeast(0)
+        val hasVisibleBeforeText = (0 until textIndex).any {
+            flex.mainInputContainer.getChildAt(it).visibility != View.GONE
+        }
+        flex.mainInputContainer.setPaddingRelative(
+            if (hasVisibleBeforeText) 0 else dp(12),
+            flex.mainInputContainer.paddingTop,
+            dp(4),
+            flex.mainInputContainer.paddingBottom,
+        )
+        (flex.mainInputContainer.layoutParams as RelativeLayout.LayoutParams).apply {
+            if (!leftVisible) {
+                removeRule(RelativeLayout.END_OF)
+                removeRule(RelativeLayout.RIGHT_OF)
+                addRule(RelativeLayout.ALIGN_PARENT_START)
+                addRule(RelativeLayout.ALIGN_PARENT_LEFT)
+                marginStart = dp(8)
+                leftMargin = dp(8)
+            } else {
+                removeRule(RelativeLayout.ALIGN_PARENT_START)
+                removeRule(RelativeLayout.ALIGN_PARENT_LEFT)
+                addRule(RelativeLayout.END_OF, flex.leftBtnsContainer.id)
+            }
+            if (!rightVisible) {
+                removeRule(RelativeLayout.START_OF)
+                removeRule(RelativeLayout.LEFT_OF)
+                addRule(RelativeLayout.ALIGN_PARENT_END)
+                addRule(RelativeLayout.ALIGN_PARENT_RIGHT)
+            } else {
+                removeRule(RelativeLayout.ALIGN_PARENT_END)
+                removeRule(RelativeLayout.ALIGN_PARENT_RIGHT)
+                addRule(RelativeLayout.START_OF, flex.rightBtnsContainer.id)
+            }
+            marginEnd = dp(8)
+            rightMargin = dp(8)
+            flex.mainInputContainer.layoutParams = this
+        }
+    }
+
+    private fun updateChatboxCustomizationAvatar(state: ChatInputViewModel.ViewState.Loaded) {
+        val avatar = flexInputBinding?.chatboxCustomizationAvatar ?: return
         val me = StoreStream.getUsers().getMe()
         val guildId = state.channel.guildId
         avatar.setImageURI(
@@ -770,6 +890,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             if (hasSendContent) View.VISIBLE else View.GONE
         flexInputBinding?.voiceMessageButton?.visibility =
             if (showVoiceMessage) View.VISIBLE else View.GONE
+        flexInputBinding?.let(::updateChatboxCustomizationGeometry)
     }
 
     override fun onEmojiPicked(emoji: Emoji) {
@@ -1039,7 +1160,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val hint = getHint(requireContext(), next.channel, next.isBlocked, next.ableToSendMessage)
         truncatedHint?.setHint(hint) ?: run { input?.hint = hint }
         updateSendButtonVisibility()
-        updateBetterChatboxAvatar(next)
+        updateChatboxCustomizationAvatar(next)
     }
 
     /**

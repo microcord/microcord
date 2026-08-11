@@ -1,11 +1,8 @@
 package com.discord.widgets.settings
 
-import android.app.AlarmManager
-import android.app.PendingIntent
+import android.app.Activity
 import android.content.Context
-import android.os.Build
-import android.os.Process
-import android.os.SystemClock
+import android.content.Intent
 import android.view.View
 import com.discord.R
 import com.discord.app.AppFragment
@@ -35,14 +32,17 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.viewProfileImagesEnabled()
             setOnCheckedListener(FeatureFlags::setViewProfileImagesEnabled)
         }
-        binding.settingsFeatureBetterChatbox.apply {
-            isChecked = FeatureFlags.betterChatboxEnabled()
+        binding.settingsFeatureChatboxCustomizations.apply {
+            isChecked = FeatureFlags.chatboxCustomizationsEnabled()
             setOnCheckedListener { enabled ->
-                FeatureFlags.setBetterChatboxEnabled(enabled)
+                FeatureFlags.setChatboxCustomizationsEnabled(enabled)
                 Snackbar.make(binding.root, R.string.user_settings_restart_app_mobile, Snackbar.LENGTH_INDEFINITE)
-                    .setAction(R.string.bundle_ready_restart) { restartApp() }
+                    .setAction(R.string.bundle_ready_restart) { restartApp(requireContext()) }
                     .show()
             }
+        }
+        binding.settingsFeatureCustomizeChatInput.setOnClickListener {
+            WidgetSettingsChatInputCustomization.launch(requireContext())
         }
         binding.settingsFeatureAvatarDecorations.apply {
             isChecked = FeatureFlags.avatarDecorationsEnabled()
@@ -62,17 +62,10 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
         }
     }
 
-    private fun restartApp() {
-        val context = requireContext()
-        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
-        val flags = PendingIntent.FLAG_CANCEL_CURRENT or
-            if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0
-        val pending = PendingIntent.getActivity(context, 0, launch, flags)
-        (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).set(
-            AlarmManager.ELAPSED_REALTIME,
-            SystemClock.elapsedRealtime() + 200L,
-            pending,
-        )
-        Process.killProcess(Process.myPid())
-    }
+}
+
+internal fun restartApp(context: Context) {
+    val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
+    launch.component?.let(Intent::makeRestartActivityTask)?.let(context::startActivity)
+    (context as? Activity)?.finishAffinity()
 }
