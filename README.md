@@ -9,5 +9,6 @@ Project status and implementation details are tracked in [PLAN.md](PLAN.md).
 - [Discord Userdoccers](https://github.com/discord-userdoccers/discord-userdoccers)
 - [Aliucord/Aliucord](https://github.com/Aliucord/Aliucord/)
 - [zt64/aliucord-plugins](https://github.com/zt64/aliucord-plugins)
-
+- [BetterChatBox](https://github.com/wingio/plugins/tree/main/BetterChatbox)
+  
 Manticord is not affiliated with or endorsed by Discord Inc.

@@ -55,6 +55,8 @@ import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.duration.humanizeCountdownDuration
 import com.discord.utilities.feature.FeatureFlags
+import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
 import com.discord.utilities.messagesend.MessageResult
 import com.discord.utilities.messagesend.MessageSendCoordinator
 import com.discord.utilities.messagesend.MessageSendLocation
@@ -78,6 +80,8 @@ import com.discord.widgets.chat.input.emoji.WidgetEmojiPicker
 import com.discord.widgets.chat.input.expression.WidgetExpressionTray
 import com.discord.widgets.chat.list.VoiceWaveformView
 import com.discord.widgets.forums.ForumPostCreateManager
+import com.discord.widgets.debugging.WidgetDebugging
+import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.widgets.message_requests.setMessageRequestAccepted
 import com.discord.api.guildjoinrequest.ApplicationStatus
 import com.discord.widgets.servers.member_verification.MemberVerificationPendingDialog
@@ -348,6 +352,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val flex = childFragmentManager.findFragmentById(R.id.chat_input_widget) as? FlexInputFragment ?: return
         val flexBinding = FlexInputWidgetBinding.bind(flex.view ?: return)
         flexInputBinding = flexBinding
+        configureBetterChatbox(flexBinding)
         flex.setKeyboardManager(object : KeyboardManager {
             override fun requestDisplay(editText: EditText) {
                 editText.requestFocus()
@@ -395,6 +400,58 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         state?.let {
             restoreInput(it)
             configureLoaded(it)
+        }
+    }
+
+    private fun configureBetterChatbox(flex: FlexInputWidgetBinding) {
+        val enabled = FeatureFlags.betterChatboxEnabled()
+        val target = if (enabled) flex.mainInputContainer else flex.leftBtnsContainer
+        if (flex.addBtn.parent !== target) {
+            (flex.addBtn.parent as? ViewGroup)?.removeView(flex.addBtn)
+            target.addView(flex.addBtn, if (enabled) 0 else target.indexOfChild(flex.giftBtn).coerceAtLeast(0))
+        }
+        flex.addBtn.apply {
+            setImageResource(if (enabled) R.drawable.ic_add_circle else R.drawable.ic_add_24dp)
+            if (enabled) background = null else setBackgroundResource(R.drawable.drawable_circle_black)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            layoutParams = if (enabled) {
+                LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginStart = -dp(8) }
+            } else {
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    marginStart = dp(6)
+                    marginEnd = dp(8)
+                }
+            }
+        }
+        flex.betterChatboxAvatar.apply {
+            visibility = if (enabled) View.VISIBLE else View.GONE
+            MGImages.setRoundingParams(this, cornerRadius = 0f, circle = true)
+        }
+        if (enabled) state?.let(::updateBetterChatboxAvatar)
+    }
+
+    private fun updateBetterChatboxAvatar(state: ChatInputViewModel.ViewState.Loaded) {
+        val avatar = flexInputBinding?.betterChatboxAvatar ?: return
+        val me = StoreStream.getUsers().getMe()
+        val guildId = state.channel.guildId
+        avatar.setImageURI(
+            IconUtils.getForGuildMemberOrUser(
+                me,
+                StoreStream.getGuilds().getMember(guildId, me.id),
+                size = 128,
+            ),
+        )
+        avatar.setOnClickListener {
+            WidgetUserSheet.show(
+                parentFragmentManager,
+                me.id,
+                state.channelId,
+                guildId.takeIf { it > 0L },
+            )
+        }
+        avatar.setOnLongClickListener {
+            WidgetDebugging.launch(requireContext())
+            true
         }
     }
 
@@ -982,6 +1039,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val hint = getHint(requireContext(), next.channel, next.isBlocked, next.ableToSendMessage)
         truncatedHint?.setHint(hint) ?: run { input?.hint = hint }
         updateSendButtonVisibility()
+        updateBetterChatboxAvatar(next)
     }
 
     /**
