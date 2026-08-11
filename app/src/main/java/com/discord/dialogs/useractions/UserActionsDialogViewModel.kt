@@ -22,7 +22,9 @@ import rx.subjects.PublishSubject
 class UserActionsDialogViewModel(
     private val userId: Long,
     channelId: Long,
-    storeObservable: Observable<StoreState> = observeStores(userId, channelId),
+    guildId: Long? = null,
+    private val isShowingGuildProfile: Boolean = false,
+    storeObservable: Observable<StoreState> = observeStores(userId, channelId, guildId),
 ) : AppViewModel<UserActionsDialogViewModel.ViewState>(ViewState.Uninitialized) {
 
     /** Raw inputs, before the relationship type is turned into button visibilities. */
@@ -34,6 +36,7 @@ class UserActionsDialogViewModel(
         val isIgnored: Boolean,
         val isMe: Boolean,
         val isDeveloperMode: Boolean,
+        val hasGuildProfile: Boolean,
     )
 
     sealed class ViewState {
@@ -48,6 +51,8 @@ class UserActionsDialogViewModel(
             val showIgnoreItem: Boolean,
             val showUnignoreItem: Boolean,
             val showCopyIdItem: Boolean,
+            val showViewMainProfileItem: Boolean,
+            val showViewServerProfileItem: Boolean,
         ) : ViewState() {
             /** Only a friend can carry a friend nickname, so only they are offered one. */
             val showFriendNicknameItem: Boolean get() = isFriend
@@ -100,6 +105,8 @@ class UserActionsDialogViewModel(
                 showUnignoreItem = isOther &&
                     type != ModelUserRelationship.TYPE_BLOCKED && storeState.isIgnored,
                 showCopyIdItem = storeState.isDeveloperMode,
+                showViewMainProfileItem = storeState.hasGuildProfile && isShowingGuildProfile,
+                showViewServerProfileItem = storeState.hasGuildProfile && !isShowingGuildProfile,
             ),
         )
     }
@@ -175,7 +182,11 @@ class UserActionsDialogViewModel(
          * The nickname comes from the *channel's* guild, so a DM (no guild) contributes none — the
          * dialog then falls back to the plain username.
          */
-        private fun observeStores(userId: Long, channelId: Long): Observable<StoreState> {
+        private fun observeStores(
+            userId: Long,
+            channelId: Long,
+            guildId: Long?,
+        ): Observable<StoreState> {
             val guilds = StoreStream.getGuilds()
             val member: Observable<GuildMember?> = StoreStream.getChannels()
                 .observeChannel(channelId)
@@ -195,7 +206,11 @@ class UserActionsDialogViewModel(
                 StoreStream.getUserRelationships().observeNickname(userId),
                 StoreStream.getUserRelationships().observeIgnoredUserIds().map { userId in it },
                 StoreStream.getUsers().observeMe().map { it.id == userId },
-            ) { user, relationshipType, guildMember, friendNickname, isIgnored, isMe ->
+                guildId?.let { id ->
+                    StoreStream.getUserProfiles().observeUserProfile(userId, id)
+                        .map { it.guildMemberProfile != null }
+                } ?: Observable.just(false),
+            ) { user, relationshipType, guildMember, friendNickname, isIgnored, isMe, hasGuildProfile ->
                 StoreState(
                     user,
                     relationshipType,
@@ -204,6 +219,7 @@ class UserActionsDialogViewModel(
                     isIgnored,
                     isMe,
                     StoreStream.getUserSettings().getIsDeveloperMode(),
+                    hasGuildProfile,
                 )
             }
                 .distinctUntilChanged()

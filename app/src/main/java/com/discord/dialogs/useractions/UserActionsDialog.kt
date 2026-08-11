@@ -25,8 +25,13 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         UserActionsDialogViewModel(
             userId = argumentsOrDefault.getLong(ARG_USER_ID, 0L),
             channelId = argumentsOrDefault.getLong(ARG_CHANNEL_ID, 0L),
+            guildId = argumentsOrDefault.getLong(ARG_GUILD_ID, 0L).takeIf { it != 0L },
+            isShowingGuildProfile = argumentsOrDefault.getBoolean(ARG_SHOWING_GUILD_PROFILE),
         )
     }
+
+    var onViewMainProfile: (() -> Unit)? = null
+    var onViewServerProfile: (() -> Unit)? = null
 
     private lateinit var blockItem: TextView
     private lateinit var unblockItem: TextView
@@ -36,6 +41,8 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
     private lateinit var copyUsernameItem: TextView
     private lateinit var copyLinkItem: TextView
     private lateinit var copyIdItem: TextView
+    private lateinit var viewMainProfileItem: TextView
+    private lateinit var viewServerProfileItem: TextView
     private lateinit var primaryGroup: ViewGroup
     private lateinit var relationshipGroup: ViewGroup
     private lateinit var groupSeparator: View
@@ -54,10 +61,12 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         copyUsernameItem = view.findViewById(R.id.user_actions_dialog_copy_username_item)
         copyLinkItem = view.findViewById(R.id.user_actions_dialog_copy_link_item)
         copyIdItem = view.findViewById(R.id.user_actions_dialog_copy_id_item)
+        viewMainProfileItem = view.findViewById(R.id.user_actions_dialog_view_main_profile_item)
+        viewServerProfileItem = view.findViewById(R.id.user_actions_dialog_view_server_profile_item)
 
         listOf(
             blockItem, unblockItem, ignoreItem, unignoreItem, friendNicknameItem,
-            copyUsernameItem, copyLinkItem, copyIdItem,
+            copyUsernameItem, copyLinkItem, copyIdItem, viewMainProfileItem, viewServerProfileItem,
         ).forEach(::restoreIconOpacity)
 
         blockItem.setOnClickListener { viewModel.blockUser() }
@@ -79,6 +88,14 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         }
         copyIdItem.setOnClickListener {
             loadedState()?.let { copy("User ID", it.user.id.toString()) }
+        }
+        viewMainProfileItem.setOnClickListener {
+            onViewMainProfile?.invoke()
+            dismiss()
+        }
+        viewServerProfileItem.setOnClickListener {
+            onViewServerProfile?.invoke()
+            dismiss()
         }
     }
 
@@ -126,6 +143,10 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         unignoreItem.visibility = if (state.showUnignoreItem) View.VISIBLE else View.GONE
         friendNicknameItem.visibility = if (state.showFriendNicknameItem) View.VISIBLE else View.GONE
         copyIdItem.visibility = if (state.showCopyIdItem) View.VISIBLE else View.GONE
+        viewMainProfileItem.visibility =
+            if (state.showViewMainProfileItem && onViewMainProfile != null) View.VISIBLE else View.GONE
+        viewServerProfileItem.visibility =
+            if (state.showViewServerProfileItem && onViewServerProfile != null) View.VISIBLE else View.GONE
         friendNicknameItem.setText(
             if (state.friendNickname == null) R.string.add_friend_nickname else R.string.change_friend_nickname,
         )
@@ -171,6 +192,8 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
     companion object {
         private const val ARG_USER_ID = "com.discord.intent.extra.EXTRA_USER_ID"
         private const val ARG_CHANNEL_ID = "com.discord.intent.extra.EXTRA_CHANNEL_ID"
+        private const val ARG_GUILD_ID = "com.discord.intent.extra.EXTRA_GUILD_ID"
+        private const val ARG_SHOWING_GUILD_PROFILE = "com.discord.intent.extra.EXTRA_SHOWING_GUILD_PROFILE"
 
         private const val ARG_ANCHOR_TOP = "com.discord.intent.extra.EXTRA_ANCHOR_TOP"
         private const val ARG_ANCHOR_END_INSET = "com.discord.intent.extra.EXTRA_ANCHOR_END_INSET"
@@ -186,11 +209,19 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
             userId: Long,
             channelId: Long,
             anchor: View? = null,
+            guildId: Long? = null,
+            isShowingGuildProfile: Boolean = false,
+            onViewMainProfile: (() -> Unit)? = null,
+            onViewServerProfile: (() -> Unit)? = null,
         ) {
             UserActionsDialog().apply {
+                this.onViewMainProfile = onViewMainProfile
+                this.onViewServerProfile = onViewServerProfile
                 arguments = Bundle().apply {
                     putLong(ARG_USER_ID, userId)
                     putLong(ARG_CHANNEL_ID, channelId)
+                    putLong(ARG_GUILD_ID, guildId ?: 0L)
+                    putBoolean(ARG_SHOWING_GUILD_PROFILE, isShowingGuildProfile)
                     anchor?.let { view ->
                         val location = IntArray(2).also(view::getLocationOnScreen)
                         val gap = (ANCHOR_GAP_DP * view.resources.displayMetrics.density).toInt()

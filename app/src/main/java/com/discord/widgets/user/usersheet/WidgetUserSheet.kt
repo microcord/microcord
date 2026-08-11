@@ -812,14 +812,40 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetFriendRequestIgnoreButton
             .setOnClickListener { viewModel.removeRelationship(R.string.friend_request_ignored) }
         binding.userSheetMoreButton.setOnClickListener { anchor ->
+            val userId = argumentsOrDefault.getLong(ARG_USER_ID)
+            val guildId = menuGuildId()
             UserActionsDialog.show(
                 parentFragmentManager,
-                argumentsOrDefault.getLong(ARG_USER_ID),
+                userId,
                 argumentsOrDefault.getLong(ARG_CHANNEL_ID),
                 anchor,
+                guildId = guildId,
+                isShowingGuildProfile = currentGuildId() != null,
+                onViewMainProfile = { reopen(userId, guildId, showGuildProfile = false) },
+                onViewServerProfile = { reopen(userId, guildId, showGuildProfile = true) },
             )
         }
         binding.userSheetRemoveFriendButton.setOnClickListener { confirmRemoveFriend() }
+    }
+
+    private fun currentGuildId(): Long? =
+        (viewModel.viewState as? WidgetUserSheetViewModel.ViewState.Loaded)
+            ?.currentGuildId?.takeIf { it > 0L }
+
+    /** Survives the switch to the main profile, so the way back is still offered. */
+    private fun menuGuildId(): Long? = currentGuildId()
+        ?: argumentsOrDefault.getLong(ARG_ORIGIN_GUILD_ID).takeIf { it != 0L }
+
+    private fun reopen(userId: Long, guildId: Long?, showGuildProfile: Boolean) {
+        // dismissNow, because show() de-dupes on tag and a queued dismiss still holds it.
+        val manager = parentFragmentManager
+        dismissNow()
+        show(
+            manager,
+            userId,
+            guildId = guildId.takeIf { showGuildProfile },
+            originGuildId = guildId,
+        )
     }
 
     private fun confirmRemoveFriend() {
@@ -1012,6 +1038,7 @@ class WidgetUserSheet : AppBottomSheet() {
         private const val ARG_USER_ID = "ARG_USER_ID"
         private const val ARG_CHANNEL_ID = "ARG_CHANNEL_ID"
         private const val ARG_GUILD_ID = "ARG_GUILD_ID"
+        private const val ARG_ORIGIN_GUILD_ID = "ARG_ORIGIN_GUILD_ID"
         private const val ARG_IS_VOICE_CONTEXT = "ARG_IS_VOICE_CONTEXT"
         private const val ARG_STREAM_PREVIEW_CLICK_BEHAVIOR = "ARG_STREAM_PREVIEW_CLICK_BEHAVIOR"
         private const val ARG_FRIEND_TOKEN = "ARG_FRIEND_TOKEN"
@@ -1048,6 +1075,7 @@ class WidgetUserSheet : AppBottomSheet() {
             streamPreviewClickBehavior: StreamPreviewClickBehavior =
                 StreamPreviewClickBehavior.TARGET_AND_LAUNCH_SPECTATE,
             friendToken: String? = null,
+            originGuildId: Long? = null,
         ) {
             WidgetUserSheet().apply {
                 arguments = Bundle().apply {
@@ -1057,6 +1085,7 @@ class WidgetUserSheet : AppBottomSheet() {
                     putBoolean(ARG_IS_VOICE_CONTEXT, isVoiceContext)
                     putSerializable(ARG_STREAM_PREVIEW_CLICK_BEHAVIOR, streamPreviewClickBehavior)
                     putString(ARG_FRIEND_TOKEN, friendToken)
+                    putLong(ARG_ORIGIN_GUILD_ID, originGuildId ?: 0L)
                 }
             }.show(fragmentManager, WidgetUserSheet::class.java.name)
         }
