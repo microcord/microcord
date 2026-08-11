@@ -5,6 +5,8 @@ import com.discord.api.guildscheduledevent.GuildScheduledEventEntityType
 import com.discord.api.message.activity.MessageActivityType
 import com.discord.api.sticker.StickerFormatType
 import com.discord.api.sticker.StickerType
+import com.discord.utilities.fcm.mainIconUrl
+import com.discord.utilities.fcm.messageTitle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -58,7 +60,7 @@ class NotificationDataParsingTest {
             "notification_id" to "fixture-notification",
         ))
 
-        assertEquals(37, NotificationData.PushPayload::class.java.declaredConstructors.single().parameterCount)
+        assertEquals(38, NotificationData.PushPayload::class.java.declaredConstructors.single().parameterCount)
         assertEquals(PushType.MESSAGE_CREATE, payload.pushType)
         assertEquals(101L, payload.messageId)
         assertEquals(MessageActivityType.SPECTATE, payload.messageActivityType)
@@ -73,6 +75,7 @@ class NotificationDataParsingTest {
         assertEquals(PushNotificationType.REMINDER, payload.notificationType)
         assertEquals(StickerFormatType.APNG, payload.sticker?.formatType)
         assertEquals(StickerType.GUILD, payload.sticker?.type)
+        assertEquals("fixture.png", payload.attachmentFilename)
         assertTrue(payload.expandSubtitle)
         assertTrue(payload.isGroupConversation)
         assertTrue(payload.isValid())
@@ -131,6 +134,7 @@ class NotificationDataParsingTest {
         assertEquals(GuildScheduledEventEntityType.UNKNOWN, payload.guildScheduledEventEntityType)
         assertNull(payload.guildScheduledEventId)
         assertNull(payload.sticker)
+        assertNull(payload.attachmentFilename)
         assertFalse(payload.expandSubtitle)
         assertFalse(payload.isValid())
     }
@@ -156,10 +160,35 @@ class NotificationDataParsingTest {
         assertFalse(dm.isGroupConversation)
     }
 
+    @Test fun messageTitlesAndIconsFollowConversationType() {
+        val dm = NotificationData.parsePushPayload(mapOf(
+            "type" to PushType.MESSAGE_CREATE.wireValue,
+            "channel_type" to Channel.DM.toString(),
+            "channel_id" to "10",
+            "user_id" to "20",
+            "user_username" to "sender",
+            "user_avatar" to "avatar",
+        ))
+        val guild = NotificationData.parsePushPayload(mapOf(
+            "type" to PushType.MESSAGE_CREATE.wireValue,
+            "channel_type" to Channel.GUILD_TEXT.toString(),
+            "channel_id" to "11",
+            "channel_name" to "general",
+            "guild_id" to "30",
+            "guild_name" to "Guild",
+            "guild_icon" to "icon",
+        ))
+
+        assertEquals("sender", dm.messageTitle())
+        assertTrue(dm.mainIconUrl()?.contains("/avatars/20/avatar") == true)
+        assertEquals("Guild #general", guild.messageTitle())
+        assertTrue(guild.mainIconUrl()?.contains("/icons/30/icon") == true)
+    }
+
     private fun parse(type: PushType, vararg fields: Pair<String, String>) =
         NotificationData.parsePushPayload(mapOf("type" to type.wireValue, *fields))
 
     companion object {
-        private const val STICKER_JSON = """{"stickers":[{"id":"201","pack_id":"202","guild_id":"203","name":"fixture-sticker","description":"sanitized","format_type":2,"tags":"fixture","type":2}]}"""
+        private const val STICKER_JSON = """{"attachments":[{"id":"200","filename":"fixture.png","size":1,"url":"https://example.invalid/fixture.png","proxy_url":"https://example.invalid/fixture.png"}],"stickers":[{"id":"201","pack_id":"202","guild_id":"203","name":"fixture-sticker","description":"sanitized","format_type":2,"tags":"fixture","type":2}]}"""
     }
 }

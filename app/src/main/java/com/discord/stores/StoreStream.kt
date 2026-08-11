@@ -122,6 +122,8 @@ import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.models.domain.ModelCustomStatusSetting
 import com.discord.api.presence.ClientStatus
 import com.discord.utilities.error.RestApiError
+import com.discord.utilities.feature.FeatureFlags
+import com.discord.utilities.icon.IconUtils
 import com.discord.workers.MessageAckWorker
 import com.discord.widgets.chat.list.actions.MessageActionCoordinator
 import com.discord.utilities.messagesend.NonceGenerator
@@ -727,8 +729,7 @@ class StoreStream private constructor(
             if (::applicationContext.isInitialized) notificationRenderer.clearChannel(applicationContext, channelId)
         },
         onMessageCandidate = ::deliverNotification,
-        // `registerPushToken` stays at its inert default: the reference posts the FCM token through
-        // `RestAPI.postScienceTrack`-adjacent `/users/@me/devices`, which is not in RestAPIInterface yet.
+        // The default token registrar posts to `/users/@me/devices` through the shared REST client.
     )
     private val gameParty = StoreGameParty(observationDeck, presences, users)
     private val userRequiredActions = StoreUserRequiredActions(observationDeck)
@@ -1443,7 +1444,7 @@ class StoreStream private constructor(
                     contextPropertiesOf("location" to MessageSendLocation.PUSH_NOTIFICATION),
                 ).subscribeOn(Schedulers.io()).toBlocking().single().also {
                     analytics.ackMessage(channelId)
-                    NotificationClient.displaySent(applicationContext, channelId, channelName, true)
+                    NotificationClient.displayReply(applicationContext, channelId, it)
                 }
                 true
             }.getOrElse {
@@ -1701,15 +1702,50 @@ class StoreStream private constructor(
     private fun deliverNotification(message: DomainMessage, delivery: NotificationPolicy.Delivery) {
         if (!::applicationContext.isInitialized) return
         val channel = channels.getChannel(message.channelId) ?: return
+        val guild = channel.guildId.takeIf { it != 0L }?.let { guilds.getGuildsInternal()[it] }
+        val author = message.author
+        val authorAvatar = (author?.avatar as? com.discord.nullserializable.NullSerializable.Value<String>)?.value
+        val title = when (channel.type) {
+            Channel.DM -> author?.username ?: channel.getDisplayName()
+            Channel.GROUP_DM -> channel.getDisplayName()
+            else -> listOfNotNull(guild?.name, channel.name).joinToString(" #")
+        }
+        val mainIcon = when (channel.type) {
+            Channel.DM -> IconUtils.getForUser(author?.id, authorAvatar, author?.discriminator?.toIntOrNull(), size = 128)
+            Channel.GROUP_DM -> IconUtils.getForChannel(channel, 128)
+            else -> IconUtils.getForGuild(guild?.id, guild?.icon, size = 128)
+        }
         val data = NotificationData(
             kind = if (channel.guildId == 0L) NotificationKind.DIRECT_MESSAGE else NotificationKind.MESSAGE,
             channelId = message.channelId,
             messageId = message.id,
             guildId = channel.guildId.takeIf { it != 0L },
-            title = channel.getDisplayName(),
-            body = message.content.orEmpty(),
+            title = title,
+            body = NotificationData.messageBody(
+                applicationContext,
+                message.content,
+                message.stickers?.firstOrNull()?.name ?: message.stickerItems?.firstOrNull()?.name,
+                message.attachments?.firstOrNull()?.filename ?: message.localAttachments?.firstOrNull()?.displayName,
+            ),
             sender = NicknameUtils.getName(channel.guildId.takeIf { it != 0L }, channel.id, message.author),
-            timestamp = clock.currentTimeMillis(),
+            conversationTitle = title.takeUnless { channel.type == Channel.DM },
+            isGroupConversation = channel.type in setOf(
+                Channel.GUILD_TEXT,
+                Channel.GUILD_VOICE,
+                Channel.GROUP_DM,
+                Channel.ANNOUNCEMENT_THREAD,
+                Channel.PUBLIC_THREAD,
+                Channel.PRIVATE_THREAD,
+            ),
+            senderKey = author?.id?.toString() ?: "discord",
+            iconUrl = mainIcon,
+            avatarIconUrl = IconUtils.getForGuildMember(
+                message.member?.avatar,
+                channel.guildId,
+                author?.id ?: 0L,
+                size = 128,
+            ) ?: IconUtils.getForUser(author?.id, authorAvatar, author?.discriminator?.toIntOrNull(), size = 128),
+            timestamp = message.timestamp?.dateTimeMillis ?: clock.currentTimeMillis(),
             authGeneration = authGeneration,
             allowReply = true,
             source = NotificationSource.GATEWAY,
@@ -3530,7 +3566,9 @@ class StoreStream private constructor(
             BootLog.record(BootLogEvent.PERSISTENCE_READY)
             val preferences = SharedPreferencesProvider.get()
             val sessionDurablePreferences = SharedPreferencesProvider.getPrefsSessionDurable()
-            FastConnectBootstrap.start(preferences, sessionDurablePreferences)
+            if (!FeatureFlags.disableHeadlessGatewayEnabled()) {
+                FastConnectBootstrap.start(preferences, sessionDurablePreferences)
+            }
             return create(
                 StoreThreadScheduler.create(),
                 clock,

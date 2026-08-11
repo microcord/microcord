@@ -3,6 +3,9 @@ package com.discord.utilities
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.Person
@@ -71,6 +74,26 @@ object ShareUtils {
         ShortcutManagerCompat.setDynamicShortcuts(context, plan.shortcuts.mapIndexed { rank, candidate ->
             toShortcut(context, candidate, rank)
         })
+    }
+
+    fun pushConversationShortcut(context: Context, candidate: ConversationShortcut) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N_MR1) return
+        ShortcutManagerCompat.pushDynamicShortcut(context, toShortcut(context, candidate, rank = 0))
+    }
+
+    fun toAdaptiveIconBitmap(context: Context, source: Bitmap): Bitmap {
+        val density = context.resources.displayMetrics.density
+        val iconSize = (72 * density).toInt()
+        val fullSize = (108 * density).toInt()
+        val inset = (fullSize - iconSize) / 2f
+        return Bitmap.createBitmap(fullSize, fullSize, Bitmap.Config.ARGB_8888).also { output ->
+            Canvas(output).drawBitmap(
+                source,
+                null,
+                RectF(inset, inset, fullSize - inset, fullSize - inset),
+                Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG),
+            )
+        }
     }
 
     internal fun planShortcuts(

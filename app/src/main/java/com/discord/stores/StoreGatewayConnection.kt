@@ -82,6 +82,7 @@ import com.discord.models.thread.dto.ModelThreadListSync
 import com.discord.stores.utilities.BatchManager
 import com.discord.stores.utilities.Batched
 import com.discord.utilities.lifecycle.Backgrounded
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.time.Clock
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -121,6 +122,7 @@ class StoreGatewayConnection(
     private var tokenSubscription: Subscription? = null
     private var backgroundedSubscription: Subscription? = null
     private var guildSubscriptionsSubscription: Subscription? = null
+    private var hasForegrounded = false
 
     // Connection state
     private val connected = behavior(false)
@@ -263,11 +265,8 @@ class StoreGatewayConnection(
      * The socket is built by [StoreStream] because it needs REST for gateway discovery; everything
      * after construction belongs to this store.
      *
-     * Backgrounding deliberately does not enter into it. The reference only drops the socket on
-     * background for iOS, where the OS suspends the process anyway; its Android branch leaves the
-     * socket up and merely resets the reconnect backoff on the way back in. Closing it would lose
-     * every dispatch that arrived while the app was away, and neither RESUME nor IDENTIFY replays
-     * events the client was not connected for.
+     * A feature flag may defer the first connection until an activity has resumed. Once foregrounded,
+     * Android backgrounding follows the reference and leaves the socket up.
      */
     fun init(socket: GatewaySocket, awaitingRestoredToken: Boolean = false) {
         this.socket = socket
@@ -285,9 +284,14 @@ class StoreGatewayConnection(
 
         backgroundedSubscription?.unsubscribe()
         backgroundedSubscription = Backgrounded.observe()
-            .filter { backgrounded -> !backgrounded }
             .observeOn(scheduler)
-            .subscribe({ this.socket?.resetBackoff() }, {})
+            .subscribe({ backgrounded ->
+                if (!backgrounded) {
+                    hasForegrounded = true
+                    this.socket?.resetBackoff()
+                    if (token != null) this.socket?.connect()
+                }
+            }, {})
 
         guildSubscriptionsSubscription?.unsubscribe()
         guildSubscriptionsSubscription = stream.getGuildSubscriptionsInternal().observeSubscriptions()
@@ -306,7 +310,8 @@ class StoreGatewayConnection(
 
     private fun handleTokenUpdate(token: String?) {
         this.token = token
-        if (token != null) socket?.connect() else socket?.close()
+        if (token == null) socket?.close()
+        else if (shouldConnectGateway(FeatureFlags.disableHeadlessGatewayEnabled(), hasForegrounded)) socket?.connect()
     }
 
     // region Outgoing
@@ -612,3 +617,6 @@ class StoreGatewayConnection(
         fun <T> SerializedSubject<T, T>.emit(data: Any) = (this as SerializedSubject<Any, Any>).onNext(data)
     }
 }
+
+internal fun shouldConnectGateway(disableHeadlessGateway: Boolean, hasForegrounded: Boolean): Boolean =
+    !disableHeadlessGateway || hasForegrounded

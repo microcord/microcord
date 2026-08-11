@@ -28,6 +28,10 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.viewProfileImagesEnabled()
             setOnCheckedListener(FeatureFlags::setViewProfileImagesEnabled)
         }
+        binding.settingsFeatureDisableHeadlessGateway.apply {
+            isChecked = FeatureFlags.disableHeadlessGatewayEnabled()
+            setOnCheckedListener(FeatureFlags::setDisableHeadlessGatewayEnabled)
+        }
         binding.settingsFeatureAvatarDecorations.apply {
             isChecked = FeatureFlags.avatarDecorationsEnabled()
             setOnCheckedListener(FeatureFlags::setAvatarDecorationsEnabled)

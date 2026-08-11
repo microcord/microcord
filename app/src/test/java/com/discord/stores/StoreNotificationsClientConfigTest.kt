@@ -3,6 +3,7 @@ package com.discord.stores
 import com.discord.api.permission.Permission
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.fcm.NotificationClient
+import com.discord.utilities.fcm.shouldPersistNotificationSettings
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.time.Clock
 import java.nio.file.Files
@@ -33,6 +34,14 @@ class StoreNotificationsClientConfigTest {
     // overload instead of `BehaviorSubject.create(T)`; casting the argument pins the right one.
     private val token = BehaviorSubject.create(null as String?)
     private val locale = BehaviorSubject.create("en-US")
+
+    @Test
+    fun authTokenChangesPersistEvenWhileForegrounded() {
+        assertTrue(shouldPersistNotificationSettings(false, null, "token"))
+        assertTrue(shouldPersistNotificationSettings(false, "token", null))
+        assertFalse(shouldPersistNotificationSettings(false, "token", "token"))
+        assertTrue(shouldPersistNotificationSettings(true, "token", "token"))
+    }
 
     /**
      * Seeded rather than pushed later: the permissions branch is leading-edge throttled to one

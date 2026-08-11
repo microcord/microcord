@@ -329,11 +329,13 @@ changeable interface. Compatibility may be limited by backend policy,
 experiments, client properties, application signing, package identity, or
 terms of service.
 
-- Do not hard-code credentials recovered from the APK.
-- Google/Firebase API identifiers from the reference must not be copied into
-  source control.
-- Register replacement Firebase, OAuth, App Links, FCM, and billing
-  configuration for `dev.mantikafasi.manticord` when those phases begin.
+- Do not hard-code account credentials, tokens, cookies, or private
+  service-account keys recovered from the APK.
+- By explicit user decision, Discord's client-side Firebase configuration may
+  be reused for FCM parity. Firebase Admin/service-account credentials remain
+  prohibited.
+- Register replacement OAuth, App Links, and billing configuration for
+  `dev.mantikafasi.manticord` when those phases begin.
 - Keep production-backend tests opt-in.
 - Use dedicated test accounts with minimal privileges.
 - Never automate spam, unsolicited messages, mass guild actions, or account
@@ -781,7 +783,7 @@ updates, persistence, and logout.
 Status: **IN PROGRESS**
 
 - [x] Notification preferences and suppression rules.
-- [ ] FCM registration using project-owned configuration.
+- [x] FCM registration using the approved Discord client configuration.
 - [x] Message/call notification rendering and grouping.
 - [x] Notification actions, deletion, and cancellation.
 - [x] Foreground/background lifecycle behavior.
@@ -791,7 +793,8 @@ Implemented: `StoreNotifications` is live in `StoreStream`; provider-neutral pus
 payload parsing, local/Gateway rendering, grouping/cache, Android 13 permission
 handling, guarded reply/read/delete actions, notice hosting, and the CallAction,
 MessageSend, and TimedMute workers are present. Focused store, payload, utility,
-worker, and notice-host tests exist. Project-owned FCM token delivery and a full
+worker, and notice-host tests exist. The installed app now acquires and registers a
+token from Discord's Firebase project; cold-process delivery and the full
 notification/action device matrix remain open.
 
 Exit criteria: notifications respect foreground state, channel/guild settings,
@@ -877,7 +880,7 @@ explicitly obsolete for 126.21 behavior, or documented as blocked.
 
 Status: **IN PROGRESS**
 
-- [ ] Project-owned Firebase configuration.
+- [x] Approved Discord client-side Firebase configuration for FCM.
 - [ ] Project-owned OAuth/Google Sign-In clients if still applicable.
 - [ ] App Links for the new application ID.
 - [x] Google Play Billing integration; project-owned products remain unconfigured.
@@ -889,7 +892,8 @@ selection, subscriptions, entitlements, gifting, boosts, and checkout handoff ar
 present and fail closed without Manticord-owned products. Purchase completion now
 routes to the reference premium/boost activation dialogs before finishing. Analytics, super
 properties, resource monitoring, and legitimate GAID retrieval are implemented
-without recovered credentials. Project-owned Firebase/FCM, dynamic links/App
+without private service credentials. FCM client configuration is present by explicit
+user decision; dynamic links/App
 Links, OAuth clients, products, and crash-reporting transport remain open.
 Samsung OAuth is explicitly out of scope and is not a blocker.
 
@@ -1161,6 +1165,7 @@ or observable behavior. Small implementation details do not belong here.
 
 | Date | Decision | Reason | Consequence |
 | --- | --- | --- | --- |
+| 2026-08-11 | Allow Discord's client-side Firebase configuration for FCM parity | The user explicitly overrode the prior project-owned-Firebase restriction after confirming custom-project tokens cannot be delivered by Discord's sender | The reference `google-services` client identifiers may be used locally; private Firebase Admin/service-account credentials, account tokens, and cookies remain forbidden |
 | 2026-08-09 | Publish master builds as debug Actions artifacts and reserve tagged release APKs for manual workflow runs | Continuous tagged releases obscured intentional releases and provided no embedded CI provenance | Settings shows `Dev <build id> <commit hash>`; manual release APKs retain the committed Baseline Profile |
 | 2026-08-09 | Sign local and CI debug/release APKs with one repository-owned development certificate | Per-machine Android debug keys made GitHub Actions APKs incompatible with local installs | All Manticord development artifacts are update-compatible; the public key is explicitly not a production trust identity |
 | 2026-08-09 | Use Gateway `zstd-stream` exclusively with zstd-jni `1.5.7-12` | Discord documents zstd transport, repeated A65 runs support it, and the user explicitly removed legacy fallback | One persistent native decoder context is scoped to each connection; zlib decoder/fallback code is removed |
@@ -1336,6 +1341,12 @@ Add one concise row after a meaningful completed or blocked work session.
 | 2026-08-10 | OpenCode | Closed three production composition gaps: `StoreUsersTyping` now uses the graph's default REST API and forwards message/thread cooldowns to `StoreSlowMode`; `StoreUserGuildSettings` binds that same API during runtime initialization; `StoreChannelMembers` now receives the shared dispatcher plus channel, role, and member-count providers in reference declaration order | Focused `StoreStreamWiringTest` and `StoreUsersTypingTest` pass; `assembleDebug` passes. Existing default-transport tests already pin client metadata, so no duplicate transport fixture was added. No device or live backend used | Device-check outbound typing and notification writes; remaining adjacent audit gaps are typing timer/standalone divergence, guild-settings analytics/reset divergence, and rich member-row parity |
 | 2026-08-11 | OpenCode | Fixed placeholder message rows after startup: upload optimistic messages now persist author/timestamp, `StoreLocalMessagesHolder` normalizes channel/nonce, removes and immediately rewrites malformed restored entries, and `Persister` fsyncs the temporary file before first publication. Message rows no longer skip binding while viewer identity is loading, and the adapter rebinds when that identity arrives | Focused `MessageHistoryStoreTest` and `PersisterTest` plus `assembleDebug` pass through `scripts/build.sh`; no device was connected | Device-check force-stop during the first queued upload write, restart, and confirm valid pending sends restore while malformed historical placeholders are removed |
 | 2026-08-11 | OpenCode | Closed two reported crashes: embed markdown parsing now falls back to one plain-text node when SimpleAST throws on unmatched input such as `Reported Review`; malformed READY/GUILD_CREATE embedded-activity summaries with a missing activity are skipped. The current READY_SUPPLEMENTAL path already consumes typed `EmbeddedActivityInstance`s, so the obsolete nullable summary path was not restored | Focused embed fallback and embedded-activity store tests plus `assembleDebug` pass through `scripts/build.sh`; no device was connected | Device-check the original embed and reconnect payloads; capture sanitized payload shape if either fallback is exercised repeatedly |
+| 2026-08-11 | OpenCode | Restored attachment/sticker notification bodies. Gateway notifications now fall back from blank message content to the first sticker name or attachment filename; FCM parsing retains the first attachment filename from its embedded message JSON and applies the same localized `sticker_notification_body` / `notification_body_attachment` templates. The reference notification renderer displays media as text, not notification bitmaps | Focused notification payload/client/store tests and `assembleDebug` pass through `scripts/build.sh` | Device-check background Gateway and cold-process FCM notifications for sticker-only, attachment-only, and content-plus-media messages |
+| 2026-08-11 | OpenCode | Completed the approved migration to Discord's client-side Firebase project. The checked-in `google-services.json` matches the reference sender/project/app identifiers while retaining Manticord's package match for resource generation | Focused notification config/payload tests and `assembleDebug` pass; APK installed on device 188b1209 and acquired a stable sanitized token hash with no FIS/auth error | Disconnect Gateway/force-stop the process and verify Discord backend delivery for a DM, guild mention, sticker, and attachment; keep private Firebase Admin credentials out of the project |
+| 2026-08-11 | OpenCode | Added the opt-in Disable Headless Gateway feature. When enabled, a fresh process started by FCM/background work skips Fast Connect and `StoreGatewayConnection` defers its first socket connection until an activity resumes. Once the app has been foregrounded, later Android backgrounding still leaves Gateway connected like the reference; this flag targets only fully closed/headless process wakes | Focused gateway policy test and `assembleDebug` pass through `scripts/build.sh`; APK installed on device 188b1209 | Enable the flag, background/kill without force-stop, send a message, and verify FCM renders without any `ManticordGateway connect requested` before opening the app |
+| 2026-08-11 | OpenCode | Fixed cold-process FCM authentication. `NotificationClient.SettingsV2` previously persisted only while already backgrounded, so logging in while foregrounded left the disk snapshot tokenless and data-only FCM messages woke the process but returned `delivery=null`. Auth-token changes, including logout, now persist immediately; ordinary foreground settings churn remains deferred | Focused notification-client persistence-policy test and `assembleDebug` pass through `scripts/build.sh`; APK installed on device 188b1209 | Open once after install so the authenticated snapshot is written, enable Disable Headless Gateway, kill without force-stop, and resend the FCM test message |
+| 2026-08-11 | OpenCode | Reconciled MESSAGE_CREATE notification presentation with 126.21: DM titles use the sender, guild/thread titles include guild and channel, reply subtitles stay on the sender line, sticker content wins over text, snowflake timestamps and exact group-conversation types are used, and user/guild/group icons load asynchronously into large icons and MessagingStyle persons. Successful direct replies append the returned message to the existing conversation instead of replacing it with a success toast. Conversation shortcuts are long-lived and use the reference 72dp-in-108dp adaptive-icon safe zone so Android does not crop avatars | Focused notification parsing, ShareUtils, and notification-client tests plus `assembleDebug` pass through `scripts/build.sh`; APK installed on device 188b1209 | Send DM/guild/reply/sticker/attachment FCM fixtures with the process dead and visually compare title, avatar scale, grouping, and inline direct-reply updates against 126.21 |
+| 2026-08-11 | OpenCode | Prevented missing guild/channel icons from turning into an oversized launcher icon. Notification conversation shortcuts and `shortcutId` are now added only after a real user/guild/channel bitmap loads; null icon payloads stay generic instead of taking `ShareUtils`' direct-share launcher fallback | `assembleDebug` passes through `scripts/build.sh`; APK installed on device 188b1209 | Re-test a guild notification whose FCM payload omits `guild_icon` and confirm no launcher icon appears |
 
 ## Agent Handoff Template
 

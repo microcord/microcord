@@ -1,10 +1,14 @@
 package com.discord.utilities.notifications
 
+import android.content.Context
+import com.discord.R
 import com.discord.api.channel.Channel
+import com.discord.api.message.Message
 import com.discord.api.guildscheduledevent.GuildScheduledEventEntityType
 import com.discord.api.message.activity.MessageActivityType
 import com.discord.api.sticker.Sticker
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
+import com.discord.i18n.FormatUtils
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import java.security.MessageDigest
@@ -45,6 +49,12 @@ data class NotificationData(
     val title: String,
     val body: String,
     val sender: String = title,
+    val conversationTitle: String? = title,
+    val isGroupConversation: Boolean = kind == NotificationKind.MESSAGE,
+    val senderKey: String = sender,
+    val senderImportant: Boolean = false,
+    val iconUrl: String? = null,
+    val avatarIconUrl: String? = null,
     val timestamp: Long = System.currentTimeMillis(),
     val authGeneration: Int,
     val allowReply: Boolean = false,
@@ -79,6 +89,7 @@ data class NotificationData(
         val applicationName: String?,
         val applicationIcon: String?,
         val sticker: Sticker?,
+        val attachmentFilename: String?,
         val customTitle: String?,
         val subtitle: String?,
         val titleResourceName: String?,
@@ -127,6 +138,7 @@ data class NotificationData(
 
         companion object {
             fun parse(data: Map<String, String>): PushPayload {
+                val message = parseMessage(data["message"])
                 val rawGuildId = data.longOrUnset("guild_id")
                 val parentChannel = channel(
                     type = UNSET_INT,
@@ -172,7 +184,8 @@ data class NotificationData(
                     applicationId = data.longOrUnset("application_id"),
                     applicationName = data["application_name"],
                     applicationIcon = data["application_icon"],
-                    sticker = parseSticker(data["message"]),
+                    sticker = message?.stickers?.firstOrNull(),
+                    attachmentFilename = message?.attachments?.firstOrNull()?.filename,
                     customTitle = data["title"],
                     subtitle = data["subtitle"],
                     titleResourceName = data["title_resource_name"],
@@ -202,15 +215,13 @@ data class NotificationData(
                 GuildScheduledEventEntityType.entries.firstOrNull { it.apiValue == value }
                     ?: GuildScheduledEventEntityType.UNKNOWN
 
-            private fun parseSticker(value: String?): Sticker? = value?.let { json ->
+            private fun parseMessage(value: String?): Message? = value?.let { json ->
                 runCatching {
                     GsonBuilder()
                         .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
                         .registerDiscordApiTypeAdapters()
                         .create()
-                        .fromJson(json, com.discord.api.message.Message::class.java)
-                        .stickers
-                        ?.firstOrNull()
+                        .fromJson(json, Message::class.java)
                 }.getOrNull()
             }
 
@@ -264,6 +275,20 @@ data class NotificationData(
         private const val ACTIVITY_TYPE_STREAMING = 1
 
         fun parsePushPayload(data: Map<String, String>): PushPayload = PushPayload.parse(data)
+
+        fun messageBody(
+            context: Context,
+            content: String?,
+            stickerName: String?,
+            attachmentFilename: String?,
+        ): String = stickerName?.let {
+                FormatUtils.format(context.getString(R.string.sticker_notification_body), "stickerName" to it)
+            }
+            ?: content?.takeIf(String::isNotBlank)
+            ?: attachmentFilename?.let {
+                FormatUtils.format(context.getString(R.string.notification_body_attachment), "filename" to it)
+            }
+            ?: ""
     }
 }
 

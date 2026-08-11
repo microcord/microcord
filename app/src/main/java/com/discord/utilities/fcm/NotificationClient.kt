@@ -120,7 +120,11 @@ object NotificationClient {
 
     @Synchronized
     fun updateSettings(settings: SettingsV2, isBackgrounded: Boolean) {
-        this.settings.set(settings, persist = isBackgrounded)
+        val previousToken = this.settings.get().token
+        this.settings.set(
+            settings,
+            persist = shouldPersistNotificationSettings(isBackgrounded, previousToken, settings.token),
+        )
         this.isBackgrounded = isBackgrounded
     }
 
@@ -162,8 +166,16 @@ object NotificationClient {
             return null
         }
         val current = getSettings()
-        if (!current.isAuthed) return null
+        if (!current.isAuthed) {
+            AppLog.w("Dropping FCM notification: unauthenticated settings")
+            return null
+        }
         if (data.type == IGNORED_NOTIFICATION_TYPE) return null
+        AppLog.d(
+            "FCM gate background=$isBackgrounded enabled=${current.isEnabled} " +
+                "inApp=${current.isEnabledInApp} channel=${data.channelId > 0L} " +
+                "title=${data.title.isNotBlank()} body=${data.body.isNotBlank()} message=${data.messageId != null}",
+        )
         return display(target, data, current)
     }
 
@@ -180,11 +192,17 @@ object NotificationClient {
 
     /** Applies [settings] to [data] and renders it, or returns `null` when the gate rejects it. */
     fun display(context: Context, data: NotificationData, settings: SettingsV2 = getSettings()): Delivery? = when {
-        isBackgrounded && settings.isEnabled ->
-            Delivery.SYSTEM.takeIf { renderer.render(context, data, settings) }
+        isBackgrounded && settings.isEnabled -> {
+            val rendered = renderer.render(context, data, settings)
+            if (!rendered) AppLog.w("FCM system notification rejected by renderer")
+            Delivery.SYSTEM.takeIf { rendered }
+        }
         !isBackgrounded && settings.isEnabledInApp ->
             Delivery.IN_APP.takeIf { inAppNotificationHandler?.invoke(context, data) == true }
-        else -> null
+        else -> {
+            AppLog.w("FCM notification disabled by foreground/background settings")
+            null
+        }
     }
 
     /** Renders [data] straight to the system tray, bypassing the foreground/background gate. */
@@ -193,6 +211,9 @@ object NotificationClient {
 
     fun displaySent(context: Context, channelId: Long, channelName: String, success: Boolean) =
         renderer.displaySent(context, channelId, channelName, success)
+
+    fun displayReply(context: Context, channelId: Long, message: com.discord.api.message.Message): Boolean =
+        renderer.displayReply(context, channelId, message, getSettings())
 
     /**
      * Removes every notification shown for [channelId].
@@ -213,3 +234,9 @@ object NotificationClient {
 
     enum class Delivery { SYSTEM, IN_APP }
 }
+
+internal fun shouldPersistNotificationSettings(
+    isBackgrounded: Boolean,
+    previousToken: String?,
+    nextToken: String?,
+): Boolean = isBackgrounded || previousToken != nextToken

@@ -9,6 +9,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -16,9 +17,15 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.IconCompat
 import com.discord.R
+import com.discord.api.message.Message
 import com.discord.app.AppActivity
+import com.discord.utilities.ShareUtils
 import com.discord.utilities.fcm.NotificationClient
+import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImagesBitmap
+import rx.Observable
 
 class NotificationRenderer(private val cache: NotificationCache = NotificationCache()) {
     fun renderLocal(context: Context, data: NotificationData, settings: NotificationClient.SettingsV2 = NotificationClient.getSettings()) =
@@ -70,7 +77,7 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
                 .build(),
         )
         if (data.kind == NotificationKind.MESSAGE || data.kind == NotificationKind.DIRECT_MESSAGE) {
-            builder.setStyle(messageStyle(snapshot.messages))
+            builder.setStyle(messageStyle(context, snapshot.messages, emptyMap()))
             if (data.messageId != null && authSession != null) {
                 builder.addAction(
                     R.drawable.ic_check_white_24dp,
@@ -91,7 +98,34 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
         } else {
             builder.setStyle(NotificationCompat.BigTextStyle().bigText(data.body))
         }
-        NotificationManagerCompat.from(context).notify(snapshot.notificationId, builder.build())
+        displayNotification(context, snapshot.notificationId, builder)
+        loadNotificationBitmaps(snapshot.messages, data).subscribe({ bitmaps ->
+            val adaptiveBitmaps = bitmaps.mapValues { ShareUtils.toAdaptiveIconBitmap(context, it.value) }
+            if (data.kind == NotificationKind.MESSAGE || data.kind == NotificationKind.DIRECT_MESSAGE) {
+                builder.setStyle(messageStyle(context, snapshot.messages, adaptiveBitmaps))
+                data.iconUrl?.let(adaptiveBitmaps::get)?.let { shortcutIcon ->
+                    ShareUtils.pushConversationShortcut(
+                        context,
+                        ShareUtils.ConversationShortcut(
+                            channelId = data.channelId,
+                            label = data.title,
+                            persons = snapshot.messages.distinctBy(NotificationData::senderKey).map {
+                                ShareUtils.ShortcutPerson(it.senderKey.substringBefore(':').toLongOrNull() ?: 0L, it.sender)
+                            },
+                            icon = shortcutIcon,
+                        ),
+                    )
+                    builder.setShortcutId(data.channelId.toString())
+                }
+            }
+            displayNotification(context, snapshot.notificationId, builder)
+        }, { })
+        data.iconUrl?.let { iconUrl ->
+            MGImagesBitmap.getBitmap(iconUrl, imageIsCircle = true).subscribe({ bitmap ->
+                builder.setLargeIcon(bitmap)
+                displayNotification(context, snapshot.notificationId, builder)
+            }, { })
+        }
         return true
     }
 
@@ -113,6 +147,41 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
 
     fun setIgnoreNextClearForAck(channelId: Long, shouldIgnore: Boolean) =
         cache.setIgnoreNextClearForAck(channelId, shouldIgnore)
+
+    fun displayReply(
+        context: Context,
+        channelId: Long,
+        message: Message,
+        settings: NotificationClient.SettingsV2,
+    ): Boolean {
+        val previous = cache.get(channelId)?.messages?.lastOrNull() ?: return false
+        val author = message.author
+        val avatar = (author?.avatar as? com.discord.nullserializable.NullSerializable.Value<String>)?.value
+        return render(
+            context,
+            previous.copy(
+                messageId = message.id,
+                body = NotificationData.messageBody(
+                    context,
+                    message.content,
+                    message.stickers?.firstOrNull()?.name,
+                    message.attachments?.firstOrNull()?.filename,
+                ),
+                sender = context.getString(R.string.me),
+                senderKey = "me",
+                senderImportant = true,
+                avatarIconUrl = IconUtils.getForUser(
+                    author?.id,
+                    avatar,
+                    author?.discriminator?.toIntOrNull(),
+                    size = 128,
+                ),
+                timestamp = message.timestamp?.dateTimeMillis ?: previous.timestamp + 1L,
+                source = NotificationSource.LOCAL,
+            ),
+            settings,
+        )
+    }
 
     @SuppressLint("MissingPermission", "NotificationPermission")
     fun displaySent(context: Context, channelId: Long, channelName: String, success: Boolean) {
@@ -162,20 +231,59 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
         data.title.isNotBlank() && data.body.isNotBlank() &&
         (data.messageId == null || data.messageId > 0)
 
-    private fun messageStyle(messages: List<NotificationData>): NotificationCompat.MessagingStyle {
-        val style = NotificationCompat.MessagingStyle(Person.Builder().setName("You").setKey("me").build())
-            .setConversationTitle(messages.last().title)
-            .setGroupConversation(messages.last().kind == NotificationKind.MESSAGE)
+    private fun messageStyle(
+        context: Context,
+        messages: List<NotificationData>,
+        bitmaps: Map<String, Bitmap>,
+    ): NotificationCompat.MessagingStyle {
+        val latest = messages.last()
+        val style = NotificationCompat.MessagingStyle(
+            Person.Builder().setName(context.getString(R.string.me)).setKey("me").build(),
+        )
+            .setConversationTitle(latest.conversationTitle)
+            .setGroupConversation(latest.isGroupConversation)
         messages.forEach { message ->
+            val icon = message.avatarIconUrl?.let(bitmaps::get)?.let(IconCompat::createWithAdaptiveBitmap)
+            val sender = Person.Builder()
+                .setName(message.sender)
+                .setKey(message.senderKey)
+                .setImportant(message.senderImportant)
+                .setIcon(icon)
+                .build()
             style.addMessage(
                 NotificationCompat.MessagingStyle.Message(
                     message.body,
-                    message.timestamp,
-                    Person.Builder().setName(message.sender).setKey(message.sender).build(),
+                    message.timestamp + if (icon == null) 0L else 1L,
+                    sender,
                 ),
             )
         }
         return style
+    }
+
+    private fun loadNotificationBitmaps(
+        messages: List<NotificationData>,
+        latest: NotificationData,
+    ): Observable<Map<String, Bitmap>> {
+        val urls = (messages.mapNotNull(NotificationData::avatarIconUrl) + listOfNotNull(latest.iconUrl))
+            .filter(String::isNotBlank)
+            .toSet()
+        return Observable.from(urls)
+            .flatMap { url ->
+                MGImagesBitmap.getBitmap(url, imageIsCircle = false)
+                    .map { bitmap -> url to bitmap }
+                    .onErrorResumeNext(Observable.empty())
+            }
+            .toMap({ it.first }, { it.second })
+    }
+
+    @SuppressLint("MissingPermission", "NotificationPermission")
+    private fun displayNotification(
+        context: Context,
+        notificationId: Int,
+        builder: NotificationCompat.Builder,
+    ) {
+        runCatching { NotificationManagerCompat.from(context).notify(notificationId, builder.build()) }
     }
 
     private fun contentIntent(context: Context, data: NotificationData): PendingIntent {

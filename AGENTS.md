@@ -198,10 +198,13 @@ invalid decompiler constructs into the target.
 
 ## Security and Live Backend
 
-- Never commit or print tokens, passwords, MFA codes, cookies, API keys, or
-  recovered official service credentials.
+- Never commit or print tokens, passwords, MFA codes, cookies, or private
+  service-account credentials. The approved Discord client Firebase
+  configuration exception below does not include server-side keys.
 - Never weaken TLS validation or add certificate/signature bypasses.
-- Do not reuse Google/Firebase values extracted from the reference APK.
+- Discord's client-side Firebase configuration may be reused for FCM parity by
+  explicit user decision recorded in `PLAN.md`; never recover or use Firebase
+  Admin/service-account credentials.
 - Live tests must be opt-in, narrow, and use approved test accounts.
 - Do not perform destructive account/guild actions without explicit approval.
 - Sanitize fixtures before committing them.
