@@ -1088,9 +1088,28 @@ object RestAPIParams {
         override fun toString(): String = "UserBulkRelationship(userIds=$userIds, token=<redacted>)"
     }
 
-    data class UserDevices(val token: String?) {
+    /**
+     * @param bypassServerThrottlingSupported tells the backend this client can take unthrottled
+     *   push; the reference sends it on Android only.
+     */
+    data class UserDevices(
+        val token: String?,
+        @SerializedName("bypass_server_throttling_supported")
+        val bypassServerThrottlingSupported: Boolean = true,
+        @SerializedName("bundle_id")
+        val bundleId: String = REFERENCE_BUNDLE_ID,
+    ) {
         val provider: String = "gcm"
-        override fun toString(): String = "UserDevices(provider=$provider, token=<redacted>)"
+        override fun toString(): String =
+            "UserDevices(provider=$provider, bundleId=$bundleId, token=<redacted>)"
+
+        private companion object {
+            /**
+             * The reference's bundle id, not this application's: the token is issued by the
+             * reference's Firebase project, and the backend matches the two.
+             */
+            const val REFERENCE_BUNDLE_ID = "com.discord"
+        }
     }
 
     data class UserEmailConfirmCode(val code: String) {

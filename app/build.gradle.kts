@@ -1,6 +1,15 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.androidx.baselineprofile)
+    // Applied below only when a Firebase config is present, so a checkout without one builds.
+    alias(libs.plugins.google.services) apply false
+}
+
+val firebaseConfig = file("google-services.json")
+if (firebaseConfig.exists()) {
+    apply(plugin = libs.plugins.google.services.get().pluginId)
+} else {
+    logger.lifecycle("google-services.json missing: push notifications will be inert in this build")
 }
 
 val buildId = providers.environmentVariable("MANTICORD_BUILD_ID").orElse("local")
@@ -125,6 +134,7 @@ dependencies {
     implementation(libs.fresco.animated.gif)
     implementation(libs.fresco.animated.webp)
     implementation(libs.photo.drawee.view)
+    implementation(libs.firebase.messaging)
     implementation(libs.gson)
     implementation(libs.kronos.android)
     implementation(libs.kryo)

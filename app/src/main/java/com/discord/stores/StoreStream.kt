@@ -2024,6 +2024,9 @@ class StoreStream private constructor(
         dispatchSubscribe(events.messageAck, "streamMessageAck") { readState ->
             mentions.handleMessageAck(readState)
             messageAck.handleMessageAck(readState)
+            // The ack may have come from another device, so the notification this one raised is
+            // now for a channel the user has already read.
+            notifications.handleMessageAck(readState.channelId)
             forumPostReadStates.handleMessageAck(readState)
             clientDataState.handleMessageAck(readState)
         }

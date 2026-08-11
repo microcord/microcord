@@ -33,6 +33,8 @@ zstd = "1.5.7-12"
 rxjava = "1.3.8"
 rxandroid = "1.2.1"
 simpleast = "2.8.0"
+firebaseMessaging = "24.1.0"
+googleServices = "4.4.2"
 gson = "2.14.0"
 kryo = "4.0.2"
 okhttp = "4.8.0"
@@ -96,6 +98,7 @@ zstd = { group = "com.github.luben", name = "zstd-jni", version.ref = "zstd" }
 rxjava = { group = "io.reactivex", name = "rxjava", version.ref = "rxjava" }
 rxandroid = { group = "io.reactivex", name = "rxandroid", version.ref = "rxandroid" }
 simpleast = { group = "com.github.discord", name = "SimpleAST", version.ref = "simpleast" }
+firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging", version.ref = "firebaseMessaging" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 kryo = { group = "com.esotericsoftware", name = "kryo", version.ref = "kryo" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
@@ -123,4 +126,5 @@ androidx-uiautomator = { group = "androidx.test.uiautomator", name = "uiautomato
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-test = { id = "com.android.test", version.ref = "agp" }
 androidx-baselineprofile = { id = "androidx.baselineprofile", version.ref = "baselineProfile" }
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
 

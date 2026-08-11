@@ -94,6 +94,22 @@ object NotificationClient {
     fun init(application: Application) {
         applicationContext = application.applicationContext
         if (isOsLevelNotificationEnabled()) renderer.initNotificationChannels(application)
+        requestRegistrationId()
+    }
+
+    /**
+     * Asks Firebase for the current registration id.
+     *
+     * `FirebaseMessagingService.onNewToken` only fires when the id is *created or rotated*, so a
+     * client that already has one would otherwise never learn it and never register the device.
+     * Absent or unconfigured Firebase is not an error — the client simply stays unregistered.
+     */
+    private fun requestRegistrationId() {
+        runCatching {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                .addOnSuccessListener(::onNewToken)
+                .addOnFailureListener { AppLog.w("Push registration unavailable: ${it.javaClass.simpleName}") }
+        }.onFailure { AppLog.w("Firebase unavailable: ${it.javaClass.simpleName}") }
     }
 
     /** Notification channels — and therefore per-channel user control — exist from API 26. */

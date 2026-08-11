@@ -211,12 +211,24 @@ class StoreNotifications(
     @StoreThread
     fun handleChannelSelected(channelId: Long) = clearChannelNotifications(channelId)
 
+
+
+    @StoreThread
+
+    fun handleMessageAck(channelId: Long) = clearChannelNotifications(channelId)
+
+    /**
+     * A backgrounded client still holds its gateway socket open, so the message that would have
+     * arrived as a push arrives here first. Dropping it unless the app was foregrounded is what
+     * left the client silent whenever it was not on screen.
+     */
     @StoreThread
     fun handleMessageCreate(input: NotificationPolicy.Input, isForeground: Boolean) {
-        if (!isForeground || !isFresh(input.message)) return
-        if (NotificationPolicy.Delivery.FOREGROUND in NotificationPolicy.evaluate(input.copy(appSettings = settings))) {
-            onMessageCandidate(input.message, NotificationPolicy.Delivery.FOREGROUND)
-        }
+        if (!isFresh(input.message)) return
+        val evaluated = NotificationPolicy.evaluate(
+            input.copy(isForeground = isForeground, appSettings = settings),
+        )
+        evaluated.forEach { delivery -> onMessageCandidate(input.message, delivery) }
     }
 
     /**

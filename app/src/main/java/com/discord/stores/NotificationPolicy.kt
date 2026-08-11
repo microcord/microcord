@@ -1,6 +1,7 @@
 package com.discord.stores
 
 import com.discord.api.channel.Channel
+import com.discord.api.message.MessageFlags
 import com.discord.api.permission.Permission
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.guild.Guild
@@ -23,6 +24,8 @@ object NotificationPolicy {
         val guildSettings: ModelNotificationSettings? = null,
         val selectedChannelId: Long? = null,
         val isDnd: Boolean = false,
+        /** Backgrounded messages go to the system tray; foregrounded ones to the in-app banner. */
+        val isForeground: Boolean = true,
         val appSettings: NotificationSettingsV2 = NotificationSettingsV2(),
     )
 
@@ -31,7 +34,9 @@ object NotificationPolicy {
         val channel = input.channel
         if (message.author?.id == input.currentUserId ||
             input.isAuthorBlockedOrIgnored ||
-            input.isDnd || !isAccessible(channel, input.effectivePermissions)
+            input.isDnd || !isAccessible(channel, input.effectivePermissions) ||
+            // An `@silent` message is delivered but never announced.
+            (message.flags ?: 0L) and MessageFlags.SUPPRESS_NOTIFICATIONS != 0L
         ) return emptySet()
 
         val guildSettings = input.guildSettings
@@ -51,6 +56,12 @@ object NotificationPolicy {
             ) return emptySet()
         }
 
+        if (!input.isForeground) {
+            // `mobile_push` is the per-guild switch for exactly this case: notify on this device
+            // while it is not in front of the user.
+            val mobilePush = input.guildSettings?.isMobilePush ?: true
+            return if (input.appSettings.isEnabled && mobilePush) setOf(Delivery.SYSTEM) else emptySet()
+        }
         return if (input.appSettings.isEnabledInApp &&
             input.selectedChannelId != channel.id &&
             (input.parentChannel == null || input.selectedChannelId != input.parentChannel.id)

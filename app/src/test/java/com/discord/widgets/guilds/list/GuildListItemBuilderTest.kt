@@ -361,6 +361,7 @@ class GuildListItemBuilderTest {
         isNewUser = isNewUser,
         applicationStreams = emptyList(),
         allChannelPermissions = emptyMap(),
+        geoRestrictedGuilds = emptyList(),
         isLeftPanelOpened = false,
         isOnHomeTab = true,
     )

@@ -108,7 +108,11 @@ class StoreNotificationsTest {
 
         assertEquals(listOf("secret" to "push"), registrations)
         assertEquals(listOf(CHANNEL), cleared)
-        assertEquals(1, candidates.size)
+        // The fresh foregrounded message banners, the stale one is dropped, and the fresh
+
+        // backgrounded one goes to the system tray rather than being discarded.
+
+        assertEquals(2, candidates.size)
         assertTrue(store.getSettings().isDisableSound)
         assertTrue(store.toString().contains("secret").not())
 
