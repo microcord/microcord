@@ -10,7 +10,6 @@ import com.discord.app.AppViewModel
 import com.discord.models.member.GuildMember
 import com.discord.models.presence.Presence
 import com.discord.models.user.MeUser
-import com.discord.stores.StoreStream
 import com.discord.models.user.User
 import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.icon.IconUtils
@@ -36,6 +35,7 @@ class UserProfileHeaderViewModel @JvmOverloads constructor(
         val allowAnimatedEmojis: Boolean,
         val reducedMotionEnabled: Boolean,
         val channel: Channel?,
+        val syncProfileThemeWithUserTheme: Boolean = false,
     )
 
     sealed class ViewState {
@@ -172,8 +172,7 @@ class UserProfileHeaderViewModel @JvmOverloads constructor(
                     (currentState as? ViewState.Loaded)?.allowAnimationInReducedMotion ?: false,
                 isMe = userId == storeState.me.id,
                 channelId = storeState.channel?.id,
-                syncProfileThemeWithUserTheme =
-                    StoreStream.getAccessibility().isSyncProfileThemeWithUserThemeEnabled(),
+                syncProfileThemeWithUserTheme = storeState.syncProfileThemeWithUserTheme,
             )
         }
     }
@@ -190,6 +189,7 @@ internal data class ProfileThemeColors(
     val borderOverlay: Int,
     val button: Int,
     val rolePillSurface: Int,
+    val tagPillSurface: Int,
     val textDefault: Int,
     val textMuted: Int,
     val textSubtle: Int,
@@ -200,10 +200,11 @@ internal data class ProfileThemeColors(
         private const val OVERLAY_ALPHA = 153
         private const val OVERLAY_ALPHA_SYNCED = 204
 
+        private const val MOD_MUTED_ALPHA = 0x0D
+        private const val MOD_STRONG_ALPHA = 0x1A
+
         private const val DARK_SECTION = 0x29000000
         private const val LIGHT_SECTION = 0x3DFFFFFF
-        private const val DARK_NOTE = 0x4D000000
-        private const val LIGHT_NOTE = 0x4DFFFFFF
         private const val DARK_BORDER = 0x14FFFFFF
         private const val LIGHT_BORDER = 0x14000000
 
@@ -229,10 +230,13 @@ internal data class ProfileThemeColors(
                 gradientTop = top,
                 gradientBottom = bottom,
                 sectionOverlay = if (profileIsDark) DARK_SECTION else LIGHT_SECTION,
-                noteOverlay = if (profileIsDark) DARK_NOTE else LIGHT_NOTE,
+                // The note sits on the same overlay as the mutual servers and friends rows; a
+                // heavier one reads as an opaque panel rather than part of the profile.
+                noteOverlay = if (profileIsDark) DARK_SECTION else LIGHT_SECTION,
                 borderOverlay = if (profileIsDark) DARK_BORDER else LIGHT_BORDER,
                 button = contrastButton(primary),
-                rolePillSurface = rolePillSurface(secondary, profileIsDark),
+                rolePillSurface = gradientOverlay(secondary, profileIsDark, MOD_MUTED_ALPHA),
+                tagPillSurface = gradientOverlay(secondary, profileIsDark, MOD_STRONG_ALPHA),
                 textDefault = if (profileIsDark) 0xF5FFFFFF.toInt() else 0xF5000000.toInt(),
                 textMuted = if (profileIsDark) 0xC2FFFFFF.toInt() else 0xC2000000.toInt(),
                 textSubtle = if (profileIsDark) 0xE0FFFFFF.toInt() else 0xE0000000.toInt(),
@@ -241,15 +245,16 @@ internal data class ProfileThemeColors(
         }
 
         /**
-         * `BACKGROUND_MOD_MUTED` under a profile theme: the secondary colour fully saturated and
-         * pinned to the opposite end of the lightness range, at 5% over the gradient.
+         * The `BACKGROUND_MOD_*` family under a profile theme: the secondary colour fully
+         * saturated and pinned to the opposite end of the lightness range, laid over the
+         * gradient at the token's own opacity.
          */
-        private fun rolePillSurface(secondary: Int, profileIsDark: Boolean): Int {
+        private fun gradientOverlay(secondary: Int, profileIsDark: Boolean, alpha: Int): Int {
             val hsl = FloatArray(3)
             ColorUtils.colorToHSL(secondary, hsl)
             hsl[1] = 1f
             hsl[2] = if (profileIsDark) 0.92f else 0.08f
-            return ColorUtils.setAlphaComponent(ColorUtils.HSLToColor(hsl), 0x0D)
+            return ColorUtils.setAlphaComponent(ColorUtils.HSLToColor(hsl), alpha)
         }
 
         /** Discord adjusts LAB lightness in chroma.js steps until white contrast is between 7 and 10. */

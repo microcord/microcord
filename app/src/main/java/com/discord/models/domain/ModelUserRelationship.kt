@@ -1,6 +1,7 @@
 package com.discord.models.domain
 
 import com.discord.api.user.User
+import com.discord.api.utcdatetime.UtcDateTime
 import com.google.gson.annotations.SerializedName
 
 data class ModelUserRelationship(
@@ -17,6 +18,8 @@ data class ModelUserRelationship(
      * and the server keeps the flag when the relationship changes.
      */
     @SerializedName("user_ignored") val userIgnored: Boolean = false,
+    /** When the relationship started. Absent on friendships that predate the field. */
+    val since: UtcDateTime? = null,
 ) {
     fun hydrate(users: Map<Long, User>): ModelUserRelationship =
         if (userId == null) this else copy(user = users[userId], userId = null)

@@ -114,7 +114,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         val surface = colors?.headerSurface ?: backgroundColor
         setBackgroundColor(if (colors != null && !paintsProfileSurface) Color.TRANSPARENT else surface)
         binding.largeAvatar.setAvatarBackgroundColor(surface)
-        binding.userProfileHeaderPrimaryName.setGuildTagProfileColors(colors?.rolePillSurface, colors?.textDefault)
+        binding.userProfileHeaderPrimaryName.setGuildTagProfileColors(colors?.tagPillSurface, colors?.textDefault)
         colors?.let {
             binding.userProfileHeaderPrimaryName.setUsernameColor(it.textDefault)
             binding.userProfileHeaderSecondaryName.setTextColor(it.textMuted)

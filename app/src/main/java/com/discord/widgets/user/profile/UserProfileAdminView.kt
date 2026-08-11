@@ -14,6 +14,8 @@ class UserProfileAdminView(context: Context, attrs: AttributeSet) : LinearLayout
         val showEditMemberButton: Boolean,
         val showKickButton: Boolean,
         val showDisableCommunicationButton: Boolean,
+        val showVerifyMemberButton: Boolean,
+        val isMemberVerified: Boolean,
         val isMultiUserDM: Boolean,
         val showBanButton: Boolean,
         val showServerMuteButton: Boolean,
@@ -28,6 +30,7 @@ class UserProfileAdminView(context: Context, attrs: AttributeSet) : LinearLayout
 
     private val editMember: TextView
     private val disableCommunication: TextView
+    private val verifyMember: TextView
     private val serverMute: TextView
     private val serverDeafen: TextView
     private val serverMove: TextView
@@ -39,6 +42,7 @@ class UserProfileAdminView(context: Context, attrs: AttributeSet) : LinearLayout
         LayoutInflater.from(context).inflate(R.layout.user_profile_admin_view, this)
         editMember = requireNotNull(findViewById(R.id.user_profile_admin_edit_member))
         disableCommunication = requireNotNull(findViewById(R.id.user_profile_admin_disable_communication))
+        verifyMember = requireNotNull(findViewById(R.id.user_profile_admin_verify_member))
         serverMute = requireNotNull(findViewById(R.id.user_profile_admin_server_mute))
         serverDeafen = requireNotNull(findViewById(R.id.user_profile_admin_server_deafen))
         serverMove = requireNotNull(findViewById(R.id.user_profile_admin_server_move))
@@ -52,6 +56,7 @@ class UserProfileAdminView(context: Context, attrs: AttributeSet) : LinearLayout
     fun setOnBan(callback: () -> Unit) = ban.setOnClickListener { callback() }
     fun setOnDisableCommunication(callback: () -> Unit) =
         disableCommunication.setOnClickListener { callback() }
+    fun setOnVerifyMember(callback: () -> Unit) = verifyMember.setOnClickListener { callback() }
     fun setOnServerMute(callback: () -> Unit) = serverMute.setOnClickListener { callback() }
     fun setOnServerDeafen(callback: () -> Unit) = serverDeafen.setOnClickListener { callback() }
     fun setOnServerMove(callback: () -> Unit) = serverMove.setOnClickListener { callback() }
@@ -61,6 +66,11 @@ class UserProfileAdminView(context: Context, attrs: AttributeSet) : LinearLayout
         editMember.visible(state.showEditMemberButton)
         kick.visible(state.showKickButton)
         kick.setText(if (state.isMultiUserDM) R.string.remove_from_group else R.string.kick)
+        verifyMember.visible(state.showVerifyMemberButton)
+        verifyMember.setText(
+            if (state.isMemberVerified) R.string.manually_unverify_member
+            else R.string.manually_verify_member,
+        )
         disableCommunication.visible(state.showDisableCommunicationButton)
         disableCommunication.setText(
             if (state.isCommunicationDisabled) R.string.remove_time_out else R.string.time_out,

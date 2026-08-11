@@ -187,9 +187,9 @@ class ProfileThemeLayoutTest {
         val binding = WidgetUserSheetBinding.bind(
             LayoutInflater.from(context).inflate(R.layout.widget_user_sheet, null),
         )
-        val noteCard = binding.userSheetNoteCard as MaterialCardView
+        val noteCard = binding.userSheetNoteCard
         val defaultNoteCard = noteCard.cardBackgroundColor.defaultColor
-        val defaultNoteCardStroke = noteCard.strokeColor
+        val defaultNoteCardStroke = (noteCard as? MaterialCardView)?.strokeColor ?: Color.TRANSPARENT
         val defaultNoteBox = binding.userSheetNoteTextFieldWrap.boxBackgroundColor
         val defaultNoteBoxStroke = binding.userSheetNoteTextFieldWrap.boxStrokeColor
         val defaultNoteHeader = binding.userSheetNoteHeader.currentTextColor

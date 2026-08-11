@@ -69,6 +69,8 @@ data class Guild(
     val officialMessageColor: Int? = null,
     /** Unreachable from where the user is rather than down, so [name] and [icon] are still sent. */
     @SerializedName("geo_restricted") val geoRestricted: Boolean = false,
+    /** The guild's server tag, when it has one. */
+    val profile: GuildTagProfile? = null,
 ) {
     @Transient var version: Long = 0
 }

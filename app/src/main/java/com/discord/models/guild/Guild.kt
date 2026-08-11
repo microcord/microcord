@@ -4,6 +4,7 @@ import com.discord.api.emoji.GuildEmoji
 import com.discord.api.guild.GuildExplicitContentFilter
 import com.discord.api.guild.GuildFeature
 import com.discord.api.guild.GuildHubType
+import com.discord.api.guild.GuildTagProfile
 import com.discord.api.guild.GuildMaxVideoChannelUsers
 import com.discord.api.guild.GuildIncidentsData
 import com.discord.api.guild.GuildNsfwLevel
@@ -53,6 +54,8 @@ data class Guild(
     val ownerConfiguredContentLevel: GuildNsfwLevel? = null,
     val incidentsData: GuildIncidentsData? = null,
     val officialMessageColor: Int? = null,
+    /** The guild's server tag, when it has one. */
+    val profile: GuildTagProfile? = null,
 ) {
     val shortName: String = toShortName(name)
 

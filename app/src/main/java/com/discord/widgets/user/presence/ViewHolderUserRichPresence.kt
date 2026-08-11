@@ -89,8 +89,6 @@ open class ViewHolderUserRichPresence(
     private val badgeRow: ViewGroup? = root.findViewById(R.id.rich_presence_badges)
 
     private val profileCards = root.allViews().filterIsInstance<MaterialCardView>().toList()
-    private val defaultCardColors = profileCards.associateWith(MaterialCardView::getCardBackgroundColor)
-    private val defaultCardStrokes = profileCards.associateWith(MaterialCardView::getStrokeColor)
     private val profileButtons = listOfNotNull(richPresencePrimaryButton, richPresenceSecondaryButton)
     private val defaultButtonTints = profileButtons.associateWith(Button::getBackgroundTintList)
     private val defaultButtonTextColors = profileButtons.associateWith(Button::getTextColors)
@@ -118,11 +116,10 @@ open class ViewHolderUserRichPresence(
     }
 
     /** Applies the user-profile palette after the variant layout has been inflated. */
-    internal fun applyProfileTheme(colors: ProfileThemeColors?) {
+    internal fun applyProfileTheme(colors: ProfileThemeColors?, surface: Int, border: Int) {
         profileCards.forEach { card ->
-            if (colors == null) card.setCardBackgroundColor(defaultCardColors.getValue(card))
-            else card.setCardBackgroundColor(colors.sectionOverlay)
-            card.strokeColor = colors?.borderOverlay ?: defaultCardStrokes.getValue(card)
+            card.setCardBackgroundColor(surface)
+            card.strokeColor = border
         }
 
         fun TextView.color(value: Int?) {

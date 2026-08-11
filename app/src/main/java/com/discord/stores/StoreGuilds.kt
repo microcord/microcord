@@ -507,6 +507,7 @@ class StoreGuilds(
             publicUpdatesChannelId = api.publicUpdatesChannelId ?: publicUpdatesChannelId,
             preferredLocale = api.preferredLocale ?: preferredLocale,
             welcomeScreen = api.welcomeScreen ?: welcomeScreen,
+            profile = api.profile ?: profile,
             maxVideoChannelUsers = api.maxVideoChannelUsers ?: maxVideoChannelUsers,
             vanityUrlCode = api.vanityUrlCode ?: vanityUrlCode,
             approximatePresenceCount = api.approximatePresenceCount.takeUnless { it == 0 } ?: approximatePresenceCount,

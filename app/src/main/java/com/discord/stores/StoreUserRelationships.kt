@@ -1,6 +1,7 @@
 package com.discord.stores
 
 import com.discord.models.domain.ModelPayload
+import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.domain.ModelUserRelationship
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
@@ -12,6 +13,7 @@ class StoreUserRelationships(
     private val relationshipsCache: Persister<Map<Long, Int>> = Persister(CACHE_KEY, UNLOADED_SENTINEL),
     private val nicknamesCache: Persister<Map<Long, String>> = Persister(NICKNAMES_CACHE_KEY, emptyMap()),
     private val ignoredCache: Persister<Set<Long>> = Persister(IGNORED_CACHE_KEY, emptySet()),
+    private val sinceCache: Persister<Map<Long, Long>> = Persister(SINCE_CACHE_KEY, emptyMap()),
 ) : StoreV2() {
     sealed class UserRelationshipsState {
         data object Unloaded : UserRelationshipsState()
@@ -27,6 +29,9 @@ class StoreUserRelationships(
     private var ignored: Set<Long> = emptySet()
     private var ignoredSnapshot: Set<Long> = emptySet()
 
+    private var since: Map<Long, Long> = emptyMap()
+    private var sinceSnapshot: Map<Long, Long> = emptyMap()
+
     @StoreThread
     fun init() {
         StoreThreadScheduler.assertCurrentThread()
@@ -34,6 +39,7 @@ class StoreUserRelationships(
             relationshipsState = UserRelationshipsState.Loaded(LinkedHashMap(it))
             nicknames = LinkedHashMap(nicknamesCache.get())
             ignored = LinkedHashSet(ignoredCache.get())
+            since = LinkedHashMap(sinceCache.get())
             markChanged()
         }
     }
@@ -45,6 +51,9 @@ class StoreUserRelationships(
     fun getNickname(userId: Long): String? = nicknamesSnapshot[userId]
 
     fun getNicknames(): Map<Long, String> = nicknamesSnapshot
+
+    /** When the friendship started, for friends whose relationship carried a `since`. */
+    fun getSince(userId: Long): UtcDateTime? = sinceSnapshot[userId]?.let(::UtcDateTime)
 
     /** Ids the viewer has ignored, excluding blocked users. */
     fun getIgnoredUserIds(): Set<Long> = ignoredSnapshot
@@ -66,6 +75,9 @@ class StoreUserRelationships(
             relationship.nickname?.takeUnless(String::isBlank)?.let { relationship.id to it }
         }.toMap()
         ignored = relationships.filter { it.userIgnored }.map { it.id }.toSet()
+        since = relationships.mapNotNull { relationship ->
+            relationship.since?.let { relationship.id to it.dateTimeMillis }
+        }.toMap()
         markChanged()
     }
 
@@ -74,6 +86,7 @@ class StoreUserRelationships(
         relationshipsState = UserRelationshipsState.Unloaded
         nicknames = emptyMap()
         ignored = emptySet()
+        since = emptyMap()
         markChanged()
     }
 
@@ -84,6 +97,10 @@ class StoreUserRelationships(
             if (nickname == null) nicks.remove(relationship.id) else nicks[relationship.id] = nickname
         },
         ignores = { if (relationship.userIgnored) it.add(relationship.id) else it.remove(relationship.id) },
+        sinces = { sinces ->
+            val started = relationship.since?.dateTimeMillis
+            if (started == null) sinces.remove(relationship.id) else sinces[relationship.id] = started
+        },
     )
 
     /**
@@ -96,6 +113,7 @@ class StoreUserRelationships(
         types = { it.remove(relationship.id) },
         nicks = { it.remove(relationship.id) },
         ignores = { if (!relationship.userIgnored) it.remove(relationship.id) },
+        sinces = { it.remove(relationship.id) },
     )
 
     /**
@@ -108,6 +126,7 @@ class StoreUserRelationships(
         types = {},
         nicks = {},
         ignores = { if (isIgnored) it.add(userId) else it.remove(userId) },
+        sinces = {},
     )
 
     fun observe(): Observable<Map<Long, Int>> = observationDeck.connectRx(this) { getRelationships() }.distinctUntilChanged()
@@ -149,6 +168,7 @@ class StoreUserRelationships(
         }
         nicknamesSnapshot = LinkedHashMap(nicknames).also(nicknamesCache::set)
         ignoredSnapshot = LinkedHashSet(ignored).also(ignoredCache::set)
+        sinceSnapshot = LinkedHashMap(since).also(sinceCache::set)
     }
 
     @StoreThread
@@ -156,6 +176,7 @@ class StoreUserRelationships(
         types: (MutableMap<Long, Int>) -> Unit,
         nicks: (MutableMap<Long, String>) -> Unit,
         ignores: (MutableSet<Long>) -> Unit,
+        sinces: (MutableMap<Long, Long>) -> Unit,
     ) {
         StoreThreadScheduler.assertCurrentThread()
         val beforeTypes = (relationshipsState as? UserRelationshipsState.Loaded)?.relationships.orEmpty()
@@ -173,6 +194,7 @@ class StoreUserRelationships(
         const val CACHE_KEY = "STORE_USER_RELATIONSHIPS_V9"
         const val NICKNAMES_CACHE_KEY = "STORE_USER_RELATIONSHIP_NICKNAMES_V1"
         const val IGNORED_CACHE_KEY = "STORE_USER_RELATIONSHIP_IGNORED_V1"
+        const val SINCE_CACHE_KEY = "STORE_USER_RELATIONSHIP_SINCE_V1"
         private val UNLOADED_SENTINEL = mapOf(-1L to -1)
     }
 }

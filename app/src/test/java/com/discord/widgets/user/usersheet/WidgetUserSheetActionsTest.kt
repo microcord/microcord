@@ -63,7 +63,6 @@ class WidgetUserSheetActionsTest {
         assertTrue(ordinary.showActions)
         assertTrue(ordinary.showMessage)
         assertTrue(ordinary.showCall)
-        assertTrue(ordinary.showVideo)
         assertTrue(ordinary.showAddFriend)
         assertTrue(ordinary.showMore)
 

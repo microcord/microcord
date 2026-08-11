@@ -455,6 +455,14 @@ object RestAPIParams {
     /** Body of `POST auth/sessions/logout`; 1-64 session id hashes. */
     data class LogoutAuthSessions(val sessionIdHashes: List<String>)
 
+    /**
+     * Body of `PUT users/@me/clan`, which sets the server tag worn next to the name.
+     *
+     * The two fields always move together: clearing sends a null guild with [identityEnabled]
+     * false, and there is no "keep the guild but hide the tag" state in the editor.
+     */
+    data class GuildIdentity(val identityGuildId: Long?, val identityEnabled: Boolean)
+
     /** Identifies a suspended account to the endpoints it can still reach. */
     data class SuspendedUser(val token: String) {
         override fun toString(): String = "SuspendedUser(token=<redacted>)"
@@ -515,6 +523,7 @@ object RestAPIParams {
         val mute: Boolean? = null,
         val deaf: Boolean? = null,
         val channelId: Long? = null,
+        val flags: Int? = null,
     ) {
         companion object {
             fun createWithNick(nick: String?) = GuildMember(nick = nick)

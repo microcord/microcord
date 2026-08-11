@@ -316,10 +316,10 @@ class UserProfileContractsTest {
     fun profileThemeDerivesDesktopModeSurfacesTextAndContrastButtons() {
         val dark = ProfileThemeColors.from(0xFF123456.toInt(), 0xFF654321.toInt(), true)
         assertTrue(dark.isDark)
-        assertEquals(0xFF1C1718.toInt(), dark.bodySurface)
+        assertEquals(0xFF071422.toInt(), dark.bodySurface)
         assertEquals(dark.headerSurface, dark.bodySurface)
         assertEquals(0x29000000, dark.sectionOverlay)
-        assertEquals(0x4D000000, dark.noteOverlay)
+        assertEquals(0x29000000, dark.noteOverlay)
         assertEquals(0x14FFFFFF, dark.borderOverlay)
         assertEquals(0xF5FFFFFF.toInt(), dark.textDefault)
         assertTrue(ProfileThemeColors.contrastRatio(dark.textDefault, dark.bodySurface) >= 4.5)
@@ -330,7 +330,7 @@ class UserProfileContractsTest {
 
         val bright = ProfileThemeColors.from(0xFFF0F0F0.toInt(), 0xFFE0D0C0.toInt(), false)
         assertFalse(bright.isDark)
-        assertEquals(0xFFE9E0D8.toInt(), bright.bodySurface)
+        assertEquals(0xFFF9F9F9.toInt(), bright.bodySurface)
         assertEquals(0x3DFFFFFF, bright.sectionOverlay)
         assertEquals(0xF5000000.toInt(), bright.textDefault)
         assertTrue(ProfileThemeColors.contrastRatio(bright.textDefault, bright.bodySurface) >= 4.5)

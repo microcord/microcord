@@ -11,8 +11,11 @@ import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.cardview.widget.CardView
+import androidx.core.content.ContextCompat
+import androidx.core.view.updateLayoutParams
 import androidx.core.view.ViewCompat
 import androidx.core.widget.ImageViewCompat
 import androidx.core.widget.TextViewCompat
@@ -20,6 +23,7 @@ import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.api.channel.isDM
+import com.discord.models.domain.ModelUserRelationship
 import com.discord.app.AppActivity
 import com.discord.app.AppBottomSheet
 import com.discord.databinding.WidgetUserSheetBinding
@@ -39,11 +43,14 @@ import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.dimen.dpToPixels
+import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.utilities.textprocessing.AstRenderer
 import com.discord.utilities.textprocessing.MessageRenderContext
+import com.discord.utilities.time.TimeUtils
 import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.utilities.uri.UriHandler
 import com.discord.widgets.guildcommunicationdisabled.start.WidgetDisableGuildCommunication
@@ -63,6 +70,7 @@ import com.discord.widgets.user.profile.UserProfileHeaderViewModel
 import com.discord.widgets.user.profile.ProfileThemeColors
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
+import com.google.android.material.textfield.TextInputLayout
 import com.google.android.material.tabs.TabLayout
 import rx.subscriptions.CompositeSubscription
 
@@ -113,8 +121,6 @@ class WidgetUserSheet : AppBottomSheet() {
     private var renderedBioAst: List<com.discord.simpleast.core.node.Node<MessageRenderContext>>? = null
 
     /** Set while the note field is being populated from state, so the watcher ignores it. */
-    private var settingNote = false
-    private var noteDirty = false
     private var defaultButtonBackgroundTints = emptyMap<MaterialButton, ColorStateList?>()
     private var defaultButtonTextColors = emptyMap<MaterialButton, ColorStateList>()
     private var defaultTextColors = emptyMap<TextView, ColorStateList>()
@@ -169,7 +175,9 @@ class WidgetUserSheet : AppBottomSheet() {
             WidgetKickUser.REQUEST_KEY_KICKED,
             viewLifecycleOwner,
         ) { _, _ -> dismiss() }
-        bindNoteField()
+        WidgetEditUserNote.bindResult(this) { note ->
+            viewModel.saveUserNote(requireContext(), note)
+        }
         bindActionButtons()
         binding.userSheetProfileHeaderView
             .setOnBadgeClick(Badge.onBadgeClick(parentFragmentManager, requireContext()))
@@ -231,7 +239,6 @@ class WidgetUserSheet : AppBottomSheet() {
     }
 
     override fun onPause() {
-        saveNote()
         StoreStream.getGuildSubscriptions()
             .unsubscribeUser(argumentsOrDefault.getLong(ARG_GUILD_ID), argumentsOrDefault.getLong(ARG_USER_ID))
         super.onPause()
@@ -261,6 +268,7 @@ class WidgetUserSheet : AppBottomSheet() {
         configureStageActions(loaded)
         configurePrivateProfile(loaded)
         configureAboutMe(loaded)
+        configureSinceDates(loaded)
         configureVoiceSection(loaded)
         configureGuildSection(loaded)
         configureConnectionsSection(loaded)
@@ -321,8 +329,9 @@ class WidgetUserSheet : AppBottomSheet() {
         // Reference paints one continuous fill behind the whole sheet; the name block sits on it
         // rather than on a surface of its own.
         val header = colors?.headerSurface ?: body
-        val card = colors?.sectionOverlay
-            ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundPrimary)
+        // Sections lift off whatever is behind them rather than using an opaque token, which
+        // collapses into the background on the pure black themes.
+        val card = surfaceColor()
 
         // The reference runs a primary-to-secondary gradient behind the whole profile, so the blocks
         // that used to carry their own fill go transparent and let it through.
@@ -340,11 +349,16 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetProfileAddToServerContainer.setBackgroundColor(block)
         binding.userSheetProfileEditContainer.setBackgroundColor(block)
         binding.userSheetProfileActionsContainer.setBackgroundColor(block)
-        binding.userSheetProfileTabs.setBackgroundColor(block)
+        binding.userSheetAdminHeader.setBackgroundColor(block)
+        binding.userSheetProfileTabsContainer.setBackgroundColor(block)
         val tabText = colors?.textDefault
             ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorHeaderPrimary)
         val tabMuted = colors?.textMuted
             ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorTextMuted)
+        val tabSelected = colors?.textDefault
+            ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorTextBrand)
+        val border = colors?.borderOverlay
+            ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundModifierAccent)
         binding.userSheetWidgetsView.setProfileColors(
             card = card,
             text = tabText,
@@ -352,8 +366,9 @@ class WidgetUserSheet : AppBottomSheet() {
             border = colors?.borderOverlay
                 ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundAccent),
         )
-        binding.userSheetProfileTabs.setTabTextColors(tabMuted, tabText)
-        binding.userSheetProfileTabs.setSelectedTabIndicatorColor(tabText)
+        binding.userSheetProfileTabs.setTabTextColors(tabMuted, tabSelected)
+        binding.userSheetProfileTabs.setSelectedTabIndicatorColor(tabSelected)
+        binding.userSheetProfileTabsRule.setBackgroundColor(border)
         profileCards().forEach { it.setCardBackgroundColor(card) }
         binding.userSheetProfileHeaderView.badgeRowColor = card
         profileTextViews().forEach { text ->
@@ -372,13 +387,7 @@ class WidgetUserSheet : AppBottomSheet() {
         val iconColor = colors?.textDefault
             ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorInteractiveNormal)
         tintTaggedIcons(iconColor)
-        profileActionButtons().forEach { button ->
-            button.setTextColor(colors?.textDefault?.let(ColorStateList::valueOf) ?: defaultTextColors.getValue(button))
-            TextViewCompat.setCompoundDrawableTintList(
-                button,
-                colors?.textDefault?.let(ColorStateList::valueOf),
-            )
-        }
+        styleActionButtons(colors)
         profileButtons().forEach { button ->
             button.backgroundTintList = colors?.button?.let(ColorStateList::valueOf)
                 ?: defaultButtonBackgroundTints[button]
@@ -418,17 +427,59 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.voiceSettingsViewCard,
         binding.userSheetAdminCard,
         binding.userSheetConnectionsCard,
+        binding.userSheetMemberSinceCard,
+        binding.userSheetFriendsSinceCard,
     )
 
     private fun profileButtons(): List<MaterialButton> = listOf(binding.userSheetProfileAddToServerButton)
 
-    private fun profileActionButtons(): List<Button> = listOf(
+    private fun profileActionButtons(): List<MaterialButton> = listOf(
         binding.userSheetMessageActionButton,
         binding.userSheetCallActionButton,
-        binding.userSheetVideoActionButton,
         binding.userSheetAddFriendActionButton,
         binding.userSheetPendingFriendRequestActionButton,
     )
+
+    /**
+     * Add friend is the only filled button on a plain profile; a custom theme fills every one of
+     * them with the contrast corrected profile colour instead.
+     */
+    private fun styleActionButtons(colors: ProfileThemeColors?) {
+        val radius = binding.aboutMeCard.radius.toInt()
+        val secondaryFill =
+            ColorCompat.getThemedColorStateListDefault(requireContext(), R.attr.colorButtonSecondary)
+        val secondaryText = ColorCompat.getThemedColor(requireContext(), R.attr.colorInteractiveActive)
+        val border = borderColor()
+        profileActionButtons().forEach { button ->
+            val filled = colors != null || button.id == R.id.user_sheet_add_friend_action_button
+            val fill = when {
+                !filled -> secondaryFill
+                else -> colors?.button ?: ContextCompat.getColor(requireContext(), R.color.brand_500)
+            }
+            val content = if (filled) Color.WHITE else secondaryText
+            button.cornerRadius = radius
+            button.backgroundTintList = ColorStateList.valueOf(fill)
+            button.setTextColor(content)
+            button.iconTint = ColorStateList.valueOf(content)
+            button.strokeWidth = if (filled) 0 else 1
+            button.strokeColor = ColorStateList.valueOf(border)
+        }
+    }
+
+    /** Beside a full width add friend or pending button, message and call are icons only. */
+    private fun compactActionButtons(compact: Boolean) {
+        listOf(
+            binding.userSheetMessageActionButton to R.string.user_profile_message,
+            binding.userSheetCallActionButton to R.string.user_profile_audio,
+        ).forEach { (button, label) ->
+            button.text = if (compact) "" else getString(label)
+            button.iconPadding = if (compact) 0 else dpToPixels(6)
+            button.updateLayoutParams<LinearLayout.LayoutParams> {
+                width = if (compact) dpToPixels(48) else 0
+                weight = if (compact) 0f else 1f
+            }
+        }
+    }
 
     private fun bindProfileTabs() {
         binding.root.onHorizontalDrag = ::dragProfilePages
@@ -459,7 +510,7 @@ class WidgetUserSheet : AppBottomSheet() {
         }
         binding.userSheetWidgetsView.bind(widgets, state.applications, state.applicationIdentities, state.games)
         val hasBoard = widgets.isNotEmpty()
-        binding.userSheetProfileTabs.visibility = if (hasBoard) View.VISIBLE else View.GONE
+        binding.userSheetProfileTabsContainer.visibility = if (hasBoard) View.VISIBLE else View.GONE
         if (!hasBoard && showingWidgets) {
             settlingProfilePage = false
             showingWidgets = false
@@ -478,7 +529,7 @@ class WidgetUserSheet : AppBottomSheet() {
     }
 
     private fun dragProfilePages(distance: Float) {
-        if (binding.userSheetProfileTabs.visibility != View.VISIBLE) return
+        if (binding.userSheetProfileTabsContainer.visibility != View.VISIBLE) return
         val width = binding.userSheetProfilePages.width.toFloat().takeIf { it > 0f } ?: return
         val allowed = if (showingWidgets) distance.coerceAtLeast(0f) else distance.coerceAtMost(0f)
         if (allowed == 0f) return
@@ -497,7 +548,7 @@ class WidgetUserSheet : AppBottomSheet() {
     }
 
     private fun releaseProfilePages(distance: Float, commit: Boolean) {
-        if (binding.userSheetProfileTabs.visibility != View.VISIBLE) return
+        if (binding.userSheetProfileTabsContainer.visibility != View.VISIBLE) return
         val width = binding.userSheetProfilePages.width.toFloat().takeIf { it > 0f } ?: return
         val wasShowingWidgets = showingWidgets
         val validDirection = if (wasShowingWidgets) distance > 0f else distance < 0f
@@ -540,7 +591,10 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.aboutMeHeader,
         binding.userSheetProfileVoiceSettingsHeader,
         binding.userSheetGuildHeader,
+        binding.userSheetAdminHeader,
         binding.userSheetConnectionsHeader,
+        binding.userSheetMemberSinceHeader,
+        binding.userSheetFriendsSinceHeader,
         binding.userSheetNoteHeader,
         binding.userSheetIncomingFriendRequestHeader,
     )
@@ -554,6 +608,12 @@ class WidgetUserSheet : AppBottomSheet() {
     }
 
     private fun isDarkTheme() = StoreStream.getUserSettingsSystem().isDarkTheme()
+
+    private fun surfaceColor() = profileThemeColors?.sectionOverlay
+        ?: if (isDarkTheme()) SURFACE_OVERLAY_DARK else SURFACE_OVERLAY_LIGHT
+
+    private fun borderColor() = profileThemeColors?.borderOverlay
+        ?: if (isDarkTheme()) BORDER_OVERLAY_DARK else BORDER_OVERLAY_LIGHT
 
     private fun configureProfileEffect(state: UserProfileHeaderViewModel.ViewState.Loaded) {
         val effect = requireNotNull(binding.userSheetProfileEffect)
@@ -637,7 +697,7 @@ class WidgetUserSheet : AppBottomSheet() {
             richPresence = state.richPresence,
             userInSameVoiceChannel = state.userInSameVoiceChannel,
         )
-        holder.applyProfileTheme(profileThemeColors)
+        holder.applyProfileTheme(profileThemeColors, surfaceColor(), borderColor())
         holder.configureUiTimestamp(activity, this)
     }
 
@@ -653,12 +713,11 @@ class WidgetUserSheet : AppBottomSheet() {
     ) {
         val visibility = state.actionVisibility
         binding.userSheetProfileActionsContainer.show(visibility.showActions)
-        binding.userSheetProfileActionsDivider.show(visibility.showActions)
         binding.userSheetMessageActionButton.show(visibility.showMessage)
         binding.userSheetCallActionButton.show(visibility.showCall)
-        binding.userSheetVideoActionButton.show(visibility.showVideo)
         binding.userSheetAddFriendActionButton.show(visibility.showAddFriend)
         binding.userSheetPendingFriendRequestActionButton.show(visibility.showPendingRequest)
+        compactActionButtons(visibility.showAddFriend || visibility.showPendingRequest)
         binding.userSheetIncomingFriendRequestHeader.show(visibility.showIncomingRequest)
         binding.userSheetFriendRequestIncomingContainer.show(visibility.showIncomingRequest)
         binding.userSheetMoreButton.show(visibility.showMore)
@@ -695,6 +754,37 @@ class WidgetUserSheet : AppBottomSheet() {
             R.string.user_profile_private_info_banner,
             "username" to state.user.getDisplayName(state.guildMember?.nick),
         )
+    }
+
+    private fun configureSinceDates(state: WidgetUserSheetViewModel.ViewState.Loaded) {
+        binding.userSheetMemberSinceHeader.show(true)
+        binding.userSheetMemberSinceCard.show(true)
+        binding.userSheetMemberSinceDiscord.text =
+            TimeUtils.toMediumDate(TimeUtils.parseSnowflake(state.user.id))
+
+        val guildJoined = state.guildMember?.joinedAt?.dateTimeMillis
+        val guildId = state.currentGuildId?.takeIf { it > 0L }
+        val showGuild = guildJoined != null && guildId != null
+        binding.userSheetMemberSinceDivider.show(showGuild)
+        binding.userSheetMemberSinceGuildIcon.show(showGuild)
+        binding.userSheetMemberSinceGuild.show(showGuild)
+        if (showGuild) {
+            binding.userSheetMemberSinceGuild.text = TimeUtils.toMediumDate(guildJoined!!)
+            IconUtils.setIcon(
+                binding.userSheetMemberSinceGuildIcon,
+                IconUtils.getForGuild(guildId, state.guildIcon, allowAnimation = false),
+            )
+        }
+
+        // Only an actual friendship has a start date, and only ones made since the field
+        // existed carry one.
+        val friendsSince = StoreStream.getUserRelationships().getSince(state.user.id)
+            ?.takeIf { state.userRelationshipType == ModelUserRelationship.TYPE_FRIEND }
+        binding.userSheetFriendsSinceHeader.show(friendsSince != null)
+        binding.userSheetFriendsSinceCard.show(friendsSince != null)
+        friendsSince?.let {
+            binding.userSheetFriendsSince.text = TimeUtils.toMediumDate(it.dateTimeMillis)
+        }
     }
 
     private fun configureAboutMe(state: WidgetUserSheetViewModel.ViewState.Loaded) {
@@ -756,15 +846,14 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetGuildHeader.show(showRoles)
         binding.userSheetRolesList.show(showRoles)
         if (showRoles) {
-            // The reference labels this section with the guild; no "Roles in {guild}" format string
-            // survives in the recovered resources, so the plain "Roles" heading is the fallback.
-            binding.userSheetGuildHeader.text = state.guildSectionHeaderText ?: getString(R.string.roles)
+            binding.userSheetGuildHeader.setText(R.string.roles)
             binding.userSheetRolesList.updateView(
                 state.roleItems,
                 state.currentGuildId ?: 0L,
                 profileThemeColors,
             )
         }
+        binding.userSheetAdminHeader.show(showAdmin)
         binding.userSheetAdminCard.show(showAdmin)
         binding.userSheetAdminView.apply {
             visibility = if (showAdmin) View.VISIBLE else View.GONE
@@ -790,16 +879,14 @@ class WidgetUserSheet : AppBottomSheet() {
     }
 
     private fun configureNote(state: WidgetUserSheetViewModel.ViewState.Loaded) {
-        val wrap = binding.userSheetNoteTextFieldWrap
-        val input = binding.userSheetNoteTextField
         val loading = state.userNoteFetchState is StoreUserNotes.UserNoteState.Loading
-        wrap.isEnabled = !loading
-        wrap.hint = getString(if (loading) R.string.loading_note else R.string.note_placeholder_mobile)
-        if (noteDirty || loading) return
-        if (input.text?.toString() == state.userNote) return
-        settingNote = true
-        input.setText(state.userNote)
-        settingNote = false
+        val note = state.userNote.orEmpty()
+        val row = binding.userSheetNoteText
+        row.text = note
+        row.isEnabled = !loading
+        row.setOnClickListener {
+            if (!loading) WidgetEditUserNote.show(parentFragmentManager, note)
+        }
     }
 
     /** Copy-ID row, shown only with developer mode on. */
@@ -812,7 +899,6 @@ class WidgetUserSheet : AppBottomSheet() {
             viewModel.launchMessage()
         }
         binding.userSheetCallActionButton.setOnClickListener { viewModel.launchVoiceCall() }
-        binding.userSheetVideoActionButton.setOnClickListener { viewModel.launchVideoCall() }
         binding.userSheetAddFriendActionButton.setOnClickListener {
             viewModel.addRelationship(null, username(), R.string.friend_request_sent)
         }
@@ -893,6 +979,7 @@ class WidgetUserSheet : AppBottomSheet() {
                 viewModel.disableCommunication()
             }
         }
+        view.setOnVerifyMember(viewModel::toggleMemberVerification)
         view.setOnServerMute(viewModel::guildMuteUser)
         view.setOnServerDeafen(viewModel::guildDeafenUser)
         view.setOnServerMove(viewModel::guildMoveForUser)
@@ -905,20 +992,6 @@ class WidgetUserSheet : AppBottomSheet() {
         setOnVolumeChange { volume, _ -> viewModel.setUserOutputVolume(volume) }
     }
 
-    private fun bindNoteField() {
-        val note = binding.userSheetNoteTextField
-        // The reference forces a plain text input so the note never gets autocorrected.
-        note.setRawInputType(EditorInfo.TYPE_CLASS_TEXT)
-        note.setOnFocusChangeListener { _, focused -> if (!focused) saveNote() }
-        note.setOnEditorActionListener { _, action, _ ->
-            if (action != EditorInfo.IME_ACTION_DONE) return@setOnEditorActionListener false
-            saveNote()
-            note.clearFocus()
-            true
-        }
-        note.doOnTextChanged { _, _, _, _ -> if (!settingNote) noteDirty = true }
-    }
-
     private fun markAccessibilityHeadings() {
         listOf(
             binding.aboutMeHeader,
@@ -928,13 +1001,6 @@ class WidgetUserSheet : AppBottomSheet() {
             binding.userSheetNoteHeader,
             binding.userSheetIncomingFriendRequestHeader,
         ).forEach { ViewCompat.setAccessibilityHeading(it, true) }
-    }
-
-    private fun saveNote() {
-        if (!noteDirty) return
-        val text = _binding?.userSheetNoteTextField?.text?.toString().orEmpty()
-        viewModel.saveUserNote(requireContext(), text)
-        noteDirty = false
     }
 
     private fun username(): String =
@@ -956,11 +1022,6 @@ class WidgetUserSheet : AppBottomSheet() {
             is WidgetUserSheetViewModel.Event.LaunchVoiceCall -> {
                 dismiss()
                 onCall?.invoke(event.channelId, false)
-            }
-
-            is WidgetUserSheetViewModel.Event.LaunchVideoCall -> {
-                dismiss()
-                onCall?.invoke(event.channelId, true)
             }
 
             is WidgetUserSheetViewModel.Event.LaunchEditMember ->
@@ -1054,6 +1115,11 @@ class WidgetUserSheet : AppBottomSheet() {
         private const val ARG_IS_VOICE_CONTEXT = "ARG_IS_VOICE_CONTEXT"
         private const val ARG_STREAM_PREVIEW_CLICK_BEHAVIOR = "ARG_STREAM_PREVIEW_CLICK_BEHAVIOR"
         private const val ARG_FRIEND_TOKEN = "ARG_FRIEND_TOKEN"
+        private const val SURFACE_OVERLAY_DARK = 0x1FFFFFFF
+        private val SURFACE_OVERLAY_LIGHT = 0xB8FFFFFF.toInt()
+        private const val BORDER_OVERLAY_DARK = 0x14FFFFFF
+        private const val BORDER_OVERLAY_LIGHT = 0x14000000
+
         private const val MAIN_TAB = 0
         private const val BOARD_TAB = 1
         private const val PAGE_SETTLE_MS = 180L
@@ -1113,55 +1179,24 @@ internal fun applyUserSheetNoteTheme(
     colors: ProfileThemeColors?,
     defaults: UserSheetNoteTheme,
 ) {
-    // Left translucent, as every other profile card is: flattening it against one point of the
-    // gradient makes an opaque block that only matches the background at that point.
-    binding.userSheetNoteCard.setCardBackgroundColor(colors?.noteOverlay ?: defaults.cardBackgroundColor)
-    (binding.userSheetNoteCard as? MaterialCardView)?.strokeColor =
-        colors?.borderOverlay ?: defaults.cardStrokeColor
-    binding.userSheetNoteTextFieldWrap.setBoxBackgroundColorStateList(
-        ColorStateList.valueOf(if (colors != null) Color.TRANSPARENT else defaults.boxBackgroundColor),
-    )
-    binding.userSheetNoteTextFieldWrap.boxStrokeColor =
-        colors?.borderOverlay ?: defaults.boxStrokeColor
-
+    // Nothing but text now, so the profile palette is all it needs: no card, no filled input, and
+    // so none of the Material surfaces that used to paint over the gradient.
     binding.userSheetNoteHeader.setTextColor(
         colors?.textMuted?.let(ColorStateList::valueOf) ?: defaults.headerTextColor,
     )
-    binding.userSheetNoteTextField.setTextColor(
-        colors?.textDefault?.let(ColorStateList::valueOf) ?: defaults.inputTextColor,
+    binding.userSheetNoteText.setTextColor(
+        colors?.textDefault?.let(ColorStateList::valueOf) ?: defaults.noteTextColor,
     )
-    binding.userSheetNoteTextField.setHintTextColor(
-        colors?.textMuted?.let(ColorStateList::valueOf) ?: defaults.inputHintTextColor,
-    )
-    binding.userSheetNoteTextFieldWrap.defaultHintTextColor =
-        colors?.textMuted?.let(ColorStateList::valueOf) ?: defaults.layoutHintTextColor
-    binding.userSheetNoteTextFieldWrap.counterTextColor =
-        colors?.textMuted?.let(ColorStateList::valueOf) ?: defaults.counterTextColor
 }
 
 internal data class UserSheetNoteTheme(
-    val cardBackgroundColor: Int,
-    val cardStrokeColor: Int,
-    val boxBackgroundColor: Int,
-    val boxStrokeColor: Int,
     val headerTextColor: ColorStateList,
-    val inputTextColor: ColorStateList,
-    val inputHintTextColor: ColorStateList,
-    val layoutHintTextColor: ColorStateList?,
-    val counterTextColor: ColorStateList?,
+    val noteTextColor: ColorStateList,
 ) {
     companion object {
         fun from(binding: WidgetUserSheetBinding) = UserSheetNoteTheme(
-            cardBackgroundColor = binding.userSheetNoteCard.cardBackgroundColor.defaultColor,
-            cardStrokeColor = (binding.userSheetNoteCard as? MaterialCardView)?.strokeColor
-                ?: Color.TRANSPARENT,
-            boxBackgroundColor = binding.userSheetNoteTextFieldWrap.boxBackgroundColor,
-            boxStrokeColor = binding.userSheetNoteTextFieldWrap.boxStrokeColor,
             headerTextColor = binding.userSheetNoteHeader.textColors,
-            inputTextColor = binding.userSheetNoteTextField.textColors,
-            inputHintTextColor = binding.userSheetNoteTextField.hintTextColors,
-            layoutHintTextColor = binding.userSheetNoteTextFieldWrap.defaultHintTextColor,
-            counterTextColor = binding.userSheetNoteTextFieldWrap.counterTextColor,
+            noteTextColor = binding.userSheetNoteText.textColors,
         )
     }
 }

@@ -16,6 +16,7 @@ import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
 import com.discord.models.user.MeUser
 import com.discord.nullserializable.NullSerializable
+import com.discord.restapi.RestAPIParams
 import com.discord.restapi.RestAPIInterface
 import com.discord.simpleast.core.node.Node
 import com.discord.simpleast.core.parser.Parser
@@ -110,13 +111,23 @@ class SettingsUserProfileViewModel(
             val currentThemeColors: NullSerializable<List<Int>>? = null,
             val currentProfileEffect: NullSerializable<Long>? = null,
             val currentProfileFrame: NullSerializable<Long>? = null,
+            val currentPrimaryGuildId: NullSerializable<Long>? = null,
         ) : ViewState() {
+
+            /** The guild whose tag is worn, pending selection first, else what the account has. */
+            val selectedPrimaryGuildId: Long?
+                get() = when (val pending = currentPrimaryGuildId) {
+                    null -> user.primaryGuild?.takeIf { it.identityEnabled == true }?.identityGuildId
+                    is NullSerializable.Null -> null
+                    is NullSerializable.Value -> pending.value
+                }
             /** The metadata this screen edits: the guild profile in a guild, the global one otherwise. */
             val savedProfile = if (meMember != null) userProfile.guildMemberProfile else userProfile.userProfile
             val isDirty = currentAvatar != null || currentBannerImage != null ||
                 currentBannerColorHex != null || isBioChanged || isPronounsChanged ||
                 currentAvatarDecoration != null || currentNameplate != null ||
                 currentThemeColors != null || currentProfileEffect != null || currentProfileFrame != null ||
+                currentPrimaryGuildId != null ||
                 (meMember != null && currentNickname.orEmpty() != meMember.nick.orEmpty()) ||
                 (meMember == null && isDisplayNameChanged)
 
@@ -453,7 +464,7 @@ class SettingsUserProfileViewModel(
     @MainThread
     fun saveChanges(context: Context) {
         val state = viewState as? ViewState.Loaded ?: return
-        val requests = listOfNotNull(identityRequest(state), profileRequest(state))
+        val requests = listOfNotNull(identityRequest(state), profileRequest(state), primaryGuildRequest(state))
         if (requests.isEmpty()) {
             eventSubject.onNext(Event.UserUpdateRequestCompleted)
             return
@@ -476,6 +487,39 @@ class SettingsUserProfileViewModel(
                 updateViewState(updated)
                 eventSubject.onNext(Event.UserUpdateRequestCompleted)
             }
+    }
+
+    /**
+     * Adopts or drops the server tag.
+     *
+     * Its own request rather than part of the user patch: the tag has a dedicated endpoint, and the
+     * two body fields always move together — clearing is a null guild with the identity disabled,
+     * because there is no "keep the guild but hide the tag" state.
+     */
+    private fun primaryGuildRequest(state: ViewState.Loaded): Observable<SavedEdit>? {
+        val pending = state.currentPrimaryGuildId ?: return null
+        val guildId = (pending as? NullSerializable.Value)?.value
+        return api.setGuildIdentity(RestAPIParams.GuildIdentity(guildId, guildId != null)).map { user ->
+            storeUserProfile.updateUser(user)
+            val edit: SavedEdit = { it.copy(currentPrimaryGuildId = null) }
+            edit
+        }
+    }
+
+    @MainThread
+    fun selectPrimaryGuild(guildId: Long?) {
+        val state = viewState as? ViewState.Loaded ?: return
+        val saved = state.user.primaryGuild?.takeIf { it.identityEnabled == true }?.identityGuildId
+        updateViewState(
+            state.copy(
+                // Choosing what the account already wears is not a change to save.
+                currentPrimaryGuildId = when {
+                    guildId == saved -> null
+                    guildId == null -> NullSerializable.Null()
+                    else -> NullSerializable.Value(guildId)
+                },
+            ),
+        )
     }
 
     private fun identityRequest(state: ViewState.Loaded): Observable<SavedEdit>? {

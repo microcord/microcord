@@ -52,7 +52,12 @@ class StoreUserNotes(
     }
 
     @StoreThread
-    fun handleConnectionOpen() = clear()
+    /**
+     * Deliberately not a [clear]: reconnecting does not change who is logged in, and READY carries
+     * no notes to refill the cache with, so dropping them here loses every fetched note until the
+     * profile is opened again. [handlePreLogout] still clears on the case that matters.
+     */
+    fun handleConnectionOpen() = Unit
 
     @StoreThread
     fun handlePreLogout() = clear()

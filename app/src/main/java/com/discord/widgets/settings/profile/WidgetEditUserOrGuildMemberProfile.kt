@@ -17,11 +17,13 @@ import com.discord.api.user.Nameplate
 import com.discord.i18n.I18nHooks
 import com.discord.nullserializable.NullSerializable
 import com.discord.stores.StoreCollectibles
+import androidx.core.view.isVisible
 import com.discord.stores.StoreStream
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.icon.IconUtils
 import com.discord.widgets.settings.premium.PremiumUpsellDialog
 import com.discord.views.AvatarDecorationView
+import com.discord.views.GuildTagView
 import com.discord.views.NameplateView
 import com.discord.widgets.user.profile.ProfileEffectView
 import com.facebook.drawee.view.SimpleDraweeView
@@ -101,6 +103,11 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
     private lateinit var nameplateCard: CardView
     private lateinit var nameplatePreview: NameplateView
     private lateinit var nameplateValue: TextView
+    private lateinit var primaryGuildHeader: TextView
+    private lateinit var primaryGuildCard: CardView
+    private lateinit var primaryGuildIcon: SimpleDraweeView
+    private lateinit var primaryGuildValue: TextView
+    private lateinit var primaryGuildTagPreview: GuildTagView
     private lateinit var save: FloatingActionButton
     private lateinit var dimmer: DimmerView
 
@@ -168,6 +175,11 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         nameplateCard = view.findViewById(R.id.nameplate_card)
         nameplatePreview = view.findViewById(R.id.nameplate_preview)
         nameplateValue = view.findViewById(R.id.nameplate_value)
+        primaryGuildHeader = view.findViewById(R.id.primary_guild_header)
+        primaryGuildCard = view.findViewById(R.id.primary_guild_card)
+        primaryGuildIcon = view.findViewById(R.id.primary_guild_icon)
+        primaryGuildValue = view.findViewById(R.id.primary_guild_value)
+        primaryGuildTagPreview = view.findViewById(R.id.primary_guild_tag_preview)
         save = view.findViewById(R.id.save_fab)
         dimmer = view.findViewById(R.id.dimmer_view)
 
@@ -280,12 +292,46 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
                 WidgetEditCollectibleSheet.Kind.PROFILE_FRAME -> viewModel.selectProfileFrame(skuId)
             }
         }
+        WidgetPrimaryGuildSheet.bindResult(this) { guildId -> viewModel.selectPrimaryGuild(guildId) }
         childFragmentManager.setFragmentResultListener(
             ProfileDiscardChangesDialog.REQUEST_KEY,
             viewLifecycleOwner,
         ) { _, _ ->
             discardConfirmed.set(true)
             requireActivity().onBackPressed()
+        }
+    }
+
+    /**
+     * The server tag row, hidden unless some guild can actually lend one.
+     *
+     * The reference omits the row entirely rather than showing an empty picker, and the tag is an
+     * account-wide identity, so it is absent from the per-guild profile editor too.
+     */
+    private fun renderPrimaryGuild(loaded: SettingsUserProfileViewModel.ViewState.Loaded) {
+        val meId = loaded.user.id
+        val eligible = if (loaded.guild != null) {
+            emptyList()
+        } else {
+            WidgetPrimaryGuildSheet.eligibleGuilds(StoreStream.getGuilds().getGuilds().values) { guildId ->
+                StoreStream.getGuilds().getMember(guildId, meId)?.pending == true
+            }
+        }
+        val selectedId = loaded.selectedPrimaryGuildId
+        val selected = eligible.firstOrNull { it.id == selectedId }
+        primaryGuildHeader.isVisible = eligible.isNotEmpty()
+        primaryGuildCard.isVisible = eligible.isNotEmpty()
+        if (eligible.isEmpty()) return
+
+        primaryGuildIcon.isVisible = selected != null
+        if (selected != null) {
+            primaryGuildIcon.setImageURI(IconUtils.getForGuild(selected.id, selected.icon))
+        }
+        primaryGuildValue.text = selected?.name
+            ?: getString(R.string.user_settings_primary_guild_tag_placeholder)
+        primaryGuildTagPreview.bind(selected?.asWornTag())
+        primaryGuildCard.setOnClickListener {
+            WidgetPrimaryGuildSheet.show(parentFragmentManager, selectedId)
         }
     }
 
@@ -401,6 +447,8 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
                 loaded.currentAvatarDecoration.selectedSkuId(loaded.savedAvatarDecoration?.skuId),
             )
         }
+
+        renderPrimaryGuild(loaded)
 
         val nameplate = loaded.previewNameplate
         nameplatePreview.bind(nameplate, NameplateView.Placement.MEMBER_LIST, selected = true)

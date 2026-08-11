@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="vertical" android:background="?attr/colorBackgroundPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="16dp" android:paddingBottom="16dp">
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingBottom="8dp" android:text="@string/user_settings_change_primary_guild_tag_label" android:textSize="@dimen/uikit_textsize_xlarge" android:textColor="?attr/colorHeaderPrimary" style="@style/UiKit.TextView.Semibold"/>
+    <com.discord.utilities.view.recycler.MaxHeightRecyclerView android:id="@+id/primary_guild_sheet_list" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="8dp" android:paddingEnd="8dp" android:clipToPadding="false"/>
+</LinearLayout>

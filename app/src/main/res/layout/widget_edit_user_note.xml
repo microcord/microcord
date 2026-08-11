@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="vertical" style="@style/UiKit.Dialog.Container">
+    <TextView android:id="@+id/edit_user_note_title" android:text="@string/edit_note" style="@style/UiKit.Dialog.Title"/>
+    <View style="@style/UiKit.Divider"/>
+    <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <LinearLayout android:focusable="true" android:focusableInTouchMode="true" style="@style/UiKit.ViewGroup.LinearLayout">
+            <com.google.android.material.textfield.TextInputLayout android:id="@+id/edit_user_note_input" android:layout_margin="16dp" android:hint="@string/note_placeholder_mobile" app:counterEnabled="true" app:counterMaxLength="256" style="@style/UiKit.TextInputLayout.Primary" xmlns:app="http://schemas.android.com/apk/res-auto">
+                <com.google.android.material.textfield.TextInputEditText android:id="@+id/edit_user_note_input_field" android:maxLength="256" style="@style/UiKit.TextInputLayout.EditText.MultiLine"/>
+            </com.google.android.material.textfield.TextInputLayout>
+        </LinearLayout>
+    </ScrollView>
+    <LinearLayout style="@style/UiKit.Dialog.ButtonContainer">
+        <com.google.android.material.button.MaterialButton android:id="@+id/edit_user_note_cancel" android:text="@string/cancel" style="@style/UiKit.Material.Button.Transparent.Fit"/>
+        <com.google.android.material.button.MaterialButton android:id="@+id/edit_user_note_save" android:text="@string/save" style="@style/UiKit.Material.Button.Fit"/>
+    </LinearLayout>
+</LinearLayout>

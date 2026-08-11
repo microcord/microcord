@@ -30,7 +30,8 @@ class GuildTagView @JvmOverloads constructor(
         isSingleLine = true
         setTypeface(typeface, Typeface.BOLD)
     }
-    private val defaultBackgroundColor = ColorCompat.getThemedColor(context, R.attr.colorBackgroundSecondary)
+    private val defaultBackgroundColor =
+        ColorCompat.getThemedColor(context, R.attr.colorBackgroundModifierStrong)
     private val defaultTextColors = label.textColors
 
     init {

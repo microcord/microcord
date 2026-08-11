@@ -9,6 +9,7 @@ import com.discord.api.game.Game
 import com.discord.api.channel.isDM
 import com.discord.api.channel.isMultiUserDM
 import com.discord.api.channel.isStageVoiceChannel
+import com.discord.api.guild.GuildFeature
 import com.discord.api.permission.Permission
 import com.discord.api.role.GuildRole
 import com.discord.api.user.UserProfile
@@ -142,7 +143,6 @@ class WidgetUserSheetViewModel(
             val channelVoiceState: VoiceState?,
             val richPresence: ModelRichPresence?,
             /** "Roles in <guild>", or `null` when there is no guild section. */
-            val guildSectionHeaderText: String?,
             val roleItems: List<GuildRole>,
             val adminViewState: UserProfileAdminView.ViewState?,
             val stageViewState: UserProfileStageActionsView.ViewState,
@@ -206,7 +206,6 @@ class WidgetUserSheetViewModel(
         val showActions: Boolean,
         val showMessage: Boolean,
         val showCall: Boolean,
-        val showVideo: Boolean,
         val showAddFriend: Boolean,
         val showPendingRequest: Boolean,
         val showIncomingRequest: Boolean,
@@ -224,7 +223,6 @@ class WidgetUserSheetViewModel(
 
         data class LaunchMessage(val userId: Long) : Event()
         data class LaunchVoiceCall(val channelId: Long) : Event()
-        data class LaunchVideoCall(val channelId: Long) : Event()
         data class LaunchSpectate(val stream: ModelApplicationStream) : Event()
         data class RequestPermissionsForSpectateStream(val stream: ModelApplicationStream) : Event()
         data class LaunchEditMember(val guildId: Long, val userId: Long) : Event()
@@ -319,7 +317,6 @@ class WidgetUserSheetViewModel(
                 ),
                 channelVoiceState = channelVoiceState,
                 richPresence = storeState.richPresence,
-                guildSectionHeaderText = storeState.guild?.name,
                 roleItems = roleItems,
                 adminViewState = createAdminViewState(
                     channel = storeState.channel,
@@ -328,6 +325,8 @@ class WidgetUserSheetViewModel(
                     manageUserContext = manageUserContext,
                     voiceState = channelVoiceState,
                     isCommunicationDisabled = guildMember?.isCommunicationDisabled() == true,
+                    guild = storeState.guild,
+                    memberFlags = guildMember?.flags ?: 0,
                 ),
                 stageViewState = UserProfileStageActionsView.ViewState(
                     isMe = isMe,
@@ -396,6 +395,8 @@ class WidgetUserSheetViewModel(
         manageUserContext: ManageUserContext?,
         voiceState: VoiceState?,
         isCommunicationDisabled: Boolean,
+        guild: Guild?,
+        memberFlags: Int,
     ): UserProfileAdminView.ViewState? {
         if (channel == null) return null
         val isMultiUserDM = channel.isMultiUserDM()
@@ -408,6 +409,11 @@ class WidgetUserSheetViewModel(
             manageUserContext?.canKick == true
         }
         val showDisableCommunication = manageUserContext?.canDisableCommunication == true && !isMe
+        val isMemberVerified = memberFlags and GUILD_MEMBER_BYPASSES_VERIFICATION != 0
+        val showVerifyMember = !isMe &&
+            manageUserContext?.canVerifyMembers == true &&
+            guild?.hasFeature(GuildFeature.COMMUNITY) == true &&
+            guild.hasFeature(GuildFeature.GUILD_ONBOARDING_EVER_ENABLED)
         val showBan = manageUserContext?.canBan == true
         // Server-muting a stage speaker is done through the stage's own controls instead.
         val showServerMute = voiceState != null &&
@@ -417,12 +423,14 @@ class WidgetUserSheetViewModel(
         val showServerMoveAndDisconnect = voiceState != null && manageUserContext?.canMove == true
 
         val anyAction = showEditMember || showKick || showBan || showDisableCommunication ||
-            showServerMute || showServerDeafen || showServerMoveAndDisconnect
+            showServerMute || showServerDeafen || showServerMoveAndDisconnect || showVerifyMember
 
         return UserProfileAdminView.ViewState(
             showEditMemberButton = showEditMember,
             showKickButton = showKick,
             showDisableCommunicationButton = showDisableCommunication,
+            showVerifyMemberButton = showVerifyMember,
+            isMemberVerified = isMemberVerified,
             isMultiUserDM = isMultiUserDM,
             showBanButton = showBan,
             showServerMuteButton = showServerMute,
@@ -530,8 +538,6 @@ class WidgetUserSheetViewModel(
 
     fun launchVoiceCall() = withPrivateChannel { eventSubject.onNext(Event.LaunchVoiceCall(it)) }
 
-    fun launchVideoCall() = withPrivateChannel { eventSubject.onNext(Event.LaunchVideoCall(it)) }
-
     /**
      * Resolves the DM with this user, opening one if it does not exist yet, then runs [onChannel].
      * The sheet may have been opened from a guild, where no DM channel is in hand.
@@ -627,6 +633,15 @@ class WidgetUserSheetViewModel(
     fun guildMuteUser() = patchGuildMember { guildId ->
         val muted = storeState?.currentChannelVoiceStates?.get(userId)?.mute == true
         restAPI.api.changeGuildMember(guildId, userId, RestAPIParams.GuildMember(mute = !muted))
+    }
+
+    fun toggleMemberVerification() = patchGuildMember { guildId ->
+        val flags = storeState?.computedMembers?.get(userId)?.flags ?: 0
+        restAPI.api.changeGuildMember(
+            guildId,
+            userId,
+            RestAPIParams.GuildMember(flags = flags xor GUILD_MEMBER_BYPASSES_VERIFICATION),
+        )
     }
 
     fun guildDeafenUser() = patchGuildMember { guildId ->
@@ -744,6 +759,8 @@ class WidgetUserSheetViewModel(
 
         private val RELATIONSHIP_CONTEXT: String by lazy { contextPropertiesOf("location" to LOCATION) }
 
+        private const val GUILD_MEMBER_BYPASSES_VERIFICATION = 1 shl 2
+
         /** Guild icon in the "Roles in <guild>" header. */
         private const val GUILD_SECTION_ICON_SIZE_DP = 16
 
@@ -759,7 +776,6 @@ class WidgetUserSheetViewModel(
                 showActions = showActions,
                 showMessage = showActions && channelType != Channel.DM,
                 showCall = showActions,
-                showVideo = showActions,
                 showAddFriend = showActions && !isBot && relationshipType == ModelUserRelationship.TYPE_NONE,
                 showPendingRequest = showActions && relationshipType in setOf(
                     ModelUserRelationship.TYPE_INVITE_INCOMING,

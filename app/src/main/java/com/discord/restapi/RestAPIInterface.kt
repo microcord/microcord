@@ -2144,6 +2144,14 @@ interface RestAPIInterface {
     @PATCH("users/@me/settings")
     fun updateUserSettingsStatus(@Body body: RestAPIParams.UserSettingsStatus): Observable<ModelUserSettings>
 
+    /**
+     * Adopts a guild's server tag, or clears it. Named `clan` after the feature's original name.
+     *
+     * Answers with a partial user, which the caller merges over the current one.
+     */
+    @PUT("users/@me/clan")
+    fun setGuildIdentity(@Body body: RestAPIParams.GuildIdentity): Observable<User>
+
     @GET("safety-hub/@me")
     fun getSafetyHub(): Observable<SafetyHub>
 

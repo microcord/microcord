@@ -167,6 +167,7 @@ data class ManageUserContext(
     val canMove: Boolean,
     val canChangeNickname: Boolean,
     val canDisableCommunication: Boolean,
+    val canVerifyMembers: Boolean,
     private val canTransferOwnership: Boolean,
 ) {
     /** Whether the moderation section of the user sheet should be shown at all. */
@@ -207,6 +208,14 @@ data class ManageUserContext(
                 PermissionUtils.canAndIsElevated(permission, myPermissions, mfaEnabled, mfaLevel)
 
             val isAdministrator = isOwner || canElevated(Permission.ADMINISTRATOR)
+            // A timeout cannot bind an administrator or the owner, so the reference hides the
+            // action rather than offering one that would silently do nothing.
+            val targetIsExempt = targetId == guild.ownerId || PermissionUtils.can(
+                Permission.ADMINISTRATOR,
+                userRoles.mapNotNull(guildRoles::get).fold(
+                    guildRoles[guild.id]?.permissions ?: 0L,
+                ) { permissions, role -> permissions or role.permissions },
+            )
             fun canModerate(permission: Long) =
                 !isSelf && outranksTarget && (isAdministrator || canElevated(permission))
 
@@ -228,7 +237,18 @@ data class ManageUserContext(
                     outranksTarget &&
                         (isAdministrator || canElevated(Permission.MANAGE_NICKNAMES))
                 },
-                canDisableCommunication = canModerate(Permission.MODERATE_MEMBERS),
+                canDisableCommunication = !targetIsExempt &&
+                    canModerate(Permission.MODERATE_MEMBERS),
+                canVerifyMembers = !isSelf && outranksTarget && (
+                    isAdministrator ||
+                        canElevated(Permission.MANAGE_GUILD) ||
+                        canElevated(Permission.MANAGE_ROLES) ||
+                        (
+                            canElevated(Permission.MODERATE_MEMBERS) &&
+                                canElevated(Permission.KICK_MEMBERS) &&
+                                canElevated(Permission.BAN_MEMBERS)
+                            )
+                    ),
                 canTransferOwnership = !isSelf && isOwner,
             )
         }

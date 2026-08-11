@@ -10,6 +10,7 @@ import android.view.View
 import android.view.Window
 import android.view.WindowManager
 import androidx.annotation.AttrRes
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.annotation.ColorInt
 import androidx.annotation.ColorRes
 import androidx.core.content.ContextCompat
@@ -54,6 +55,22 @@ object ColorCompat {
         val typedValue = TypedValue()
         context?.theme?.resolveAttribute(attributeResourceId, typedValue, true)
         return typedValue.data
+    }
+
+    /**
+     * [getThemedColor] reads `TypedValue.data`, which for an attribute pointing at a
+     * `ColorStateList` resource is the resource id rather than a colour.
+     */
+    @JvmStatic
+    @ColorInt
+    fun getThemedColorStateListDefault(context: Context, @AttrRes attributeResourceId: Int): Int {
+        val typedValue = TypedValue()
+        context.theme.resolveAttribute(attributeResourceId, typedValue, true)
+        return if (typedValue.type == TypedValue.TYPE_STRING) {
+            AppCompatResources.getColorStateList(context, typedValue.resourceId).defaultColor
+        } else {
+            typedValue.data
+        }
     }
 
     @JvmStatic

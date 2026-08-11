@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:orientation="horizontal" android:gravity="center_vertical" android:background="?attr/selectableItemBackground" android:minHeight="56dp" android:paddingStart="8dp" android:paddingEnd="8dp" android:paddingTop="8dp" android:paddingBottom="8dp" android:layout_width="match_parent" android:layout_height="wrap_content">
+    <com.facebook.drawee.view.SimpleDraweeView android:id="@+id/primary_guild_item_icon" android:layout_width="32dp" android:layout_height="32dp" android:layout_marginEnd="12dp" app:roundAsCircle="true" android:importantForAccessibility="no"/>
+    <TextView android:id="@+id/primary_guild_item_name" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:singleLine="true" android:textSize="@dimen/uikit_textsize_medium" android:textColor="?attr/colorHeaderPrimary" style="@style/UiKit.TextView"/>
+    <com.discord.views.GuildTagView android:id="@+id/primary_guild_item_tag" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:importantForAccessibility="no"/>
+    <RadioButton android:id="@+id/primary_guild_item_radio" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:clickable="false" android:focusable="false" android:buttonTint="?attr/colorCompoundButton"/>
+</LinearLayout>

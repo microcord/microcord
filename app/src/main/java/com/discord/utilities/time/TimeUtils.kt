@@ -92,6 +92,11 @@ object TimeUtils {
     @JvmStatic
     fun millisToSnowflake(millis: Long): Long = SnowflakeUtils.fromTimestamp(millis)
 
+    /** Short month, day and year in the reader's locale — "Jan 5, 2015" in en-US. */
+    @JvmStatic
+    fun toMediumDate(unixTimeMillis: Long): String =
+        DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.getDefault()).format(Date(unixTimeMillis))
+
     // endregion
 
     // region date arithmetic
