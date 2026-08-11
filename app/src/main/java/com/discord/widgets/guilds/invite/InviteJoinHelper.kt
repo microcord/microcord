@@ -117,8 +117,8 @@ object InviteJoinHelper {
         val guild = invite.guild
         val joinRequests = if (
             guild != null &&
-            GuildFeature.MEMBER_VERIFICATION_GATE_ENABLED in guild.features &&
-            GuildFeature.COMMUNITY in guild.features
+            (invite.requiresApplication() ||
+                GuildFeature.MEMBER_VERIFICATION_GATE_ENABLED in guild.features && GuildFeature.COMMUNITY in guild.features)
         ) {
             StoreStream.getGuildJoinRequests().observeGuildJoinRequest(guild.id)
         } else {

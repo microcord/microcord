@@ -32,6 +32,7 @@ import com.discord.views.guilds.ServerMemberCount
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.InviteEntry
 import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
+import com.discord.widgets.guilds.invite.requiresApplication
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.button.MaterialButton
 import rx.Observable
@@ -120,12 +121,7 @@ class WidgetChatListAdapterItemInvite(
                 val isMemberOfGuild = invite.guild?.let { guilds.getGuild(it.id) } != null
                 val localChannel = invite.channel?.let { channels.getChannel(it.id) }
 
-                // Reference behaviour, reproduced verbatim: an invite counts as resolvable only while
-                // its expiry lies in the *past*. Invites embedded in chat are fetched from the invite
-                // endpoint, which returns neither `created_at` nor `max_age`, so the expiry is zero and
-                // this is always true for them — which is why the inverted test never surfaced.
-                val isResolvable = invite.getExpirationTime() < ClockFactory.get().currentTimeMillis() &&
-                    !invite.isRevoked()
+                val isResolvable = invite.isResolvableAt(ClockFactory.get().currentTimeMillis())
                 if (isResolvable) {
                     Model.Resolved(
                         invite = invite,
@@ -308,6 +304,7 @@ class WidgetChatListAdapterItemInvite(
         loadingButton.visibility = View.GONE
         joinedButton.visibility = if (isJoined) View.VISIBLE else View.GONE
         joinButton.visibility = if (isJoined) View.GONE else View.VISIBLE
+        joinButton.setText(if (invite.requiresApplication()) R.string.invite_button_apply_to_join else R.string.join_guild)
         mentionButton.visibility = View.GONE
         val instanceId = inviteInstanceId(item.messageId, item.inviteCode)
         joinButton.setOnClickListener { joinServerOrDM(javaClass, invite, inviteInstanceId = instanceId) }
@@ -405,3 +402,5 @@ internal fun StoreInstantInvites.InviteState.inviteCardState(): InviteCardState 
     is StoreInstantInvites.InviteState.Resolved -> InviteCardState.RESOLVED
     StoreInstantInvites.InviteState.Invalid -> InviteCardState.INVALID
 }
+
+internal fun ModelInvite.isResolvableAt(now: Long) = !isExpired(now) && !isRevoked()

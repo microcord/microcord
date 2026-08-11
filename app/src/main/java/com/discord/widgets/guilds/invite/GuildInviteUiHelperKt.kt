@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.res.Resources
 import com.discord.R
 import com.discord.api.channel.Channel
+import com.discord.api.guild.GuildFeature
 import com.discord.app.AppToast
 import com.discord.i18n.i18nFormat
 import com.discord.i18n.i18nPlural
@@ -35,6 +36,9 @@ fun shareLinkClick(context: Context?, invite: ModelInvite) {
     context ?: return
     shareLink(context, getInviteLink(invite, context.resources))
 }
+
+internal fun ModelInvite.requiresApplication() =
+    guild?.features?.contains(GuildFeature.MEMBER_VERIFICATION_MANUAL_APPROVAL) == true
 
 @Suppress("UNUSED_PARAMETER")
 fun shareLinkClick(context: Context?, guildInvite: GuildInvite, channel: Channel?) {
