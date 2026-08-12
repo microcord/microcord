@@ -238,7 +238,7 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
     }
 
     private fun configureIcon(guild: Guild) {
-        val original = IconUtils.getForGuild(guild, allowAnimation = true)
+        val original = IconUtils.getForGuild(guild, allowAnimation = true, size = ICON_SIZE_DP)
         val current = state.get(icon.id, original)
         if (!hasOpenedAvatarPicker && mostRecentIntent.getBooleanExtra(INTENT_EXTRA_OPEN_AVATAR_PICKER, false)) {
             openImagePicker { configureIcon(guild, it) }
@@ -474,7 +474,7 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
                     STATE_ID_NOTIFICATION_DEFAULT,
                     guild.defaultMessageNotifications,
                 ),
-                icon = state.get(icon.id, IconUtils.getForGuild(guild, allowAnimation = false)),
+                icon = state.get(icon.id, IconUtils.getForGuild(guild, allowAnimation = false, size = ICON_SIZE_DP)),
                 name = nameInput.getTextOrEmpty().trim(),
                 verificationLevel = guild.verificationLevel,
                 explicitContentFilter = guild.explicitContentFilter,
@@ -577,6 +577,9 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
     }
 
     companion object {
+        /** Matches `avatar_size_xxlarge`, which is what the editor draws it at. */
+        private const val ICON_SIZE_DP = 80
+
         private const val INTENT_EXTRA_GUILD_ID = "INTENT_EXTRA_GUILD_ID"
         private const val INTENT_EXTRA_OPEN_AVATAR_PICKER = "INTENT_EXTRA_OPEN_AVATAR_PICKER"
         private const val INVALID_GUILD_ID = -1L

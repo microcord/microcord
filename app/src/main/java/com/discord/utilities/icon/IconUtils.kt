@@ -4,6 +4,7 @@ import android.content.res.Resources
 import android.os.Build
 import android.widget.ImageView
 import androidx.annotation.DimenRes
+import androidx.annotation.VisibleForTesting
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDMRecipient
@@ -50,6 +51,9 @@ object IconUtils  {
     private val UNRESTRICTED = R.dimen.avatar_size_unrestricted
 
     private const val IMAGE_SIZE_ASSET_DEFAULT_PX = 160
+
+    /** Presence of this marks a signed attachment link, which must not be rewritten. */
+    private const val SIGNED_PARAM = "hm="
 
     /** What a full-screen viewer asks for, in dp; density takes it the rest of the way. */
     const val AVATAR_MAX_SIZE_DP = 1024
@@ -540,7 +544,37 @@ object IconUtils  {
         changeDetector: MGImages.ChangeDetector = MGImages.AlwaysUpdateChangeDetector,
     ) {
         val sizePx = imageView.resources.getDimensionPixelSize(sizeDimenRes)
-        setIcon(imageView, url, sizePx, sizePx, true, transform, changeDetector)
+        setIcon(imageView, withRequestedSize(url, sizePx), sizePx, sizePx, true, transform, changeDetector)
+    }
+
+    /**
+     * Rewrites a CDN link to ask for the pixels the view is about to decode it into.
+     *
+     * The requested size and the decode budget were previously set at opposite ends of a call — one
+     * on the URL, one on the drawee — and nothing held them together, so they drifted apart
+     * silently and the difference only ever showed up as a blurry icon. Deriving one from the other
+     * is what stops that being expressible.
+     *
+     * [sizePx] is already in device pixels, so it is quantised directly rather than through
+     * [proxySizePx], which is for the dp figures callers pass to the builders.
+     */
+    @JvmStatic
+    @VisibleForTesting
+    fun withRequestedSize(url: String?, sizePx: Int): String? {
+        if (url == null || sizePx <= 0) return url
+        if (!url.startsWith("http")) return url
+        // A signed link is only valid in the exact form it was issued in.
+        if (SIGNED_PARAM in url) return url
+        return replaceParam(url, "size", getMediaProxySize(sizePx).toString())
+    }
+
+    private fun replaceParam(url: String, name: String, value: String): String {
+        val queryStart = url.indexOf('?')
+        if (queryStart < 0) return "$url?$name=$value"
+        val params = url.substring(queryStart + 1)
+            .split('&')
+            .filter { it.isNotEmpty() && it.substringBefore('=') != name }
+        return url.substring(0, queryStart) + "?" + (params + "$name=$value").joinToString("&")
     }
 
     @JvmStatic

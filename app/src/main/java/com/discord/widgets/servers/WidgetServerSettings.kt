@@ -82,9 +82,9 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
     }
 
     private fun configureHeader(model: WidgetServerSettingsViewModel.ViewState.Loaded) {
-        val iconUrl = IconUtils.getForGuild(model.guild, allowAnimation = true)
+        val iconUrl = IconUtils.getForGuild(model.guild, allowAnimation = true, size = HEADER_ICON_SIZE_DP)
         serverName.text = model.guild.name
-        IconUtils.setIcon(serverIcon, iconUrl, R.dimen.avatar_size_large)
+        IconUtils.setIcon(serverIcon, iconUrl, R.dimen.avatar_size_hero)
         // The lettered fallback is a sibling of the image, not a placeholder inside it.
         serverIconText.visibility = if (iconUrl == null) View.VISIBLE else View.GONE
         serverIconText.text = model.guild.shortName
@@ -250,6 +250,9 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
     }
 
     companion object {
+        /** Matches `avatar_size_hero`, which is what the header actually draws it at. */
+        private const val HEADER_ICON_SIZE_DP = 128
+
         private const val INTENT_EXTRA_GUILD_ID = "INTENT_EXTRA_GUILD_ID"
         private const val INVALID_GUILD_ID = -1L
 
