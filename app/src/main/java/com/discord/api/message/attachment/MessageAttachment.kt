@@ -4,7 +4,7 @@ import java.util.Locale
 import java.net.URLConnection
 
 /** Filename suffixes the client renders inline as an image. */
-val IMAGE_MIME_TYPES: List<String> = listOf(".jpeg", ".jpg", ".gif", ".png", ".bmp", ".webp")
+val IMAGE_MIME_TYPES: List<String> = listOf(".jpeg", ".jpg", ".gif", ".png", ".bmp", ".webp", ".avif")
 
 /** Filename suffixes the client renders inline as a video. */
 val VIDEO_MIME_TYPES: List<String> = listOf(".webm", ".mov", ".mpeg", ".mpg", ".mp4")
@@ -36,6 +36,21 @@ data class MessageAttachment(
     val isSpoiler: Boolean
         get() = filename.startsWith(SPOILER_PREFIX) || flags?.and(FLAG_IS_SPOILER) == FLAG_IS_SPOILER
 
+    /**
+     * Whether the proxy has to be told to keep every frame.
+     *
+     * Only meaningful for the two formats that can hold an animation without announcing it in the
+     * extension; a GIF is animated by definition and is fetched untouched.
+     */
+    val isAnimated: Boolean
+        get() = flags?.and(FLAG_IS_ANIMATED) == FLAG_IS_ANIMATED
+
+    val isAvif: Boolean
+        get() = filename.endsWith(".avif", ignoreCase = true)
+
+    val isAnimatableStill: Boolean
+        get() = isAnimated && (isAvif || filename.endsWith(".webp", ignoreCase = true))
+
     val isAudio: Boolean
         get() = contentType?.startsWith("audio/", ignoreCase = true) == true ||
             URLConnection.guessContentTypeFromName(filename)?.startsWith("audio/") == true
@@ -47,6 +62,7 @@ data class MessageAttachment(
         const val FLAG_CONTAINS_EXPLICIT_MEDIA = 1 shl 4
         const val FLAG_CONTAINS_GORE_CONTENT = 1 shl 6
         const val FLAG_CONTAINS_SELF_HARM_CONTENT = 1 shl 7
+        const val FLAG_IS_ANIMATED = 1 shl 5
     }
 }
 

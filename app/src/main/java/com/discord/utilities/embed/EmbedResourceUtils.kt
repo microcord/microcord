@@ -5,6 +5,7 @@ import android.content.res.Resources
 import androidx.annotation.DrawableRes
 import com.discord.R
 import com.discord.api.message.attachment.MessageAttachment
+import com.discord.utilities.images.MediaProxyUrl
 import com.discord.api.message.attachment.MessageAttachmentType
 import com.discord.api.message.embed.EmbedImage
 import com.discord.api.message.embed.EmbedThumbnail
@@ -210,8 +211,11 @@ object EmbedResourceUtils {
     fun createRenderableEmbedMediaFromAttachment(
         attachment: MessageAttachment,
     ): RenderableEmbedMedia = when (attachment.type) {
-        MessageAttachmentType.VIDEO, MessageAttachmentType.IMAGE ->
-            RenderableEmbedMedia(attachment.proxyUrl, attachment.width, attachment.height)
+        MessageAttachmentType.VIDEO, MessageAttachmentType.IMAGE -> RenderableEmbedMedia(
+            MediaProxyUrl.forAttachment(attachment, attachment.proxyUrl),
+            attachment.width,
+            attachment.height,
+        )
         MessageAttachmentType.FILE -> createFileRenderableMedia(attachment.filename)
     }
 
@@ -236,10 +240,10 @@ object EmbedResourceUtils {
      * only one guaranteed to be reachable from a client behind a restrictive network.
      */
     private fun EmbedImage.asRenderableEmbedMedia() =
-        RenderableEmbedMedia(proxyUrl ?: url, width, height)
+        RenderableEmbedMedia((proxyUrl ?: url)?.let(MediaProxyUrl::forMedia), width, height)
 
     private fun EmbedThumbnail.asRenderableEmbedMedia() =
-        RenderableEmbedMedia(proxyUrl ?: url, width, height)
+        RenderableEmbedMedia((proxyUrl ?: url)?.let(MediaProxyUrl::forMedia), width, height)
 
     private fun EmbedVideo.asRenderableEmbedMedia() =
         RenderableEmbedMedia(proxyUrl ?: url, width, height)

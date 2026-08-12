@@ -16,10 +16,26 @@ class AttachmentUrlRefresherTest {
     }
 
     @Test
-    fun `a link is renewed shortly before it lapses, not after`() {
-        // Renewing exactly on the deadline would hand out a link that dies in transit.
-        assertTrue(AttachmentUrlRefresher.isExpired(signed, expiresAtMs - 30_000L))
-        assertFalse(AttachmentUrlRefresher.isExpired(signed, expiresAtMs - 120_000L))
+    fun `a link is renewed an hour before it lapses, not after`() {
+        // A link can sit between being built and being fetched, so the window covers the gap.
+        assertTrue(AttachmentUrlRefresher.isExpired(signed, expiresAtMs - 59L * 60_000L))
+        assertFalse(AttachmentUrlRefresher.isExpired(signed, expiresAtMs - 61L * 60_000L))
+    }
+
+    @Test
+    fun `only attachment paths are treated as signed`() {
+        assertFalse(
+            AttachmentUrlRefresher.isExpired(
+                "https://cdn.discordapp.com/avatars/1/hash.webp?ex=65d903de",
+                expiresAtMs,
+            ),
+        )
+        assertTrue(
+            AttachmentUrlRefresher.isExpired(
+                "https://cdn.discordapp.com/ephemeral-attachments/1/2/a.png?ex=65d903de",
+                expiresAtMs,
+            ),
+        )
     }
 
     @Test

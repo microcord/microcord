@@ -69,7 +69,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         binding.largeAvatar.setOnClickListener {
             if (state.editable) onAvatarEdit()
             else if (FeatureFlags.viewProfileImagesEnabled()) {
-                IconUtils.getForGuildMemberOrUser(state.user, state.guildMember, 2048, true)
+                IconUtils.getForGuildMemberOrUser(state.user, state.guildMember, IconUtils.AVATAR_MAX_SIZE_DP, true)
                     ?.let { WidgetMedia.launchImage(context, it, state.user.username) }
             }
         }
@@ -81,7 +81,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         binding.userProfileHeaderSecondaryName.setOnClickListener(
             if (!state.editable && state.showSmallAvatar && FeatureFlags.viewProfileImagesEnabled()) {
                 View.OnClickListener {
-                    IconUtils.getForUser(state.user, true, 2048)
+                    IconUtils.getForUser(state.user, true, IconUtils.AVATAR_MAX_SIZE_DP)
                         ?.let { WidgetMedia.launchImage(context, it, state.user.username) }
                 }
             } else null,
@@ -130,21 +130,24 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
 
     private fun isDarkTheme() = StoreStream.getUserSettingsSystem().isDarkTheme()
 
-    private fun configureBanner(state: UserProfileHeaderViewModel.ViewState.Loaded) {
-        val hash = state.effectiveBanner
-        val size = maxOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels)
-        val url = when {
-            hash == null -> null
-            hash.startsWith("data:") -> hash
-            state.guildMember?.hasBanner() == true || state.effectiveBannerGuildId != null -> IconUtils.getForGuildMemberBanner(
+    private fun bannerUrl(state: UserProfileHeaderViewModel.ViewState.Loaded, sizeDp: Int): String? {
+        val hash = state.effectiveBanner ?: return null
+        if (hash.startsWith("data:")) return hash
+        return if (state.guildMember?.hasBanner() == true || state.effectiveBannerGuildId != null) {
+            IconUtils.getForGuildMemberBanner(
                 hash,
                 state.effectiveBannerGuildId ?: checkNotNull(state.guildMember).guildId,
                 state.user.id,
-                size,
+                sizeDp,
                 state.shouldAnimateBanner,
             )
-            else -> IconUtils.getForUserBanner(state.user.id, hash, size, state.shouldAnimateBanner)
+        } else {
+            IconUtils.getForUserBanner(state.user.id, hash, sizeDp, state.shouldAnimateBanner)
         }
+    }
+
+    private fun configureBanner(state: UserProfileHeaderViewModel.ViewState.Loaded) {
+        val url = bannerUrl(state, PROFILE_BANNER_SIZE_DP)
         binding.banner.aspectRatio = BANNER_ASPECT_RATIO
         MGImages.setImage(
             binding.banner,
@@ -156,7 +159,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         binding.banner.setOnClickListener {
             if (state.editable) onBannerPress()
             else if (url != null && FeatureFlags.viewProfileImagesEnabled()) {
-                WidgetMedia.launchImage(context, url, state.user.username)
+                WidgetMedia.launchImage(context, bannerUrl(state, IconUtils.AVATAR_MAX_SIZE_DP) ?: url, state.user.username)
             }
         }
         binding.bannerEdit.setOnClickListener { onBannerPress() }
@@ -267,6 +270,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         private const val BADGE_ROW_RADIUS_DP = 8
         private const val BADGE_ROW_PADDING_H_DP = 7
         private const val BADGE_ROW_PADDING_V_DP = 2
+        private const val PROFILE_BANNER_SIZE_DP = 600
         private const val BANNER_ASPECT_RATIO = 300f / 105f
     }
 

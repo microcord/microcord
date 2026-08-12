@@ -1,5 +1,7 @@
 package com.discord.api.user
 
+import com.discord.utilities.icon.IconUtils
+
 import com.discord.api.application.ProfileApplication
 import com.discord.api.connectedaccounts.ConnectedAccount
 import com.discord.api.guildmember.GuildMember
@@ -22,11 +24,12 @@ data class AvatarDecorationData(
         ?.let { "$CDN/media/v1/collectibles-shop/$it/${if (animate) "animated" else "static"}" }
 
     private fun presetUrl(animate: Boolean) = asset.takeIf(String::isNotBlank)
-        ?.let { "$CDN/avatar-decoration-presets/$it.png?size=$PRESET_SIZE&passthrough=$animate" }
+        ?.let { "$CDN/avatar-decoration-presets/$it.png?size=${presetSize()}&passthrough=$animate" }
 
     private companion object {
         const val CDN = "https://cdn.discordapp.com"
-        const val PRESET_SIZE = 256
+        /** Small and drawn in bulk, so the rung below is accepted when it is close enough. */
+        fun presetSize() = IconUtils.proxySizePx(IconUtils.AVATAR_DECORATION_SIZE_DP, allowUpscaling = true)
     }
 }
 

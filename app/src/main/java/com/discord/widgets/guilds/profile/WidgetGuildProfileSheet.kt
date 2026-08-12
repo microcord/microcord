@@ -99,11 +99,12 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
         }
         IconUtils.setIcon(binding.guildProfileSheetIcon, IconUtils.getForGuild(
             state.guildId, state.guildIcon, "asset://asset/images/default_icon_selected.jpg", true,
+            size = GUILD_PROFILE_ICON_SIZE_DP,
         ))
         binding.guildProfileSheetIcon.setOnClickListener(
             if (state.guildIcon != null && FeatureFlags.viewProfileImagesEnabled()) {
                 View.OnClickListener {
-                    IconUtils.getForGuild(state.guildId, state.guildIcon, allowAnimation = true, size = 2048)
+                    IconUtils.getForGuild(state.guildId, state.guildIcon, allowAnimation = true, size = IconUtils.AVATAR_MAX_SIZE_DP)
                         ?.let { WidgetMedia.launchImage(requireContext(), it, state.guildName) }
                 }
             } else null,
@@ -140,9 +141,9 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
                     View.OnClickListener {
                         val fullUrl = when (state.banner.type) {
                             WidgetGuildProfileSheetViewModel.Banner.Type.BANNER ->
-                                IconUtils.getBannerForGuild(state.banner.guildId, state.banner.hash, 2048, true)
+                                IconUtils.getBannerForGuild(state.banner.guildId, state.banner.hash, IconUtils.AVATAR_MAX_SIZE_DP, true)
                             WidgetGuildProfileSheetViewModel.Banner.Type.SPLASH ->
-                                state.banner.hash?.let { IconUtils.getGuildSplashUrl(state.banner.guildId, it, 2048) }
+                                state.banner.hash?.let { IconUtils.getGuildSplashUrl(state.banner.guildId, it, IconUtils.AVATAR_MAX_SIZE_DP) }
                         }
                         fullUrl?.let { WidgetMedia.launchImage(requireContext(), it, state.guildName) }
                     }
@@ -322,6 +323,9 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
     }
 
     companion object {
+        /** Deliberately above the 80dp it renders at, matching the reference. */
+        private const val GUILD_PROFILE_ICON_SIZE_DP = 96
+
         private const val EXTRA_GUILD_ID = "com.discord.intent.extra.EXTRA_GUILD_ID"
         private const val EXTRA_VIEWING_GUILD = "com.discord.intent.extra.EXTRA_VIEWING_GUILD"
         private const val EXTRA_CHANNEL_ID = "com.discord.intent.extra.EXTRA_CHANNEL_ID"

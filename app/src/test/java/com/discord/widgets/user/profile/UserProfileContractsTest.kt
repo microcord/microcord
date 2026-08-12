@@ -453,14 +453,14 @@ class UserProfileContractsTest {
         assertEquals(
             listOf(
                 "https://cdn.discordapp.com/media/v1/collectibles-shop/3/animated",
-                "https://cdn.discordapp.com/avatar-decoration-presets/a_frame.png?size=256&passthrough=true",
+                "https://cdn.discordapp.com/avatar-decoration-presets/a_frame.png?size=64&passthrough=true",
             ),
             animated.avatarDecoration?.imageUrls(animated.shouldAnimateBanner),
         )
         assertEquals(
             listOf(
                 "https://cdn.discordapp.com/media/v1/collectibles-shop/3/static",
-                "https://cdn.discordapp.com/avatar-decoration-presets/a_frame.png?size=256&passthrough=false",
+                "https://cdn.discordapp.com/avatar-decoration-presets/a_frame.png?size=64&passthrough=false",
             ),
             reduced.avatarDecoration?.imageUrls(reduced.shouldAnimateBanner),
         )

@@ -797,13 +797,17 @@ internal fun androidx.fragment.app.Fragment.setScreenStatusBarColor(color: Int) 
  * An animated GIF is fetched untouched — asking the proxy to re-encode it would flatten it to one
  * frame. Anything else is fetched as a still, which is what the viewer draws and is far smaller.
  */
-internal fun mediaFormatQuery(lastPathSegment: String?, staticImageExtension: String): String =
-    if (lastPathSegment?.endsWith(".gif") == true) "" else "&format=$staticImageExtension"
+internal fun mediaFormatQuery(lastPathSegment: String?, staticImageExtension: String): String = when {
+    // AVIF only decodes natively from API 31, so it is transcoded regardless of what it is for.
+    lastPathSegment?.endsWith(".avif", ignoreCase = true) == true -> "&format=$staticImageExtension"
+    lastPathSegment?.endsWith(".gif", ignoreCase = true) == true -> ""
+    else -> "&format=$staticImageExtension"
+}
 
 internal fun profileImageUrl(url: String): String =
     url.toHttpUrl().newBuilder()
         .setQueryParameter("quality", "lossless")
-        .setQueryParameter("size", "3072")
+        .setQueryParameter("size", IconUtils.proxySizePx(IconUtils.AVATAR_MAX_SIZE_DP).toString())
         .build()
         .toString()
 
@@ -840,5 +844,14 @@ internal fun fitWithin(width: Int, height: Int, maxWidth: Int, maxHeight: Int): 
 /** [resizeToFit] against the device's screen. */
 internal fun resizeToFitScreen(context: Context, input: Rect): Rect {
     val metrics = context.resources.displayMetrics
-    return resizeToFit(input, Rect(0, 0, metrics.widthPixels, metrics.heightPixels))
+    val bounds = Rect(
+        0,
+        0,
+        minOf(metrics.widthPixels, MEDIA_PROXY_MAX_TARGET_RESOLUTION),
+        minOf(metrics.heightPixels, MEDIA_PROXY_MAX_TARGET_RESOLUTION),
+    )
+    return resizeToFit(input, bounds)
 }
+
+/** The proxy will not render past this on either axis. */
+internal const val MEDIA_PROXY_MAX_TARGET_RESOLUTION = 4096

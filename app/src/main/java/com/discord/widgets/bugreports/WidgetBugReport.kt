@@ -218,7 +218,7 @@ class WidgetBugReport : AppFragment(R.layout.widget_bug_report) {
             priority.setText(level.title)
             MGImages.setImage(
                 view = priorityIcon,
-                url = IconUtils.getForEmoji(level.emojiId, animated = true, sizePx = 64),
+                url = IconUtils.getForEmoji(level.emojiId, animated = true, size = 64),
                 useSmallCache = true,
                 changeDetector = imagesChangeDetector,
             )
@@ -344,7 +344,7 @@ internal class BugReportPrioritySheet : AppBottomSheet() {
                 WidgetBugReport.priorityDescription(itemView.context, index)
             MGImages.setImage(
                 itemView.findViewById(R.id.select_component_sheet_item_icon),
-                IconUtils.getForEmoji(data.emojiId, animated = true, sizePx = 64),
+                IconUtils.getForEmoji(data.emojiId, animated = true, size = 64),
             )
             itemView.setOnClickListener {
                 onSelected?.invoke(index)

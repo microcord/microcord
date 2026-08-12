@@ -20,7 +20,13 @@ object StickerUtils {
      * it needs no `Context` and can therefore be the default value of [getCDNAssetUrl]'s `size`,
      * exactly as the reference declares it.
      */
-    val DEFAULT_STICKER_SIZE_PX: Int by lazy { dpToPixels(DEFAULT_STICKER_SIZE_DP) }
+    /**
+     * Density is capped at 2 here alone: a sticker is drawn large and often several at a time, and
+     * the reference trades the last of the sharpness for the memory on a 3x screen.
+     */
+    val DEFAULT_STICKER_SIZE_PX: Int by lazy {
+        IconUtils.proxySizePx(DEFAULT_STICKER_SIZE_DP, maxDensity = 2f)
+    }
 
     /**
      * Builds the CDN URL for [sticker].
@@ -44,6 +50,11 @@ object StickerUtils {
             append("?passthrough=")
             append(passthrough)
             size?.let { append("&size=${IconUtils.getMediaProxySize(it)}") }
+            // WebP is the only format the proxy can hand back untouched, so it is the only one
+            // worth asking not to recompress.
+            if (sticker.getFileExtension() == ".${IconUtils.WEBP_IMAGE_EXTENSION}") {
+                append("&quality=lossless")
+            }
         }
         StickerFormatType.LOTTIE ->
             "https://discord.com/stickers/${sticker.getStickerId()}${sticker.getFileExtension()}"

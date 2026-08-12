@@ -20,10 +20,16 @@ object AttachmentUrlRefresher {
     private const val MAX_BATCH = 50
 
     /**
-     * Re-sign shortly before the deadline rather than exactly on it, so a link cannot lapse between
-     * being handed out and being fetched.
+     * Re-signed an hour ahead of the deadline, matching the reference.
+     *
+     * The window has to cover how long a link can sit between being handed to the image layer and
+     * actually being fetched — a message scrolled past, cached, and drawn later still holds the URL
+     * it was built with. A margin of seconds only covers the immediate fetch.
      */
-    private const val EXPIRY_MARGIN_MS = 60_000L
+    private const val EXPIRY_MARGIN_MS = 60L * 60L * 1_000L
+
+    /** Only attachment links are signed; anything else with an `ex` parameter is not ours to re-sign. */
+    private val SIGNED_PATH_PREFIXES = listOf("/attachments/", "/ephemeral-attachments/")
 
     /**
      * Whether [url] is a signed link that has expired, or is about to.
@@ -31,9 +37,13 @@ object AttachmentUrlRefresher {
      * An unsigned link — anything without the parameter — never expires and is left alone.
      */
     fun isExpired(url: String, nowMs: Long): Boolean {
+        if (!isSignedAttachment(url)) return false
         val expiresAtMs = expiryMs(url) ?: return false
         return nowMs + EXPIRY_MARGIN_MS >= expiresAtMs
     }
+
+    fun isSignedAttachment(url: String): Boolean =
+        SIGNED_PATH_PREFIXES.any { url.substringBefore('?').contains(it) }
 
     /**
      * Read straight out of the query string rather than through `Uri`, so the rule stays pure

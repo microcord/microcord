@@ -23,7 +23,7 @@ class WidgetMediaLaunchTest {
         val args = launchArgs("https://cdn.discordapp.com/avatars/1/hash.webp?size=2048", "user")
 
         assertEquals(args.uri, args.previewImageUri)
-        assertEquals("https://cdn.discordapp.com/avatars/1/hash.webp?quality=lossless&size=3072", args.uri)
+        assertEquals("https://cdn.discordapp.com/avatars/1/hash.webp?quality=lossless&size=1024", args.uri)
         assertEquals(3072, args.width)
         assertEquals(3072, args.height)
         assertEquals("user", args.title)
@@ -34,7 +34,7 @@ class WidgetMediaLaunchTest {
     @Test
     fun `profile quality replaces only quality and size`() {
         assertEquals(
-            "https://cdn.discordapp.com/banner.webp?hash=value&quality=lossless&size=3072#frame",
+            "https://cdn.discordapp.com/banner.webp?hash=value&quality=lossless&size=1024#frame",
             profileImageUrl("https://cdn.discordapp.com/banner.webp?size=128&hash=value&quality=low#frame"),
         )
     }

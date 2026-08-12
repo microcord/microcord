@@ -1,5 +1,6 @@
 package com.discord.utilities.icon
 
+import android.content.res.Resources
 import android.os.Build
 import android.widget.ImageView
 import androidx.annotation.DimenRes
@@ -32,6 +33,12 @@ import com.facebook.imagepipeline.request.ImageRequestBuilder
 object IconUtils  {
 
     const val ANIMATED_IMAGE_EXTENSION = "gif"
+    const val WEBP_IMAGE_EXTENSION = "webp"
+    const val PNG_IMAGE_EXTENSION = "png"
+    const val JPEG_IMAGE_EXTENSION = "jpg"
+
+    /** A `v_` hash is a video asset; the proxy serves it whole and refuses to resize it. */
+    const val VIDEO_IMAGE_EXTENSION = "mp4"
     const val DEFAULT_ICON = "asset://asset/images/default_icon.jpg"
     const val DEFAULT_ICON_BLURPLE = "asset://asset/images/default_icon_selected.jpg"
 
@@ -43,6 +50,18 @@ object IconUtils  {
     private val UNRESTRICTED = R.dimen.avatar_size_unrestricted
 
     private const val IMAGE_SIZE_ASSET_DEFAULT_PX = 160
+
+    /** What a full-screen viewer asks for, in dp; density takes it the rest of the way. */
+    const val AVATAR_MAX_SIZE_DP = 1024
+
+    /** What a chat row asks for when it does not say; deliberately larger than it draws. */
+    const val AVATAR_SIZE_DP = 128
+
+    /** Emoji are requested at one size and scaled down by the row that draws them. */
+    const val EMOJI_SIZE_DP = 48
+
+    /** The reference pins guild banners to one width rather than the caller's. */
+    private const val GUILD_BANNER_SIZE_DP = 360
 
     /** Default avatar variants for an account that still has a discriminator. */
     private const val LEGACY_DEFAULT_AVATAR_COUNT = 5
@@ -81,25 +100,69 @@ object IconUtils  {
     // ---------------------------------------------------------------------------------------
 
     /**
-     * Rounds [size] up to the smallest supported media-proxy width.
+     * Rounds [size] to a supported media-proxy width.
      *
-     * @throws NoSuchElementException when [size] exceeds the largest supported width (4096).
+     * [allowUpscaling] permits snapping down to the rung below when the overshoot is within 25%,
+     * letting the proxy stretch the smaller rendition rather than fetch the next one up.
      */
     @JvmStatic
-    fun getMediaProxySize(size: Int): Int = MEDIA_PROXY_SIZES.first { it >= size }
-
-    /** Appends `?size=` when a positive [size] was requested, quantising it first. */
-    private fun withSize(url: String?, size: Int?): String? {
-        if (url == null || size == null || size <= 0) return url
-        return "$url?size=${getMediaProxySize(size)}"
+    @JvmOverloads
+    fun getMediaProxySize(size: Int, allowUpscaling: Boolean = false): Int {
+        if (allowUpscaling) {
+            val below = MEDIA_PROXY_SIZES.lastOrNull { it <= size }
+            if (below != null && size.toDouble() / below <= 1.25) return below
+        }
+        return MEDIA_PROXY_SIZES.firstOrNull { size <= it } ?: MEDIA_PROXY_SIZES.last()
     }
 
     /**
-     * The reference emits the query unconditionally for guild/role/splash/banner builders, i.e.
-     * without the `size > 0` guard used by [withSize]. Kept separate so both behaviors survive.
+     * Every `size` a caller passes is in dp.
+     *
+     * The proxy renders in device pixels, so asking for the dp figure hands back an image the
+     * display then has to stretch by the screen's density — which is the whole of why assets look
+     * soft on a dense screen.
      */
+    /** Overridable so unit tests are not at the mercy of whatever density the JVM reports. */
+    @JvmStatic
+    var displayDensity: () -> Float = {
+        runCatching { Resources.getSystem().displayMetrics.density }.getOrDefault(1f).takeIf { it > 0f } ?: 1f
+    }
+
+    @JvmStatic
+    @JvmOverloads
+    fun proxySizePx(sizeDp: Int, allowUpscaling: Boolean = false, maxDensity: Float = Float.MAX_VALUE): Int =
+        getMediaProxySize((sizeDp * minOf(displayDensity(), maxDensity)).toInt(), allowUpscaling)
+
+    /** Decorations are drawn 1.2x the avatar they ring. */
+    const val AVATAR_DECORATION_SIZE_DP = 70
+
+    /**
+     * `animated=true` is what makes the proxy return every frame of an animated WebP; without it
+     * the same URL yields a still, which is how a static preview is requested.
+     */
+    private fun assetQuery(
+        size: Int?,
+        imageHash: String?,
+        allowAnimation: Boolean,
+        extension: String,
+        extra: String? = null,
+    ): String {
+        val params = ArrayList<String>(3)
+        if (size != null && size > 0) params += "size=${proxySizePx(size)}"
+        if (extension == WEBP_IMAGE_EXTENSION && allowAnimation && imageHash != null && isImageHashAnimated(imageHash)) {
+            params += "animated=true"
+        }
+        extra?.let { params += it }
+        return if (params.isEmpty()) "" else params.joinToString("&", prefix = "?")
+    }
+
+    private fun withSize(url: String?, size: Int?): String? {
+        if (url == null || size == null || size <= 0) return url
+        return "$url?size=${proxySizePx(size)}"
+    }
+
     private fun sizeQuery(size: Int?): String =
-        size?.let { "?size=${getMediaProxySize(it)}" } ?: ""
+        size?.let { "?size=${proxySizePx(it)}" } ?: ""
 
     // ---------------------------------------------------------------------------------------
     // Animation gating
@@ -107,6 +170,8 @@ object IconUtils  {
 
     /** Discord marks animated image hashes with an `a_` prefix. */
     fun isImageHashAnimated(imageHash: String): Boolean = imageHash.startsWith("a_")
+
+    fun isVideoAssetHash(imageHash: String): Boolean = imageHash.startsWith("v_")
 
     fun isDataUrlForGif(dataUrl: String): Boolean = dataUrl.startsWith("data:image/gif")
 
@@ -117,12 +182,11 @@ object IconUtils  {
      * (`StoreUserSettings.observeIsAnimatedEmojisEnabled`, which already folds in reduced motion).
      * An animated hash only becomes a GIF when the user allows animation.
      */
-    fun getImageExtension(imageHash: String, allowAnimation: Boolean): String =
-        if (allowAnimation && isImageHashAnimated(imageHash)) {
-            ANIMATED_IMAGE_EXTENSION
-        } else {
-            staticImageExtension
-        }
+    fun getImageExtension(imageHash: String, allowAnimation: Boolean): String = when {
+        !allowAnimation || !isImageHashAnimated(imageHash) -> staticImageExtension
+        staticImageExtension == WEBP_IMAGE_EXTENSION -> WEBP_IMAGE_EXTENSION
+        else -> ANIMATED_IMAGE_EXTENSION
+    }
 
     // ---------------------------------------------------------------------------------------
     // User avatars
@@ -139,19 +203,20 @@ object IconUtils  {
         userAvatar: String?,
         discriminator: Int? = null,
         allowAnimation: Boolean = false,
-        size: Int? = null,
+        size: Int? = AVATAR_SIZE_DP,
         isWebhook: Boolean = false,
     ): String? {
         if (userId == -1L) return userAvatar
         if (userId != null && userAvatar != null) {
             val extension = getImageExtension(userAvatar, allowAnimation)
-            return withSize("$CDN_HOST/avatars/$userId/$userAvatar.$extension", size)
+            return "$CDN_HOST/avatars/$userId/$userAvatar.$extension" +
+                assetQuery(size, userAvatar, allowAnimation, extension)
         }
         return getDefaultAvatar(getDefaultAvatarIndex(userId, discriminator, isWebhook))
     }
 
     @JvmStatic
-    fun getForUser(user: User?, allowAnimation: Boolean = false, size: Int? = null): String? =
+    fun getForUser(user: User?, allowAnimation: Boolean = false, size: Int? = AVATAR_SIZE_DP): String? =
         getForUser(user?.id, user?.avatar, user?.discriminator, allowAnimation, size, user?.isWebhook == true)
 
     /**
@@ -181,7 +246,8 @@ object IconUtils  {
     ): String? {
         if (bannerHash.isNullOrBlank()) return null
         val extension = getBannerImageExtension(bannerHash, allowAnimation)
-        return withSize("$CDN_HOST/banners/$userId/$bannerHash.$extension", size)
+        return "$CDN_HOST/banners/$userId/$bannerHash.$extension" +
+            assetQuery(size, bannerHash, allowAnimation, extension)
     }
 
     // ---------------------------------------------------------------------------------------
@@ -192,20 +258,18 @@ object IconUtils  {
         guildMemberAvatar: String?,
         guildId: Long,
         userId: Long,
-        size: Int? = null,
+        size: Int? = AVATAR_SIZE_DP,
         allowAnimation: Boolean = false,
     ): String? {
         if (guildMemberAvatar.isNullOrBlank() || guildId == 0L || userId == 0L) return null
         val extension = getImageExtension(guildMemberAvatar, allowAnimation)
-        return withSize(
-            "$CDN_HOST/guilds/$guildId/users/$userId/avatars/$guildMemberAvatar.$extension",
-            size,
-        )
+        return "$CDN_HOST/guilds/$guildId/users/$userId/avatars/$guildMemberAvatar.$extension" +
+            assetQuery(size, guildMemberAvatar, allowAnimation, extension)
     }
 
     fun getForGuildMember(
         guildMember: GuildMember,
-        size: Int? = null,
+        size: Int? = AVATAR_SIZE_DP,
         allowAnimation: Boolean = false,
     ): String? = getForGuildMember(
         guildMember.avatarHash,
@@ -219,7 +283,7 @@ object IconUtils  {
     fun getForGuildMemberOrUser(
         user: User?,
         guildMember: GuildMember?,
-        size: Int? = null,
+        size: Int? = AVATAR_SIZE_DP,
         allowAnimation: Boolean = false,
     ): String? =
         if (guildMember != null && guildMember.hasAvatar()) {
@@ -237,14 +301,20 @@ object IconUtils  {
     ): String? {
         if (guildMemberBanner.isNullOrBlank() || guildId == 0L || userId == 0L) return null
         val extension = getBannerImageExtension(guildMemberBanner, allowAnimation)
-        return withSize(
-            "$CDN_HOST/guilds/$guildId/users/$userId/banners/$guildMemberBanner.$extension",
-            size,
-        )
+        return "$CDN_HOST/guilds/$guildId/users/$userId/banners/$guildMemberBanner.$extension" +
+            assetQuery(size, guildMemberBanner, allowAnimation, extension)
     }
 
+    /**
+     * A still banner is served as PNG, not WebP — the reference asks for the lossless format on the
+     * one surface stretched widest. Only an animated banner takes the [getImageExtension] path.
+     */
     private fun getBannerImageExtension(imageHash: String, allowAnimation: Boolean): String =
-        if (allowAnimation && isImageHashAnimated(imageHash)) ANIMATED_IMAGE_EXTENSION else staticImageExtension
+        if (allowAnimation && isImageHashAnimated(imageHash)) {
+            getImageExtension(imageHash, allowAnimation)
+        } else {
+            PNG_IMAGE_EXTENSION
+        }
 
     // ---------------------------------------------------------------------------------------
     // Guild icon, banner and splash
@@ -259,8 +329,12 @@ object IconUtils  {
         size: Int? = null,
     ): String? {
         if (icon.isNullOrEmpty() || guildId == null) return defaultIcon
+        if (allowAnimation && isVideoAssetHash(icon)) {
+            return "$CDN_HOST/icons/$guildId/$icon.$VIDEO_IMAGE_EXTENSION"
+        }
         val extension = getImageExtension(icon, allowAnimation)
-        return "$CDN_HOST/icons/$guildId/$icon.$extension" + sizeQuery(size)
+        return "$CDN_HOST/icons/$guildId/$icon.$extension" +
+            assetQuery(size, icon, allowAnimation, extension)
     }
 
     @JvmStatic
@@ -278,8 +352,15 @@ object IconUtils  {
         allowAnimation: Boolean = false,
     ): String? {
         if (guildId == null || banner == null) return null
-        val extension = getImageExtension(banner, allowAnimation)
-        return "$CDN_HOST/banners/$guildId/$banner.$extension" + sizeQuery(size)
+        val extension = when {
+            allowAnimation && isImageHashAnimated(banner) -> getImageExtension(banner, allowAnimation)
+            staticImageExtension == WEBP_IMAGE_EXTENSION -> WEBP_IMAGE_EXTENSION
+            else -> JPEG_IMAGE_EXTENSION
+        }
+        // JPEG has no lossless mode of its own, so the proxy is asked not to recompress.
+        val quality = if (extension == JPEG_IMAGE_EXTENSION) "quality=lossless" else null
+        return "$CDN_HOST/banners/$guildId/$banner.$extension" +
+            assetQuery(size ?: GUILD_BANNER_SIZE_DP, banner, allowAnimation, extension, quality)
     }
 
     fun getBannerForGuild(
@@ -289,7 +370,7 @@ object IconUtils  {
     ): String? = getBannerForGuild(guild?.id, guild?.banner, size, allowAnimation)
 
     fun getGuildSplashUrl(guildId: Long, splashHash: String, size: Int? = null): String =
-        "$CDN_HOST/splashes/$guildId/$splashHash.$staticImageExtension" + sizeQuery(size)
+        "$CDN_HOST/splashes/$guildId/$splashHash.$JPEG_IMAGE_EXTENSION" + sizeQuery(size)
 
     fun getGuildSplashUrl(guild: Guild?, size: Int? = null): String? {
         val splash = guild?.splash ?: return null
@@ -316,11 +397,11 @@ object IconUtils  {
             if (type == Channel.GROUP_DM) return getDefaultForGroupDM(channelId)
             return if (returnDefaultAsset) "" else null
         }
-        return withSize("$CDN_HOST/channel-icons/$channelId/$icon.$staticImageExtension", size)
+        return withSize("$CDN_HOST/channel-icons/$channelId/$icon.$PNG_IMAGE_EXTENSION", size)
     }
 
     @JvmStatic
-    fun getForChannel(channel: Channel?, size: Int? = null): String? {
+    fun getForChannel(channel: Channel?, size: Int? = AVATAR_SIZE_DP): String? {
         if (channel == null) return null
         if (channel.type == Channel.DM) {
             // `getDMRecipient` only resolves when there is exactly one recipient; otherwise the
@@ -343,8 +424,14 @@ object IconUtils  {
     // Role icons
     // ---------------------------------------------------------------------------------------
 
-    fun getRoleIconUrl(roleId: Long, iconHash: String, size: Int? = null): String =
-        "$CDN_HOST/role-icons/$roleId/$iconHash.$staticImageExtension" + sizeQuery(size)
+    /**
+     * The reference drops `quality=lossless` on Android once a size is given, for memory; it only
+     * survives when no size narrows the request.
+     */
+    fun getRoleIconUrl(roleId: Long, iconHash: String, size: Int? = null): String {
+        val query = if (size != null) "?size=${proxySizePx(size)}" else "?quality=lossless"
+        return "$CDN_HOST/role-icons/$roleId/$iconHash.$staticImageExtension$query"
+    }
 
     // ---------------------------------------------------------------------------------------
     // Emoji
@@ -358,9 +445,18 @@ object IconUtils  {
      * reconstructed in this project, and five widgets currently hand-build the URL, so the
      * canonical implementation is placed here.
      */
-    fun getForEmoji(emojiId: Long, animated: Boolean, sizePx: Int): String {
-        val extension = if (animated) ANIMATED_IMAGE_EXTENSION else staticImageExtension
-        return "$CDN_HOST/emojis/$emojiId.$extension?size=$sizePx&quality=lossless"
+    @JvmOverloads
+    fun getForEmoji(emojiId: Long, animated: Boolean, size: Int = EMOJI_SIZE_DP, forcePng: Boolean = false): String {
+        val webp = staticImageExtension == WEBP_IMAGE_EXTENSION
+        val extension = when {
+            forcePng -> PNG_IMAGE_EXTENSION
+            !animated -> staticImageExtension
+            webp -> WEBP_IMAGE_EXTENSION
+            else -> ANIMATED_IMAGE_EXTENSION
+        }
+        // Emoji are drawn small and in bulk, so the rung below is accepted when it is close enough.
+        val animatedParam = if (webp && animated) "&animated=true" else ""
+        return "$CDN_HOST/emojis/$emojiId.$extension?size=${proxySizePx(size, allowUpscaling = true)}$animatedParam"
     }
 
     // ---------------------------------------------------------------------------------------
@@ -373,8 +469,8 @@ object IconUtils  {
         imageId: String,
         sizePx: Int = IMAGE_SIZE_ASSET_DEFAULT_PX,
     ): String =
-        "$CDN_HOST/app-icons/$applicationId/$imageId.$staticImageExtension" +
-            "?size=${getMediaProxySize(sizePx)}"
+        "$CDN_HOST/app-icons/$applicationId/$imageId.$PNG_IMAGE_EXTENSION" +
+            "?size=${proxySizePx(sizePx)}"
 
     /**
      * Rich-presence asset URL.
@@ -427,7 +523,7 @@ object IconUtils  {
         val query = quantisedSize
             ?.let { "?size=$it&keep_aspect_ratio=true" }
             ?: "?keep_aspect_ratio=true"
-        return "$CDN_HOST/app-icons/$applicationId/$hash.$staticImageExtension$query"
+        return "$CDN_HOST/app-icons/$applicationId/$hash.$PNG_IMAGE_EXTENSION$query"
     }
 
     // ---------------------------------------------------------------------------------------
