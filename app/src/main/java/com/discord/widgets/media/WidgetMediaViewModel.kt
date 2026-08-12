@@ -28,4 +28,7 @@ class WidgetMediaViewModel : AppViewModel<Unit>() {
 
     /** Where playback had reached, so a resume seeks back instead of restarting. */
     var currentPlayerPositionMs: Long = 0L
+
+    /** Identifies the gallery page those playback fields belong to. */
+    var currentMediaUri: String? = null
 }

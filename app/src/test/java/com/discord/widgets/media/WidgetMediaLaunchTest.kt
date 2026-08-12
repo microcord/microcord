@@ -90,7 +90,7 @@ class WidgetMediaLaunchTest {
 
         assertEquals(MediaType.VIDEO, args.mediaType)
         assertEquals("https://media.discordapp.net/proxied", args.progressiveMediaUri)
-        assertEquals("https://media.discordapp.net/proxied", args.previewImageUri)
+        assertEquals("https://media.discordapp.net/proxied?format=webp&width=1280&height=720", args.previewImageUri)
     }
 
     @Test

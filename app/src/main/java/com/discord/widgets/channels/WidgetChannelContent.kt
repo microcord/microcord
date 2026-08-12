@@ -29,7 +29,15 @@ import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.uri.UriHandler
 import com.discord.widgets.media.WidgetMedia
-import java.net.URLConnection
+import com.discord.widgets.media.MediaViewerContext
+import com.discord.widgets.media.mediaVideoPreviewUrl
+
+internal fun isDirectVideoUrl(url: String?): Boolean {
+    val path = url?.substringBefore('?')?.substringBefore('#')?.lowercase() ?: return false
+    return VIDEO_EXTENSIONS.any(path::endsWith)
+}
+
+private val VIDEO_EXTENSIONS = listOf(".mp4", ".webm", ".mov", ".mkv")
 
 class WidgetChannelContent : AppFragment(R.layout.widget_channel_content) {
     private enum class Tab(val key: String, val has: List<String>, val emptyText: Int) {
@@ -48,7 +56,7 @@ class WidgetChannelContent : AppFragment(R.layout.widget_channel_content) {
         val channelId: Long,
         val messageId: Long,
         val metadata: String,
-        val authorAvatarUrl: String? = null,
+        val viewerContext: MediaViewerContext? = null,
     )
 
     private data class TabState(
@@ -73,7 +81,9 @@ class WidgetChannelContent : AppFragment(R.layout.widget_channel_content) {
         super.onViewBound(view)
         _binding = WidgetChannelContentBinding.bind(view)
         setActionBarTitle(if (channelId == 0L) R.string.server_content else R.string.channel_content)
-        setActionBarDisplayHomeAsUpEnabled(true)
+        setActionBarDisplayHomeAsUpEnabled(true, R.drawable.ic_arrow_back_white_24dp, R.string.back)
+            ?.setNavigationOnClickListener { requireActivity().finish() }
+        setOnBackPressed(handler = { requireActivity().finish(); true })
         gridMode = requireContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(GRID_MODE, false)
         binding.channelContentMedia.setOnClickListener { select(Tab.MEDIA) }
         binding.channelContentFiles.setOnClickListener { select(Tab.FILES) }
@@ -154,7 +164,9 @@ class WidgetChannelContent : AppFragment(R.layout.widget_channel_content) {
             val added = result?.messages.orEmpty().flatten().filter { it.hit != false }
                 .flatMap { message -> items(requestedTab, message, channels[message.channelId].orEmpty()) }
                 .filter { state.seen.add(it.url) }
+                .sortedByDescending(Item::messageId)
             state.items += added
+            state.items.sortByDescending(Item::messageId)
             state.cursor = result?.cursor?.takeUnless(com.discord.api.search.SearchCursor::isEmpty)
             state.canLoadMore = state.cursor != null && added.isNotEmpty()
             state.loading = false
@@ -176,13 +188,16 @@ class WidgetChannelContent : AppFragment(R.layout.widget_channel_content) {
             Tab.MEDIA -> buildList {
                 message.attachments.orEmpty().forEach { attachment ->
                     if (attachment.type != com.discord.api.message.attachment.MessageAttachmentType.FILE) {
-                        add(Item(attachment.url, attachment.proxyUrl, attachment.filename, video = attachment.type == com.discord.api.message.attachment.MessageAttachmentType.VIDEO, attachment = attachment, channelId = message.channelId, messageId = message.id, metadata = metadata))
+                        val video = attachment.type == com.discord.api.message.attachment.MessageAttachmentType.VIDEO
+                        add(Item(attachment.url, if (video) mediaVideoPreviewUrl(attachment.proxyUrl) else attachment.proxyUrl, attachment.filename, video = video, attachment = attachment, channelId = message.channelId, messageId = message.id, metadata = metadata))
                     }
                 }
                 message.embeds.orEmpty().forEach { embed ->
-                    embed.video?.url?.let { url ->
-                        val proxy = embed.thumbnail?.proxyUrl ?: embed.thumbnail?.url ?: embed.video.proxyUrl ?: url
-                        add(Item(url, proxy, embed.title, video = true, attachment = MessageAttachment(url, 0, 0, proxy, "video.mp4", embed.video.width, embed.video.height, contentType = "video/mp4"), channelId = message.channelId, messageId = message.id, metadata = metadata))
+                    embed.video?.let { video ->
+                        val stream = video.proxyUrl ?: video.url ?: return@forEach
+                        if (!isDirectVideoUrl(stream)) return@forEach
+                        val poster = embed.thumbnail?.proxyUrl ?: embed.thumbnail?.url ?: mediaVideoPreviewUrl(stream)
+                        add(Item(stream, poster, embed.title, video = true, attachment = MessageAttachment(stream, 0, 0, stream, "video.${Uri.parse(stream).path?.substringAfterLast('.', "mp4")}", video.width, video.height, contentType = "video/mp4"), channelId = message.channelId, messageId = message.id, metadata = metadata))
                         return@forEach
                     }
                     embed.image?.url?.let { url ->
@@ -202,7 +217,7 @@ class WidgetChannelContent : AppFragment(R.layout.widget_channel_content) {
                 val matcher = Patterns.WEB_URL.matcher(message.content.orEmpty())
                 while (matcher.find()) matcher.group()?.let { add(Item(it, channelId = message.channelId, messageId = message.id, metadata = metadata)) }
             }
-        }.map { it.copy(authorAvatarUrl = avatar) }
+        }.map { it.copy(viewerContext = MediaViewerContext(author, avatar, message.timestamp?.dateTimeMillis)) }
     }
 
     private fun renderState(state: TabState, failed: Boolean = false) {
@@ -217,8 +232,16 @@ class WidgetChannelContent : AppFragment(R.layout.widget_channel_content) {
     }
 
     private fun open(item: Item) {
-        if (tab == Tab.MEDIA && item.attachment != null) WidgetMedia.launch(requireContext(), item.attachment)
-        else UriHandler.handle(requireContext(), item.url)
+        if (tab == Tab.MEDIA && item.attachment != null) {
+            val gallery = states.getValue(Tab.MEDIA).items.filter { it.attachment != null }
+            val selected = gallery.indexOfFirst { it.url == item.url }.coerceAtLeast(0)
+            WidgetMedia.launchGallery(
+                requireContext(),
+                gallery.mapNotNull(Item::attachment),
+                selected,
+                gallery.map(Item::viewerContext),
+            )
+        } else UriHandler.handle(requireContext(), item.url)
     }
 
     private fun jump(item: Item) {
@@ -262,12 +285,13 @@ class WidgetChannelContent : AppFragment(R.layout.widget_channel_content) {
                 binding.channelContentPreviewContainer.visibility = if (item.previewUrl == null) View.GONE else View.VISIBLE
                 binding.channelContentFileIcon.visibility = if (!grid && item.previewUrl == null && item.attachment != null) View.VISIBLE else View.GONE
                 binding.channelContentDetails.visibility = if (grid) View.GONE else View.VISIBLE
-                binding.channelContentGridAvatar.visibility = if (grid && item.authorAvatarUrl != null) View.VISIBLE else View.GONE
-                item.authorAvatarUrl?.let {
+                val avatar = item.viewerContext?.avatarUrl
+                binding.channelContentGridAvatar.visibility = if (grid && avatar != null) View.VISIBLE else View.GONE
+                avatar?.let {
                     MGImages.setImage(binding.channelContentAvatar, it)
                     MGImages.setImage(binding.channelContentGridAvatar, it)
                 }
-                binding.channelContentAvatar.visibility = if (item.authorAvatarUrl == null) View.GONE else View.VISIBLE
+                binding.channelContentAvatar.visibility = if (avatar == null) View.GONE else View.VISIBLE
                 item.previewUrl?.let { MGImages.setImage(binding.channelContentPreview, it) }
                 binding.channelContentPlay.visibility = if (item.video) View.VISIBLE else View.GONE
                 binding.channelContentTitle.text = item.title ?: item.url

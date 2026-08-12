@@ -104,7 +104,7 @@ class ChatAttachmentView @JvmOverloads constructor(
             audioPlayer.visibility = View.GONE
         }
 
-        val openAttachment = OnClickListener { openAttachment(it.context, entry.attachment) }
+        val openAttachment = OnClickListener { openAttachment(it.context, entry) }
         val previewsText = entry.attachment.type == MessageAttachmentType.FILE &&
             isTextPreviewFilename(entry.attachment.filename)
         inlineMedia.setOnClickListener(openAttachment)
@@ -300,7 +300,7 @@ class ChatAttachmentView @JvmOverloads constructor(
             binding.chatListItemAttachmentTextPreviewMore.visibility = View.GONE
             binding.chatListItemAttachmentCopy.visibility = View.GONE
             binding.chatListItemAttachmentCard.setOnClickListener {
-                openAttachment(it.context, attachment)
+                UriHandler.handleOrUntrusted(it.context, attachment.url)
             }
             return@post
         }
@@ -415,9 +415,15 @@ class ChatAttachmentView @JvmOverloads constructor(
         super.onDetachedFromWindow()
     }
 
-    private fun openAttachment(context: Context, attachment: MessageAttachment) {
+    private fun openAttachment(context: Context, entry: AttachmentEntry) {
+        val attachment = entry.attachment
         when (attachment.type) {
-            MessageAttachmentType.IMAGE, MessageAttachmentType.VIDEO -> WidgetMedia.launch(context, attachment)
+            MessageAttachmentType.IMAGE, MessageAttachmentType.VIDEO -> {
+                val media = entry.message.attachments.orEmpty().filter {
+                    it.type == MessageAttachmentType.IMAGE || it.type == MessageAttachmentType.VIDEO
+                }
+                WidgetMedia.launchGallery(context, media, media.indexOfFirst { it.id == attachment.id }.coerceAtLeast(0))
+            }
             MessageAttachmentType.FILE -> UriHandler.handleOrUntrusted(context, attachment.url)
         }
     }

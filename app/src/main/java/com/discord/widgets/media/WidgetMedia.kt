@@ -11,13 +11,17 @@ import android.graphics.drawable.Animatable
 import android.net.Uri
 import android.os.Bundle
 import android.view.GestureDetector
+import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.ImageButton
 import android.widget.ProgressBar
 import androidx.appcompat.widget.PopupMenu
+import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.widget.ViewPager2
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator
 import com.discord.R
 import com.discord.api.message.attachment.MessageAttachment
@@ -29,6 +33,7 @@ import com.discord.app.AppLog
 import com.discord.app.AppScreenRouter
 import com.discord.app.appViewModels
 import com.discord.databinding.WidgetMediaBinding
+import com.discord.databinding.WidgetMediaGalleryPageBinding
 import com.discord.i18n.i18nFormat
 import com.discord.player.MediaSource
 import com.discord.player.MediaType
@@ -126,6 +131,22 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
      * not resume when the user came back.
      */
     private var playerPausedByFragmentLifecycle: Boolean = false
+    private var gallery: List<MediaGalleryItem> = emptyList()
+    private var galleryIndex: Int = 0
+    private val galleryAdapter = GalleryAdapter()
+    private val galleryPageCallback = object : ViewPager2.OnPageChangeCallback() {
+        override fun onPageSelected(position: Int) {
+            galleryIndex = position
+        }
+
+        override fun onPageScrollStateChanged(state: Int) {
+            if (state == ViewPager2.SCROLL_STATE_DRAGGING) stopGalleryPlaybackForSwipe()
+            if (state == ViewPager2.SCROLL_STATE_IDLE) {
+                val item = gallery.getOrNull(galleryIndex) ?: return
+                bindMedia(item.args, item.viewerContext, galleryPage = true)
+            }
+        }
+    }
 
     // region lifecycle
 
@@ -137,6 +158,28 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
 
         // The video surface swallows touches, so it needs the same tap handler as the container.
         binding.mediaPlayerView.videoSurfaceView?.setOnClickListener { onMediaClick() }
+        var videoTouchDownX = 0f
+        var videoTouchDownY = 0f
+        binding.mediaPlayerView.setOnTouchListener { _, event ->
+            if (gallery.isEmpty()) return@setOnTouchListener false
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                videoTouchDownX = event.x
+                videoTouchDownY = event.y
+            }
+            MotionEvent.obtain(event).also { forwarded ->
+                binding.mediaGallery.dispatchTouchEvent(forwarded)
+                forwarded.recycle()
+            }
+            if (event.actionMasked == MotionEvent.ACTION_UP &&
+                hypot((event.x - videoTouchDownX).toDouble(), (event.y - videoTouchDownY).toDouble()) < 20.0
+            ) onMediaClick()
+            true
+        }
+        binding.mediaContainer.canStartGesture = { !isImageZoomed() }
+        binding.mediaContainer.onVerticalDrag = ::dragToDismiss
+        binding.mediaContainer.onVerticalRelease = ::releaseToDismiss
+        binding.mediaGallery.adapter = galleryAdapter
+        binding.mediaGallery.registerOnPageChangeCallback(galleryPageCallback)
         binding.mediaContainer.setOnClickListener { onMediaClick() }
         binding.mediaClose.setOnClickListener { activity?.finish() }
 
@@ -153,15 +196,51 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         bound.mediaLoadingIndicator.visibility = if (viewModel.showCoverFrame) View.VISIBLE else View.GONE
 
         val extras = launchExtras
-        val sourceUri = Uri.parse(extras.getString(INTENT_URL))
-        imageUri = Uri.parse(extras.getString(INTENT_IMAGE_URL))
-        mediaSource = mediaSourceExtra(extras)
+        gallery = galleryExtra(extras)
+        galleryIndex = extras.getInt(INTENT_GALLERY_INDEX, 0).coerceIn(0, (gallery.size - 1).coerceAtLeast(0))
+        val item = gallery.getOrNull(galleryIndex)
+        if (item != null) {
+            bound.mediaGallery.visibility = View.VISIBLE
+            bound.mediaImage.visibility = View.GONE
+            galleryAdapter.notifyDataSetChanged()
+            bound.mediaGallery.setCurrentItem(galleryIndex, false)
+            bindMedia(item.args, item.viewerContext, galleryPage = true)
+        } else {
+            bound.mediaGallery.visibility = View.GONE
+            bindMedia(mediaArgsExtra(extras), viewerContextExtra(extras))
+        }
+    }
+
+    private fun bindMedia(args: MediaLaunchArgs, viewerContext: MediaViewerContext?, galleryPage: Boolean = false) {
+        if (galleryPage && viewModel.currentMediaUri != args.uri) {
+            viewModel.currentMediaUri = args.uri
+            viewModel.isPlaying = true
+            viewModel.showCoverFrame = true
+            viewModel.currentPlayerPositionMs = 0L
+        }
+        player?.release()
+        player = null
+        stopPositionPolling()
+        bound.mediaPlayerView.player = null
+        bound.mediaLoadingIndicator.visibility = if (galleryPage) View.GONE else View.VISIBLE
+        if (!galleryPage) {
+            bound.mediaImage.visibility = View.VISIBLE
+            MGImages.cancelImageRequests(bound.mediaImage)
+            bound.mediaImage.getZoomableController().run {
+                setScale(getMinimumScale(), bound.mediaImage.width / 2f, bound.mediaImage.height / 2f, false)
+            }
+        }
+        val sourceUri = Uri.parse(args.uri ?: args.previewImageUri)
+        imageUri = Uri.parse(args.previewImageUri)
+        mediaSource = if (args.progressiveMediaUri != null && args.mediaType != null) {
+            MediaSource.create(args.mediaType, args.progressiveMediaUri, FEATURE_TAG)
+        } else null
         videoUrl = mediaSource?.progressiveMediaUri?.toString()
 
         // Downloading a video must fetch the stream, not its poster frame.
         val downloadUri = videoUrl?.let(Uri::parse) ?: imageUri
 
-        val title = extras.getString(INTENT_TITLE)
+        val title = args.title
         val titleSubtext = if (title.isNullOrBlank()) sourceUri.toString() else title
 
         bound.mediaMore.setOnClickListener { anchor ->
@@ -174,7 +253,6 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
                 show()
             }
         }
-        val viewerContext = viewerContextExtra(extras)
         bound.mediaAuthor.visibility = if (viewerContext == null) View.GONE else View.VISIBLE
         viewerContext?.let { context ->
             bound.mediaAuthorName.text = context.authorName
@@ -186,7 +264,8 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         bound.mediaVolume.setOnClickListener { toggleMute(bound.mediaVolume) }
         bound.mediaBottomChrome.visibility = if (isVideo()) View.VISIBLE else View.GONE
 
-        configureMediaImage()
+        if (!galleryPage) configureMediaImage()
+        bound.mediaPlayerView.visibility = if (galleryPage) View.GONE else bound.mediaPlayerView.visibility
         showControls()
 
         playerPausedByFragmentLifecycle = false
@@ -211,6 +290,12 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         controlsVisibilitySubscription = null
         stopPositionPolling()
         bound.mediaImage.setTapListener(null)
+        bound.mediaContainer.canStartGesture = { true }
+        bound.mediaContainer.onVerticalDrag = null
+        bound.mediaContainer.onVerticalRelease = null
+        bound.mediaPlayerView.setOnTouchListener(null)
+        bound.mediaGallery.unregisterOnPageChangeCallback(galleryPageCallback)
+        bound.mediaGallery.adapter = null
         MGImages.cancelImageRequests(bound.mediaImage)
         // The player outlives the view, so it must let go of the views the view hierarchy owns.
         bound.mediaPlayerView.player = null
@@ -312,10 +397,11 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
 
     private fun handlePlayerEvent(event: PlayerEvent) {
         when (event) {
-            PlayerEvent.Buffering -> showLoadingIndicator()
+            PlayerEvent.Buffering -> if (gallery.isEmpty()) showLoadingIndicator()
             PlayerEvent.Ready -> {
                 // The first real frame is on screen, so the cover frame can come down for good.
                 bound.mediaImage.visibility = View.GONE
+                if (gallery.isNotEmpty()) bound.mediaPlayerView.visibility = View.VISIBLE
                 viewModel.showCoverFrame = false
                 hideLoadingIndicator()
             }
@@ -556,6 +642,20 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
     private fun mediaSourceExtra(extras: Bundle): MediaSource? = extras.getParcelable(INTENT_MEDIA_SOURCE)
 
     @Suppress("DEPRECATION")
+    private fun galleryExtra(extras: Bundle): List<MediaGalleryItem> =
+        (extras.getSerializable(INTENT_GALLERY) as? ArrayList<*>)?.filterIsInstance<MediaGalleryItem>().orEmpty()
+
+    private fun mediaArgsExtra(extras: Bundle) = MediaLaunchArgs(
+        extras.getString(INTENT_TITLE),
+        extras.getString(INTENT_URL),
+        mediaSourceExtra(extras)?.progressiveMediaUri?.toString(),
+        extras.getString(INTENT_IMAGE_URL),
+        extras.getInt(INTENT_WIDTH).takeIf { it > 0 },
+        extras.getInt(INTENT_HEIGHT).takeIf { it > 0 },
+        mediaSourceExtra(extras)?.mediaType,
+    )
+
+    @Suppress("DEPRECATION")
     private fun viewerContextExtra(extras: Bundle): MediaViewerContext? =
         extras.getSerializable(INTENT_VIEWER_CONTEXT) as? MediaViewerContext
 
@@ -635,6 +735,82 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         }
     }
 
+    private fun dragToDismiss(distance: Float) {
+        val progress = (abs(distance) / bound.mediaContainer.height.coerceAtLeast(1)).coerceIn(0f, 1f)
+        bound.mediaContainer.translationY = distance
+        bound.mediaContainer.alpha = 1f - progress * 0.85f
+        val scale = 1f - progress * 0.08f
+        bound.mediaContainer.scaleX = scale
+        bound.mediaContainer.scaleY = scale
+    }
+
+    private fun stopGalleryPlaybackForSwipe() {
+        stopPositionPolling()
+        player?.release()
+        player = null
+        bound.mediaPlayerView.player = null
+        bound.mediaPlayerControlView.player = null
+        bound.mediaPlayerView.visibility = View.GONE
+    }
+
+    private fun releaseToDismiss(distance: Float) {
+        if (abs(distance) > bound.mediaContainer.height * 0.15f) {
+            bound.mediaContainer.animate()
+                .translationY(if (distance < 0f) -bound.mediaContainer.height.toFloat() else bound.mediaContainer.height.toFloat())
+                .alpha(0f)
+                .scaleX(0.9f)
+                .scaleY(0.9f)
+                .setDuration(180L)
+                .withEndAction { activity?.finish() }
+                .start()
+        } else {
+            bound.mediaContainer.animate().translationY(0f).alpha(1f).scaleX(1f).scaleY(1f).setDuration(180L).start()
+        }
+    }
+
+    private fun isImageZoomed(): Boolean = if (gallery.isNotEmpty()) galleryAdapter.isZoomed(galleryIndex)
+    else bound.mediaImage.visibility == View.VISIBLE && bound.mediaImage.getZoomableController().getScale() > 1.01f
+
+    private inner class GalleryAdapter : RecyclerView.Adapter<GalleryAdapter.Holder>() {
+        override fun getItemCount() = gallery.size
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = Holder(
+            WidgetMediaGalleryPageBinding.inflate(LayoutInflater.from(parent.context), parent, false),
+        )
+
+        override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(gallery[position])
+
+        override fun onViewRecycled(holder: Holder) {
+            MGImages.cancelImageRequests(holder.binding.mediaGalleryImage)
+            super.onViewRecycled(holder)
+        }
+
+        fun isZoomed(position: Int): Boolean {
+            val recycler = bound.mediaGallery.getChildAt(0) as? RecyclerView
+            val holder = recycler?.findViewHolderForAdapterPosition(position) as? Holder
+            return holder?.binding?.mediaGalleryImage?.getZoomableController()?.getScale()?.let { it > 1.01f } == true
+        }
+
+        inner class Holder(val binding: WidgetMediaGalleryPageBinding) : RecyclerView.ViewHolder(binding.root) {
+            fun bind(item: MediaGalleryItem) {
+                val image = binding.mediaGalleryImage
+                image.setIsLongpressEnabled(false)
+                image.getZoomableController().setZoomTransitionDuration(ZOOM_ANIMATION_DURATION_MS)
+                image.setTapListener(object : GestureDetector.SimpleOnGestureListener() {
+                    override fun onSingleTapConfirmed(e: MotionEvent): Boolean { onMediaClick(); return true }
+                    override fun onDoubleTap(e: MotionEvent): Boolean {
+                        val controller = image.getZoomableController()
+                        val target = if (controller.getScale() < DOUBLE_TAP_ZOOM_THRESHOLD_SCALE) DOUBLE_TAP_ZOOM_SCALE else 1f
+                        controller.setScale(target, e.x, e.y, true)
+                        return true
+                    }
+                })
+                MGImages.setScaleType(image, ScalingUtils.ScaleType.FIT_CENTER)
+                MGImages.setImage(image, item.args.previewImageUri)
+            }
+        }
+    }
+
     companion object {
         private const val LOG_TAG = "WidgetMedia"
 
@@ -645,6 +821,8 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         private const val INTENT_HEIGHT = "INTENT_MEDIA_HEIGHT"
         private const val INTENT_MEDIA_SOURCE = "INTENT_MEDIA_SOURCE"
         private const val INTENT_VIEWER_CONTEXT = "INTENT_VIEWER_CONTEXT"
+        private const val INTENT_GALLERY = "INTENT_GALLERY"
+        private const val INTENT_GALLERY_INDEX = "INTENT_GALLERY_INDEX"
 
         private const val SHOW_CONTROLS_TIMEOUT_MS = 3000L
         private const val VERTICAL_CONTROLS_ANIMATION_DURATION_MS = 200L
@@ -682,6 +860,30 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         @JvmStatic
         fun launch(context: Context, embed: MessageEmbed) = launch(context, launchArgs(embed), null)
 
+        @JvmStatic
+        @JvmOverloads
+        fun launchGallery(
+            context: Context,
+            attachments: List<MessageAttachment>,
+            selectedIndex: Int,
+            viewerContexts: List<MediaViewerContext?> = emptyList(),
+        ) {
+            val items = attachments.mapIndexed { index, attachment ->
+                MediaGalleryItem(launchArgs(attachment), viewerContexts.getOrNull(index))
+            }
+            val selected = selectedIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
+            items.getOrNull(selected)?.let { item ->
+                presentScreen(
+                    context,
+                    WidgetMedia::class.java,
+                    intentFor(item.args)
+                        .putExtra(INTENT_VIEWER_CONTEXT, item.viewerContext)
+                        .putExtra(INTENT_GALLERY, ArrayList(items))
+                        .putExtra(INTENT_GALLERY_INDEX, selected),
+                )
+            }
+        }
+
         /** Builds the launch intent. Its extras are the screen's whole argument contract. */
         private fun intentFor(args: MediaLaunchArgs): Intent {
             // Playback needs both a stream and a kind; without either this is a still image.
@@ -716,6 +918,11 @@ data class MediaViewerContext(
     val timestampMs: Long?,
 ) : Serializable
 
+internal data class MediaGalleryItem(
+    val args: MediaLaunchArgs,
+    val viewerContext: MediaViewerContext?,
+) : Serializable
+
 /** Shows [screen] through the reference-shaped single-activity screen router. */
 internal fun presentScreen(context: Context, screen: Class<out AppFragment>, launchIntent: Intent) =
     AppScreenRouter.launch(context, screen, launchIntent)
@@ -738,7 +945,7 @@ internal data class MediaLaunchArgs(
     val width: Int?,
     val height: Int?,
     val mediaType: MediaType?,
-)
+) : Serializable
 
 internal fun launchArgs(imageUrl: String, title: String?): MediaLaunchArgs {
     val source = profileImageUrl(imageUrl)
@@ -747,16 +954,22 @@ internal fun launchArgs(imageUrl: String, title: String?): MediaLaunchArgs {
 
 internal fun launchArgs(attachment: MessageAttachment): MediaLaunchArgs {
     val isVideo = attachment.type == MessageAttachmentType.VIDEO
+    val preview = if (isVideo) mediaVideoPreviewUrl(attachment.proxyUrl) else attachment.proxyUrl
     return MediaLaunchArgs(
         title = attachment.filename,
         uri = attachment.proxyUrl,
         // Only a video has a stream to play; an image's proxy URL is the image itself.
         progressiveMediaUri = attachment.proxyUrl.takeIf { isVideo },
-        previewImageUri = attachment.proxyUrl,
+        previewImageUri = preview,
         width = attachment.width,
         height = attachment.height,
         mediaType = MediaType.VIDEO.takeIf { isVideo },
     )
+}
+
+internal fun mediaVideoPreviewUrl(url: String): String {
+    val proxied = url.replace("https://cdn.discordapp.com/", "https://media.discordapp.net/")
+    return "$proxied${if ('?' in proxied) '&' else '?'}format=webp&width=1280&height=720"
 }
 
 internal fun launchArgs(embed: MessageEmbed): MediaLaunchArgs {
