@@ -33,7 +33,7 @@ class StorePhone(
     private var defaultCountryCode: PhoneCountryCode = PhoneCountryCode.DEFAULT_COUNTRY_CODE
     private var selectedCountryCode: PhoneCountryCode = PhoneCountryCode.MISSING_COUNTRY_CODE
     private val selectedCountryCodeCache =
-        Persister(CACHE_KEY_SELECTED_COUNTRY_CODE, PhoneCountryCode.MISSING_COUNTRY_CODE)
+        Persister(CACHE_KEY_SELECTED_COUNTRY_CODE, PhoneCountryCode.MISSING_COUNTRY_CODE, deviceScoped = true)
 
     fun getCountryCode(): PhoneCountryCode =
         if (selectedCountryCode == PhoneCountryCode.MISSING_COUNTRY_CODE) {

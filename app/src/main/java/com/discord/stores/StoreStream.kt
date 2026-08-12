@@ -67,6 +67,7 @@ import com.discord.restapi.RestAPIBuilder
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.restapi.cookie.CookieJars
+import com.discord.stores.authentication.AccountTokens
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
 import com.discord.stores.utilities.Batched
@@ -95,6 +96,7 @@ import com.discord.utilities.notifications.NotificationData
 import com.discord.utilities.notifications.NotificationKind
 import com.discord.utilities.notifications.NotificationSource
 import com.discord.utilities.fcm.NotificationClient
+import com.discord.utilities.fcm.PushDeviceSync
 import com.discord.widgets.settings.NotificationStore
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapterItemCallMessage
 import com.discord.widgets.chat.input.ChatInputGuardActions
@@ -174,7 +176,12 @@ class StoreStream private constructor(
         onAuthStateChanged = ::handleAuthStateInternal,
         onLoginResult = ::handleLoginResultInternal,
         onPreLogout = ::handlePreLogout,
+        // Named late so logout can drop this device's registration; the store is declared below.
+        pushTokenProvider = { notifications.getPushToken() },
     )
+    private val accountTokens = AccountTokens(sessionDurablePreferences)
+    private val multiAccount = StoreMultiAccount(dispatcher, accountTokens, sessionDurablePreferences)
+    private val multiAccountSwitch = StoreMultiAccountSwitch(dispatcher)
     private val accessibility = StoreAccessibility(dispatcher, observationDeck)
     private val userSettings = StoreUserSettings(dispatcher, accessibility, preferences)
     private val userSettingsSystem = StoreUserSettingsSystem(
@@ -775,7 +782,29 @@ class StoreStream private constructor(
             if (::applicationContext.isInitialized) NotificationClient.clear(channelId, applicationContext)
         },
         onMessageCandidate = ::deliverNotification,
-        // The default token registrar posts to `/users/@me/devices` through the shared REST client.
+        registerPushToken = { _, pushToken, persisted ->
+            // Mid-switch the account list still describes the session being torn down. Reporting it
+            // unpersisted leaves the retry to the READY that ends the switch.
+            if (multiAccountSwitch.isSwitching()) persisted(false)
+            else PushDeviceSync.register(
+                accounts = multiAccount.getAccounts(),
+                tokens = accountTokens,
+                currentUserId = users.getMe().id,
+                pushToken = pushToken,
+                onSyncToken = { userId, syncToken ->
+                    dispatcher.schedule { multiAccount.handlePushSyncToken(userId, syncToken) }
+                },
+                onTokenRejected = { userId ->
+                    dispatcher.schedule {
+                        multiAccount.handleTokenStatus(userId, StoreMultiAccount.TokenStatus.INVALID)
+                    }
+                },
+                onInvalidated = { invalidated ->
+                    dispatcher.schedule { multiAccount.handleInvalidPushSyncTokens(invalidated) }
+                },
+                persisted = persisted,
+            )
+        },
     )
     private val gameParty = StoreGameParty(observationDeck, presences, users)
     private val userRequiredActions = StoreUserRequiredActions(observationDeck)
@@ -992,6 +1021,7 @@ class StoreStream private constructor(
     }
     private val storesV2 = mutableListOf(
         accessibility,
+        multiAccount,
         userSettingsSystem,
         users,
         userRelationships,
@@ -1583,6 +1613,7 @@ class StoreStream private constructor(
         BootLog.record(BootLogEvent.GATEWAY_READY)
         accessibilityMonitorBind(context)
         accessibility.init(context)
+        multiAccount.init(context)
         userSettings.init(context)
         userSettings.observeCustomStatus().subscribe { status ->
             dispatcher.schedule { presences.handleUserSettingsUpdate(null, status) }
@@ -2099,6 +2130,7 @@ class StoreStream private constructor(
             users.handleUserUpdated(user)
             userProfiles.updateUser(user)
             mfa.handleUserUpdated(user)
+            if (user.id == users.getMeInternal().id) multiAccount.handleCurrentUserUpdated(users.getMeInternal())
         }
         dispatchSubscribe(events.userNoteUpdate, "handleUserNoteUpdated", userNotes::handleNoteUpdate)
         dispatchSubscribe(events.relationshipAdd, "streamRelationshipAdd") { relationship ->
@@ -2982,8 +3014,13 @@ class StoreStream private constructor(
         }
         if (initialized.value == true) navigation.updateAuthState(state)
         if (state == null) {
-            Persister.reset()
-            preferences.edit().clear().apply()
+            if (authentication.isSwitchingAccount()) {
+                Persister.reset(includeDeviceScoped = false)
+                SharedPreferencesProvider.clearUserScoped()
+            } else {
+                Persister.reset()
+                preferences.edit().clear().apply()
+            }
         }
     }
 
@@ -2993,8 +3030,33 @@ class StoreStream private constructor(
         userSettingsSystem.handleLoginResult(loginResult)
     }
 
+    /**
+     * Signs into another account already on the switcher list.
+     *
+     * A missing token means the list outlived the credential it describes — the row is marked so it
+     * offers to sign in again rather than failing silently every time it is tapped.
+     */
+    private fun performAccountSwitch(userId: Long, location: StoreMultiAccountSwitch.Location) = dispatcher.schedule {
+        if (multiAccountSwitch.isSwitching()) return@schedule
+        val previousUserId = users.getMeInternal().id.takeUnless { it == 0L }
+        if (userId == previousUserId) return@schedule
+        val token = accountTokens.get(userId)
+        if (token == null) {
+            multiAccount.handleTokenStatus(userId, StoreMultiAccount.TokenStatus.INVALID)
+            return@schedule
+        }
+        multiAccountSwitch.handleSwitchStart(userId, previousUserId, location)
+        authentication.switchAccountToken(token)
+    }
+
     @StoreThread
     private fun handlePreLogoutInternal() {
+        // Read before the user store is reset, and only for a real logout: a switch is expected to
+        // leave the account it is stepping away from on the list.
+        val switching = authentication.isSwitchingAccount()
+        if (!switching) {
+            users.getMeInternal().id.takeUnless { it == 0L }?.let(multiAccount::removeAccountInternal)
+        }
         authGeneration++
         gatewayConnection.handlePreLogout()
         if (::messageSendCoordinator.isInitialized) messageSendCoordinator.cancelAll()
@@ -3005,7 +3067,10 @@ class StoreStream private constructor(
             WorkManager.getInstance(applicationContext).cancelAllWorkByTag("MESSAGE_ACK")
         }
         authentication.handlePreLogout()
-        userSettingsSystem.handlePreLogout()
+        // Theme, locale and font scale belong to the device. Their teardown forces the sync toggles
+        // back on and clears the stored values, so running it on a switch loses an unsynced choice
+        // on the way out and cannot give it back on the way home.
+        if (!switching) userSettingsSystem.handlePreLogout()
         notifications.handlePreLogout()
         analytics.handlePreLogout()
         userRelationships.handlePreLogout()
@@ -3025,7 +3090,7 @@ class StoreStream private constructor(
         guildSubscriptions.reset()
         tabsNavigation.handlePreLogout()
         userSettings.reset()
-        userSettingsSystem.reset()
+        if (!switching) userSettingsSystem.reset()
         users.reset()
         guilds.reset()
         channels.reset()
@@ -3191,6 +3256,11 @@ class StoreStream private constructor(
             (payload.users.orEmpty() + listOfNotNull(payload.me)).associateBy { it.id }
         authentication.handleConnectionOpen(payload)
         users.handleConnectionOpen(payload)
+        multiAccount.handleConnectionOpen(users.getMeInternal(), authentication.getAuthState()?.token)
+        multiAccountSwitch.handleConnectionOpen(users.getMeInternal())
+        // Deferred a dispatch: the registration reads the account snapshot, which does not include
+        // the account that just connected until this one ends.
+        dispatcher.schedule { notifications.handleConnectionOpen() }
         handleFrecencyProtoInternal(frecencyProto.handleConnectionOpen(null))
         frecency.handleConnectionOpen()
         val settingsProto = userSettingsProto.handleConnectionOpen(payload.userSettingsProto)
@@ -3710,6 +3780,10 @@ class StoreStream private constructor(
 
         @JvmStatic fun getAccessibility() = requireInstance().accessibility
         @JvmStatic fun getAuthentication() = requireInstance().authentication
+        @JvmStatic fun getMultiAccount() = requireInstance().multiAccount
+        @JvmStatic fun getMultiAccountSwitch() = requireInstance().multiAccountSwitch
+        @JvmStatic fun switchAccount(userId: Long, location: StoreMultiAccountSwitch.Location) =
+            requireInstance().performAccountSwitch(userId, location)
         @JvmStatic fun getDebugOptions() = requireInstance().debugOptions
         @JvmStatic fun getUserSettings() = requireInstance().userSettings
         @JvmStatic fun getUserSettingsSystem() = requireInstance().userSettingsSystem

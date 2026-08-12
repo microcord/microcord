@@ -150,6 +150,13 @@ data class NotificationData(
     val deepLink: String? = null,
     /** Android channel id, resolved from the payload's `notif_type_id`; see [PushChannel]. */
     val notificationChannelId: String? = null,
+    /**
+     * Which signed-in account this was sent to.
+     *
+     * Only present once the device is registered for more than one account, since the server has no
+     * reason to disambiguate before that.
+     */
+    val receivingUserId: Long? = null,
 ) {
     /**
      * An id for a notification with no channel to key off. Falling back to the channel id would
@@ -200,6 +207,8 @@ data class NotificationData(
         val sentAtMs: Long?,
         val expandSubtitle: Boolean,
         val notificationId: String?,
+        /** The account the push was addressed to, once the device serves more than one. */
+        val receivingUserId: Long?,
     ) {
         val pushType: PushType? get() = PushType.fromWireValue(type)
 
@@ -319,6 +328,7 @@ data class NotificationData(
                     sentAtMs = data["sent_at_ms"]?.toLongOrNull(),
                     expandSubtitle = data["expand_subtitle"]?.toBoolean() ?: false,
                     notificationId = data["notification_id"],
+                    receivingUserId = data["receiving_user_id"]?.toLongOrNull(),
                 )
             }
 

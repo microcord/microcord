@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:background="?attr/colorBackgroundPrimary" style="@style/UiKit.ViewGroup.NestedScrollView">
+    <LinearLayout style="@style/UiKit.ViewGroup.LinearLayout">
+        <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:layout_marginBottom="8dp" android:layout_marginStart="16dp" android:layout_marginEnd="16dp">
+            <TextView android:id="@+id/switch_accounts_title" android:layout_alignParentStart="true" android:text="@string/switch_accounts_choose_account" style="@style/UiKit.Sheet.Header.Title"/>
+            <TextView android:id="@+id/switch_accounts_manage" android:layout_alignParentEnd="true" android:layout_centerVertical="true" android:background="?attr/selectableItemBackgroundBorderless" android:padding="4dp" android:textColor="?attr/colorTextLink" android:text="@string/switch_accounts_manage_accounts" style="@style/UiKit.TextView"/>
+        </RelativeLayout>
+        <TextView android:id="@+id/switch_accounts_subheader" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginBottom="16dp" android:textColor="?attr/colorHeaderSecondary" android:text="@string/switch_accounts_choose_account_helper" style="@style/UiKit.TextView"/>
+        <View style="@style/UiKit.Divider"/>
+        <androidx.recyclerview.widget.RecyclerView android:id="@+id/switch_accounts_recycler" android:layout_width="match_parent" android:layout_height="wrap_content" android:nestedScrollingEnabled="false"/>
+        <View style="@style/UiKit.Divider"/>
+        <LinearLayout android:id="@+id/switch_accounts_add" android:background="?attr/selectableItemBackground" android:gravity="center_vertical" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="16dp" android:paddingBottom="16dp" android:focusable="true" android:clickable="true" style="@style/UiKit.ViewGroup.LinearLayout.Horizontal">
+            <androidx.appcompat.widget.AppCompatImageView android:layout_width="24dp" android:layout_height="24dp" android:importantForAccessibility="no" app:srcCompat="@drawable/ic_add_24dp" app:tint="?attr/colorTextLink"/>
+            <TextView android:id="@+id/switch_accounts_add_label" android:layout_marginStart="16dp" android:textColor="?attr/colorTextLink" android:text="@string/switch_accounts_add_an_account_button" style="@style/UiKit.TextView.Large"/>
+        </LinearLayout>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

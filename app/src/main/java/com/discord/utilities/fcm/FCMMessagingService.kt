@@ -111,6 +111,7 @@ class FCMMessagingService : FirebaseMessagingService() {
             type = type,
             deepLink = deepLink,
             notificationChannelId = PushChannel.forPush(pushType, notifTypeId, channel.type)?.id,
+            receivingUserId = receivingUserId,
         )
     }
 }

@@ -24,6 +24,7 @@ import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.restapi.cookie.CookieJars
 import com.discord.stores.authentication.AuthStateCache
+import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.error.AccountSuspendedException
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.time.TimeUtils
@@ -57,6 +58,7 @@ class StoreAuthentication(
     private val observeSelectedChannel: () -> Observable<Channel?> = { Observable.never() },
 ) {
     private var _isConsentRequired: Boolean? = null
+    @Volatile private var isSwitchingAccount = false
     private val ageGateError = BehaviorSubject.create<String?>()
     private var authState: AuthState? = null
     private var authSessionIdHash: String? = null
@@ -212,6 +214,52 @@ class StoreAuthentication(
         setAuthed(token.trim())
     }
 
+    /**
+     * Signs out of the current account and straight into [token].
+     *
+     * Both states are published from one dispatch so nothing observing the token can act on the
+     * intermediate logged-out one — the socket would otherwise close and the navigator would bounce
+     * through the login screen on the way.
+     *
+     * The teardown is the ordinary logout; only its reach differs. [isSwitchingAccount] holds while
+     * it runs, and the stores that own local state consult it to spare the settings that describe
+     * the device rather than the account, matching the reference's `LOGOUT.isSwitchingAccount`.
+     */
+    fun switchAccountToken(token: String) {
+        require(token.isNotBlank()) { "Token is required." }
+        isSwitchingAccount = true
+        userInitiatedAuthEventSubject.onNext(false)
+        onPreLogout()
+        dispatcher.schedule {
+            publishAuthStateInternal(null)
+            publishAuthStateInternal(AuthState.from(token.trim(), emptySet()))
+            isSwitchingAccount = false
+        }
+    }
+
+    fun isSwitchingAccount(): Boolean = isSwitchingAccount
+
+    /**
+     * Steps back to the login screen without giving up the accounts already on this device.
+     *
+     * The session has to go, since only one is held at a time, but this is not the user signing out
+     * of it: the account keeps its place in the switcher and its stored token, so it can be returned
+     * to afterwards whether or not another one is added.
+     *
+     * The reference instead keeps the current session connected and logs the new account in beneath
+     * it, which needs the credential request to authenticate as nobody and to end in
+     * [switchAccountToken] rather than an ordinary login. That is the one behavioural gap here.
+     */
+    fun logoutToAddAccount() {
+        isSwitchingAccount = true
+        userInitiatedAuthEventSubject.onNext(false)
+        onPreLogout()
+        dispatcher.schedule {
+            publishAuthStateInternal(null)
+            isSwitchingAccount = false
+        }
+    }
+
     @StoreThread
     internal fun handleLoginResultInternal(loginResult: ModelLoginResult) {
         setFingerprint(null, true)
@@ -266,8 +314,16 @@ class StoreAuthentication(
             // Persister value, the whole preference store, and the cookie jar — which lives in its
             // own preference file and holds the `__Secure-recent_mfa` elevation bypass. Without
             // this the next account inherits guild order, folders, read states and settings.
-            Persister.reset()
-            preferences.edit().clear().apply()
+            //
+            // A switch spares whatever describes the device instead of the account; the cookie jar
+            // is not that, since the elevation bypass it holds was granted to the account leaving.
+            if (isSwitchingAccount) {
+                Persister.reset(includeDeviceScoped = false)
+                SharedPreferencesProvider.clearUserScoped()
+            } else {
+                Persister.reset()
+                preferences.edit().clear().apply()
+            }
             CookieJars.clear()
         }
     }

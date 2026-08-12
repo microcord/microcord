@@ -46,7 +46,7 @@ class StoreRtcRegion(
 ) {
 
     private val lastTestResultCache =
-        Persister(CACHE_KEY_LATENCY_TEST_RESULT, RtcLatencyTestResult())
+        Persister(CACHE_KEY_LATENCY_TEST_RESULT, RtcLatencyTestResult(), deviceScoped = true)
     private var lastTestResult = RtcLatencyTestResult()
 
     fun init() {

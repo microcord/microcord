@@ -12,6 +12,8 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.intent.DeepLinkParser
 import com.discord.utilities.intent.DeepLinkRoute
 import com.discord.utilities.intent.LinkParseResult
+import com.discord.utilities.rx.ui
+import com.discord.widgets.multiaccount.WidgetSwitchAccounts
 import com.google.android.material.button.MaterialButton
 import rx.Subscription
 
@@ -62,6 +64,19 @@ class WidgetAuthLanding : AuthFragment(R.layout.widget_auth_landing, AuthRoute.L
         view.findViewById<MaterialButton>(R.id.auth_landing_login).setOnClickListener {
             actions.navigate(AuthRoute.LOGIN)
         }
+        // Signing out leaves the other accounts on this device stored but unreachable — the
+        // switcher lives behind settings, which needs a session. This is the way back to them.
+        //
+        // Bound to the list rather than read once: the account being signed out is dropped by a
+        // dispatch that can land after this screen is shown, which would leave an empty switcher
+        // reachable behind a button offering accounts that are no longer there.
+        val chooseAccount = view.findViewById<MaterialButton>(R.id.auth_landing_choose_account)
+        chooseAccount.setOnClickListener { WidgetSwitchAccounts.show(parentFragmentManager) }
+        StoreStream.getMultiAccount().observeAccounts()
+            .ui(this)
+            .subscribe { accounts ->
+                chooseAccount.visibility = if (accounts.isEmpty()) View.GONE else View.VISIBLE
+            }
         redeemOneTimeLogin()
     }
 

@@ -21,6 +21,7 @@ import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.user.UserUtils.displayName
 import com.discord.widgets.debugging.WidgetDebugging
 import com.discord.widgets.media.WidgetQRScanner
+import com.discord.widgets.multiaccount.WidgetSwitchAccounts
 import com.discord.widgets.settings.account.WidgetSettingsAccount
 import com.discord.widgets.settings.developer.WidgetSettingsDeveloper
 import com.discord.widgets.notice.WidgetNoticeDialog
@@ -153,6 +154,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
             onSelected = { item ->
                 when (item.itemId) {
                     R.id.menu_settings_debugging -> WidgetDebugging.launch(requireContext())
+                    R.id.menu_settings_switch_accounts -> WidgetSwitchAccounts.show(parentFragmentManager)
                     R.id.menu_settings_log_out -> showLogoutDialog(requireContext())
                 }
             },

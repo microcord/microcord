@@ -21,9 +21,9 @@ class StoreAccessibility(
     private var isDetectionAllowed = false
     private var fontScaledUp = false
     private var fontScaledDown = false
-    private val reducedMotionCache = Persister("CACHE_KEY_ACCESSIBILITY_REDUCED_MOTION_ENABLED", false)
+    private val reducedMotionCache = Persister("CACHE_KEY_ACCESSIBILITY_REDUCED_MOTION_ENABLED", false, deviceScoped = true)
     private val syncProfileThemeCache =
-        Persister("CACHE_KEY_ACCESSIBILITY_SYNC_PROFILE_THEME_WITH_USER_THEME", false)
+        Persister("CACHE_KEY_ACCESSIBILITY_SYNC_PROFILE_THEME_WITH_USER_THEME", false, deviceScoped = true)
 
     fun getAccessibilityFeatures(): EnumSet<AccessibilityFeatureFlags> = accessibilityFeaturesSnapshot
     fun isReducedMotionEnabled() = reducedMotionEnabled

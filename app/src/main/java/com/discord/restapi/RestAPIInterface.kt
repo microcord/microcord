@@ -64,6 +64,8 @@ import com.discord.api.hubs.EmailVerificationCode
 import com.discord.api.hubs.WaitlistSignup
 import com.discord.api.message.Message
 import com.discord.api.message.PollVoters
+import com.discord.api.notification.DeviceSyncResponse
+import com.discord.api.notification.PushSyncToken
 import com.discord.api.premium.ClaimedOutboundPromotion
 import com.discord.api.premium.OutboundPromotion
 import com.discord.api.report.MenuAPIResponse
@@ -336,6 +338,16 @@ interface RestAPIInterface {
 
     @POST("users/@me/devices")
     fun userCreateDevice(@Body body: RestAPIParams.UserDevices): Observable<Void>
+
+    @PUT("users/@me/devices/sync")
+    fun userSyncDevices(@Body body: RestAPIParams.UserDevicesSync): Observable<DeviceSyncResponse>
+
+    /**
+     * @param authorization The account minting the token, which is not the one holding the session
+     *   for every account but the active one.
+     */
+    @GET("users/@me/devices/sync-token")
+    fun userPushSyncToken(@Header("Authorization") authorization: String): Observable<PushSyncToken>
 
     @POST("users/@me/phone")
     fun userAddPhone(@Body body: RestAPIParams.Phone): Observable<Void>

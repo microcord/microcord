@@ -78,7 +78,7 @@ class StoreExperiments(
     private val guildExperimentsCache =
         Persister<List<GuildExperimentDto>>(GUILD_EXPERIMENTS_CACHE_KEY, ArrayList())
     private val experimentOverridesCache =
-        Persister<Map<String, Int>>(EXPERIMENT_OVERRIDES_CACHE_KEY, HashMap())
+        Persister<Map<String, Int>>(EXPERIMENT_OVERRIDES_CACHE_KEY, HashMap(), deviceScoped = true)
 
     override fun init(context: Context) {
         super.init(context)

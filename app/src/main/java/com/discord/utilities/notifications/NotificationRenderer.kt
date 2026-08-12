@@ -322,7 +322,11 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
             context,
             AppActivity.Main::class.java,
         )
-        return PendingIntent.getActivity(context, requestCode(data, 0), intent, immutableFlags())
+        data.receivingUserId?.let { intent.putExtra(EXTRA_RECEIVING_USER_ID, it) }
+        // Salted by account: two accounts can both see a channel, and an unsalted request code
+        // would let their notifications share one PendingIntent and so one destination.
+        val salt = data.receivingUserId?.hashCode() ?: 0
+        return PendingIntent.getActivity(context, requestCode(data, salt), intent, immutableFlags())
     }
 
     private fun actionIntent(
@@ -407,6 +411,9 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
         const val CHANNEL_DIRECT_MESSAGES = NotificationClient.NOTIF_CHANNEL_MESSAGES_DIRECT
         const val CHANNEL_SOCIAL = NotificationClient.NOTIF_CHANNEL_SOCIAL
         const val CHANNEL_GENERAL = NotificationClient.NOTIF_GENERAL
+
+        /** The account a notification was addressed to, so a tap can reach it. */
+        const val EXTRA_RECEIVING_USER_ID = "manticord.receivingUserId"
 
         private const val EXTRA_LATEST_MESSAGE_ID = "manticord.latestMessageId"
         private const val LIGHT_PERIOD_MS = 1_500

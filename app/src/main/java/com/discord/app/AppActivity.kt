@@ -25,9 +25,12 @@ import androidx.lifecycle.Lifecycle
 import com.discord.R
 import com.discord.databinding.ActivityAppBinding
 import com.discord.models.domain.ModelUserSettings
+import com.discord.i18n.I18nHooks
 import com.discord.stores.IntentRouteResult
 import com.discord.stores.MainRoute
 import com.discord.stores.RequiredAction
+import com.discord.stores.StoreMultiAccount
+import com.discord.stores.StoreMultiAccountSwitch
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreNotices
 import com.discord.stores.StoreStream
@@ -37,9 +40,11 @@ import com.discord.utilities.intent.LinkParseResult
 import com.discord.utilities.developer.DeveloperSettings
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
+import com.discord.utilities.notifications.NotificationRenderer
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.user.UserUtils.isStaff
+import com.discord.widgets.multiaccount.WidgetAccountSwitchSpinner
 import com.discord.views.ThemedColor
 import com.discord.views.ToolbarTitleLayout
 import com.discord.widgets.auth.AuthAction
@@ -270,7 +275,67 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
         settingsSubscription = userSettings.observeSettings(true)
             .bindToComponentLifecycle(this)
             .subscribe { settings -> runOnUiThread { onUserSettingsChanged(settings.locale, settings.theme, settings.fontScale) } }
+        // Hosted here rather than on the switcher sheet, which is dismissed the moment a switch
+        // starts and so would never live long enough to report how it ended.
+        StoreStream.getMultiAccountSwitch().observeResults()
+            .bindToComponentLifecycle(this)
+            .subscribe { result -> runOnUiThread { onAccountSwitchResult(result) } }
+        StoreStream.getMultiAccountSwitch().observeIsSwitching()
+            .bindToComponentLifecycle(this)
+            .subscribe { switching ->
+                runOnUiThread {
+                    if (switching) {
+                        WidgetAccountSwitchSpinner.show(supportFragmentManager)
+                    } else {
+                        WidgetAccountSwitchSpinner.dismiss(supportFragmentManager)
+                    }
+                }
+            }
         tryShowPendingNotice()
+    }
+
+    /**
+     * Holds a notification's intent until the account it was addressed to is the one signed in.
+     *
+     * A push raised for a background account opens onto a channel the active account may not even
+     * be able to see, so routing it before the switch lands would send the user somewhere wrong.
+     * The extra is consumed first, so the replay after the switch routes normally.
+     */
+    private fun deferForAccountSwitch(intent: Intent): Boolean {
+        val receivingUserId = intent.getLongExtra(NotificationRenderer.EXTRA_RECEIVING_USER_ID, 0L)
+        if (receivingUserId == 0L) return false
+        intent.removeExtra(NotificationRenderer.EXTRA_RECEIVING_USER_ID)
+        if (receivingUserId == StoreStream.getUsers().getMe().id) return false
+        if (StoreStream.getMultiAccount().getAccount(receivingUserId) == null) return false
+        val deferred = Intent(intent)
+        StoreStream.getMultiAccountSwitch().observeResults()
+            .take(1)
+            .bindToComponentLifecycle(this)
+            .subscribe { result ->
+                if (result is StoreMultiAccountSwitch.Result.Success && result.userId == receivingUserId) {
+                    runOnUiThread { consumeIntent(deferred) }
+                }
+            }
+        StoreStream.switchAccount(receivingUserId, StoreMultiAccountSwitch.Location.PUSH_NOTIFICATION)
+        return true
+    }
+
+    private fun onAccountSwitchResult(result: StoreMultiAccountSwitch.Result) = when (result) {
+        is StoreMultiAccountSwitch.Result.Success -> AppToast.show(
+            this,
+            I18nHooks.format(
+                this,
+                R.string.switch_accounts_toast_login_success,
+                mapOf("username" to result.username),
+            ),
+        )
+        is StoreMultiAccountSwitch.Result.Failure -> {
+            // The stored token was refused or never produced a session for the account asked for,
+            // so the row has to stop offering a switch that cannot happen.
+            StoreStream.getMultiAccount()
+                .handleTokenStatusAsync(result.targetUserId, StoreMultiAccount.TokenStatus.INVALID)
+            AppToast.show(this, R.string.switch_accounts_toast_login_error)
+        }
     }
 
     override fun onPause() {
@@ -491,6 +556,7 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
     }
 
     private fun consumeIntent(intent: Intent) {
+        if (deferForAccountSwitch(intent)) return
         directScreen = false
         // A screen intent addresses one fragment directly and bypasses MainRoute entirely. Without
         // this branch `AppScreenRouter.launch` silently re-entered the tab host, which left every

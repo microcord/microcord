@@ -62,9 +62,11 @@ class NotificationDataParsingTest {
             "sent_at_ms" to "1420070400000",
             "expand_subtitle" to "TRUE",
             "notification_id" to "fixture-notification",
+            "receiving_user_id" to "109",
         ))
 
-        assertEquals(39, NotificationData.PushPayload::class.java.declaredConstructors.single().parameterCount)
+        assertEquals(40, NotificationData.PushPayload::class.java.declaredConstructors.single().parameterCount)
+        assertEquals(109L, payload.receivingUserId)
         assertEquals(PushType.MESSAGE_CREATE, payload.pushType)
         assertEquals(101L, payload.messageId)
         assertEquals(MessageActivityType.SPECTATE, payload.messageActivityType)

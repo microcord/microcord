@@ -18,7 +18,16 @@ import rx.subjects.BehaviorSubject
 import rx.subjects.SerializedSubject
 import rx.subjects.Subject
 
-class Persister<T : Any>(val key: String, private val defaultValue: T, preload: Boolean = true) {
+/**
+ * @param deviceScoped Survives an account switch. Settings that describe the device rather than
+ *   whoever is signed in on it, matching the reference's `UserAgnosticStore`.
+ */
+class Persister<T : Any>(
+    val key: String,
+    private val defaultValue: T,
+    preload: Boolean = true,
+    private val deviceScoped: Boolean = false,
+) {
     private var value: T = defaultValue
     private var valueDirty = false
     private var valueUnset = true
@@ -228,9 +237,13 @@ class Persister<T : Any>(val key: String, private val defaultValue: T, preload: 
         }
 
         @JvmStatic
-        fun reset() {
+        fun reset() = reset(includeDeviceScoped = true)
+
+        @JvmStatic
+        fun reset(includeDeviceScoped: Boolean) {
             preferences.removeAll { reference ->
                 reference.get()?.let {
+                    if (!includeDeviceScoped && it.deviceScoped) return@let false
                     it.clear(true)
                     false
                 } ?: true

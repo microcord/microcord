@@ -1113,6 +1113,27 @@ object RestAPIParams {
         }
     }
 
+    /**
+     * As [UserDevices], but registers the device against several accounts at once.
+     *
+     * @param pushSyncTokens One per account, minted with that account's own credentials. The active
+     *   account has to come first: the older push service only ever delivered to the head of the
+     *   list, and the reference still orders it that way for those servers.
+     */
+    data class UserDevicesSync(
+        val token: String?,
+        @SerializedName("push_sync_tokens")
+        val pushSyncTokens: List<String>,
+        @SerializedName("bypass_server_throttling_supported")
+        val bypassServerThrottlingSupported: Boolean = true,
+        @SerializedName("bundle_id")
+        val bundleId: String = "com.discord",
+    ) {
+        val provider: String = "gcm"
+        override fun toString(): String =
+            "UserDevicesSync(provider=$provider, bundleId=$bundleId, accounts=${pushSyncTokens.size}, token=<redacted>)"
+    }
+
     data class UserEmailConfirmCode(val code: String) {
         override fun toString(): String = "UserEmailConfirmCode(code=<redacted>)"
     }

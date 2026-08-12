@@ -35,7 +35,7 @@ class StoreNotifications(
     private val onMessageCandidate: (Message, NotificationPolicy.Delivery) -> Unit = { _, _ -> },
     private val registerPushToken: (authToken: String, pushToken: String?, persisted: (Boolean) -> Unit) -> Unit =
         { _, pushToken, persisted -> registerDevice(pushToken, persisted) },
-    private val settingsCache: Persister<NotificationSettingsV2> = Persister(SETTINGS_CACHE_KEY, NotificationSettingsV2()),
+    private val settingsCache: Persister<NotificationSettingsV2> = Persister(SETTINGS_CACHE_KEY, NotificationSettingsV2(), deviceScoped = true),
     /**
      * The four inputs the reference folds into a completed `NotificationClient.SettingsV2`. They are
      * injectable so the fold is testable without a store graph. The production defaults use this
@@ -205,6 +205,17 @@ class StoreNotifications(
     fun handleRegistrationToken(token: String?) = synchronized(this) {
         registrationTokenReceived = true
         pushToken = token
+        tryTokenPersist()
+    }
+
+    /**
+     * Re-registers the device now that the session names its account.
+     *
+     * Registering for several accounts at once needs to know which one is active, and nothing does
+     * until READY says so — the reference syncs here for the same reason.
+     */
+    fun handleConnectionOpen() = synchronized(this) {
+        pushTokenPersisted = null
         tryTokenPersist()
     }
 
