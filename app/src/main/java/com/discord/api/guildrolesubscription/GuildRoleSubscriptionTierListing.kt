@@ -14,4 +14,6 @@ data class GuildRoleSubscriptionTierListing(
     val subscriptionPlans: List<SubscriptionPlan>,
     val roleBenefits: GuildRoleSubscriptionRoleBenefits,
     val roleId: Long,
+    /** Retired but still owned by existing subscribers, so it keeps its role and its emoji. */
+    val archived: Boolean? = null,
 )

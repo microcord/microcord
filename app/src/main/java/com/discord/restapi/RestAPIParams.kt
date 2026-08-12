@@ -800,7 +800,8 @@ object RestAPIParams {
         class ResponsePost(val location: String)
     }
 
-    class PatchGuildEmoji(val name: String)
+    /** @param roles As [PostGuildEmoji]; omitted leaves the emoji's existing access untouched. */
+    class PatchGuildEmoji(val name: String, val roles: List<Long>? = null)
 
     /**
      * Leaving Community. Separate from [UpdateGuild] because the two channels have to be written as
@@ -842,9 +843,14 @@ object RestAPIParams {
         override fun toString(): String = "Phone(source=$source, <redacted>)"
     }
 
+    /**
+     * @param roles Restricts the emoji to these roles. Naming subscription roles is what makes an
+     *   emoji a premium one; omitted, the emoji is available to the whole server.
+     */
     class PostGuildEmoji(
         val name: String,
         val image: String,
+        val roles: List<Long>? = null,
     )
 
     class PruneGuild(

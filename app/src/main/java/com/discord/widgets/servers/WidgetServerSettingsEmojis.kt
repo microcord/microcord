@@ -11,7 +11,10 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.permission.Permission as DiscordPermission
+import com.discord.api.guildrolesubscription.GuildRoleSubscriptionTierListing
+import com.discord.api.role.GuildRole
 import com.discord.app.AppFragment
+import com.discord.app.AppToast
 import com.discord.app.AppViewFlipper
 import com.discord.dialogs.ImageUploadDialog
 import com.discord.dialogs.SelectorDialog
@@ -25,7 +28,10 @@ import com.discord.models.user.CoreUser
 import com.discord.models.user.MeUser
 import com.discord.models.user.User
 import com.discord.restapi.RestAPIParams
+import com.discord.stores.StoreGuildRoleSubscriptions
 import com.discord.stores.StoreStream
+import com.discord.utilities.guild.RoleSubscriptionEmojis
+import com.discord.utilities.guild.RoleSubscriptionEmojis.AccessTier
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
@@ -42,6 +48,7 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.user.UserUtils.getUserNameWithDiscriminator
 import com.discord.utilities.view.extensions.setGrayscale
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
+import com.discord.widgets.servers.guild_role_subscription.emojis.SelectEmojiRolesDialog
 import com.discord.widgets.settings.SettingsNavigation
 import com.discord.widgets.settings.SettingsStrings
 import com.facebook.drawee.view.SimpleDraweeView
@@ -51,9 +58,13 @@ import rx.Observable
 class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_emojis) {
 
     private var guildId = INVALID_GUILD_ID
+    /** Premium-emoji mode: the same screen scoped to emoji gated behind subscription tiers. */
+    private var roleSubscription = false
     private lateinit var viewFlipper: AppViewFlipper
     private lateinit var adapter: Adapter
     private var uploadEmojiAction: ((String) -> Unit)? = null
+    /** Tiers picked for the upload in progress; an emoji is premium only because it names them. */
+    private var pendingUploadRoles: List<Long>? = null
     private val mediaPickerProvider by lazy {
         object : MediaPicker.Provider {
             override fun requireContext() = this@WidgetServerSettingsEmojis.requireContext()
@@ -69,6 +80,8 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
         guildId = arguments?.getLong(INTENT_EXTRA_GUILD_ID, INVALID_GUILD_ID)
             ?.takeIf { it != INVALID_GUILD_ID }
             ?: mostRecentIntent.getLongExtra(INTENT_EXTRA_GUILD_ID, INVALID_GUILD_ID)
+        roleSubscription = arguments?.getBoolean(INTENT_EXTRA_ROLE_SUBSCRIPTION) == true ||
+            mostRecentIntent.getBooleanExtra(INTENT_EXTRA_ROLE_SUBSCRIPTION, false)
         viewFlipper = view.findViewById(R.id.widget_server_settings_emojis_view_flipper)
         adapter = MGRecyclerAdapter.configure(Adapter(view.findViewById(R.id.widget_server_settings_emojis_recycler)))
     }
@@ -76,7 +89,7 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
         StoreStream.getGuildEmojis().activate(guildId)
-        Model.get(guildId)
+        Model.get(guildId, roleSubscription)
             .ui(this)
             .appSubscribe(WidgetServerSettingsEmojis::class.java, context, onNext = ::configureUI)
     }
@@ -91,7 +104,9 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
             appActivity?.onBackPressed()
             return
         }
-        setActionBarTitle(R.string.emoji)
+        setActionBarTitle(
+            if (roleSubscription) R.string.guild_role_subscription_settings_section_emoji_mobile else R.string.emoji,
+        )
         setActionBarSubtitle(model.guild.name)
         val items = model.items
         val defaultName = model.defaultName
@@ -99,23 +114,48 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
         viewFlipper.displayedChild = VIEW_INDEX_CONTENT
         uploadEmojiAction = { dataUrl -> uploadEmoji(defaultName, dataUrl) }
         adapter.setData(items)
-        adapter.onUploadEmoji = ::openMediaChooser
+        adapter.onUploadEmoji = {
+            if (roleSubscription) selectRolesThenUpload(model.subscriptionTiers) else openMediaChooser()
+        }
         adapter.onEmojiItemClicked = { view, emoji ->
             WidgetServerSettingsEmojisEdit.launch(view.context, guildId, emoji.id, emoji.name)
         }
-        adapter.onEmojiOverflowClicked = { view, emoji -> showEmojiOverflow(view, emoji) }
+        adapter.onEmojiOverflowClicked = { view, emoji ->
+            showEmojiOverflow(view, emoji, model.subscriptionTiers)
+        }
     }
 
-    private fun showEmojiOverflow(view: View, emoji: ModelEmojiGuild) {
-        SelectorDialog.show(
-            parentFragmentManager,
-            emoji.name,
-            arrayOf(getString(R.string.edit), getString(R.string.delete)),
-        ) { index ->
-            when (index) {
-                0 -> WidgetServerSettingsEmojisEdit.launch(view.context, guildId, emoji.id, emoji.name)
-                1 -> deleteEmoji(emoji)
+    private fun showEmojiOverflow(
+        view: View,
+        emoji: ModelEmojiGuild,
+        tiers: List<AccessTier>,
+    ) {
+        val options = buildList {
+            add(getString(R.string.edit))
+            // Which tiers may use it is only meaningful for an emoji that is gated at all.
+            if (roleSubscription) add(getString(R.string.guild_role_subscriptions_manage_emoji_roles_modal_header))
+            add(getString(R.string.delete))
+        }
+        SelectorDialog.show(parentFragmentManager, emoji.name, options.toTypedArray()) { index ->
+            when (options[index]) {
+                getString(R.string.delete) -> deleteEmoji(emoji)
+                getString(R.string.guild_role_subscriptions_manage_emoji_roles_modal_header) ->
+                    editEmojiRoles(emoji, tiers)
+                else -> WidgetServerSettingsEmojisEdit.launch(view.context, guildId, emoji.id, emoji.name)
             }
+        }
+    }
+
+    private fun editEmojiRoles(emoji: ModelEmojiGuild, tiers: List<AccessTier>) {
+        if (tiers.isEmpty()) return
+        SelectEmojiRolesDialog.show(parentFragmentManager, tiers, emoji.roles.toSet()) { roles ->
+            val api = RestAPI.apiOrNull ?: return@show
+            api.patchGuildEmoji(guildId, emoji.id, RestAPIParams.PatchGuildEmoji(emoji.name, roles))
+                .restSubscribeOn()
+                .ui(this)
+                .appSubscribe(WidgetServerSettingsEmojis::class.java, context) {
+                    StoreStream.getGuildEmojis().fetchGuildEmoji(guildId)
+                }
         }
     }
 
@@ -147,18 +187,38 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
         MGImages.requestDataUrl(context, uri, mimeType, uploadEmojiAction)
     }
 
+    /**
+     * Asks which tiers may use the emoji before picking the image.
+     *
+     * The roles are what make the upload a premium emoji, so they have to be settled before the
+     * request goes out; the reference asks in the same order.
+     */
+    private fun selectRolesThenUpload(tiers: List<AccessTier>) {
+        // An emoji is premium because it names a tier's role, so with no tiers there is nothing to
+        // upload against — a real state of the server rather than a failure.
+        if (tiers.isEmpty()) {
+            AppToast.show(this, R.string.guild_role_subscriptions_manage_emoji_no_tiers)
+            return
+        }
+        SelectEmojiRolesDialog.show(parentFragmentManager, tiers, emptySet()) { roles ->
+            pendingUploadRoles = roles
+            openMediaChooser()
+        }
+    }
+
     private fun uploadEmoji(name: String, imageBase64: String) {
         val api = RestAPI.apiOrNull ?: return
-        api.postGuildEmoji(guildId, RestAPIParams.PostGuildEmoji(name, imageBase64))
+        api.postGuildEmoji(guildId, RestAPIParams.PostGuildEmoji(name, imageBase64, pendingUploadRoles))
             .restSubscribeOn()
             .ui(this)
             .appSubscribe(WidgetServerSettingsEmojis::class.java, context) {
+                pendingUploadRoles = null
                 StoreStream.getGuildEmojis().fetchGuildEmoji(guildId)
             }
     }
 
     sealed class Item : MGRecyclerDataPayload {
-        data class EmojiHeader(val emojiMax: Int) : Item() {
+        data class EmojiHeader(val emojiMax: Int, val roleSubscription: Boolean) : Item() {
             override val type = TYPE_HEADER
             override val key = "EMOJI_HEADER"
         }
@@ -229,11 +289,26 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
 
             override fun onConfigure(position: Int, data: Item) {
                 val header = data as Item.EmojiHeader
-                description.text = SettingsStrings.render(
-                    itemView.context,
-                    R.string.guild_settings_emoji_upload_to_server_message,
-                    "count" to header.emojiMax,
-                    "maxSize" to EMOJI_MAX_FILESIZE_KB,
+                description.text = if (header.roleSubscription) {
+                    SettingsStrings.render(
+                        itemView.context,
+                        R.string.guild_role_subscriptions_manage_emoji_upload_description,
+                        "maxSlots" to header.emojiMax,
+                    )
+                } else {
+                    SettingsStrings.render(
+                        itemView.context,
+                        R.string.guild_settings_emoji_upload_to_server_message,
+                        "count" to header.emojiMax,
+                        "maxSize" to EMOJI_MAX_FILESIZE_KB,
+                    )
+                }
+                upload.setText(
+                    if (header.roleSubscription) {
+                        R.string.guild_role_subscriptions_manage_emoji_upload_cta
+                    } else {
+                        R.string.upload_emoji
+                    },
                 )
                 requirements.text = listOf(
                     itemView.context.getString(R.string.guild_settings_emoji_upload_requirements_1),
@@ -316,13 +391,15 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
         val guild: Guild,
         val items: List<Item>?,
         val defaultName: String?,
+        /** Tiers an emoji can be gated behind, archived last; empty outside premium mode. */
+        val subscriptionTiers: List<AccessTier>,
     ) {
         data class Permission(val canManage: Boolean, val guild: Guild)
 
         companion object {
-            fun get(guildId: Long): Observable<Model?> = canManageEmojisAndStickers(guildId)
-                .flatMap { permission ->
-                    if (permission?.canManage == true) getGuildEmojis(permission.guild)
+            fun get(guildId: Long, roleSubscription: Boolean): Observable<Model?> =
+                canManageEmojisAndStickers(guildId).flatMap { permission ->
+                    if (permission?.canManage == true) getGuildEmojis(permission.guild, roleSubscription)
                     else Observable.just(null as Model?)
                 }
 
@@ -345,45 +422,104 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
                     )
                 }.computationLatest()
 
-            private fun getGuildEmojis(guild: Guild): Observable<Model?> = Observable.combineLatest(
-                StoreStream.getGuildEmojis().observeGuildEmoji(guild.id),
-                StoreStream.getGuilds().observeGuildMembers(guild.id),
-            ) { emojis: List<ModelEmojiGuild>?, members: Map<Long, GuildMember> ->
-                create(guild, emojis, members)
-            }.doOnSubscribe { StoreStream.getGuildEmojis().fetchGuildEmoji(guild.id) }
-                .computationLatest()
+            private fun getGuildEmojis(guild: Guild, roleSubscription: Boolean): Observable<Model?> =
+                Observable.combineLatest(
+                    StoreStream.getGuildEmojis().observeGuildEmoji(guild.id),
+                    StoreStream.getGuilds().observeGuildMembers(guild.id),
+                    StoreStream.getGuilds().observeRoles(guild.id),
+                    observeSubscriptionTiers(guild.id, roleSubscription),
+                ) {
+                    emojis: List<ModelEmojiGuild>?,
+                    members: Map<Long, GuildMember>,
+                    roles: Map<Long, GuildRole>,
+                    listings: List<GuildRoleSubscriptionTierListing>,
+                    ->
+                    create(guild, emojis, members, roles, listings, roleSubscription)
+                }.doOnSubscribe {
+                    StoreStream.getGuildEmojis().fetchGuildEmoji(guild.id)
+                    if (roleSubscription) {
+                        StoreStream.getGuildRoleSubscriptions().fetchGuildRoleSubscriptionGroupsForGuild(guild.id)
+                    }
+                }.computationLatest()
+
+            /**
+             * The storefront's tiers, when they happen to be loaded.
+             *
+             * Only an enrichment: the picker's rows come from the guild's roles, so an empty or
+             * still-loading storefront costs a tier's own name and its archived mark, not the
+             * ability to upload. Not fetched at all outside premium mode.
+             */
+            private fun observeSubscriptionTiers(
+                guildId: Long,
+                roleSubscription: Boolean,
+            ): Observable<List<GuildRoleSubscriptionTierListing>> {
+                if (!roleSubscription) return Observable.just(emptyList())
+                return StoreStream.getGuildRoleSubscriptions().observeGuildRoleSubscriptionState(guildId)
+                    .map { state ->
+                        (state as? StoreGuildRoleSubscriptions.GuildRoleSubscriptionGroupState.Loaded)
+                            ?.guildRoleSubscriptionGroupListing
+                            ?.subscriptionListings
+                            .orEmpty()
+                    }
+            }
 
             private fun create(
                 guild: Guild,
                 emojis: List<ModelEmojiGuild>?,
                 members: Map<Long, GuildMember>,
+                roles: Map<Long, GuildRole>,
+                listings: List<GuildRoleSubscriptionTierListing>,
+                roleSubscription: Boolean,
             ): Model {
-                if (emojis == null) return Model(guild, null, null)
-                val emojiMax = PremiumUtils.getGuildEmojiMaxCount(guild)
-                val static = emojis.filterNot(ModelEmojiGuild::animated)
+                if (emojis == null) return Model(guild, null, null, emptyList())
+                val subscriptionRoleIds = RoleSubscriptionEmojis.subscriptionRoleIds(roles)
+                val visible = emojis.filter {
+                    RoleSubscriptionEmojis.isRoleSubscriptionEmoji(it, subscriptionRoleIds) == roleSubscription
+                }
+                val emojiMax = if (roleSubscription) {
+                    RoleSubscriptionEmojis.MAX_SLOTS
+                } else {
+                    PremiumUtils.getGuildEmojiMaxCount(guild)
+                }
+                val static = visible.filterNot(ModelEmojiGuild::animated)
                     .map { Item.EmojiItem.from(it, members) }
                     .reversed()
-                val animated = emojis.filter(ModelEmojiGuild::animated)
+                val animated = visible.filter(ModelEmojiGuild::animated)
                     .map { Item.EmojiItem.from(it, members) }
                     .reversed()
-                val items = mutableListOf<Item>(Item.EmojiHeader(emojiMax))
+                val items = mutableListOf<Item>(Item.EmojiHeader(emojiMax, roleSubscription))
                 val used = static.size + animated.size
-                if (static.isNotEmpty()) {
-                    items += Item.EmojiSection(emojiMax, used, R.string.emoji)
-                    items += static
+                // Premium emoji draw on one allowance and the reference lists them under a single
+                // heading, animated or not.
+                if (roleSubscription) {
+                    if (used > 0) {
+                        items += Item.EmojiSection(
+                            emojiMax,
+                            used,
+                            R.string.guild_role_subscriptions_manage_emoji_emoji_section_title,
+                        )
+                        items += static
+                        items += animated
+                    }
+                } else {
+                    if (static.isNotEmpty()) {
+                        items += Item.EmojiSection(emojiMax, used, R.string.emoji)
+                        items += static
+                    }
+                    if (animated.isNotEmpty()) {
+                        items += Item.EmojiSection(emojiMax, used, R.string.animated_emoji)
+                        items += animated
+                    }
                 }
-                if (animated.isNotEmpty()) {
-                    items += Item.EmojiSection(emojiMax, used, R.string.animated_emoji)
-                    items += animated
-                }
-                if (static.isEmpty() && animated.isEmpty()) items += Item.EmojiEmpty
-                return Model(guild, items, "emoji_${emojis.size + 1}")
+                if (used == 0) items += Item.EmojiEmpty
+                return Model(guild, items, "emoji_${emojis.size + 1}", RoleSubscriptionEmojis.accessTiers(roles, listings))
             }
         }
     }
 
     companion object {
         private const val INTENT_EXTRA_GUILD_ID = "INTENT_EXTRA_GUILD_ID"
+        private const val INTENT_EXTRA_ROLE_SUBSCRIPTION = "INTENT_EXTRA_ROLE_SUBSCRIPTION"
         private const val INVALID_GUILD_ID = -1L
         private const val EMOJI_MAX_FILESIZE_KB = 256
         private const val EMOJI_IMAGE_SIZE = 64
@@ -395,12 +531,18 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
 
         fun create(context: Context, guildId: Long) = launch(context, guildId)
 
-        fun launch(context: Context, guildId: Long) {
-            StoreStream.getAnalytics().onGuildSettingsPaneViewed("EMOJIS", guildId)
+        @JvmOverloads
+        fun launch(context: Context, guildId: Long, roleSubscription: Boolean = false) {
+            StoreStream.getAnalytics().onGuildSettingsPaneViewed(
+                if (roleSubscription) "ROLE_SUBSCRIPTION_EMOJIS" else "EMOJIS",
+                guildId,
+            )
             SettingsNavigation.launch(
                 context,
                 WidgetServerSettingsEmojis::class.java,
-                Intent().putExtra(INTENT_EXTRA_GUILD_ID, guildId),
+                Intent()
+                    .putExtra(INTENT_EXTRA_GUILD_ID, guildId)
+                    .putExtra(INTENT_EXTRA_ROLE_SUBSCRIPTION, roleSubscription),
             )
         }
     }

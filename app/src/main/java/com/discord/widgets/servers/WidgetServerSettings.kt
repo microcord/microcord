@@ -146,6 +146,7 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
         bindOption(R.id.server_settings_guild_role_subscription_basic_info, showSubscriptionSections)
         bindOption(R.id.server_settings_guild_role_subscription_tiers, showSubscriptionSections)
         bindOption(R.id.server_settings_guild_role_subscription_earnings, showSubscriptionSections)
+        bindOption(R.id.server_settings_guild_role_subscription_emojis, showSubscriptionSections)
 
         // Members is the one row the reference never gates: any member who reaches this screen at
         // all may open the member list.
@@ -217,6 +218,9 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
         bindDestination(R.id.server_settings_guild_role_subscription_earnings) {
             WidgetServerSettingsGuildRoleSubscriptionEarnings.launch(it.context)
         }
+        bindDestination(R.id.server_settings_guild_role_subscription_emojis) {
+            WidgetServerSettingsEmojis.launch(it.context, guildId, roleSubscription = true)
+        }
     }
 
     /** Shows the row when [allowed] *and* its destination exists; hides it otherwise. */
@@ -285,6 +289,7 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
             R.id.server_settings_guild_role_subscription_basic_info,
             R.id.server_settings_guild_role_subscription_tiers,
             R.id.server_settings_guild_role_subscription_earnings,
+            R.id.server_settings_guild_role_subscription_emojis,
         )
 
         /** Section container → the option rows inside it. */
@@ -311,6 +316,7 @@ class WidgetServerSettings : AppFragment(R.layout.widget_server_settings) {
                 R.id.server_settings_guild_role_subscription_basic_info,
                 R.id.server_settings_guild_role_subscription_tiers,
                 R.id.server_settings_guild_role_subscription_earnings,
+                R.id.server_settings_guild_role_subscription_emojis,
             ),
             R.id.server_settings_section_user_management to listOf(
                 R.id.server_settings_members_option,
