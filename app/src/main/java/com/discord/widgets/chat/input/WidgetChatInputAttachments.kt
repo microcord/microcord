@@ -222,6 +222,9 @@ class WidgetChatInputAttachments(
         )
 
         previewList.addItemDecoration(FilePreviewDecoration(adapter))
+        previewList.addItemDecoration(MediaSizeDecoration { position ->
+            adapter.selectionAggregator.attachments.getOrNull(position)?.uri
+        })
         previewList.addItemDecoration(SpoilerPreviewDecoration(adapter))
         installLongPressToOpenSheet(fragment, previewList, adapter)
     }
@@ -505,6 +508,7 @@ class WidgetChatInputAttachments(
 
     open class DiscordMediaFragment : PhotosFragment() {
         private var grantedSelectionCoordinator: SelectionCoordinator<Attachment<Any>, Attachment<Any>>? = null
+        private var mediaSizeDecoration: RecyclerView.ItemDecoration? = null
 
         override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? =
             super.onCreateView(inflater, container, savedInstanceState).also { view ->
@@ -540,6 +544,8 @@ class WidgetChatInputAttachments(
                 viewLifecycleOwner.lifecycleScope,
             )
             recyclerView.adapter = adapter
+            mediaSizeDecoration?.let(recyclerView::removeItemDecoration)
+            mediaSizeDecoration = MediaSizeDecoration(adapter::uri).also(recyclerView::addItemDecoration)
             recyclerView.invalidateItemDecorations()
             view?.findViewById<SwipeRefreshLayout>(com.lytefast.flexinput.R.id.swipeRefreshLayout)?.let { swipeRefresh ->
                 swipeRefresh.setOnRefreshListener {
@@ -552,6 +558,7 @@ class WidgetChatInputAttachments(
         override fun onDestroyView() {
             grantedSelectionCoordinator?.close()
             grantedSelectionCoordinator = null
+            mediaSizeDecoration = null
             super.onDestroyView()
         }
     }
@@ -650,6 +657,8 @@ class WidgetChatInputAttachments(
                 mediaType,
             )
         }
+
+        fun uri(position: Int): Uri? = item(position)?.uri
 
         inner class Holder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             private val preview = itemView.findViewById<com.facebook.drawee.view.SimpleDraweeView>(
@@ -957,6 +966,42 @@ class WidgetChatInputAttachments(
         private companion object {
             const val MAX_EXTENSION_CHARS = 4
             const val FALLBACK_EXTENSION = "FILE"
+        }
+    }
+
+    private class MediaSizeDecoration(
+        private val uriAt: (Int) -> Uri?,
+    ) : RecyclerView.ItemDecoration() {
+        private val sizes = mutableMapOf<String, String?>()
+        private val background = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(210, 0, 0, 0) }
+        private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+
+        override fun onDrawOver(canvas: Canvas, parent: RecyclerView, state: RecyclerView.State) {
+            val density = parent.resources.displayMetrics.density
+            text.textSize = 10f * parent.resources.displayMetrics.scaledDensity
+            repeat(parent.childCount) { childIndex ->
+                val child = parent.getChildAt(childIndex)
+                val position = parent.getChildAdapterPosition(child)
+                if (position == RecyclerView.NO_POSITION) return@repeat
+                val uri = uriAt(position) ?: return@repeat
+                val label = sizes.getOrPut(uri.toString()) {
+                    runCatching {
+                        parent.context.contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+                            descriptor.statSize.takeIf { it >= 0L }?.let {
+                                android.text.format.Formatter.formatShortFileSize(parent.context, it)
+                            }
+                        }
+                    }.getOrNull()
+                } ?: return@repeat
+                val horizontal = 5f * density
+                val vertical = 2f * density
+                val width = text.measureText(label) + horizontal * 2
+                val height = text.fontMetrics.run { bottom - top } + vertical * 2
+                val left = child.left + 4f * density
+                val top = child.top + 4f * density
+                canvas.drawRoundRect(left, top, left + width, top + height, 4f * density, 4f * density, background)
+                canvas.drawText(label, left + horizontal, top + vertical - text.fontMetrics.top, text)
+            }
         }
     }
 
