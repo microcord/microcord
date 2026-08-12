@@ -2113,7 +2113,7 @@ class StoreStream private constructor(
         dispatchSubscribe(events.relationshipRemove, "streamRelationshipRemove", userRelationships::handleRelationshipRemove)
         dispatchSubscribe(events.friendSuggestionCreate, "friendSuggestionCreate", friendSuggestions::handleFriendSuggestionCreate)
         dispatchSubscribe(events.friendSuggestionDelete, "friendSuggestionDelete", friendSuggestions::handleFriendSuggestionDelete)
-        dispatchSubscribe(events.presenceUpdate, "streamPresenceUpdate") { presence ->
+        dispatchSubscribeBatched(events.presenceUpdate, "streamPresenceUpdate") { presence ->
             users.handlePresenceUpdate(presence)
             presences.handlePresenceUpdate(presence.guildId ?: 0L, presence)
             gameParty.handlePresenceUpdate(presence)

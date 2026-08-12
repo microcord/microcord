@@ -216,7 +216,11 @@ class StoreGatewayConnection(
     val messagePollVoteRemove = behavior<PollVoteEvent>()
 
     // Presence and typing
-    val presenceUpdate = behavior<Presence>()
+    /**
+     * Coalesced for the same reason as [voiceStateUpdate], and more so: presence is the highest
+     * volume event on the wire, and every one of them rewrites a map the whole UI reads from.
+     */
+    val presenceUpdate: Batched<Presence> = batches.createBatched(EVENT_PRESENCE_UPDATE)
     val presenceReplace = behavior<List<Presence>>()
     val typingStart = behavior<TypingUser>()
 
@@ -305,9 +309,15 @@ class StoreGatewayConnection(
     }
 
     private fun handleTokenUpdate(token: String?) {
+        val previous = this.token
         this.token = token
-        if (token == null) socket?.close()
-        else socket?.connect()
+        when {
+            token == null -> socket?.close()
+            // `connect` only acts on a disconnected socket, so replacing a token in place would
+            // leave the live connection identified as the account that just went away.
+            previous != null -> socket?.reconnectWithNewSession("Token changed")
+            else -> socket?.connect()
+        }
     }
 
     // region Outgoing
@@ -551,7 +561,7 @@ class StoreGatewayConnection(
             "MESSAGE_POLL_VOTE_REMOVE" -> messagePollVoteRemove.emit(data)
 
             // Presence and typing
-            "PRESENCE_UPDATE" -> presenceUpdate.emit(data)
+            EVENT_PRESENCE_UPDATE -> presenceUpdate.onNextAny(data)
             "PRESENCES_REPLACE" -> presenceReplace.emit(data)
             "TYPING_START" -> typingStart.emit(data)
 
@@ -585,6 +595,7 @@ class StoreGatewayConnection(
 
     private companion object {
         const val EVENT_VOICE_STATE_UPDATE = "VOICE_STATE_UPDATE"
+        const val EVENT_PRESENCE_UPDATE = "PRESENCE_UPDATE"
         const val DEFAULT_MEMBER_REQUEST_LIMIT = 100
 
         fun <T> behavior(): SerializedSubject<T, T> = SerializedSubject(BehaviorSubject.create())
