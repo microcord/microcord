@@ -50,6 +50,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.widgets.chat.input.attachments.AttachmentBottomSheet
+import com.discord.widgets.chat.input.attachments.PhotoEditorDialog
 import com.discord.widgets.chat.input.emoji.EmojiPickerListener
 import com.discord.widgets.chat.input.expression.WidgetExpressionTray
 import com.discord.widgets.chat.polls.PollCreateLauncherFragment
@@ -88,6 +89,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+internal const val SOURCE_PHOTO_EDITOR = "photo_editor"
+
 /**
  * Everything the composer needs from FlexInput: the attachment pages, the attachment preview strip,
  * and the expression tray that lives in FlexInput's emoji slot.
@@ -111,6 +114,7 @@ class WidgetChatInputAttachments(
     private val onBackspacePressed: () -> Unit,
     private val onAttachmentsChanged: (Boolean) -> Unit = {},
 ) {
+    private var editingAttachment: Attachment<Any>? = null
 
     /**
      * @param canCreateThread the reference adds a fourth "create thread" page here. There is no
@@ -182,6 +186,34 @@ class WidgetChatInputAttachments(
             }
         }
         flexInputFragment.setAttachmentPreviewAdapter(adapter)
+        val previewList = flexInputFragment.view
+            ?.findViewById<RecyclerView>(com.lytefast.flexinput.R.id.attachment_preview_list)
+            ?: return
+        flexInputFragment.childFragmentManager.setFragmentResultListener(
+            PhotoEditorDialog.RESULT_KEY,
+            fragment,
+        ) { _, result ->
+            val original = editingAttachment ?: return@setFragmentResultListener
+            editingAttachment = null
+            val aggregator = adapter.selectionAggregator
+            val index = aggregator.attachments.indexOfFirst { it === original || it.id == original.id }
+            if (index < 0) return@setFragmentResultListener
+            if (result.getBoolean(PhotoEditorDialog.RESULT_DELETED)) {
+                aggregator.unselectItem(aggregator[index])
+                return@setFragmentResultListener
+            }
+            val uri = result.getString(PhotoEditorDialog.RESULT_URI)?.let(Uri::parse) ?: return@setFragmentResultListener
+            aggregator.attachments[index] = SourcedAttachment(
+                id = original.id,
+                uri = uri,
+                displayName = result.getString(PhotoEditorDialog.RESULT_NAME).orEmpty(),
+                data = original.data,
+                source = SOURCE_PHOTO_EDITOR,
+                spoiler = result.getBoolean(PhotoEditorDialog.RESULT_SPOILER),
+            )
+            adapter.notifyItemChanged(index)
+            previewList.invalidateItemDecorations()
+        }
         adapter.selectionAggregator.addItemSelectionListener(
             object : SelectionCoordinator.ItemSelectionListener<Attachment<Any>> {
                 override fun onItemSelected(item: Attachment<Any>) = notifyAttachmentsChanged(fragment, adapter)
@@ -189,9 +221,6 @@ class WidgetChatInputAttachments(
             },
         )
 
-        val previewList = flexInputFragment.view
-            ?.findViewById<RecyclerView>(com.lytefast.flexinput.R.id.attachment_preview_list)
-            ?: return
         previewList.addItemDecoration(FilePreviewDecoration(adapter))
         previewList.addItemDecoration(SpoilerPreviewDecoration(adapter))
         installLongPressToOpenSheet(fragment, previewList, adapter)
@@ -236,6 +265,15 @@ class WidgetChatInputAttachments(
                         adapter.notifyItemChanged(index)
                     }
                     previewList.invalidateItemDecorations()
+                },
+                onEditImage = {
+                    editingAttachment = attachment
+                    PhotoEditorDialog.show(
+                        flexInputFragment.childFragmentManager,
+                        attachment.uri,
+                        attachment.displayName,
+                        (attachment as? SourcedAttachment<*>)?.spoiler == true,
+                    )
                 },
             )
             return true

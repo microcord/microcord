@@ -34,6 +34,21 @@ class UploadAttachmentTest {
         val json = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
             .create().toJsonTree(body).asJsonObject
         assertTrue(json["attachments"].asJsonArray[0].asJsonObject["is_spoiler"].asBoolean)
+        val remixBody = RestAPIParams.Message(
+            attachments = listOf(
+                RestAPIParams.Message.Attachment(
+                    0,
+                    "edited.png",
+                    false,
+                    isRemix = true,
+                ),
+            ),
+        )
+        val remixJson = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .create().toJsonTree(remixBody).asJsonObject
+        val remixAttachment = remixJson["attachments"].asJsonArray[0].asJsonObject
+        assertTrue(remixAttachment["is_remix"].asBoolean)
+        assertFalse(remixAttachment.has("flags"))
 
         fun attachment(filename: String, flags: Int?) = MessageAttachment(
             url = "https://cdn.test/$filename",
@@ -48,5 +63,6 @@ class UploadAttachmentTest {
         assertTrue(attachment("image.png", MessageAttachment.FLAG_IS_SPOILER).isSpoiler)
         assertTrue(attachment("SPOILER_image.png", null).isSpoiler)
         assertFalse(attachment("image.png", null).isSpoiler)
+        assertTrue(attachment("edited.png", MessageAttachment.FLAG_IS_REMIX).isRemix)
     }
 }

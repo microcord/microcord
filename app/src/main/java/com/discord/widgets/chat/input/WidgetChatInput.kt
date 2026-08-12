@@ -935,6 +935,9 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                     requireContext().contentResolver,
                     attachment,
                     spoiler = (attachment as? SourcedAttachment<*>)?.spoiler == true,
+                ).copy(
+                    isRemix = ((attachment as? SourcedAttachment<*>)?.source == SOURCE_PHOTO_EDITOR)
+                        .takeIf { it },
                 )
             }
         }.getOrElse {

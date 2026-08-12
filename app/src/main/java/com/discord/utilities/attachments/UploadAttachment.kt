@@ -28,6 +28,7 @@ data class UploadAttachment(
     val permissionPersisted: Boolean,
     val durationSecs: Double? = null,
     val waveform: String? = null,
+    val isRemix: Boolean? = null,
 ) {
     val fileName: String = sanitizeUploadFileName(displayName)
 

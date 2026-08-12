@@ -661,6 +661,7 @@ object RestAPIParams {
             @SerializedName("uploaded_filename") val uploadedFilename: String? = null,
             @SerializedName("duration_secs") val durationSecs: Double? = null,
             val waveform: String? = null,
+            @SerializedName("is_remix") val isRemix: Boolean? = null,
         )
 
         data class Poll(

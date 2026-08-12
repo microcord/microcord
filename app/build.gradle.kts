@@ -105,6 +105,8 @@ android {
 dependencies {
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.apng)
+    implementation(libs.photoeditor)
+    implementation(libs.androidsvg)
     implementation(libs.billing)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.browser)

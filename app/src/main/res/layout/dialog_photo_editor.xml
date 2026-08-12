@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/photo_editor_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#111214">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:id="@+id/photo_editor_header"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:background="#1e1f22"
+            android:elevation="4dp"
+            android:gravity="center_vertical"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <ImageButton
+                android:id="@+id/photo_editor_close"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="@drawable/ripple_brighten"
+                android:contentDescription="@string/close"
+                android:padding="8dp"
+                android:src="@drawable/ic_close_white_24dp"
+                app:tint="@color/white" />
+
+            <TextView
+                android:id="@+id/photo_editor_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/white"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <ImageButton
+                android:id="@+id/photo_editor_spoiler"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/ripple_brighten"
+                android:contentDescription="@string/spoiler"
+                android:padding="8dp"
+                android:src="@drawable/ic_eye"
+                app:tint="@color/white" />
+
+            <ImageButton
+                android:id="@+id/photo_editor_delete"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/ripple_brighten"
+                android:contentDescription="@string/delete"
+                android:padding="8dp"
+                android:src="@drawable/ic_delete_24dp"
+                app:tint="#da373c" />
+
+            <ImageButton
+                android:id="@+id/photo_editor_save"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/ripple_brighten"
+                android:contentDescription="@string/save"
+                android:padding="8dp"
+                android:src="@drawable/ic_check_white_24dp"
+                app:tint="@color/white" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/photo_editor_canvas"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="@color/black">
+
+            <ja.burhanrashid52.photoeditor.PhotoEditorView
+                android:id="@+id/photo_editor_view"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_gravity="center" />
+
+            <FrameLayout
+                android:id="@+id/photo_editor_spoiler_overlay"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#99000000"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:background="@drawable/photo_editor_spoiler_pill"
+                    android:paddingStart="20dp"
+                    android:paddingTop="8dp"
+                    android:paddingEnd="20dp"
+                    android:paddingBottom="8dp"
+                    android:text="@string/spoiler"
+                    android:textAllCaps="true"
+                    android:textColor="@color/white"
+                    android:textSize="24sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
+
+            <ProgressBar
+                android:id="@+id/photo_editor_progress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center" />
+        </FrameLayout>
+
+        <ViewFlipper
+            android:id="@+id/photo_editor_sub_toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:background="#2b2d31">
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:fillViewport="true"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp">
+
+                    <ImageButton android:id="@+id/photo_editor_pen" style="@style/PhotoEditorToolButton" android:contentDescription="@string/pen" android:src="@drawable/ic_edit_24dp" />
+                    <ImageButton android:id="@+id/photo_editor_erase" style="@style/PhotoEditorToolButton" android:contentDescription="@string/erase" android:src="@drawable/ic_delete_24dp" />
+                    <View android:layout_width="1dp" android:layout_height="28dp" android:layout_marginStart="4dp" android:layout_marginEnd="8dp" android:background="#3f4147" />
+                    <TextView android:id="@+id/photo_editor_brush_size_label" android:layout_width="60dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="@color/white" android:textSize="14sp" />
+                    <com.google.android.material.slider.Slider android:id="@+id/photo_editor_brush_size" android:layout_width="150dp" android:layout_height="wrap_content" android:valueFrom="5" android:valueTo="80" android:stepSize="1" app:thumbColor="#5865f2" app:trackColorActive="#5865f2" app:trackColorInactive="#4e5058" />
+                    <View android:id="@+id/photo_editor_color_white" style="@style/PhotoEditorColorSwatch" />
+                    <View android:id="@+id/photo_editor_color_black" style="@style/PhotoEditorColorSwatch" />
+                    <View android:id="@+id/photo_editor_color_red" style="@style/PhotoEditorColorSwatch" />
+                    <View android:id="@+id/photo_editor_color_orange" style="@style/PhotoEditorColorSwatch" />
+                    <View android:id="@+id/photo_editor_color_yellow" style="@style/PhotoEditorColorSwatch" />
+                    <View android:id="@+id/photo_editor_color_green" style="@style/PhotoEditorColorSwatch" />
+                    <View android:id="@+id/photo_editor_color_blue" style="@style/PhotoEditorColorSwatch" />
+                    <View android:id="@+id/photo_editor_color_purple" style="@style/PhotoEditorColorSwatch" />
+                </LinearLayout>
+            </HorizontalScrollView>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/photo_editor_filters"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp" />
+        </ViewFlipper>
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#1e1f22"
+            android:elevation="8dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="8dp">
+
+                <ImageButton android:id="@+id/photo_editor_undo" style="@style/PhotoEditorToolButton" android:contentDescription="@string/undo" android:src="@drawable/ic_reply_24dp" />
+                <ImageButton android:id="@+id/photo_editor_redo" style="@style/PhotoEditorToolButton" android:contentDescription="@string/redo" android:scaleX="-1" android:src="@drawable/ic_reply_24dp" />
+                <ImageButton android:id="@+id/photo_editor_reset" style="@style/PhotoEditorToolButton" android:contentDescription="@string/reset" android:src="@drawable/ucrop_ic_reset" />
+                <View android:layout_width="1dp" android:layout_height="28dp" android:layout_marginStart="4dp" android:layout_marginEnd="8dp" android:background="#3f4147" />
+                <ImageButton android:id="@+id/photo_editor_draw" style="@style/PhotoEditorToolButton" android:contentDescription="@string/draw" android:src="@drawable/ic_edit_24dp" />
+                <ImageButton android:id="@+id/photo_editor_text" style="@style/PhotoEditorToolButton" android:contentDescription="@string/text" android:src="@drawable/ic_text_image_24dp" />
+                <ImageButton android:id="@+id/photo_editor_emoji" style="@style/PhotoEditorToolButton" android:contentDescription="@string/emoji" android:src="@drawable/ic_emoji_24dp" />
+                <ImageButton android:id="@+id/photo_editor_sticker" style="@style/PhotoEditorToolButton" android:contentDescription="@string/sticker" android:src="@drawable/ic_sticker_icon_24dp" />
+                <ImageButton android:id="@+id/photo_editor_image" style="@style/PhotoEditorToolButton" android:contentDescription="@string/image" android:src="@drawable/ic_photo_grey_24dp" />
+                <ImageButton android:id="@+id/photo_editor_crop" style="@style/PhotoEditorToolButton" android:contentDescription="@string/crop" android:src="@drawable/ucrop_ic_crop" />
+                <ImageButton android:id="@+id/photo_editor_filter" style="@style/PhotoEditorToolButton" android:contentDescription="@string/filter" android:src="@drawable/ic_filter_list_grey_24dp" />
+            </LinearLayout>
+        </HorizontalScrollView>
+    </LinearLayout>
+</FrameLayout>

@@ -3,6 +3,8 @@ package com.discord.widgets.chat.input.attachments
 import android.content.DialogInterface
 import android.graphics.drawable.Animatable
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.view.View
 import android.webkit.MimeTypeMap
@@ -43,6 +45,7 @@ class AttachmentBottomSheet : AppBottomSheet() {
     private var isSpoiler = false
     private var onFileRemoved: (() -> Unit)? = null
     private var onMarkSpoiler: ((Boolean) -> Unit)? = null
+    private var onEditImage: (() -> Unit)? = null
     private var onDismissed: (() -> Unit)? = null
 
     override fun getContentViewResId(): Int = R.layout.widget_attachment_bottom_sheet
@@ -94,6 +97,14 @@ class AttachmentBottomSheet : AppBottomSheet() {
             markSpoiler(next)
             onMarkSpoiler?.invoke(next)
         }
+        binding.attachmentEditImage.apply {
+            visibility = if (onEditImage == null || videoDurationMs() != null) View.GONE else View.VISIBLE
+            setOnClickListener {
+                val edit = onEditImage
+                dismiss()
+                Handler(Looper.getMainLooper()).post { edit?.invoke() }
+            }
+        }
         setPeekHeightBottomView(binding.attachmentRemoveItem)
     }
 
@@ -113,6 +124,7 @@ class AttachmentBottomSheet : AppBottomSheet() {
         super.onDismiss(dialog)
         onFileRemoved = null
         onMarkSpoiler = null
+        onEditImage = null
         onDismissed?.invoke()
     }
 
@@ -194,11 +206,13 @@ class AttachmentBottomSheet : AppBottomSheet() {
             spoiler: Boolean,
             onFileRemoved: () -> Unit,
             onMarkSpoiler: (Boolean) -> Unit,
+            onEditImage: (() -> Unit)? = null,
             onDismissed: (() -> Unit)? = null,
         ): AttachmentBottomSheet = AttachmentBottomSheet().apply {
             arguments = bundleOf(EXTRA_ATTACHMENT to attachment, EXTRA_SPOILER to spoiler)
             this.onFileRemoved = onFileRemoved
             this.onMarkSpoiler = onMarkSpoiler
+            this.onEditImage = onEditImage
             this.onDismissed = onDismissed
             show(fragmentManager, AttachmentBottomSheet::class.java.name)
         }

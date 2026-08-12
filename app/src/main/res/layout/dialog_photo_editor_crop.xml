@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/photo_editor_bottom_sheet_background" android:orientation="vertical" android:padding="16dp">
+    <View android:layout_width="36dp" android:layout_height="4dp" android:layout_gravity="center_horizontal" android:layout_marginBottom="14dp" android:background="@drawable/photo_editor_sheet_handle" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" android:text="@string/photo_editor_crop_image" android:textColor="@color/white" android:textSize="18sp" android:textStyle="bold" />
+    <FrameLayout android:layout_width="match_parent" android:layout_height="320dp" android:background="@color/black">
+        <ImageView android:id="@+id/photo_editor_crop_preview" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" />
+        <com.discord.widgets.chat.input.attachments.PhotoEditorCropOverlayView android:id="@+id/photo_editor_crop_overlay" android:layout_width="match_parent" android:layout_height="match_parent" />
+    </FrameLayout>
+    <com.google.android.material.slider.Slider xmlns:app="http://schemas.android.com/apk/res-auto" android:id="@+id/photo_editor_crop_rotation" android:layout_width="match_parent" android:layout_height="wrap_content" android:valueFrom="-180" android:valueTo="180" android:stepSize="1" app:thumbColor="#5865f2" app:trackColorActive="#5865f2" app:trackColorInactive="#4e5058" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:orientation="horizontal" android:paddingTop="4dp" android:paddingBottom="12dp">
+        <TextView android:id="@+id/photo_editor_crop_flip_h" style="@style/PhotoEditorCropButton" android:layout_marginEnd="4dp" android:text="Flip H" />
+        <TextView android:id="@+id/photo_editor_crop_flip_v" style="@style/PhotoEditorCropButton" android:layout_marginStart="4dp" android:layout_marginEnd="4dp" android:text="Flip V" />
+        <TextView android:id="@+id/photo_editor_crop_rotate" style="@style/PhotoEditorCropButton" android:layout_marginStart="4dp" android:text="Rotate 90°" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="end" android:orientation="horizontal">
+        <TextView android:id="@+id/photo_editor_crop_cancel" android:layout_width="wrap_content" android:layout_height="48dp" android:gravity="center" android:paddingHorizontal="16dp" android:text="@string/cancel" android:textColor="#dbdee1" android:textStyle="bold" />
+        <TextView android:id="@+id/photo_editor_crop_apply" android:layout_width="wrap_content" android:layout_height="48dp" android:layout_marginStart="8dp" android:background="@drawable/photo_editor_primary_button" android:gravity="center" android:paddingHorizontal="20dp" android:text="@string/crop" android:textColor="@color/white" android:textStyle="bold" />
+    </LinearLayout>
+</LinearLayout>

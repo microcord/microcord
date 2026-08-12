@@ -36,6 +36,9 @@ data class MessageAttachment(
     val isSpoiler: Boolean
         get() = filename.startsWith(SPOILER_PREFIX) || flags?.and(FLAG_IS_SPOILER) == FLAG_IS_SPOILER
 
+    val isRemix: Boolean
+        get() = flags?.and(FLAG_IS_REMIX) == FLAG_IS_REMIX
+
     /**
      * Whether the proxy has to be told to keep every frame.
      *
@@ -57,6 +60,7 @@ data class MessageAttachment(
 
     companion object {
         const val SPOILER_PREFIX = "SPOILER_"
+        const val FLAG_IS_REMIX = 1 shl 2
         const val FLAG_IS_SPOILER = 1 shl 3
 
         const val FLAG_CONTAINS_EXPLICIT_MEDIA = 1 shl 4

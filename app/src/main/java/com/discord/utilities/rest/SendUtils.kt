@@ -94,6 +94,7 @@ object SendUtils {
                         isSpoiler = attachment.spoiler,
                         durationSecs = attachment.durationSecs,
                         waveform = attachment.waveform,
+                        isRemix = attachment.isRemix,
                     )
                 },
             )

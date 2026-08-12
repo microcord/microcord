@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="48dp"
+    android:background="@drawable/photo_editor_tool_background"
+    android:gravity="center"
+    android:minWidth="48dp"
+    android:paddingStart="10dp"
+    android:paddingEnd="10dp"
+    android:textColor="#dbdee1"
+    android:textSize="14sp"
+    android:textStyle="bold" />

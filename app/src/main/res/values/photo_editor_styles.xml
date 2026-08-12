@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="PhotoEditorToolButton" parent="Widget.AppCompat.ImageButton">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_marginEnd">5dp</item>
+        <item name="android:background">@drawable/photo_editor_tool_background</item>
+        <item name="android:padding">13dp</item>
+        <item name="tint">#dbdee1</item>
+    </style>
+
+    <style name="PhotoEditorColorSwatch">
+        <item name="android:layout_width">32dp</item>
+        <item name="android:layout_height">32dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+    </style>
+    <style name="PhotoEditorTextToggle">
+        <item name="android:layout_width">48dp</item><item name="android:layout_height">48dp</item>
+        <item name="android:background">@drawable/photo_editor_tool_background</item>
+        <item name="android:gravity">center</item><item name="android:textColor">#80848e</item><item name="android:textSize">18sp</item>
+    </style>
+    <style name="PhotoEditorCropButton">
+        <item name="android:layout_width">0dp</item><item name="android:layout_height">48dp</item><item name="android:layout_weight">1</item>
+        <item name="android:background">@drawable/photo_editor_crop_button</item><item name="android:gravity">center</item>
+        <item name="android:textColor">#dbdee1</item><item name="android:textSize">14sp</item><item name="android:textStyle">bold</item>
+    </style>
+</resources>

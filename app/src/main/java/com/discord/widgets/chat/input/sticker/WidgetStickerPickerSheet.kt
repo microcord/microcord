@@ -36,6 +36,7 @@ class WidgetStickerPickerSheet : AppBottomSheet(), StickerPickerListener {
             mode = StickerPickerMode.BOTTOM_SHEET,
             initialStickerPackId = packId,
             searchText = argumentsOrDefault.getString(WidgetStickerPicker.EXTRA_SEARCH_TEXT),
+            selectionOnly = argumentsOrDefault.getBoolean(WidgetStickerPicker.EXTRA_SELECTION_ONLY),
         )
         picker.stickerPickerListener = this
         stickerPickerFragment = picker
@@ -90,6 +91,7 @@ class WidgetStickerPickerSheet : AppBottomSheet(), StickerPickerListener {
             stickerPickerListener: StickerPickerListener?,
             initialStickerPackId: Long? = null,
             searchText: String? = null,
+            selectionOnly: Boolean = false,
             onCancel: (() -> Unit)? = null,
         ): WidgetStickerPickerSheet = WidgetStickerPickerSheet().apply {
             this.stickerPickerListenerDelegate = stickerPickerListener
@@ -99,6 +101,7 @@ class WidgetStickerPickerSheet : AppBottomSheet(), StickerPickerListener {
                     putLong(WidgetStickerPicker.EXTRA_STICKER_PACK_ID, it)
                 }
                 searchText?.let { putString(WidgetStickerPicker.EXTRA_SEARCH_TEXT, it) }
+                putBoolean(WidgetStickerPicker.EXTRA_SELECTION_ONLY, selectionOnly)
             }
             show(fragmentManager, WidgetStickerPickerSheet::class.java.simpleName)
         }

@@ -68,6 +68,8 @@ class WidgetStickerPicker : AppFragment(R.layout.widget_sticker_picker) {
     private val initialStickerPackId: Long
         get() = args.getLong(EXTRA_STICKER_PACK_ID, NO_PACK)
 
+    private val selectionOnly: Boolean get() = args.getBoolean(EXTRA_SELECTION_ONLY)
+
     /** Set by the host tray so it can hide its own search field while an empty state is showing. */
     var showSearchBar: ((Boolean) -> Unit)? = null
 
@@ -303,6 +305,10 @@ class WidgetStickerPicker : AppFragment(R.layout.widget_sticker_picker) {
     // region interaction
 
     private fun onStickerItemSelected(stickerItem: StickerItem) {
+        if (selectionOnly) {
+            stickerPickerListener?.onStickerPicked(stickerItem.sticker)
+            return
+        }
         if (viewModel.onStickerSelected(stickerItem.sticker)) {
             stickerPickerListener?.onStickerPicked(stickerItem.sticker)
         }
@@ -433,12 +439,16 @@ class WidgetStickerPicker : AppFragment(R.layout.widget_sticker_picker) {
             mode: StickerPickerMode,
             initialStickerPackId: Long? = null,
             searchText: String? = null,
+            selectionOnly: Boolean = false,
         ): WidgetStickerPicker = WidgetStickerPicker().apply {
             arguments = Bundle().apply {
                 putSerializable(ARG_MODE, mode)
                 initialStickerPackId?.let { putLong(EXTRA_STICKER_PACK_ID, it) }
                 searchText?.let { putString(EXTRA_SEARCH_TEXT, it) }
+                putBoolean(EXTRA_SELECTION_ONLY, selectionOnly)
             }
         }
+
+        const val EXTRA_SELECTION_ONLY = "EXTRA_SELECTION_ONLY"
     }
 }
