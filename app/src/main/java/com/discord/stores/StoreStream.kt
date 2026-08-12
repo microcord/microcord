@@ -98,6 +98,7 @@ import com.discord.utilities.notifications.NotificationSource
 import com.discord.utilities.fcm.NotificationClient
 import com.discord.utilities.fcm.PushDeviceSync
 import com.discord.widgets.settings.NotificationStore
+import com.discord.widgets.phone.PhoneCountryCodes
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapterItemCallMessage
 import com.discord.widgets.chat.input.ChatInputGuardActions
 import com.discord.widgets.chat.input.ChatInputStoreBindings
@@ -1625,6 +1626,10 @@ class StoreStream private constructor(
         accessibilityMonitorBind(context)
         accessibility.init(context)
         multiAccount.init(context)
+        // Without this the country list is empty and the picked country is never read back off
+        // disk, so the field falls to its default every time the screen is rebuilt.
+        phone.init(context)
+        PhoneCountryCodes.store = phone
         userSettings.init(context)
         userSettings.observeCustomStatus().subscribe { status ->
             dispatcher.schedule { presences.handleUserSettingsUpdate(null, status) }

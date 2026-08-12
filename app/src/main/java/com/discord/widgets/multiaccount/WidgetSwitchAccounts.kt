@@ -124,7 +124,7 @@ class WidgetSwitchAccounts : AppBottomSheet() {
     private fun openLogin() {
         dismiss()
         if (StoreStream.getAuthentication().isAuthed()) {
-            StoreStream.getAuthentication().logoutToAddAccount()
+            StoreStream.getAuthentication().logoutKeepingAccount()
         }
     }
 

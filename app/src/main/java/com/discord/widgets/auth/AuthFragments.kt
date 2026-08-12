@@ -18,6 +18,8 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.utilities.time.ClockFactory
+import com.discord.widgets.user.account.WidgetUserAccountVerifyBase
+import com.discord.widgets.user.phone.WidgetUserPhoneManage
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputLayout
 import java.util.Calendar
@@ -196,8 +198,24 @@ class WidgetAuthRequiredAction : AuthFragment(R.layout.widget_user_account_verif
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         view.findViewById<View>(R.id.verify_account_by_email).setOnClickListener { navigate(AuthRequiredAction.VERIFY_EMAIL) }
-        view.findViewById<View>(R.id.verify_account_by_phone).setOnClickListener { navigate(AuthRequiredAction.VERIFY_PHONE) }
+        // Not the auth code screen: that one verifies a number the flow already knows, and this
+        // gate has none. The account phone screen collects it, sends the code and confirms with the
+        // password, which is the sequence the reference runs for this required action.
+        view.findViewById<View>(R.id.verify_account_by_phone).setOnClickListener {
+            WidgetUserPhoneManage.launch(
+                requireContext(),
+                WidgetUserAccountVerifyBase.Mode.FORCED,
+                WidgetUserPhoneManage.Source.USER_ACTION_REQUIRED,
+            )
+        }
         view.findViewById<TextView>(R.id.verify_account_support).setOnClickListener { actions.openSupport() }
+        // The way off a gate there is no other way off. Not a real sign-out: the account keeps its
+        // place in the switcher and its token, so the user lands on the login screen able to switch
+        // straight back — the requirement is the server's to lift, not something leaving discards.
+        view.findViewById<TextView>(R.id.verify_account_logout).apply {
+            visibility = View.VISIBLE
+            setOnClickListener { StoreStream.getAuthentication().logoutKeepingAccount() }
+        }
     }
 
     /** Which factors are offered comes from the gate itself; some accept only one of the two. */

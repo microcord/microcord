@@ -244,13 +244,10 @@ class StoreAuthentication(
      *
      * The session has to go, since only one is held at a time, but this is not the user signing out
      * of it: the account keeps its place in the switcher and its stored token, so it can be returned
-     * to afterwards whether or not another one is added.
-     *
-     * The reference instead keeps the current session connected and logs the new account in beneath
-     * it, which needs the credential request to authenticate as nobody and to end in
-     * [switchAccountToken] rather than an ordinary login. That is the one behavioural gap here.
+     * to afterwards. Used to add another account, and to escape a screen that has locked this one
+     * out — in both cases leaving is about reaching the login screen, not discarding the account.
      */
-    fun logoutToAddAccount() {
+    fun logoutKeepingAccount() {
         isSwitchingAccount = true
         userInitiatedAuthEventSubject.onNext(false)
         onPreLogout()

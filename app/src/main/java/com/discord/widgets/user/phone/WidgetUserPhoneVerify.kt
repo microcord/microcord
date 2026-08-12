@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.view.View
 import android.widget.ImageView
+import android.widget.TextView
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -11,7 +12,9 @@ import com.discord.R
 import com.discord.analytics.generated.events.impression.TrackImpressionUserVerifyPhone
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
+import com.discord.app.AppToast
 import com.discord.app.LoggingConfig
+import com.discord.i18n.i18nRender
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
@@ -91,6 +94,7 @@ class WidgetUserPhoneVerify : WidgetUserAccountVerifyBase(R.layout.widget_user_p
         dimmer = view.findViewById(R.id.dimmer_view)
 
         codeVerificationView.onCodeEntered = ::handleCodeEntered
+        view.findViewById<TextView>(R.id.phone_verify_resend).setOnClickListener { resendCode() }
 
         closeButton.visibility = if (isForced) View.GONE else View.VISIBLE
         closeButton.setOnClickListener {
@@ -120,6 +124,38 @@ class WidgetUserPhoneVerify : WidgetUserAccountVerifyBase(R.layout.widget_user_p
         Observable.timer(AUTOFILL_SUBMIT_DELAY_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
             .ui(this)
             .appSubscribe(WidgetUserPhoneVerify::class.java) { handleCodeEntered(verificationCode) }
+    }
+
+    /**
+     * Asks for another code by repeating the request that produced the first one.
+     *
+     * Not `phone-verifications/resend`: that endpoint continues a verification the *authentication*
+     * flow started, and there is none here — this screen's code came from `users/@me/phone`, which
+     * has to be re-sent with the same `change_phone_reason` for the server to issue against the
+     * same pending change. The reference has no resend on its phone screens at all and re-enters
+     * the number instead, which reaches this same endpoint.
+     *
+     * The half-typed code is cleared: the one it belongs to is about to be superseded, and leaving
+     * the digits there invites submitting a code the server has already replaced.
+     */
+    private fun resendCode() {
+        val phoneNumber = mostRecentIntent.getStringExtra(INTENT_EXTRA_PHONE_NUMBER) ?: return
+        val source = mostRecentIntent.getStringExtra(INTENT_EXTRA_SOURCE_TYPE)
+        codeVerificationView.clearCode()
+        RestAPI.api
+            .userAddPhone(RestAPIParams.Phone(phone = phoneNumber, source = source))
+            .restSubscribeOn()
+            .withDimmer(dimmer)
+            .ui(this)
+            .appSubscribe(errorClass = WidgetUserPhoneVerify::class.java, context = context) {
+                AppToast.show(
+                    context,
+                    requireContext().i18nRender(
+                        R.string.sms_confirmation_description,
+                        "phone" to phoneNumber,
+                    ),
+                )
+            }
     }
 
     private fun handleCodeEntered(verificationCode: String) {
