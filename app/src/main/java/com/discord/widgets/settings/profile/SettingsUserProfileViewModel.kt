@@ -498,10 +498,13 @@ class SettingsUserProfileViewModel(
      */
     private fun primaryGuildRequest(state: ViewState.Loaded): Observable<SavedEdit>? {
         val pending = state.currentPrimaryGuildId ?: return null
-        val guildId = (pending as? NullSerializable.Value)?.value
-        return api.setGuildIdentity(RestAPIParams.GuildIdentity(guildId, guildId != null)).map { user ->
+        val tagGuildId = (pending as? NullSerializable.Value)?.value
+        return api.setGuildIdentity(RestAPIParams.GuildIdentity(tagGuildId, tagGuildId != null)).map { user ->
             storeUserProfile.updateUser(user)
-            val edit: SavedEdit = { it.copy(currentPrimaryGuildId = null) }
+            // The tag is worn everywhere the account is drawn, and only the profile fetch pushes
+            // the new user into `StoreUser` for those surfaces to see.
+            storeUserProfile.fetchProfile(state.user.id, guildId)
+            val edit: SavedEdit = { it.copy(user = merge(it.user, user), currentPrimaryGuildId = null) }
             edit
         }
     }
