@@ -44,6 +44,18 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
         binding.settingsFeatureCustomizeChatInput.setOnClickListener {
             WidgetSettingsChatInputCustomization.launch(requireContext())
         }
+        binding.settingsFeatureHeaderCustomizations.apply {
+            isChecked = FeatureFlags.headerCustomizationsEnabled()
+            setOnCheckedListener { enabled ->
+                FeatureFlags.setHeaderCustomizationsEnabled(enabled)
+                Snackbar.make(binding.root, R.string.user_settings_restart_app_mobile, Snackbar.LENGTH_INDEFINITE)
+                    .setAction(R.string.bundle_ready_restart) { restartApp(requireContext()) }
+                    .show()
+            }
+        }
+        binding.settingsFeatureCustomizeHeader.setOnClickListener {
+            WidgetSettingsHeaderCustomization.launch(requireContext())
+        }
         binding.settingsFeatureAvatarDecorations.apply {
             isChecked = FeatureFlags.avatarDecorationsEnabled()
             setOnCheckedListener(FeatureFlags::setAvatarDecorationsEnabled)

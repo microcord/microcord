@@ -8,6 +8,7 @@ object FeatureFlags {
     private const val FETCH_UNCACHED_USERS = "feature_fetch_uncached_users"
     private const val VIEW_PROFILE_IMAGES = "feature_view_profile_images"
     private const val CHATBOX_CUSTOMIZATIONS = "feature_chatbox_customizations"
+    private const val HEADER_CUSTOMIZATIONS = "feature_header_customizations"
     private const val AVATAR_DECORATIONS = "feature_avatar_decorations"
     private const val NAMEPLATES = "feature_nameplates"
     private const val PROFILE_EFFECTS = "feature_profile_effects"
@@ -23,6 +24,8 @@ object FeatureFlags {
     fun setViewProfileImagesEnabled(enabled: Boolean) = setEnabled(VIEW_PROFILE_IMAGES, enabled)
     fun chatboxCustomizationsEnabled() = enabled(CHATBOX_CUSTOMIZATIONS)
     fun setChatboxCustomizationsEnabled(enabled: Boolean) = setEnabled(CHATBOX_CUSTOMIZATIONS, enabled)
+    fun headerCustomizationsEnabled() = enabled(HEADER_CUSTOMIZATIONS)
+    fun setHeaderCustomizationsEnabled(enabled: Boolean) = setEnabled(HEADER_CUSTOMIZATIONS, enabled)
     fun avatarDecorationsEnabled() = enabled(AVATAR_DECORATIONS, true)
     fun setAvatarDecorationsEnabled(enabled: Boolean) = setEnabled(AVATAR_DECORATIONS, enabled)
     fun nameplatesEnabled() = enabled(NAMEPLATES, true)

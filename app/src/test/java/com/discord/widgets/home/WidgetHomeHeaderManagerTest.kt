@@ -13,7 +13,7 @@ import org.w3c.dom.Element
 class WidgetHomeHeaderManagerTest {
 
     @Test
-    fun `every message header offers search and members and nothing else`() {
+    fun `message headers offer search members and pins where supported`() {
         val messageChannels = listOf(
             Channel.GUILD_TEXT,
             Channel.GUILD_ANNOUNCEMENT,
@@ -30,6 +30,11 @@ class WidgetHomeHeaderManagerTest {
             val state = WidgetHomeHeaderManager.menuState(type)
             assertTrue("search hidden for channel type $type", state.search)
             assertTrue("members hidden for channel type $type", state.sidePanel)
+            assertEquals(
+                "wrong pins visibility for channel type $type",
+                type != Channel.GUILD_FORUM && type != Channel.GUILD_MEDIA,
+                state.pins,
+            )
         }
     }
 
@@ -62,7 +67,7 @@ class WidgetHomeHeaderManagerTest {
             .map { menu.getElementsByTagName("item").item(it) as Element }
             .associateBy { it.getAttribute("android:id") }
 
-        listOf("@+id/menu_chat_search", "@+id/menu_chat_side_panel").forEach { id ->
+        listOf("@+id/menu_chat_pins", "@+id/menu_chat_search", "@+id/menu_chat_side_panel").forEach { id ->
             assertEquals("always", items.getValue(id).getAttribute("app:showAsAction"))
             assertEquals("?attr/colorInteractiveNormal", items.getValue(id).getAttribute("app:iconTint"))
         }

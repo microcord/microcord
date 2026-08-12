@@ -30,6 +30,7 @@ import com.discord.widgets.hubs.toArgsIntent
 import com.discord.widgets.guilds.join.WidgetGuildWelcomeSheet
 import com.discord.widgets.chat.list.WidgetChatList
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapterItemCallMessage
+import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.quickmentions.WidgetQuickMentionsDialog
 import com.discord.widgets.search.WidgetSearch
 import com.discord.api.channel.Channel
@@ -50,6 +51,11 @@ import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.rx.ui
 import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.channel.guildChannelIcon
+import com.discord.utilities.feature.HeaderCustomization
+import com.discord.utilities.feature.HeaderCustomization.Action
+import com.discord.utilities.feature.HeaderCustomization.Identity
+import com.discord.utilities.feature.HeaderCustomization.Surface
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.toolbar.positionUnreadCountView
 import com.discord.utilities.user.UserUtils.hasUnreadUrgentMessages
@@ -416,13 +422,22 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         if (toolbar.menu.size() == 0) {
             toolbar.inflateMenu(R.menu.menu_chat_toolbar)
         }
+        val visibleActions = WidgetHomeHeaderManager.customizeMenu(
+            toolbar.menu,
+            requireContext(),
+            if (channel.isPrivate()) Surface.DM else Surface.CHANNEL,
+        )
         val callableDm = channel.isPrivate() && !channel.isSystemDM()
         val selectedVoiceChannelId = StoreStream.getVoiceChannelSelected().getSelectedVoiceChannelId()
-        toolbar.menu.findItem(R.id.menu_chat_start_call)?.isVisible = callableDm && selectedVoiceChannelId == 0L
-        toolbar.menu.findItem(R.id.menu_chat_start_video_call)?.isVisible = callableDm && selectedVoiceChannelId == 0L
-        toolbar.menu.findItem(R.id.menu_chat_stop_call)?.isVisible = callableDm && selectedVoiceChannelId == channel.id
-        toolbar.menu.findItem(R.id.menu_chat_search)?.isVisible = true
-        toolbar.menu.findItem(R.id.menu_chat_side_panel)?.isVisible = true
+        toolbar.menu.findItem(R.id.menu_chat_start_call)?.isVisible =
+            callableDm && selectedVoiceChannelId == 0L && visibleActions[Action.VOICE] != false
+        toolbar.menu.findItem(R.id.menu_chat_start_video_call)?.isVisible =
+            callableDm && selectedVoiceChannelId == 0L && visibleActions[Action.VIDEO] != false
+        toolbar.menu.findItem(R.id.menu_chat_stop_call)?.isVisible =
+            callableDm && selectedVoiceChannelId == channel.id && visibleActions[Action.VOICE] != false
+        toolbar.menu.findItem(R.id.menu_chat_search)?.isVisible = visibleActions[Action.SEARCH] != false
+        toolbar.menu.findItem(R.id.menu_chat_side_panel)?.isVisible = visibleActions[Action.MEMBERS] != false
+        toolbar.menu.findItem(R.id.menu_chat_pins)?.isVisible = visibleActions[Action.PINS] != false
         toolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 R.id.menu_chat_start_call -> true.also { privateCallLauncher().launchVoiceCall(channel.id) }
@@ -432,9 +447,16 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                 }
                 R.id.menu_chat_search -> true.also { openSearch(channel) }
                 R.id.menu_chat_side_panel -> true.also { panels.openEndPanel() }
+                R.id.menu_chat_pins -> true.also { WidgetChannelPinnedMessages.show(requireContext(), channel.id) }
                 else -> false
             }
         }
+        val headerSurface = if (channel.isPrivate()) Surface.DM else Surface.CHANNEL
+        val customHeader = FeatureFlags.headerCustomizationsEnabled()
+        actionBarTitleLayout?.setIdentityVisibility(
+            showIcon = !customHeader || HeaderCustomization.identityVisible(headerSurface, Identity.AVATAR),
+            showTitle = !customHeader || HeaderCustomization.identityVisible(headerSurface, Identity.TITLE),
+        )
         updateUnreadCount()
     }
 
