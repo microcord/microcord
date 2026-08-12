@@ -1453,6 +1453,18 @@ interface RestAPIInterface {
     @POST("users/@me/messages/search/tabs")
     fun searchDmMessages(@Body body: RestAPIParams.SearchTabs): Observable<ModelSearchTabsResponse>
 
+    @POST("channels/{channelId}/messages/search/tabs")
+    fun searchChannelMessageTabs(
+        @Path("channelId") channelId: Long,
+        @Body body: RestAPIParams.SearchTabs,
+    ): Observable<ModelSearchTabsResponse>
+
+    @POST("guilds/{guildId}/messages/search/tabs")
+    fun searchGuildMessageTabs(
+        @Path("guildId") guildId: Long,
+        @Body body: RestAPIParams.SearchTabs,
+    ): Observable<ModelSearchTabsResponse>
+
     @GET("guilds/{guildId}/messages/search")
     fun searchGuildMessages(
         @Path("guildId") guildId: Long,

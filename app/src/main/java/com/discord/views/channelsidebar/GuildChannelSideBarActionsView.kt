@@ -14,6 +14,7 @@ class GuildChannelSideBarActionsView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
 ) : LinearLayout(context, attrs) {
     private val notifications: MaterialButton
+    private val media: MaterialButton
     private val pins: MaterialButton
     private val searchOrThreads: MaterialButton
     private val settings: MaterialButton
@@ -21,6 +22,7 @@ class GuildChannelSideBarActionsView @JvmOverloads constructor(
     init {
         LayoutInflater.from(context).inflate(R.layout.guild_channel_side_bar_actions_view, this)
         notifications = requireNotNull(findViewById(R.id.channel_sidebar_actions_notifications))
+        media = requireNotNull(findViewById(R.id.channel_sidebar_actions_media))
         pins = requireNotNull(findViewById(R.id.channel_sidebar_actions_pins))
         searchOrThreads = requireNotNull(findViewById(R.id.channel_sidebar_actions_search_or_threads))
         settings = requireNotNull(findViewById(R.id.channel_sidebar_actions_settings))
@@ -34,6 +36,7 @@ class GuildChannelSideBarActionsView @JvmOverloads constructor(
         onNotificationsClicked: (View) -> Unit = {},
         onPinsClicked: (View) -> Unit = {},
         onSettingsClicked: (View) -> Unit = {},
+        onMediaClicked: (View) -> Unit = {},
         hasUnseenPins: Boolean = false,
         channelIsMuted: Boolean = false,
         disablePins: Boolean = false,
@@ -63,6 +66,7 @@ class GuildChannelSideBarActionsView @JvmOverloads constructor(
             if (channelIsMuted) R.string.notifications_muted else R.string.notifications,
         )
         settings.setOnClickListener(onSettingsClicked)
+        media.setOnClickListener(onMediaClicked)
     }
 
     private fun setTopDrawable(button: MaterialButton, resource: Int) {

@@ -15,6 +15,7 @@ class PrivateChannelSideBarActionsView @JvmOverloads constructor(
 ) : LinearLayout(context, attrs) {
     private val call: MaterialButton
     private val notifications: MaterialButton
+    private val media: MaterialButton
     private val search: MaterialButton
     private val video: MaterialButton
 
@@ -22,6 +23,7 @@ class PrivateChannelSideBarActionsView @JvmOverloads constructor(
         LayoutInflater.from(context).inflate(R.layout.private_channel_side_bar_actions_view, this)
         call = requireNotNull(findViewById(R.id.private_channel_sidebar_actions_call))
         notifications = requireNotNull(findViewById(R.id.private_channel_sidebar_actions_notifications))
+        media = requireNotNull(findViewById(R.id.private_channel_sidebar_actions_media))
         search = requireNotNull(findViewById(R.id.private_channel_sidebar_actions_search))
         video = requireNotNull(findViewById(R.id.private_channel_sidebar_actions_video))
         configure()
@@ -33,12 +35,14 @@ class PrivateChannelSideBarActionsView @JvmOverloads constructor(
         onVideoClicked: View.OnClickListener = View.OnClickListener {},
         onNotificationsClicked: View.OnClickListener = View.OnClickListener {},
         onSearchClicked: View.OnClickListener = View.OnClickListener {},
+        onMediaClicked: View.OnClickListener = View.OnClickListener {},
         channelIsMuted: Boolean = false,
     ) {
         call.setOnClickListener(onCallClicked)
         video.setOnClickListener(onVideoClicked)
         notifications.setOnClickListener(onNotificationsClicked)
         search.setOnClickListener(onSearchClicked)
+        media.setOnClickListener(onMediaClicked)
         val value = TypedValue()
         context.theme.resolveAttribute(
             if (channelIsMuted) R.attr.ic_sidebar_notifications_off_24dp

@@ -226,6 +226,30 @@ class RestTransportTest {
     }
 
     @Test
+    fun channelContentTabsUseDefaultTransportHeaders() {
+        repeat(2) { server.enqueue(MockResponse().setBody("{\"tabs\":{}}")) }
+        installDefaultApi()
+        val body = RestAPIParams.SearchTabs(
+            tabs = mapOf("media" to RestAPIParams.SearchTabs.Tab(has = listOf("image", "video"), limit = 25)),
+            channelIds = listOf("2"),
+        )
+
+        RestAPI.api.searchChannelMessageTabs(2, body).toBlocking().single()
+        RestAPI.api.searchGuildMessageTabs(3, body).toBlocking().single()
+
+        val requests = listOf(server.takeRequest(), server.takeRequest())
+        requests.forEach { request ->
+            assertEquals("fixture-token", request.getHeader("Authorization"))
+            assertFalse(request.getHeader("X-Super-Properties").isNullOrBlank())
+            assertFalse(request.getHeader("X-Discord-Timezone").isNullOrBlank())
+            assertEquals("POST", request.method)
+            assertTrue(request.body.readUtf8().contains("\"media\""))
+        }
+        assertEquals("/api/v9/channels/2/messages/search/tabs", requests[0].path)
+        assertEquals("/api/v9/guilds/3/messages/search/tabs", requests[1].path)
+    }
+
+    @Test
     fun guildTagProfileUsesReactNativeTransportHeaders() {
         server.enqueue(MockResponse().setBody(
             """{"id":"1","name":"Guild","icon_hash":"icon","member_count":10,"online_count":2,"description":"Profile","brand_color_primary":"#000000","game_application_ids":[],"game_activity":{},"tag":"TAG","badge":1,"badge_color_primary":"#000000","badge_color_secondary":"#000000","badge_hash":"badge","traits":[],"features":[],"visibility":1,"custom_banner_hash":null,"premium_subscription_count":0,"premium_tier":0}""",

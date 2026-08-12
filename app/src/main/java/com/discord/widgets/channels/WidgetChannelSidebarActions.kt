@@ -71,6 +71,9 @@ class WidgetChannelSidebarActions : AppFragment(R.layout.widget_channel_sidebar_
                     onSearchClicked = View.OnClickListener {
                         WidgetSearch.launchForChannel(viewState.channelId, requireContext())
                     },
+                    onMediaClicked = View.OnClickListener {
+                        WidgetChannelContent.launch(requireContext(), 0L, viewState.channelId)
+                    },
                     channelIsMuted = viewState.isMuted,
                 )
             }
@@ -95,6 +98,9 @@ class WidgetChannelSidebarActions : AppFragment(R.layout.widget_channel_sidebar_
                     onSettingsClicked = {
                         if (viewState.isThread) WidgetThreadSettings.launch(viewState.channelId, requireContext())
                         else WidgetTextChannelSettings.launch(viewState.channelId, requireContext())
+                    },
+                    onMediaClicked = {
+                        WidgetChannelContent.launch(requireContext(), viewState.guildId, viewState.channelId)
                     },
                     hasUnseenPins = viewState.hasUnreadPins,
                     channelIsMuted = viewState.isMuted,

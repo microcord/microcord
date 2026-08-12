@@ -30,6 +30,7 @@ import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
 import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventLocationSelect
 import com.discord.widgets.media.WidgetMedia
 import com.discord.widgets.servers.WidgetServerNotifications
+import com.discord.widgets.channels.WidgetChannelContent
 import com.discord.widgets.servers.WidgetServerSettings
 import com.discord.widgets.servers.WidgetServerSettingsEmojis
 import com.discord.widgets.settings.profile.WidgetEditUserOrGuildMemberProfile
@@ -187,6 +188,9 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
         if (tabs == null || state.isGuildHub) return
         binding.guildProfileSheetNotifications.setOnClickAndDismissListener {
             WidgetServerNotifications.launch(requireContext(), state.guildId)
+        }
+        binding.guildProfileSheetMedia.setOnClickAndDismissListener {
+            WidgetChannelContent.launch(requireContext(), state.guildId, 0L)
         }
         binding.guildProfileSheetSettings.apply {
             visibility = if (tabs.canAccessSettings) View.VISIBLE else View.GONE
