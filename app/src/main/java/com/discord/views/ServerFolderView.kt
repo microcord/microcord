@@ -37,6 +37,16 @@ class ServerFolderView(context: Context, attrs: AttributeSet?) : LinearLayout(co
         guildGrid.visibility = if (isOpen) View.GONE else View.VISIBLE
     }
 
+    /**
+     * Keeps the folder's own image in both states, for folders whose icon identifies them. A
+     * collapsed preview of the guilds inside would make the pending stack look like one of the
+     * user's own folders.
+     */
+    fun showFolderImageOnly() {
+        folderImage.visibility = View.VISIBLE
+        guildGrid.visibility = View.GONE
+    }
+
     fun animateState(animationId: Int) {
         val animation = AnimationUtils.loadAnimation(context, animationId).apply {
             if (animationsDisabled()) duration = 0

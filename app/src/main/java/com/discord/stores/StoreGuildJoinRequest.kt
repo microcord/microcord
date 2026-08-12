@@ -54,6 +54,7 @@ class StoreGuildJoinRequest(
     private var requestsByIdSnapshot: Map<Long, GuildJoinRequest> = emptyMap()
     private val pendingGuilds = HashMap<Long, Guild>()
     private var pendingGuildsSnapshot: Map<Long, Guild> = emptyMap()
+    private var isFetchingPendingGuilds = false
 
     fun getGuildJoinRequest(guildId: Long): GuildJoinRequest? = guildJoinRequestsSnapshot[guildId]
 
@@ -89,13 +90,20 @@ class StoreGuildJoinRequest(
      * at a guild that is neither joined nor already fetched — otherwise the call is skipped.
      */
     fun fetchPendingGuilds() = dispatcher.schedule {
+        // Callers are render passes, which repeat for reasons of their own while the response is
+        // still in flight.
+        if (isFetchingPendingGuilds) return@schedule
         val joined = guildsStore.getGuilds()
         val missing = guildJoinRequests.keys.filter { it !in joined && it !in pendingGuilds }
         if (missing.isEmpty()) return@schedule
         val api = restApi() ?: return@schedule
+        isFetchingPendingGuilds = true
         api.getUserJoinRequestGuilds()
             .restSubscribeOn(false)
-            .appSubscribe(StoreGuildJoinRequest::class.java) { results ->
+            .appSubscribe(
+                StoreGuildJoinRequest::class.java,
+                onTerminated = { dispatcher.schedule { isFetchingPendingGuilds = false } },
+            ) { results ->
                 dispatcher.schedule { handlePendingGuildsLoaded(results) }
             }
     }
@@ -165,6 +173,7 @@ class StoreGuildJoinRequest(
     internal fun reset() {
         guildJoinRequests.clear()
         pendingGuilds.clear()
+        isFetchingPendingGuilds = false
         markChanged()
     }
 

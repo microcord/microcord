@@ -236,7 +236,9 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
                 folderView.folderImage.setImageDrawable(
                     ContextCompat.getDrawable(folderView.context, R.drawable.ic_guild_list_pending_folder),
                 )
-                folderView.showCurrentState()
+                // Cleared because a recycled view arrives carrying the previous folder's colour.
+                folderView.folderImage.imageTintList = null
+                folderView.showFolderImageOnly()
                 return
             }
 
@@ -420,11 +422,11 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
                 ApplicationStatus.STARTED ->
                     applicationStatus.setImageResource(R.drawable.ic_application_status_started)
                 ApplicationStatus.PENDING ->
-                    applicationStatus.setImageResource(R.drawable.ic_application_status_approved)
-                ApplicationStatus.REJECTED ->
                     applicationStatus.setImageResource(R.drawable.ic_application_status_pending)
-                ApplicationStatus.APPROVED ->
+                ApplicationStatus.REJECTED ->
                     applicationStatus.setImageResource(R.drawable.ic_application_status_rejected)
+                ApplicationStatus.APPROVED ->
+                    applicationStatus.setImageResource(R.drawable.ic_application_status_approved)
                 ApplicationStatus.UNKNOWN -> applicationStatus.visibility = View.GONE
             }
         }

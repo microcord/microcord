@@ -88,7 +88,9 @@ internal object GuildListItemBuilder {
                 }
             }
 
-        if (storeState.openFolderIds.contains(GuildListItem.ID_PENDING_GUILDS_FOLDER)) {
+        // Not gated on the folder being open: the folder only exists once the guilds behind the
+        // applications are known, so waiting for it to be expanded would mean it never appears.
+        if (storeState.guildJoinRequests.isNotEmpty()) {
             GuildsListStoreHooks.fetchPendingGuilds()
         }
         if (hasReviewablePendingGuilds(storeState)) {

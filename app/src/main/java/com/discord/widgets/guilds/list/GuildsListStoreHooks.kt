@@ -48,7 +48,7 @@ object GuildsListStoreHooks {
     @Volatile
     var pendingGuilds: () -> Observable<List<Guild>> = { Observable.just(emptyList()) }
 
-    /** `StoreGuildJoinRequest.fetchPendingGuilds()`, fired when the pending folder is expanded. */
+    /** `StoreGuildJoinRequest.fetchPendingGuilds()`, fired while an application's guild is unknown. */
     @Volatile
     var fetchPendingGuilds: () -> Unit = {}
 
