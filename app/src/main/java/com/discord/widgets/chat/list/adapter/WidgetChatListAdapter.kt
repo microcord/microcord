@@ -481,6 +481,15 @@ class WidgetChatListAdapter @JvmOverloads constructor(
     private inner class HandlerOfScrolls : RecyclerView.OnScrollListener() {
         private var channelId: Long = 0L
         private var scrollState: Int = 0
+        private var positionState: Int = Int.MIN_VALUE
+
+        override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+            val next = StoreChat.InteractionState.getScrollState(layoutManager)
+            if (next != positionState) {
+                positionState = next
+                publishInteractionState()
+            }
+        }
 
         override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
             super.onScrollStateChanged(recyclerView, newState)
