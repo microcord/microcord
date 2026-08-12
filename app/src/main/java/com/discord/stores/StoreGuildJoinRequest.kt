@@ -51,12 +51,21 @@ class StoreGuildJoinRequest(
 
     private val guildJoinRequests = HashMap<Long, GuildJoinRequest>()
     private var guildJoinRequestsSnapshot: Map<Long, GuildJoinRequest> = emptyMap()
+    private var requestsByIdSnapshot: Map<Long, GuildJoinRequest> = emptyMap()
     private val pendingGuilds = HashMap<Long, Guild>()
     private var pendingGuildsSnapshot: Map<Long, Guild> = emptyMap()
 
     fun getGuildJoinRequest(guildId: Long): GuildJoinRequest? = guildJoinRequestsSnapshot[guildId]
 
     fun getGuildJoinRequests(): Map<Long, GuildJoinRequest> = guildJoinRequestsSnapshot
+
+    /**
+     * The application behind an interview channel.
+     *
+     * The interview group DM shares its snowflake with the application, which is how the
+     * reference resolves the notices posted into it from the channel id alone.
+     */
+    fun getRequestById(joinRequestId: Long): GuildJoinRequest? = requestsByIdSnapshot[joinRequestId]
 
     fun getPendingGuilds(): Map<Long, Guild> = pendingGuildsSnapshot
 
@@ -192,5 +201,11 @@ class StoreGuildJoinRequest(
     override fun snapshotData() {
         guildJoinRequestsSnapshot = HashMap(guildJoinRequests)
         pendingGuildsSnapshot = HashMap(pendingGuilds)
+        requestsByIdSnapshot = buildMap {
+            guildJoinRequests.values.forEach { request ->
+                request.joinRequestId?.let { put(it, request) }
+                request.interviewChannelId?.let { put(it, request) }
+            }
+        }
     }
 }

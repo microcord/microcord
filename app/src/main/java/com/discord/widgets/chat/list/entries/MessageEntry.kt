@@ -1,5 +1,6 @@
 package com.discord.widgets.chat.list.entries
 
+import com.discord.api.message.MessageTypes
 import com.discord.api.channel.Channel
 import com.discord.api.role.GuildRole
 import com.discord.api.sticker.BaseSticker
@@ -67,7 +68,13 @@ data class MessageEntry(
     )
 
     private companion object {
-        private const val TYPE_DEFAULT = 0
+        /** The user-message types with no row of their own; a reply or a command has one. */
+        private val PLAIN_USER_MESSAGE_TYPES = MessageTypes.USER_MESSAGE - setOf(
+            MessageTypes.REPLY,
+            MessageTypes.CHAT_INPUT_COMMAND,
+            MessageTypes.CONTEXT_MENU_COMMAND,
+        )
+
         private const val TYPE_CALL = 3
         private const val TYPE_CHANNEL_FOLLOW_ADD = 13
         private const val TYPE_REPLY = 19
@@ -99,7 +106,7 @@ data class MessageEntry(
             if (message.hasSnapshot() ||
                 message.isInteraction() ||
                 messageType == null ||
-                messageType == TYPE_DEFAULT ||
+                messageType in PLAIN_USER_MESSAGE_TYPES ||
                 messageType == TYPE_LOCAL ||
                 messageType == TYPE_LOCAL_SLOWMODE
             ) {

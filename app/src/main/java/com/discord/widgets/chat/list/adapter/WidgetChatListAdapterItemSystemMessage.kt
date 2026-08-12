@@ -15,12 +15,17 @@ import com.discord.i18n.I18nHooks
 import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
 import com.discord.models.user.CoreUser
+import com.discord.models.user.User
 import com.discord.stores.StoreStream
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.analytics.Traits
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.message.MessageUtils
 import com.discord.utilities.time.TimeUtils
+import com.discord.utilities.uri.UriHandler
+import java.text.DateFormat
+import java.util.Date
+import java.util.Locale
 import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
 import com.discord.utilities.view.text.LinkifiedTextView
 import com.discord.views.ThemedColor
@@ -380,8 +385,224 @@ class WidgetChatListAdapterItemSystemMessage(
 
             TYPE_POLL_RESULT -> pollResultMessage(context, message, authorName)
 
+            TYPE_STAGE_START -> I18nHooks.format(
+                context,
+                R.string.system_message_stage_start_mobile,
+                mapOf("username" to authorName, "topic" to message.content),
+                nameHooks,
+            )
+
+            TYPE_STAGE_END -> I18nHooks.format(
+                context,
+                R.string.system_message_stage_end_mobile,
+                mapOf("username" to authorName, "topic" to message.content),
+                nameHooks,
+            )
+
+            TYPE_STAGE_TOPIC -> I18nHooks.format(
+                context,
+                R.string.system_message_stage_topic_mobile,
+                mapOf("username" to authorName, "topic" to message.content),
+                nameHooks,
+            )
+
+            TYPE_STAGE_SPEAKER -> I18nHooks.format(
+                context,
+                R.string.system_message_stage_speaker_mobile,
+                mapOf("username" to authorName),
+                nameHooks,
+            )
+
+            TYPE_STAGE_RAISE_HAND -> I18nHooks.format(
+                context,
+                R.string.system_message_stage_raise_hand_mobile,
+                mapOf("username" to authorName),
+                nameHooks,
+            )
+
+            TYPE_PRIVATE_CHANNEL_INTEGRATION_ADDED,
+            TYPE_PRIVATE_CHANNEL_INTEGRATION_REMOVED,
+            -> privateChannelIntegrationMessage(context, message, authorName, nameHooks)
+
+            // The alert-mode notice is authored by AutoMod, whose end time travels in the body.
+            TYPE_GUILD_INCIDENT_ALERT_MODE_ENABLED -> I18nHooks.format(
+                context,
+                R.string.guild_server_lockdown_enabled_system_message_mobile_short,
+                mapOf("username" to authorName, "time" to alertModeEndTime(message)),
+                nameHooks,
+            )
+
+            TYPE_GUILD_INCIDENT_ALERT_MODE_DISABLED -> I18nHooks.format(
+                context,
+                R.string.guild_server_lockdown_disabled_system_message_mobile,
+                mapOf("username" to authorName),
+                nameHooks,
+            )
+
+            TYPE_GUILD_INCIDENT_REPORT_RAID -> I18nHooks.format(
+                context,
+                R.string.guild_raid_report_system_message_mobile,
+                mapOf("username" to authorName, "guildName" to guildName),
+                nameHooks,
+            )
+
+            TYPE_GUILD_INCIDENT_REPORT_FALSE_ALARM -> I18nHooks.format(
+                context,
+                R.string.guild_report_false_alarm_system_message_mobile_short,
+                mapOf("username" to authorName),
+                nameHooks,
+            )
+
+            TYPE_GUILD_JOIN_REQUEST_ACCEPT,
+            TYPE_GUILD_JOIN_REQUEST_REJECT,
+            TYPE_GUILD_JOIN_REQUEST_WITHDRAWN,
+            -> joinRequestMessage(context, message)
+
+            TYPE_VOICE_SESSION -> voiceSessionMessage(context, message, authorName, authorHook, otherRoleColor)
+
+            TYPE_FRIEND_REQUEST_ACCEPTED -> I18nHooks.format(
+                context,
+                if (message.author?.id == StoreStream.getUsers().getMe().id) {
+                    R.string.system_message_friend_request_accepted_requester
+                } else {
+                    R.string.system_message_friend_request_accepted_accepter
+                },
+                mapOf("username" to authorName),
+                nameHooks,
+            )
+
             else -> context.getString(R.string.reply_quote_message_not_loaded)
         }
+    }
+
+    /**
+     * A session with no end timestamp is still running, so it reads as an invitation rather than
+     * a summary. Once it ends the participants are named, most-affine first, up to three before
+     * the rest collapse into a count.
+     */
+    private fun voiceSessionMessage(
+        context: Context,
+        message: Message,
+        authorName: String?,
+        authorHook: Hook,
+        otherRoleColor: Int,
+    ): CharSequence {
+        if (message.call?.endedTimestamp == null) {
+            return I18nHooks.format(
+                context,
+                R.string.voice_session_started_system_message_mobile,
+                mapOf("username" to authorName),
+                mapOf("usernameOnClick" to authorHook),
+            )
+        }
+        val participants = voiceSessionParticipants(message)
+        val duration = TimeUtils.toFriendlyStringSimple(message.getCallDuration())
+        val args = mutableMapOf<String, Any?>("username" to authorName, "duration" to duration)
+        val hooks = mutableMapOf("usernameOnClick" to authorHook)
+        participants.take(2).forEachIndexed { index, user ->
+            args["username${index + 2}"] = user.username
+            hooks["username${index + 2}OnClick"] = Hook(
+                spans = listOf(StyleSpan(Typeface.BOLD), ForegroundColorSpan(otherRoleColor)),
+                onClick = {
+                    adapter.eventHandler.onUserMentionClicked(
+                        user.id,
+                        adapter.data.channelId,
+                        adapter.data.guildId,
+                    )
+                },
+            )
+        }
+        // The author counts as a participant, which is what the reference numbers these by.
+        val res = when (participants.size + 1) {
+            1 -> R.string.voice_session_ended_system_message_mobile_one
+            2 -> R.string.voice_session_ended_system_message_mobile_two
+            3 -> R.string.voice_session_ended_system_message_mobile_three
+            else -> {
+                args["otherCount"] = participants.size - 1
+                R.string.voice_session_ended_system_message_mobile_many
+            }
+        }
+        return I18nHooks.format(context, res, args, hooks)
+    }
+
+    /** Everyone but the author, ordered the way the reference orders them: by affinity. */
+    private fun voiceSessionParticipants(message: Message): List<User> {
+        val authorId = message.author?.id
+        val affinities = StoreStream.getUserAffinities().getUserAffinities()
+            .userAffinities.associate { it.userId to it.affinity }
+        val users = StoreStream.getUsers().getUsers()
+        return message.call?.participants.orEmpty()
+            .filterNot { it == authorId }
+            .mapNotNull(users::get)
+            .sortedByDescending { affinities[it.id] ?: 0f }
+    }
+
+    /**
+     * The applicant and the server are resolved from the interview channel the notice was posted
+     * in, which shares its snowflake with the application. A moderator reviewing someone else's
+     * application holds no record of it, and the reference has anonymous copy for exactly that.
+     */
+    private fun joinRequestMessage(context: Context, message: Message): CharSequence {
+        val request = StoreStream.getGuildJoinRequests().getRequestById(message.channelId)
+        val guildName = request?.guildId?.let { guildId ->
+            StoreStream.getGuilds().getGuild(guildId)?.name
+                ?: StoreStream.getGuildJoinRequests().getPendingGuild(guildId)?.name
+        }
+        val username = request?.userId?.let { StoreStream.getUsers().getUsers()[it]?.username }
+            ?: request?.user?.username
+        if (username == null || guildName == null) {
+            return context.getString(
+                when (message.type) {
+                    TYPE_GUILD_JOIN_REQUEST_ACCEPT ->
+                        R.string.guild_join_request_approved_system_message_anonymous
+                    TYPE_GUILD_JOIN_REQUEST_REJECT ->
+                        R.string.guild_join_request_rejected_system_message_anonymous
+                    else -> R.string.guild_join_request_withdrawn_system_message_anonymous
+                },
+            )
+        }
+        return I18nHooks.format(
+            context,
+            when (message.type) {
+                TYPE_GUILD_JOIN_REQUEST_ACCEPT -> R.string.guild_join_request_approved_system_message_mobile
+                TYPE_GUILD_JOIN_REQUEST_REJECT -> R.string.guild_join_request_rejected_system_message_mobile
+                else -> R.string.guild_join_request_withdrawn_system_message_mobile
+            },
+            mapOf("username" to username, "guildName" to guildName),
+        )
+    }
+
+    /** A deleted application has no name left to show, which the reference has its own copy for. */
+    private fun privateChannelIntegrationMessage(
+        context: Context,
+        message: Message,
+        authorName: String?,
+        nameHooks: Map<String, Hook>,
+    ): CharSequence {
+        val applicationName = message.application?.name
+        val added = message.type == TYPE_PRIVATE_CHANNEL_INTEGRATION_ADDED
+        val res = when {
+            applicationName == null && added -> R.string.private_channel_integration_added_deleted_application_mobile
+            applicationName == null -> R.string.private_channel_integration_removed_deleted_application_mobile
+            added -> R.string.private_channel_integration_added_mobile
+            else -> R.string.private_channel_integration_removed_mobile
+        }
+        return I18nHooks.format(
+            context,
+            res,
+            mapOf("username" to authorName, "otherUsername" to applicationName),
+            nameHooks + ("helpCenterLink" to Hook(
+                spans = listOf(ForegroundColorSpan(ThemedColor.resolve(context, R.attr.colorTextLink))),
+                onClick = { UriHandler.handle(context, PRIVATE_CHANNEL_INTEGRATIONS_HELP_URL) },
+            )),
+        )
+    }
+
+    /** `content` carries the ISO instant the alert mode lapses, or is empty when it does not. */
+    private fun alertModeEndTime(message: Message): String {
+        val content = message.content?.takeUnless(String::isBlank) ?: return ""
+        val millis = TimeUtils.parseUTCDate(content).takeIf { it > 0L } ?: return ""
+        return DateFormat.getTimeInstance(DateFormat.SHORT, Locale.getDefault()).format(Date(millis))
     }
 
     /** The purchase notice links the tier name back to the server's subscription listing. */
@@ -463,6 +684,20 @@ class WidgetChatListAdapterItemSystemMessage(
         -> R.drawable.ic_warning_circle_24dp
         TYPE_THREAD_CREATED -> R.drawable.ic_thread
         TYPE_POLL_RESULT -> R.drawable.ic_sort_white_24dp
+        TYPE_STAGE_START, TYPE_STAGE_END, TYPE_STAGE_TOPIC -> R.drawable.ic_stage_audience
+        TYPE_STAGE_SPEAKER -> R.drawable.ic_stage_move_to_speaker
+        TYPE_STAGE_RAISE_HAND -> R.drawable.ic_stage_raised_hand
+        TYPE_PRIVATE_CHANNEL_INTEGRATION_ADDED -> R.drawable.ic_group_join
+        TYPE_PRIVATE_CHANNEL_INTEGRATION_REMOVED -> R.drawable.ic_group_leave
+        TYPE_GUILD_INCIDENT_ALERT_MODE_ENABLED, TYPE_GUILD_INCIDENT_REPORT_RAID ->
+            R.drawable.ic_shieldstar_24dp
+        TYPE_GUILD_INCIDENT_ALERT_MODE_DISABLED, TYPE_GUILD_INCIDENT_REPORT_FALSE_ALARM ->
+            R.drawable.ic_check_green_24dp
+        TYPE_GUILD_JOIN_REQUEST_ACCEPT -> R.drawable.ic_application_status_approved
+        TYPE_GUILD_JOIN_REQUEST_REJECT -> R.drawable.ic_application_status_rejected
+        TYPE_GUILD_JOIN_REQUEST_WITHDRAWN -> R.drawable.ic_application_status_pending
+        TYPE_FRIEND_REQUEST_ACCEPTED -> R.drawable.ic_group_join
+        TYPE_VOICE_SESSION -> R.drawable.ic_call_24dp
         else -> R.drawable.ic_x_red_24dp
     }
 
@@ -486,6 +721,25 @@ class WidgetChatListAdapterItemSystemMessage(
         private const val TYPE_AUTO_MODERATION_ACTION = 24
         private const val TYPE_ROLE_SUBSCRIPTION_PURCHASE = 25
         private const val TYPE_POLL_RESULT = 46
+        private const val TYPE_STAGE_START = 27
+        private const val TYPE_STAGE_END = 28
+        private const val TYPE_STAGE_SPEAKER = 29
+        private const val TYPE_STAGE_RAISE_HAND = 30
+        private const val TYPE_STAGE_TOPIC = 31
+        private const val TYPE_PRIVATE_CHANNEL_INTEGRATION_ADDED = 33
+        private const val TYPE_PRIVATE_CHANNEL_INTEGRATION_REMOVED = 34
+        private const val TYPE_GUILD_INCIDENT_ALERT_MODE_ENABLED = 36
+        private const val TYPE_GUILD_INCIDENT_ALERT_MODE_DISABLED = 37
+        private const val TYPE_GUILD_INCIDENT_REPORT_RAID = 38
+        private const val TYPE_GUILD_INCIDENT_REPORT_FALSE_ALARM = 39
+        private const val TYPE_GUILD_JOIN_REQUEST_ACCEPT = 52
+        private const val TYPE_GUILD_JOIN_REQUEST_REJECT = 53
+        private const val TYPE_GUILD_JOIN_REQUEST_WITHDRAWN = 54
+        private const val TYPE_VOICE_SESSION = 65
+        private const val TYPE_FRIEND_REQUEST_ACCEPTED = 67
+
+        private const val PRIVATE_CHANNEL_INTEGRATIONS_HELP_URL =
+            "https://support.discord.com/hc/en-us/articles/15104189280151"
 
         /** Local placeholder produced when a thread's starter message cannot be fetched. */
         private const val TYPE_THREAD_STARTER_NOT_LOADED = -7

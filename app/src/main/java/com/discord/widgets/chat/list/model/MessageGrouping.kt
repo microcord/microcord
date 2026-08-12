@@ -1,5 +1,6 @@
 package com.discord.widgets.chat.list.model
 
+import com.discord.api.message.MessageTypes
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isGuildForumPost
 import com.discord.api.message.MessageFlags
@@ -92,5 +93,5 @@ object MessageGrouping {
     private const val TYPE_CONTEXT_MENU_COMMAND = 23
 
     /** `MessageTypesSets.USER_MESSAGE`; everything else counts as a system message here. */
-    private val USER_MESSAGE_TYPES = setOf(0, 19, 20, 23, 26, 41, 45, 47, 68)
+    private val USER_MESSAGE_TYPES = MessageTypes.USER_MESSAGE
 }

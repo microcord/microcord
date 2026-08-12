@@ -1,5 +1,6 @@
 package com.discord.widgets.chat.list.actions
 
+import com.discord.api.message.MessageTypes
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -299,7 +300,7 @@ class WidgetChatListActions : AppBottomSheet() {
             model.permissions,
         )
         return !message.isLocal() && model.type == TYPE_CHAT &&
-            (message.isUserMessage() || message.isApplicationMessage()) && (privateChannel || canReadAndSend)
+            message.type in MessageTypes.REPLYABLE && (privateChannel || canReadAndSend)
     }
 
     private fun canCreatePublicThread(model: Model): Boolean {

@@ -5,6 +5,7 @@ import com.discord.api.botuikit.Component
 import com.discord.api.channel.Channel
 import com.discord.api.guildmember.GuildMember
 import com.discord.api.interaction.Interaction
+import com.discord.api.message.MessageTypes
 import com.discord.api.message.LocalAttachment
 import com.discord.api.message.MessageReference
 import com.discord.api.message.MessagePoll
@@ -154,7 +155,7 @@ data class Message(
     fun isInteraction() = type == -5 || type == -4 || interaction != null
     fun isLocalApplicationCommand() = type == -5 || type == -4
     fun isLocal() = type == -1 || type == -2 || type == -3 || isLocalApplicationCommand() || type == -6 || type == -8
-    fun isUserMessage() = type == 0 || type == 19
+    fun isUserMessage() = type in MessageTypes.USER_MESSAGE
     fun isSystemMessage() = !isUserMessage() && !isApplicationMessage()
     fun isWebhook() = webhookId != null
     fun isSpotifyListeningActivity() = activity?.type == MessageActivityType.LISTEN &&
