@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" app:layout_behavior="@string/appbar_scrolling_view_behavior" style="@style/UiKit.ViewGroup.LinearLayout">
+        <androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+            <LinearLayout android:padding="16dp" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:gravity="center" android:id="@+id/report_raid_description" android:layout_width="match_parent" style="@style/UiKit.TextView"/>
+                <com.discord.views.CheckedSetting android:id="@+id/report_raid_message_spam" android:layout_marginTop="24dp" app:cs_text="@string/guild_report_raid_modal_choice_message_spam" app:cs_view_type="check" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/report_raid_dm_spam" app:cs_text="@string/guild_report_raid_modal_choice_dm_spam" app:cs_view_type="check" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/report_raid_mention_spam" app:cs_text="@string/guild_report_raid_modal_choice_mention_spam" app:cs_view_type="check" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/report_raid_suspicious_users" app:cs_text="@string/guild_report_raid_modal_choice_suspicious_users" app:cs_view_type="check" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/report_raid_settings_spam" app:cs_text="@string/guild_report_raid_modal_choice_settings_spam" app:cs_view_type="check" style="@style/UiKit.CheckedSetting.Themed"/>
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+        <com.google.android.material.button.MaterialButton android:id="@+id/report_raid_submit" android:layout_width="match_parent" android:layout_margin="16dp" android:text="@string/submit" android:backgroundTint="?attr/colorBackgroundAccent" style="@style/UiKit.Material.Button"/>
+    </LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

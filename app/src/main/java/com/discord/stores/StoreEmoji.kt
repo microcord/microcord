@@ -101,6 +101,9 @@ class StoreEmoji(
         return null
     }
 
+    fun observeGuildEmoji(guildId: Long): Observable<List<ModelEmojiCustom>> =
+        customEmojiStore.observeAllowedGuildEmoji().map { it[guildId]?.values?.toList().orEmpty() }
+
     @JvmOverloads
     fun getEmojiSet(
         guildId: Long,

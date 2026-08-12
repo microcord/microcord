@@ -148,7 +148,6 @@ class WidgetServerNotifications : AppFragment(R.layout.widget_server_notificatio
         configureHighlights(model)
         configureToggles(model)
         configureRadios(model)
-        configureShowAllChannels(model)
         configurePresetRadios(model)
         configureUnreadRadios(model)
         configureDetailVisibility(model)
@@ -269,23 +268,6 @@ class WidgetServerNotifications : AppFragment(R.layout.widget_server_notificatio
         radio.setContainerClickListener { view ->
             viewModel.setFrequency(view.context.applicationContext, frequency)
         }
-    }
-
-    private fun configureShowAllChannels(model: WidgetServerNotificationsViewModel.ViewState.Loaded) {
-        val switch = binding.serverNotificationsShowAllChannelsSwitch
-        switch.isVisible = model.supportsChannelOptIn
-        if (!model.supportsChannelOptIn) return
-        switch.setOnCheckedListener(null)
-        switch.setChecked(model.showAllChannels, false)
-        switch.setOnCheckedListener(
-            Action1<Boolean> { showAll ->
-                StoreStream.getUserGuildSettings().setGuildOptInChannels(
-                    switch.context.applicationContext,
-                    viewModel.guildId,
-                    optInOnly = !showAll,
-                )
-            },
-        )
     }
 
     private fun configurePresetRadios(model: WidgetServerNotificationsViewModel.ViewState.Loaded) {

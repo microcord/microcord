@@ -3,7 +3,11 @@ package com.discord.widgets.guilds.profile
 import androidx.annotation.StringRes
 import com.discord.R
 import com.discord.api.guild.GuildFeature
+import com.discord.api.guild.GuildIncidentsData
 import com.discord.api.guild.preview.GuildPreview
+import com.discord.api.permission.Permission
+import com.discord.utilities.permissions.PermissionUtils
+import com.discord.models.domain.emoji.ModelEmojiCustom
 import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
 import com.discord.models.user.MeUser
@@ -11,8 +15,10 @@ import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreGuildProfiles
 import com.discord.stores.StoreStream
+import com.discord.stores.UserSettings
 import com.discord.utilities.channel.GuildChannelsInfo
 import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
@@ -60,10 +66,15 @@ class WidgetGuildProfileSheetViewModel(
             nick = state.computedMe?.nick,
             guildAvatar = state.computedMe?.avatarHash,
             isAllowDMChecked = guild.id !in state.restrictedGuildIds,
+            isAllowMessageRequestsChecked = guild.id !in state.messageRequestRestrictedGuildIds,
             hideMutedChannels = state.guildChannelsInfo.hideMutedChannels,
             canLeaveGuild = !guild.isOwner(state.me.id),
             isDeveloper = state.isDeveloper,
             username = state.me.username,
+            isMuted = guild.id in state.mutedGuildIds,
+            isCommunity = GuildFeature.COMMUNITY in guild.features,
+            showAllChannels = !state.guildChannelsInfo.notificationSettings.isOptInChannelsEnabled,
+            canReportRaid = canReportRaid(guild),
         )
         return ViewState.Loaded(
             guildId = guild.id,
@@ -85,6 +96,7 @@ class WidgetGuildProfileSheetViewModel(
             ),
             isGuildHub = guild.isHub(),
             meUser = state.me,
+            emojis = if (state.isLurking) emptyList() else state.emojis,
         )
     }
 
@@ -156,6 +168,34 @@ class WidgetGuildProfileSheetViewModel(
     fun setHideMutedChannels(guildId: Long, hidden: Boolean) =
         StoreStream.getUserGuildSettings().setHideMutedChannels(guildId, hidden)
 
+    fun setAllowMessageRequests(guildId: Long, allowed: Boolean) {
+        val current = UserSettings.messageRequestRestrictedGuildIds.get().toMutableSet()
+        if (allowed) current.remove(guildId) else current.add(guildId)
+        UserSettings.messageRequestRestrictedGuildIds.set(current.toList())
+    }
+
+    /** Matches the reference: any moderation-shaped permission may raise a raid report. */
+    private fun canReportRaid(guild: Guild): Boolean {
+        if (hasDetectedActivity(guild.incidentsData)) return false
+        val permissions = StoreStream.getPermissions().getGuildPermissions()[guild.id]
+        return PermissionUtils.can(Permission.BAN_MEMBERS, permissions) ||
+            PermissionUtils.can(Permission.KICK_MEMBERS, permissions) ||
+            PermissionUtils.can(Permission.MODERATE_MEMBERS, permissions) ||
+            PermissionUtils.can(Permission.MANAGE_GUILD, permissions)
+    }
+
+    private fun hasDetectedActivity(incidents: GuildIncidentsData?): Boolean {
+        val cutoff = ClockFactory.get().currentTimeMillis() - RAID_ALERT_WINDOW_MS
+        return (incidents?.raidDetectedAt?.dateTimeMillis ?: 0) > cutoff ||
+            (incidents?.dmSpamDetectedAt?.dateTimeMillis ?: 0) > cutoff
+    }
+
+    fun setShowAllChannels(context: android.content.Context, guildId: Long, showAll: Boolean) =
+        StoreStream.getUserGuildSettings().setGuildOptInChannels(context, guildId, optInOnly = !showAll)
+
+    fun setMuted(context: android.content.Context, guildId: Long, muted: Boolean) =
+        StoreStream.getUserGuildSettings().setGuildMuted(context, guildId, muted)
+
     data class Actions(
         val isUnread: Boolean,
         val canManageChannels: Boolean,
@@ -164,10 +204,15 @@ class WidgetGuildProfileSheetViewModel(
         val nick: String?,
         val guildAvatar: String?,
         val isAllowDMChecked: Boolean,
+        val isAllowMessageRequestsChecked: Boolean,
         val hideMutedChannels: Boolean,
         val canLeaveGuild: Boolean,
         val isDeveloper: Boolean,
         val username: String,
+        val isMuted: Boolean,
+        val isCommunity: Boolean,
+        val showAllChannels: Boolean,
+        val canReportRaid: Boolean,
     ) {
         val displayGuildIdentityRow = !nick.isNullOrEmpty() || !guildAvatar.isNullOrEmpty()
     }
@@ -186,9 +231,12 @@ class WidgetGuildProfileSheetViewModel(
         val me: MeUser,
         val computedMe: GuildMember?,
         val restrictedGuildIds: List<Long>,
+        val messageRequestRestrictedGuildIds: List<Long>,
+        val mutedGuildIds: List<Long>,
         val isDeveloper: Boolean,
         val isLurking: Boolean,
         val isUnread: Boolean,
+        val emojis: List<ModelEmojiCustom>,
     )
 
     sealed class ViewState {
@@ -209,11 +257,14 @@ class WidgetGuildProfileSheetViewModel(
             val bottomActions: BottomActions,
             val isGuildHub: Boolean,
             val meUser: MeUser,
+            val emojis: List<ModelEmojiCustom> = emptyList(),
             val isPrivate: Boolean = false,
         ) : ViewState()
     }
 
     companion object {
+        private const val RAID_ALERT_WINDOW_MS = 2 * 60 * 60 * 1000L
+
         private fun badge(features: Collection<GuildFeature>): Int? = when {
             GuildFeature.VERIFIED in features -> R.drawable.ic_verified_badge
             GuildFeature.PARTNERED in features -> R.drawable.ic_partnered_badge
@@ -221,16 +272,36 @@ class WidgetGuildProfileSheetViewModel(
         }
 
         internal fun observeStores(guildId: Long): Observable<StoreState> = Observable.combineLatest(
-            StoreStream.getGuilds().observeGuild(guildId),
-            StoreStream.getGuildProfiles().observeGuildProfile(guildId),
-            StoreStream.getReadStates().getIsUnread(guildId),
-            StoreStream.getUsers().observeMe(),
-            StoreStream.getUsers().observeMe().flatMap { me -> StoreStream.getGuilds().observeComputedMember(guildId, me.id) },
-            StoreStream.getUserSettings().observeRestrictedGuildIds(),
-            StoreStream.getLurking().isLurkingObs(guildId),
-            GuildChannelsInfo.get(guildId),
-        ) { guild, profile, unread, me, member, restricted, lurking, info ->
-            StoreState(guild, profile, info, me, member, restricted, StoreStream.getUserSettings().getIsDeveloperMode(), lurking, unread)
+            listOf(
+                StoreStream.getGuilds().observeGuild(guildId),
+                StoreStream.getGuildProfiles().observeGuildProfile(guildId),
+                StoreStream.getReadStates().getIsUnread(guildId),
+                StoreStream.getUsers().observeMe(),
+                StoreStream.getUsers().observeMe()
+                    .flatMap { me -> StoreStream.getGuilds().observeComputedMember(guildId, me.id) },
+                StoreStream.getUserSettings().observeRestrictedGuildIds(),
+                UserSettings.messageRequestRestrictedGuildIds.observe(),
+                StoreStream.getUserGuildSettings().observeMutedGuildIds(),
+                StoreStream.getLurking().isLurkingObs(guildId),
+                GuildChannelsInfo.get(guildId),
+                StoreStream.getEmojis().observeGuildEmoji(guildId),
+            ),
+        ) { args ->
+            @Suppress("UNCHECKED_CAST")
+            StoreState(
+                guild = args[0] as Guild?,
+                guildProfile = args[1] as StoreGuildProfiles.GuildProfileData?,
+                guildChannelsInfo = args[9] as GuildChannelsInfo,
+                me = args[3] as MeUser,
+                computedMe = args[4] as GuildMember?,
+                restrictedGuildIds = args[5] as List<Long>,
+                messageRequestRestrictedGuildIds = args[6] as List<Long>,
+                mutedGuildIds = args[7] as List<Long>,
+                isDeveloper = StoreStream.getUserSettings().getIsDeveloperMode(),
+                isLurking = args[8] as Boolean,
+                isUnread = args[2] as Boolean,
+                emojis = args[10] as List<ModelEmojiCustom>,
+            )
         }
     }
 }

@@ -8,6 +8,8 @@ import android.widget.TextView
 import androidx.cardview.widget.CardView
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.fragment.app.FragmentManager
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.app.AppBottomSheet
@@ -25,8 +27,10 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.views.CheckedSetting
 import com.discord.widgets.channels.WidgetCreateChannel
+import com.discord.widgets.guilds.antiraid.WidgetGuildReportRaid
 import com.discord.widgets.guilds.contextmenu.ContextMenuNavigation
 import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
+import com.discord.widgets.guilds.onboarding.WidgetChannelsAndRoles
 import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventLocationSelect
 import com.discord.widgets.media.WidgetMedia
 import com.discord.widgets.servers.WidgetServerNotifications
@@ -48,6 +52,7 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
     }
     private var actionsRoot: View? = null
     private var profileActionsBinding: WidgetGuildProfileActionsBinding? = null
+    private val emojisAdapter = WidgetGuildProfileSheetEmojisAdapter()
 
     override fun getContentViewResId() = R.layout.widget_guild_profile_sheet
 
@@ -231,6 +236,8 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
             if (actions == null) View.GONE else View.VISIBLE
         actions?.let { bindMemberActions(actionsRoot, state, it) }
 
+        bindEmojis(actionsRoot, state)
+
         val bottom = state.bottomActions
         profileActionsBinding?.guildProfileSheetBottomActions?.visibility =
             if (bottom.showUploadEmoji || bottom.showViewServer) View.VISIBLE else View.GONE
@@ -248,15 +255,42 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
         }
     }
 
+    private fun bindEmojis(root: View, state: WidgetGuildProfileSheetViewModel.ViewState.Loaded) {
+        val card = root.findViewById<CardView>(R.id.guild_profile_sheet_emojis) ?: return
+        card.visibility = if (state.emojis.isEmpty()) View.GONE else View.VISIBLE
+        if (state.emojis.isEmpty()) return
+        val recycler = root.findViewById<RecyclerView>(R.id.guild_profile_sheet_emojis_recycler) ?: return
+        if (recycler.adapter == null) {
+            recycler.layoutManager = LinearLayoutManager(requireContext(), RecyclerView.HORIZONTAL, false)
+            recycler.adapter = emojisAdapter
+        }
+        emojisAdapter.onClickEmoji = {
+            dismiss()
+            WidgetServerSettingsEmojis.launch(requireContext(), state.guildId)
+        }
+        val density = resources.displayMetrics.density
+        val available = resources.displayMetrics.widthPixels - (64 * density)
+        emojisAdapter.setData(state.emojis, (available / (32 * density)).toInt().coerceAtLeast(1))
+    }
+
     private fun bindMemberActions(
         root: View,
         state: WidgetGuildProfileSheetViewModel.ViewState.Loaded,
         actions: WidgetGuildProfileSheetViewModel.Actions,
     ) {
-        root.findViewById<CardView>(R.id.guild_profile_sheet_mark_as_read_action)?.visibility =
-            if (actions.isUnread) View.VISIBLE else View.GONE
-        root.findViewById<View>(R.id.guild_profile_sheet_mark_as_read)?.setOnClickListener {
-            viewModel.onClickMarkAsRead(state.guildId)
+        root.findViewById<View>(R.id.guild_profile_sheet_mark_as_read)?.apply {
+            visibility = if (actions.isUnread) View.VISIBLE else View.GONE
+            setOnClickListener { viewModel.onClickMarkAsRead(state.guildId) }
+        }
+        root.findViewById<TextView>(R.id.guild_profile_sheet_mute)?.apply {
+            setText(if (actions.isMuted) R.string.unmute_server else R.string.mute_server)
+            setOnClickAndDismissListener {
+                viewModel.setMuted(requireContext().applicationContext, state.guildId, !actions.isMuted)
+            }
+        }
+        root.findViewById<View>(R.id.guild_profile_sheet_channels_and_roles)?.apply {
+            visibility = if (actions.isCommunity) View.VISIBLE else View.GONE
+            setOnClickAndDismissListener { WidgetChannelsAndRoles.launch(requireContext(), state.guildId) }
         }
         bindPrimaryActions(root, state, actions)
         (root.findViewById<View>(R.id.change_identity)
@@ -285,9 +319,24 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
             isChecked = actions.isAllowDMChecked
             setOnCheckedListener { viewModel.setAllowDM(state.guildId, it) }
         }
+        root.findViewById<CheckedSetting>(R.id.guild_profile_sheet_allow_message_requests)?.apply {
+            isChecked = actions.isAllowMessageRequestsChecked
+            setOnCheckedListener { viewModel.setAllowMessageRequests(state.guildId, it) }
+        }
         root.findViewById<CheckedSetting>(R.id.guild_profile_sheet_hide_muted_channels)?.apply {
             isChecked = actions.hideMutedChannels
             setOnCheckedListener { viewModel.setHideMutedChannels(state.guildId, it) }
+        }
+        root.findViewById<CheckedSetting>(R.id.guild_profile_sheet_show_all_channels)?.apply {
+            visibility = if (actions.isCommunity) View.VISIBLE else View.GONE
+            isChecked = actions.showAllChannels
+            setOnCheckedListener {
+                viewModel.setShowAllChannels(requireContext().applicationContext, state.guildId, it)
+            }
+        }
+        root.findViewById<View>(R.id.guild_profile_sheet_report_raid)?.apply {
+            visibility = if (actions.canReportRaid) View.VISIBLE else View.GONE
+            setOnClickAndDismissListener { WidgetGuildReportRaid.launch(requireContext(), state.guildId) }
         }
         root.findViewById<View>(R.id.guild_profile_sheet_leave_server)?.apply {
             visibility = if (actions.canLeaveGuild) View.VISIBLE else View.GONE

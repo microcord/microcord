@@ -1157,6 +1157,9 @@ interface RestAPIInterface {
     @POST("guilds/{guildId}/ack")
     fun ackGuild(@Path("guildId") guildId: Long): Observable<Void>
 
+    @POST("guilds/{guildId}/auto-moderation/report-raid")
+    fun reportRaid(@Path("guildId") guildId: Long): Observable<Void>
+
     @POST("read-states/ack-bulk")
     fun bulkAck(@Body body: RestAPIParams.BulkAck): Observable<Void>
 

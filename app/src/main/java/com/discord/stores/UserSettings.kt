@@ -274,6 +274,11 @@ object UserSettings {
         privacyBuilder.clearRestrictedGuildIds().addAllRestrictedGuildIds(ids)
     }
 
+    val messageRequestRestrictedGuildIds =
+        setting({ it.privacy.messageRequestRestrictedGuildIdsList.toList() }) { ids ->
+            privacyBuilder.clearMessageRequestRestrictedGuildIds().addAllMessageRequestRestrictedGuildIds(ids)
+        }
+
     val guildFolders = setting(
         fromProto = { proto ->
             proto.guildFolders.foldersList.map { it.toModel() }
