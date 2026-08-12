@@ -159,8 +159,20 @@ spawn_gradle() {
   printf '%s\n' "$started" >"$STATE/running.start"
 
   # Stream to our own stdout as well, so whichever agent is doing the work still sees it live.
-  tail -n +1 -f "$STATE/logs/$key.log" --pid="$pid" 2>/dev/null &
-  local tailpid=$!
+  #
+  # A runner drains every queued task set, not just its own, so most of what it streams may belong
+  # to somebody else. Left unlabelled those lines read as this agent's build, and another agent's
+  # compile error looks like our own tree failing to build — the exit code we return is still ours,
+  # taken from this request's own result file.
+  local tailpid
+  if [ "$key" = "$KEY" ]; then
+    tail -n +1 -f "$STATE/logs/$key.log" --pid="$pid" 2>/dev/null &
+    tailpid=$!
+  else
+    tail -n +1 -f "$STATE/logs/$key.log" --pid="$pid" 2>/dev/null \
+      | sed "s/^/[another agent's build $key] /" &
+    tailpid=$!
+  fi
 
   wait "$pid"
   local code=$?
