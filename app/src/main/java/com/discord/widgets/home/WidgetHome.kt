@@ -35,6 +35,7 @@ import com.discord.widgets.search.WidgetSearch
 import com.discord.api.channel.Channel
 import com.discord.api.guild.GuildFeature
 import com.discord.api.channel.getDisplayNameOrDefault
+import com.discord.api.channel.getDMRecipient
 import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isGuildForumPost
 import com.discord.api.channel.isPrivate
@@ -49,6 +50,7 @@ import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.rx.ui
 import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.channel.guildChannelIcon
+import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.toolbar.positionUnreadCountView
 import com.discord.utilities.user.UserUtils.hasUnreadUrgentMessages
 import com.discord.widgets.chat.input.AppFlexInputViewModel
@@ -388,6 +390,11 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         }
         toolbar.title = null
         setActionBarTitle(title, titleIcon)
+        when (channel.type) {
+            Channel.DM -> channel.getDMRecipient()?.let { IconUtils.getForUser(it, size = 24) }
+            Channel.GROUP_DM -> IconUtils.getForChannel(channel, size = 24)
+            else -> null
+        }?.let { actionBarTitleLayout?.setAvatar(it) }
         setActionBarSubtitle(
             when {
                 threadDraft != null -> threadDraft.parentChannel.getDisplayNameOrDefault(requireContext(), false)

@@ -12,6 +12,7 @@ import androidx.core.view.isVisible
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayNameOrDefault
+import com.discord.api.channel.getDMRecipient
 import com.discord.api.channel.isArchivedThread
 import com.discord.api.channel.isDMStatusVisible
 import com.discord.api.channel.isThreadOnlyChannel
@@ -25,6 +26,7 @@ import com.discord.databinding.WidgetHomeBinding
 import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreStream
 import com.discord.utilities.channel.guildChannelIcon
+import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.toolbar.positionUnreadCountView
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.widgets.channels.invite.GroupInviteFriendsSheet
@@ -42,6 +44,7 @@ object WidgetHomeHeaderManager {
         @DrawableRes val drawableRes: Int? = null,
         val leftButtonIsBack: Boolean = false,
         @DrawableRes val trailingDrawable: Int? = null,
+        val avatarUrl: String? = null,
     )
 
     internal data class MenuState(
@@ -76,6 +79,7 @@ object WidgetHomeHeaderManager {
                 iconAccessibilityLabel = if (header.leftButtonIsBack) R.string.back else R.string.toggle_drawer,
             )
             widgetHome.setActionBarTitle(header.title, header.drawableRes, header.trailingDrawable)
+            widgetHome.actionBarTitleLayout?.setAvatar(header.avatarUrl)
             widgetHome.setActionBarSubtitle(header.subtitle)
             widgetHome.appActivity?.toolbar?.setNavigationOnClickListener { widgetHome.handleCenterPanelBack() }
         }
@@ -104,14 +108,22 @@ object WidgetHomeHeaderManager {
         is StoreChannelsSelected.ResolvedSelectedChannel.Channel -> when (val selectedChannel = channel) {
             null -> HeaderData(context.getString(R.string.channels_unavailable_title))
             else -> when (selectedChannel.type) {
-                Channel.GROUP_DM -> HeaderData(
-                    selectedChannel.getDisplayNameOrDefault(context, includePrefix = false),
-                    drawableRes = R.drawable.ic_group_message_header,
-                )
-                Channel.DM -> HeaderData(
-                    selectedChannel.getDisplayNameOrDefault(context, includePrefix = false),
-                    drawableRes = R.drawable.ic_direct_message_header,
-                )
+                Channel.GROUP_DM -> {
+                    val icon = IconUtils.getForChannel(selectedChannel, size = 24)
+                    HeaderData(
+                        selectedChannel.getDisplayNameOrDefault(context, includePrefix = false),
+                        drawableRes = R.drawable.ic_group_message_header.takeIf { icon == null },
+                        avatarUrl = icon,
+                    )
+                }
+                Channel.DM -> {
+                    val avatar = selectedChannel.getDMRecipient()?.let { IconUtils.getForUser(it, size = 24) }
+                    HeaderData(
+                        selectedChannel.getDisplayNameOrDefault(context, includePrefix = false),
+                        drawableRes = R.drawable.ic_direct_message_header.takeIf { avatar == null },
+                        avatarUrl = avatar,
+                    )
+                }
                 Channel.DIRECTORY -> HeaderData(
                     selectedChannel.getDisplayNameOrDefault(context, includePrefix = false),
                     drawableRes = R.drawable.ic_hub_24dp,

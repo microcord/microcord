@@ -7,6 +7,8 @@ import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
+import com.discord.utilities.images.MGImages
+import com.facebook.drawee.generic.RoundingParams
 import com.discord.databinding.ViewToolbarTitleBinding
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 
@@ -40,16 +42,29 @@ class ToolbarTitleLayout(context: Context) : ConstraintLayout(context) {
         binding.toolbarTitleSubtext.setTextAndVisibilityBy(subtitle)
     }
 
+    fun setAvatar(url: String?) {
+        if (url == null) return
+        binding.toolbarIcon.hierarchy.roundingParams = RoundingParams.asCircle()
+        MGImages.setImage(binding.toolbarIcon, url, width = 24, height = 24, useSmallCache = true)
+        binding.toolbarIcon.visibility = View.VISIBLE
+    }
+
     fun setTitleColor(@ColorInt color: Int) {
         binding.toolbarTitle.setTextColor(color)
     }
 
-    private fun android.widget.ImageView.setDrawableOrHide(@DrawableRes drawableRes: Int?) {
+    private fun com.facebook.drawee.view.SimpleDraweeView.setDrawableOrHide(@DrawableRes drawableRes: Int?) {
         if (drawableRes == null) {
             visibility = View.GONE
             return
         }
-        setImageDrawable(ResourcesCompat.getDrawable(resources, drawableRes, context.theme))
+        hierarchy.roundingParams = null
+        setActualImageResource(drawableRes)
         visibility = View.VISIBLE
+    }
+
+    private fun android.widget.ImageView.setDrawableOrHide(@DrawableRes drawableRes: Int?) {
+        visibility = if (drawableRes == null) View.GONE else View.VISIBLE
+        if (drawableRes != null) setImageDrawable(ResourcesCompat.getDrawable(resources, drawableRes, context.theme))
     }
 }
