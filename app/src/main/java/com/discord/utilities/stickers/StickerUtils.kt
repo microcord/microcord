@@ -43,7 +43,7 @@ object StickerUtils {
         size: Int? = DEFAULT_STICKER_SIZE_PX,
         passthrough: Boolean = true,
     ): String = when (sticker.formatType) {
-        StickerFormatType.PNG, StickerFormatType.APNG -> buildString {
+        StickerFormatType.PNG, StickerFormatType.APNG, StickerFormatType.GIF -> buildString {
             append("https://media.discordapp.net/stickers/")
             append(sticker.getStickerId())
             append(sticker.getFileExtension())

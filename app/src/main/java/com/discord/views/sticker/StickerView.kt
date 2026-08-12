@@ -18,13 +18,12 @@ import com.discord.i18n.i18nFormat
 import com.discord.rlottie.RLottieDrawable
 import com.discord.rlottie.RLottieImageView
 import com.discord.stores.StoreStream
-import com.discord.utilities.apng.ApngUtils
 import com.discord.utilities.file.DownloadUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.stickers.StickerUtils
 import com.facebook.drawee.drawable.ScalingUtils
 import com.facebook.drawee.view.SimpleDraweeView
-import kotlinx.coroutines.Job
+import com.linecorp.apng.ApngDrawable
 import rx.Subscription
 import rx.schedulers.Schedulers
 
@@ -37,7 +36,7 @@ class StickerView @JvmOverloads constructor(
     private val placeholder: ImageView
     private var sticker: BaseSticker? = null
     private var subscription: Subscription? = null
-    private var apngLoadingJob: Job? = null
+    private var apngDrawable: ApngDrawable? = null
 
     init {
         LayoutInflater.from(context).inflate(R.layout.sticker_view, this)
@@ -50,14 +49,14 @@ class StickerView @JvmOverloads constructor(
 
     @JvmOverloads
     fun d(sticker: BaseSticker, stickerAnimationSettings: Int? = null) {
-        if (this.sticker?.getStickerId() == sticker.getStickerId() && subscription != null) return
+        if (this.sticker?.getStickerId() == sticker.getStickerId() && subscription?.isUnsubscribed == false) return
         clearWork()
         this.sticker = sticker
         resetViews()
         when (sticker.formatType) {
             StickerFormatType.PNG -> showStatic(sticker)
-            StickerFormatType.APNG, StickerFormatType.LOTTIE ->
-                loadAnimated(sticker, stickerAnimationSettings)
+            StickerFormatType.APNG -> loadApng(sticker, stickerAnimationSettings)
+            StickerFormatType.LOTTIE, StickerFormatType.GIF -> loadAnimated(sticker, stickerAnimationSettings)
             StickerFormatType.UNKNOWN ->
                 Log.e(TAG, "Invalid sticker format passed to StickerView: ${sticker.formatType}")
         }
@@ -84,6 +83,11 @@ class StickerView @JvmOverloads constructor(
     private fun loadAnimated(sticker: BaseSticker, localSetting: Int?) {
         val target = if (sticker.formatType == StickerFormatType.LOTTIE) lottieView else imageView
         target.visibility = View.VISIBLE
+        if (sticker.formatType != StickerFormatType.LOTTIE) {
+            subscription = StoreStream.getUserSettings().observeStickerAnimationSettings()
+                .subscribe { setting -> post { showAnimatedRaster(sticker, localSetting ?: setting) } }
+            return
+        }
         subscription = rx.Observable.combineLatest(
             StickerUtils.fetchSticker(context, sticker),
             // The account setting, reduced-motion aware, straight from the store that owns it.
@@ -139,34 +143,67 @@ class StickerView @JvmOverloads constructor(
         } else {
             imageView.contentDescription = contentDescription(sticker)
             imageView.hierarchy.actualImageScaleType = ScalingUtils.ScaleType.FIT_CENTER
-            when (setting) {
-                StickerUtils.ALWAYS_ANIMATE -> renderApng(file)
-                // Not animating: ask the media proxy for the flattened still frame
-                // (`passthrough = false`) rather than the APNG the renderer would need.
-                StickerUtils.ANIMATE_ON_INTERACTION -> {
-                    MGImages.setImage(imageView, stillImageUrl(sticker), useSmallCache = true)
-                    imageView.setOnLongClickListener {
-                        renderApng(file)
-                        true
-                    }
-                }
-                StickerUtils.NEVER_ANIMATE -> {
-                    MGImages.setImage(imageView, stillImageUrl(sticker), useSmallCache = true)
-                    imageView.setOnLongClickListener(null)
-                }
-            }
+            showAnimatedRaster(sticker, setting)
         }
     }
 
-    private fun renderApng(file: java.io.File) {
-        apngLoadingJob?.cancel()
-        apngLoadingJob = ApngUtils.renderApngFromFile(
-            file,
-            imageView,
-            StickerUtils.DEFAULT_STICKER_SIZE_PX,
-            StickerUtils.DEFAULT_STICKER_SIZE_PX,
-            true,
-        )
+    private fun loadApng(sticker: BaseSticker, localSetting: Int?) {
+        imageView.visibility = View.VISIBLE
+        subscription = rx.Observable.combineLatest(
+            StickerUtils.fetchSticker(context, sticker),
+            StoreStream.getUserSettings().observeStickerAnimationSettings(),
+        ) { download, setting -> download to (localSetting ?: setting) }
+            .subscribeOn(Schedulers.io())
+            .subscribe(
+                { (download, setting) ->
+                    if (download is DownloadUtils.DownloadState.Completed) {
+                        val drawable = ApngDrawable.decode(download.file)
+                        post {
+                            if (this.sticker?.getStickerId() != sticker.getStickerId()) {
+                                drawable.recycle()
+                                return@post
+                            }
+                            placeholder.visibility = View.GONE
+                            imageView.contentDescription = contentDescription(sticker)
+                            imageView.hierarchy.actualImageScaleType = ScalingUtils.ScaleType.FIT_CENTER
+                            apngDrawable?.recycle()
+                            apngDrawable = drawable
+                            imageView.setImageDrawable(drawable)
+                            if (setting == StickerUtils.ALWAYS_ANIMATE) drawable.start()
+                            imageView.setOnLongClickListener(
+                                if (setting == StickerUtils.ANIMATE_ON_INTERACTION) {
+                                    View.OnLongClickListener { drawable.start(); true }
+                                } else {
+                                    null
+                                },
+                            )
+                        }
+                    }
+                },
+                { error -> Log.w(TAG, "Failed to load APNG sticker ${sticker.getStickerId()}", error) },
+            )
+    }
+
+    private fun showAnimatedRaster(sticker: BaseSticker, setting: Int) {
+        placeholder.visibility = View.GONE
+        imageView.contentDescription = contentDescription(sticker)
+        imageView.hierarchy.actualImageScaleType = ScalingUtils.ScaleType.FIT_CENTER
+        val animatedUrl = StickerUtils.getCDNAssetUrl(sticker)
+        when (setting) {
+            StickerUtils.ALWAYS_ANIMATE ->
+                MGImages.setImage(imageView, animatedUrl, useSmallCache = false, autoPlayAnimations = true)
+            StickerUtils.ANIMATE_ON_INTERACTION -> {
+                MGImages.setImage(imageView, stillImageUrl(sticker), useSmallCache = true)
+                imageView.setOnLongClickListener {
+                    MGImages.setImage(imageView, animatedUrl, useSmallCache = false, autoPlayAnimations = true)
+                    true
+                }
+            }
+            StickerUtils.NEVER_ANIMATE -> {
+                MGImages.setImage(imageView, stillImageUrl(sticker), useSmallCache = true)
+                imageView.setOnLongClickListener(null)
+            }
+        }
     }
 
     private fun stillImageUrl(sticker: BaseSticker) =
@@ -183,6 +220,10 @@ class StickerView @JvmOverloads constructor(
 
     private fun resetViews() {
         MGImages.cancelImageRequests(imageView)
+        apngDrawable?.stop()
+        apngDrawable?.recycle()
+        apngDrawable = null
+        imageView.setImageDrawable(null)
         imageView.setOnLongClickListener(null)
         lottieView.rlottieDrawable?.stop()
         lottieView.setImageDrawable(null)
@@ -196,13 +237,11 @@ class StickerView @JvmOverloads constructor(
     private fun clearWork() {
         subscription?.unsubscribe()
         subscription = null
-        apngLoadingJob?.cancel()
-        apngLoadingJob = null
     }
 
     override fun setOnClickListener(listener: OnClickListener?) {
         when (sticker?.formatType) {
-            StickerFormatType.PNG, StickerFormatType.APNG -> imageView.setOnClickListener(listener)
+            StickerFormatType.PNG, StickerFormatType.APNG, StickerFormatType.GIF -> imageView.setOnClickListener(listener)
             StickerFormatType.LOTTIE -> lottieView.setOnClickListener(listener)
             else -> Unit
         }

@@ -18,11 +18,12 @@ data class Sticker(
     override fun getFileExtension() = formatType.fileExtension()
     override fun toStickerPartial() = StickerPartial(id, formatType, name)
     override fun getStickerId() = id
-    fun isAnimated() = formatType == StickerFormatType.APNG || formatType == StickerFormatType.LOTTIE
+    fun isAnimated() = formatType in setOf(StickerFormatType.APNG, StickerFormatType.LOTTIE, StickerFormatType.GIF)
 }
 
 internal fun StickerFormatType.fileExtension() = when (this) {
     StickerFormatType.UNKNOWN -> ""
     StickerFormatType.PNG, StickerFormatType.APNG -> ".png"
     StickerFormatType.LOTTIE -> ".json"
+    StickerFormatType.GIF -> ".gif"
 }

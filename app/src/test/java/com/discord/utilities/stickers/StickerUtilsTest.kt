@@ -38,6 +38,11 @@ class StickerUtilsTest {
             "https://media.discordapp.net/stickers/44.png?passthrough=true&size=160",
             StickerUtils.getCDNAssetUrl(apng, 160),
         )
+        assertEquals(StickerFormatType.GIF, StickerFormatType.fromApiValue(4))
+        assertEquals(
+            "https://media.discordapp.net/stickers/46.gif?passthrough=true&size=160",
+            StickerUtils.getCDNAssetUrl(StickerPartial(46, StickerFormatType.GIF, "gif"), 160),
+        )
     }
 
     /** Requested sizes are quantised up to a width the media proxy will actually render. */

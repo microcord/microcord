@@ -156,7 +156,7 @@ class Persister<T : Any>(val key: String, private val defaultValue: T, preload: 
     }
 
     companion object {
-        private const val CACHE_MAGIC = 0x4D435034
+        private const val CACHE_MAGIC = 0x4D435035
         private val preferences = CopyOnWriteArrayList<WeakReference<Persister<*>>>()
         private var filesDir = File("")
         private var initialized = false
