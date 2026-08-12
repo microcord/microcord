@@ -335,6 +335,7 @@ internal class ReadyPayloadHydrator(
         ownerConfiguredContentLevel = ownerConfiguredContentLevel,
         incidentsData = incidentsData,
         officialMessageColor = officialMessageColor,
+        profile = profile,
     )
 
     private data class GuildCache(

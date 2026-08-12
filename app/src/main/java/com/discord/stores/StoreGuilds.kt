@@ -548,7 +548,8 @@ class StoreGuilds(
     }
 
     companion object {
-        const val GUILDS_CACHE_KEY = "STORE_GUILDS_V34"
+        /** Bump on any change to what [Guild] carries; versioning stops the server resending it. */
+        const val GUILDS_CACHE_KEY = "STORE_GUILDS_V35"
         const val GUILD_ROLES_CACHE_KEY = "STORE_GUILD_ROLES_V7"
         const val GUILD_JOINED_AT_CACHE_KEY = "STORE_GUILD_JOINED_AT_V6"
 
