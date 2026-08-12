@@ -224,11 +224,13 @@ object NotificationClient {
      * [isAckRequest] marks a clear caused by our own read-ack round trip. A channel that was just
      * direct-replied to is exempt from exactly one such clear, so the reply's own ack does not wipe
      * a notification that arrived in the meantime.
+     *
+     * [ackMessageId] keeps a notification whose newest message is newer than the ack.
      */
     @JvmOverloads
-    fun clear(channelId: Long, context: Context? = null, isAckRequest: Boolean = false) {
+    fun clear(channelId: Long, context: Context? = null, isAckRequest: Boolean = false, ackMessageId: Long = 0L) {
         val target = context ?: applicationContext ?: return
-        renderer.clearChannel(target, channelId, isAckRequest)
+        renderer.clearChannel(target, channelId, isAckRequest, ackMessageId)
     }
 
     /** Marks [channelId] exempt from the next ack-driven clear. */

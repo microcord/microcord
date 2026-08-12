@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
@@ -43,7 +44,7 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
         if (!canNotify(context, settings.isEnabled) || !isValid(data)) return false
         initNotificationChannels(context)
         val snapshot = cache.add(data)
-        val channelId = PushChannel.fromWireValue(data.notificationChannel)?.id ?: data.kind.channelId
+        val channelId = data.notificationChannelId ?: data.kind.channelId
         val private = data.kind != NotificationKind.GENERAL
         val authSession = NotificationActionSession.fromToken(settings.token)
         val builder = NotificationCompat.Builder(context, channelId)
@@ -60,6 +61,11 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
             .setNumber(snapshot.messages.size)
             .setContentIntent(contentIntent(context, data))
             .setDeleteIntent(actionIntent(context, data, NotificationActionReceiver.ACTION_DELETE))
+            .addExtras(
+                Bundle().apply {
+                    putLong(EXTRA_LATEST_MESSAGE_ID, snapshot.messages.maxOf { it.messageId ?: 0L })
+                },
+            )
 
         // Notification channels carry sound/vibration/light policy from API 26; below that the
         // notification itself has to, which is why the reference only sets these on the builder.
@@ -133,9 +139,11 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
      * Cancels every notification shown for [channelId].
      *
      * [isAckRequest] marks a clear driven by our own read-ack; see [NotificationCache.removeChannel].
+     * [ackMessageId] spares a notification whose newest message is newer than the ack.
      */
     @JvmOverloads
-    fun clearChannel(context: Context, channelId: Long, isAckRequest: Boolean = false): Boolean {
+    fun clearChannel(context: Context, channelId: Long, isAckRequest: Boolean = false, ackMessageId: Long = 0L): Boolean {
+        if (ackMessageId > 0L && latestMessageId(context, channelId) > ackMessageId) return false
         if (!cache.consumeAckExemption(channelId, isAckRequest)) return false
         cache.removeChannel(channelId)
         // The id is derived from the channel id rather than read back from the cache, so a receiver
@@ -209,6 +217,20 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
                 .build(),
         )
     }
+
+    /**
+     * Read back from the tray rather than from the cache: a receiver woken into a fresh process has
+     * no cache, and the notification it has to decide about is still on screen.
+     */
+    private fun latestMessageId(context: Context, channelId: Long): Long = runCatching {
+        val id = NotificationCache.notificationId(channelId)
+        context.getSystemService(NotificationManager::class.java)
+            ?.activeNotifications
+            ?.firstOrNull { it.id == id }
+            ?.notification
+            ?.extras
+            ?.getLong(EXTRA_LATEST_MESSAGE_ID, 0L)
+    }.getOrNull() ?: 0L
 
     fun cancel(context: Context, notificationId: Int) {
         if (notificationId > 0) NotificationManagerCompat.from(context).cancel(notificationId)
@@ -386,6 +408,7 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
         const val CHANNEL_SOCIAL = NotificationClient.NOTIF_CHANNEL_SOCIAL
         const val CHANNEL_GENERAL = NotificationClient.NOTIF_GENERAL
 
+        private const val EXTRA_LATEST_MESSAGE_ID = "manticord.latestMessageId"
         private const val LIGHT_PERIOD_MS = 1_500
         private const val REPLY_STATUS_TIMEOUT_MS = 3_000L
 

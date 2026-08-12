@@ -9,6 +9,7 @@ import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.notifications.NotificationData
 import com.discord.utilities.notifications.NotificationKind
 import com.discord.utilities.notifications.NotificationSource
+import com.discord.utilities.notifications.PushChannel
 import com.discord.utilities.notifications.PushType
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -40,7 +41,10 @@ class FCMMessagingService : FirebaseMessagingService() {
             "FCM message received. type=${message.data["type"]} fields=${message.data.size} " +
                 "notification=${message.notification != null}",
         )
-        val payload = runCatching { NotificationData.parsePushPayload(message.data) }
+        // An ack with no watermark of its own falls back to Firebase's own send time.
+        val data = message.data.toMutableMap()
+        if (!data.containsKey("sent_at_ms") && message.sentTime > 0L) data["sent_at_ms"] = message.sentTime.toString()
+        val payload = runCatching { NotificationData.parsePushPayload(data) }
             .onFailure { AppLog.e("Unparseable push payload: ${it.javaClass.simpleName}") }
             .getOrNull() ?: return
         if (!payload.isValid()) {
@@ -50,8 +54,10 @@ class FCMMessagingService : FirebaseMessagingService() {
         // A dismissal retracts what is already showing rather than adding to it: the account read
         // the channel, or answered the call, somewhere else.
         if (payload.pushType?.isDismissal == true) {
-            NotificationClient.clear(payload.channel.id, applicationContext, isAckRequest = true)
-            AppLog.d("FCM dismissal type=${payload.type} channel=${payload.channel.id}")
+            payload.ackChannelIds.forEach {
+                NotificationClient.clear(it, applicationContext, isAckRequest = true, ackMessageId = payload.ackMessageId)
+            }
+            AppLog.d("FCM dismissal type=${payload.type} channels=${payload.ackChannelIds.size}")
             return
         }
         val delivery = NotificationClient.handlePushNotification(payload.toNotificationData(), applicationContext)
@@ -104,7 +110,7 @@ class FCMMessagingService : FirebaseMessagingService() {
                 NotificationClient.getSettings().canReplyTo(channel.id),
             type = type,
             deepLink = deepLink,
-            notificationChannel = notificationChannel,
+            notificationChannelId = PushChannel.forPush(pushType, notifTypeId, channel.type)?.id,
         )
     }
 }

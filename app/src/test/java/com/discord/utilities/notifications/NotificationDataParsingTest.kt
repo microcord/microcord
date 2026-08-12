@@ -5,6 +5,7 @@ import com.discord.api.guildscheduledevent.GuildScheduledEventEntityType
 import com.discord.api.message.activity.MessageActivityType
 import com.discord.api.sticker.StickerFormatType
 import com.discord.api.sticker.StickerType
+import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.fcm.mainIconUrl
 import com.discord.utilities.fcm.messageTitle
 import org.junit.Assert.assertEquals
@@ -57,12 +58,13 @@ class NotificationDataParsingTest {
             "guild_scheduled_event_id" to "108",
             "notification_type" to "reminder",
             "tracking_type" to "fixture_tracking",
-            "notification_channel" to "General",
+            "notif_type_id" to "1",
+            "sent_at_ms" to "1420070400000",
             "expand_subtitle" to "TRUE",
             "notification_id" to "fixture-notification",
         ))
 
-        assertEquals(38, NotificationData.PushPayload::class.java.declaredConstructors.single().parameterCount)
+        assertEquals(39, NotificationData.PushPayload::class.java.declaredConstructors.single().parameterCount)
         assertEquals(PushType.MESSAGE_CREATE, payload.pushType)
         assertEquals(101L, payload.messageId)
         assertEquals(MessageActivityType.SPECTATE, payload.messageActivityType)
@@ -223,12 +225,26 @@ class NotificationDataParsingTest {
         }
     }
 
-    @Test fun serverChannelCategoryIsParsed() {
-        assertEquals(
-            PushChannel.REACTIONS,
-            PushChannel.fromWireValue(parse(PushType.GENERIC_PUSH_NOTIFICATION_SENT, "notification_channel" to "reactions").notificationChannel),
-        )
-        assertNull(PushChannel.fromWireValue("somethingNewerThanThisBuild"))
+    @Test fun notificationChannelComesFromTheNotificationType() {
+        fun channelFor(type: PushType, vararg fields: Pair<String, String>) = parse(type, *fields).let {
+            PushChannel.forPush(it.pushType, it.notifTypeId, it.channel.type)
+        }
+
+        assertEquals(PushChannel.REACTIONS, channelFor(PushType.GENERIC_PUSH_NOTIFICATION_SENT, "notif_type_id" to "23"))
+        assertEquals(PushChannel.MESSAGES, channelFor(PushType.MESSAGE_CREATE, "notif_type_id" to "1", "channel_type" to "0"))
+        assertEquals(PushChannel.DIRECT_MESSAGES, channelFor(PushType.MESSAGE_CREATE, "notif_type_id" to "1", "channel_type" to "1"))
+        assertEquals(PushChannel.CALLS, channelFor(PushType.CALL_RING))
+        assertNull(channelFor(PushType.GENERIC_PUSH_NOTIFICATION_SENT, "notif_type_id" to "9999"))
+    }
+
+    @Test fun dismissalsCarryTheirAckTargetsAndWatermark() {
+        val ack = parse(PushType.CHANNEL_ACK, "channel_ids" to "103,104", "sent_at_ms" to "1420070400000")
+        assertEquals(listOf(103L, 104L), ack.ackChannelIds)
+        assertEquals(SnowflakeUtils.fromTimestamp(1420070400000L), ack.ackMessageId)
+
+        val single = parse(PushType.CHANNEL_ACK, "channel_id" to "42")
+        assertEquals(listOf(42L), single.ackChannelIds)
+        assertEquals(0L, single.ackMessageId)
     }
 
     private fun parse(type: PushType, vararg fields: Pair<String, String>) =

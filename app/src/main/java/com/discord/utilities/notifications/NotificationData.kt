@@ -8,6 +8,7 @@ import com.discord.api.guildscheduledevent.GuildScheduledEventEntityType
 import com.discord.api.message.activity.MessageActivityType
 import com.discord.api.sticker.Sticker
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
+import com.discord.utilities.SnowflakeUtils
 import com.discord.i18n.FormatUtils
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
@@ -17,29 +18,77 @@ enum class NotificationKind { MESSAGE, DIRECT_MESSAGE, SOCIAL, GENERAL }
 
 enum class NotificationSource { LOCAL, GATEWAY }
 
-/**
- * The categories the server names in `notification_channel`, so Android can offer one switch per
- * kind of notification rather than one for everything.
- *
- * Only the ones this client can receive are listed; an unrecognised value falls back to the
- * notification's own kind.
- */
-enum class PushChannel(val wireValue: String, val id: String, val label: String) {
-    DIRECT_MESSAGES("directMessages", "DirectMessages", "Direct messages"),
-    MESSAGES("messages", "Messages", "Messages"),
-    SOCIAL("social", "Social", "Social"),
-    FRIEND_REQUESTS("friendRequests", "FriendRequests", "Friend requests"),
-    REACTIONS("reactions", "Reactions", "Reactions"),
-    POLLS("polls", "Polls", "Polls"),
-    FORUM_THREAD_CREATED("forumThreadCreated", "Forum Post Create", "Forum notifications"),
-    GUILD_EVENT_LIVE("guildEventLive", "Guild Event Live", "Event notifications"),
-    GUILD_HIGHLIGHTS("guildHighlights", "GuildHighlights", "Server highlights"),
-    STAGE_LIVE("stageLive", "Stage Live", "Stage notifications"),
-    SYSTEM_MESSAGES("systemMessages", "SystemMessages", "Discord system messages"),
-    OTHER("other", "General", "Other server notifications");
+/** Server-side notification kind, sent as `notif_type_id`. */
+enum class NotifType(val id: Int) {
+    MESSAGE_CREATE(1),
+    RELATIONSHIP_ADD(3),
+    FRIEND_SUGGESTION_CREATE(4),
+    GUILD_STREAM_START(6),
+    STAGE_INSTANCE_CREATE(7),
+    GUILD_SCHEDULED_EVENT_UPDATE(8),
+    FORUM_THREAD_CREATED(9),
+    TOP_MESSAGES_PUSH(10),
+    MISSED_MESSAGE_PUSH(11),
+    FRIEND_REQUEST_REMINDER_PUSH(13),
+    HOME_LIFECYCLE_PUSH(14),
+    POLL_ENDED_PUSH(15),
+    NUDGE_NEW_FRIEND_DM_PUSH(16),
+    REACTIONS_PUSH_NOTIFICATION(23),
+    SUSPICIOUS_SESSION(27),
+    NEW_USER_SESSION(28);
 
     companion object {
-        fun fromWireValue(value: String?): PushChannel? = entries.firstOrNull { it.wireValue == value }
+        fun fromId(id: Int?): NotifType? = entries.firstOrNull { it.id == id }
+    }
+}
+
+/**
+ * The notification channel a push belongs in, so Android can offer one switch per kind of
+ * notification rather than one for everything.
+ *
+ * Derived from [NotifType] and not from the payload's own `notification_channel`, which is
+ * deprecated and which the current client no longer reads.
+ */
+enum class PushChannel(val id: String, val label: String) {
+    CALLS("Calls", "Incoming calls"),
+    DIRECT_MESSAGES("DirectMessages", "Direct messages"),
+    MESSAGES("Messages", "Messages"),
+    SOCIAL("Social", "Social"),
+    FRIEND_REQUESTS("FriendRequests", "Friend requests"),
+    REACTIONS("Reactions", "Reactions"),
+    POLLS("Polls", "Polls"),
+    FORUM_THREAD_CREATED("Forum Post Create", "Forum notifications"),
+    GUILD_EVENT_LIVE("Guild Event Live", "Event notifications"),
+    GUILD_HIGHLIGHTS("GuildHighlights", "Server highlights"),
+    STAGE_LIVE("Stage Live", "Stage notifications"),
+    SYSTEM_MESSAGES("SystemMessages", "Discord system messages"),
+    OTHER("General", "Other server notifications");
+
+    companion object {
+        fun forPush(pushType: PushType?, notifTypeId: Int?, channelType: Int): PushChannel? {
+            if (pushType == PushType.CALL_RING || pushType == PushType.CALL_RING_END) return CALLS
+            return when (NotifType.fromId(notifTypeId)) {
+                NotifType.MESSAGE_CREATE ->
+                    if (channelType == Channel.DM || channelType == Channel.GROUP_DM) DIRECT_MESSAGES else MESSAGES
+                NotifType.RELATIONSHIP_ADD -> FRIEND_REQUESTS
+                NotifType.FRIEND_SUGGESTION_CREATE,
+                NotifType.GUILD_STREAM_START,
+                NotifType.FRIEND_REQUEST_REMINDER_PUSH,
+                NotifType.NUDGE_NEW_FRIEND_DM_PUSH,
+                -> SOCIAL
+                NotifType.STAGE_INSTANCE_CREATE -> STAGE_LIVE
+                NotifType.GUILD_SCHEDULED_EVENT_UPDATE -> GUILD_EVENT_LIVE
+                NotifType.FORUM_THREAD_CREATED -> FORUM_THREAD_CREATED
+                NotifType.POLL_ENDED_PUSH -> POLLS
+                NotifType.REACTIONS_PUSH_NOTIFICATION -> REACTIONS
+                NotifType.TOP_MESSAGES_PUSH,
+                NotifType.MISSED_MESSAGE_PUSH,
+                NotifType.HOME_LIFECYCLE_PUSH,
+                -> OTHER
+                NotifType.SUSPICIOUS_SESSION, NotifType.NEW_USER_SESSION -> SYSTEM_MESSAGES
+                null -> null
+            }
+        }
     }
 }
 
@@ -99,8 +148,8 @@ data class NotificationData(
     val type: String? = null,
     /** Where the server says a tap should land, for types a channel id cannot express. */
     val deepLink: String? = null,
-    /** The category the server picked; see `PushChannel`. */
-    val notificationChannel: String? = null,
+    /** Android channel id, resolved from the payload's `notif_type_id`; see [PushChannel]. */
+    val notificationChannelId: String? = null,
 ) {
     /**
      * An id for a notification with no channel to key off. Falling back to the channel id would
@@ -146,13 +195,26 @@ data class NotificationData(
         val guildScheduledEventId: Long?,
         val notificationType: PushNotificationType?,
         val trackingType: String?,
-        val notificationChannel: String?,
+        val notifTypeId: Int?,
+        /** Watermark for the channels in [acknowledgementChannelIds]; see [PushType.isDismissal]. */
+        val sentAtMs: Long?,
         val expandSubtitle: Boolean,
         val notificationId: String?,
     ) {
         val pushType: PushType? get() = PushType.fromWireValue(type)
 
         val normalizedGuildId: Long get() = guildId
+
+        /** The channels a dismissal retracts. Older payloads name only the one they were sent for. */
+        val ackChannelIds: List<Long>
+            get() = acknowledgementChannelIds.ifEmpty { listOfNotNull(channel.id.takeIf { it > 0L }) }
+
+        /**
+         * Notifications for a message newer than this survive the ack, which is how a message that
+         * lands between the read happening elsewhere and the ack arriving here keeps its
+         * notification. Zero when the server sent no watermark, which clears unconditionally.
+         */
+        val ackMessageId: Long get() = sentAtMs?.let(SnowflakeUtils::fromTimestamp) ?: 0L
 
         val isGroupConversation: Boolean = pushType == PushType.MESSAGE_CREATE && channel.type in setOf(
             Channel.GUILD_TEXT,
@@ -253,7 +315,8 @@ data class NotificationData(
                     guildScheduledEventId = data["guild_scheduled_event_id"]?.toLongOrNull(),
                     notificationType = PushNotificationType.fromWireValue(data["notification_type"]),
                     trackingType = data["tracking_type"],
-                    notificationChannel = data["notification_channel"],
+                    notifTypeId = data["notif_type_id"]?.toIntOrNull(),
+                    sentAtMs = data["sent_at_ms"]?.toLongOrNull(),
                     expandSubtitle = data["expand_subtitle"]?.toBoolean() ?: false,
                     notificationId = data["notification_id"],
                 )
