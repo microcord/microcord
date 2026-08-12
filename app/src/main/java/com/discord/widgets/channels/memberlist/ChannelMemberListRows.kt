@@ -5,7 +5,9 @@ import com.discord.api.channel.Channel
 import com.discord.api.presence.ClientStatus
 import com.discord.api.role.GuildRole
 import com.discord.api.user.AvatarDecorationData
+import com.discord.api.user.DisplayNameStyles
 import com.discord.api.user.Nameplate
+import com.discord.utilities.displaynamestyles.DisplayNameStyleUtils
 import com.discord.models.domain.ModelGuildMemberListUpdate.Group
 import com.discord.models.member.GuildMember
 import com.discord.models.presence.Presence
@@ -43,6 +45,7 @@ sealed class ChannelMemberListRow(open val key: String) {
         val canDisplayStatusEmoji: Boolean = true,
         val nameplate: Nameplate? = guildMember?.collectibles?.nameplate ?: user.collectibles?.nameplate,
     val avatarDecoration: AvatarDecorationData? = guildMember?.avatarDecoration ?: user.avatarDecoration,
+    val displayNameStyles: DisplayNameStyles? = DisplayNameStyleUtils.resolve(user, guildMember),
     ) : ChannelMemberListRow("member:${user.id}")
 
     data class PlaceholderHeader(override val key: String) : ChannelMemberListRow(key)

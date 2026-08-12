@@ -3,6 +3,7 @@ package com.discord.models.user
 import com.discord.api.premium.PremiumTier
 import com.discord.api.user.AvatarDecorationData
 import com.discord.api.user.Collectibles
+import com.discord.api.user.DisplayNameStyles
 import com.discord.api.user.PrimaryGuild
 import com.discord.nullserializable.NullSerializable
 import com.discord.utilities.icon.IconUtils
@@ -22,6 +23,7 @@ data class CoreUser(
     override val bannerColor: String? = null,
     override val globalName: String? = null,
     override val collectibles: Collectibles? = null,
+    override val displayNameStyles: DisplayNameStyles? = null,
     override val avatarDecoration: AvatarDecorationData? = null,
     override val isWebhook: Boolean = false,
     override val primaryGuild: PrimaryGuild? = null,
@@ -41,6 +43,7 @@ data class CoreUser(
         user.bannerColor?.value,
         user.globalName,
         user.collectibles?.value,
+        user.displayNameStyles?.value,
         user.avatarDecorationData?.value,
         user.bot == true && user.discriminator == IconUtils.WEBHOOK_DISCRIMINATOR,
         user.primaryGuild,
@@ -62,6 +65,7 @@ data class CoreUser(
             bannerColor = mergeNullSerializable(oldUser.bannerColor, newUser.bannerColor),
             globalName = newUser.globalName,
             collectibles = mergeNullSerializable(oldUser.collectibles, newUser.collectibles),
+            displayNameStyles = mergeNullSerializable(oldUser.displayNameStyles, newUser.displayNameStyles),
             avatarDecoration = mergeNullSerializable(oldUser.avatarDecoration, newUser.avatarDecorationData),
             isWebhook = newUser.bot == true && newUser.discriminator == IconUtils.WEBHOOK_DISCRIMINATOR,
             primaryGuild = newUser.primaryGuild ?: oldUser.primaryGuild,

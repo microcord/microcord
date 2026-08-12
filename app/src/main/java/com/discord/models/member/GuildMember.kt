@@ -6,6 +6,7 @@ import com.discord.api.guildmember.GuildMember as ApiGuildMember
 import com.discord.api.role.GuildRole
 import com.discord.api.user.AvatarDecorationData
 import com.discord.api.user.Collectibles
+import com.discord.api.user.DisplayNameStyles
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.user.User
 import com.discord.utilities.user.UserUtils.getDisplayName
@@ -25,6 +26,7 @@ data class GuildMember(
     val bio: String? = null,
     val communicationDisabledUntil: UtcDateTime? = null,
     val collectibles: Collectibles? = null,
+    val displayNameStyles: DisplayNameStyles? = null,
     val avatarDecoration: AvatarDecorationData? = null,
     val flags: Int = 0,
 ) {
@@ -66,6 +68,7 @@ data class GuildMember(
                 bio = apiGuildMember.bio,
                 communicationDisabledUntil = apiGuildMember.communicationDisabledUntil,
                 collectibles = apiGuildMember.collectibles,
+                displayNameStyles = apiGuildMember.displayNameStyles,
                 avatarDecoration = apiGuildMember.avatarDecorationData,
                 flags = apiGuildMember.flags,
             )

@@ -33,6 +33,8 @@ import com.discord.stores.StoreMessageState
 import com.discord.stores.StoreStream
 import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.channel.ChannelSelector
+import com.discord.utilities.displaynamestyles.DisplayNameStyleRenderer
+import com.discord.utilities.displaynamestyles.DisplayNameStyleUtils
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.message.MessageUtils
 import com.discord.utilities.permissions.PermissionUtils
@@ -201,6 +203,13 @@ class WidgetChatListAdapterItemMessage(
         val itemName = itemName ?: return
         itemName.text = entry.authorDisplayName()
         itemName.setTextColor(authorTextColor(entry.author))
+        // Font only: the reference leaves author names uncoloured, since a long channel would be
+        // re-shading a name on every row.
+        DisplayNameStyleRenderer.apply(
+            itemName,
+            DisplayNameStyleUtils.resolve(message.author, entry.author),
+            DisplayNameStyleRenderer.Mode.FONT,
+        )
         itemName.setOnClickListener {
             adapter.eventHandler.onMessageAuthorNameClicked(message, adapter.data.guildId)
         }

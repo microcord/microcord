@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="?attr/colorBackgroundSecondary">
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="16dp">
+        <TextView android:id="@+id/display_name_style_sheet_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="12dp" android:textStyle="bold" android:textColor="?attr/colorHeaderPrimary" style="@style/UiKit.TextView.H2"/>
+        <GridLayout android:id="@+id/display_name_style_sheet_grid" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+        <TextView android:id="@+id/display_name_style_sheet_disclaimer" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="@string/display_name_styles_non_latin_disclaimer" android:textColor="?attr/colorTextMuted" android:visibility="gone" style="@style/UiKit.TextView"/>
+        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp">
+            <com.google.android.material.button.MaterialButton android:id="@+id/display_name_style_sheet_default" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="8dp" android:visibility="gone" android:text="@string/display_name_styles_use_default_color" style="@style/UiKit.Material.Button.Secondary"/>
+            <com.google.android.material.button.MaterialButton android:id="@+id/display_name_style_sheet_custom" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:visibility="gone" android:text="@string/custom_color" style="@style/UiKit.Material.Button.Secondary"/>
+        </LinearLayout>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

@@ -3,6 +3,7 @@ package com.discord.api.guildmember
 import com.discord.api.presence.Presence
 import com.discord.api.user.AvatarDecorationData
 import com.discord.api.user.Collectibles
+import com.discord.api.user.DisplayNameStyles
 import com.discord.api.user.User
 import com.discord.api.utcdatetime.UtcDateTime
 
@@ -22,5 +23,6 @@ data class GuildMember(
     val communicationDisabledUntil: UtcDateTime? = null,
     val avatarDecorationData: AvatarDecorationData? = null,
     val collectibles: Collectibles? = null,
+    val displayNameStyles: DisplayNameStyles? = null,
     val flags: Int = 0,
 )

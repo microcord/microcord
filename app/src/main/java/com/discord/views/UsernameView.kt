@@ -10,9 +10,11 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.widget.TextViewCompat
 import com.discord.R
+import com.discord.api.user.DisplayNameStyles
 import com.discord.api.user.PrimaryGuild
 import com.discord.databinding.ViewUsernameBinding
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.displaynamestyles.DisplayNameStyleRenderer
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.setVitoSpan
 import com.facebook.drawee.drawable.ScalingUtils
@@ -93,6 +95,18 @@ class UsernameView @JvmOverloads constructor(
     fun setUsernameColor(color: Int) {
         binding.usernameText.setTextColor(color)
     }
+
+    /**
+     * Draws the name in its owner's chosen font, colour and effect.
+     *
+     * Must be called after [configureUsername] and [setUsernameColor]: it reads the colour it finds
+     * as the one to fall back to, and a style with no colours of its own keeps it.
+     */
+    @JvmOverloads
+    fun setDisplayNameStyles(
+        styles: DisplayNameStyles?,
+        mode: DisplayNameStyleRenderer.Mode = DisplayNameStyleRenderer.Mode.FULL,
+    ) = DisplayNameStyleRenderer.apply(binding.usernameText, styles, mode)
 
     private fun DraweeSpanStringBuilder.setAvatar(
         context: Context,

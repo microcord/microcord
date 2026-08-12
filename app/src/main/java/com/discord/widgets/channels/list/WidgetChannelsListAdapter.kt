@@ -49,6 +49,8 @@ import com.discord.models.member.GuildMember
 import com.discord.models.user.User
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.displaynamestyles.DisplayNameStyleRenderer
+import com.discord.utilities.displaynamestyles.DisplayNameStyleUtils
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.utilities.permissions.PermissionUtils
@@ -882,6 +884,11 @@ class WidgetChannelsListAdapter(
             root.setOnClickListener { adapter.onCallChannel(item.channel) }
 
             name.text = GuildMember.getNickOrUsername(item.computed, item.user)
+            DisplayNameStyleRenderer.apply(
+                name,
+                DisplayNameStyleUtils.resolve(item.user, item.computed),
+                DisplayNameStyleRenderer.Mode.FONT,
+            )
             camera.visibility = if (item.voiceState.selfVideo) View.VISIBLE else View.GONE
             microphone.visibility =
                 if (item.voiceState.isMutedByAnySource()) View.VISIBLE else View.GONE
@@ -953,6 +960,12 @@ class WidgetChannelsListAdapter(
 
             name.text = channelName
             name.setTextColor(textColor(item))
+            DisplayNameStyleRenderer.apply(
+                name,
+                DisplayNameStyleUtils.resolve(channel.getDMRecipient()),
+                if (item.selected) DisplayNameStyleRenderer.Mode.FULL else DisplayNameStyleRenderer.Mode.FONT,
+                textColor(item),
+            )
             pin.setColorFilter(textColor(item))
             guildTag.bind(channel.getDMRecipient()?.primaryGuild)
             tag.visibility = if (channel.isSystemDM()) View.VISIBLE else View.GONE

@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:background="?attr/colorBackgroundPrimary" style="@style/UiKit.ViewGroup.Page.LinearLayout">
+    <com.google.android.material.appbar.AppBarLayout android:background="?attr/colorBackgroundPrimary" style="@style/AppTheme.AppBarLayout">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <androidx.coordinatorlayout.widget.CoordinatorLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <androidx.core.widget.NestedScrollView android:id="@+id/display_name_styles_scroll" android:layout_width="match_parent" android:layout_height="match_parent" android:clipToPadding="false" android:paddingBottom="16dp">
+            <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="8dp">
+
+                <!-- The profile card, with the chat row tucked under its bottom-right corner. -->
+                <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="24dp">
+                    <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" app:cardBackgroundColor="?attr/colorBackgroundSecondary" app:cardCornerRadius="12dp" app:cardElevation="0dp">
+                        <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content">
+                            <View android:id="@+id/display_name_styles_preview_banner" android:layout_width="match_parent" android:layout_height="60dp" android:background="?attr/colorBackgroundAccent"/>
+                            <com.facebook.drawee.view.SimpleDraweeView android:id="@+id/display_name_styles_preview_avatar" android:layout_width="72dp" android:layout_height="72dp" android:layout_marginStart="16dp" android:layout_marginTop="-32dp" app:roundAsCircle="true" app:roundingBorderWidth="6dp" app:roundingBorderColor="?attr/colorBackgroundSecondary" android:importantForAccessibility="no"/>
+                            <com.discord.views.DisplayNameTextView android:id="@+id/display_name_styles_preview_name" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginTop="8dp" android:maxLines="2" android:textSize="22sp" android:textStyle="bold" android:textColor="?attr/colorHeaderPrimary"/>
+                            <TextView android:id="@+id/display_name_styles_preview_username" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginBottom="16dp" android:singleLine="true" android:textColor="?attr/colorTextMuted" style="@style/UiKit.TextView"/>
+                        </LinearLayout>
+                    </androidx.cardview.widget.CardView>
+
+                    <androidx.cardview.widget.CardView android:layout_width="260dp" android:layout_height="wrap_content" android:layout_gravity="end" android:layout_marginTop="-18dp" app:cardBackgroundColor="?attr/colorBackgroundPrimary" app:cardCornerRadius="8dp" app:cardElevation="4dp">
+                        <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="12dp">
+                            <com.facebook.drawee.view.SimpleDraweeView android:id="@+id/display_name_styles_chat_avatar" android:layout_width="32dp" android:layout_height="32dp" android:layout_marginEnd="12dp" app:roundAsCircle="true" android:importantForAccessibility="no"/>
+                            <LinearLayout android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+                                <!-- Font only, deliberately: colours and effects never reach a chat author name. -->
+                                <com.discord.views.DisplayNameTextView android:id="@+id/display_name_styles_chat_name" android:layout_width="wrap_content" android:layout_height="wrap_content" android:singleLine="true" android:textStyle="bold" android:textColor="?attr/colorHeaderPrimary" style="@style/UiKit.TextView"/>
+                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/display_name_styles_chat_preview" android:textColor="?attr/colorTextNormal" style="@style/UiKit.TextView"/>
+                            </LinearLayout>
+                        </LinearLayout>
+                    </androidx.cardview.widget.CardView>
+                </LinearLayout>
+
+                <TextView android:id="@+id/display_name_styles_upsell" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" android:text="@string/display_name_styles_premium_upsell" android:textColor="?attr/colorTextMuted" android:visibility="gone" style="@style/UiKit.TextView"/>
+
+                <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content" app:cardBackgroundColor="?attr/colorBackgroundSecondary" app:cardCornerRadius="8dp" app:cardElevation="0dp">
+                    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content">
+                        <LinearLayout android:id="@+id/display_name_styles_font_row" android:orientation="horizontal" android:gravity="center_vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="12dp" android:background="?attr/selectableItemBackground">
+                            <LinearLayout android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/display_name_styles_choose_font" android:textStyle="bold" android:textColor="?attr/colorHeaderPrimary" style="@style/UiKit.TextView"/>
+                                <TextView android:id="@+id/display_name_styles_font_value" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="?attr/colorTextMuted" style="@style/UiKit.TextView"/>
+                            </LinearLayout>
+                            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_arrow_right_24dp" app:tint="?attr/colorInteractiveNormal" android:importantForAccessibility="no"/>
+                        </LinearLayout>
+                        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?attr/colorBackgroundModifierAccent"/>
+                        <LinearLayout android:id="@+id/display_name_styles_effect_row" android:orientation="horizontal" android:gravity="center_vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="12dp" android:background="?attr/selectableItemBackground">
+                            <LinearLayout android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/display_name_styles_choose_effect" android:textStyle="bold" android:textColor="?attr/colorHeaderPrimary" style="@style/UiKit.TextView"/>
+                                <TextView android:id="@+id/display_name_styles_effect_value" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="?attr/colorTextMuted" style="@style/UiKit.TextView"/>
+                            </LinearLayout>
+                            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_arrow_right_24dp" app:tint="?attr/colorInteractiveNormal" android:importantForAccessibility="no"/>
+                        </LinearLayout>
+                        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?attr/colorBackgroundModifierAccent"/>
+                        <LinearLayout android:id="@+id/display_name_styles_color_row" android:orientation="horizontal" android:gravity="center_vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="12dp" android:background="?attr/selectableItemBackground">
+                            <LinearLayout android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="12dp">
+                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/display_name_styles_choose_color" android:textStyle="bold" android:textColor="?attr/colorHeaderPrimary" style="@style/UiKit.TextView"/>
+                                <TextView android:id="@+id/display_name_styles_color_value" android:layout_width="match_parent" android:layout_height="wrap_content" android:singleLine="true" android:ellipsize="end" android:textColor="?attr/colorTextMuted" style="@style/UiKit.TextView"/>
+                            </LinearLayout>
+                            <View android:id="@+id/display_name_styles_color_swatch" android:layout_width="24dp" android:layout_height="24dp" android:layout_marginEnd="8dp"/>
+                            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_arrow_right_24dp" app:tint="?attr/colorInteractiveNormal" android:importantForAccessibility="no"/>
+                        </LinearLayout>
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <LinearLayout android:id="@+id/display_name_styles_actions" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp">
+                    <com.google.android.material.button.MaterialButton android:id="@+id/display_name_styles_surprise" android:text="@string/display_name_styles_surprise_me" android:minHeight="44dp" android:insetTop="0dp" android:insetBottom="0dp" app:icon="@drawable/ic_wand_24dp" app:iconSize="18dp" app:iconGravity="textStart" app:iconPadding="8dp" style="@style/UiKit.Material.Button.Tertiary"/>
+                    <com.google.android.material.button.MaterialButton android:id="@+id/display_name_styles_remove" android:layout_marginTop="8dp" android:text="@string/display_name_styles_remove" android:minHeight="44dp" android:insetTop="0dp" android:insetBottom="0dp" app:icon="@drawable/ic_clear_24dp" app:iconSize="18dp" app:iconGravity="textStart" app:iconPadding="8dp" style="@style/UiKit.Material.Button.Tertiary"/>
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+
+        <com.google.android.material.button.MaterialButton android:id="@+id/display_name_styles_apply" android:layout_gravity="bottom" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginBottom="16dp" android:text="@string/display_name_styles_apply" android:visibility="gone" style="@style/UiKit.Material.Button"/>
+        <com.discord.utilities.dimmer.DimmerView android:id="@+id/display_name_styles_dimmer" style="@style/UiKit.DimmerView"/>
+    </androidx.coordinatorlayout.widget.CoordinatorLayout>
+</LinearLayout>

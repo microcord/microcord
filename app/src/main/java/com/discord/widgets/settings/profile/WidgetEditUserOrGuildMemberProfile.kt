@@ -20,7 +20,11 @@ import com.discord.stores.StoreCollectibles
 import androidx.core.view.isVisible
 import com.discord.stores.StoreStream
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.displaynamestyles.DisplayNameStyleRenderer
+import com.discord.utilities.displaynamestyles.DisplayNameStyleUtils
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.user.UserUtils.getDisplayName
+import com.discord.views.DisplayNameTextView
 import com.discord.widgets.settings.premium.PremiumUpsellDialog
 import com.discord.views.AvatarDecorationView
 import com.discord.views.GuildTagView
@@ -101,6 +105,9 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
     private lateinit var avatarDecorationPreview: AvatarDecorationView
     private lateinit var avatarDecorationValue: TextView
     private lateinit var nameplateCard: CardView
+    private lateinit var displayNameStylesHeader: TextView
+    private lateinit var displayNameStylesCard: CardView
+    private lateinit var displayNameStylesRowPreview: DisplayNameTextView
     private lateinit var nameplatePreview: NameplateView
     private lateinit var nameplateValue: TextView
     private lateinit var primaryGuildHeader: TextView
@@ -173,6 +180,9 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         avatarDecorationPreview = view.findViewById(R.id.avatar_decoration_preview)
         avatarDecorationValue = view.findViewById(R.id.avatar_decoration_value)
         nameplateCard = view.findViewById(R.id.nameplate_card)
+        displayNameStylesHeader = view.findViewById(R.id.display_name_styles_header)
+        displayNameStylesCard = view.findViewById(R.id.display_name_styles_card)
+        displayNameStylesRowPreview = view.findViewById(R.id.display_name_styles_row_preview)
         nameplatePreview = view.findViewById(R.id.nameplate_preview)
         nameplateValue = view.findViewById(R.id.nameplate_value)
         primaryGuildHeader = view.findViewById(R.id.primary_guild_header)
@@ -465,6 +475,35 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
                 loaded.guild?.id,
                 loaded.currentNameplate.selectedSkuId(loaded.savedNameplate?.skuId),
             )
+        }
+
+        configureDisplayNameStyles(loaded)
+    }
+
+    /**
+     * The row that opens the display-name-style editor.
+     *
+     * Its own screen writes immediately rather than joining this screen's pending edit, so the row
+     * only previews what is already saved. That is why it is bound from the loaded state each time
+     * rather than from a pending value.
+     */
+    private fun configureDisplayNameStyles(loaded: SettingsUserProfileViewModel.ViewState.Loaded) {
+        // Premium in both scopes, unlike a collectible: owning one lets you equip it account-wide
+        // for free, but styling a name is itself the paid thing. `canEditGuildProfile` is always
+        // true outside a guild, so gating on it left the account-wide row open to everyone.
+        val canEdit = loaded.canEditThemeColors
+        displayNameStylesHeader.setCompoundDrawablesRelativeWithIntrinsicBounds(
+            0, 0, R.drawable.ic_nitro_wheel_16dp, 0,
+        )
+        displayNameStylesHeader.visibility = View.VISIBLE
+        displayNameStylesCard.visibility = View.VISIBLE
+        val member = loaded.guild?.id?.let { StoreStream.getGuilds().getMember(it, loaded.user.id) }
+        val styles = DisplayNameStyleUtils.resolve(loaded.user, member)
+        displayNameStylesRowPreview.text = loaded.user.getDisplayName(member?.nick)
+        DisplayNameStyleRenderer.apply(displayNameStylesRowPreview, styles)
+        displayNameStylesCard.setOnClickListener {
+            if (!canEdit) return@setOnClickListener showPremiumRequired()
+            WidgetDisplayNameStyles.launch(requireContext(), loaded.guild?.id)
         }
     }
 

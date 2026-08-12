@@ -3,6 +3,7 @@ package com.discord.models.user
 import com.discord.api.premium.PremiumTier
 import com.discord.api.user.AvatarDecorationData
 import com.discord.api.user.Collectibles
+import com.discord.api.user.DisplayNameStyles
 import com.discord.api.user.PrimaryGuild
 import java.io.Serializable
 
@@ -19,6 +20,7 @@ interface User : Serializable {
     val username: String
     val globalName: String? get() = null
     val collectibles: Collectibles? get() = null
+    val displayNameStyles: DisplayNameStyles? get() = null
     val avatarDecoration: AvatarDecorationData? get() = null
     val primaryGuild: PrimaryGuild? get() = null
     val isBot: Boolean

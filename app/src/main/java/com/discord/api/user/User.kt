@@ -30,6 +30,7 @@ data class User(
     val bannerColor: NullSerializable<String>? = null,
     val globalName: String? = null,
     val collectibles: NullSerializable<Collectibles>? = null,
+    val displayNameStyles: NullSerializable<DisplayNameStyles>? = null,
     val avatarDecorationData: NullSerializable<AvatarDecorationData>? = null,
     val storeCountry: UserStoreCountry? = null,
     val primaryGuild: PrimaryGuild? = null,

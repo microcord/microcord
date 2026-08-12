@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <item name="display_name_style_default_color" type="id" />
+    <item name="display_name_style_default_typeface" type="id" />
     <item name="uikit_sheet_header_guideline" type="id" />
     <item name="voice_message_button" type="id" />
 </resources>

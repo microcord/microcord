@@ -15,6 +15,7 @@ import com.discord.models.member.GuildMember
 import com.discord.models.user.User
 import com.discord.stores.StoreStream
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.displaynamestyles.DisplayNameStyleUtils
 import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
@@ -183,6 +184,11 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         binding.userProfileHeaderPrimaryName.configureUsername(primary)
         binding.userProfileHeaderPrimaryName.configureGuildTag(user.primaryGuild, 15f)
         binding.userProfileHeaderPrimaryName.configureTag(user.isBot, if (user.isSystemUser) R.string.system_dm_tag_system else R.string.bot_tag_bot, false)
+        // The profile is where a style is meant to be seen, so this is one of the few surfaces
+        // that draws the colour and effect rather than only the font.
+        binding.userProfileHeaderPrimaryName.setDisplayNameStyles(
+            DisplayNameStyleUtils.resolve(user, member),
+        )
         // Reference: the username and pronouns share one line, joined by a divider dot.
         // The aka row already names the account, so only the pronouns survive alongside it.
         val accountLine = accountName

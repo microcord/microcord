@@ -17,6 +17,10 @@ data class PatchGuildMemberBody(
     val avatar: NullSerializable<String>? = null,
     val avatarDecorationSkuId: NullSerializable<String>? = null,
     val collectibles: NullSerializable<PatchCollectibles>? = null,
+    // Flat here too, and nulling all three drops the override back to the account-wide style.
+    val displayNameFontId: NullSerializable<Int>? = null,
+    val displayNameEffectId: NullSerializable<Int>? = null,
+    val displayNameColors: NullSerializable<List<Int>>? = null,
 )
 
 /**

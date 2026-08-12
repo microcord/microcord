@@ -16,4 +16,9 @@ data class PatchUserBody(
     val globalName: NullSerializable<String>? = null,
     val avatarDecorationSkuId: NullSerializable<String>? = null,
     val nameplateSkuId: NullSerializable<String>? = null,
+    // A display name style is written as three flat fields even though it is read back nested
+    // under `display_name_styles`; all three move together, and all three null to clear it.
+    val displayNameFontId: NullSerializable<Int>? = null,
+    val displayNameEffectId: NullSerializable<Int>? = null,
+    val displayNameColors: NullSerializable<List<Int>>? = null,
 )

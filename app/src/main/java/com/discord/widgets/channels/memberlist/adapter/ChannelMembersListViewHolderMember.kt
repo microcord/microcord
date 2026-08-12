@@ -14,6 +14,7 @@ import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.presence.statusIcon
 import com.discord.databinding.WidgetChannelMembersListItemUserBinding
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.displaynamestyles.DisplayNameStyleRenderer
 import com.discord.views.AvatarDecorationView
 import com.discord.views.StatusView
 import com.discord.views.NameplateView
@@ -74,6 +75,9 @@ class ChannelMembersListViewHolderMember(private val binding: WidgetChannelMembe
             configureTag(data.isBot, data.tagText ?: R.string.bot_tag_bot, data.tagVerified)
             setUsernameColor(data.color?.takeUnless { it == Color.BLACK || it == 0 }
                 ?: ColorCompat.getThemedColor(context, R.attr.primary_000))
+            // Font only: a member's role colour is what a moderator reads this list for, so the
+            // reference leaves it in place rather than overpainting it with the name style.
+            setDisplayNameStyles(data.displayNameStyles, DisplayNameStyleRenderer.Mode.FONT)
         }
         binding.root.findViewById<StatusView>(R.id.channel_members_list_item_presence).apply {
             setPresence(data.presence)

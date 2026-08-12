@@ -7,6 +7,7 @@ import android.text.style.RelativeSizeSpan
 import androidx.annotation.ColorInt
 import com.discord.api.premium.PremiumTier
 import com.discord.api.presence.ClientStatus
+import com.discord.api.user.DisplayNameStyles
 import com.discord.api.user.User as ApiUser
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.presence.Presence
@@ -281,6 +282,7 @@ object UserUtils {
         system = isSystemUser,
         globalName = globalName,
         collectibles = collectibles?.let { NullSerializable.Value(it) },
+        displayNameStyles = displayNameStyles?.let { NullSerializable.Value(it) },
         avatarDecorationData = avatarDecoration?.let { NullSerializable.Value(it) },
         primaryGuild = primaryGuild,
     )
