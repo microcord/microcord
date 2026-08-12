@@ -2,6 +2,7 @@ package com.discord.stores
 
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isArchivedThread
+import com.discord.api.channel.isGuildForumPost
 import com.discord.api.channel.isManaged
 import com.discord.api.channel.isTextOrVoiceChannel
 import com.discord.api.channel.isThread
@@ -144,6 +145,44 @@ class StoreMessageAck @JvmOverloads constructor(
 
     fun getForChannel(channelId: Long): Ack? = getAll()[channelId]
 
+    /**
+     * The marker to compare a channel's newest message against.
+     *
+     * A channel with no stored marker is not "read from the beginning of time": the reference
+     * derives one rather than treating the absence as a value. For a thread that derivation is
+     * [threadAckMessageId]; for anything else it is the point the user joined the guild.
+     */
+    fun getAckMessageId(channel: Channel, guildJoinedAtMs: Long?): Long {
+        getAll()[channel.id]?.let { return it.messageId }
+        if (channel.isThread()) return threadAckMessageId(channel, guildJoinedAtMs)
+        return SnowflakeUtils.fromTimestamp(guildJoinedAtMs ?: clock.currentTimeMillis())
+    }
+
+    /**
+     * Where an unseeded thread counts as read up to.
+     *
+     * Joining is treated as five seconds earlier than it happened, so a thread entered by being
+     * mentioned in it does not immediately show the message that pulled the user in as unread, and
+     * an archive stamp is backed off by a millisecond so the last message before archiving still
+     * counts. A forum post ignores the guild join time outright — posts predating the user are
+     * still new to them, which is not true of an ordinary channel.
+     */
+    private fun threadAckMessageId(channel: Channel, guildJoinedAtMs: Long?): Long {
+        val joinedThread = storeThreadsActiveJoined.getActiveJoinedThreadsInternal()[channel.id]
+        val parent = channel.parentId?.let { storeChannels.findChannelByIdInternal(it) }
+        val guildTime = if (channel.isGuildForumPost(parent)) {
+            0L
+        } else {
+            guildJoinedAtMs ?: clock.currentTimeMillis()
+        }
+        val joinTime = joinedThread?.joinTimestamp?.dateTimeMillis?.minus(5_000L) ?: 0L
+        val archiveTime = TimeUtils.parseUTCDate(channel.threadMetadata?.archiveTimestamp)
+            .takeIf { it != 0L }?.minus(1L) ?: 0L
+        val base = maxOf(joinTime, archiveTime).takeIf { it > 0L }
+            ?: (SnowflakeUtils.toTimestamp(channel.id) - 1L)
+        return SnowflakeUtils.fromTimestamp(maxOf(guildTime, base))
+    }
+
     fun observeAll(): Observable<Map<Long, Ack>> =
         observationDeck.connectRx(this) { getAll() }.distinctUntilChanged()
 
@@ -274,11 +313,9 @@ class StoreMessageAck @JvmOverloads constructor(
         // away are pruned by handleGuildCreate, and threads leaving the active set are handled by
         // updateThreadAcks.
         threadSyncSubscription?.unsubscribe()
-        threadSyncSubscription = observeActiveThreadIdsWithPrevious()
+        threadSyncSubscription = observeActiveThreadIds()
             .computationLatest()
-            .subscribe({ (oldThreadIds, newThreadIds) ->
-                dispatcher.schedule { updateThreadAcks(oldThreadIds, newThreadIds) }
-            }, { })
+            .subscribe({ threadIds -> dispatcher.schedule { seedThreadAcks(threadIds) } }, { })
         markChanged()
     }
 
@@ -636,44 +673,59 @@ class StoreMessageAck @JvmOverloads constructor(
         }
     }
 
-    /** Drops markers for channels that no longer exist once unavailable guild hydration is complete. */
+    /**
+     * Drops markers the client can no longer place, but only once they are too old to matter.
+     *
+     * A channel missing from the store is not proof it is gone — an archived thread, or one whose
+     * guild has not finished syncing, looks identical. The age test is what separates the two: a
+     * marker is kept while either the channel or the marker itself is younger than
+     * [OLD_ACK_CUTOFF_MS], so a thread that comes back still knows where the user had read to.
+     */
     @StoreThread
     private fun pruneAcks() {
         if (storeGuilds.getUnavailableGuildsInternal().isNotEmpty()) return
         val activeJoinedThreads = storeThreadsActiveJoined.getActiveJoinedThreadsInternal()
         val activeForumThreads = storeThreadsActive.getAllForumThreadsByIdInternal()
-        val iterator = acks.keys.iterator()
+        val cutoffId = SnowflakeUtils.fromTimestamp(clock.currentTimeMillis() - OLD_ACK_CUTOFF_MS)
+        val iterator = acks.entries.iterator()
         while (iterator.hasNext()) {
-            val channelId = iterator.next()
-            if (storeChannels.findChannelByIdInternal(channelId) == null &&
-                channelId !in activeJoinedThreads && channelId !in activeForumThreads
+            val (channelId, ack) = iterator.next()
+            if (storeChannels.findChannelByIdInternal(channelId) != null ||
+                channelId in activeJoinedThreads || channelId in activeForumThreads
             ) {
-                iterator.remove()
-                markChanged()
+                continue
             }
+            // A marker carrying mentions goes regardless of age: the count is the server's, and
+            // keeping a local copy for a channel that is gone leaves the badge permanently wrong.
+            if (getMentionCount(channelId) == 0 && (channelId > cutoffId || ack.messageId > cutoffId)) {
+                continue
+            }
+            iterator.remove()
+            markChanged()
         }
     }
 
-    private fun observeActiveThreadIdsWithPrevious(): Observable<Pair<Set<Long>, Set<Long>>> =
+    private fun observeActiveThreadIds(): Observable<Set<Long>> =
         Observable.combineLatest(
             storeThreadsActiveJoined.observeAllActiveJoinedThreadsById(),
             storeThreadsActive.observeAllActiveForumThreadsById(),
         ) { joined, forum -> joined.keys + forum.keys }
             .leadingEdgeThrottle(1, TimeUnit.SECONDS)
             .distinctUntilChanged()
-            .scan(emptySet<Long>() to emptySet<Long>()) { previous, threadIds -> previous.second to threadIds }
 
+    /**
+     * Seeds a starting marker for threads that have none.
+     *
+     * Only ever adds. A thread leaving the active set means the client stopped listing it, not that
+     * the user forgot where they had read to, so its marker is left alone and is still correct if
+     * the thread is unarchived or rejoined later.
+     */
     @StoreThread
-    private fun updateThreadAcks(oldThreadIds: Set<Long>, newThreadIds: Set<Long>) {
-        if (storeGuilds.getUnavailableGuildsInternal().isEmpty()) {
-            (oldThreadIds - newThreadIds).forEach { threadId ->
-                if (acks.remove(threadId) != null) markChanged()
-            }
-        }
+    private fun seedThreadAcks(threadIds: Set<Long>) {
         val joined = storeThreadsActiveJoined.getActiveJoinedThreadsInternal()
         val forum = storeThreadsActive.getAllForumThreadsByIdInternal()
         val guildJoinedAt = storeGuilds.getGuildsJoinedAtInternal()
-        (newThreadIds - oldThreadIds).forEach { threadId ->
+        threadIds.forEach { threadId ->
             if (threadId in acks || !threadAckState(threadId).isThreadAndAbleToAck()) return@forEach
             val joinedThread = joined[threadId]
             val channel = joinedThread?.channel ?: forum[threadId] ?: return@forEach
@@ -703,6 +755,9 @@ class StoreMessageAck @JvmOverloads constructor(
         const val ACKS_CACHE_KEY = "MOST_RECENT_ACKS_V3"
 
         private const val DAY_MS = 86_400_000L
+
+        /** How stale a marker for an unknown channel must be before it is discarded. */
+        private const val OLD_ACK_CUTOFF_MS = 30L * DAY_MS
 
         /** The endpoint's per-request limit. */
         private const val BULK_ACK_CHUNK = 100

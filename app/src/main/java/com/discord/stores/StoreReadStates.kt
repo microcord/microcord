@@ -177,9 +177,8 @@ class StoreReadStates(private val clock: Clock) : Store() {
                 )
             ) continue
 
-            val ack = acks[channelId]
-            if (ack == null && channel.isThread()) continue
-            val ackMessageId = ack?.messageId ?: (((guildJoinedAt[channel.guildId] ?: clock.currentTimeMillis()) - DISCORD_EPOCH) shl 22)
+            val ackMessageId = acks[channelId]?.messageId
+                ?: StoreStream.getMessageAck().getAckMessageId(channel, guildJoinedAt[channel.guildId])
             if (!MessageUtils.isNewer(ackMessageId, mostRecentMessageId)) continue
 
             unreadChannels += channelId
