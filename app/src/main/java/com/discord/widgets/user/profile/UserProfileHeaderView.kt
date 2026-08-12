@@ -62,6 +62,12 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
 
     fun updateViewState(state: UserProfileHeaderViewModel.ViewState.Loaded) {
         configureTheme(state)
+        // Owned here rather than by each host: the pill is part of this view, and three screens
+        // render it, of which only one ever remembered to colour it.
+        badgeRowColor = ProfileThemeColors.surfaceOverlay(
+            state.profileThemeColors(isDarkTheme()),
+            isDarkTheme(),
+        )
         binding.largeAvatar.setOnAvatarBitmapLoadedListener { bitmap, _ ->
             val pixel = bitmap.getPixel(bitmap.width / 2, bitmap.height / 2)
             onAvatarRepresentativeColorUpdated(pixel)

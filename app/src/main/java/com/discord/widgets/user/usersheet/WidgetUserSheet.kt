@@ -370,7 +370,6 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetProfileTabs.setSelectedTabIndicatorColor(tabSelected)
         binding.userSheetProfileTabsRule.setBackgroundColor(border)
         profileCards().forEach { it.setCardBackgroundColor(card) }
-        binding.userSheetProfileHeaderView.badgeRowColor = card
         profileTextViews().forEach { text ->
             text.setTextColor(
                 if (colors != null && text !is Button) ColorStateList.valueOf(colors.textDefault)
@@ -609,8 +608,7 @@ class WidgetUserSheet : AppBottomSheet() {
 
     private fun isDarkTheme() = StoreStream.getUserSettingsSystem().isDarkTheme()
 
-    private fun surfaceColor() = profileThemeColors?.sectionOverlay
-        ?: if (isDarkTheme()) SURFACE_OVERLAY_DARK else SURFACE_OVERLAY_LIGHT
+    private fun surfaceColor() = ProfileThemeColors.surfaceOverlay(profileThemeColors, isDarkTheme())
 
     private fun borderColor() = profileThemeColors?.borderOverlay
         ?: if (isDarkTheme()) BORDER_OVERLAY_DARK else BORDER_OVERLAY_LIGHT
@@ -1115,8 +1113,6 @@ class WidgetUserSheet : AppBottomSheet() {
         private const val ARG_IS_VOICE_CONTEXT = "ARG_IS_VOICE_CONTEXT"
         private const val ARG_STREAM_PREVIEW_CLICK_BEHAVIOR = "ARG_STREAM_PREVIEW_CLICK_BEHAVIOR"
         private const val ARG_FRIEND_TOKEN = "ARG_FRIEND_TOKEN"
-        private const val SURFACE_OVERLAY_DARK = 0x1FFFFFFF
-        private val SURFACE_OVERLAY_LIGHT = 0xB8FFFFFF.toInt()
         private const val BORDER_OVERLAY_DARK = 0x14FFFFFF
         private const val BORDER_OVERLAY_LIGHT = 0x14000000
 
