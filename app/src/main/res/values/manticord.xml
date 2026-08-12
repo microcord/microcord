@@ -60,4 +60,24 @@
     <string name="notifications_share_profile_update">Share when I update my profile</string>
     <string name="notifications_share_profile_update_help">Allow friends to receive a push notification when you update your profile.</string>
     <string name="sticker_matching">STICKERS MATCHING {prefix}</string>
+    <string name="command_validation_unusable_attachments">This command has no attachment option for every file you attached.</string>
+    <string name="ephemeral_with_reason">Only you can see this because {reason}. [Dismiss message](handleDelete)</string>
+    <string name="ephemeral_reason_feature_limited">a required feature is temporarily limited</string>
+    <string name="ephemeral_reason_guild_feature_limited">a required feature is temporarily limited in this server</string>
+    <string name="ephemeral_reason_user_feature_limited">a required feature is temporarily limited for you</string>
+    <string name="ephemeral_reason_slowmode">slowmode is active</string>
+    <string name="ephemeral_reason_rate_limit">you are being rate limited</string>
+    <string name="ephemeral_reason_cannot_message_user">you cannot message this user</string>
+    <string name="ephemeral_reason_user_verification_level">you do not meet this server\'s verification level</string>
+    <string name="ephemeral_reason_cannot_unarchive_thread">you cannot unarchive this thread</string>
+    <string name="ephemeral_reason_cannot_join_thread">you cannot join this thread</string>
+    <string name="ephemeral_reason_missing_permissions">you cannot send messages in this channel</string>
+    <string name="ephemeral_reason_cannot_send_attachments">you cannot send attachments in this channel</string>
+    <string name="ephemeral_reason_cannot_send_embeds">you cannot send embeds in this channel</string>
+    <string name="ephemeral_reason_cannot_send_stickers">you cannot send stickers in this channel</string>
+    <string name="ephemeral_reason_automod_blocked">AutoMod blocked the message</string>
+    <string name="ephemeral_reason_harmful_link">the message contains a blocked link</string>
+    <string name="ephemeral_reason_cannot_use_command">you cannot use this command in this channel</string>
+    <string name="ephemeral_reason_beta_guild_size">this is only visible to you during the beta</string>
+    <string name="ephemeral_reason_cannot_use_external_apps">you cannot use external apps in this channel</string>
 </resources>

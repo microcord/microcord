@@ -5,11 +5,12 @@ import android.text.style.ForegroundColorSpan
 import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
-import androidx.core.content.ContextCompat
 import com.discord.R
+import com.discord.api.interaction.MessageInteractionMetadata
 import com.discord.i18n.Hook
 import com.discord.i18n.I18nHooks
 import com.discord.utilities.uri.UriHandler
+import com.discord.views.ThemedColor
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.EphemeralMessageEntry
 
@@ -39,10 +40,31 @@ class WidgetChatListAdapterItemEphemeralMessage(
             UriHandler.handle(helpIcon.context, EPHEMERAL_MESSAGES_HELP_ARTICLE)
         }
 
-        // The footer covers exactly one message, so both plurals are always resolved for a
-        // quantity of one; they exist as plurals because the desktop client groups them.
         val resources = dismiss.resources
         dismiss.movementMethod = LinkMovementMethod.getInstance()
+        val dismissHook = mapOf(
+            "handleDelete" to Hook(
+                spans = listOf(
+                    ForegroundColorSpan(ThemedColor.resolve(itemView.context, R.attr.colorTextLink)),
+                ),
+                onClick = { adapter.eventHandler.onDismissClicked(message) },
+            ),
+        )
+
+        val reasonRes = MessageInteractionMetadata
+            .ephemeralityReasonRes(message.interactionMetadata?.ephemeralityReason)
+        if (reasonRes != null) {
+            dismiss.text = I18nHooks.format(
+                dismiss.context,
+                R.string.ephemeral_with_reason,
+                mapOf("reason" to resources.getString(reasonRes)),
+                dismissHook,
+            )
+            return
+        }
+
+        // The footer covers exactly one message, so both plurals are always resolved for a
+        // quantity of one; they exist as plurals because the desktop client groups them.
         dismiss.text = I18nHooks.format(
             dismiss.context,
             R.string.only_you_can_see_and_delete_these,
@@ -53,14 +75,7 @@ class WidgetChatListAdapterItemEphemeralMessage(
                     1,
                 ),
             ),
-            mapOf(
-                "handleDelete" to Hook(
-                    spans = listOf(
-                        ForegroundColorSpan(ContextCompat.getColor(itemView.context, R.color.brand)),
-                    ),
-                    onClick = { adapter.eventHandler.onDismissClicked(message) },
-                ),
-            ),
+            dismissHook,
         )
     }
 

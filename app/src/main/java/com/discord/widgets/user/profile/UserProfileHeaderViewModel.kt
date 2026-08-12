@@ -203,6 +203,18 @@ internal data class ProfileThemeColors(
         private const val MOD_MUTED_ALPHA = 0x0D
         private const val MOD_STRONG_ALPHA = 0x1A
 
+        /** What a section lifts off the background by when no profile theme supplies one. */
+        const val SURFACE_OVERLAY_DARK = 0x1FFFFFFF
+        val SURFACE_OVERLAY_LIGHT = 0xB8FFFFFF.toInt()
+
+        /**
+         * The fill shared by every surface that sits on the profile — cards, and the pill behind
+         * the badge row. Translucent so it lifts off whatever is behind it rather than collapsing
+         * into an opaque token, which is what happens on the black themes.
+         */
+        fun surfaceOverlay(colors: ProfileThemeColors?, isDarkTheme: Boolean): Int =
+            colors?.sectionOverlay ?: if (isDarkTheme) SURFACE_OVERLAY_DARK else SURFACE_OVERLAY_LIGHT
+
         private const val DARK_SECTION = 0x29000000
         private const val LIGHT_SECTION = 0x3DFFFFFF
         private const val DARK_BORDER = 0x14FFFFFF

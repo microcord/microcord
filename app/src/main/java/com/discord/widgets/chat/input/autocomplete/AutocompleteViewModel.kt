@@ -84,6 +84,10 @@ class AutocompleteViewModel(
     private var remoteRequestSubscription: Subscription? = null
     private var selectedCommand: ApplicationCommandAutocompletable? = null
     private var selectedCommandOption: ApplicationCommandOption? = null
+
+    /** Attachment option name → the URI of the file picked for it. */
+    private val attachmentAssignments = LinkedHashMap<String, String>()
+    private var pendingAttachmentOption: String? = null
     private var lastCommandQuery: String? = null
     private var commandState: CommandState = CommandState()
     private var pendingRemoteQuery: Pair<String, String>? = null
@@ -139,6 +143,7 @@ class AutocompleteViewModel(
         currentToken = null
         selectedCommand = null
         selectedCommandOption = null
+        clearAttachmentAssignments()
         lastCommandQuery = null
         commandState = CommandState()
         pendingRemoteQuery = null
@@ -250,6 +255,7 @@ class AutocompleteViewModel(
         if (!item.hasPermissionToUse) return false
         selectedCommand = item
         selectedCommandOption = null
+        clearAttachmentAssignments()
         currentToken = null
         selectedCommandState.onNext(
             SelectedCommandViewState.SelectedCommand(item.command, null, application),
@@ -262,6 +268,7 @@ class AutocompleteViewModel(
     fun selectCommandOption(option: ApplicationCommandOption) {
         val command = selectedCommand ?: return
         selectedCommandOption = option
+        if (option.type == ApplicationCommandType.ATTACHMENT) pendingAttachmentOption = option.name
         pendingRemoteQuery = null
         sentRemoteQuery = null
         clearRemoteResults()
@@ -302,10 +309,10 @@ class AutocompleteViewModel(
     ): ApplicationCommandData? {
         val selected = selectedCommand ?: return null
         val command = selected.command
-        val attachmentMap = command.options
-            .filter { it.type == ApplicationCommandType.ATTACHMENT }
-            .zip(attachments)
-            .toMap()
+        val attachmentMap = assignAttachments(
+            command.options.filter { it.type == ApplicationCommandType.ATTACHMENT },
+            attachments,
+        )
         val parsed = AutocompleteCommandUtils.parseCommandOptions(
             input,
             command,
@@ -351,9 +358,42 @@ class AutocompleteViewModel(
         } else {
             leafValues
         }
+        val unusableAttachments = attachments.size > attachmentMap.size
         val valid = command.options.filter(ApplicationCommandOption::required).all { validity[it] == true } &&
-            validity.values.all { it } && attachments.size == attachmentMap.size
-        return ApplicationCommandData(selected.application ?: return null, root, values, valid)
+            validity.values.all { it } && !unusableAttachments
+        return ApplicationCommandData(
+            selected.application ?: return null,
+            root,
+            values,
+            valid,
+            unusableAttachments,
+        )
+    }
+
+    private fun assignAttachments(
+        options: List<ApplicationCommandOption>,
+        attachments: List<Attachment<*>>,
+    ): Map<ApplicationCommandOption, Attachment<*>> {
+        val byUri = attachments.associateBy { it.uri.toString() }
+        val optionNames = options.mapTo(HashSet(), ApplicationCommandOption::name)
+        attachmentAssignments.entries.retainAll { (name, uri) -> name in optionNames && uri in byUri }
+
+        val unassigned = attachments
+            .filterNot { it.uri.toString() in attachmentAssignments.values }
+            .toMutableList()
+        pendingAttachmentOption
+            ?.takeIf { it in optionNames && it !in attachmentAssignments }
+            ?.let { name ->
+                unassigned.removeLastOrNull()?.let { attachmentAssignments[name] = it.uri.toString() }
+                pendingAttachmentOption = null
+            }
+        options.forEach { option ->
+            if (option.name in attachmentAssignments) return@forEach
+            unassigned.removeFirstOrNull()?.let { attachmentAssignments[option.name] = it.uri.toString() }
+        }
+        return options.mapNotNull { option ->
+            attachmentAssignments[option.name]?.let(byUri::get)?.let { option to it }
+        }.toMap()
     }
 
     fun getCommandBrowserCommandPositions(
@@ -382,8 +422,14 @@ class AutocompleteViewModel(
     private fun clearSelectedCommand() {
         selectedCommand = null
         selectedCommandOption = null
+        clearAttachmentAssignments()
         pendingRemoteQuery = null
         selectedCommandState.onNext(SelectedCommandViewState.Hidden)
+    }
+
+    private fun clearAttachmentAssignments() {
+        attachmentAssignments.clear()
+        pendingAttachmentOption = null
     }
 
     private fun requestRemoteOptionIfNeeded(input: CharSequence) {

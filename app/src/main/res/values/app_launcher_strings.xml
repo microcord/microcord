@@ -16,4 +16,11 @@
     <string name="app_launcher_command_not_found_body">This command is no longer available.</string>
     <string name="app_launcher_required_options">Complete the required options before sending.</string>
     <string name="app_launcher_connection_result">Connection</string>
+    <string name="app_launcher_section_recent_commands">Recent commands</string>
+    <string name="app_launcher_section_recents">Recents</string>
+    <string name="app_launcher_section_installed">Installed</string>
+    <string name="app_launcher_section_apps_in_server">Apps in this server</string>
+    <string name="app_launcher_section_activities">Activities</string>
+    <string name="app_launcher_section_recommended">Recommended</string>
+    <string name="app_launcher_view_all">View all</string>
 </resources>

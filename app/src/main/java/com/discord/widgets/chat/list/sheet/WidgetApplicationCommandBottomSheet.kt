@@ -90,6 +90,7 @@ class WidgetApplicationCommandBottomSheet : AppBottomSheet() {
         applicationName.text = appName
         applicationName.visibility = if (appName == null) View.GONE else View.VISIBLE
         val application = state.application
+        avatar.visibility = if (application?.icon == null) View.GONE else View.VISIBLE
         MGImages.setImage(
             avatar,
             application?.icon?.let { IconUtils.getApplicationIcon(application.id, it) },

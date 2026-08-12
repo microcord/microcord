@@ -2,6 +2,7 @@ package com.discord.widgets.chat.input.applauncher
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.discord.R
 import com.discord.api.applicationdirectory.ApplicationDirectorySearchResult
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isPrivate
@@ -58,6 +59,7 @@ class AppLauncherViewModel(
     },
 ) : ViewModel() {
     private val subscriptions = CompositeSubscription()
+    private val backStack = ArrayDeque<AppLauncherRoute>()
     private val queries = PublishSubject.create<String>().toSerialized()
     private val stateSubject = BehaviorSubject.create(AppLauncherViewState())
 
@@ -82,7 +84,7 @@ class AppLauncherViewModel(
     private var selectedApplication: AppLauncherApplication? = null
     private var selectedCommand: ApplicationCommand? = null
     private var viewAllRows: List<AppLauncherRow> = emptyList()
-    private var viewAllTitle: String = ""
+    private var viewAllTitleRes: Int? = null
     private var searchPinnedDivider = false
     private var pendingRestoreRoute: AppLauncherRoute? = null
     private var pendingRestoreApplicationId: Long? = null
@@ -209,6 +211,7 @@ class AppLauncherViewModel(
     fun setQuery(value: String) {
         query = value.take(MAX_QUERY_LENGTH)
         route = AppLauncherRoute.HOME
+        backStack.clear()
         publish()
         queries.onNext(query)
     }
@@ -220,6 +223,7 @@ class AppLauncherViewModel(
     }
 
     fun selectApplication(application: AppLauncherApplication) {
+        backStack.addLast(route)
         selectedApplication = application
         selectedCommand = null
         route = AppLauncherRoute.APPLICATION_VIEW
@@ -228,15 +232,19 @@ class AppLauncherViewModel(
     }
 
     fun selectCommand(command: ApplicationCommand) {
+        backStack.addLast(route)
         selectedCommand = command
-        selectedApplication = applications.firstOrNull { it.id == command.applicationId }
-            ?.let(AppLauncherRows::fromCommandApplication)
+        if (selectedApplication?.id != command.applicationId) {
+            selectedApplication = applications.firstOrNull { it.id == command.applicationId }
+                ?.let(AppLauncherRows::fromCommandApplication)
+        }
         route = AppLauncherRoute.COMMAND_VIEW
         publish()
     }
 
     fun showViewAll(row: AppLauncherRow.ViewAll) {
-        viewAllTitle = row.title
+        backStack.addLast(route)
+        viewAllTitleRes = row.sectionTitleRes
         viewAllRows = if (row.applications.isNotEmpty()) {
             row.applications.mapIndexed { index, application ->
                 AppLauncherRow.ApplicationRow(application, index == 0, index == row.applications.lastIndex)
@@ -250,10 +258,10 @@ class AppLauncherViewModel(
     }
 
     fun navigateBack(): Boolean {
-        if (route == AppLauncherRoute.HOME) return false
-        route = AppLauncherRoute.HOME
-        selectedApplication = null
+        val previous = backStack.removeLastOrNull() ?: return false
+        route = previous
         selectedCommand = null
+        if (previous == AppLauncherRoute.HOME) selectedApplication = null
         publish()
         return true
     }
@@ -321,7 +329,7 @@ class AppLauncherViewModel(
                 } else {
                     AppLauncherRows.search(query, commands, applications, directoryResults, commandsLoading || directoryLoading)
                 },
-                title = "Apps",
+                titleRes = R.string.apps,
                 searchPinnedDivider = searchPinnedDivider,
             )
             AppLauncherRoute.APPLICATION_VIEW -> {
@@ -349,7 +357,7 @@ class AppLauncherViewModel(
             AppLauncherRoute.APP_LIST_VIEW -> AppLauncherViewState(
                 route = route,
                 rows = viewAllRows,
-                title = viewAllTitle,
+                titleRes = viewAllTitleRes,
             )
         }
         stateSubject.onNext(state)

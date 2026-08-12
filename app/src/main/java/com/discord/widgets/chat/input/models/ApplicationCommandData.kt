@@ -14,4 +14,6 @@ data class ApplicationCommandData(
     val applicationCommand: ApplicationCommand,
     val values: List<ApplicationCommandValue>,
     val validInputs: Boolean = false,
+    /** Set when the files staged in the composer outnumber the command's attachment options. */
+    val hasUnusableAttachments: Boolean = false,
 )

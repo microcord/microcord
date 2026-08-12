@@ -5,6 +5,7 @@ import com.discord.api.botuikit.Component
 import com.discord.api.channel.Channel
 import com.discord.api.guildmember.GuildMember
 import com.discord.api.interaction.Interaction
+import com.discord.api.interaction.MessageInteractionMetadata
 import com.discord.api.message.activity.MessageActivity
 import com.discord.api.message.activity.MessageActivityInstance
 import com.discord.api.message.attachment.MessageAttachment
@@ -57,7 +58,7 @@ data class Message(
     val poll: MessagePoll? = null,
     val resolved: MessageResolvedData? = null,
     val activityInstance: MessageActivityInstance? = null,
-    val interactionMetadata: Interaction? = null,
+    val interactionMetadata: MessageInteractionMetadata? = null,
     val lobbyId: Long? = null,
     val mentionChannels: List<Channel>? = null,
     val purchaseNotification: MessagePurchaseNotification? = null,

@@ -130,7 +130,8 @@ class WidgetAppLauncher : AppBottomSheet() {
 
     private fun render(state: AppLauncherViewState) {
         adapter.setData(state.rows)
-        binding.appLauncherTitle.text = state.title.ifBlank { getString(R.string.apps) }
+        binding.appLauncherTitle.text = state.titleRes?.let(::getString)
+            ?: state.title.ifBlank { getString(R.string.apps) }
         binding.appLauncherBack.visibility = if (state.route == AppLauncherRoute.HOME) View.INVISIBLE else View.VISIBLE
         binding.appLauncherSearchWrap.isVisible = state.route == AppLauncherRoute.HOME
         binding.appLauncherSearchDivider.isVisible = state.route == AppLauncherRoute.HOME && state.searchPinnedDivider

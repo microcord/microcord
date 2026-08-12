@@ -584,6 +584,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             autocompleteRecyclerView = binding.chatInputMentionsRecycler,
             stickersContainer = binding.chatInputStickersContainer,
             viewModel = autocompleteViewModel,
+            onAttachmentOptionClicked = { flexInputBinding?.addBtn?.performClick() },
         ).also {
             it.setChannelId(state?.channelId)
             it.onViewBoundOrOnResume()
@@ -947,7 +948,12 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val commandData = autocomplete?.getApplicationCommandData(attachments)
         if (commandData != null) {
             if (!commandData.validInputs) {
-                Toast.makeText(requireContext(), R.string.command_validation_required_error, Toast.LENGTH_SHORT).show()
+                val reason = if (commandData.hasUnusableAttachments) {
+                    R.string.command_validation_unusable_attachments
+                } else {
+                    R.string.command_validation_required_error
+                }
+                Toast.makeText(requireContext(), reason, Toast.LENGTH_SHORT).show()
                 return false
             }
             val command = commandData.applicationCommand

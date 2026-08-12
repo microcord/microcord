@@ -64,7 +64,9 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/app_launcher_title"
-        style="@style/UiKit.TextInputLayout.Search.ActionBar">
+        app:boxBackgroundColor="?attr/colorInputBackground"
+        app:startIconTint="?attr/colorInteractiveNormal"
+        style="@style/UiKit.TextInputLayout.Search">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/app_launcher_search"

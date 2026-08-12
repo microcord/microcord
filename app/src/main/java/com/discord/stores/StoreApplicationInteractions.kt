@@ -119,6 +119,7 @@ class StoreApplicationInteractions(
         private set
     private var applicationCommandLocalSendDataSnapshot: Map<String, ApplicationCommandLocalSendData> =
         emptyMap()
+    private val pendingCommandAttachments = HashMap<String, List<UploadAttachment>>()
 
     val componentInteractions: MutableMap<String, ComponentLocation> = LinkedHashMap()
 
@@ -441,8 +442,8 @@ class StoreApplicationInteractions(
         val sendData = applicationCommandLocalSendDataSnapshot[nonce] ?: return
         dispatcher.schedule {
             storeMessages.deleteLocalMessage(message.channelId, nonce)
-            handleSendApplicationCommandRequest(sendData)
             removeApplicationCommandSendData(nonce)
+            handleSendApplicationCommandRequest(sendData, pendingCommandAttachments[nonce])
         }
     }
 
@@ -454,6 +455,11 @@ class StoreApplicationInteractions(
         onFail: (RestApiError) -> Unit = {},
     ) {
         upsertApplicationCommandSendData(localSendData)
+        if (attachments.isNullOrEmpty()) {
+            pendingCommandAttachments.remove(localSendData.nonceString)
+        } else {
+            pendingCommandAttachments[localSendData.nonceString] = attachments
+        }
         val localMessage = buildApplicationCommandLocalMessage(localSendData)
         sentInteractions.put(localSendData.nonceString, SentInteraction(localSendData.channelId, null, localSendData.guildId))
         storeMessages.sendMessage(localMessage, localSendData, attachments).subscribe { result ->
@@ -524,6 +530,7 @@ class StoreApplicationInteractions(
 
     @StoreThread
     private fun removeApplicationCommandSendData(nonce: String) {
+        pendingCommandAttachments.remove(nonce)
         if (applicationCommandLocalSendDataSet.remove(nonce) != null) markChanged()
     }
 

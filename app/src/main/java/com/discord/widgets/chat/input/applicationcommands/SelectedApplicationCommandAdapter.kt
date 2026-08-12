@@ -85,15 +85,15 @@ class SelectedApplicationCommandAdapter(
     ) {
         if (itemCount == 0) return
         verifiedInputs.forEach { (option, valid) ->
-            paramPositions[option.name]?.let { position ->
-                getItem(position).completed = valid
-                getItem(position).error = option in showOptionErrorSet
-            }
+            val position = paramPositions[option.name] ?: return@forEach
+            val item = getItem(position)
+            val error = option in showOptionErrorSet
+            if (item.completed == valid && item.error == error) return@forEach
+            item.completed = valid
+            item.error = error
+            notifyItemChanged(position)
         }
-        configureVerified()
     }
-
-    private fun configureVerified() = Unit
 
     override fun onCreateViewHolder(
         parent: ViewGroup,

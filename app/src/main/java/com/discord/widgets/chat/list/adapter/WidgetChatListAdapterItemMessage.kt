@@ -31,6 +31,7 @@ import com.discord.models.user.User
 import com.discord.stores.StoreMessageReplies
 import com.discord.stores.StoreMessageState
 import com.discord.stores.StoreStream
+import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.message.MessageUtils
@@ -464,8 +465,9 @@ class WidgetChatListAdapterItemMessage(
         // The BOT badge would sit next to a name that is not the one doing the talking.
         itemTag?.visibility = View.GONE
 
+        val timedOut = hasDeferredResponseExpired(message)
         itemLoadingText?.setTextColor(
-            if (message.isFailed()) {
+            if (message.isFailed() || timedOut) {
                 ThemedColor.resolve(itemView.context, R.attr.colorError)
             } else {
                 ThemedColor.resolve(itemView.context, R.attr.colorTextMuted)
@@ -473,12 +475,11 @@ class WidgetChatListAdapterItemMessage(
         )
 
         when {
-            message.isLocalApplicationCommand() && message.isLoading() -> {
-                itemLoadingText?.text = I18nHooks.format(
-                    itemText.context,
-                    R.string.application_command_waiting,
-                    mapOf("applicationName" to entry.authorDisplayName()),
-                )
+            timedOut -> {
+                itemLoadingText?.setText(R.string.application_command_timed_out)
+                sendError?.visibility = View.VISIBLE
+                loadingDots?.visibility = View.INVISIBLE
+                loadingDots?.stop()
             }
             message.isLocalApplicationCommand() && message.isFailed() -> {
                 itemLoadingText?.setText(R.string.application_command_failed)
@@ -486,10 +487,23 @@ class WidgetChatListAdapterItemMessage(
                 loadingDots?.visibility = View.INVISIBLE
                 loadingDots?.stop()
             }
-            message.isLocalApplicationCommand() -> {
+            message.isLocalApplicationCommand() && !message.isLoading() -> {
                 itemLoadingText?.setText(R.string.application_command_sending)
             }
+            else -> {
+                itemLoadingText?.text = I18nHooks.format(
+                    itemText.context,
+                    R.string.application_command_waiting,
+                    mapOf("applicationName" to entry.authorDisplayName()),
+                )
+            }
         }
+    }
+
+    private fun hasDeferredResponseExpired(message: Message): Boolean {
+        if (message.interaction == null || !message.isLoading()) return false
+        val deadline = SnowflakeUtils.toTimestamp(message.id) + DEFERRED_RESPONSE_TIMEOUT_MS
+        return deadline < adapter.clock.currentTimeMillis()
     }
 
     // endregion
@@ -1026,6 +1040,9 @@ class WidgetChatListAdapterItemMessage(
         private const val TYPE_LOCAL = -1
         private const val TYPE_LOCAL_INVALID = -3
         private const val TYPE_LOCAL_SLOWMODE = -6
+
+        /** The interaction's webhook token expires after this, so no response can arrive later. */
+        private const val DEFERRED_RESPONSE_TIMEOUT_MS = 15 * 60 * 1000L
 
         private const val DIMMED_ALPHA = 0.5f
         private const val REPLY_SYSTEM_MESSAGE_ALPHA = 0.64f

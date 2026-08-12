@@ -45,6 +45,8 @@ class InputAutocomplete(
     private val autocompleteRecyclerView: RecyclerView,
     private val stickersContainer: View,
     private val viewModel: AutocompleteViewModel,
+    /** Opens the file picker; an attachment option has no text form to type into. */
+    private val onAttachmentOptionClicked: () -> Unit = {},
 ) {
 
     private val adapter = ChatInputAutocompleteAdapter()
@@ -367,6 +369,10 @@ class InputAutocomplete(
     private fun focusCommandOption(option: ApplicationCommandOption) {
         val editable = editText.editableText ?: return
         viewModel.selectCommandOption(option)
+        if (option.type == ApplicationCommandType.ATTACHMENT) {
+            onAttachmentOptionClicked()
+            return
+        }
         val commandOptions = viewModel.getSelectedCommandOptions()
         val existing = AutocompleteModelUtils.findCommandOptionValueRange(editable, option, commandOptions)
         if (existing != null) {

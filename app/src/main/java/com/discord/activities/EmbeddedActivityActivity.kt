@@ -10,6 +10,8 @@ import android.os.PowerManager
 import android.util.Rational
 import android.view.View
 import android.view.WindowManager
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import android.webkit.PermissionRequest
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -70,6 +72,7 @@ class EmbeddedActivityActivity : AppCompatActivity() {
         binding = ActivityEmbeddedActivityBinding.inflate(layoutInflater)
         setContentView(binding.root)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        hideStatusBar()
         binding.activityClose.setOnClickListener { leaveAndFinish() }
         binding.activityPip.setOnClickListener { enterPip() }
         binding.activityRetry.setOnClickListener { startSession() }
@@ -78,6 +81,7 @@ class EmbeddedActivityActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        hideStatusBar()
         webView?.onResume()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             thermalListener?.let { getSystemService(PowerManager::class.java).addThermalStatusListener(it) }
@@ -90,6 +94,13 @@ class EmbeddedActivityActivity : AppCompatActivity() {
         }
         webView?.onPause()
         super.onPause()
+    }
+
+    private fun hideStatusBar() {
+        WindowInsetsControllerCompat(window, binding.root).apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.statusBars())
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

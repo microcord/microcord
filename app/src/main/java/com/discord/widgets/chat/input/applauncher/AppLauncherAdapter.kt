@@ -8,6 +8,7 @@ import com.discord.R
 import com.discord.databinding.WidgetAppLauncherActivityCardBinding
 import com.discord.databinding.WidgetAppLauncherActivityPairBinding
 import com.discord.databinding.WidgetAppLauncherBannerBinding
+import com.discord.databinding.WidgetAppLauncherHeaderBinding
 import com.discord.databinding.WidgetAppLauncherRowBinding
 import com.discord.databinding.WidgetAppLauncherStateBinding
 
@@ -36,6 +37,7 @@ class AppLauncherAdapter(
         is AppLauncherRow.ActivityPair -> TYPE_ACTIVITY
         is AppLauncherRow.Banner -> TYPE_BANNER
         is AppLauncherRow.Empty, AppLauncherRow.Loading -> TYPE_STATE
+        is AppLauncherRow.Header -> TYPE_HEADER
         else -> TYPE_ROW
     }
 
@@ -45,6 +47,7 @@ class AppLauncherAdapter(
             TYPE_ACTIVITY -> ActivityHolder(WidgetAppLauncherActivityPairBinding.inflate(inflater, parent, false))
             TYPE_BANNER -> BannerHolder(WidgetAppLauncherBannerBinding.inflate(inflater, parent, false))
             TYPE_STATE -> StateHolder(WidgetAppLauncherStateBinding.inflate(inflater, parent, false))
+            TYPE_HEADER -> HeaderHolder(WidgetAppLauncherHeaderBinding.inflate(inflater, parent, false))
             else -> RowHolder(WidgetAppLauncherRowBinding.inflate(inflater, parent, false))
         }
     }
@@ -54,7 +57,15 @@ class AppLauncherAdapter(
             is ActivityHolder -> holder.bind(rows[position] as AppLauncherRow.ActivityPair)
             is BannerHolder -> holder.bind(rows[position] as AppLauncherRow.Banner)
             is StateHolder -> holder.bind(rows[position])
+            is HeaderHolder -> holder.bind(rows[position] as AppLauncherRow.Header)
             is RowHolder -> holder.bind(rows[position])
+        }
+    }
+
+    private class HeaderHolder(private val binding: WidgetAppLauncherHeaderBinding) :
+        RecyclerView.ViewHolder(binding.root) {
+        fun bind(row: AppLauncherRow.Header) {
+            binding.root.setText(row.titleRes)
         }
     }
 
@@ -69,14 +80,6 @@ class AppLauncherAdapter(
             root.isFocusable = true
             root.setOnClickListener(null)
             when (row) {
-                is AppLauncherRow.Header -> {
-                    appLauncherRowTitle.text = row.title
-                    appLauncherRowTitle.setTextAppearance(R.style.UiKit_TextView_H2)
-                    appLauncherRowArrow.visibility = View.GONE
-                    root.isClickable = false
-                    root.isFocusable = false
-                    root.contentDescription = row.title
-                }
                 is AppLauncherRow.ApplicationRow -> bindApplication(row.application)
                 is AppLauncherRow.CommandRow -> {
                     appLauncherRowIcon.visibility = View.VISIBLE
@@ -91,9 +94,9 @@ class AppLauncherAdapter(
                     root.setOnClickListener { onCommandSelected(row.command) }
                 }
                 is AppLauncherRow.ViewAll -> {
-                    appLauncherRowTitle.text = row.title
-                    appLauncherRowTitle.setTextAppearance(R.style.UiKit_TextView_Semibold)
-                    root.contentDescription = row.title
+                    val label = root.context.getString(R.string.app_launcher_view_all)
+                    appLauncherRowTitle.text = label
+                    root.contentDescription = label
                     root.setOnClickListener { onViewAllSelected(row) }
                 }
                 else -> Unit
@@ -104,7 +107,6 @@ class AppLauncherAdapter(
             appLauncherRowIcon.visibility = View.VISIBLE
             setIcon(application.id, application.icon)
             appLauncherRowTitle.text = application.name
-            appLauncherRowTitle.setTextAppearance(R.style.UiKit_TextView_Semibold)
             appLauncherRowSubtitle.text = application.description
             appLauncherRowSubtitle.visibility = if (application.description.isBlank()) View.GONE else View.VISIBLE
             appLauncherRowPromoted.visibility = if (application.promoted) View.VISIBLE else View.GONE
@@ -196,5 +198,6 @@ class AppLauncherAdapter(
         private const val UNAVAILABLE_ALPHA = 0.4f
         private const val TYPE_BANNER = 2
         private const val TYPE_STATE = 3
+        private const val TYPE_HEADER = 4
     }
 }

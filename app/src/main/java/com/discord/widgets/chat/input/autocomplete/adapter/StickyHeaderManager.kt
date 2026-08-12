@@ -15,6 +15,7 @@ class StickyHeaderManager(
             recyclerView,
             false,
         ),
+        onIconLoaded = recyclerView::invalidate,
     )
 
     fun layoutViews(recyclerView: RecyclerView) =
