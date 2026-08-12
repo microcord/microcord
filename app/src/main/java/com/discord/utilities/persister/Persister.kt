@@ -18,7 +18,7 @@ import rx.subjects.BehaviorSubject
 import rx.subjects.SerializedSubject
 import rx.subjects.Subject
 
-class Persister<T : Any>(val key: String, private val defaultValue: T) {
+class Persister<T : Any>(val key: String, private val defaultValue: T, preload: Boolean = true) {
     private var value: T = defaultValue
     private var valueDirty = false
     private var valueUnset = true
@@ -30,7 +30,7 @@ class Persister<T : Any>(val key: String, private val defaultValue: T) {
             "Preference key must be a private file name"
         }
         preferences += WeakReference(this)
-        preloader.preload(this)
+        if (preload) preloader.preload(this)
     }
 
     @Synchronized
@@ -77,6 +77,7 @@ class Persister<T : Any>(val key: String, private val defaultValue: T) {
             restoreBackup(file, backup)
             val stream = temporary.outputStream()
             Output(stream).use { output ->
+                output.writeInt(CACHE_MAGIC)
                 requireNotNull(kryo.get()).writeClassAndObject(output, value)
                 output.flush()
                 stream.fd.sync()
@@ -101,15 +102,19 @@ class Persister<T : Any>(val key: String, private val defaultValue: T) {
         if (!file.exists() || file.length() >= filesDir.usableSpace) return value
 
         return try {
-            val decoded = Input(file.inputStream()).use { input -> requireNotNull(kryo.get()).readClassAndObject(input) }
+            val decoded = Input(file.inputStream()).use { input ->
+                if (input.readInt() != CACHE_MAGIC) null
+                else requireNotNull(kryo.get()).readClassAndObject(input)
+            }
             if (decoded != null) {
                 @Suppress("UNCHECKED_CAST")
                 decoded as T
             } else {
-                logger(6, "Unable to cast deserialized preference $key.", Exception(key))
+                file.delete()
                 value
             }
         } catch (exception: Exception) {
+            file.delete()
             logger(5, "Unable to deserialize preference $key.", Exception(key, exception))
             value
         }
@@ -124,7 +129,8 @@ class Persister<T : Any>(val key: String, private val defaultValue: T) {
     private class Preloader {
         private val active = java.util.concurrent.atomic.AtomicInteger()
         private val state = BehaviorSubject.create(true)
-        private val executor = Executors.newSingleThreadExecutor { runnable ->
+        // ponytail: two readers overlap Kryo CPU work without turning startup into an I/O stampede.
+        private val executor = Executors.newFixedThreadPool(2) { runnable ->
             Thread(runnable, "PersisterPreload").apply { isDaemon = true }
         }
         private val scheduler = Schedulers.from(executor)
@@ -150,6 +156,7 @@ class Persister<T : Any>(val key: String, private val defaultValue: T) {
     }
 
     companion object {
+        private const val CACHE_MAGIC = 0x4D435034
         private val preferences = CopyOnWriteArrayList<WeakReference<Persister<*>>>()
         private var filesDir = File("")
         private var initialized = false

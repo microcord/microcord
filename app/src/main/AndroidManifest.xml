@@ -139,6 +139,7 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme.Dark"
         tools:targetApi="n">
+        <profileable android:shell="true" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

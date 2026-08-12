@@ -25,7 +25,7 @@ import rx.Observable
 class StoreEmojiCustom(
     private val storeGuilds: StoreGuilds,
     private val allowedGuildEmojiPersister: Persister<Map<Long, Map<Long, ModelEmojiCustom>>> =
-        Persister(ALLOWED_EMOJI_CACHE_KEY, HashMap()),
+        Persister(ALLOWED_EMOJI_CACHE_KEY, HashMap(), preload = false),
 ) : StoreV2() {
 
     private val allGuildEmoji = LinkedHashMap<Long, Map<Long, ModelEmojiCustom>>()

@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewStub
 import android.widget.ImageView
 import android.widget.ProgressBar
 import androidx.cardview.widget.CardView
@@ -56,7 +57,8 @@ class InlineMediaView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
 ) : CardView(context, attrs, defStyleAttr), View.OnAttachStateChangeListener, AppComponent {
-    private val playerView: PlayerView
+    private val playerStub: ViewStub
+    private var playerView: PlayerView? = null
     private val imagePreview: SimpleDraweeView
     private val gifIndicator: ImageView
     private val playButton: ImageView
@@ -70,7 +72,7 @@ class InlineMediaView @JvmOverloads constructor(
 
     init {
         LayoutInflater.from(context).inflate(R.layout.inline_media_view, this, true)
-        playerView = requireNotNull(findViewById(R.id.inline_media_player_view))
+        playerStub = requireNotNull(findViewById(R.id.inline_media_player_stub))
         imagePreview = requireNotNull(findViewById(R.id.inline_media_image_preview))
         gifIndicator = requireNotNull(findViewById(R.id.inline_media_gif_indicator))
         playButton = requireNotNull(findViewById(R.id.inline_media_play_button))
@@ -177,41 +179,46 @@ class InlineMediaView @JvmOverloads constructor(
         }
 
         val uri = params.progressiveMediaUri ?: return
-        subscriptions = CompositeSubscription()
-        val player = AppMediaPlayer.create(context)
-        appMediaPlayer = player
-        player.volume.ui(this).appSubscribe(
-            InlineMediaView::class.java,
-            subscriptionHandler = subscriptions::add,
-        ) { configureVolume(player, it > 0f) }
-        player.events.onBackpressureBuffer().ui(this).appSubscribe(
-            InlineMediaView::class.java,
-            subscriptionHandler = subscriptions::add,
-            errorHandler = { resetViews(params) },
-        ) { handlePlayerEvent(it, params) }
-
         val mediaSource = MediaSource.create(
             if (params.embedType == EmbedType.GIFV) MediaType.GIFV else MediaType.VIDEO,
             uri,
             featureTag,
         )
         if (params.embedType == EmbedType.GIFV) {
-            player.play(
-                mediaSource,
-                playerView,
-                autoPlayWhenReady = shouldAutoPlay(params),
-                loopMedia = true,
-            )
+            val player = createPlayer(params)
+            player.play(mediaSource, getPlayerView(), autoPlayWhenReady = shouldAutoPlay(params), loopMedia = true)
             player.setVolume(0f)
-        } else {
-            player.setVolume(1f)
         }
         playButton.setOnClickListener {
-            playerView.visibility = View.VISIBLE
-            player.play(mediaSource, playerView)
+            val player = createPlayer(params)
+            val view = getPlayerView()
+            view.visibility = View.VISIBLE
+            player.setVolume(1f)
+            player.play(mediaSource, view)
             playButton.visibility = View.GONE
             loadingIndicator.visibility = View.VISIBLE
         }
+    }
+
+    private fun createPlayer(params: ViewParams): AppMediaPlayer {
+        appMediaPlayer?.let { return it }
+        subscriptions = CompositeSubscription()
+        return AppMediaPlayer.create(context).also { player ->
+            appMediaPlayer = player
+            player.volume.ui(this).appSubscribe(
+                InlineMediaView::class.java,
+                subscriptionHandler = subscriptions::add,
+            ) { configureVolume(player, it > 0f) }
+            player.events.onBackpressureBuffer().ui(this).appSubscribe(
+                InlineMediaView::class.java,
+                subscriptionHandler = subscriptions::add,
+                errorHandler = { resetViews(params) },
+            ) { handlePlayerEvent(it, params) }
+        }
+    }
+
+    private fun getPlayerView(): PlayerView = playerView ?: (playerStub.inflate() as PlayerView).also {
+        playerView = it
     }
 
     private fun handlePlayerEvent(event: AppMediaPlayer.Event, params: ViewParams) {
@@ -241,7 +248,7 @@ class InlineMediaView @JvmOverloads constructor(
 
     private fun resetViews(params: ViewParams) {
         imagePreview.visibility = View.VISIBLE
-        playerView.visibility = if (params.progressiveMediaUri != null && shouldAutoPlay(params)) View.VISIBLE else View.GONE
+        playerView?.visibility = if (params.progressiveMediaUri != null && shouldAutoPlay(params)) View.VISIBLE else View.GONE
         volumeToggle.visibility = View.GONE
         loadingIndicator.visibility = View.GONE
         playButton.visibility = if (params.embedType == EmbedType.VIDEO) View.VISIBLE else View.GONE
@@ -249,7 +256,7 @@ class InlineMediaView @JvmOverloads constructor(
     }
 
     private fun clearPlayer() {
-        playerView.player = null
+        playerView?.player = null
         appMediaPlayer?.release()
         appMediaPlayer = null
     }

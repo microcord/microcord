@@ -87,6 +87,7 @@ class RLottieDrawable : BitmapDrawable, Animatable {
             val json = context.resources.openRawResource(rawRes)
                 .bufferedReader(Charsets.UTF_8)
                 .use { it.readText() }
+            ensureNativeLibraryLoaded()
             nativePtr = createWithJson(json, name, metadata, colorReplacement)
             frameIntervalMs = frameInterval(limitFps = false)
             setAllowDecodeSingleFrame(decodeSingleFrame)
@@ -106,6 +107,7 @@ class RLottieDrawable : BitmapDrawable, Animatable {
     ) : super() {
         initialize(width, height, displayRefreshRate)
         this.limitFps = limitFps
+        ensureNativeLibraryLoaded()
         nativePtr = create(file.absolutePath, width, height, metadata, precache, colorReplacement, limitFps)
         if (nativePtr == 0L) {
             // A file the native decoder rejects will never decode; drop it so the
@@ -514,6 +516,12 @@ class RLottieDrawable : BitmapDrawable, Animatable {
          * rasterisation and running several at once starves the frame decoders.
          */
         @Volatile private var cacheQueue: ExecutorService? = null
+
+        private val nativeLibraryLoaded by lazy { System.loadLibrary("dsti") }
+
+        private fun ensureNativeLibraryLoaded() {
+            nativeLibraryLoaded
+        }
 
         private fun ensureCacheQueue(): ExecutorService = cacheQueue ?: synchronized(this) {
             cacheQueue ?: Executors.newSingleThreadExecutor().also { cacheQueue = it }

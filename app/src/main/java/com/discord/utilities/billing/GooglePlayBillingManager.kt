@@ -58,7 +58,6 @@ object GooglePlayBillingManager :
     fun init(application: Application) {
         if (::application.isInitialized) return
         this.application = application
-        billingClient = newBillingClient()
         application.registerActivityLifecycleCallbacks(LifecycleListener())
         StoreStream.getAuthentication().observeIsAuthed().subscribe { authenticated ->
             isAuthenticated = authenticated
@@ -202,9 +201,11 @@ object GooglePlayBillingManager :
         GooglePlayInAppSkus.skus.map { it.paymentGatewaySkuId },
     )
 
-    private fun onActivityCreated() {
+    private fun onActivityCreated(activity: Activity) {
         activeActivities.incrementAndGet()
-        if (isAuthenticated) connect()
+        activity.window.decorView.postDelayed({
+            if (isAuthenticated && activeActivities.get() > 0) connect()
+        }, STARTUP_DELAY_MS)
     }
 
     private fun onActivityDestroyed() {
@@ -217,7 +218,7 @@ object GooglePlayBillingManager :
 
     private class LifecycleListener : Application.ActivityLifecycleCallbacks {
         override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
-            if (activity is AppActivity) GooglePlayBillingManager.onActivityCreated()
+            if (activity is AppActivity) GooglePlayBillingManager.onActivityCreated(activity)
         }
 
         override fun onActivityResumed(activity: Activity) {
@@ -245,4 +246,6 @@ object GooglePlayBillingManager :
 
     internal fun nextBackoff(current: Long): Long =
         if (current > Long.MAX_VALUE / 2L) Long.MAX_VALUE else current * 2L
+
+    private const val STARTUP_DELAY_MS = 500L
 }

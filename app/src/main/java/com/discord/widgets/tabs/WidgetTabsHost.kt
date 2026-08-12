@@ -68,6 +68,7 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
 
     private val globalStatusIndicatorStateObserver = WidgetGlobalStatusIndicatorState.Provider.get()
     private val tabToTabSelectionListenerMap = mutableMapOf<NavigationTab, OnTabSelectedListener>()
+    private val requestedTabFragments = mutableSetOf<NavigationTab>()
 
     private lateinit var container: ViewGroup
     private lateinit var navHost: FrameLayout
@@ -101,7 +102,6 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
         // us or a back press on another tab would drive the hidden home panels instead.
         setOnBackPressed(::handleBackPress)
         installCrossScreenNavigation()
-        installTabFragments()
     }
 
     override fun onViewBoundOrOnResume() {
@@ -212,6 +212,7 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
         }
 
     private fun navigateToTab(navigationTab: NavigationTab) {
+        installTabFragment(navigationTab)
         TAB_CONTAINER_IDS.forEach { (tab, containerId) ->
             requireView().findViewById<View>(containerId).visibility =
                 if (navigationTab == tab) View.VISIBLE else View.GONE
@@ -306,13 +307,19 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
         )
     }
 
-    private fun installTabFragments() {
-        if (childFragmentManager.findFragmentById(R.id.widget_tabs_host_home) != null) return
+    private fun installTabFragment(tab: NavigationTab) {
+        val containerId = TAB_CONTAINER_IDS[tab] ?: return
+        if (childFragmentManager.findFragmentById(containerId) != null || childFragmentManager.isStateSaved) return
+        if (!requestedTabFragments.add(tab)) return
+        val fragment = when (tab) {
+            NavigationTab.HOME -> homeFragmentFactory?.invoke() ?: WidgetHome()
+            NavigationTab.FRIENDS -> WidgetFriendsList()
+            NavigationTab.MENTIONS -> WidgetUserMentions()
+            NavigationTab.SETTINGS -> WidgetSettings()
+            else -> return
+        }
         childFragmentManager.commit {
-            replace(R.id.widget_tabs_host_home, homeFragmentFactory?.invoke() ?: WidgetHome(), NavigationTab.HOME.name)
-            replace(R.id.widget_tabs_host_friends, WidgetFriendsList(), NavigationTab.FRIENDS.name)
-            replace(R.id.widget_tabs_host_mentions, WidgetUserMentions(), NavigationTab.MENTIONS.name)
-            replace(R.id.widget_tabs_host_user_settings, WidgetSettings(), NavigationTab.SETTINGS.name)
+            replace(containerId, fragment, tab.name)
         }
     }
 

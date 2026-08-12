@@ -2,6 +2,8 @@ package com.discord.app
 
 import android.app.Application
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.appcompat.app.AppCompatDelegate
 import com.discord.dialogs.WidgetMaskedLinksDialog
 import com.discord.stores.StoreStream
@@ -68,14 +70,16 @@ class App : Application() {
         NoticePopupChannel.install()
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
         BootLog.record(BootLogEvent.PLATFORM_READY)
-        System.loadLibrary("dsti")
         BootLog.record(BootLogEvent.NATIVE_READY)
         StoreStream.initialize(this)
         // Without this the sidebar has no pending-applications folder and a guild the user has
         // applied to cannot be tapped at all.
         GuildsListStoreHooks.install()
         GooglePlayBillingManager.init(this)
-        VoiceEngineServiceController.INSTANCE.init(this)
+        Handler(Looper.getMainLooper()).postDelayed(
+            { VoiceEngineServiceController.INSTANCE.init(this) },
+            STARTUP_DEFER_MS,
+        )
     }
 
     override fun onTrimMemory(level: Int) {
@@ -90,6 +94,7 @@ class App : Application() {
     }
 
     companion object {
+        private const val STARTUP_DEFER_MS = 500L
         private val initialized = AtomicBoolean()
     }
 }

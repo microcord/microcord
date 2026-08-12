@@ -83,7 +83,9 @@ object NotificationClient {
     @Volatile
     private var isBackgrounded: Boolean = true
 
-    private val settings: Persister<SettingsV2> by lazy { Persister(SETTINGS_CACHE_KEY, SettingsV2()) }
+    private val settings: Persister<SettingsV2> by lazy {
+        Persister(SETTINGS_CACHE_KEY, SettingsV2(), preload = false)
+    }
 
     private var token: String? = null
 

@@ -68,7 +68,7 @@ class StoreApplicationCommands(
     private val storePermissions: StorePermissions? = null,
     private val restApi: () -> RestAPIInterface? = { RestAPI.apiOrNull },
     private val indexCachePersister: Persister<PersistedIndexCache> =
-        Persister(INDEX_CACHE_KEY, PersistedIndexCache()),
+        Persister(INDEX_CACHE_KEY, PersistedIndexCache(), preload = false),
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
     private val builtInCommandsProvider: BuiltInCommandsProvider = BuiltInCommands(),
     private val nonceGenerator: NonceGenerator = NonceGenerator(),

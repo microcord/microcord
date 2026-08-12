@@ -99,12 +99,14 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         setOnBackPressed(::handleBackPressed)
         panels.registerStartPanelStateListeners(
             OverlappingPanelsLayout.PanelStateListener {
+                if (it == PanelState.Opening || it == PanelState.Open) ensureStartPanelFragments()
                 startPanelState = dismissChatInputWhenPanelOpens(startPanelState, it)
                 StoreStream.getNavigation().setLeftPanelState(it)
             },
         )
         panels.registerEndPanelStateListeners(
             OverlappingPanelsLayout.PanelStateListener {
+                if (it == PanelState.Opening || it == PanelState.Open) ensureEndPanelFragment()
                 endPanelState = dismissChatInputWhenPanelOpens(endPanelState, it)
                 StoreStream.getNavigation().setRightPanelState(it)
             },
@@ -116,27 +118,12 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         GuildsListNavigation.showHubVerification = { context ->
             AppScreenRouter.launch(context, WidgetHubEmailFlow::class.java, HubEmailArgs().toArgsIntent())
         }
-        if (childFragmentManager.findFragmentByTag(GUILDS_TAG) == null) {
-            childFragmentManager.commitNow { replace(R.id.widget_guilds, WidgetGuildsList(), GUILDS_TAG) }
-        }
-        if (childFragmentManager.findFragmentByTag(CHANNELS_TAG) == null) {
-            childFragmentManager.commitNow { replace(R.id.widget_channels, WidgetChannelsList(), CHANNELS_TAG) }
-        }
-        if (childFragmentManager.findFragmentByTag(FORUM_TAG) == null) {
-            childFragmentManager.commitNow {
-                replace(R.id.widget_forum_channel_list, WidgetForumBrowser(), FORUM_TAG)
-            }
-        }
-        if (childFragmentManager.findFragmentByTag(MEMBERS_TAG) == null) {
-            childFragmentManager.commitNow { replace(R.id.widget_connected_list, WidgetChannelMembersList(), MEMBERS_TAG) }
-        }
+        val initialSurface = centerSurface(StoreStream.getChannelsSelected().getResolvedSelectedChannel())
+        if (savedInstanceState != null || initialSurface == CenterSurface.NONE) ensureStartPanelFragments()
+        if (savedInstanceState != null) ensureEndPanelFragment()
+        if (initialSurface == CenterSurface.FORUM) ensureForumFragment()
         if (childFragmentManager.findFragmentByTag(TOPIC_TAG) == null) {
             childFragmentManager.commitNow { replace(R.id.widget_channel_topic, WidgetChannelTopic(), TOPIC_TAG) }
-        }
-        if (childFragmentManager.findFragmentByTag(ACTIONS_TAG) == null) {
-            childFragmentManager.commitNow {
-                replace(R.id.widget_channel_action_bar, WidgetChannelSidebarActions(), ACTIONS_TAG)
-            }
         }
         WidgetChannelSidebarActions.onNotifications = ::openMuteSettings
         WidgetChannelSidebarActions.onSearch = ::openSearch
@@ -170,6 +157,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
             activity?.runOnUiThread {
                 val channel = selected.channelOrParent
                 val surface = centerSurface(selected)
+                if (surface == CenterSurface.NONE) ensureStartPanelFragments()
+                if (surface == CenterSurface.FORUM) ensureForumFragment()
                 lockCloseRightPanel(surface != CenterSurface.CHAT)
                 panels.setStartPanelUseFullPortraitWidth(surface == CenterSurface.NONE)
                 panels.setStartPanelLockState(
@@ -339,6 +328,34 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private fun ensureChatInflated() {
         if (view?.findViewById<View>(R.id.widget_home_panel_center_chat) != null) return
         view?.findViewById<ViewStub>(R.id.widget_home_panel_center_chat_stub)?.inflate()
+    }
+
+    private fun ensureStartPanelFragments() {
+        if (childFragmentManager.findFragmentByTag(GUILDS_TAG) == null) {
+            childFragmentManager.commitNow { replace(R.id.widget_guilds, WidgetGuildsList(), GUILDS_TAG) }
+        }
+        if (childFragmentManager.findFragmentByTag(CHANNELS_TAG) == null) {
+            childFragmentManager.commitNow { replace(R.id.widget_channels, WidgetChannelsList(), CHANNELS_TAG) }
+        }
+        if (childFragmentManager.findFragmentByTag(ACTIONS_TAG) == null) {
+            childFragmentManager.commitNow {
+                replace(R.id.widget_channel_action_bar, WidgetChannelSidebarActions(), ACTIONS_TAG)
+            }
+        }
+    }
+
+    private fun ensureEndPanelFragment() {
+        if (childFragmentManager.findFragmentByTag(MEMBERS_TAG) == null) {
+            childFragmentManager.commitNow { replace(R.id.widget_connected_list, WidgetChannelMembersList(), MEMBERS_TAG) }
+        }
+    }
+
+    private fun ensureForumFragment() {
+        if (childFragmentManager.findFragmentByTag(FORUM_TAG) == null) {
+            childFragmentManager.commitNow {
+                replace(R.id.widget_forum_channel_list, WidgetForumBrowser(), FORUM_TAG)
+            }
+        }
     }
 
     private fun refreshChatToolbar() {
