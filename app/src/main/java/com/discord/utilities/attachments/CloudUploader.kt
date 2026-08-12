@@ -34,6 +34,9 @@ object CloudUploader {
     data class StagedUpload(val uploadedFilename: String)
 
     private const val MAX_ATTEMPTS = 12
+
+    /** One file is reserved per request, so its position in that batch is always the first. */
+    private const val SLOT_REQUEST_INDEX = "0"
     private const val INITIAL_BACKOFF_MS = 500L
     private const val MAX_BACKOFF_MS = 30_000L
 
@@ -127,11 +130,13 @@ object CloudUploader {
             .retryWhen { failures ->
                 failures.flatMap { error ->
                     attempt += 1
-                    if (attempt >= MAX_ATTEMPTS || !isRetryable(error)) {
+                    // No slot yet means the reservation itself failed, not the upload to it.
+                    val reserving = slot == null
+                    if (attempt >= MAX_ATTEMPTS || !isRetryable(error, reserving)) {
                         Observable.error(error)
                     } else {
                         // A URL that failed may simply have expired, so drop it and re-reserve.
-                        if (isExpiredUrl(error)) slot = null
+                        if (!reserving && isExpiredUrl(error)) slot = null
                         Observable.timer(backoffMs(attempt), TimeUnit.MILLISECONDS)
                     }
                 }
@@ -148,7 +153,7 @@ object CloudUploader {
         CreateAttachmentsBody(
             listOf(
                 UploadAttachmentRequest(
-                    id = attachment.id.toString(),
+                    id = SLOT_REQUEST_INDEX,
                     filename = attachment.fileName,
                     fileSize = attachment.size,
                 ),
@@ -199,15 +204,21 @@ object CloudUploader {
      * Storage answering 4xx means it understood and declined, so repeating the same request would
      * only waste the user's data — except for the two codes that explicitly invite a retry.
      */
-    private fun isRetryable(error: Throwable): Boolean = when (error) {
+    private fun isRetryable(error: Throwable, reserving: Boolean): Boolean = when (error) {
         is HttpException ->
-            error.code() >= 500 || error.code() in RETRYABLE_CLIENT_CODES || isExpiredUrl(error)
+            error.code() >= 500 || error.code() in RETRYABLE_CLIENT_CODES ||
+                (!reserving && isExpiredUrl(error))
         is InterruptedIOException -> false
         is IOException -> true
         else -> false
     }
 
-    /** Storage reports a lapsed signature as a plain refusal, so it is recognised by code. */
+    /**
+     * Storage reports a lapsed signature as a plain refusal, so it is recognised by code.
+     *
+     * Only ever asked about the upload itself: the same codes from the reservation mean the
+     * request was malformed, and retrying an unchanged malformed request never terminates.
+     */
     private fun isExpiredUrl(error: Throwable): Boolean =
         error is HttpException && (error.code() == 403 || error.code() == 400)
 
