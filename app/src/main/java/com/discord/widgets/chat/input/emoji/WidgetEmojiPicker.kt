@@ -42,6 +42,7 @@ class WidgetEmojiPicker : AppFragment(R.layout.widget_emoji_picker) {
     }
 
     private var _binding: WidgetEmojiPickerBinding? = null
+    private var forReaction = false
     private val binding get() = requireNotNull(_binding)
     private lateinit var viewModel: EmojiPickerViewModel
     private lateinit var emojiAdapter: WidgetEmojiAdapter
@@ -59,7 +60,7 @@ class WidgetEmojiPicker : AppFragment(R.layout.widget_emoji_picker) {
                 showNitroUpsell()
                 return
             }
-            StoreStream.getEmojis().onEmojiUsed(emoji)
+            if (!forReaction) StoreStream.getEmojis().onEmojiUsed(emoji)
             val handler = onPicked
             if (handler != null) handler(emoji) else host()?.onEmojiPicked(emoji)
             view?.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
@@ -97,13 +98,18 @@ class WidgetEmojiPicker : AppFragment(R.layout.widget_emoji_picker) {
         _binding = WidgetEmojiPickerBinding.bind(view)
         val contextType = arguments?.getSerializable(ARG_CONTEXT_TYPE) as? EmojiPickerContextType
             ?: EmojiPickerContextType.Chat
+        forReaction = arguments?.getBoolean(ARG_FOR_REACTION) == true
 
         viewModel = ViewModelProvider(
             this,
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    EmojiPickerViewModel(requireContext().applicationContext, contextType) as T
+                    EmojiPickerViewModel(
+                        requireContext().applicationContext,
+                        contextType,
+                        forReaction,
+                    ) as T
             },
         ).get(EmojiPickerViewModel::class.java)
 
@@ -233,6 +239,7 @@ class WidgetEmojiPicker : AppFragment(R.layout.widget_emoji_picker) {
     companion object {
         private const val ARG_CONTEXT_TYPE = "emoji_picker_context_type"
         private const val ARG_MODE = "emoji_picker_mode"
+        private const val ARG_FOR_REACTION = "emoji_picker_for_reaction"
 
         private const val FLIPPER_GRID = 0
         private const val FLIPPER_EMPTY = 1
@@ -243,11 +250,13 @@ class WidgetEmojiPicker : AppFragment(R.layout.widget_emoji_picker) {
         fun create(
             contextType: EmojiPickerContextType,
             mode: EmojiPickerMode = EmojiPickerMode.INLINE,
+            forReaction: Boolean = false,
         ): WidgetEmojiPicker =
             WidgetEmojiPicker().apply {
                 arguments = Bundle().apply {
                     putSerializable(ARG_CONTEXT_TYPE, contextType)
                     putSerializable(ARG_MODE, mode)
+                    putBoolean(ARG_FOR_REACTION, forReaction)
                 }
             }
     }

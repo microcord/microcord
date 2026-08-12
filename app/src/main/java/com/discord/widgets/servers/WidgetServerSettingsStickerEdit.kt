@@ -105,7 +105,7 @@ class WidgetServerSettingsStickerEdit :
         configurePreview(sticker)
         configureRelatedEmoji(state.get(STATE_ID_TAGS, sticker?.tags.orEmpty()))
         relatedEmoji.setOnClickListener {
-            WidgetEmojiPickerSheet.show(parentFragmentManager) { picked ->
+            WidgetEmojiPickerSheet.show(parentFragmentManager, forReaction = false) { picked ->
                 configureRelatedEmoji(picked.id?.toString() ?: picked.name.orEmpty())
                 state.configureSaveActionView(save)
             }

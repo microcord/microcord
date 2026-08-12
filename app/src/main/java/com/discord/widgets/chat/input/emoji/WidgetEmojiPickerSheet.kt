@@ -19,6 +19,8 @@ import com.discord.models.domain.emoji.ModelEmojiCustom
 class WidgetEmojiPickerSheet : AppBottomSheet() {
 
     private var listener: ((MessageReactionEmoji) -> Unit)? = null
+    /** False for the pickers that borrow this sheet to choose an emoji that is not a reaction. */
+    private var forReaction = true
 
     override fun getContentViewResId() = R.layout.widget_emoji_picker_sheet
 
@@ -27,6 +29,7 @@ class WidgetEmojiPickerSheet : AppBottomSheet() {
         val picker = WidgetEmojiPicker.create(
             EmojiPickerContextType.Chat,
             EmojiPickerMode.BOTTOM_SHEET,
+            forReaction = forReaction,
         ).apply {
             onPicked = { emoji ->
                 listener?.invoke(emoji.toReactionEmoji())
@@ -55,8 +58,16 @@ class WidgetEmojiPickerSheet : AppBottomSheet() {
     companion object {
         private const val SHEET_HEIGHT_RATIO = 0.9
 
-        fun show(manager: FragmentManager, listener: (MessageReactionEmoji) -> Unit) {
-            WidgetEmojiPickerSheet().apply { this.listener = listener }
+        @JvmOverloads
+        fun show(
+            manager: FragmentManager,
+            forReaction: Boolean = true,
+            listener: (MessageReactionEmoji) -> Unit,
+        ) {
+            WidgetEmojiPickerSheet().apply {
+                this.listener = listener
+                this.forReaction = forReaction
+            }
                 .show(manager, WidgetEmojiPickerSheet::class.java.simpleName)
         }
     }

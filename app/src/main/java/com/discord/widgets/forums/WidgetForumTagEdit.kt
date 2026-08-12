@@ -69,7 +69,7 @@ class WidgetForumTagEdit : AppFragment(R.layout.widget_forum_tag_edit) {
             setOnClickListener { confirmRemove() }
         }
         view.findViewById<FrameLayout>(R.id.forum_tag_edit_emoji_wrap).setOnClickListener {
-            WidgetEmojiPickerSheet.show(parentFragmentManager) { picked ->
+            WidgetEmojiPickerSheet.show(parentFragmentManager, forReaction = false) { picked ->
                 emoji = picked
                 renderEmoji()
                 updateSaveVisibility()

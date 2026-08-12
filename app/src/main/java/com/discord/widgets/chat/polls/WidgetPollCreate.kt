@@ -93,7 +93,7 @@ class WidgetPollCreate : AppFragment(R.layout.widget_poll_create) {
             row.pollAnswerEmojiButton.contentDescription = answer.emoji?.name
                 ?: getString(R.string.poll_answer_emoji)
             row.pollAnswerEmojiButton.setOnClickListener {
-                WidgetEmojiPickerSheet.show(parentFragmentManager) { emoji ->
+                WidgetEmojiPickerSheet.show(parentFragmentManager, forReaction = false) { emoji ->
                     viewModel.setAnswerEmoji(index, emoji)
                     renderAnswers()
                 }

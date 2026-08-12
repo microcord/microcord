@@ -225,7 +225,7 @@ class WidgetChatListActions : AppBottomSheet() {
         RestAPI.api.addReaction(model.message.channelId, model.message.id, emoji.getReactionKey())
             .restSubscribeOn().ui(this)
             .appSubscribe(WidgetChatListActions::class.java, context = context) {
-                StoreStream.getEmojis().onEmojiUsed(emoji)
+                StoreStream.getEmojis().onEmojiUsed(emoji, isReaction = true)
                 dismiss()
             }
     }
@@ -367,7 +367,8 @@ class WidgetChatListActions : AppBottomSheet() {
                         ) { permissions, me, members -> Triple(permissions, me, members[authorId]) }
                         val context = Observable.combineLatest(
                             StoreStream.getGuilds().observeGuild(channel.guildId),
-                            StoreStream.getEmojis().getEmojiSet(channel.guildId, channel.id),
+                            StoreStream.getEmojis()
+                                .getEmojiSet(channel.guildId, channel.id, forReaction = true),
                             ::Pair,
                         )
                         Observable.combineLatest(identity, context) { (permissions, me, member), (guild, emojis) ->

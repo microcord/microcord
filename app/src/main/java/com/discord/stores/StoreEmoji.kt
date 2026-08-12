@@ -42,11 +42,11 @@ class StoreEmoji(
      * [Emoji.getUniqueId] values. That store has not been reconstructed yet; until it is, the
      * favourites row is empty rather than wrong.
      */
-    private val observeFavoriteAndFrequentEmojiIds: () -> Observable<Pair<Set<String>, List<String>>> = {
+    private val observeFavoriteAndFrequentEmojiIds: (forReaction: Boolean) -> Observable<Pair<Set<String>, List<String>>> = {
         Observable.just(emptySet<String>() to emptyList())
     },
-    private val getFrequentEmojiKeys: (() -> List<String>)? = null,
-    private val trackEmoji: ((String) -> Unit)? = null,
+    private val getFrequentEmojiKeys: ((forReaction: Boolean) -> List<String>)? = null,
+    private val trackEmoji: ((String, Boolean) -> Unit)? = null,
 ) : Rules.EmojiDataProvider {
 
     private val fallbackFrecency = ExpressionFrecencyTracker()
@@ -107,16 +107,24 @@ class StoreEmoji(
         channelId: Long,
         includeUnusableEmojis: Boolean = false,
         includeUnavailableEmojis: Boolean = false,
+        forReaction: Boolean = false,
     ): Observable<EmojiSet> = getEmojiSet(
         EmojiContext.Chat(guildId, channelId),
         includeUnusableEmojis,
         includeUnavailableEmojis,
+        forReaction,
     )
 
+    /**
+     * @param forReaction Scores the "Frequently Used" row against reactions rather than messages;
+     *   the two histories are kept apart, as in the reference.
+     */
+    @JvmOverloads
     fun getEmojiSet(
         emojiContext: EmojiContext,
         includeUnusableEmojis: Boolean,
         includeUnavailableEmojis: Boolean,
+        forReaction: Boolean = false,
     ): Observable<EmojiSet> {
         val hasExternalEmojiPermission: Observable<Boolean> = when {
             emojiContext is EmojiContext.Chat && emojiContext.guildId != 0L ->
@@ -132,7 +140,7 @@ class StoreEmoji(
             userStore.observeMe().map { it.isPremium },
             hasExternalEmojiPermission,
             sortedGuildsStore.observeOrderedGuilds().map { it.keys.toList() },
-            observeFavoriteAndFrequentEmojiIds(),
+            observeFavoriteAndFrequentEmojiIds(forReaction),
         ) { isPremium, hasExternalEmoji, sortedGuildIds, emojiHistory ->
             Inputs(isPremium, hasExternalEmoji, sortedGuildIds, emojiHistory.first, emojiHistory.second)
         }
@@ -151,14 +159,19 @@ class StoreEmoji(
                             hasExternalEmojiPermission = inputs.hasExternalEmojiPermission,
                             favoriteEmojiIds = inputs.favoriteEmojiIds,
                             frequentEmojiIds = inputs.frequentEmojiIds,
+                            forReaction = forReaction,
                         )
                     }
             }
     }
 
-    fun onEmojiUsed(emoji: Emoji) = onEmojiUsed(emoji.getUniqueId())
+    @JvmOverloads
+    fun onEmojiUsed(emoji: Emoji, isReaction: Boolean = false) =
+        onEmojiUsed(emoji.getUniqueId(), isReaction)
 
-    fun onEmojiUsed(emojiKey: String) = trackEmoji?.invoke(emojiKey) ?: fallbackFrecency.track(emojiKey)
+    @JvmOverloads
+    fun onEmojiUsed(emojiKey: String, isReaction: Boolean = false) =
+        trackEmoji?.invoke(emojiKey, isReaction) ?: fallbackFrecency.track(emojiKey)
 
     // region internals
 
@@ -180,7 +193,9 @@ class StoreEmoji(
         includeUnavailableEmojis: Boolean,
         hasExternalEmojiPermission: Boolean,
         favoriteEmojiIds: Set<String>,
-        frequentEmojiIds: List<String> = getFrequentEmojiKeys?.invoke() ?: fallbackFrecency.getSortedKeys(),
+        frequentEmojiIds: List<String> =
+            getFrequentEmojiKeys?.invoke(false) ?: fallbackFrecency.getSortedKeys(),
+        forReaction: Boolean = false,
     ): EmojiSet {
         val isExternalEmoji: (Long) -> Boolean = { guildId ->
             when (emojiContext) {
@@ -274,7 +289,7 @@ class StoreEmoji(
             unicodeEmojis = unicodeEmojisByCategory,
             customEmojis = usableCustomEmojis,
             emojiIndex = emojiIdsMap,
-            recentEmojis = getFrequentlyUsedEmojis(emojiIdsMap, frequentEmojiIds),
+            recentEmojis = getFrequentlyUsedEmojis(emojiIdsMap, frequentEmojiIds, forReaction),
             favoriteEmoji = favoriteEmoji,
         )
     }
@@ -283,12 +298,17 @@ class StoreEmoji(
      * The "Frequently Used" row: frecency first, topped up with [DEFAULT_FREQUENT_EMOJIS] so a
      * fresh install still shows something.
      */
-    private fun getFrequentlyUsedEmojis(emojiIdsMap: Map<String, Emoji>, frequentEmojiIds: List<String>): List<Emoji> {
+    private fun getFrequentlyUsedEmojis(
+        emojiIdsMap: Map<String, Emoji>,
+        frequentEmojiIds: List<String>,
+        forReaction: Boolean,
+    ): List<Emoji> {
         val tracked = frequentEmojiIds
             .mapNotNull(emojiIdsMap::get)
             .take(MAX_FREQUENTLY_USED_EMOJIS)
         if (tracked.size >= MAX_FREQUENTLY_USED_EMOJIS) return tracked
-        val defaults = DEFAULT_FREQUENT_EMOJIS.mapNotNull(namesMap::get)
+        val defaultNames = if (forReaction) DEFAULT_REACTION_EMOJIS else DEFAULT_FREQUENT_EMOJIS
+        val defaults = defaultNames.mapNotNull(namesMap::get)
         return (tracked + defaults.take(MAX_FREQUENTLY_USED_EMOJIS - tracked.size)).distinct()
     }
 
@@ -459,6 +479,17 @@ class StoreEmoji(
         @JvmField
         val DEFAULT_FREQUENT_EMOJIS: Array<String> = arrayOf(
             "bread", "fork_and_knife", "yum", "weary", "tired_face", "poop", "thumbsup", "100",
+        )
+
+        /**
+         * The same, for reactions. What people reach for to react is not what they type, so the
+         * reference suggests a different set; its first three are double-weighted to guarantee
+         * they reach the quick-reaction row, which here is simply their position.
+         */
+        @JvmField
+        val DEFAULT_REACTION_EMOJIS: Array<String> = arrayOf(
+            "100", "thumbsup", "thumbsdown", "heart", "point_up", "eyes", "weary", "laughing",
+            "white_check_mark", "x",
         )
     }
 }

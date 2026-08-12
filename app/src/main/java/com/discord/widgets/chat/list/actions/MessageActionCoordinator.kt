@@ -17,6 +17,8 @@ class MessageActionCoordinator(private val callbacks: Callbacks) {
         val createPendingReply: (Channel, Message, Boolean, Boolean) -> Unit,
         val retryLocal: (Message) -> Unit,
         val cancelLocal: (Message) -> Unit,
+        /** Records an emoji as reacted with; see [toggleReaction]. */
+        val reactionAdded: (String) -> Unit = {},
     )
 
     fun delete(message: Message, completed: (Result<Unit>) -> Unit = {}) {
@@ -52,6 +54,11 @@ class MessageActionCoordinator(private val callbacks: Callbacks) {
             else -> previous + MessageReaction(1, emoji, true)
         }
         callbacks.messageUpdated(message.copy(reactions = updated))
+        // Scored here rather than at each button: this is the one place every added reaction passes
+        // through, whether it came from the picker, a tap on an existing one, or another screen.
+        // A custom emoji is keyed by id and a Unicode one by its surrogates, which is exactly what
+        // the reaction carries.
+        if (!removing) callbacks.reactionAdded(emoji.id ?: emoji.name.orEmpty())
         callbacks.toggleReactionRemote(message.channelId, message.id, reactionRoute(emoji), removing) { result ->
             if (result.isFailure) callbacks.messageUpdated(message.copy(reactions = previous))
             completed(result)

@@ -404,13 +404,23 @@ class StoreStream private constructor(
         users,
         permissions,
         guildsSorted,
-        observeFavoriteAndFrequentEmojiIds = {
+        observeFavoriteAndFrequentEmojiIds = { forReaction ->
             Observable.combineLatest(
                 mediaFavorites.observeFavoriteEmojiKeys(),
-                mediaFavorites.observeEmojiFrecency(),
-            ) { favorites, _ -> favorites to mediaFavorites.getEmojiFrecencyKeys() }
+                if (forReaction) {
+                    mediaFavorites.observeReactionEmojiFrecency()
+                } else {
+                    mediaFavorites.observeEmojiFrecency()
+                },
+            ) { favorites, frequent -> favorites to frequent }
         },
-        getFrequentEmojiKeys = mediaFavorites::getEmojiFrecencyKeys,
+        getFrequentEmojiKeys = { forReaction ->
+            if (forReaction) {
+                mediaFavorites.getReactionEmojiFrecencyKeys()
+            } else {
+                mediaFavorites.getEmojiFrecencyKeys()
+            }
+        },
         trackEmoji = mediaFavorites::onEmojiUsed,
     )
     private val emojiGuild = StoreEmojiGuild(observationDeck, dispatcher)
@@ -1344,6 +1354,7 @@ class StoreStream private constructor(
                 createPendingReply = { channel, message, mention, showToggle ->
                     pendingReplies.onCreatePendingReply(channel, message, mention, showToggle)
                 },
+                reactionAdded = { emojiKey -> emoji.onEmojiUsed(emojiKey, isReaction = true) },
                 retryLocal = { message ->
                     if (message.hasLocalUploads) retryFailedUpload(message)
                     else message.nonce?.let {

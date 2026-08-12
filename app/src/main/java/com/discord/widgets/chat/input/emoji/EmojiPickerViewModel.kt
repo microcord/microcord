@@ -31,7 +31,9 @@ import rx.Subscription
 class EmojiPickerViewModel(
     private val context: Context,
     private val contextType: EmojiPickerContextType = EmojiPickerContextType.Chat,
-    private val emojiSetSource: () -> Observable<EmojiSet> = { observeEmojiSet(contextType) },
+    /** Opened to react: the frequently-used row is then scored against reactions, not messages. */
+    private val forReaction: Boolean = false,
+    private val emojiSetSource: () -> Observable<EmojiSet> = { observeEmojiSet(contextType, forReaction) },
     private val guildsSource: () -> Observable<Map<Long, Guild>> = { StoreStream.getGuilds().observeGuilds() },
     private val animationsSource: () -> Observable<Boolean> =
         { StoreStream.getUserSettings().observeIsAnimatedEmojisEnabled() },
@@ -133,21 +135,34 @@ class EmojiPickerViewModel(
 
     companion object {
 
-        private fun observeEmojiSet(contextType: EmojiPickerContextType): Observable<EmojiSet> {
+        private fun observeEmojiSet(
+            contextType: EmojiPickerContextType,
+            forReaction: Boolean,
+        ): Observable<EmojiSet> {
             val store = StoreStream.getEmojis()
             return when (contextType) {
                 is EmojiPickerContextType.Chat ->
                     StoreStream.getChannelsSelected().observeSelectedChannel().switchMap { channel ->
                         if (channel == null) {
-                            store.getEmojiSet(StoreEmoji.EmojiContext.Global, true, false)
+                            store.getEmojiSet(StoreEmoji.EmojiContext.Global, true, false, forReaction)
                         } else {
-                            store.getEmojiSet(channel.guildId, channel.id, includeUnusableEmojis = true)
+                            store.getEmojiSet(
+                                channel.guildId,
+                                channel.id,
+                                includeUnusableEmojis = true,
+                                forReaction = forReaction,
+                            )
                         }
                     }
                 is EmojiPickerContextType.Global ->
-                    store.getEmojiSet(StoreEmoji.EmojiContext.Global, true, false)
+                    store.getEmojiSet(StoreEmoji.EmojiContext.Global, true, false, forReaction)
                 is EmojiPickerContextType.Guild ->
-                    store.getEmojiSet(StoreEmoji.EmojiContext.Guild(contextType.guildId), true, false)
+                    store.getEmojiSet(
+                        StoreEmoji.EmojiContext.Guild(contextType.guildId),
+                        true,
+                        false,
+                        forReaction,
+                    )
             }
         }
 

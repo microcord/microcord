@@ -21,6 +21,17 @@ object FrecencySettings {
         { emojiFrecencyBuilder.clearEmojis().putAllEmojis(it) },
     )
 
+    /**
+     * Emoji used to react, kept apart from [emojiFrecency].
+     *
+     * What people reach for to react is not what they type into messages, so the reference scores
+     * the two separately and reacting bumps both.
+     */
+    val emojiReactionFrecency = frecency(
+        { it.emojiReactionFrecency.emojisMap },
+        { emojiReactionFrecencyBuilder.clearEmojis().putAllEmojis(it) },
+    )
+
     val stickerFrecency = frecency(
         { it.stickerFrecency.stickersMap.mapKeys(Map.Entry<Long, *>::key) },
         { items -> stickerFrecencyBuilder.clearStickers().putAllStickers(items.mapKeys { it.key.toLong() }) },

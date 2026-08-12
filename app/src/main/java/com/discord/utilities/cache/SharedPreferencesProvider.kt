@@ -73,6 +73,7 @@ object SharedPreferencesProvider {
         "CACHE_KEY_SYNC_TEXT_AND_IMAGES",
         "CACHE_KEY_HIDE_VOICE_PARTICIPANTS",
         "screenshot_detection_enabled",
+        "developer_log_rest_requests",
     )
 
     @VisibleForTesting

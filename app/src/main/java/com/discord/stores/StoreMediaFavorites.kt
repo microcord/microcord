@@ -59,6 +59,7 @@ class StoreMediaFavorites(
     }
 
     private val emojiFrecency = ExpressionFrecencyTracker()
+    private val emojiReactionFrecency = ExpressionFrecencyTracker()
     private var emojiKeyToLocal: (String) -> String = { it }
     private var emojiKeyToServer: (String) -> String = { it }
 
@@ -67,6 +68,8 @@ class StoreMediaFavorites(
         override fun writeInto(builder: FrecencyUserSettings.Builder) {
             builder.emojiFrecencyBuilder.clearEmojis()
                 .putAllEmojis(emojiFrecency.toProtoEntries().mapValues { it.value.toProto() })
+            builder.emojiReactionFrecencyBuilder.clearEmojis()
+                .putAllEmojis(emojiReactionFrecency.toProtoEntries().mapValues { it.value.toProto() })
         }
     }
 
@@ -107,6 +110,21 @@ class StoreMediaFavorites(
     fun observeEmojiFrecency(): Observable<List<String>> =
         observationDeck.connectRx(this, generator = ::getEmojiFrecencyKeys).distinctUntilChanged()
 
+    /**
+     * Emoji ordered by how often they are used to react.
+     *
+     * Falls back to the message-composition history while this one is empty. The reference does
+     * the same thing once, as a stored migration that seeds the new field from the old; done at
+     * read instead, an account that has never reacted still opens on something familiar without
+     * this client writing invented history into the account's proto.
+     */
+    fun getReactionEmojiFrecencyKeys(): List<String> =
+        emojiReactionFrecency.getSortedKeys().ifEmpty { emojiFrecency.getSortedKeys() }
+            .map(emojiKeyToLocal)
+
+    fun observeReactionEmojiFrecency(): Observable<List<String>> =
+        observationDeck.connectRx(this, generator = ::getReactionEmojiFrecencyKeys).distinctUntilChanged()
+
     fun isFavoriteGif(gif: ModelGif): Boolean {
         val key = canonicalGifKey(gif.tenorGifUrl)
         return getFavoriteGifs().any { it.tenorGifUrl == key }
@@ -137,8 +155,15 @@ class StoreMediaFavorites(
         is Favorite.FavUnicodeEmoji -> setFavoriteEmoji(favorite.emojiUniqueId, enabled)
     }
 
-    fun onEmojiUsed(emojiKey: String) {
-        emojiFrecency.track(emojiKeyToServer(emojiKey))
+    /**
+     * @param isReaction Reacting scores the emoji in both histories, as in the reference: a
+     *   reaction is still a use of that emoji, it is just also a reaction.
+     */
+    @JvmOverloads
+    fun onEmojiUsed(emojiKey: String, isReaction: Boolean = false) {
+        val serverKey = emojiKeyToServer(emojiKey)
+        emojiFrecency.track(serverKey)
+        if (isReaction) emojiReactionFrecency.track(serverKey)
         beforeSend.markDirty()
         dispatcher.schedule { markChanged() }
     }
@@ -146,12 +171,16 @@ class StoreMediaFavorites(
     @StoreThread
     fun handleFrecencySettings(settings: FrecencyUserSettings) {
         emojiFrecency.replace(settings.emojiFrecency.emojisMap.mapValues { it.value.toEntry() })
+        emojiReactionFrecency.replace(
+            settings.emojiReactionFrecency.emojisMap.mapValues { it.value.toEntry() },
+        )
         markChanged()
     }
 
     @StoreThread
     fun handlePreLogout() {
         emojiFrecency.replace(emptyMap())
+        emojiReactionFrecency.replace(emptyMap())
         markChanged()
     }
 
