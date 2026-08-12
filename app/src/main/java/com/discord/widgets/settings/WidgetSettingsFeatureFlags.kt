@@ -32,6 +32,10 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.viewProfileImagesEnabled()
             setOnCheckedListener(FeatureFlags::setViewProfileImagesEnabled)
         }
+        binding.settingsFeatureTypingUserAvatars.apply {
+            isChecked = FeatureFlags.typingUserAvatarsEnabled()
+            setOnCheckedListener(FeatureFlags::setTypingUserAvatarsEnabled)
+        }
         binding.settingsFeatureChatboxCustomizations.apply {
             isChecked = FeatureFlags.chatboxCustomizationsEnabled()
             setOnCheckedListener { enabled ->

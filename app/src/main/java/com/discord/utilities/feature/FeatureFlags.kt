@@ -9,6 +9,7 @@ object FeatureFlags {
     private const val VIEW_PROFILE_IMAGES = "feature_view_profile_images"
     private const val CHATBOX_CUSTOMIZATIONS = "feature_chatbox_customizations"
     private const val HEADER_CUSTOMIZATIONS = "feature_header_customizations"
+    private const val TYPING_USER_AVATARS = "feature_typing_user_avatars"
     private const val AVATAR_DECORATIONS = "feature_avatar_decorations"
     private const val NAMEPLATES = "feature_nameplates"
     private const val PROFILE_EFFECTS = "feature_profile_effects"
@@ -26,6 +27,8 @@ object FeatureFlags {
     fun setChatboxCustomizationsEnabled(enabled: Boolean) = setEnabled(CHATBOX_CUSTOMIZATIONS, enabled)
     fun headerCustomizationsEnabled() = enabled(HEADER_CUSTOMIZATIONS)
     fun setHeaderCustomizationsEnabled(enabled: Boolean) = setEnabled(HEADER_CUSTOMIZATIONS, enabled)
+    fun typingUserAvatarsEnabled() = enabled(TYPING_USER_AVATARS)
+    fun setTypingUserAvatarsEnabled(enabled: Boolean) = setEnabled(TYPING_USER_AVATARS, enabled)
     fun avatarDecorationsEnabled() = enabled(AVATAR_DECORATIONS, true)
     fun setAvatarDecorationsEnabled(enabled: Boolean) = setEnabled(AVATAR_DECORATIONS, enabled)
     fun nameplatesEnabled() = enabled(NAMEPLATES, true)

@@ -2,12 +2,19 @@ package com.discord.widgets.chat.overlay
 
 import android.os.Bundle
 import android.view.View
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.Lifecycle
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.databinding.WidgetChatOverlayBinding
+import com.discord.models.guild.UserGuildMember
 import com.discord.stores.StoreStream
+import com.discord.utilities.feature.FeatureFlags
+import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.setVitoSpan
 import com.discord.utilities.time.TimeUtils
+import com.facebook.drawee.drawable.ScalingUtils
+import com.facebook.drawee.span.DraweeSpanStringBuilder
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
 import java.util.concurrent.TimeUnit
@@ -112,7 +119,7 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
             if (hasTyping) start() else stop()
         }
         binding.chatTypingUsersTyping.apply {
-            text = typingText(users)
+            setDraweeSpanStringBuilder(typingText(users))
             visibility = if (hasTyping) View.VISIBLE else View.GONE
         }
         val slowmodeText = when {
@@ -128,19 +135,56 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
             if (typing.channelRateLimit > 0) View.VISIBLE else View.GONE
     }
 
-    private fun typingText(users: List<CharSequence>): CharSequence = I18nSpans.render(
-        formatTypingText(
-            getString(
-                when (users.size) {
-                    1 -> R.string.one_user_typing
-                    2 -> R.string.two_users_typing
-                    3 -> R.string.three_users_typing
-                    else -> R.string.several_users_typing
-                },
+    private fun typingText(users: List<UserGuildMember>): DraweeSpanStringBuilder {
+        val names = users.map { it.getNickOrUserName() }
+        val rendered = I18nSpans.render(
+            formatTypingText(
+                getString(
+                    when (users.size) {
+                        1 -> R.string.one_user_typing
+                        2 -> R.string.two_users_typing
+                        3 -> R.string.three_users_typing
+                        else -> R.string.several_users_typing
+                    },
+                ),
+                names,
             ),
-            users,
-        ),
-    )
+        )
+        val builder = DraweeSpanStringBuilder(rendered)
+        if (!FeatureFlags.typingUserAvatarsEnabled() || users.size > 3) return builder
+
+        var searchFrom = 0
+        val positions = names.map { name ->
+            builder.indexOf(name.toString(), searchFrom).also { index ->
+                if (index >= 0) searchFrom = index + name.length
+            }
+        }
+        val size = (16 * resources.displayMetrics.density).toInt()
+        users.indices.reversed().forEach { index ->
+            val position = positions[index]
+            if (position < 0) return@forEach
+            val avatarUrl = IconUtils.getForGuildMemberOrUser(
+                users[index].user,
+                users[index].guildMember,
+                size = IconUtils.getMediaProxySize(size),
+            ) ?: return@forEach
+            builder.insert(position, "# ")
+            builder.setVitoSpan(
+                context = requireContext(),
+                url = avatarUrl,
+                start = position,
+                end = position,
+                width = size,
+                height = size,
+                alignment = 2,
+                autoPlay = false,
+                placeholder = AppCompatResources.getDrawable(requireContext(), R.drawable.asset_default_avatar_32dp),
+                scaleType = ScalingUtils.ScaleType.CENTER_CROP,
+                circular = true,
+            )
+        }
+        return builder
+    }
 
     companion object {
         // Kept until StoreStream's legacy widget installation is removed in its owning wave.

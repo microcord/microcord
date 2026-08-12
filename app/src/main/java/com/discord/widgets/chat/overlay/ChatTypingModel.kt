@@ -1,8 +1,7 @@
 package com.discord.widgets.chat.overlay
 
-import com.discord.utilities.user.NicknameUtils
 import com.discord.api.guild.GuildVerificationLevel
-import com.discord.models.member.GuildMember
+import com.discord.models.guild.UserGuildMember
 import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreSlowMode
 import com.discord.stores.StoreStream
@@ -13,7 +12,7 @@ sealed class ChatTypingModel {
     object Hide : ChatTypingModel()
 
     data class Typing(
-        val typingUsers: List<CharSequence>,
+        val typingUsers: List<UserGuildMember>,
         val channelRateLimit: Int,
         val cooldownSecs: Int,
     ) : ChatTypingModel()
@@ -49,15 +48,13 @@ sealed class ChatTypingModel {
                 .observeCooldownSecs(channel.id, StoreSlowMode.Type.ThreadCreate)
                 .map { Typing(emptyList(), channel.rateLimitPerUser, it) }
 
-        private fun typingUsers(channel: com.discord.api.channel.Channel): Observable<List<CharSequence>> =
+        private fun typingUsers(channel: com.discord.api.channel.Channel): Observable<List<UserGuildMember>> =
             StoreStream.getUsersTyping().observeTypingUsers(channel.id).switchMap { userIds ->
                 Observable.combineLatest(
                     StoreStream.getUsers().observeUsers(userIds),
                     StoreStream.getGuilds().observeComputed(channel.guildId, userIds),
                 ) { users, members ->
-                    users.values.map { user ->
-                        NicknameUtils.getName(channel.guildId.takeIf { it != 0L }, channel.id, user) as CharSequence
-                    }.take(4)
+                    users.values.map { user -> UserGuildMember(user, members[user.id]) }.take(4)
                 }
             }.distinctUntilChanged()
     }
