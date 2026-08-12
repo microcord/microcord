@@ -5,11 +5,13 @@ import com.discord.utilities.cache.SharedPreferencesProvider
 object AppRestRequestLogger {
     const val PREF_LOG_REST_REQUESTS = "developer_log_rest_requests"
 
+    /** Session-durable: a switch of accounts is not a reason to stop logging this device. */
     fun isEnabled() = runCatching {
-        SharedPreferencesProvider.get().getBoolean(PREF_LOG_REST_REQUESTS, false)
+        SharedPreferencesProvider.getPrefsSessionDurable().getBoolean(PREF_LOG_REST_REQUESTS, false)
     }.getOrDefault(false)
 
     fun setEnabled(enabled: Boolean) {
-        SharedPreferencesProvider.get().edit().putBoolean(PREF_LOG_REST_REQUESTS, enabled).apply()
+        SharedPreferencesProvider.getPrefsSessionDurable().edit()
+            .putBoolean(PREF_LOG_REST_REQUESTS, enabled).apply()
     }
 }

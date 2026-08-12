@@ -52,7 +52,6 @@ object SharedPreferencesProvider {
         key in DEVICE_SCOPED_KEYS || DEVICE_SCOPED_PREFIXES.any(key::startsWith)
 
     private val DEVICE_SCOPED_PREFIXES = listOf(
-        "DEBUG_OPTION_",
         "CACHE_KEY_VOICE_SETTINGS_",
     )
 
@@ -73,7 +72,6 @@ object SharedPreferencesProvider {
         "CACHE_KEY_SYNC_TEXT_AND_IMAGES",
         "CACHE_KEY_HIDE_VOICE_PARTICIPANTS",
         "screenshot_detection_enabled",
-        "developer_log_rest_requests",
     )
 
     @VisibleForTesting

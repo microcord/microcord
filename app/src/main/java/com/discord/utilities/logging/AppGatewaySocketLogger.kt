@@ -28,12 +28,14 @@ class AppGatewaySocketLogger(
         private const val TAG = "GatewayEvents"
         val INSTANCE = AppGatewaySocketLogger()
 
+        /** Session-durable: a switch of accounts is not a reason to stop logging this device. */
         fun isEnabled() = runCatching {
-            SharedPreferencesProvider.get().getBoolean(PREF_LOG_GATEWAY_EVENTS, false)
+            SharedPreferencesProvider.getPrefsSessionDurable().getBoolean(PREF_LOG_GATEWAY_EVENTS, false)
         }.getOrDefault(false)
 
         fun setEnabled(enabled: Boolean) {
-            SharedPreferencesProvider.get().edit().putBoolean(PREF_LOG_GATEWAY_EVENTS, enabled).apply()
+            SharedPreferencesProvider.getPrefsSessionDurable().edit()
+                .putBoolean(PREF_LOG_GATEWAY_EVENTS, enabled).apply()
         }
     }
 }

@@ -8,11 +8,14 @@ object DeveloperSettings {
     private const val VERBOSE_BOOT = "developer_verbose_boot"
     const val ACTUAL_TIER = -1
 
-    fun isVerboseBootEnabled(): Boolean =
-        SharedPreferencesProvider.getOrNull()?.getBoolean(VERBOSE_BOOT, false) ?: false
+    /** Session-durable: a switch of accounts is not a reason to stop logging this device. */
+    fun isVerboseBootEnabled(): Boolean = runCatching {
+        SharedPreferencesProvider.getPrefsSessionDurable().getBoolean(VERBOSE_BOOT, false)
+    }.getOrDefault(false)
 
     fun setVerboseBootEnabled(enabled: Boolean) {
-        SharedPreferencesProvider.get().edit().putBoolean(VERBOSE_BOOT, enabled).apply()
+        SharedPreferencesProvider.getPrefsSessionDurable().edit()
+            .putBoolean(VERBOSE_BOOT, enabled).apply()
     }
 
     fun premiumTierOverride(): PremiumTier? = SharedPreferencesProvider.getOrNull()

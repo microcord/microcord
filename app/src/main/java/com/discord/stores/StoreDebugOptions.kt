@@ -15,7 +15,7 @@ import com.discord.utilities.cache.SharedPreferencesProvider
  * syncing it would follow the account onto devices that were never meant to be pointed at canary.
  */
 class StoreDebugOptions(
-    private val preferences: SharedPreferences = SharedPreferencesProvider.get(),
+    private val preferences: SharedPreferences = SharedPreferencesProvider.getPrefsSessionDurable(),
 ) {
 
     /** Every switch the header understands, keyed by the token the backend expects. */
