@@ -43,7 +43,7 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
         if (!canNotify(context, settings.isEnabled) || !isValid(data)) return false
         initNotificationChannels(context)
         val snapshot = cache.add(data)
-        val channelId = data.kind.channelId
+        val channelId = PushChannel.fromWireValue(data.notificationChannel)?.id ?: data.kind.channelId
         val private = data.kind != NotificationKind.GENERAL
         val authSession = NotificationActionSession.fromToken(settings.token)
         val builder = NotificationCompat.Builder(context, channelId)
@@ -56,7 +56,7 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
             .setDefaults(notificationDefaults(settings))
             .setCategory(if (data.kind == NotificationKind.SOCIAL) NotificationCompat.CATEGORY_SOCIAL else NotificationCompat.CATEGORY_MESSAGE)
             .setVisibility(if (private) NotificationCompat.VISIBILITY_PRIVATE else NotificationCompat.VISIBILITY_PUBLIC)
-            .setGroup("manticord.channel.${data.channelId}")
+            .setGroup(if (data.channelId > 0L) "manticord.channel.${data.channelId}" else "manticord.general")
             .setNumber(snapshot.messages.size)
             .setContentIntent(contentIntent(context, data))
             .setDeleteIntent(actionIntent(context, data, NotificationActionReceiver.ACTION_DELETE))
@@ -287,11 +287,16 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
     }
 
     private fun contentIntent(context: Context, data: NotificationData): PendingIntent {
-        val guild = data.guildId?.toString() ?: "@me"
-        val message = data.messageId?.let { "/$it" }.orEmpty()
+        // The server's own deep link wins: a friend request or quest has no channel to open, and
+        // reconstructing a `channels/...` url for one lands on nothing.
+        val uri = data.deepLink?.takeIf(String::isNotBlank) ?: run {
+            val guild = data.guildId?.toString() ?: "@me"
+            val message = data.messageId?.let { "/$it" }.orEmpty()
+            "manticord://app/channels/$guild/${data.channelId}$message"
+        }
         val intent = Intent(
             Intent.ACTION_VIEW,
-            Uri.parse("manticord://app/channels/$guild/${data.channelId}$message"),
+            Uri.parse(uri),
             context,
             AppActivity.Main::class.java,
         )
@@ -357,10 +362,21 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
     fun initNotificationChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java)
-        NotificationKind.entries.forEach { kind ->
-            manager.createNotificationChannel(NotificationChannel(kind.channelId, kind.channelId, NotificationManager.IMPORTANCE_DEFAULT).apply {
-                lockscreenVisibility = if (kind == NotificationKind.GENERAL) Notification.VISIBILITY_PUBLIC else Notification.VISIBILITY_PRIVATE
-            })
+        // Ids overlap between the two: a [PushChannel] label is the readable name for a channel the
+        // kinds already needed, so each id is registered once.
+        val labels = LinkedHashMap<String, String>()
+        NotificationKind.entries.forEach { labels[it.channelId] = it.channelId }
+        PushChannel.entries.forEach { labels[it.id] = it.label }
+        labels.forEach { (id, label) ->
+            manager.createNotificationChannel(
+                NotificationChannel(id, label, NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    lockscreenVisibility = if (id == NotificationKind.GENERAL.channelId) {
+                        Notification.VISIBILITY_PUBLIC
+                    } else {
+                        Notification.VISIBILITY_PRIVATE
+                    }
+                },
+            )
         }
     }
 

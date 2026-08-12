@@ -17,6 +17,32 @@ enum class NotificationKind { MESSAGE, DIRECT_MESSAGE, SOCIAL, GENERAL }
 
 enum class NotificationSource { LOCAL, GATEWAY }
 
+/**
+ * The categories the server names in `notification_channel`, so Android can offer one switch per
+ * kind of notification rather than one for everything.
+ *
+ * Only the ones this client can receive are listed; an unrecognised value falls back to the
+ * notification's own kind.
+ */
+enum class PushChannel(val wireValue: String, val id: String, val label: String) {
+    DIRECT_MESSAGES("directMessages", "DirectMessages", "Direct messages"),
+    MESSAGES("messages", "Messages", "Messages"),
+    SOCIAL("social", "Social", "Social"),
+    FRIEND_REQUESTS("friendRequests", "FriendRequests", "Friend requests"),
+    REACTIONS("reactions", "Reactions", "Reactions"),
+    POLLS("polls", "Polls", "Polls"),
+    FORUM_THREAD_CREATED("forumThreadCreated", "Forum Post Create", "Forum notifications"),
+    GUILD_EVENT_LIVE("guildEventLive", "Guild Event Live", "Event notifications"),
+    GUILD_HIGHLIGHTS("guildHighlights", "GuildHighlights", "Server highlights"),
+    STAGE_LIVE("stageLive", "Stage Live", "Stage notifications"),
+    SYSTEM_MESSAGES("systemMessages", "SystemMessages", "Discord system messages"),
+    OTHER("other", "General", "Other server notifications");
+
+    companion object {
+        fun fromWireValue(value: String?): PushChannel? = entries.firstOrNull { it.wireValue == value }
+    }
+}
+
 enum class PushNotificationType(val wireValue: String) {
     REMINDER("reminder");
 
@@ -28,13 +54,23 @@ enum class PushNotificationType(val wireValue: String) {
 enum class PushType(val wireValue: String) {
     ACTIVITY_START("ACTIVITY_START"),
     APPLICATION_LIBRARY_INSTALL_COMPLETE("APPLICATION_LIBRARY_INSTALL_COMPLETE"),
+    CALL_ACK("CALL_ACK"),
+    CALL_CONNECT("CALL_CONNECT"),
     CALL_RING("CALL_RING"),
+    CALL_RING_END("CALL_RING_END"),
+    CHANNEL_ACK("CHANNEL_ACK"),
     FORUM_THREAD_CREATED("FORUM_THREAD_CREATED"),
+    FRIEND_SUGGESTION_CREATE("FRIEND_SUGGESTION_CREATE"),
     GENERIC_PUSH_NOTIFICATION_SENT("GENERIC_PUSH_NOTIFICATION_SENT"),
     GUILD_SCHEDULED_EVENT_UPDATE("GUILD_SCHEDULED_EVENT_UPDATE"),
+    GUILD_STREAM_START("GUILD_STREAM_START"),
     MESSAGE_CREATE("MESSAGE_CREATE"),
     RELATIONSHIP_ADD("RELATIONSHIP_ADD"),
     STAGE_INSTANCE_CREATE("STAGE_INSTANCE_CREATE");
+
+    /** Carries no notification of its own; it retracts ones already showing. */
+    val isDismissal: Boolean
+        get() = this == CALL_ACK || this == CALL_RING_END || this == CHANNEL_ACK
 
     companion object {
         fun fromWireValue(value: String): PushType? = entries.firstOrNull { it.wireValue == value }
@@ -61,7 +97,18 @@ data class NotificationData(
     val source: NotificationSource = NotificationSource.LOCAL,
     /** Push payload discriminator (`MESSAGE_CREATE`, `top_messages_push`, …); null for local notifications. */
     val type: String? = null,
+    /** Where the server says a tap should land, for types a channel id cannot express. */
+    val deepLink: String? = null,
+    /** The category the server picked; see `PushChannel`. */
+    val notificationChannel: String? = null,
 ) {
+    /**
+     * An id for a notification with no channel to key off. Falling back to the channel id would
+     * give every one of them the same id, so each would replace the last.
+     */
+    fun standaloneNotificationId(): Int =
+        ((type.orEmpty() + deepLink.orEmpty() + title).hashCode() and Int.MAX_VALUE).coerceAtLeast(1)
+
     /** The complete 126.21 data-message payload. Values remain private user content and must not be logged. */
     data class PushPayload(
         val type: String,
@@ -123,10 +170,17 @@ data class NotificationData(
                 GuildScheduledEventEntityType.VOICE,
                 GuildScheduledEventEntityType.EXTERNAL,
             )
+            // A dismissal is always acted on; it has no content of its own to validate.
+            PushType.CALL_ACK,
+            PushType.CALL_CONNECT,
+            PushType.CALL_RING_END,
+            PushType.CHANNEL_ACK,
             PushType.APPLICATION_LIBRARY_INSTALL_COMPLETE,
             PushType.CALL_RING,
             PushType.FORUM_THREAD_CREATED,
+            PushType.FRIEND_SUGGESTION_CREATE,
             PushType.GENERIC_PUSH_NOTIFICATION_SENT,
+            PushType.GUILD_STREAM_START,
             PushType.MESSAGE_CREATE,
             PushType.RELATIONSHIP_ADD,
             PushType.STAGE_INSTANCE_CREATE,
@@ -311,6 +365,7 @@ class NotificationCache(private val maxMessages: Int = 20) {
 
     @Synchronized
     fun add(data: NotificationData): Snapshot {
+        if (data.channelId <= 0L) return Snapshot(data.standaloneNotificationId(), listOf(data))
         val messages = channels.getOrPut(data.channelId) { mutableListOf() }
         data.messageId?.let { id -> messages.removeAll { it.messageId == id } }
         messages += data

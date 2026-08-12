@@ -19,6 +19,7 @@ import com.discord.app.AppScreenRouter
 import com.discord.app.appViewModels
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
+import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.intent.AppIntentContract
@@ -401,6 +402,13 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
             DeepLinkRoute.Home ->
                 StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE, true)
             DeepLinkRoute.Friends -> StoreStream.getTabsNavigation().selectTab(NavigationTab.FRIENDS, true)
+            // Handled here rather than at intent time: a cold start routes the intent before the
+            // stores have restored, and the restored selection would overwrite it.
+            is DeepLinkRoute.Channel -> {
+                StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE, true)
+                ChannelSelector.getInstance().selectChannel(route.guildId ?: 0L, route.channelId)
+                route.messageId?.let { StoreStream.getMessagesLoader().jumpToMessage(route.channelId, it) }
+            }
             is DeepLinkRoute.Settings -> StoreStream.getTabsNavigation().selectTab(NavigationTab.SETTINGS, true)
             else -> return
         }

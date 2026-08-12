@@ -10,7 +10,9 @@ import com.discord.utilities.fcm.messageTitle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
+import com.discord.utilities.notifications.NotificationKind
 import org.junit.Test
 
 class NotificationDataParsingTest {
@@ -183,6 +185,50 @@ class NotificationDataParsingTest {
         assertTrue(dm.mainIconUrl()?.contains("/avatars/20/avatar") == true)
         assertEquals("Guild #general", guild.messageTitle())
         assertTrue(guild.mainIconUrl()?.contains("/icons/30/icon") == true)
+    }
+
+    @Test fun keepsPushTypesThisBuildDoesNotKnowWhenTheyCarrySomethingToShow() {
+        val unknown = NotificationData.parsePushPayload(
+            mapOf("type" to "FRIEND_ONLINE", "title" to "Alex is online", "deeplink" to "discord://app/channels/@me/1"),
+        )
+        assertTrue(unknown.isValid())
+        assertEquals("discord://app/channels/@me/1", unknown.deepLink)
+
+        // Nothing renderable: dropping it is right, otherwise it shows as an empty notification.
+        assertFalse(NotificationData.parsePushPayload(mapOf("type" to "FRIEND_ONLINE")).isValid())
+    }
+
+    @Test fun channellessNotificationsDoNotShareAnId() {
+        fun standalone(type: String, title: String) = NotificationData(
+            kind = NotificationKind.GENERAL,
+            channelId = 0L,
+            title = title,
+            body = "body",
+            authGeneration = 0,
+            type = type,
+        ).standaloneNotificationId()
+
+        assertNotEquals(standalone("FRIEND_ONLINE", "Alex"), standalone("PROFILE_UPDATE", "Sam"))
+        assertEquals(standalone("FRIEND_ONLINE", "Alex"), standalone("FRIEND_ONLINE", "Alex"))
+    }
+
+    @Test fun dismissalTypesAreValidAndFlagged() {
+        listOf(PushType.CALL_ACK, PushType.CALL_RING_END, PushType.CHANNEL_ACK).forEach { type ->
+            assertTrue(type.isDismissal)
+            assertTrue(parse(type, "channel_id" to "42").isValid())
+        }
+        listOf(PushType.CALL_CONNECT, PushType.FRIEND_SUGGESTION_CREATE, PushType.GUILD_STREAM_START).forEach {
+            assertFalse(it.isDismissal)
+            assertTrue(parse(it, "channel_id" to "42").isValid())
+        }
+    }
+
+    @Test fun serverChannelCategoryIsParsed() {
+        assertEquals(
+            PushChannel.REACTIONS,
+            PushChannel.fromWireValue(parse(PushType.GENERIC_PUSH_NOTIFICATION_SENT, "notification_channel" to "reactions").notificationChannel),
+        )
+        assertNull(PushChannel.fromWireValue("somethingNewerThanThisBuild"))
     }
 
     private fun parse(type: PushType, vararg fields: Pair<String, String>) =

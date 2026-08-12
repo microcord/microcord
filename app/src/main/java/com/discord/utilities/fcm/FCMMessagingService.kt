@@ -47,6 +47,13 @@ class FCMMessagingService : FirebaseMessagingService() {
             AppLog.w("Dropping invalid FCM payload. type=${payload.type}")
             return
         }
+        // A dismissal retracts what is already showing rather than adding to it: the account read
+        // the channel, or answered the call, somewhere else.
+        if (payload.pushType?.isDismissal == true) {
+            NotificationClient.clear(payload.channel.id, applicationContext, isAckRequest = true)
+            AppLog.d("FCM dismissal type=${payload.type} channel=${payload.channel.id}")
+            return
+        }
         val delivery = NotificationClient.handlePushNotification(payload.toNotificationData(), applicationContext)
         AppLog.d("FCM delivery result=$delivery type=${payload.type}")
     }
@@ -60,7 +67,7 @@ class FCMMessagingService : FirebaseMessagingService() {
             kind = when (pushType) {
                 PushType.MESSAGE_CREATE, PushType.FORUM_THREAD_CREATED ->
                     if (isDirect) NotificationKind.DIRECT_MESSAGE else NotificationKind.MESSAGE
-                PushType.RELATIONSHIP_ADD -> NotificationKind.SOCIAL
+                PushType.RELATIONSHIP_ADD, PushType.FRIEND_SUGGESTION_CREATE -> NotificationKind.SOCIAL
                 else -> NotificationKind.GENERAL
             },
             channelId = channel.id,
@@ -96,6 +103,8 @@ class FCMMessagingService : FirebaseMessagingService() {
                 channel.type != Channel.GUILD_VOICE &&
                 NotificationClient.getSettings().canReplyTo(channel.id),
             type = type,
+            deepLink = deepLink,
+            notificationChannel = notificationChannel,
         )
     }
 }

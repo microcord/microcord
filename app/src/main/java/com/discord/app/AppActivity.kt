@@ -31,10 +31,8 @@ import com.discord.stores.RequiredAction
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreNotices
 import com.discord.stores.StoreStream
-import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.intent.AppIntentContract
 import com.discord.utilities.intent.AppIntentParser
-import com.discord.utilities.intent.DeepLinkRoute
 import com.discord.utilities.intent.LinkParseResult
 import com.discord.utilities.developer.DeveloperSettings
 import com.discord.utilities.logging.BootLog
@@ -517,16 +515,8 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
         val contract = AppIntentParser.parse(intent)
         when (val result = StoreStream.getNavigation().routeIntent(contract)) {
             is IntentRouteResult.External -> UriHandler.handle(this, result.uri)
-            IntentRouteResult.Queued -> {
-                val route = ((contract as? AppIntentContract.Link)?.result as? LinkParseResult.Internal)?.route
-                if (route is DeepLinkRoute.Channel) {
-                    StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE, true)
-                    ChannelSelector.getInstance().selectChannel(route.guildId ?: 0L, route.channelId)
-                    StoreStream.getNavigation().consumePendingIntent(contract)
-                } else {
-                    pendingLaunchIntent = Intent(intent)
-                }
-            }
+            // Left queued for [WidgetTabsHost], which replays it once the UI and stores exist.
+            IntentRouteResult.Queued -> pendingLaunchIntent = Intent(intent)
             IntentRouteResult.Rejected -> Unit
         }
         if (intent.action != Intent.ACTION_MAIN) {
