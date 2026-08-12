@@ -458,6 +458,44 @@ class WidgetChatListAdapterItemSystemMessage(
             TYPE_GUILD_JOIN_REQUEST_WITHDRAWN,
             -> joinRequestMessage(context, message)
 
+            TYPE_GUILD_APPLICATION_PREMIUM_SUBSCRIPTION -> I18nHooks.format(
+                context,
+                if (message.application != null) {
+                    R.string.system_message_application_subscription_purchase_mobile
+                } else {
+                    R.string.system_message_application_subscription_purchase_from_deleted_application_mobile
+                },
+                mapOf("username" to authorName, "applicationName" to message.application?.name),
+                nameHooks,
+            )
+
+            TYPE_CHANNEL_LINKED_TO_LOBBY -> I18nHooks.format(
+                context,
+                R.string.system_message_channel_linked_to_lobby_new_mobile,
+                mapOf("username" to authorName, "applicationName" to messageApplicationName(message)),
+                nameHooks +
+                    ("applicationNameOnClick" to Hook(spans = listOf(StyleSpan(Typeface.BOLD)))) +
+                    ("urlOnClick" to linkHook(context, LINKED_LOBBIES_HELP_URL)),
+            )
+
+            TYPE_IN_GAME_MESSAGE_NUX -> I18nHooks.format(
+                context,
+                R.string.system_message_in_game_message_nux_mobile,
+                mapOf("username" to authorName, "gameName" to messageApplicationName(message)),
+                nameHooks + ("urlOnClick" to linkHook(context, SOCIAL_LAYER_HELP_URL)),
+            )
+
+            // Only the guild-product flavour has a notice; the reference renders nothing else.
+            TYPE_PURCHASE_NOTIFICATION -> I18nHooks.format(
+                context,
+                R.string.system_message_guild_product_purchase_mobile,
+                mapOf(
+                    "username" to authorName,
+                    "productName" to message.purchaseNotification?.guildProductPurchase?.productName,
+                ),
+                nameHooks,
+            )
+
             TYPE_VOICE_SESSION -> voiceSessionMessage(context, message, authorName, authorHook, otherRoleColor)
 
             TYPE_FRIEND_REQUEST_ACCEPTED -> I18nHooks.format(
@@ -474,6 +512,16 @@ class WidgetChatListAdapterItemSystemMessage(
             else -> context.getString(R.string.reply_quote_message_not_loaded)
         }
     }
+
+    /** The message carries the application inline, or names one the store already holds. */
+    private fun messageApplicationName(message: Message): String? =
+        message.application?.name
+            ?: message.applicationId?.let { StoreStream.getApplication().getApplication(it)?.name }
+
+    private fun linkHook(context: Context, url: String) = Hook(
+        spans = listOf(ForegroundColorSpan(ThemedColor.resolve(context, R.attr.colorTextLink))),
+        onClick = { UriHandler.handle(context, url) },
+    )
 
     /**
      * A session with no end timestamp is still running, so it reads as an invitation rather than
@@ -591,10 +639,7 @@ class WidgetChatListAdapterItemSystemMessage(
             context,
             res,
             mapOf("username" to authorName, "otherUsername" to applicationName),
-            nameHooks + ("helpCenterLink" to Hook(
-                spans = listOf(ForegroundColorSpan(ThemedColor.resolve(context, R.attr.colorTextLink))),
-                onClick = { UriHandler.handle(context, PRIVATE_CHANNEL_INTEGRATIONS_HELP_URL) },
-            )),
+            nameHooks + ("helpCenterLink" to linkHook(context, PRIVATE_CHANNEL_INTEGRATIONS_HELP_URL)),
         )
     }
 
@@ -698,6 +743,11 @@ class WidgetChatListAdapterItemSystemMessage(
         TYPE_GUILD_JOIN_REQUEST_WITHDRAWN -> R.drawable.ic_application_status_pending
         TYPE_FRIEND_REQUEST_ACCEPTED -> R.drawable.ic_group_join
         TYPE_VOICE_SESSION -> R.drawable.ic_call_24dp
+        TYPE_GUILD_APPLICATION_PREMIUM_SUBSCRIPTION,
+        TYPE_PURCHASE_NOTIFICATION,
+        -> R.drawable.ic_user_premium_guild_subscription
+        TYPE_CHANNEL_LINKED_TO_LOBBY -> R.drawable.ic_link_white_24dp
+        TYPE_IN_GAME_MESSAGE_NUX -> R.drawable.ic_group_join
         else -> R.drawable.ic_x_red_24dp
     }
 
@@ -735,11 +785,19 @@ class WidgetChatListAdapterItemSystemMessage(
         private const val TYPE_GUILD_JOIN_REQUEST_ACCEPT = 52
         private const val TYPE_GUILD_JOIN_REQUEST_REJECT = 53
         private const val TYPE_GUILD_JOIN_REQUEST_WITHDRAWN = 54
+        private const val TYPE_GUILD_APPLICATION_PREMIUM_SUBSCRIPTION = 32
+        private const val TYPE_PURCHASE_NOTIFICATION = 44
+        private const val TYPE_CHANNEL_LINKED_TO_LOBBY = 49
+        private const val TYPE_IN_GAME_MESSAGE_NUX = 51
         private const val TYPE_VOICE_SESSION = 65
         private const val TYPE_FRIEND_REQUEST_ACCEPTED = 67
 
         private const val PRIVATE_CHANNEL_INTEGRATIONS_HELP_URL =
             "https://support.discord.com/hc/en-us/articles/15104189280151"
+        private const val LINKED_LOBBIES_HELP_URL =
+            "https://support.discord.com/hc/en-us/articles/29216887858967"
+        private const val SOCIAL_LAYER_HELP_URL =
+            "https://support.discord.com/hc/en-us/articles/27893392334359"
 
         /** Local placeholder produced when a thread's starter message cannot be fetched. */
         private const val TYPE_THREAD_STARTER_NOT_LOADED = -7
