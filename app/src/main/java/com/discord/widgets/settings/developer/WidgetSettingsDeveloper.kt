@@ -15,6 +15,7 @@ import com.discord.app.AppLog
 import com.discord.app.AppScreenRouter
 import com.discord.databinding.WidgetSettingsDeveloperBinding
 import com.discord.stores.StoreDebugOptions
+import com.discord.app.AppToast
 import com.discord.stores.StoreStream
 import com.discord.utilities.developer.DeveloperSettings
 import com.discord.utilities.experiments.ExperimentRegistry
@@ -88,6 +89,13 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
         }
         binding.developerSettingsSimulateGatewayReconnect.setOnClickListener {
             StoreStream.getGatewayConnection().simulateReconnectForTesting()
+        }
+        binding.developerSettingsWriteCaches.setOnClickListener {
+            AppToast.show(requireContext(), if (StoreStream.writeCaches()) "Caches written" else "Some caches failed to write")
+        }
+        binding.developerSettingsClearCaches.setOnClickListener {
+            StoreStream.clearCaches()
+            AppToast.show(requireContext(), "Caches cleared, reconnecting")
         }
     }
 

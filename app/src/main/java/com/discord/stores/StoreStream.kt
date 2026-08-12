@@ -3556,6 +3556,15 @@ class StoreStream private constructor(
 
     fun observeInitialized(): Observable<Boolean> = initialized.distinctUntilChanged()
 
+    internal fun writeCachesInternal(): Boolean = Persister.persistAll()
+
+    /** Versions go with the data they describe, or the next IDENTIFY asks for a delta against nothing. */
+    internal fun clearCachesInternal() = dispatcher.schedule {
+        clientDataState.clear()
+        Persister.reset()
+        gatewayConnection.reconnectWithNewSession("Caches cleared")
+    }
+
     // Accessors used by StoreGatewayConnection to assemble IDENTIFY and outgoing traffic.
     internal fun getAuthenticationInternal() = authentication
     internal fun getClientDataStateInternal() = clientDataState
@@ -3749,6 +3758,8 @@ class StoreStream private constructor(
         @JvmStatic fun getFriendSuggestions() = requireInstance().friendSuggestions
         @JvmStatic fun getUserAffinities() = requireInstance().userAffinities
         @JvmStatic fun getGatewayConnection() = requireInstance().gatewayConnection
+        @JvmStatic fun writeCaches() = requireInstance().writeCachesInternal()
+        @JvmStatic fun clearCaches() = requireInstance().clearCachesInternal()
         @JvmStatic fun getClientDataState() = requireInstance().clientDataState
         @JvmStatic fun getConnectionOpen() = requireInstance().connectionOpen
         @JvmStatic fun getConnectivity() = requireInstance().connectivity

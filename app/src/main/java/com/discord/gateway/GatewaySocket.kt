@@ -266,6 +266,14 @@ class GatewaySocket(
         scheduler.schedule(0) { reconnect("Simulated reconnect", immediate = true) }
     }
 
+    /** Re-identifies rather than resuming, so the server sends a complete `READY`. */
+    fun reconnectWithNewSession(reason: String) {
+        scheduler.schedule(0) {
+            clearSession()
+            reconnect(reason, immediate = true)
+        }
+    }
+
     fun isSessionEstablished(): Boolean = state == State.CONNECTED
 
     fun completeFastConnect() {

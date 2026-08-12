@@ -421,6 +421,10 @@ class StoreGatewayConnection(
         socket?.simulateReconnectForTesting()
     }
 
+    fun reconnectWithNewSession(reason: String) {
+        socket?.reconnectWithNewSession(reason)
+    }
+
     fun dispose() {
         tokenSubscription?.unsubscribe()
         tokenSubscription = null
