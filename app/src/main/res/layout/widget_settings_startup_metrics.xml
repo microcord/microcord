@@ -4,7 +4,7 @@
         <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
     </com.google.android.material.appbar.AppBarLayout>
     <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent" app:layout_behavior="@string/appbar_scrolling_view_behavior">
-        <com.google.android.material.tabs.TabLayout android:id="@+id/startup_metrics_tabs" android:layout_width="match_parent" android:layout_height="wrap_content" app:tabMode="fixed" app:tabTextColor="?attr/colorTextMuted" app:tabSelectedTextColor="?attr/colorHeaderPrimary" app:tabIndicatorColor="?attr/colorHeaderPrimary"/>
+        <com.google.android.material.tabs.TabLayout android:id="@+id/startup_metrics_tabs" android:layout_width="match_parent" android:layout_height="wrap_content" app:tabMode="fixed" app:tabTextAppearance="@style/App.TabLayout.Text" app:tabTextColor="?attr/colorTextMuted" app:tabSelectedTextColor="?attr/colorHeaderPrimary" app:tabIndicatorColor="?attr/colorHeaderPrimary"/>
         <androidx.core.widget.NestedScrollView android:id="@+id/startup_metrics_scroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true">
             <TextView android:id="@+id/startup_metrics_report" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="16dp" android:textIsSelectable="true" android:textSize="12sp" android:fontFamily="monospace" android:textColor="?attr/colorHeaderPrimary"/>
         </androidx.core.widget.NestedScrollView>
