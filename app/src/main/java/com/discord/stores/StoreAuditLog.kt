@@ -53,6 +53,9 @@ class StoreAuditLog(
     /** The channel-overwrite counterpart: `allow`/`deny` are kept, and cleared bits become `reset`. */
     private val transformPermissionOverride: (ModelAuditLogEntry.Change) -> List<ModelAuditLogEntry.Change> =
         AuditLogChangeUtils::transformPermissionOverride,
+    /** Splits the `system_channel_flags` bitfield into one change per notification kind. */
+    private val transformSystemChannelFlags: (ModelAuditLogEntry.Change) -> List<ModelAuditLogEntry.Change> =
+        AuditLogChangeUtils::transformSystemChannelFlags,
 ) : StoreV2() {
 
     data class AuditLogFilter(val userFilter: Long, val actionFilter: Int) {
@@ -71,6 +74,8 @@ class StoreAuditLog(
         val integrations: List<ModelGuildIntegration> = emptyList(),
         val guildScheduledEvents: List<GuildScheduledEvent> = emptyList(),
         val threads: List<Channel> = emptyList(),
+        val applicationCommands: List<ModelAuditLog.NamedTarget> = emptyList(),
+        val autoModerationRules: List<ModelAuditLog.NamedTarget> = emptyList(),
         val selectedItemId: Long? = null,
         val filter: AuditLogFilter = AuditLogFilter.emptyFilter(),
         val deletedTargets: Map<ModelAuditLogEntry.TargetType, MutableMap<Long, CharSequence?>> = emptyMap(),
@@ -204,6 +209,12 @@ class StoreAuditLog(
             state = state.copy(guildScheduledEvents = state.guildScheduledEvents + it)
         }
         newAuditLog.threads?.let { state = state.copy(threads = state.threads + it) }
+        newAuditLog.applicationCommands?.let {
+            state = state.copy(applicationCommands = state.applicationCommands + it)
+        }
+        newAuditLog.autoModerationRules?.let {
+            state = state.copy(autoModerationRules = state.autoModerationRules + it)
+        }
 
         val transformed = transformEntries(guildId, newAuditLog.auditLogEntries.orEmpty())
         state = state.copy(
@@ -255,6 +266,10 @@ class StoreAuditLog(
                         changes.addAll(transformPermissionChange(change))
                         return@forEach
                     }
+                    KEY_SYSTEM_CHANNEL_FLAGS -> {
+                        changes.addAll(transformSystemChannelFlags(change))
+                        return@forEach
+                    }
                 }
                 changes.add(change)
                 when (change.key) {
@@ -263,14 +278,24 @@ class StoreAuditLog(
                 }
             }
 
-            if (rawEntry.actionTypeId == ModelAuditLogEntry.ACTION_MEMBER_PRUNE) {
-                changes.add(
+            // Three actions carry a value in `options` that reads as a change: the log has nowhere
+            // else to show it, and the rest of the pipeline only understands changes.
+            when (rawEntry.actionTypeId) {
+                ModelAuditLogEntry.ACTION_MEMBER_PRUNE -> changes.add(
                     ModelAuditLogEntry.Change(
                         KEY_PRUNE_DELETE_DAYS,
                         null,
                         rawEntry.options?.deleteMemberDays ?: 1,
                     ),
                 )
+                ModelAuditLogEntry.ACTION_AUTO_MODERATION_BLOCK_MESSAGE ->
+                    rawEntry.options?.autoModerationRuleName?.let {
+                        changes.add(ModelAuditLogEntry.Change(KEY_TRIGGERED_RULE_NAME, null, it))
+                    }
+                ModelAuditLogEntry.ACTION_VOICE_CHANNEL_STATUS_CREATE ->
+                    rawEntry.options?.status?.let {
+                        changes.add(ModelAuditLogEntry.Change(KEY_STATUS, null, it))
+                    }
             }
 
             val entry = ModelAuditLogEntry(
@@ -319,11 +344,7 @@ class StoreAuditLog(
         if (entry.actionType != ModelAuditLogEntry.ActionType.DELETE || nameChange == null) return
         var name = nameChange.oldValue as? String
         if (entry.targetType == ModelAuditLogEntry.TargetType.CHANNEL) {
-            // Reference bug reproduced: the old channel `type` is parsed as a Long (see
-            // `ModelAuditLogEntry.ValueFactory`) and the reference compares it against a boxed
-            // Integer, so this branch never fires and a deleted text channel is never rendered
-            // with its leading '#'. Fixing it means comparing numerically.
-            if (typeChange?.oldValue == 0) name = "#$name"
+            if ((typeChange?.oldValue as? Number)?.toInt() == CHANNEL_TYPE_GUILD_TEXT) name = "#$name"
         }
         val deletedTargets = state.deletedTargets.toMutableMap()
         val byId = deletedTargets[entry.targetType]
@@ -362,6 +383,8 @@ class StoreAuditLog(
             integrations = ArrayList(state.integrations),
             guildScheduledEvents = ArrayList(state.guildScheduledEvents),
             threads = ArrayList(state.threads),
+            applicationCommands = ArrayList(state.applicationCommands),
+            autoModerationRules = ArrayList(state.autoModerationRules),
             deletedTargets = state.deletedTargets.mapValues { HashMap(it.value) },
         )
     }
@@ -377,15 +400,23 @@ class StoreAuditLog(
         internal const val MAX_MERGES = 50
 
         /**
-         * Actions where each occurrence stands alone: a bulk-delete count, and who was moved or
-         * disconnected, are lost if two entries collapse.
+         * Actions where each occurrence stands alone: a bulk-delete count, who was moved or
+         * disconnected, and which command an override applies to are all lost if two entries
+         * collapse. Prune is already merged server-side.
          */
         private val NEVER_MERGED_ACTIONS = setOf(
             ModelAuditLogEntry.ACTION_MESSAGE_DELETE,
             ModelAuditLogEntry.ACTION_MESSAGE_BULK_DELETE,
+            ModelAuditLogEntry.ACTION_MESSAGE_PIN,
+            ModelAuditLogEntry.ACTION_MESSAGE_UNPIN,
             ModelAuditLogEntry.ACTION_MEMBER_MOVE,
             ModelAuditLogEntry.ACTION_MEMBER_DISCONNECT,
+            ModelAuditLogEntry.ACTION_MEMBER_PRUNE,
+            ModelAuditLogEntry.ACTION_BOT_ADD,
+            ModelAuditLogEntry.ACTION_APPLICATION_COMMAND_PERMISSION_UPDATE,
         )
+
+        private const val CHANNEL_TYPE_GUILD_TEXT = 0
 
         private const val KEY_REASON = "reason"
         private const val KEY_ALLOW = "allow"
@@ -395,6 +426,9 @@ class StoreAuditLog(
         private const val KEY_NAME = "name"
         private const val KEY_TYPE = "type"
         private const val KEY_PRUNE_DELETE_DAYS = "prune_delete_days"
+        private const val KEY_SYSTEM_CHANNEL_FLAGS = "system_channel_flags"
+        private const val KEY_TRIGGERED_RULE_NAME = "triggered_rule_name"
+        private const val KEY_STATUS = "status"
 
         /**
          * Reference: `AuditLogUtils.getTimestampStart`. Inlined because

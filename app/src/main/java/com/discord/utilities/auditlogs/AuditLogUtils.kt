@@ -58,6 +58,7 @@ object AuditLogUtils {
         121, // application command permission update
         130, 131, 132, // soundboard sound create/update/delete
         140, 141, 142, 143, // automod rule create/update/delete, blocked message
+        171, 172, // guild home feature/remove item
         163, 164, 165, // onboarding prompt create/update/delete
         166, 167, // onboarding create/update
         190, 191, // server guide create/update
@@ -161,17 +162,46 @@ object AuditLogUtils {
             142 -> R.string.guild_settings_audit_log_automod_rule_delete
             143 -> R.string.guild_settings_audit_log_auto_moderation_block_message
 
+            // A profile violation has no message and so no channel to point at.
+            144 -> if (auditLogEntry.options?.autoModerationRuleTriggerType == AUTOMOD_TRIGGER_USER_PROFILE) {
+                R.string.guild_settings_audit_log_auto_moderation_flagged_user_profile
+            } else {
+                R.string.guild_settings_audit_log_auto_moderation_flag_to_channel_message
+            }
+
+            145 -> R.string.guild_settings_audit_log_auto_moderation_user_communication_disabled_message
+            146 -> R.string.guild_settings_audit_log_auto_moderation_quarantine_user
+
+            150 -> R.string.creator_monetization_applied_audit_log_title
+            151 -> R.string.creator_monetization_terms_accepted_audit_log_title
+
             163 -> R.string.guild_settings_audit_log_role_prompt_create
             164 -> R.string.guild_settings_audit_log_role_prompt_update
             165 -> R.string.guild_settings_audit_log_role_prompt_delete
             166 -> R.string.guild_settings_audit_log_onboarding_create
             167 -> R.string.guild_settings_audit_log_onboarding_update
 
+            171 -> when (auditLogEntry.newValueOf("entity_type") as? String) {
+                HOME_ENTITY_TYPE_MESSAGE -> R.string.guild_settings_audit_log_guild_home_feature_message
+                HOME_ENTITY_TYPE_FORUM_POST -> R.string.guild_settings_audit_log_guild_home_feature_forum_post
+                else -> R.string.guild_settings_audit_log_guild_home_feature_item
+            }
+
+            172 -> R.string.guild_settings_audit_log_guild_home_remove_item
+
             190 -> R.string.guild_settings_audit_log_home_settings_create
             191 -> R.string.guild_settings_audit_log_home_settings_update
 
             192 -> R.string.guild_settings_audit_log_voice_channel_status_created
             193 -> R.string.guild_settings_audit_log_voice_channel_status_deleted
+
+            200, 201 -> R.string.guild_settings_audit_log_scheduled_event_recurrence_update
+            202 -> R.string.guild_settings_audit_log_scheduled_event_recurrence_delete
+
+            210 -> R.string.guild_settings_audit_log_member_verification_update
+            211 -> R.string.guild_settings_audit_log_guild_profile_update
+            212 -> R.string.guild_settings_audit_log_migrate_pin_permission
+            213 -> R.string.guild_settings_audit_log_migrate_bypass_slowmode_permission
 
             else -> {
                 AppLog.e("Unknown audit log action type: $actionTypeId")
@@ -253,6 +283,9 @@ object AuditLogUtils {
         142 -> R.string.guild_settings_action_filter_automod_rule_delete
         143 -> R.string.guild_settings_action_filter_auto_moderation_block_message
 
+        171 -> R.string.guild_settings_action_filter_guild_home_feature_item
+        172 -> R.string.guild_settings_action_filter_guild_home_remove_item
+
         163 -> R.string.guild_settings_action_filter_role_prompt_create
         164 -> R.string.guild_settings_action_filter_role_prompt_update
         165 -> R.string.guild_settings_action_filter_role_prompt_delete
@@ -303,6 +336,18 @@ object AuditLogUtils {
             TargetType.GUILD_SCHEDULED_EVENT -> R.attr.ic_audit_calendar
             TargetType.STICKER -> R.attr.ic_audit_sticker
             TargetType.THREAD -> R.attr.ic_audit_thread
+            TargetType.GUILD_SCHEDULED_EVENT_EXCEPTION -> R.attr.ic_audit_calendar
+            TargetType.VOICE_CHANNEL_STATUS -> R.attr.ic_audit_channel
+            TargetType.AUTO_MODERATION_RULE -> R.attr.ic_audit_webhook
+            TargetType.ONBOARDING_PROMPT,
+            TargetType.GUILD_ONBOARDING,
+            TargetType.HOME_SETTINGS,
+            TargetType.GUILD_MEMBER_VERIFICATION,
+            -> R.attr.ic_audit_member
+            TargetType.GUILD_HOME, TargetType.GUILD_PROFILE -> R.attr.ic_audit_server
+            // No slash-command or soundboard glyph was recovered; both borrow the closest one.
+            TargetType.APPLICATION_COMMAND -> R.attr.ic_audit_integration
+            TargetType.GUILD_SOUNDBOARD -> R.attr.ic_audit_emoji
             // UNKNOWN and anything a newer server adds render without a target icon.
             else -> return 0
         }
@@ -355,7 +400,8 @@ object AuditLogUtils {
                 context,
                 title,
                 "user" to username,
-                "target" to auditLogEntry.changes.orEmpty().first { it.key == "code" }.oldValue.toString(),
+                "target" to auditLogEntry.changes.orEmpty()
+                    .firstOrNull { it.key == "code" }?.oldValue.toString(),
             )
 
             26 -> SettingsStrings.render(
@@ -378,13 +424,13 @@ object AuditLogUtils {
             )
 
             // Emoji actions name the emoji from the change list; unlike other targets there is no
-            // store to resolve a deleted one from, so `first` is safe only because the server always
-            // sends a `name` change for these three actions — the reference relies on the same.
+            // store to resolve a deleted one from.
             60, 61, 62 -> SettingsStrings.render(
                 context,
                 title,
                 "user" to username,
-                "target" to auditLogEntry.changes.orEmpty().first { it.key == "name" }.value.toString(),
+                "target" to auditLogEntry.changes.orEmpty()
+                    .firstOrNull { it.key == "name" }?.value.toString(),
             )
 
             72 -> SettingsStrings.render(
@@ -447,6 +493,46 @@ object AuditLogUtils {
                     ),
             )
 
+            // AutoMod acts on a member for something they posted, so the row names the member and
+            // the channel it happened in. Quarantining and profile flags have no message and so no
+            // channel; they read as a plain "AutoMod did this to {user}".
+            143, 145 -> SettingsStrings.render(
+                context,
+                title,
+                "target" to getTargetText(auditLogEntry, targets, prefix),
+                "channel" to optionChannelName(),
+            )
+
+            144 -> if (options?.autoModerationRuleTriggerType == AUTOMOD_TRIGGER_USER_PROFILE) {
+                SettingsStrings.render(context, title, "user" to username)
+            } else {
+                SettingsStrings.render(
+                    context,
+                    title,
+                    "target" to getTargetText(auditLogEntry, targets, prefix),
+                    "channel" to optionChannelName(),
+                )
+            }
+
+            146 -> SettingsStrings.render(context, title, "user" to username)
+
+            192, 193 -> SettingsStrings.render(
+                context,
+                title,
+                "user" to username,
+                "channel" to (optionChannelName() ?: getTargetText(auditLogEntry, targets, prefix)),
+            )
+
+            // A recurrence exception names the occurrence it applies to, whose date is the only
+            // thing distinguishing it from the other occurrences of the same event.
+            200, 201, 202 -> SettingsStrings.render(
+                context,
+                title,
+                "user" to username,
+                "target" to getTargetText(auditLogEntry, targets, prefix),
+                "subtarget" to occurrenceDate(auditLogEntry, context),
+            )
+
             else -> SettingsStrings.render(
                 context,
                 title,
@@ -454,6 +540,17 @@ object AuditLogUtils {
                 "target" to getTargetText(auditLogEntry, targets, prefix),
             )
         }
+    }
+
+    /** The day of the recurring-event occurrence an exception entry applies to. */
+    private fun occurrenceDate(auditLogEntry: ModelAuditLogEntry, context: Context): CharSequence {
+        val exceptionId = auditLogEntry.options?.eventExceptionId ?: 0L
+        if (exceptionId == 0L) return ""
+        return DateUtils.formatDateTime(
+            context,
+            SnowflakeUtils.toTimestamp(exceptionId),
+            DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_YEAR,
+        )
     }
 
     /**
@@ -470,8 +567,15 @@ object AuditLogUtils {
         targets: Map<TargetType, out Map<Long, CharSequence?>>,
         channelPrefix: String = "",
     ): String {
-        val targetType = auditLogEntry.targetType.let {
-            if (it == TargetType.CHANNEL_OVERWRITE) TargetType.CHANNEL else it
+        val targetType = when (val type = auditLogEntry.targetType) {
+            TargetType.CHANNEL_OVERWRITE, TargetType.VOICE_CHANNEL_STATUS -> TargetType.CHANNEL
+            TargetType.GUILD_SCHEDULED_EVENT_EXCEPTION -> TargetType.GUILD_SCHEDULED_EVENT
+            TargetType.GUILD_HOME,
+            TargetType.GUILD_PROFILE,
+            TargetType.GUILD_ONBOARDING,
+            TargetType.GUILD_MEMBER_VERIFICATION,
+            -> TargetType.GUILD
+            else -> type
         }
         val resolved = targets[targetType]?.get(auditLogEntry.targetId)
             ?: when (targetType) {
@@ -480,6 +584,11 @@ object AuditLogUtils {
                 TargetType.INVITE -> auditLogEntry.valueOf("code")
                 TargetType.WEBHOOK -> auditLogEntry.valueOf("name")
                 TargetType.INTEGRATION -> auditLogEntry.valueOf("type")
+                TargetType.ONBOARDING_PROMPT -> auditLogEntry.valueOf("title")
+                TargetType.AUTO_MODERATION_RULE,
+                TargetType.GUILD_SOUNDBOARD,
+                TargetType.APPLICATION_COMMAND,
+                -> auditLogEntry.valueOf("name")
                 else -> null
             }
         return (resolved ?: auditLogEntry.targetId).toString()
@@ -560,4 +669,9 @@ object AuditLogUtils {
     private const val CHANNEL_TYPE_GUILD_STAGE_VOICE = 13L
     private const val CHANNEL_TYPE_ANNOUNCEMENT_THREAD = 10L
     private const val CHANNEL_TYPE_PRIVATE_THREAD = 12L
+
+    private const val AUTOMOD_TRIGGER_USER_PROFILE = 6
+
+    private const val HOME_ENTITY_TYPE_MESSAGE = "message"
+    private const val HOME_ENTITY_TYPE_FORUM_POST = "forum_post"
 }

@@ -354,7 +354,14 @@ class WidgetServerSettingsAuditLog : AppFragment(R.layout.widget_server_settings
                 auditLogState.users.forEach { (id, user) ->
                     userNames[id] = user.getUserNameWithDiscriminator()
                 }
-                bucket(TargetType.GUILD)[guildId] = guild.name
+                // Every guild-scoped target names the guild itself.
+                listOf(
+                    TargetType.GUILD,
+                    TargetType.GUILD_HOME,
+                    TargetType.GUILD_PROFILE,
+                    TargetType.GUILD_ONBOARDING,
+                    TargetType.GUILD_MEMBER_VERIFICATION,
+                ).forEach { bucket(it)[guildId] = guild.name }
 
                 val webhookNames = bucket(TargetType.WEBHOOK)
                 auditLogState.webhooks.forEach { webhookNames[it.id] = it.name }
@@ -364,6 +371,15 @@ class WidgetServerSettingsAuditLog : AppFragment(R.layout.widget_server_settings
                 auditLogState.guildScheduledEvents.forEach { eventNames[it.id] = it.name }
                 val threadNames = bucket(TargetType.THREAD)
                 auditLogState.threads.forEach { threadNames[it.id] = it.name }
+                val ruleNames = bucket(TargetType.AUTO_MODERATION_RULE)
+                auditLogState.autoModerationRules.forEach { ruleNames[it.id] = it.name }
+                // A chat command reads as a command rather than as a name, hence the slash; the
+                // other command kinds are menu entries and take none.
+                val commandNames = bucket(TargetType.APPLICATION_COMMAND)
+                auditLogState.applicationCommands.forEach {
+                    commandNames[it.id] =
+                        if (it.type == COMMAND_TYPE_CHAT_INPUT) "/${it.name}" else it.name
+                }
                 return targets
             }
 
@@ -416,6 +432,7 @@ class WidgetServerSettingsAuditLog : AppFragment(R.layout.widget_server_settings
         private const val SCROLL_DIRECTION_DOWN = 1
         private const val USER_THROTTLE_SECONDS = 3L
         private const val ACTION_CHANNEL_DELETE = 12
+        private const val COMMAND_TYPE_CHAT_INPUT = 1
 
         private const val VIEW_INDEX_LOGS_LOADING = 0
         private const val VIEW_INDEX_LOGS_CONTENT = 1

@@ -166,17 +166,24 @@ interface Model {
         }
 
         /**
-         * Reads a value of unannounced shape: array via [itemFactory], string, number-as-long or
-         * boolean. Any other token — including `null` — yields `null` without being consumed, which
-         * mirrors the reference implementation.
+         * Reads a value of unannounced shape: object or array via [itemFactory], string,
+         * number-as-long or boolean. A `null` is consumed and yields `null`.
+         *
+         * An object has to go through [itemFactory] rather than being skipped: a value left
+         * unconsumed leaves the reader on a `BEGIN_OBJECT` where the enclosing [parse] loop expects
+         * a name, which fails the whole payload rather than the one field.
          */
         @Throws(IOException::class)
         fun <T> parseUnknown(itemFactory: ItemFactory<T>): Any? = when (`in`.peek()) {
+            JsonToken.BEGIN_OBJECT -> itemFactory.get()
             JsonToken.BEGIN_ARRAY -> nextList(itemFactory)
             JsonToken.STRING -> nextStringOrNull()
             JsonToken.NUMBER -> nextLongOrNull()
             JsonToken.BOOLEAN -> nextBooleanOrNull()
-            else -> null
+            else -> {
+                if (`in`.peek() == JsonToken.NULL) `in`.nextNull()
+                null
+            }
         }
 
         private fun consumedNull(): Boolean {

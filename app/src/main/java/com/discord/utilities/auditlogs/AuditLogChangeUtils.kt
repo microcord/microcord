@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.style.ForegroundColorSpan
+import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import com.discord.R
 import com.discord.api.permission.Permission
@@ -56,6 +57,16 @@ object AuditLogChangeUtils {
         ACTION_MEMBER_BAN_ADD,
         ACTION_MEMBER_KICK,
         ACTION_MEMBER_PRUNE,
+        // Not a deletion of anything the row lists: its one change names the rule that fired.
+        ACTION_AUTO_MODERATION_BLOCK_MESSAGE,
+    )
+
+    /** `system_channel_flags` bit to the change key [transformSystemChannelFlags] emits for it. */
+    private val SYSTEM_CHANNEL_FLAG_KEYS = listOf(
+        1L to KEY_SYSTEM_JOIN_NOTIFICATIONS,
+        2L to KEY_SYSTEM_PREMIUM_SUBSCRIPTIONS,
+        4L to KEY_SYSTEM_REMINDER_NOTIFICATIONS,
+        8L to KEY_SYSTEM_JOIN_NOTIFICATION_REPLIES,
     )
 
     // region public API
@@ -90,6 +101,23 @@ object AuditLogChangeUtils {
         return buildList {
             if (granted.isNotEmpty()) add(Change(change.key, null, granted))
             if (reset.isNotEmpty()) add(Change(KEY_RESET, null, reset))
+        }
+    }
+
+    /**
+     * Splits a `system_channel_flags` bitfield change into one change per notification kind.
+     *
+     * Only the bits that actually moved produce a line, and each value is inverted on the way out:
+     * a set flag *suppresses* the notification, so "flag added" is what a moderator reads as
+     * "turned off".
+     */
+    fun transformSystemChannelFlags(change: Change): List<Change> {
+        val old = asLong(change.oldValue) ?: 0L
+        val new = asLong(change.newValue) ?: 0L
+        return SYSTEM_CHANNEL_FLAG_KEYS.mapNotNull { (flag, key) ->
+            val had = old and flag == flag
+            val has = new and flag == flag
+            if (had == has) null else Change(key, !had, !has)
         }
     }
 
@@ -134,7 +162,20 @@ object AuditLogChangeUtils {
                 TargetType.GUILD_SCHEDULED_EVENT -> getGuildScheduledEventChangeString(change)
                 TargetType.STICKER -> getStickerChangeString(change)
                 TargetType.THREAD -> getThreadChangeString(change)
-                else -> 0
+                TargetType.APPLICATION_COMMAND -> getCommandPermissionChangeString(change)
+                TargetType.AUTO_MODERATION_RULE -> getAutoModerationRuleChangeString(change)
+                TargetType.GUILD_SOUNDBOARD -> getSoundboardChangeString(change)
+                TargetType.ONBOARDING_PROMPT -> getOnboardingPromptChangeString(change)
+                TargetType.GUILD_ONBOARDING -> getOnboardingChangeString(change)
+                TargetType.HOME_SETTINGS -> getHomeSettingsChangeString(change)
+                TargetType.VOICE_CHANNEL_STATUS -> getVoiceChannelStatusChangeString(change)
+                TargetType.GUILD_MEMBER_VERIFICATION -> getMemberVerificationChangeString(change)
+                TargetType.GUILD_PROFILE -> getGuildProfileChangeString(change)
+                TargetType.GUILD_SCHEDULED_EVENT_EXCEPTION ->
+                    getScheduledEventExceptionChangeString(change)
+                // Every other target still shows a moderator's reason, which is the one change key
+                // every action can carry.
+                else -> if (change.key == "reason") R.string.guild_settings_audit_log_common_reason else 0
             }
 
             if (textId == 0) {
@@ -208,7 +249,12 @@ object AuditLogChangeUtils {
             TargetType.CHANNEL_OVERWRITE -> change.key in setOf("id", "type", "permission_overwrites")
             TargetType.INVITE -> change.key in setOf("uses", "inviter_id")
             TargetType.WEBHOOK -> change.key in setOf("type", "application_id")
-            TargetType.INTEGRATION -> change.key == "type"
+            // A bot integration only ever reports `{type, name}`, and the header already names it.
+            TargetType.INTEGRATION -> change.key in setOf("type", "name")
+            TargetType.THREAD -> change.key in setOf("id", "type")
+            TargetType.GUILD_HOME -> change.key == "entity_type"
+            TargetType.GUILD_ONBOARDING -> change.key == "prompts"
+            TargetType.GUILD_SOUNDBOARD -> change.key in setOf("id", "sound_id")
             TargetType.STICKER -> when (change.key) {
                 // A sticker with no description is normal; an *empty* description line is not worth
                 // a row, but a real one is.
@@ -269,7 +315,7 @@ object AuditLogChangeUtils {
                 SettingsStrings.render(
                     context,
                     textId,
-                    "count" to "${getPluralString(context, change)}\n" +
+                    "count" to "${getPluralString(context, change, auditLogEntry)}\n" +
                         renderPermissionList(change, auditLogEntry, context),
                 )
 
@@ -305,18 +351,63 @@ object AuditLogChangeUtils {
                     "newValue" to TimeUtils.getReadableTimeString(context, change.newValue as String),
                 )
 
-            // Synthesised by `StoreAuditLog` from the entry's options, so unlike every other change
-            // here its value is an Int rather than the parser's Long — hence the widening read.
-            key == "prune_delete_days" ->
+            // Durations whose sentence only exists as a plural: the string resource is a bare
+            // `{newValue}` slot and the wording, including the unit, lives in the plural.
+            pluralValueFor(textId) != 0 -> SettingsStrings.render(
+                context,
+                textId,
+                "newValue" to plural(
+                    context,
+                    pluralValueFor(textId),
+                    (asLong(change.value) ?: 0L).toInt(),
+                ),
+            )
+
+            key == "video_quality_mode" -> SettingsStrings.render(
+                context,
+                textId,
+                "newValue" to context.getString(
+                    if (asLong(change.value) == VIDEO_QUALITY_FULL) {
+                        R.string.video_quality_mode_full
+                    } else {
+                        R.string.video_quality_mode_auto
+                    },
+                ),
+            )
+
+            // Seconds on the wire; the picker that set it only offers named spans. Zero is
+            // "never expires", whose sentence has nothing to substitute.
+            key == "max_age" && (asLong(change.value) ?: 0L) > 0L -> SettingsStrings.render(
+                context,
+                textId,
+                "newValue" to maxAgeLabel(context, asLong(change.value) ?: 0L),
+            )
+
+            // A command-permission override names the role, member or channel it applies to; the
+            // change's own key is that id.
+            auditLogEntry.targetType == TargetType.APPLICATION_COMMAND && key != "reason" ->
                 SettingsStrings.render(
                     context,
                     textId,
-                    "newValue" to plural(
-                        context,
-                        R.plurals.guild_settings_audit_log_member_prune_delete_days_newValue,
-                        (asLong(change.value) ?: 0L).toInt(),
-                    ),
+                    "subtarget" to commandPermissionSubtarget(auditLogEntry, change, targets, context),
                 )
+
+            auditLogEntry.targetType == TargetType.AUTO_MODERATION_RULE ->
+                SettingsStrings.render(
+                    context,
+                    textId,
+                    "newValue" to autoModerationValue(context, change, targets),
+                )
+
+            key == "default_channel_ids" -> SettingsStrings.render(
+                context,
+                textId,
+                "count" to plural(
+                    context,
+                    R.plurals.guild_settings_audit_log_onboarding_default_channel_ids_count,
+                    (change.value as? Collection<*>)?.size ?: 0,
+                ),
+            )
 
             // Seconds on the wire, minutes on screen.
             key == "afk_timeout" && change.newValue != null ->
@@ -356,6 +447,140 @@ object AuditLogChangeUtils {
         ""
     }
 
+    /**
+     * The plural that carries [textId]'s wording, or `0` when the string stands on its own.
+     *
+     * These sentences are number-dependent all the way through ("Set slowmode to **a second**"),
+     * so the whole thing lives in the plural and the string resource is only the slot it goes in.
+     */
+    @PluralsRes
+    private fun pluralValueFor(@StringRes textId: Int): Int = when (textId) {
+        R.string.guild_settings_audit_log_member_prune_delete_days ->
+            R.plurals.guild_settings_audit_log_member_prune_delete_days_newValue
+        R.string.guild_settings_audit_log_integration_expire_grace_period ->
+            R.plurals.guild_settings_audit_log_integration_expire_grace_period_newValue
+        R.string.guild_settings_audit_log_channel_rate_limit_per_user_create ->
+            R.plurals.guild_settings_audit_log_channel_rate_limit_per_user_create_newValue
+        R.string.guild_settings_audit_log_channel_rate_limit_per_user_change ->
+            R.plurals.guild_settings_audit_log_channel_rate_limit_per_user_change_newValue
+        R.string.guild_settings_audit_log_channel_default_auto_archive_duration_create ->
+            R.plurals.guild_settings_audit_log_channel_default_auto_archive_duration_create_newValue
+        R.string.guild_settings_audit_log_channel_default_auto_archive_duration_change ->
+            R.plurals.guild_settings_audit_log_channel_default_auto_archive_duration_change_newValue
+        R.string.guild_settings_audit_log_thread_auto_archive_duration_create ->
+            R.plurals.guild_settings_audit_log_thread_auto_archive_duration_create_newValue
+        R.string.guild_settings_audit_log_thread_auto_archive_duration_change ->
+            R.plurals.guild_settings_audit_log_thread_auto_archive_duration_change_newValue
+        else -> 0
+    }
+
+    /** An invite lifetime as the span the invite settings offer, rather than as raw seconds. */
+    private fun maxAgeLabel(context: Context, seconds: Long): CharSequence = when {
+        seconds % SECONDS_PER_WEEK == 0L ->
+            plural(context, R.plurals.duration_weeks_weeks, (seconds / SECONDS_PER_WEEK).toInt(), "weeks")
+        seconds % SECONDS_PER_DAY == 0L ->
+            plural(context, R.plurals.duration_days_days, (seconds / SECONDS_PER_DAY).toInt(), "days")
+        seconds % SECONDS_PER_HOUR == 0L ->
+            plural(context, R.plurals.duration_hours_hours, (seconds / SECONDS_PER_HOUR).toInt(), "hours")
+        else ->
+            plural(context, R.plurals.duration_minutes_minutes, (seconds / SECONDS_PER_MINUTE).toInt(), "minutes")
+    }
+
+    /**
+     * The role, member or channel a command-permission override applies to.
+     *
+     * The override's own id doubles as the change key. Discord uses `guildId - 1` to mean "every
+     * channel", which is the only id that names nothing.
+     */
+    private fun commandPermissionSubtarget(
+        auditLogEntry: ModelAuditLogEntry,
+        change: Change,
+        targets: Map<TargetType, out Map<Long, CharSequence?>>,
+        context: Context,
+    ): CharSequence {
+        val id = change.key?.toLongOrNull() ?: return ""
+        val guildId = auditLogEntry.guildId
+        if (guildId != null && id == guildId - 1) return context.getString(R.string.all_channels)
+        val override = change.newValue as? ModelAuditLogEntry.ChangeNameId
+        val type = override?.type ?: 0
+        val named = when (type) {
+            COMMAND_PERMISSION_TYPE_ROLE -> targets[TargetType.ROLE]?.get(id)
+            COMMAND_PERMISSION_TYPE_USER -> targets[TargetType.USER]?.get(id)
+            COMMAND_PERMISSION_TYPE_CHANNEL -> targets[TargetType.CHANNEL]?.get(id)
+            else -> null
+        }
+        return named ?: id.toString()
+    }
+
+    /**
+     * An AutoMod rule field as text.
+     *
+     * Every field of a rule is either an enum, a list of ids or a list of keywords, so none of them
+     * can be substituted raw. Exempt roles and channels resolve against the names the screen already
+     * collected, and an empty list reads as "None" rather than as nothing at all.
+     */
+    private fun autoModerationValue(
+        context: Context,
+        change: Change,
+        targets: Map<TargetType, out Map<Long, CharSequence?>>,
+    ): CharSequence {
+        val value = change.value
+        return when (change.key) {
+            "trigger_type" -> context.getString(automodTriggerName(asLong(value)))
+            "event_type" -> context.getString(automodEventName(asLong(value)))
+            "actions" -> namesOrNone(
+                context,
+                (value as? Collection<*>).orEmpty()
+                    .map { context.getString(automodActionName((it as? ModelAuditLogEntry.ChangeNameId)?.type?.toLong())) },
+            )
+            "exempt_roles" -> namesOrNone(
+                context,
+                (value as? Collection<*>).orEmpty()
+                    .mapNotNull { targets[TargetType.ROLE]?.get(toId(it)) },
+            )
+            "exempt_channels" -> namesOrNone(
+                context,
+                (value as? Collection<*>).orEmpty()
+                    .mapNotNull { targets[TargetType.CHANNEL]?.get(toId(it)) },
+            )
+            else -> (value as? Collection<*>)?.joinToString { "'$it'" } ?: value.toString()
+        }
+    }
+
+    private fun namesOrNone(context: Context, names: List<CharSequence>): CharSequence =
+        if (names.isEmpty()) {
+            context.getString(R.string.guild_settings_audit_log_automod_rule_none)
+        } else {
+            names.joinToString()
+        }
+
+    @StringRes
+    private fun automodTriggerName(triggerType: Long?): Int = when (triggerType) {
+        1L -> R.string.guild_automod_keyword_filter_name
+        2L -> R.string.guild_automod_link_filter_name
+        3L -> R.string.guild_automod_ml_spam_filter_name
+        4L -> R.string.guild_automod_default_keyword_list_filter_name
+        5L -> R.string.guild_automod_mention_spam_filter_name
+        6L -> R.string.guild_automod_user_profile_filter_name
+        else -> R.string.guild_automod_unknown
+    }
+
+    @StringRes
+    private fun automodEventName(eventType: Long?): Int = when (eventType) {
+        1L -> R.string.guild_automod_event_type_message_send
+        2L -> R.string.guild_automod_event_type_guild_member_join_or_update
+        else -> R.string.guild_automod_unknown
+    }
+
+    @StringRes
+    private fun automodActionName(actionType: Long?): Int = when (actionType) {
+        1L -> R.string.guild_automod_actions_block_message_name
+        2L -> R.string.guild_automod_actions_flag_to_channel_name
+        3L -> R.string.guild_automod_actions_user_communication_disabled
+        4L -> R.string.guild_automod_actions_quarantine_user
+        else -> R.string.guild_automod_unknown
+    }
+
     /** `"Granted 3 permissions for @Moderators"` plus the permission names on the next line. */
     private fun renderPermissions(
         change: Change,
@@ -388,14 +613,33 @@ object AuditLogChangeUtils {
         return "${getPluralString(context, change)}\n" + roles.joinToString { it.name.orEmpty() }
     }
 
-    /** The count phrase alone, for a role or permission list whose subject is already known. */
-    private fun getPluralString(context: Context, change: Change): CharSequence {
+    /**
+     * The count phrase alone, for a role or permission list whose subject is already known.
+     *
+     * A role's own permissions and a channel overwrite's read differently — "Granted 2 permissions"
+     * against "Granted 2 permissions for @Moderators" — so the ramp is chosen by what the entry
+     * targets rather than by the change key alone.
+     */
+    private fun getPluralString(
+        context: Context,
+        change: Change,
+        entry: ModelAuditLogEntry? = null,
+    ): CharSequence {
         val size = (change.value as? Collection<*>)?.size ?: return ""
+        val isRole = entry?.targetType == TargetType.ROLE
         val pluralRes = when (change.key) {
             KEY_ROLES_ADD -> R.plurals.guild_settings_audit_log_member_roles_add_count
             KEY_ROLES_REMOVE -> R.plurals.guild_settings_audit_log_member_roles_remove_count
-            KEY_ALLOW -> R.plurals.guild_settings_audit_log_channel_permission_overrides_granted_count
-            KEY_DENY -> R.plurals.guild_settings_audit_log_channel_permission_overrides_denied_count
+            KEY_ALLOW -> if (isRole) {
+                R.plurals.guild_settings_audit_log_role_permissions_granted_count
+            } else {
+                R.plurals.guild_settings_audit_log_channel_permission_overrides_granted_count
+            }
+            KEY_DENY -> if (isRole) {
+                R.plurals.guild_settings_audit_log_role_permissions_denied_count
+            } else {
+                R.plurals.guild_settings_audit_log_channel_permission_overrides_denied_count
+            }
             else -> return ""
         }
         return plural(context, pluralRes, size)
@@ -445,7 +689,10 @@ object AuditLogChangeUtils {
         "name" -> R.string.guild_settings_audit_log_guild_name_change
         "reason" -> R.string.guild_settings_audit_log_common_reason
         "icon_hash" -> R.string.guild_settings_audit_log_guild_icon_hash_change
-        "banner_hash" -> R.string.guild_settings_audit_log_guild_banner_hash_change
+        "banner_hash" -> change.nullableNewValueString(
+            hasNoNewValue = R.string.guild_settings_audit_log_guild_banner_hash_remove,
+            hasNewValue = R.string.guild_settings_audit_log_guild_banner_hash_change,
+        )
         "splash_hash" -> R.string.guild_settings_audit_log_guild_splash_hash_change
         "discovery_splash_hash" -> R.string.guild_settings_audit_log_guild_discovery_splash_hash_change
         "region" -> R.string.guild_settings_audit_log_guild_region_change
@@ -453,6 +700,16 @@ object AuditLogChangeUtils {
         "owner_id" -> R.string.guild_settings_audit_log_guild_owner_id_change
         "afk_timeout" -> R.string.guild_settings_audit_log_guild_afk_timeout_change
         "system_channel_flags" -> R.string.guild_settings_audit_log_guild_system_channel_flags_change
+
+        // The four keys `transformSystemChannelFlags` splits the bitfield into.
+        KEY_SYSTEM_JOIN_NOTIFICATIONS ->
+            R.string.guild_settings_audit_log_guild_system_channel_join_notifications
+        KEY_SYSTEM_PREMIUM_SUBSCRIPTIONS ->
+            R.string.guild_settings_audit_log_guild_system_channel_premium_subscriptions
+        KEY_SYSTEM_REMINDER_NOTIFICATIONS ->
+            R.string.guild_settings_audit_log_guild_system_channel_reminder_notifications
+        KEY_SYSTEM_JOIN_NOTIFICATION_REPLIES ->
+            R.string.guild_settings_audit_log_guild_system_channel_join_notification_replies
 
         "description" -> change.nullableNewValueString(
             hasNoNewValue = R.string.guild_settings_audit_log_guild_description_clear,
@@ -547,14 +804,28 @@ object AuditLogChangeUtils {
             hasNoOldValue = R.string.guild_settings_audit_log_channel_video_quality_mode_create,
             hasOldValue = R.string.guild_settings_audit_log_channel_video_quality_mode_change,
         )
-        "rate_limit_per_user" -> change.nullableOldValueString(
-            hasNoOldValue = R.string.guild_settings_audit_log_channel_rate_limit_per_user_create,
-            hasOldValue = R.string.guild_settings_audit_log_channel_rate_limit_per_user_change,
+        "user_limit" -> change.nullableOldValueString(
+            hasNoOldValue = R.string.guild_settings_audit_log_channel_user_limit_create,
+            hasOldValue = R.string.guild_settings_audit_log_channel_user_limit_change,
         )
-        "default_auto_archive_duration" -> change.nullableOldValueString(
-            hasNoOldValue = R.string.guild_settings_audit_log_channel_default_auto_archive_duration_create,
-            hasOldValue = R.string.guild_settings_audit_log_channel_default_auto_archive_duration_change,
-        )
+        // Zero turns each of these off entirely, which reads as its own sentence rather than as
+        // "0 seconds"; Android plurals have no `=0` case to express that.
+        "rate_limit_per_user" -> if (asLong(change.value) == 0L) {
+            R.string.guild_settings_audit_log_channel_rate_limit_per_user_disable
+        } else {
+            change.nullableOldValueString(
+                hasNoOldValue = R.string.guild_settings_audit_log_channel_rate_limit_per_user_create,
+                hasOldValue = R.string.guild_settings_audit_log_channel_rate_limit_per_user_change,
+            )
+        }
+        "default_auto_archive_duration" -> if (asLong(change.value) == 0L) {
+            R.string.guild_settings_audit_log_channel_default_auto_archive_duration_remove
+        } else {
+            change.nullableOldValueString(
+                hasNoOldValue = R.string.guild_settings_audit_log_channel_default_auto_archive_duration_create,
+                hasOldValue = R.string.guild_settings_audit_log_channel_default_auto_archive_duration_change,
+            )
+        }
 
         // A topic and a voice region can each be set, changed or cleared, so both nulls matter.
         "topic" -> change.nullableNewOrOldValueString(
@@ -581,6 +852,9 @@ object AuditLogChangeUtils {
     private fun getUserChangeString(change: Change): Int = when (change.key) {
         "reason" -> R.string.guild_settings_audit_log_common_reason
         "prune_delete_days" -> R.string.guild_settings_audit_log_member_prune_delete_days
+        // Synthesised for an AutoMod enforcement entry, whose target is the member it hit.
+        "triggered_rule_name" ->
+            R.string.guild_settings_audit_log_auto_moderation_triggered_rule_name_change
         KEY_ROLES_ADD -> R.string.guild_settings_audit_log_member_roles_add
         KEY_ROLES_REMOVE -> R.string.guild_settings_audit_log_member_roles_remove
 
@@ -789,10 +1063,14 @@ object AuditLogChangeUtils {
             hasNoOldValue = R.string.guild_settings_audit_log_channel_rate_limit_per_user_create,
             hasOldValue = R.string.guild_settings_audit_log_channel_rate_limit_per_user_change,
         )
-        "auto_archive_duration" -> change.nullableOldValueString(
-            hasNoOldValue = R.string.guild_settings_audit_log_thread_auto_archive_duration_create,
-            hasOldValue = R.string.guild_settings_audit_log_thread_auto_archive_duration_change,
-        )
+        "auto_archive_duration" -> if (asLong(change.value) == 0L) {
+            R.string.guild_settings_audit_log_thread_auto_archive_duration_remove
+        } else {
+            change.nullableOldValueString(
+                hasNoOldValue = R.string.guild_settings_audit_log_thread_auto_archive_duration_create,
+                hasOldValue = R.string.guild_settings_audit_log_thread_auto_archive_duration_change,
+            )
+        }
         "archived" -> if (change.value == true) {
             R.string.guild_settings_audit_log_thread_archived
         } else {
@@ -802,6 +1080,197 @@ object AuditLogChangeUtils {
             R.string.guild_settings_audit_log_thread_locked
         } else {
             R.string.guild_settings_audit_log_thread_unlocked
+        }
+        "invitable" -> if (change.value == true) {
+            R.string.guild_settings_audit_log_thread_invitable_enabled
+        } else {
+            R.string.guild_settings_audit_log_thread_invitable_disabled
+        }
+        else -> 0
+    }
+
+    /**
+     * A command-permission change is keyed by the *snowflake* it applies to, not by a field name,
+     * so the table cannot be a lookup: the sentence is chosen from the override itself. A change
+     * with no new value removed the override; otherwise the `permission` flag says which way it went.
+     */
+    @StringRes
+    private fun getCommandPermissionChangeString(change: Change): Int {
+        if (change.key == "reason") return R.string.guild_settings_audit_log_common_reason
+        val override = change.newValue as? ModelAuditLogEntry.ChangeNameId
+            ?: return R.string.guild_settings_audit_log_command_permission_removed
+        return if (override.permission == true) {
+            R.string.guild_settings_audit_log_command_permission_granted
+        } else {
+            R.string.guild_settings_audit_log_command_permission_denied
+        }
+    }
+
+    @StringRes
+    private fun getAutoModerationRuleChangeString(change: Change): Int = when (change.key) {
+        "reason" -> R.string.guild_settings_audit_log_common_reason
+        "name" -> R.string.guild_settings_audit_log_automod_rule_name_update
+        "trigger_type" -> R.string.guild_settings_audit_log_automod_rule_trigger_type_update
+        "event_type" -> R.string.guild_settings_audit_log_automod_rule_event_type_update
+        "actions" -> R.string.guild_settings_audit_log_automod_rule_actions_update
+        "trigger_metadata" -> R.string.guild_settings_audit_log_automod_rule_trigger_metadata_update
+        "exempt_roles" -> R.string.guild_settings_audit_log_automod_rule_exempt_roles_update
+        "exempt_channels" -> R.string.guild_settings_audit_log_automod_rule_exempt_channels_update
+        "triggered_rule_name" ->
+            R.string.guild_settings_audit_log_auto_moderation_triggered_rule_name_change
+        KEY_AUTOMOD_ADD_KEYWORDS -> R.string.guild_settings_audit_log_automod_rule_add_keywords
+        KEY_AUTOMOD_REMOVE_KEYWORDS -> R.string.guild_settings_audit_log_automod_rule_remove_keywords
+        KEY_AUTOMOD_ADD_REGEX -> R.string.guild_settings_audit_log_automod_rule_add_regex_patterns
+        KEY_AUTOMOD_REMOVE_REGEX ->
+            R.string.guild_settings_audit_log_automod_rule_remove_regex_patterns
+        KEY_AUTOMOD_ADD_ALLOW_LIST -> R.string.guild_settings_audit_log_automod_rule_add_allow_list
+        KEY_AUTOMOD_REMOVE_ALLOW_LIST ->
+            R.string.guild_settings_audit_log_automod_rule_remove_allow_list
+
+        // A rule delete carries `enabled` as an old value only, so both sides are consulted.
+        "enabled" -> if ((change.newValue ?: change.oldValue) == true) {
+            R.string.guild_settings_audit_log_automod_rule_enabled_update
+        } else {
+            R.string.guild_settings_audit_log_automod_rule_disabled_update
+        }
+        else -> 0
+    }
+
+    @StringRes
+    private fun getSoundboardChangeString(change: Change): Int = when (change.key) {
+        "reason" -> R.string.guild_settings_audit_log_common_reason
+        "name" -> change.nullableOldValueString(
+            hasNoOldValue = R.string.guild_settings_audit_log_guild_soundboard_sound_name_create,
+            hasOldValue = R.string.guild_settings_audit_log_guild_soundboard_sound_name_change,
+        )
+        "volume" -> change.nullableOldValueString(
+            hasNoOldValue = R.string.guild_settings_audit_log_guild_soundboard_sound_volume_create,
+            hasOldValue = R.string.guild_settings_audit_log_guild_soundboard_sound_volume_change,
+        )
+        "emoji_name" -> change.nullableNewOrOldValueString(
+            hasBoth = R.string.guild_settings_audit_log_guild_soundboard_sound_emoji_name_replace,
+            hasNoOldValue = R.string.guild_settings_audit_log_guild_soundboard_sound_emoji_name_create,
+            hasNoNewValue = R.string.guild_settings_audit_log_guild_soundboard_sound_emoji_name_remove,
+        )
+        // `emoji_id` names a custom emoji the row would have to draw; there is no span for that
+        // here, so the change is left to the caller's skip-and-log path.
+        else -> 0
+    }
+
+    @StringRes
+    private fun getOnboardingPromptChangeString(change: Change): Int = when (change.key) {
+        "reason" -> R.string.guild_settings_audit_log_common_reason
+        "options" -> R.string.guild_settings_audit_log_onboarding_prompt_changed_options
+        "title" -> change.nullableOldValueString(
+            hasNoOldValue = R.string.guild_settings_audit_log_role_prompt_title_create,
+            hasOldValue = R.string.guild_settings_audit_log_role_prompt_title_change,
+        )
+        "description" -> change.nullableOldValueString(
+            hasNoOldValue = R.string.guild_settings_audit_log_role_prompt_description_create,
+            hasOldValue = R.string.guild_settings_audit_log_role_prompt_description_change,
+        )
+        "single_select" -> if (change.newValue == true) {
+            R.string.guild_settings_audit_log_role_prompt_single_select
+        } else {
+            R.string.guild_settings_audit_log_role_prompt_multi_select
+        }
+        "required" -> if (change.newValue == true) {
+            R.string.guild_settings_audit_log_role_prompt_required
+        } else {
+            R.string.guild_settings_audit_log_role_prompt_optional
+        }
+        else -> 0
+    }
+
+    @StringRes
+    private fun getOnboardingChangeString(change: Change): Int = when (change.key) {
+        "reason" -> R.string.guild_settings_audit_log_common_reason
+        "default_channel_ids" -> R.string.guild_settings_audit_log_onboarding_default_channel_ids
+        "enable_default_channels" -> if (change.newValue == true) {
+            R.string.guild_settings_audit_log_onboarding_enable_default_channels
+        } else {
+            R.string.guild_settings_audit_log_onboarding_disable_default_channels
+        }
+        "enable_onboarding_prompts" -> if (change.newValue == true) {
+            R.string.guild_settings_audit_log_onboarding_enable_prompts
+        } else {
+            R.string.guild_settings_audit_log_onboarding_disable_prompts
+        }
+        "enabled" -> if (change.newValue == true) {
+            R.string.guild_settings_audit_log_onboarding_enable
+        } else {
+            R.string.guild_settings_audit_log_onboarding_disable
+        }
+        else -> 0
+    }
+
+    @StringRes
+    private fun getHomeSettingsChangeString(change: Change): Int = when (change.key) {
+        "reason" -> R.string.guild_settings_audit_log_common_reason
+        "welcome_message" -> R.string.guild_settings_audit_log_home_settings_changed_welcome_message
+        "new_member_actions" ->
+            R.string.guild_settings_audit_log_home_settings_changed_new_member_actions
+        "resource_channels" ->
+            R.string.guild_settings_audit_log_home_settings_changed_resource_channels
+        else -> 0
+    }
+
+    @StringRes
+    private fun getVoiceChannelStatusChangeString(change: Change): Int = when (change.key) {
+        "reason" -> R.string.guild_settings_audit_log_common_reason
+        "status" -> R.string.guild_settings_audit_log_voice_channel_status_status_create
+        else -> 0
+    }
+
+    @StringRes
+    private fun getMemberVerificationChangeString(change: Change): Int = when (change.key) {
+        "reason" -> R.string.guild_settings_audit_log_common_reason
+        "verification_enabled" -> if (change.newValue == true) {
+            R.string.guild_settings_audit_log_verification_enabled
+        } else {
+            R.string.guild_settings_audit_log_verification_disabled
+        }
+        "manual_approval_enabled" -> if (change.newValue == true) {
+            R.string.guild_settings_audit_log_manual_verification_enabled
+        } else {
+            R.string.guild_settings_audit_log_manual_verification_disabled
+        }
+        else -> 0
+    }
+
+    @StringRes
+    private fun getGuildProfileChangeString(change: Change): Int = when (change.key) {
+        "description" -> R.string.guild_settings_audit_log_guild_profile_description_update
+        "brand_color_primary" -> R.string.guild_settings_audit_log_guild_profile_color_update
+        "custom_banner_hash" -> R.string.guild_settings_audit_log_guild_profile_banner_update
+        "traits" -> R.string.guild_settings_audit_log_guild_profile_traits_update
+        "game_application_ids" -> R.string.guild_settings_audit_log_guild_profile_games_update
+        "visibility" -> R.string.guild_settings_audit_log_guild_profile_visibility_update
+        "server_tag" -> change.nullableNewValueString(
+            hasNoNewValue = R.string.guild_settings_audit_log_guild_tag_cleared,
+            hasNewValue = R.string.guild_settings_audit_log_guild_tag_update,
+        )
+        else -> 0
+    }
+
+    @StringRes
+    private fun getScheduledEventExceptionChangeString(change: Change): Int = when (change.key) {
+        "reason" -> R.string.guild_settings_audit_log_common_reason
+        "scheduled_start_time" -> change.nullableNewValueString(
+            hasNoNewValue = R.string.guild_settings_audit_log_scheduled_event_exception_scheduled_start_time_removed,
+            hasNewValue = R.string.guild_settings_audit_log_scheduled_event_exception_scheduled_start_time_change,
+        )
+        "scheduled_end_time" -> change.nullableNewValueString(
+            hasNoNewValue = R.string.guild_settings_audit_log_scheduled_event_exception_scheduled_end_time_removed,
+            hasNewValue = R.string.guild_settings_audit_log_scheduled_event_exception_scheduled_end_time_change,
+        )
+        // Only an actual flip is worth a line: the field is present on every exception entry.
+        "is_canceled" -> when {
+            change.oldValue != true && change.newValue == true ->
+                R.string.guild_settings_audit_log_scheduled_event_exception_is_canceled_canceled
+            change.oldValue == true && change.newValue != true ->
+                R.string.guild_settings_audit_log_scheduled_event_exception_is_canceled_restored
+            else -> 0
         }
         else -> 0
     }
@@ -889,6 +1358,8 @@ object AuditLogChangeUtils {
         6 -> R.string.store_channel
         13 -> R.string.stage_channel
         4 -> R.string.category
+        15 -> R.string.forum_channel
+        16 -> R.string.media_channel
         else -> R.string.thread
     }
 
@@ -945,11 +1416,28 @@ object AuditLogChangeUtils {
 
     private fun asLong(value: Any?): Long? = toId(value)
 
-    private fun plural(context: Context, pluralRes: Int, quantity: Int): CharSequence =
-        com.discord.i18n.FormatUtils.format(
-            context.resources.getQuantityString(pluralRes, quantity),
-            "count" to quantity,
-        )
+    /**
+     * A quantity phrase from a plural resource.
+     *
+     * Discord's plurals do not agree on what the quantity placeholder is called — `{count}`,
+     * `{newValue}` and `{#}` all appear, and the shared duration plurals use their own unit name —
+     * so every spelling is bound to the same number rather than each caller having to know which
+     * one its resource happens to use.
+     */
+    private fun plural(
+        context: Context,
+        pluralRes: Int,
+        quantity: Int,
+        unitKey: String? = null,
+    ): CharSequence = com.discord.i18n.FormatUtils.format(
+        context.resources.getQuantityString(pluralRes, quantity),
+        buildMap {
+            put("count", quantity)
+            put("newValue", quantity)
+            put("#", quantity)
+            unitKey?.let { put(it, quantity) }
+        },
+    )
 
     /** The string to use when only one of the two values is present. */
     private fun Change.nullableNewOrOldValueString(
@@ -983,10 +1471,24 @@ object AuditLogChangeUtils {
     private const val KEY_RESET = "reset"
     private const val KEY_ROLES_ADD = "\$add"
     private const val KEY_ROLES_REMOVE = "\$remove"
+    private const val KEY_AUTOMOD_ADD_KEYWORDS = "\$add_keyword_filter"
+    private const val KEY_AUTOMOD_REMOVE_KEYWORDS = "\$remove_keyword_filter"
+    private const val KEY_AUTOMOD_ADD_REGEX = "\$add_regex_patterns"
+    private const val KEY_AUTOMOD_REMOVE_REGEX = "\$remove_regex_patterns"
+    private const val KEY_AUTOMOD_ADD_ALLOW_LIST = "\$add_allow_list"
+    private const val KEY_AUTOMOD_REMOVE_ALLOW_LIST = "\$remove_allow_list"
+
+    // Synthesised by `StoreAuditLog` out of the `system_channel_flags` bitfield; no such key
+    // exists on the wire.
+    const val KEY_SYSTEM_JOIN_NOTIFICATIONS = "join_notifications"
+    const val KEY_SYSTEM_PREMIUM_SUBSCRIPTIONS = "premium_subscriptions"
+    const val KEY_SYSTEM_REMINDER_NOTIFICATIONS = "reminder_notifications"
+    const val KEY_SYSTEM_JOIN_NOTIFICATION_REPLIES = "join_notification_replies"
 
     private const val ACTION_MEMBER_KICK = 20
     private const val ACTION_MEMBER_PRUNE = 21
     private const val ACTION_MEMBER_BAN_ADD = 22
+    private const val ACTION_AUTO_MODERATION_BLOCK_MESSAGE = 143
 
     /** A permission bitfield is a signed 64-bit value; bit 63 is the last one that can be set. */
     private const val MAX_PERMISSION_BIT_INDEX = 63
@@ -996,5 +1498,14 @@ object AuditLogChangeUtils {
     private const val STAGE_PRIVACY_GUILD_ONLY = 2L
 
     private const val SECONDS_PER_MINUTE = 60L
+    private const val SECONDS_PER_HOUR = 3600L
+    private const val SECONDS_PER_DAY = 86400L
+    private const val SECONDS_PER_WEEK = 604800L
     private const val BITS_PER_KILOBIT = 1000L
+
+    private const val VIDEO_QUALITY_FULL = 2L
+
+    private const val COMMAND_PERMISSION_TYPE_ROLE = 1
+    private const val COMMAND_PERMISSION_TYPE_USER = 2
+    private const val COMMAND_PERMISSION_TYPE_CHANNEL = 3
 }

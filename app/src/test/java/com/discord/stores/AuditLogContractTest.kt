@@ -175,6 +175,34 @@ class AuditLogContractTest {
         assertFalse(state.hasError)
     }
 
+    /**
+     * The actions Discord has added since 126.21.
+     *
+     * [ModelAuditLogEntry.getTargetType] places them by *range*, so a wrong boundary silently
+     * relabels a whole block rather than one action; every id below is a boundary or sits next to
+     * one.
+     */
+    @Test
+    fun `actions added since 126_21 map to a type, a target and a title`() {
+        modernContracts.forEach { expected ->
+            assertEquals(
+                "action ${expected.id}",
+                expected.action,
+                ModelAuditLogEntry.getActionType(expected.id),
+            )
+            assertEquals(
+                "action ${expected.id}",
+                expected.target,
+                ModelAuditLogEntry.getTargetType(expected.id),
+            )
+            val entry = ModelAuditLogEntry(expected.id.toLong(), expected.id, 1, 2, null, null, 7, null)
+            assertEquals("action ${expected.id}", expected.title, AuditLogUtils.getEntryTitle(entry))
+        }
+        AuditLogUtils.ALL_ACTION_TYPES.forEach {
+            assertNotEquals("filter name for $it", 0, AuditLogUtils.getActionName(it))
+        }
+    }
+
     private fun awaitState(
         scheduler: TestScheduler,
         store: StoreAuditLog,
@@ -252,6 +280,41 @@ class AuditLogContractTest {
             ActionContract(111, ActionType.UPDATE, TargetType.THREAD, R.string.guild_settings_audit_log_thread_update),
             ActionContract(112, ActionType.DELETE, TargetType.THREAD, R.string.guild_settings_audit_log_thread_delete),
             ActionContract(UNKNOWN_ACTION, ActionType.ALL, TargetType.UNKNOWN, R.string.guild_settings_audit_log_unknown_action),
+        )
+
+        val modernContracts = listOf(
+            ActionContract(121, ActionType.UPDATE, TargetType.APPLICATION_COMMAND, R.string.guild_settings_audit_log_command_permission_update),
+            ActionContract(130, ActionType.CREATE, TargetType.GUILD_SOUNDBOARD, R.string.guild_settings_audit_log_guild_soundboard_sound_created),
+            ActionContract(131, ActionType.UPDATE, TargetType.GUILD_SOUNDBOARD, R.string.guild_settings_audit_log_guild_soundboard_sound_updated),
+            ActionContract(132, ActionType.DELETE, TargetType.GUILD_SOUNDBOARD, R.string.guild_settings_audit_log_guild_soundboard_sound_deleted),
+            ActionContract(140, ActionType.CREATE, TargetType.AUTO_MODERATION_RULE, R.string.guild_settings_audit_log_automod_rule_create),
+            ActionContract(141, ActionType.UPDATE, TargetType.AUTO_MODERATION_RULE, R.string.guild_settings_audit_log_automod_rule_update),
+            ActionContract(142, ActionType.DELETE, TargetType.AUTO_MODERATION_RULE, R.string.guild_settings_audit_log_automod_rule_delete),
+            ActionContract(143, ActionType.DELETE, TargetType.USER, R.string.guild_settings_audit_log_auto_moderation_block_message),
+            ActionContract(144, ActionType.UPDATE, TargetType.USER, R.string.guild_settings_audit_log_auto_moderation_flag_to_channel_message),
+            ActionContract(145, ActionType.UPDATE, TargetType.USER, R.string.guild_settings_audit_log_auto_moderation_user_communication_disabled_message),
+            ActionContract(146, ActionType.UPDATE, TargetType.USER, R.string.guild_settings_audit_log_auto_moderation_quarantine_user),
+            ActionContract(150, ActionType.CREATE, TargetType.GUILD, R.string.creator_monetization_applied_audit_log_title),
+            ActionContract(151, ActionType.UPDATE, TargetType.GUILD, R.string.creator_monetization_terms_accepted_audit_log_title),
+            ActionContract(163, ActionType.CREATE, TargetType.ONBOARDING_PROMPT, R.string.guild_settings_audit_log_role_prompt_create),
+            ActionContract(164, ActionType.UPDATE, TargetType.ONBOARDING_PROMPT, R.string.guild_settings_audit_log_role_prompt_update),
+            ActionContract(165, ActionType.DELETE, TargetType.ONBOARDING_PROMPT, R.string.guild_settings_audit_log_role_prompt_delete),
+            ActionContract(166, ActionType.CREATE, TargetType.GUILD_ONBOARDING, R.string.guild_settings_audit_log_onboarding_create),
+            ActionContract(167, ActionType.UPDATE, TargetType.GUILD_ONBOARDING, R.string.guild_settings_audit_log_onboarding_update),
+            ActionContract(171, ActionType.CREATE, TargetType.GUILD_HOME, R.string.guild_settings_audit_log_guild_home_feature_item),
+            ActionContract(172, ActionType.DELETE, TargetType.GUILD_HOME, R.string.guild_settings_audit_log_guild_home_remove_item),
+            ActionContract(180, ActionType.ALL, TargetType.GUILD, R.string.guild_settings_audit_log_unknown_action),
+            ActionContract(190, ActionType.CREATE, TargetType.HOME_SETTINGS, R.string.guild_settings_audit_log_home_settings_create),
+            ActionContract(191, ActionType.UPDATE, TargetType.HOME_SETTINGS, R.string.guild_settings_audit_log_home_settings_update),
+            ActionContract(192, ActionType.CREATE, TargetType.VOICE_CHANNEL_STATUS, R.string.guild_settings_audit_log_voice_channel_status_created),
+            ActionContract(193, ActionType.DELETE, TargetType.VOICE_CHANNEL_STATUS, R.string.guild_settings_audit_log_voice_channel_status_deleted),
+            ActionContract(200, ActionType.UPDATE, TargetType.GUILD_SCHEDULED_EVENT_EXCEPTION, R.string.guild_settings_audit_log_scheduled_event_recurrence_update),
+            ActionContract(201, ActionType.UPDATE, TargetType.GUILD_SCHEDULED_EVENT_EXCEPTION, R.string.guild_settings_audit_log_scheduled_event_recurrence_update),
+            ActionContract(202, ActionType.DELETE, TargetType.GUILD_SCHEDULED_EVENT_EXCEPTION, R.string.guild_settings_audit_log_scheduled_event_recurrence_delete),
+            ActionContract(210, ActionType.UPDATE, TargetType.GUILD_MEMBER_VERIFICATION, R.string.guild_settings_audit_log_member_verification_update),
+            ActionContract(211, ActionType.UPDATE, TargetType.GUILD_PROFILE, R.string.guild_settings_audit_log_guild_profile_update),
+            ActionContract(212, ActionType.UPDATE, TargetType.GUILD, R.string.guild_settings_audit_log_migrate_pin_permission),
+            ActionContract(213, ActionType.UPDATE, TargetType.GUILD, R.string.guild_settings_audit_log_migrate_bypass_slowmode_permission),
         )
     }
 }

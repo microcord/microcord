@@ -104,6 +104,17 @@ class ModelAuditLogEntry : Model {
         GUILD_SCHEDULED_EVENT,
         STICKER,
         THREAD,
+        APPLICATION_COMMAND,
+        GUILD_SOUNDBOARD,
+        AUTO_MODERATION_RULE,
+        ONBOARDING_PROMPT,
+        GUILD_ONBOARDING,
+        GUILD_HOME,
+        HOME_SETTINGS,
+        VOICE_CHANNEL_STATUS,
+        GUILD_SCHEDULED_EVENT_EXCEPTION,
+        GUILD_MEMBER_VERIFICATION,
+        GUILD_PROFILE,
     }
 
     /**
@@ -150,27 +161,39 @@ class ModelAuditLogEntry : Model {
             "ModelAuditLogEntry.Change(key=$key, oldValue=$oldValue, newValue=$newValue)"
     }
 
-    /** The `{name, id}` shape a change value takes for roles and other named entities. */
+    /**
+     * The object shape a change value takes: `{name, id}` for roles and other named entities, and
+     * `{id, type, permission}` for the per-target overrides an application-command permission
+     * change carries.
+     */
     class ChangeNameId : Model {
         var name: String? = null
             private set
         var id: Long = 0
+            private set
+        var type: Int = 0
+            private set
+        var permission: Boolean? = null
             private set
 
         override fun assignField(reader: Model.JsonReader) {
             when (reader.nextName()) {
                 "name" -> name = reader.nextString(name)
                 "id" -> id = reader.nextLong(id)
+                "type" -> type = reader.nextInt(type)
+                "permission" -> permission = reader.nextBooleanOrNull()
                 else -> reader.skipValue()
             }
         }
 
         override fun equals(other: Any?): Boolean = other is ChangeNameId &&
-            name == other.name && id == other.id
+            name == other.name && id == other.id && type == other.type &&
+            permission == other.permission
 
-        override fun hashCode(): Int = 31 * (name?.hashCode() ?: 0) + id.hashCode()
+        override fun hashCode(): Int = listOf(name, id, type, permission).hashCode()
 
-        override fun toString(): String = "ModelAuditLogEntry.ChangeNameId(name=$name, id=$id)"
+        override fun toString(): String =
+            "ModelAuditLogEntry.ChangeNameId(name=$name, id=$id, type=$type, permission=$permission)"
     }
 
     /** Action-specific extras: the pruned member count, the moved-to channel, and so on. */
@@ -189,6 +212,20 @@ class ModelAuditLogEntry : Model {
             private set
         var id: Long = 0
             private set
+        var applicationId: Long = 0
+            private set
+        var autoModerationRuleName: String? = null
+            private set
+        var autoModerationRuleTriggerType: Int = 0
+            private set
+        var integrationType: String? = null
+            private set
+        var messageId: Long = 0
+            private set
+        var status: String? = null
+            private set
+        var eventExceptionId: Long = 0
+            private set
 
         override fun assignField(reader: Model.JsonReader) {
             when (reader.nextName()) {
@@ -199,6 +236,15 @@ class ModelAuditLogEntry : Model {
                 "members_removed" -> membersRemoved = reader.nextInt(membersRemoved)
                 "type" -> type = reader.nextInt(type)
                 "id" -> id = reader.nextLong(id)
+                "application_id" -> applicationId = reader.nextLong(applicationId)
+                "auto_moderation_rule_name" ->
+                    autoModerationRuleName = reader.nextString(autoModerationRuleName)
+                "auto_moderation_rule_trigger_type" ->
+                    autoModerationRuleTriggerType = reader.nextInt(autoModerationRuleTriggerType)
+                "integration_type" -> integrationType = reader.nextString(integrationType)
+                "message_id" -> messageId = reader.nextLong(messageId)
+                "status" -> status = reader.nextString(status)
+                "event_exception_id" -> eventExceptionId = reader.nextLong(eventExceptionId)
                 else -> reader.skipValue()
             }
         }
@@ -206,24 +252,43 @@ class ModelAuditLogEntry : Model {
         override fun equals(other: Any?): Boolean = other is Options &&
             count == other.count && channelId == other.channelId && roleName == other.roleName &&
             deleteMemberDays == other.deleteMemberDays && membersRemoved == other.membersRemoved &&
-            type == other.type && id == other.id
+            type == other.type && id == other.id && applicationId == other.applicationId &&
+            autoModerationRuleName == other.autoModerationRuleName &&
+            autoModerationRuleTriggerType == other.autoModerationRuleTriggerType &&
+            integrationType == other.integrationType && messageId == other.messageId &&
+            status == other.status && eventExceptionId == other.eventExceptionId
 
         override fun hashCode(): Int = listOf(
-            count, channelId, roleName, deleteMemberDays, membersRemoved, type, id,
+            count, channelId, roleName, deleteMemberDays, membersRemoved, type, id, applicationId,
+            autoModerationRuleName, autoModerationRuleTriggerType, integrationType, messageId,
+            status, eventExceptionId,
         ).hashCode()
 
         override fun toString(): String = "ModelAuditLogEntry.Options(count=$count, " +
             "channelId=$channelId, roleName=$roleName, deleteMemberDays=$deleteMemberDays, " +
-            "membersRemoved=$membersRemoved, type=$type, id=$id)"
+            "membersRemoved=$membersRemoved, type=$type, id=$id, applicationId=$applicationId, " +
+            "autoModerationRuleName=$autoModerationRuleName, " +
+            "autoModerationRuleTriggerType=$autoModerationRuleTriggerType, " +
+            "integrationType=$integrationType, messageId=$messageId, status=$status, " +
+            "eventExceptionId=$eventExceptionId)"
     }
 
-    /** Reads one element of a change value: an object becomes a [ChangeNameId]. */
+    /**
+     * Reads one element of a change value: an object becomes a [ChangeNameId].
+     *
+     * Anything else is consumed and dropped rather than left in place — an element that is skipped
+     * without being read never advances the reader, and the array loop around it would not end.
+     */
     class ValueFactory(private val reader: Model.JsonReader) : Model.JsonReader.ItemFactory<Any> {
         override fun get(): Any? = when (reader.peek()) {
             JsonToken.BEGIN_OBJECT -> reader.parse(ChangeNameId())
             JsonToken.STRING -> reader.nextStringOrNull()
             JsonToken.NUMBER -> reader.nextLongOrNull()
-            else -> null
+            JsonToken.BOOLEAN -> reader.nextBooleanOrNull()
+            else -> {
+                reader.skipValue()
+                null
+            }
         }
     }
 
@@ -276,6 +341,40 @@ class ModelAuditLogEntry : Model {
         const val ACTION_THREAD_CREATE = 110
         const val ACTION_THREAD_UPDATE = 111
         const val ACTION_THREAD_DELETE = 112
+        const val ACTION_APPLICATION_COMMAND_PERMISSION_UPDATE = 121
+        const val ACTION_SOUNDBOARD_SOUND_CREATE = 130
+        const val ACTION_SOUNDBOARD_SOUND_UPDATE = 131
+        const val ACTION_SOUNDBOARD_SOUND_DELETE = 132
+        const val ACTION_AUTO_MODERATION_RULE_CREATE = 140
+        const val ACTION_AUTO_MODERATION_RULE_UPDATE = 141
+        const val ACTION_AUTO_MODERATION_RULE_DELETE = 142
+        const val ACTION_AUTO_MODERATION_BLOCK_MESSAGE = 143
+        const val ACTION_AUTO_MODERATION_FLAG_TO_CHANNEL = 144
+        const val ACTION_AUTO_MODERATION_USER_COMMUNICATION_DISABLED = 145
+        const val ACTION_AUTO_MODERATION_QUARANTINE_USER = 146
+        const val ACTION_CREATOR_MONETIZATION_REQUEST_CREATED = 150
+        const val ACTION_CREATOR_MONETIZATION_TERMS_ACCEPTED = 151
+        const val ACTION_ONBOARDING_PROMPT_CREATE = 163
+        const val ACTION_ONBOARDING_PROMPT_UPDATE = 164
+        const val ACTION_ONBOARDING_PROMPT_DELETE = 165
+        const val ACTION_ONBOARDING_CREATE = 166
+        const val ACTION_ONBOARDING_UPDATE = 167
+        const val ACTION_GUILD_HOME_FEATURE_ITEM = 171
+        const val ACTION_GUILD_HOME_REMOVE_ITEM = 172
+
+        /** Retired server-side; kept because [getTargetType] still has to place it. */
+        const val ACTION_HARMFUL_LINKS_BLOCKED_MESSAGE = 180
+        const val ACTION_HOME_SETTINGS_CREATE = 190
+        const val ACTION_HOME_SETTINGS_UPDATE = 191
+        const val ACTION_VOICE_CHANNEL_STATUS_CREATE = 192
+        const val ACTION_VOICE_CHANNEL_STATUS_DELETE = 193
+        const val ACTION_GUILD_SCHEDULED_EVENT_EXCEPTION_CREATE = 200
+        const val ACTION_GUILD_SCHEDULED_EVENT_EXCEPTION_UPDATE = 201
+        const val ACTION_GUILD_SCHEDULED_EVENT_EXCEPTION_DELETE = 202
+        const val ACTION_GUILD_MEMBER_VERIFICATION_UPDATE = 210
+        const val ACTION_GUILD_PROFILE_UPDATE = 211
+        const val ACTION_GUILD_MIGRATE_PIN_PERMISSION = 212
+        const val ACTION_GUILD_MIGRATE_BYPASS_SLOWMODE_PERMISSION = 213
 
         const val CHANGE_KEY_AFK_CHANNEL_ID = "afk_channel_id"
         const val CHANGE_KEY_AFK_TIMEOUT = "afk_timeout"
@@ -369,6 +468,14 @@ class ModelAuditLogEntry : Model {
             ACTION_STICKER_CREATE,
             ACTION_GUILD_SCHEDULED_EVENT_CREATE,
             ACTION_THREAD_CREATE,
+            ACTION_AUTO_MODERATION_RULE_CREATE,
+            ACTION_CREATOR_MONETIZATION_REQUEST_CREATED,
+            ACTION_ONBOARDING_PROMPT_CREATE,
+            ACTION_ONBOARDING_CREATE,
+            ACTION_GUILD_HOME_FEATURE_ITEM,
+            ACTION_SOUNDBOARD_SOUND_CREATE,
+            ACTION_HOME_SETTINGS_CREATE,
+            ACTION_VOICE_CHANNEL_STATUS_CREATE,
             -> ActionType.CREATE
 
             ACTION_GUILD_UPDATE,
@@ -386,6 +493,23 @@ class ModelAuditLogEntry : Model {
             ACTION_STICKER_UPDATE,
             ACTION_GUILD_SCHEDULED_EVENT_UPDATE,
             ACTION_THREAD_UPDATE,
+            // A recurrence exception is an edit to an existing event even when it is "created".
+            ACTION_GUILD_SCHEDULED_EVENT_EXCEPTION_CREATE,
+            ACTION_GUILD_SCHEDULED_EVENT_EXCEPTION_UPDATE,
+            ACTION_APPLICATION_COMMAND_PERMISSION_UPDATE,
+            ACTION_CREATOR_MONETIZATION_TERMS_ACCEPTED,
+            ACTION_AUTO_MODERATION_RULE_UPDATE,
+            ACTION_AUTO_MODERATION_FLAG_TO_CHANNEL,
+            ACTION_AUTO_MODERATION_USER_COMMUNICATION_DISABLED,
+            ACTION_AUTO_MODERATION_QUARANTINE_USER,
+            ACTION_ONBOARDING_PROMPT_UPDATE,
+            ACTION_ONBOARDING_UPDATE,
+            ACTION_SOUNDBOARD_SOUND_UPDATE,
+            ACTION_HOME_SETTINGS_UPDATE,
+            ACTION_GUILD_MEMBER_VERIFICATION_UPDATE,
+            ACTION_GUILD_PROFILE_UPDATE,
+            ACTION_GUILD_MIGRATE_PIN_PERMISSION,
+            ACTION_GUILD_MIGRATE_BYPASS_SLOWMODE_PERMISSION,
             -> ActionType.UPDATE
 
             ACTION_CHANNEL_DELETE,
@@ -405,56 +529,68 @@ class ModelAuditLogEntry : Model {
             ACTION_STAGE_INSTANCE_DELETE,
             ACTION_STICKER_DELETE,
             ACTION_GUILD_SCHEDULED_EVENT_DELETE,
+            ACTION_GUILD_SCHEDULED_EVENT_EXCEPTION_DELETE,
             ACTION_THREAD_DELETE,
+            ACTION_AUTO_MODERATION_BLOCK_MESSAGE,
+            ACTION_AUTO_MODERATION_RULE_DELETE,
+            ACTION_ONBOARDING_PROMPT_DELETE,
+            ACTION_GUILD_HOME_REMOVE_ITEM,
+            ACTION_SOUNDBOARD_SOUND_DELETE,
+            ACTION_VOICE_CHANNEL_STATUS_DELETE,
             -> ActionType.DELETE
 
             else -> ActionType.ALL
         }
 
+        /**
+         * The kind of object [actionTypeId] acts on.
+         *
+         * Written as ordered ranges rather than an exhaustive list of ids, the way the reference
+         * has it: action numbers are allocated in blocks, so an id this build has never heard of
+         * still lands on the right target as long as the server keeps to the block it belongs to.
+         * The order of the branches is the table — several of them overlap, and the earlier one
+         * wins. Message delete/pin/unpin target the *author*, while bulk delete targets the
+         * channel, which is why those four sit outside their own block.
+         */
         @JvmStatic
-        fun getTargetType(actionTypeId: Int): TargetType = when (actionTypeId) {
-            ACTION_ALL -> TargetType.ALL
-            ACTION_GUILD_UPDATE -> TargetType.GUILD
-            ACTION_CHANNEL_CREATE,
-            ACTION_CHANNEL_UPDATE,
-            ACTION_CHANNEL_DELETE,
-            ACTION_MESSAGE_BULK_DELETE,
-            -> TargetType.CHANNEL
-            ACTION_CHANNEL_OVERWRITE_CREATE,
-            ACTION_CHANNEL_OVERWRITE_UPDATE,
-            ACTION_CHANNEL_OVERWRITE_DELETE,
-            -> TargetType.CHANNEL_OVERWRITE
-            ACTION_MEMBER_KICK,
-            ACTION_MEMBER_PRUNE,
-            ACTION_MEMBER_BAN_ADD,
-            ACTION_MEMBER_BAN_REMOVE,
-            ACTION_MEMBER_UPDATE,
-            ACTION_MEMBER_ROLE_UPDATE,
-            ACTION_MEMBER_MOVE,
-            ACTION_MEMBER_DISCONNECT,
-            ACTION_BOT_ADD,
-            ACTION_MESSAGE_DELETE,
-            ACTION_MESSAGE_PIN,
-            ACTION_MESSAGE_UNPIN,
-            -> TargetType.USER
-            ACTION_ROLE_CREATE, ACTION_ROLE_UPDATE, ACTION_ROLE_DELETE -> TargetType.ROLE
-            ACTION_INVITE_CREATE, ACTION_INVITE_UPDATE, ACTION_INVITE_DELETE -> TargetType.INVITE
-            ACTION_WEBHOOK_CREATE, ACTION_WEBHOOK_UPDATE, ACTION_WEBHOOK_DELETE -> TargetType.WEBHOOK
-            ACTION_EMOJI_CREATE, ACTION_EMOJI_UPDATE, ACTION_EMOJI_DELETE -> TargetType.EMOJI
-            ACTION_INTEGRATION_CREATE,
-            ACTION_INTEGRATION_UPDATE,
-            ACTION_INTEGRATION_DELETE,
-            -> TargetType.INTEGRATION
-            ACTION_STAGE_INSTANCE_CREATE,
-            ACTION_STAGE_INSTANCE_UPDATE,
-            ACTION_STAGE_INSTANCE_DELETE,
-            -> TargetType.STAGE_INSTANCE
-            ACTION_STICKER_CREATE, ACTION_STICKER_UPDATE, ACTION_STICKER_DELETE -> TargetType.STICKER
-            ACTION_GUILD_SCHEDULED_EVENT_CREATE,
-            ACTION_GUILD_SCHEDULED_EVENT_UPDATE,
-            ACTION_GUILD_SCHEDULED_EVENT_DELETE,
-            -> TargetType.GUILD_SCHEDULED_EVENT
-            ACTION_THREAD_CREATE, ACTION_THREAD_UPDATE, ACTION_THREAD_DELETE -> TargetType.THREAD
+        fun getTargetType(actionTypeId: Int): TargetType = when {
+            actionTypeId == ACTION_ALL -> TargetType.ALL
+            actionTypeId <= ACTION_GUILD_UPDATE -> TargetType.GUILD
+            actionTypeId <= ACTION_CHANNEL_DELETE ||
+                actionTypeId == ACTION_MESSAGE_BULK_DELETE -> TargetType.CHANNEL
+            actionTypeId <= ACTION_CHANNEL_OVERWRITE_DELETE -> TargetType.CHANNEL_OVERWRITE
+            actionTypeId <= ACTION_BOT_ADD ||
+                actionTypeId == ACTION_MESSAGE_DELETE ||
+                actionTypeId == ACTION_MESSAGE_PIN ||
+                actionTypeId == ACTION_MESSAGE_UNPIN -> TargetType.USER
+            actionTypeId <= ACTION_ROLE_DELETE -> TargetType.ROLE
+            actionTypeId <= ACTION_INVITE_DELETE -> TargetType.INVITE
+            actionTypeId <= ACTION_WEBHOOK_DELETE -> TargetType.WEBHOOK
+            actionTypeId <= ACTION_EMOJI_DELETE -> TargetType.EMOJI
+            actionTypeId <= ACTION_INTEGRATION_DELETE -> TargetType.INTEGRATION
+            actionTypeId <= ACTION_STAGE_INSTANCE_DELETE -> TargetType.STAGE_INSTANCE
+            actionTypeId <= ACTION_STICKER_DELETE -> TargetType.STICKER
+            actionTypeId <= ACTION_GUILD_SCHEDULED_EVENT_DELETE -> TargetType.GUILD_SCHEDULED_EVENT
+            actionTypeId <= ACTION_THREAD_DELETE -> TargetType.THREAD
+            actionTypeId == ACTION_APPLICATION_COMMAND_PERMISSION_UPDATE ->
+                TargetType.APPLICATION_COMMAND
+            actionTypeId <= ACTION_SOUNDBOARD_SOUND_DELETE -> TargetType.GUILD_SOUNDBOARD
+            actionTypeId < ACTION_AUTO_MODERATION_BLOCK_MESSAGE -> TargetType.AUTO_MODERATION_RULE
+            // The AutoMod *enforcement* actions name the member they were applied to.
+            actionTypeId <= ACTION_AUTO_MODERATION_QUARANTINE_USER -> TargetType.USER
+            actionTypeId <= ACTION_CREATOR_MONETIZATION_TERMS_ACCEPTED -> TargetType.GUILD
+            actionTypeId <= ACTION_ONBOARDING_PROMPT_DELETE -> TargetType.ONBOARDING_PROMPT
+            actionTypeId <= ACTION_ONBOARDING_UPDATE -> TargetType.GUILD_ONBOARDING
+            actionTypeId <= ACTION_GUILD_HOME_REMOVE_ITEM -> TargetType.GUILD_HOME
+            actionTypeId <= ACTION_HARMFUL_LINKS_BLOCKED_MESSAGE -> TargetType.GUILD
+            actionTypeId <= ACTION_HOME_SETTINGS_UPDATE -> TargetType.HOME_SETTINGS
+            actionTypeId <= ACTION_VOICE_CHANNEL_STATUS_DELETE -> TargetType.VOICE_CHANNEL_STATUS
+            actionTypeId <= ACTION_GUILD_SCHEDULED_EVENT_EXCEPTION_DELETE ->
+                TargetType.GUILD_SCHEDULED_EVENT_EXCEPTION
+            actionTypeId <= ACTION_GUILD_MEMBER_VERIFICATION_UPDATE ->
+                TargetType.GUILD_MEMBER_VERIFICATION
+            actionTypeId <= ACTION_GUILD_PROFILE_UPDATE -> TargetType.GUILD_PROFILE
+            actionTypeId <= ACTION_GUILD_MIGRATE_BYPASS_SLOWMODE_PERMISSION -> TargetType.GUILD
             else -> TargetType.UNKNOWN
         }
     }

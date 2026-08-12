@@ -5,7 +5,10 @@ import android.content.Intent
 import android.view.View
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.api.permission.Permission
+import com.discord.api.role.GuildRole
 import com.discord.app.AppFragment
+import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
 import com.discord.stores.StoreAuditLog.AuditLogState
@@ -116,19 +119,30 @@ class WidgetServerSettingsAuditLogFilter : AppFragment(R.layout.widget_audit_log
                 StoreStream.getAuditLog().observeAuditLogState(guildId),
                 StoreStream.getUsers().observeAllUsers(),
                 StoreStream.getGuilds().observeComputed(guildId),
+                StoreStream.getGuilds().observeRoles(guildId),
+                StoreStream.getGuilds().observeGuild(guildId),
                 filterPublisher
                     .leadingEdgeThrottle(SEARCH_THROTTLE_MS, TimeUnit.MILLISECONDS)
                     .distinctUntilChanged(),
-            ) { auditLogState, users, guildMembers, filterText ->
+            ) { auditLogState, users, guildMembers, roles, guild, filterText ->
                 if (filterType == FILTER_TYPE_USER) {
-                    Model(userItems(context, auditLogState, users, guildMembers, filterText))
+                    Model(
+                        userItems(
+                            context, auditLogState, users, guildMembers, roles, guild, filterText,
+                        ),
+                    )
                 } else {
                     Model(actionItems(context, auditLogState, filterText))
                 }
             }.distinctUntilChanged()
 
             /**
-             * Every known user, fuzzy-matched on username, with the currently selected one first.
+             * The users worth filtering by, fuzzy-matched on username, selected one first.
+             *
+             * Not every user the client has ever cached: only the ones that could plausibly appear
+             * in this guild's log — whoever already acted in the entries loaded so far, plus the
+             * owner and anyone holding a role with a management permission. Anything wider offers
+             * to filter by people who can never have produced an entry here.
              *
              * The "All users" row is only offered while the search box is empty: it is not a search
              * result, and leaving it pinned to the top of a filtered list would be misleading.
@@ -138,6 +152,8 @@ class WidgetServerSettingsAuditLogFilter : AppFragment(R.layout.widget_audit_log
                 auditLogState: AuditLogState,
                 users: Map<Long, User>,
                 guildMembers: Map<Long, GuildMember>,
+                roles: Map<Long, GuildRole>,
+                guild: Guild?,
                 filterText: String,
             ): List<WidgetServerSettingsAuditLogFilterAdapter.AuditLogUserFilterItem> {
                 val allUsersRow = if (filterText.isBlank()) {
@@ -155,7 +171,18 @@ class WidgetServerSettingsAuditLogFilter : AppFragment(R.layout.widget_audit_log
                     emptyList()
                 }
 
-                val matches = users.values
+                val candidateIds = LinkedHashSet<Long>()
+                auditLogState.entries.orEmpty().forEach { entry ->
+                    if (entry.userId != NO_USER_FILTER) candidateIds.add(entry.userId)
+                }
+                guildMembers.values.forEach { member ->
+                    if (member.userId == guild?.ownerId || member.canManageGuild(roles)) {
+                        candidateIds.add(member.userId)
+                    }
+                }
+
+                val matches = candidateIds
+                    .mapNotNull { users[it] ?: auditLogState.users[it] }
                     .filter { SearchUtils.fuzzyMatch(filterText.lowercase(), it.username.lowercase()) }
                     .map { user ->
                         WidgetServerSettingsAuditLogFilterAdapter.AuditLogUserFilterItem(
@@ -170,6 +197,12 @@ class WidgetServerSettingsAuditLogFilter : AppFragment(R.layout.widget_audit_log
 
                 return (allUsersRow + matches).sortedBy { !it.isChecked }
             }
+
+            private fun GuildMember.canManageGuild(roles: Map<Long, GuildRole>): Boolean =
+                getRoles().any { roleId ->
+                    val permissions = roles[roleId]?.permissions ?: return@any false
+                    permissions and MANAGEMENT_PERMISSIONS != 0L
+                }
 
             /** Every renderable action, fuzzy-matched on its localised name, selected one first. */
             private fun actionItems(
@@ -204,6 +237,27 @@ class WidgetServerSettingsAuditLogFilter : AppFragment(R.layout.widget_audit_log
             WidgetServerSettingsAuditLogFilterAdapter.NO_USER_FILTER
         private const val NO_GUILD = 0L
         private const val SEARCH_THROTTLE_MS = 100L
+
+        /**
+         * The permissions that can produce an audit-log entry.
+         *
+         * Deliberately not [com.discord.api.permission.Permission.MANAGEMENT_PERMISSIONS], which is
+         * the "can see server settings" bundle: this one drops `MANAGE_EVENTS`/`MODERATE_MEMBERS`
+         * and adds `MANAGE_MESSAGES`/`MOVE_MEMBERS`.
+         */
+        private val MANAGEMENT_PERMISSIONS = Permission.KICK_MEMBERS or
+            Permission.BAN_MEMBERS or
+            Permission.ADMINISTRATOR or
+            Permission.MANAGE_CHANNELS or
+            Permission.MANAGE_GUILD or
+            Permission.MANAGE_MESSAGES or
+            Permission.MANAGE_NICKNAMES or
+            Permission.MANAGE_ROLES or
+            Permission.MANAGE_WEBHOOKS or
+            Permission.MANAGE_GUILD_EXPRESSIONS or
+            Permission.MOVE_MEMBERS or
+            Permission.MUTE_MEMBERS or
+            Permission.DEAFEN_MEMBERS
 
         fun show(context: Context, guildId: Long, filterType: Int) {
             SettingsNavigation.launch(
