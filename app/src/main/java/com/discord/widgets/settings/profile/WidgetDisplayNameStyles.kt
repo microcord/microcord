@@ -164,12 +164,14 @@ class WidgetDisplayNameStyles : AppFragment(R.layout.widget_display_name_styles)
             pending,
             DisplayNameStyleRenderer.Mode.FULL,
             unstyled,
+            overrideSettings = true,
         )
         DisplayNameStyleRenderer.apply(
             chatName,
             pending,
             DisplayNameStyleRenderer.Mode.FONT,
             unstyled,
+            overrideSettings = true,
         )
 
         fontValue.setText(DisplayNameStylePresets.fontName(pending.fontId))

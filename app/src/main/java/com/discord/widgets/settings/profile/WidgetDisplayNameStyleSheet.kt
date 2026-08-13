@@ -159,6 +159,7 @@ class WidgetDisplayNameStyleSheet : AppBottomSheet() {
                     id,
                     DisplayNameStylePresets.presetsFor(id).first(),
                 ),
+                overrideSettings = true,
             )
         }
         tile.setOnClickListener {

@@ -12,6 +12,7 @@ import android.widget.TextView
 import androidx.annotation.ColorInt
 import com.discord.R
 import com.discord.api.user.DisplayNameStyles
+import com.discord.stores.StoreStream
 import com.discord.utilities.color.ColorCompat
 import com.discord.views.DisplayNameTextView
 import kotlin.math.cos
@@ -53,6 +54,10 @@ object DisplayNameStyleRenderer {
      *   restyled in place — those pass their own, because by the second call the view is wearing
      *   the last style's colour rather than the theme's.
      */
+    /**
+     * @param overrideSettings draws the style even when the accessibility toggle is off, which is
+     *   what the style picker and its previews need — otherwise choosing a style would show nothing.
+     */
     @JvmStatic
     @JvmOverloads
     fun apply(
@@ -60,9 +65,11 @@ object DisplayNameStyleRenderer {
         styles: DisplayNameStyles?,
         mode: Mode = Mode.FULL,
         @ColorInt defaultColor: Int = view.currentTextColor,
+        overrideSettings: Boolean = false,
     ) {
         reset(view, defaultColor)
         if (styles == null) return
+        if (!overrideSettings && !StoreStream.getAccessibility().isDisplayNameStylesEnabled()) return
 
         DisplayNameStyleFonts.typefaceFor(view.context, styles.fontId)?.let { view.typeface = it }
         if (mode == Mode.FONT) return

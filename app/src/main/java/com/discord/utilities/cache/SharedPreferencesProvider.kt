@@ -53,6 +53,7 @@ object SharedPreferencesProvider {
 
     private val DEVICE_SCOPED_PREFIXES = listOf(
         "CACHE_KEY_VOICE_SETTINGS_",
+        "feature_",
     )
 
     private val DEVICE_SCOPED_KEYS = setOf(

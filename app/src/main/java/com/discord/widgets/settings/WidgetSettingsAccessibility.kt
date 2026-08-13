@@ -9,6 +9,7 @@ import com.discord.models.domain.ModelUserSettings
 import com.discord.stores.StoreStream
 import com.discord.utilities.rx.ui
 import com.discord.utilities.view.text.LinkifiedTextView
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.views.CheckedSetting
 import com.discord.views.RadioManager
 import rx.Observable
@@ -35,6 +36,7 @@ class WidgetSettingsAccessibility : AppFragment(R.layout.widget_settings_accessi
     /** Reference `WidgetSettingsAccessibility.Model`. */
     data class Model(
         val reducedMotionEnabled: Boolean,
+        val displayNameStylesEnabled: Boolean,
         val allowAnimatedEmoji: Boolean,
         val autoPlayGifs: Boolean,
         val currentStickerAnimationSettings: Int,
@@ -44,17 +46,26 @@ class WidgetSettingsAccessibility : AppFragment(R.layout.widget_settings_accessi
                 val settings = StoreStream.getUserSettings()
                 return Observable.combineLatest(
                     StoreStream.getAccessibility().observeReducedMotionEnabled(),
+                    StoreStream.getAccessibility().observeDisplayNameStylesEnabled(),
                     settings.observeIsAnimatedEmojisEnabled(false),
                     settings.observeIsAutoPlayGifsEnabled(false),
                     settings.observeStickerAnimationSettings(false),
-                ) { reducedMotion, animatedEmoji, autoPlayGifs, stickerAnimation ->
-                    Model(reducedMotion, animatedEmoji, autoPlayGifs, stickerAnimation)
+                ) { reducedMotion, displayNameStyles, animatedEmoji, autoPlayGifs, stickerAnimation ->
+                    Model(reducedMotion, displayNameStyles, animatedEmoji, autoPlayGifs, stickerAnimation)
                 }
             }
         }
     }
 
     private var stickersAnimationRadioManager: RadioManager? = null
+
+    /** Collectibles keep their [FeatureFlags] storage; only where they are surfaced has moved. */
+    private fun bindCollectible(root: View, id: Int, get: () -> Boolean, set: (Boolean) -> Unit) {
+        root.findViewById<CheckedSetting>(id).apply {
+            setChecked(get(), false)
+            setOnCheckedListener(Action1 { set(it) })
+        }
+    }
 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
@@ -69,6 +80,12 @@ class WidgetSettingsAccessibility : AppFragment(R.layout.widget_settings_accessi
 
         root.findViewById<CheckedSetting>(R.id.settings_accessibility_reduced_motion_switch)
             .setOnCheckedListener(Action1 { accessibility.setReducedMotionEnabled(it) })
+        root.findViewById<CheckedSetting>(R.id.settings_accessibility_display_name_styles_switch)
+            .setOnCheckedListener(Action1 { accessibility.setDisplayNameStylesEnabled(it) })
+        bindCollectible(root, R.id.settings_feature_avatar_decorations, FeatureFlags::avatarDecorationsEnabled, FeatureFlags::setAvatarDecorationsEnabled)
+        bindCollectible(root, R.id.settings_feature_nameplates, FeatureFlags::nameplatesEnabled, FeatureFlags::setNameplatesEnabled)
+        bindCollectible(root, R.id.settings_feature_profile_effects, FeatureFlags::profileEffectsEnabled, FeatureFlags::setProfileEffectsEnabled)
+        bindCollectible(root, R.id.settings_feature_profile_frames, FeatureFlags::profileFramesEnabled, FeatureFlags::setProfileFramesEnabled)
         root.findViewById<LinkifiedTextView>(R.id.settings_accessibility_reduced_motion_description).apply {
             text = SettingsStrings.render(
                 context,
@@ -106,6 +123,8 @@ class WidgetSettingsAccessibility : AppFragment(R.layout.widget_settings_accessi
 
         root.findViewById<CheckedSetting>(R.id.settings_accessibility_reduced_motion_switch)
             .setChecked(model.reducedMotionEnabled, false)
+        root.findViewById<CheckedSetting>(R.id.settings_accessibility_display_name_styles_switch)
+            .setChecked(model.displayNameStylesEnabled, false)
 
         if (model.reducedMotionEnabled) {
             emoji.setDisabledTooltip(R.string.accessibility_reduced_motion_settings_override)

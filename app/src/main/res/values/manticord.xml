@@ -75,6 +75,8 @@
     <string name="guild_report_raid_modal_choice_settings_spam">Changing server and channel settings</string>
     <string name="manticord_discovery_category_count" translatable="false">%1$s (%2$d)</string>
     <string name="hub_add_server_create_prompt">Want to start a new group?</string>
+    <string name="display_name_styles_setting_title">Display Name Styles</string>
+    <string name="display_name_styles_setting_subtitle">Enable display name styles — including font, effect, and color — across Discord.</string>
     <string name="global_discovery_title">Discover</string>
     <string name="global_discovery_servers_featured_category">Home</string>
     <string name="global_discovery_servers_gaming_category">Gaming</string>

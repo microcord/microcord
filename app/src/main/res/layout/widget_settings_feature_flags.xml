@@ -19,11 +19,6 @@
             <TextView android:text="@string/feature_header_customizations" style="@style/UiKit.Settings.Item.Header"/>
             <com.discord.views.CheckedSetting android:id="@+id/settings_feature_header_customizations" app:cs_text="@string/feature_header_customizations_enable" app:cs_subtext="@string/feature_header_customizations_description" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
             <TextView android:id="@+id/settings_feature_customize_header" android:text="@string/header_customization_title" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
-            <TextView android:id="@+id/settings_feature_collectibles_header" android:text="@string/feature_collectibles" style="@style/UiKit.Settings.Item.Header"/>
-            <com.discord.views.CheckedSetting android:id="@+id/settings_feature_avatar_decorations" app:cs_text="@string/feature_avatar_decorations" app:cs_subtext="@string/feature_avatar_decorations_description" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
-            <com.discord.views.CheckedSetting android:id="@+id/settings_feature_nameplates" app:cs_text="@string/feature_nameplates" app:cs_subtext="@string/feature_nameplates_description" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
-            <com.discord.views.CheckedSetting android:id="@+id/settings_feature_profile_effects" app:cs_text="@string/feature_profile_effects" app:cs_subtext="@string/feature_profile_effects_description" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
-            <com.discord.views.CheckedSetting android:id="@+id/settings_feature_profile_frames" app:cs_text="@string/feature_profile_frames" app:cs_subtext="@string/feature_profile_frames_description" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

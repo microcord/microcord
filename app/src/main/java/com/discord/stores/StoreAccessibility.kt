@@ -18,21 +18,26 @@ class StoreAccessibility(
     private var accessibilityFeaturesSnapshot = EnumSet.of(AccessibilityFeatureFlags.NONE)
     private var reducedMotionEnabled = false
     private var syncProfileThemeWithUserTheme = false
+    private var displayNameStylesEnabled = true
     private var isDetectionAllowed = false
     private var fontScaledUp = false
     private var fontScaledDown = false
     private val reducedMotionCache = Persister("CACHE_KEY_ACCESSIBILITY_REDUCED_MOTION_ENABLED", false, deviceScoped = true)
     private val syncProfileThemeCache =
         Persister("CACHE_KEY_ACCESSIBILITY_SYNC_PROFILE_THEME_WITH_USER_THEME", false, deviceScoped = true)
+    private val displayNameStylesCache =
+        Persister("CACHE_KEY_ACCESSIBILITY_DISPLAY_NAME_STYLES_ENABLED", true, deviceScoped = true)
 
     fun getAccessibilityFeatures(): EnumSet<AccessibilityFeatureFlags> = accessibilityFeaturesSnapshot
     fun isReducedMotionEnabled() = reducedMotionEnabled
     fun isSyncProfileThemeWithUserThemeEnabled() = syncProfileThemeWithUserTheme
+    fun isDisplayNameStylesEnabled() = displayNameStylesEnabled
     fun isScreenreaderEnabled() = accessibilityFeaturesSnapshot.contains(AccessibilityFeatureFlags.SCREENREADER)
 
     override fun init(context: Context) {
         reducedMotionEnabled = reducedMotionCache.get()
         syncProfileThemeWithUserTheme = syncProfileThemeCache.get()
+        displayNameStylesEnabled = displayNameStylesCache.get()
         accessibilityMonitor.observeAccessibilityState().subscribe { state ->
             dispatcher.schedule { updateMonitoredAccessibilityState(state) }
         }
@@ -41,6 +46,7 @@ class StoreAccessibility(
     internal fun initForTesting() {
         reducedMotionEnabled = reducedMotionCache.get()
         syncProfileThemeWithUserTheme = syncProfileThemeCache.get()
+        displayNameStylesEnabled = displayNameStylesCache.get()
         dispatcher.schedule { markChanged() }
     }
 
@@ -52,9 +58,17 @@ class StoreAccessibility(
         observationDeck.connectRx(this, generator = ::isReducedMotionEnabled)
     fun observeSyncProfileThemeWithUserTheme(): Observable<Boolean> =
         observationDeck.connectRx(this, generator = ::isSyncProfileThemeWithUserThemeEnabled)
+    fun observeDisplayNameStylesEnabled(): Observable<Boolean> =
+        observationDeck.connectRx(this, generator = ::isDisplayNameStylesEnabled)
 
     fun setReducedMotionEnabled(enabled: Boolean) = dispatcher.schedule {
         reducedMotionEnabled = enabled
+        markChanged()
+    }
+
+    fun setDisplayNameStylesEnabled(enabled: Boolean) = dispatcher.schedule {
+        displayNameStylesEnabled = enabled
+        displayNameStylesCache.set(enabled, persist = true)
         markChanged()
     }
 
