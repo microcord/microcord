@@ -11,6 +11,12 @@ import rx.subjects.BehaviorSubject
 
 class StoreGuildOnboarding(
     private val dispatcher: Dispatcher,
+    /**
+     * Whether the guild is only being previewed rather than joined.
+     *
+     * Injected so a store test can drive both cases without a [StoreStream].
+     */
+    private val isLurking: (Long) -> Boolean = { StoreStream.getLurking().isLurking(it) },
 ) : Store() {
     data class State(
         val loading: Boolean = false,
@@ -49,6 +55,10 @@ class StoreGuildOnboarding(
     fun fetch(guildId: Long, force: Boolean = false) = dispatcher.schedule {
         val current = get(guildId)
         if (current.loading || (!force && current.onboarding != null)) return@schedule
+        // A lurker has no membership for the endpoint to answer about, so it always fails. The
+        // failure is indistinguishable from a failed submit downstream, and the screen would tell
+        // someone browsing a server that their choices could not be saved.
+        if (isLurking(guildId)) return@schedule
         publish(guildId, current.copy(loading = true, error = false))
         val service = RestAPI.apiOrNull
         if (service == null) {

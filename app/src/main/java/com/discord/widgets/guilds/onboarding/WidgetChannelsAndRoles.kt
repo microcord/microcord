@@ -134,7 +134,9 @@ class WidgetChannelsAndRoles : AppFragment(R.layout.widget_channels_and_roles) {
         if (_binding == null) return
         val current = model
         binding.loading.visibility = if (current?.onboarding?.loading != false) View.VISIBLE else View.GONE
-        binding.error.visibility = if (current?.onboarding?.error == true) View.VISIBLE else View.GONE
+        // No error banner: the reference has none here, and a failed load is indistinguishable
+        // from a server with no questions, so both fall through to the empty state. The screen also
+        // has nothing to save, which is what the only message available would have claimed.
         if (current == null || current.onboarding.loading) return
         val items = if (tab == Tab.CUSTOMIZE) customizeRows(current) else browseRows(current)
         rows.submit(items)

@@ -13,7 +13,6 @@
         </com.google.android.material.textfield.TextInputLayout>
         <ProgressBar android:id="@+id/loading" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center"/>
         <TextView android:id="@+id/empty" android:visibility="gone" android:gravity="center" android:padding="24dp" style="@style/UiKit.TextView.Subtext"/>
-        <TextView android:id="@+id/error" android:visibility="gone" android:gravity="center" android:padding="12dp" android:text="@string/guild_onboarding_submit_failed" android:textColor="?attr/colorError" style="@style/UiKit.TextView"/>
         <androidx.recyclerview.widget.RecyclerView android:id="@+id/list" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:clipToPadding="false" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingBottom="24dp" app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"/>
     </LinearLayout>
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
