@@ -1,5 +1,6 @@
 package com.discord.utilities.messagesend
 
+import android.net.Uri
 import com.discord.api.message.Message as ApiMessage
 import com.discord.api.message.MessageReference
 import com.discord.api.sticker.Sticker
@@ -11,6 +12,7 @@ import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.models.message.Message
 import com.discord.stores.StorePendingReplies
 import com.discord.utilities.captcha.CaptchaSolution
+import com.discord.utilities.attachments.UploadAttachment
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -74,6 +76,29 @@ class MessageSendCoordinatorTest {
         assertEquals(5_000L, reconciled.message.id)
         // The optimistic id is replaced by the server id, but the nonce still ties them together.
         assertEquals(nonce, reconciled.message.nonce)
+    }
+
+    @Test
+    fun oversizedContentIsRejectedEvenWithAnAttachment() {
+        val submission = coordinator.send(
+            MessageSendCoordinator.Send(
+                channelId = CHANNEL_ID,
+                content = "x".repeat(MessageSendCoordinator.DEFAULT_CHARACTER_LIMIT + 1),
+                attachments = listOf(
+                    UploadAttachment(
+                        id = 0L,
+                        uri = Uri.parse("file:///message.txt"),
+                        displayName = "message.txt",
+                        spoiler = false,
+                        mimeType = MessageSendCoordinator.TEXT_FILE_MIME_TYPE,
+                        size = 1L,
+                        permissionPersisted = false,
+                    ),
+                ),
+            ),
+        )
+
+        assertTrue(submission is MessageSendCoordinator.Submission.Rejected)
     }
 
     @Test

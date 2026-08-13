@@ -383,6 +383,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
         input.channelId <= 0 || input.systemDm -> MessageResult.NoValidContent
         !input.canSend -> MessageResult.ValidationError("Missing send permission")
         input.communicationDisabled -> MessageResult.ValidationError("Communication disabled")
+        input.content.length > characterLimit -> MessageResult.ValidationError("Message exceeds $characterLimit characters")
         !input.attachments.isNullOrEmpty() -> null
         !input.stickers.isNullOrEmpty() -> null
         else -> validateContent(input.content)
@@ -406,8 +407,9 @@ class MessageSendCoordinator @JvmOverloads constructor(
             ?: MessageAllowedMentions(repliedUser = reply.shouldMention)
     }
 
-    private companion object {
+    companion object {
         const val DEFAULT_CHARACTER_LIMIT = 2_000
+        const val TEXT_FILE_MIME_TYPE = "text/plain"
         const val TYPING_INTERVAL_MS = 9_000L
         const val TYPE_SENDING = -1
         const val TYPE_FAILED = -2

@@ -45,6 +45,8 @@ import com.discord.app.AppToast
 import com.discord.app.appActivityViewModels
 import com.discord.databinding.FlexInputWidgetBinding
 import com.discord.databinding.WidgetChatInputBinding
+import com.discord.dialogs.SimpleConfirmationDialog
+import com.discord.dialogs.SimpleConfirmationDialogArgs
 import com.discord.i18n.FormatUtils
 import com.discord.models.domain.emoji.Emoji
 import com.discord.models.member.GuildMember
@@ -102,6 +104,7 @@ import com.lytefast.flexinput.managers.KeyboardManager
 import com.lytefast.flexinput.model.Attachment
 import com.lytefast.flexinput.widget.FlexEditText
 import java.io.File
+import java.util.UUID
 import rx.Subscription
 import rx.subjects.PublishSubject
 import com.discord.utilities.user.UserUtils.getDisplayName
@@ -918,9 +921,13 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
      * mention the user typed by hand (`@alice#0001`) leaves as `<@id>` exactly like one they
      * picked from the popup.
      */
-    private fun submit(attachments: List<Attachment<*>>): Boolean {
+    private fun submit(
+        attachments: List<Attachment<*>>,
+        contentOverride: String? = null,
+        generatedUpload: UploadAttachment? = null,
+    ): Boolean {
         val loaded = state ?: return false
-        var content = autocomplete?.getInputContent() ?: input?.text?.toString().orEmpty()
+        var content = contentOverride ?: autocomplete?.getInputContent() ?: input?.text?.toString().orEmpty()
         val pendingReply =
             (loaded.pendingReplyState as? ChatInputViewModel.ViewState.PendingReplyState.Replying)?.pendingReply
 
@@ -940,7 +947,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                     isRemix = ((attachment as? SourcedAttachment<*>)?.source == SOURCE_PHOTO_EDITOR)
                         .takeIf { it },
                 )
-            }
+            } + listOfNotNull(generatedUpload)
         }.getOrElse {
             Toast.makeText(requireContext(), R.string.invalid_attachments_failure, Toast.LENGTH_SHORT).show()
             return false
@@ -983,7 +990,17 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 return true
             }
         }
-        if (uploads.isNotEmpty() && shouldOfferMediaForOriginalPost(loaded)) {
+        if (
+            generatedUpload == null &&
+            !loaded.isEditing &&
+            content.length > MessageSendCoordinator.DEFAULT_CHARACTER_LIMIT
+        ) {
+            offerSendAsFile(content, attachments)
+            return false
+        }
+        if (uploads.any { it.mimeType.startsWith("image/") || it.mimeType.startsWith("video/") } &&
+            shouldOfferMediaForOriginalPost(loaded)
+        ) {
             promptAddMediaToOriginalPost(loaded, content, uploads, attachments)
             return false
         }
@@ -1102,6 +1119,41 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val result = (submission as MessageSendCoordinator.Submission.Rejected).result
         Toast.makeText(requireContext(), validationMessage(result), Toast.LENGTH_SHORT).show()
         return false
+    }
+
+    private fun offerSendAsFile(content: String, attachments: List<Attachment<*>>) {
+        SimpleConfirmationDialog.show(
+            parentFragmentManager,
+            SimpleConfirmationDialogArgs(
+                title = getString(R.string.message_too_long_header),
+                description = getString(R.string.message_too_long_send_as_file_description),
+                positiveButtonText = getString(R.string.message_too_long_send_as_file),
+                negativeButtonText = getString(R.string.cancel),
+            ),
+            positiveClickListener = View.OnClickListener {
+                val upload = runCatching {
+                    val file = File(requireContext().cacheDir, "message-${UUID.randomUUID()}.txt")
+                    file.writeText(content, Charsets.UTF_8)
+                    UploadAttachment(
+                        id = System.currentTimeMillis(),
+                        uri = Uri.fromFile(file),
+                        displayName = "message.txt",
+                        spoiler = false,
+                        mimeType = MessageSendCoordinator.TEXT_FILE_MIME_TYPE,
+                        size = file.length(),
+                        permissionPersisted = false,
+                    )
+                }.getOrElse {
+                    Toast.makeText(requireContext(), R.string.invalid_attachments_failure, Toast.LENGTH_SHORT).show()
+                    return@OnClickListener
+                }
+                if (submit(attachments, contentOverride = "", generatedUpload = upload)) {
+                    input?.setText("")
+                    (childFragmentManager.findFragmentById(R.id.chat_input_widget) as? FlexInputFragment)
+                        ?.clearAttachments()
+                }
+            },
+        )
     }
 
     private fun insertMention(userId: Long) {
