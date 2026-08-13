@@ -14,26 +14,40 @@ import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import com.discord.api.embeddedactivities.EmbeddedActivityOAuthAuthentication
+import androidx.webkit.WebViewAssetLoader
 import com.discord.api.embeddedactivities.EmbeddedActivityOAuthAuthorization
 import com.discord.api.embeddedactivities.EmbeddedActivityOAuthUser
+import com.discord.app.AppLog
+import com.discord.rpc.RpcCloseCodes
+import com.discord.rpc.RpcError
+import com.discord.rpc.RpcErrors
+import com.discord.utilities.analytics.AnalyticsUtils
+import com.discord.rpc.RpcServer
+import com.discord.rpc.RpcServerConfig
+import com.discord.rpc.RpcServerManager
+import com.discord.rpc.RpcSocket
+import com.discord.rpc.RpcSocketSource
+import com.discord.rpc.RpcTransportTypes
+import com.discord.rpc.commands.RpcActivityHost
+import com.discord.rpc.commands.RpcAuthHost
+import com.discord.rpc.commands.rpcActivityHost
+import com.discord.rpc.commands.rpcAuthHost
+import com.discord.rpc.transport.PostMessageTransport
 import com.discord.stores.StoreStream
 import com.discord.utilities.rest.RestAPI
-import java.util.Locale
+import java.io.File
 import java.util.UUID
 import org.json.JSONArray
 import org.json.JSONObject
+import org.json.JSONTokener
 import rx.Observable
-import rx.Subscription
-import rx.android.schedulers.AndroidSchedulers
-import rx.schedulers.Schedulers
-import rx.subscriptions.CompositeSubscription
 
 @SuppressLint("SetJavaScriptEnabled", "ViewConstructor")
 class EmbeddedActivityWebView(
@@ -44,14 +58,35 @@ class EmbeddedActivityWebView(
     private val onAuthorizeRequest: (EmbeddedActivityAuthorizeRequest, () -> Unit, () -> Unit) -> Unit,
     private val onCrash: () -> Unit,
     private val onLoadError: (String) -> Unit,
+    private val onOrientationLockState: (Int, Int?, Int?) -> Unit = { _, _, _ -> },
+    private val onInviteDialog: (com.discord.api.channel.Channel) -> Unit = {},
+    private val onShareLink: (String) -> Unit = {},
+    private val onImageUpload: ((String?) -> Unit) -> Unit = { it(null) },
+    private val onNavigateToConnections: () -> Unit = {},
 ) : WebView(context) {
     private val bridgeSecret = UUID.randomUUID().toString()
-    private val bridge = Bridge()
-    private val subscriptions = linkedSetOf<String>()
-    private val oauthSubscriptions = CompositeSubscription()
-    private val pendingOAuth = linkedMapOf<String, Subscription>()
-    private var bridgeClientId: Long? = null
-    private var authorizationPromptPending = false
+    private val activityOrigin = "https://${session.application.id}.discordsays.com"
+    private val pageDirectory = File(context.cacheDir, "$PAGE_DIRECTORY/${session.frameId}")
+    private val source = RpcSocketSource(RpcTransportTypes.POST_MESSAGE, activityOrigin, session.frameId)
+
+    private val transport = PostMessageTransport(::validateSocketClient)
+    private val server: RpcServer = RpcServerManager.create(
+        RpcServerConfig(
+            cdnHost = session.discordConfig.cdnHost,
+            apiEndpoint = session.discordConfig.apiEndpoint,
+            environment = session.discordConfig.environment,
+        ),
+        transport,
+    )
+
+    private val assetLoader = WebViewAssetLoader.Builder()
+        .setDomain("${session.application.id}.discordsays.com")
+        .addPathHandler(
+            "/${session.frameId}/",
+            WebViewAssetLoader.InternalStoragePathHandler(context, pageDirectory),
+        )
+        .build()
+
     private var destroyed = false
 
     init {
@@ -71,269 +106,309 @@ class EmbeddedActivityWebView(
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             setSupportMultipleWindows(false)
             javaScriptCanOpenWindowsAutomatically = false
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
-                allowFileAccessFromFileURLs = false
-                allowUniversalAccessFromFileURLs = false
-            }
+            allowFileAccessFromFileURLs = false
+            allowUniversalAccessFromFileURLs = false
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) safeBrowsingEnabled = true
         }
         WebView.setWebContentsDebuggingEnabled(false)
-        addJavascriptInterface(bridge, BRIDGE_NAME)
+        addJavascriptInterface(Bridge(), BRIDGE_NAME)
         webViewClient = ActivityClient()
         webChromeClient = ActivityChromeClient()
-        ViewCompat.setOnApplyWindowInsetsListener(this) { view, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+
+        // The activity draws edge to edge; insets reach it as CSS variables instead of padding, so
+        // its own chrome moves without letterboxing the frame.
+        ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+            )
+            updateSafeAreas(bars.left, bars.top, bars.right, bars.bottom)
             insets
+        }
+
+        rpcActivityHost = ActivityHost()
+        rpcAuthHost = AuthHost()
+        server.onDisconnect = { _, code, message ->
+            if (code != null && code != RpcCloseCodes.CLOSE_NORMAL) {
+                AppLog.i(TAG, "activity socket closed: $code $message")
+            }
         }
     }
 
+    /**
+     * Writes the wrapper page and points the WebView at it through [assetLoader].
+     *
+     * The page has to be served over https from the activity's own origin rather than handed to
+     * `loadData`: the activity SDK needs a secure context for `crypto.subtle`, and the wrapper has
+     * to share an origin with the frame to read `contentWindow`.
+     */
     fun loadActivity() {
-        loadDataWithBaseURL(HOST_ORIGIN, hostPage(), "text/html", "utf-8", null)
+        pageDirectory.mkdirs()
+        File(pageDirectory, PAGE_FILE).writeText(wrapperPage())
+        transport.handleFrameMount(session.frameId)
+        loadUrl("$activityOrigin/${session.frameId}/$PAGE_FILE")
     }
 
     fun updateInstance(instance: com.discord.api.embeddedactivities.EmbeddedActivityInstance) {
         session = session.copy(instance = instance)
-        updateParticipants()
+        server.updateSubscriptions()
     }
 
-    private fun updateParticipants() {
-        if (PARTICIPANTS_EVENT !in subscriptions) return
-        dispatch(
-            PARTICIPANTS_EVENT,
-            JSONObject().put(
-                "participants",
-                JSONArray().apply {
-                    session.instance.participants.forEach { participant ->
-                        val user = StoreStream.getUsers().getUsers()[participant.userId]
-                        put(
-                            JSONObject()
-                                .put("id", participant.userId.toString())
-                                .put("username", user?.username ?: "")
-                                .put("flags", 0),
-                        )
-                    }
-                },
-            ),
-        )
-    }
-
-    override fun onPause() {
-        super.onPause()
-    }
-
-    override fun onResume() {
-        super.onResume()
+    /** Re-runs every subscription's updater; the store layer has no push channel into the server. */
+    fun onStoresChanged() {
+        if (!destroyed) server.updateSubscriptions()
     }
 
     fun destroySafely() {
         if (destroyed) return
         destroyed = true
-        oauthSubscriptions.unsubscribe()
-        pendingOAuth.clear()
+        transport.handleFrameUnmount(session.frameId)
+        if (rpcActivityHost is ActivityHost) rpcActivityHost = null
+        if (rpcAuthHost is AuthHost) rpcAuthHost = null
         stopLoading()
         removeJavascriptInterface(BRIDGE_NAME)
         (parent as? ViewGroup)?.removeView(this)
+        pageDirectory.deleteRecursively()
         destroy()
     }
 
-    private fun hostPage(): String = """
-        <!doctype html><html><head>
-        <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-        <meta name="referrer" content="origin">
-        <style>html,body,iframe{width:100%;height:100%;margin:0;border:0;overflow:hidden;background:transparent}</style>
-        </head><body><iframe id="activity" sandbox="allow-pointer-lock allow-scripts allow-same-origin allow-forms" allow="autoplay; encrypted-media; fullscreen; picture-in-picture; camera; microphone"></iframe>
-        <script>(function(){
-          var frame=document.getElementById('activity');
-          var activityOrigin=${JSONObject.quote(activityOrigin())};
-          window.addEventListener('message',function(event){
-            if(event.source===frame.contentWindow&&event.origin===activityOrigin&&Array.isArray(event.data)){
-              try{DiscordNative.postMessage(${JSONObject.quote(bridgeSecret)},JSON.stringify(event.data));}catch(e){}
-            }
-          });
-          window.__hostDeliver=function(json){
-            try{frame.contentWindow.postMessage(JSON.parse(json),activityOrigin);}catch(e){}
-          };
-          frame.referrerPolicy='origin';
-          frame.src=${JSONObject.quote(session.url)};
-        })();</script></body></html>
-    """.trimIndent()
+    private fun validateSocketClient(
+        socket: RpcSocket,
+        origin: String?,
+        clientId: String?,
+    ): Observable<Unit> {
+        if (clientId == null) {
+            return Observable.error(
+                RpcError.close(RpcCloseCodes.INVALID_CLIENTID, "No Client ID Specified"),
+            )
+        }
+        // An activity's origin is derived from its application id, so this is the whole allowlist.
+        if (origin != null && origin != "https://$clientId.discordsays.com") {
+            return Observable.error(RpcError.close(RpcCloseCodes.INVALID_ORIGIN, "Invalid Origin"))
+        }
+        val applicationId = clientId.toLongOrNull()
+            ?: return Observable.error(RpcError.close(RpcCloseCodes.INVALID_CLIENTID, "Invalid Client ID"))
+        socket.application.id = applicationId
+        socket.application.name = session.application.name
+        socket.application.icon = session.application.icon
+        return Observable.just(Unit)
+    }
 
-    private fun activityOrigin(): String = Uri.parse(session.url).let { "${it.scheme}://${it.authority}" }
+    private fun wrapperPage(): String {
+        val sandbox = "allow-pointer-lock allow-scripts allow-same-origin allow-forms"
+        return """
+            <html>
+            <head>
+            <style>body{padding:0;margin:0;width:100vw;min-height:100vh;min-height:-webkit-fill-available}</style>
+            <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+            </head>
+            <body>
+            <script type="text/javascript">
+              // The reference forwards every message it receives; only the activity frame may
+              // reach the RPC server, so the sender is checked before anything crosses the bridge.
+              window.addEventListener('message', function (e) {
+                var f = document.getElementById('$FRAME_ELEMENT_ID');
+                if (f == null || e.source !== f.contentWindow) return;
+                if (e.origin !== ${JSONObject.quote(activityOrigin)}) return;
+                if (!Array.isArray(e.data)) return;
+                $BRIDGE_NAME.postMessage(${JSONObject.quote(bridgeSecret)}, JSON.stringify(e.data));
+              });
+            </script>
+            <iframe id="$FRAME_ELEMENT_ID" width="100%" height="100%" src=${JSONObject.quote(session.url)} frameborder="0" allow="autoplay; encrypted-media" allowfullscreen sandbox="$sandbox" referrerPolicy="origin"></iframe>
+            <script type="text/javascript">
+              var iframeWindow = document.getElementById('$FRAME_ELEMENT_ID').contentWindow;
+              var isIframeLoaded = false;
+              function updateSafeAreaVars(insets) {
+                var d = iframeWindow.document.documentElement;
+                d.style.setProperty('--discord-safe-area-inset-left', insets.left + 'px');
+                d.style.setProperty('--discord-safe-area-inset-right', insets.right + 'px');
+                d.style.setProperty('--discord-safe-area-inset-top', insets.top + 'px');
+                d.style.setProperty('--discord-safe-area-inset-bottom', insets.bottom + 'px');
+                iframeWindow.dispatchEvent(new Event('resize'));
+                iframeWindow.document.documentElement.offsetHeight;
+              }
+              iframeWindow.addEventListener('load', function () { isIframeLoaded = true; });
+              iframeWindow.addEventListener('message', function (e) {
+                var messageData = e.data;
+                if (messageData == null || messageData.type !== 'safeAreaUpdateEvent') return;
+                var insets = messageData.data.insets;
+                if (isIframeLoaded) {
+                  updateSafeAreaVars(insets);
+                } else {
+                  iframeWindow.addEventListener('load', function () { updateSafeAreaVars(insets); });
+                }
+              });
+            </script>
+            </body>
+            </html>
+        """.trimIndent()
+    }
 
-    private fun deliver(tuple: JSONArray) {
-        if (!shouldDeliverAsyncResult(destroyed)) return
+    /**
+     * The top inset the frame is told about is the header height, not the system inset: the header
+     * is what actually covers the activity, and the status bar is hidden while one is running.
+     */
+    private fun updateSafeAreas(left: Int, top: Int, right: Int, bottom: Int) {
+        val density = resources.displayMetrics.density
+        postToFrame(
+            JSONObject()
+                .put("type", "safeAreaUpdateEvent")
+                .put(
+                    "data",
+                    JSONObject().put(
+                        "insets",
+                        JSONObject()
+                            .put("left", (left / density).toInt())
+                            .put("top", HEADER_HEIGHT_DP)
+                            .put("right", (right / density).toInt())
+                            .put("bottom", (bottom / density).toInt()),
+                    ),
+                ),
+        )
+    }
+
+    private fun postToFrame(message: Any) {
+        if (destroyed) return
         post {
-            if (shouldDeliverAsyncResult(destroyed)) {
-                evaluateJavascript("window.__hostDeliver(${JSONObject.quote(tuple.toString())});", null)
-            }
+            if (destroyed) return@post
+            evaluateJavascript(
+                "(function(){var f=document.getElementById('$FRAME_ELEMENT_ID');" +
+                    "if(f)f.contentWindow.postMessage($message, ${JSONObject.quote(activityOrigin)});})()",
+                null,
+            )
         }
     }
 
-    private fun reply(command: String, nonce: Any?, data: JSONObject) = deliver(
-        JSONArray().put(1).put(
-            JSONObject()
-                .put("cmd", command)
-                .put("evt", JSONObject.NULL)
-                .put("nonce", nonce ?: JSONObject.NULL)
-                .put("data", data),
-        ),
-    )
-
-    private fun replyError(command: String, nonce: Any?, code: Int = 4002, message: String) = deliver(
-        JSONArray().put(1).put(
-            JSONObject()
-                .put("cmd", command)
-                .put("evt", "ERROR")
-                .put("nonce", nonce ?: JSONObject.NULL)
-                .put("data", JSONObject().put("code", code).put("message", message)),
-        ),
-    )
-
-    private fun dispatch(event: String, data: JSONObject) = deliver(
-        JSONArray().put(1).put(
-            JSONObject()
-                .put("cmd", "DISPATCH")
-                .put("evt", event)
-                .put("nonce", JSONObject.NULL)
-                .put("data", data),
-        ),
-    )
+    private fun postToRpcClient(tuple: JSONArray, targetOrigin: String) {
+        if (destroyed) return
+        post {
+            if (destroyed) return@post
+            evaluateJavascript(
+                "(function(){var f=document.getElementById('$FRAME_ELEMENT_ID');" +
+                    "if(f)f.contentWindow.postMessage($tuple, ${JSONObject.quote(targetOrigin)});})()",
+                null,
+            )
+        }
+    }
 
     private inner class Bridge {
         @JavascriptInterface
         fun postMessage(secret: String, payload: String) {
             if (!acceptsBridgeMessage(secret, bridgeSecret, payload, destroyed)) return
-            post { runCatching { handleMessage(JSONArray(payload)) } }
-        }
-    }
-
-    private fun handleMessage(tuple: JSONArray) {
-        when (tuple.optInt(0, -1)) {
-            0 -> {
-                bridgeClientId = tuple.optJSONObject(1)?.optString("client_id")?.toLongOrNull()
-                ready()
-            }
-            1 -> handleCommand(tuple.optJSONObject(1) ?: return)
-        }
-    }
-
-    private fun ready() {
-        val me = StoreStream.getUsers().getMe()
-        dispatch(
-            "READY",
-            JSONObject()
-                .put("v", 1)
-                .put(
-                    "config",
-                    JSONObject()
-                        .put("cdn_host", session.discordConfig.cdnHost)
-                        .put("api_endpoint", session.discordConfig.apiEndpoint)
-                        .put("environment", session.discordConfig.environment),
-                )
-                .put(
-                    "user",
-                    JSONObject()
-                        .put("id", me.id.toString())
-                        .put("username", me.username)
-                        .put("discriminator", me.discriminator.toString())
-                        .apply { me.avatar?.let { put("avatar", it) } },
-                ),
-        )
-    }
-
-    private fun handleCommand(payload: JSONObject) {
-        val command = payload.optString("cmd")
-        val nonce = payload.opt("nonce")
-        val event = payload.optString("evt").takeIf(String::isNotBlank)
-        val args = payload.optJSONObject("args") ?: JSONObject()
-        when (command) {
-            "GET_CHANNEL" -> reply(
-                command,
-                nonce,
-                JSONObject()
-                    .put("id", session.channel.id.toString())
-                    .put("guild_id", session.channel.guildId.takeIf { it > 0L }?.toString() ?: JSONObject.NULL)
-                    .put("type", session.channel.type)
-                    .put("name", session.channel.name ?: ""),
-            )
-            "GET_CHANNEL_PERMISSIONS" -> reply(
-                command,
-                nonce,
-                JSONObject().put(
-                    "permissions",
-                    StoreStream.getPermissions().getPermissionsByChannel()[session.channel.id]?.toString() ?: "0",
-                ),
-            )
-            "SUBSCRIBE" -> {
-                if (event != null) subscriptions += event
-                reply(command, nonce, JSONObject().put("evt", event))
-                if (event == PARTICIPANTS_EVENT) updateParticipants()
-            }
-            "UNSUBSCRIBE" -> {
-                if (event != null) subscriptions -= event
-                reply(command, nonce, JSONObject().put("evt", event))
-            }
-            "OPEN_EXTERNAL_LINK" -> onExternalUrl(args.optString("url")) { opened ->
-                reply(command, nonce, JSONObject().put("opened", opened))
-            }
-            "USER_SETTINGS_GET_LOCALE" -> reply(
-                command,
-                nonce,
-                JSONObject().put("locale", Locale.getDefault().toLanguageTag()),
-            )
-            "ENCOURAGE_HW_ACCELERATION" -> reply(command, nonce, JSONObject().put("enabled", true))
-            "SET_ACTIVITY" -> reply(
-                command,
-                nonce,
-                args.optJSONObject("activity") ?: JSONObject().put("name", "").put("type", 0),
-            )
-            "SET_ORIENTATION_LOCK_STATE", "CAPTURE_LOG", "SEND_ANALYTICS_EVENT",
-            "GET_PLATFORM_BEHAVIORS", "GET_QUEST" -> reply(command, nonce, JSONObject())
-            "AUTHORIZE" -> authorize(command, nonce, args)
-            "AUTHENTICATE" -> authenticate(command, nonce, args)
-            else -> replyError(command, nonce, message = "Unsupported command")
-        }
-    }
-
-    private fun authorize(command: String, nonce: Any?, args: JSONObject) {
-        val request = runCatching { parseAuthorizeRequest(args) }.getOrElse { failure ->
-            val error = failure as? EmbeddedActivityOAuthException
-                ?: EmbeddedActivityOAuthException.InvalidRequest()
-            replyError(command, nonce, error.rpcCode, error.message.orEmpty())
-            return
-        }
-        val client = oauthClient() ?: run {
-            replyError(command, nonce, 4011, "Authorization unavailable")
-            return
-        }
-        if (authorizationPromptPending) {
-            replyError(command, nonce, 4011, "Authorization already pending")
-            return
-        }
-        authorizationPromptPending = true
-        onAuthorizeRequest(
-            request,
-            {
-                authorizationPromptPending = false
-                subscribeOAuth(command, nonce, client.authorize(request)) { code ->
-                    JSONObject().put("code", code)
+            post {
+                if (destroyed) return@post
+                runCatching {
+                    transport.handleMessage(JSONTokener(payload).nextValue(), source, ::postToRpcClient)
                 }
-            },
-            {
-                authorizationPromptPending = false
-                replyError(command, nonce, 4011, "Authorization cancelled")
-            },
-        )
+            }
+        }
     }
 
-    private fun authenticate(command: String, nonce: Any?, args: JSONObject) {
-        val token = args.optString("access_token")
-        val client = oauthClient() ?: run {
-            replyError(command, nonce, 4009, "Authentication unavailable")
-            return
+    private inner class ActivityHost : RpcActivityHost {
+        override fun connectedParticipantIds() = session.instance.participants.map { it.userId }
+
+        override fun participantNickname(userId: Long): String? =
+            StoreStream.getGuilds().getMember(session.channel.guildId, userId)?.nick
+
+        override fun setOrientationLockState(lockState: Int, pictureInPicture: Int?, grid: Int?) =
+            onOrientationLockState(lockState, pictureInPicture, grid)
+
+        override fun setUseInteractivePip(enabled: Boolean) = Unit
+
+        override fun openExternalLink(url: String): Observable<Boolean> =
+            Observable.create { subscriber ->
+                onExternalUrl(url) { opened ->
+                    subscriber.onNext(opened)
+                    subscriber.onCompleted()
+                }
+            }
+
+        override fun refreshProxyTicket(): Observable<String> =
+            EmbeddedActivitySessionManager.refreshProxyTicket(session)
+
+        override fun openInviteDialog() = onInviteDialog(session.channel)
+
+        override fun shareLink(message: String, customId: String?, linkId: String?): Observable<Boolean> =
+            Observable.fromCallable {
+                val link = buildString {
+                    append("https://discord.com/activities/${session.application.id}")
+                    customId?.let { append("?custom_id=$it") }
+                }
+                onShareLink("$message $link")
+                true
+            }
+
+        override fun navigateToConnections() = onNavigateToConnections()
+
+        override fun initiateImageUpload(): Observable<String> =
+            Observable.create { subscriber ->
+                onImageUpload { url ->
+                    if (url == null) {
+                        subscriber.onError(RpcError.error(RpcErrors.UNKNOWN_ERROR, "No image selected"))
+                    } else {
+                        subscriber.onNext(url)
+                        subscriber.onCompleted()
+                    }
+                }
+            }
+
+        override fun captureLog(level: String, message: String) {
+            AppLog.i(TAG, "${session.application.id} - $message")
         }
-        subscribeOAuth(command, nonce, client.authenticate(token), ::authenticationJson)
+
+        override fun sendAnalyticsEvent(name: String, properties: JSONObject) {
+            val values = properties.keys().asSequence()
+                .mapNotNull { key -> properties.opt(key)?.let { key to it } }
+                .toMap(mutableMapOf<String, Any>())
+            values["activity_application_id"] = session.application.id
+            values["activity_channel_type"] = session.channel.type
+            session.channel.guildId.takeIf { it > 0L }?.let { values["activity_guild_id"] = it }
+            AnalyticsUtils.Tracker.instance.track(name, values)
+        }
+    }
+
+    private inner class AuthHost : RpcAuthHost {
+        override fun authorize(socket: RpcSocket, args: JSONObject): Observable<String> {
+            val request = runCatching { parseAuthorizeRequest(args) }.getOrElse { failure ->
+                return Observable.error(
+                    failure as? EmbeddedActivityOAuthException ?: EmbeddedActivityOAuthException.InvalidRequest(),
+                )
+            }
+            val client = oauthClient()
+                ?: return Observable.error(EmbeddedActivityOAuthException.AuthorizationFailed())
+            return client.requiresConsent(request).flatMap { needsConsent ->
+                if (!needsConsent) client.authorize(request) else promptThenAuthorize(client, request)
+            }
+        }
+
+        /** Consent is a native prompt, so the grant only reaches the API once the user agrees. */
+        private fun promptThenAuthorize(
+            client: EmbeddedActivityOAuthClient,
+            request: EmbeddedActivityAuthorizeRequest,
+        ): Observable<String> = Observable.create { subscriber ->
+            onAuthorizeRequest(
+                request,
+                {
+                    client.authorize(request).subscribe(
+                        { code ->
+                            subscriber.onNext(code)
+                            subscriber.onCompleted()
+                        },
+                        subscriber::onError,
+                    )
+                },
+                {
+                    subscriber.onError(
+                        RpcError.error(RpcErrors.OAUTH2_ERROR, "User cancelled authorization"),
+                    )
+                },
+            )
+        }
+
+        override fun authenticate(socket: RpcSocket, accessToken: String): Observable<JSONObject> {
+            val client = oauthClient()
+                ?: return Observable.error(EmbeddedActivityOAuthException.AuthenticationFailed())
+            return client.authenticate(accessToken).map { authorizationJson(it.authorization) }
+        }
     }
 
     private fun oauthClient(): EmbeddedActivityOAuthClient? {
@@ -352,60 +427,27 @@ class EmbeddedActivityWebView(
         val responseType = args.optString("response_type").ifBlank { "code" }
         if (responseType != "code") throw EmbeddedActivityOAuthException.InvalidRequest()
         val clientId = args.optString("client_id").toLongOrNull()
-            ?: bridgeClientId
             ?: throw EmbeddedActivityOAuthException.InvalidClient()
-        val scopesValue = when {
-            args.has("scopes") -> args.opt("scopes")
-            else -> args.opt("scope")
-        }
+        val scopesValue = if (args.has("scopes")) args.opt("scopes") else args.opt("scope")
         val scopes = when (scopesValue) {
             is JSONArray -> List(scopesValue.length()) { index -> scopesValue.optString(index) }
             is String -> scopesValue.split(' ').filter(String::isNotBlank)
             else -> emptyList()
         }
-        val state = if (!args.has("state") || args.isNull("state")) null else {
+        val state = if (!args.has("state") || args.isNull("state")) {
+            null
+        } else {
             args.opt("state") as? String ?: throw EmbeddedActivityOAuthException.InvalidRequest()
         }
-        val codeChallenge = args.optString("code_challenge").takeIf(String::isNotBlank)
-        val codeChallengeMethod = args.optString("code_challenge_method").takeIf(String::isNotBlank)
-        return EmbeddedActivityAuthorizeRequest(clientId, scopes, state, codeChallenge, codeChallengeMethod)
+        return EmbeddedActivityAuthorizeRequest(
+            clientId,
+            scopes,
+            state,
+            args.optString("code_challenge").takeIf(String::isNotBlank),
+            args.optString("code_challenge_method").takeIf(String::isNotBlank),
+            args.optString("prompt").takeIf(String::isNotBlank),
+        )
     }
-
-    private fun <T> subscribeOAuth(
-        command: String,
-        nonce: Any?,
-        request: Observable<T>,
-        toJson: (T) -> JSONObject,
-    ) {
-        val key = nonce?.takeUnless { it === JSONObject.NULL }?.toString()?.takeIf(String::isNotBlank)
-        if (key == null || pendingOAuth.containsKey(key)) {
-            replyError(command, nonce, message = "Invalid request nonce")
-            return
-        }
-        val subscription = request
-            .subscribeOn(Schedulers.io())
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribe({ result ->
-                pendingOAuth.remove(key)
-                if (shouldDeliverAsyncResult(destroyed)) reply(command, nonce, toJson(result))
-            }, { failure ->
-                pendingOAuth.remove(key)
-                if (shouldDeliverAsyncResult(destroyed)) {
-                    val error = failure as? EmbeddedActivityOAuthException
-                    replyError(
-                        command,
-                        nonce,
-                        error?.rpcCode ?: if (command == "AUTHORIZE") 4011 else 4009,
-                        error?.message ?: if (command == "AUTHORIZE") "Authorization failed" else "Authentication failed",
-                    )
-                }
-            })
-        pendingOAuth[key] = subscription
-        oauthSubscriptions.add(subscription)
-    }
-
-    private fun authenticationJson(authentication: EmbeddedActivityOAuthAuthentication): JSONObject =
-        authorizationJson(authentication.authorization).put("access_token", authentication.accessToken)
 
     private fun authorizationJson(authorization: EmbeddedActivityOAuthAuthorization): JSONObject = JSONObject()
         .put(
@@ -421,9 +463,9 @@ class EmbeddedActivityWebView(
         )
         .put("scopes", JSONArray(authorization.scopes))
         .put("expires", authorization.expires)
-        .put("user", authorization.user?.let(::userJson) ?: JSONObject.NULL)
+        .put("user", authorization.user?.let(::oauthUserJson) ?: JSONObject.NULL)
 
-    private fun userJson(user: EmbeddedActivityOAuthUser) = JSONObject()
+    private fun oauthUserJson(user: EmbeddedActivityOAuthUser) = JSONObject()
         .put("id", user.id.toString())
         .put("username", user.username)
         .put("discriminator", user.discriminator)
@@ -432,16 +474,19 @@ class EmbeddedActivityWebView(
         .put("public_flags", user.publicFlags)
 
     private inner class ActivityClient : WebViewClient() {
+        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+            assetLoader.shouldInterceptRequest(request.url)
+
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             if (!request.isForMainFrame) return false
             val url = request.url.toString()
-            if (url.startsWith(HOST_ORIGIN)) return false
+            if (url.startsWith(activityOrigin)) return false
             onExternalUrl(url) {}
             return true
         }
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-            if (request.url.host == Uri.parse(session.url).host) onLoadError(error.description?.toString().orEmpty())
+            if (request.isForMainFrame) onLoadError(error.description?.toString().orEmpty())
         }
 
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
@@ -452,7 +497,7 @@ class EmbeddedActivityWebView(
 
     private inner class ActivityChromeClient : WebChromeClient() {
         override fun onPermissionRequest(request: PermissionRequest) {
-            if (request.origin.toString().removeSuffix("/") != activityOrigin()) {
+            if (request.origin.toString().removeSuffix("/") != activityOrigin) {
                 request.deny()
                 return
             }
@@ -484,9 +529,14 @@ class EmbeddedActivityWebView(
 
     internal companion object {
         const val BRIDGE_NAME = "DiscordNative"
-        const val HOST_ORIGIN = "https://discord.com/"
-        const val PARTICIPANTS_EVENT = "ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE"
+        const val FRAME_ELEMENT_ID = "activityFrame"
+        const val PAGE_DIRECTORY = "discord_activity_data"
+        const val PAGE_FILE = "activity.html"
         const val MAX_BRIDGE_MESSAGE_LENGTH = 64 * 1024
+
+        /** Must track `activity_chrome`'s height; it is what the frame reserves at the top. */
+        const val HEADER_HEIGHT_DP = 48
+        private const val TAG = "EmbeddedActivityWebView"
 
         fun acceptsBridgeMessage(secret: String, expected: String, payload: String, destroyed: Boolean) =
             !destroyed && secret == expected && payload.length <= MAX_BRIDGE_MESSAGE_LENGTH

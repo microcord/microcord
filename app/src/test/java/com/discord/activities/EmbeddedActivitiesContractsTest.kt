@@ -158,6 +158,7 @@ class EmbeddedActivitiesContractsTest {
             EmbeddedActivityDiscordConfig("//discord.com/api", "production", "cdn.discordapp.com"),
             "proxy secret",
             url,
+            "frame",
         )
         assertFalse(session.toString().contains("proxy secret"))
         assertFalse(session.toString().contains("discordsays"))

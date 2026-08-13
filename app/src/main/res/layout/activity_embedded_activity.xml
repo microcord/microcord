@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    The activity fills the window and the header floats over it, so the frame keeps the whole
+    viewport and only its own UI moves. The loading and error panel is declared *before* the header
+    so leaving stays reachable while an activity is still booting.
+-->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -9,56 +14,6 @@
         android:id="@+id/activity_web_container"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
-
-    <LinearLayout
-        android:id="@+id/activity_chrome"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top"
-        android:background="#CC202225"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="12dp"
-        android:paddingVertical="8dp">
-
-        <TextView
-            android:id="@+id/activity_title"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textColor="@android:color/white"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/activity_participants"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:contentDescription="@string/embedded_activity_participants"
-            android:paddingHorizontal="12dp"
-            android:textColor="#B5BAC1"
-            android:textSize="14sp" />
-
-        <ImageButton
-            android:id="@+id/activity_pip"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/embedded_activity_picture_in_picture"
-            android:src="@drawable/ic_launch_24dp"
-            android:tint="@android:color/white" />
-
-        <ImageButton
-            android:id="@+id/activity_close"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/embedded_activity_leave"
-            android:src="@drawable/ic_close_24dp"
-            android:tint="@android:color/white" />
-    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/activity_status"
@@ -93,4 +48,92 @@
             android:visibility="gone"
             app:lb_text="@string/embedded_activity_retry" />
     </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/activity_chrome"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_gravity="top"
+        android:background="#3D000000">
+
+        <View
+            android:layout_width="32dp"
+            android:layout_height="4dp"
+            android:layout_gravity="top|center_horizontal"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/drawable_activity_header_grabber" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="8dp">
+
+            <LinearLayout
+                android:id="@+id/activity_pip"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_weight="1"
+                android:background="@drawable/drawable_activity_header_pill"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="12dp">
+
+                <ImageView
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_chevron_down_white_12dp" />
+
+                <TextView
+                    android:id="@+id/activity_title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:contentDescription="@string/embedded_activity_picture_in_picture"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="@android:color/white"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/activity_participants"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/embedded_activity_participants"
+                android:paddingHorizontal="12dp"
+                android:textColor="#B5BAC1"
+                android:textSize="14sp" />
+
+            <LinearLayout
+                android:id="@+id/activity_close"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:background="@drawable/drawable_activity_leave_pill"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="12dp">
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_exit_24dp"
+                    android:tint="@android:color/white" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:text="@string/embedded_activity_leave"
+                    android:textColor="@android:color/white"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
 </FrameLayout>

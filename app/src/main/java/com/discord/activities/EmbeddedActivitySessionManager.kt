@@ -42,10 +42,12 @@ data class EmbeddedActivitySession(
     val discordConfig: EmbeddedActivityDiscordConfig,
     val proxyTicket: String,
     val url: String,
+    /** Identifies this frame to the RPC transport; also the path the wrapper page is served under. */
+    val frameId: String,
 ) {
     override fun toString() =
         "EmbeddedActivitySession(application=${application.id}, instance=${instance.compositeInstanceId}, " +
-            "channel=${channel.id}, proxyTicket=<redacted>, url=<redacted>)"
+            "channel=${channel.id}, frameId=$frameId, proxyTicket=<redacted>, url=<redacted>)"
 }
 
 sealed class EmbeddedActivityLaunchException(message: String) : IllegalStateException(message) {
@@ -99,6 +101,7 @@ object EmbeddedActivitySessionManager {
                         .take(1)
                         .timeout(INSTANCE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 }.map { activityInstance ->
+                    val frameId = UUID.randomUUID().toString()
                     EmbeddedActivitySession(
                         application,
                         config,
@@ -106,11 +109,22 @@ object EmbeddedActivitySessionManager {
                         channel,
                         rpcConfig,
                         ticket.ticket,
-                        buildUrl(activityInstance, channel, ticket.ticket, request),
+                        buildUrl(activityInstance, channel, ticket.ticket, request, frameId),
+                        frameId,
                     )
                 }
             }
         }
+    }
+
+    /** Answers `REQUEST_PROXY_TICKET_REFRESH`; the ticket the URL was built with is short-lived. */
+    fun refreshProxyTicket(session: EmbeddedActivitySession): Observable<String> {
+        val api = RestAPI.embeddedActivitiesApiOrNull
+            ?: return Observable.error(EmbeddedActivityLaunchException.NoRestClient())
+        return api.proxyTicket(
+            session.application.id,
+            EmbeddedActivityProxyTicketRequest(session.channel.id),
+        ).map { it.ticket }
     }
 
     fun leave(session: EmbeddedActivitySession): Observable<*> {

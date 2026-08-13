@@ -84,6 +84,7 @@ class EmbeddedActivityWebViewSmokeTest {
             EmbeddedActivityDiscordConfig("//discord.com/api", "production", "cdn.discordapp.com"),
             "redacted",
             "https://12.discordsays.com/?frame_id=smoke",
+            "smoke",
         )
     }
 }

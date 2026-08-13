@@ -18,6 +18,16 @@ data class EmbeddedActivityOAuthAuthorizeBody(
 
 data class EmbeddedActivityOAuthAuthorizeResponse(val location: String)
 
+/**
+ * Response of `GET oauth2/authorize`, which reports whether this user has already granted the
+ * requested scopes. [authorized] is what lets a `prompt=none` request skip the consent screen.
+ */
+data class EmbeddedActivityOAuthPreauthorization(
+    val application: EmbeddedActivityOAuthApplication,
+    val authorized: Boolean = false,
+    val user: EmbeddedActivityOAuthUser? = null,
+)
+
 data class EmbeddedActivityOAuthApplication(
     val id: Long,
     val name: String,

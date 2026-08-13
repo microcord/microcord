@@ -1301,4 +1301,8 @@ object RestAPIParams {
     data class CreateChannel(val recipients: List<Long>) {
         constructor(recipientId: Long) : this(listOf(recipientId))
     }
+
+    data class ApplicationTicket(val testMode: Boolean = false)
+
+    data class ApplicationTicketResponse(val ticket: String)
 }

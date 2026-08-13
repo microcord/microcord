@@ -123,3 +123,6 @@ object EmbeddedActivityLocationKind {
     const val PRIVATE_CHANNEL_MESSAGE = "pcm"
     const val PARTY = "party"
 }
+
+/** Response of `POST applications/{id}/attachment`. */
+data class EmbeddedActivityAttachment(val url: String)

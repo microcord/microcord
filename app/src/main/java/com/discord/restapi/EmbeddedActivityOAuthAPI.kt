@@ -1,7 +1,9 @@
 package com.discord.restapi
 
 import com.discord.api.embeddedactivities.EmbeddedActivityOAuthAuthorization
+import com.google.gson.JsonObject
 import com.discord.api.embeddedactivities.EmbeddedActivityOAuthAuthorizeBody
+import com.discord.api.embeddedactivities.EmbeddedActivityOAuthPreauthorization
 import com.discord.api.embeddedactivities.EmbeddedActivityOAuthAuthorizeResponse
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -11,6 +13,17 @@ import retrofit2.http.Query
 import rx.Observable
 
 interface EmbeddedActivityOAuthAPI {
+    @GET("oauth2/authorize")
+    fun preauthorize(
+        @Query("client_id") clientId: String,
+        @Query("response_type") responseType: String,
+        @Query("scope") scope: String,
+        @Query("state") state: String?,
+        @Query("code_challenge") codeChallenge: String?,
+        @Query("code_challenge_method") codeChallengeMethod: String?,
+        @Query("integration_type") integrationType: Int,
+    ): Observable<EmbeddedActivityOAuthPreauthorization>
+
     @POST("oauth2/authorize")
     fun authorize(
         @Query("client_id") clientId: String,
@@ -26,4 +39,10 @@ interface EmbeddedActivityOAuthAPI {
     fun authenticate(
         @Header("Authorization") bearerAccessToken: String,
     ): Observable<EmbeddedActivityOAuthAuthorization>
+
+    /** `AUTHENTICATE` answers with the response body verbatim, which the typed model above loses. */
+    @GET("oauth2/@me")
+    fun authenticateRaw(
+        @Header("Authorization") bearerAccessToken: String,
+    ): Observable<JsonObject>
 }

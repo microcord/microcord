@@ -2,10 +2,12 @@ package com.discord.activities
 
 import android.Manifest
 import android.app.PictureInPictureParams
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.net.Uri
 import android.os.PowerManager
 import android.util.Rational
 import android.view.View
@@ -18,14 +20,21 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.discord.R
+import com.discord.api.channel.Channel
 import com.discord.databinding.ActivityEmbeddedActivityBinding
 import com.discord.stores.StoreStream
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.uri.UriHandler
 import com.discord.views.OAuthPermissionViews
+import com.discord.widgets.guilds.invite.WidgetGuildInviteShareSheet
 import com.discord.widgets.notice.WidgetNoticeDialog
+import com.discord.widgets.settings.connections.WidgetSettingsUserConnections
 import com.facebook.drawee.view.SimpleDraweeView
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import rx.Observable
 import rx.Subscription
 import rx.android.schedulers.AndroidSchedulers
 import rx.schedulers.Schedulers
@@ -37,9 +46,17 @@ class EmbeddedActivityActivity : AppCompatActivity() {
     private var webView: EmbeddedActivityWebView? = null
     private var launchSubscription: Subscription? = null
     private var participantSubscription: Subscription? = null
+    private var storeSubscription: Subscription? = null
     private var pendingPermissionRequest: PermissionRequest? = null
     private var crashRecoveryCount = 0
     private var leaveSent = false
+
+    private var pendingImageUpload: ((String?) -> Unit)? = null
+    private var imageUploadSubscription: Subscription? = null
+
+    private val imagePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri -> uploadPickedImage(uri) }
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -116,6 +133,10 @@ class EmbeddedActivityActivity : AppCompatActivity() {
     override fun onDestroy() {
         launchSubscription?.unsubscribe()
         participantSubscription?.unsubscribe()
+        storeSubscription?.unsubscribe()
+        imageUploadSubscription?.unsubscribe()
+        pendingImageUpload?.invoke(null)
+        pendingImageUpload = null
         pendingPermissionRequest?.deny()
         pendingPermissionRequest = null
         webView?.destroySafely()
@@ -127,6 +148,7 @@ class EmbeddedActivityActivity : AppCompatActivity() {
     private fun startSession(restoredInstanceId: String? = null) {
         launchSubscription?.unsubscribe()
         participantSubscription?.unsubscribe()
+        storeSubscription?.unsubscribe()
         webView?.destroySafely()
         webView = null
         showLoading()
@@ -166,6 +188,11 @@ class EmbeddedActivityActivity : AppCompatActivity() {
             onAuthorizeRequest = ::requestOAuthAuthorization,
             onCrash = ::recoverWebView,
             onLoadError = { showError("Unable to load activity", retry = true) },
+            onOrientationLockState = { lockState, _, _ -> applyOrientation(lockState) },
+            onInviteDialog = ::showInviteSheet,
+            onShareLink = ::shareLink,
+            onImageUpload = ::pickImageForUpload,
+            onNavigateToConnections = { WidgetSettingsUserConnections.launch(this) },
         )
         this.webView = webView
         binding.activityWebContainer.addView(
@@ -185,6 +212,66 @@ class EmbeddedActivityActivity : AppCompatActivity() {
                 binding.activityParticipants.text = instance.participants.size.toString()
                 webView.updateInstance(instance)
             }
+        // Nothing pushes store changes into the RPC server, so subscriptions are re-evaluated
+        // whenever the state an activity can observe moves.
+        storeSubscription = Observable
+            .merge(
+                StoreStream.getUsers().observeMe().map { Unit },
+                StoreStream.getMediaSettings().getVoiceConfiguration().map { Unit },
+                StoreStream.getVoiceChannelSelected().observeSelectedVoiceChannelId().map { Unit },
+            )
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe { webView.onStoresChanged() }
+    }
+
+    private fun showInviteSheet(channel: Channel) {
+        val guildId = channel.guildId.takeIf { it > 0L } ?: return
+        WidgetGuildInviteShareSheet.show(supportFragmentManager, channel.id, guildId, "Activity Invite")
+    }
+
+    private fun shareLink(text: String) {
+        startActivity(
+            Intent.createChooser(
+                Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text),
+                null,
+            ),
+        )
+    }
+
+    /** Only one upload can be in flight; the picker has a single result slot. */
+    private fun pickImageForUpload(onResult: (String?) -> Unit) {
+        if (pendingImageUpload != null) {
+            onResult(null)
+            return
+        }
+        pendingImageUpload = onResult
+        imagePickerLauncher.launch("image/*")
+    }
+
+    private fun uploadPickedImage(uri: Uri?) {
+        val onResult = pendingImageUpload ?: return
+        pendingImageUpload = null
+        val applicationId = session?.application?.id
+        val api = RestAPI.embeddedActivitiesApiOrNull
+        if (uri == null || applicationId == null || api == null) {
+            onResult(null)
+            return
+        }
+        imageUploadSubscription = Observable
+            .fromCallable {
+                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: throw IllegalStateException("Unable to read image")
+                val type = contentResolver.getType(uri) ?: "image/*"
+                MultipartBody.Part.createFormData(
+                    "file",
+                    "upload",
+                    bytes.toRequestBody(type.toMediaTypeOrNull()),
+                )
+            }
+            .flatMap { api.uploadAttachment(applicationId, it) }
+            .subscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe({ onResult(it.url) }, { onResult(null) })
     }
 
     private fun requestOAuthAuthorization(

@@ -4,6 +4,7 @@ import com.discord.api.activity.ActivityActionConfirmation
 import com.discord.api.activity.ActivityMetadata
 import com.discord.api.application.Application
 import com.discord.api.application.ApplicationAsset
+import com.discord.api.application.ApplicationExternalAsset
 import com.discord.api.auth.AuthSessionsResponse
 import com.discord.api.auth.ForgotPasswordResponse
 import com.discord.api.auth.PasswordStrength
@@ -104,6 +105,8 @@ import com.discord.models.domain.ModelConnectionAccessToken
 import com.discord.models.domain.ModelConnectionState
 import com.discord.models.domain.ModelEmailChangeConfirm
 import com.discord.models.domain.ModelEntitlement
+import com.discord.models.domain.ModelSku
+import com.discord.models.domain.ModelStoreListing
 import com.discord.models.domain.ModelGateway
 import com.discord.models.domain.ModelGift
 import com.discord.models.domain.ModelGuildBoostSlot
@@ -326,6 +329,13 @@ interface RestAPIInterface {
 
     @GET("oauth2/applications/{applicationId}/assets")
     fun getApplicationAssets(@Path("applicationId") applicationId: Long): Observable<List<ApplicationAsset>>
+
+    /** Trades off-Discord image urls for media-proxy paths usable as rich-presence asset ids. */
+    @POST("applications/{applicationId}/external-assets")
+    fun getApplicationExternalAssets(
+        @Path("applicationId") applicationId: Long,
+        @Body body: RestAPIParams.ExternalAssets,
+    ): Observable<List<ApplicationExternalAsset>>
 
     // -- Account --------------------------------------------------------------------------------
 
@@ -1782,6 +1792,20 @@ interface RestAPIInterface {
         @Path("applicationId") applicationId: Long,
         @Query("exclude_consumed") excludeConsumed: Boolean = true,
     ): Observable<List<ModelEntitlement>>
+
+    // -- RPC ------------------------------------------------------------------------------------------------------------
+
+    /** `applications/{id}/skus` is owner only; a player reads the published listings instead. */
+    @GET("store/published-listings/skus")
+    fun getPublishedListings(
+        @Query("application_id") applicationId: Long,
+    ): Observable<List<ModelStoreListing>>
+
+    @POST("applications/{applicationId}/ticket")
+    fun getApplicationTicket(
+        @Path("applicationId") applicationId: Long,
+        @Body body: RestAPIParams.ApplicationTicket,
+    ): Observable<RestAPIParams.ApplicationTicketResponse>
 
     // -- Outbound promotions ------------------------------------------------------------------------------------------------
 

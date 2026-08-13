@@ -25,6 +25,7 @@ recyclerview = "1.4.0"
 swiperefreshlayout = "1.2.0"
 viewpager2 = "1.1.0"
 browser = "1.10.0"
+webkit = "1.15.0"
 cameraview = "2.7.2"
 camerakit = "1.0.0-beta3.10"
 colorpicker = "1.1.0"
@@ -93,6 +94,7 @@ photo-drawee-view = { group = "me.relex", name = "photodraweeview", version.ref 
 lottie = { group = "com.airbnb.android", name = "lottie", version.ref = "lottie" }
 apng = { group = "com.linecorp", name = "apng", version.ref = "apng" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
+androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }
 cameraview = { group = "com.otaliastudios", name = "cameraview", version.ref = "cameraview" }
 camerakit = { group = "com.github.CameraKit", name = "camerakit-android", version.ref = "camerakit" }
 colorpicker = { group = "com.jaredrummler", name = "colorpicker", version.ref = "colorpicker" }

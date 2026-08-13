@@ -120,6 +120,7 @@ dependencies {
     implementation(libs.androidx.recyclerview)
     implementation(libs.androidx.swiperefreshlayout)
     implementation(libs.androidx.viewpager2)
+    implementation(libs.androidx.webkit)
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.profileinstaller)
     implementation(libs.exoplayer.core)

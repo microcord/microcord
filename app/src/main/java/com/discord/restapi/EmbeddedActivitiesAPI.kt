@@ -1,6 +1,7 @@
 package com.discord.restapi
 
 import com.discord.api.commands.ApplicationCommandIndex
+import com.discord.api.embeddedactivities.EmbeddedActivityAttachment
 import com.discord.api.embeddedactivities.EmbeddedActivityDiscordConfig
 import com.discord.api.embeddedactivities.EmbeddedActivityInstance
 import com.discord.api.embeddedactivities.EmbeddedActivityLaunchBody
@@ -10,9 +11,12 @@ import com.discord.api.embeddedactivities.EmbeddedActivitySessionBody
 import com.discord.api.embeddedactivities.EmbeddedActivityShelf
 import com.discord.api.embeddedactivities.EmbeddedActivityTrustedLink
 import retrofit2.Response
+import okhttp3.MultipartBody
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.Multipart
 import retrofit2.http.POST
+import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
 import rx.Observable
@@ -69,4 +73,12 @@ interface EmbeddedActivitiesAPI {
         @Path("applicationId") applicationId: Long,
         @Body body: EmbeddedActivityProxyTicketRequest,
     ): Observable<EmbeddedActivityProxyTicket>
+
+    /** Backs `INITIATE_IMAGE_UPLOAD`; answers the CDN url the activity is handed. */
+    @Multipart
+    @POST("applications/{applicationId}/attachment")
+    fun uploadAttachment(
+        @Path("applicationId") applicationId: Long,
+        @Part file: MultipartBody.Part,
+    ): Observable<EmbeddedActivityAttachment>
 }
