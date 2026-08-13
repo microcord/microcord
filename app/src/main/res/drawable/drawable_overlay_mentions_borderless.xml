@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The mention pill with no surrounding ring.
+
+    Every other variant strokes itself in the row's own background colour to fake a gap between the
+    pill and whatever sits behind it. That only works while the row really is that colour: over
+    nameplate artwork the ring is just an opaque blob in the wrong shape.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/status_red_500"/>
+    <corners android:radius="12dp"/>
+</shape>

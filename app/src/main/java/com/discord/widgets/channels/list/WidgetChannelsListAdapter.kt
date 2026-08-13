@@ -952,6 +952,8 @@ class WidgetChannelsListAdapter(
                 false
             }
             root.contentDescription = contentDescription(item, channelName)
+            val hasNameplate =
+                (item.nameplate ?: channel.getDMRecipient()?.collectibles?.nameplate) != null
             nameplate.bind(
                 item.nameplate ?: channel.getDMRecipient()?.collectibles?.nameplate,
                 NameplateView.Placement.CHANNEL,
@@ -992,6 +994,15 @@ class WidgetChannelsListAdapter(
 
             mentions.text = minOf(MAX_MENTION_COUNT, item.mentionCount).toString()
             mentions.visibility = if (item.mentionCount > 0) View.VISIBLE else View.GONE
+            // The themed pill strokes itself in the row's background colour to fake a gap. Over a
+            // nameplate the row is artwork, not that colour, so the ring reads as a grey blob.
+            mentions.setBackgroundResource(
+                if (hasNameplate) {
+                    R.drawable.drawable_overlay_mentions_borderless
+                } else {
+                    itemView.getThemedDrawableRes(R.attr.drawable_overlay_mentions)
+                },
+            )
             pin.visibility = if (item.pinned) View.VISIBLE else View.GONE
 
             root.isSelected = item.selected
