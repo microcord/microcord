@@ -16,6 +16,9 @@ interface DirectoryChannelItemClickInterface {
     /** The viewer wants to join [guildId], which is listed in [channelId]. */
     fun onEntryClicked(guildId: Long, channelId: Long)
 
+    /** The row itself was tapped, away from either button: preview [guildId] if it allows it. */
+    fun onEntryPreviewClicked(guildId: Long, channelId: Long) = Unit
+
     /** The viewer already belongs to [guildId] and wants to open it. */
     fun onGoToGuildClicked(guildId: Long)
 

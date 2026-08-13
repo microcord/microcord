@@ -13,6 +13,8 @@ import com.discord.api.channel.Channel
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.app.appActivityViewModels
+import com.discord.panels.PanelsChildGestureRegionObserver
+import com.discord.widgets.home.WidgetHome
 import com.discord.i18n.i18nFormat
 import com.discord.models.guild.Guild
 import com.discord.stores.StoreDirectories
@@ -65,6 +67,8 @@ class WidgetDirectoryChannel : AppFragment(R.layout.widget_directory_channel) {
     private var tabMediator: TabLayoutMediator? = null
 
     /** 48dp of breathing room under the collapsing header, applied only while tabs are visible. */
+    private val gestureRegionObserver by lazy { PanelsChildGestureRegionObserver.Provider.get() }
+
     private val tabLayoutMargins: Int
         get() = (TAB_LAYOUT_MARGINS_DP * resources.displayMetrics.density).toInt()
 
@@ -83,12 +87,16 @@ class WidgetDirectoryChannel : AppFragment(R.layout.widget_directory_channel) {
         header.setTitle(getString(R.string.hub_directory_search_title))
         header.setDescription(getString(R.string.hub_directory_search_subtitle))
 
+        gestureRegionObserver.register(viewPager)
+        gestureRegionObserver.register(tabs)
         pagerAdapter = WidgetDirectoryChannelViewPagerAdapter(this)
         viewPager.adapter = pagerAdapter
         tabMediator = TabLayoutMediator(tabs, viewPager, ::configureTab).also { it.attach() }
     }
 
     override fun onDestroyView() {
+        gestureRegionObserver.unregister(viewPager)
+        gestureRegionObserver.unregister(tabs)
         tabMediator?.detach()
         tabMediator = null
         super.onDestroyView()
@@ -109,6 +117,31 @@ class WidgetDirectoryChannel : AppFragment(R.layout.widget_directory_channel) {
     }
 
     private fun configureUi(state: WidgetDirectoriesViewModel.ViewState) {
+        bindToolbar()
+        setActionBarDisplayHomeAsUpEnabled(
+            showHomeAsUp = true,
+            iconRes = R.drawable.ic_menu_24dp,
+            iconAccessibilityLabel = R.string.toggle_drawer,
+        )
+        setActionBarTitle(
+            state.guild?.name ?: state.channel?.name.orEmpty(),
+            leadingDrawableRes = R.drawable.ic_hub_24dp,
+        )
+        setActionBarOptionsMenu(
+            R.menu.menu_chat_toolbar,
+            onSelected = { item ->
+                if (item.itemId == R.id.menu_chat_side_panel) {
+                    (parentFragment as? WidgetHome)?.getPanelLayout()?.openEndPanel()
+                }
+            },
+            // The directory shares the chat menu purely for the member-list button.
+            onConfigured = { menu ->
+                for (i in 0 until menu.size()) {
+                    val item = menu.getItem(i)
+                    item.isVisible = item.itemId == R.id.menu_chat_side_panel
+                }
+            },
+        )
         configureSearchHeader(state.channel)
         configureEmptyCards(state)
         maybePromptForHubName(state.guild)

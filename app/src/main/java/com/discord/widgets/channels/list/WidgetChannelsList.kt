@@ -25,7 +25,6 @@ import com.discord.api.channel.isGuildVocalChannel
 import com.discord.widgets.voice.fullscreen.WidgetGuildCallOnboardingSheet
 import com.discord.api.guild.GuildFeature
 import com.discord.app.AppFragment
-import com.discord.app.AppScreenRouter
 import com.discord.models.guild.Guild
 import com.discord.stores.SelectedChannelAnalyticsLocation
 import com.discord.stores.StoreNavigation
@@ -44,7 +43,6 @@ import com.discord.views.CustomAppBarLayout
 import com.discord.views.ThemedColor
 import com.discord.widgets.channels.invite.GroupInviteFriendsSheet
 import com.discord.widgets.channels.list.items.ChannelListItemPrivate
-import com.discord.widgets.directories.WidgetDirectoryChannel
 import com.discord.widgets.friends.EmptyFriendsStateView
 import com.discord.widgets.hubs.events.WidgetHubEventsPage
 import com.discord.widgets.guilds.onboarding.WidgetChannelsAndRoles
@@ -281,12 +279,6 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
             channel,
             analyticsLocation = SelectedChannelAnalyticsLocation.CHANNEL_LIST,
         )
-        if (channel.type == Channel.DIRECTORY) {
-            // A directory channel holds no messages: opening it in the chat surface lands the user
-            // on a permanently empty conversation. It gets its own screen instead.
-            AppScreenRouter.launch(requireContext(), WidgetDirectoryChannel::class.java)
-            return
-        }
         storeNavigation.setNavigationPanelAction(StoreNavigation.PanelAction.UNLOCK_LEFT)
         storeNavigation.setNavigationPanelAction(StoreNavigation.PanelAction.CLOSE)
     }

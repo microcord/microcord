@@ -266,6 +266,10 @@ class StoreStream private constructor(
     private val guildScheduledEvents = StoreGuildScheduledEvents(
         dispatcher, permissions, users, guilds, clock, observationDeck,
     )
+    private val directories = StoreDirectories(
+        dispatcher, observationDeck, guilds, guildScheduledEvents,
+    )
+
     private val instantInvites = StoreInstantInvites(
         dispatcher,
         observationDeck,
@@ -1031,6 +1035,7 @@ class StoreStream private constructor(
         )
     }
     private val storesV2 = mutableListOf(
+        directories,
         accessibility,
         multiAccount,
         userSettingsSystem,
@@ -1212,6 +1217,7 @@ class StoreStream private constructor(
         WidgetHomePanelNsfw.onGuildNsfwGateAllowed = guildsNsfw::allow
         WidgetHomePanelNsfw.onGuildNsfwGateDenied = guildsNsfw::deny
         WidgetHomePanelLoading.onHomeShown = { analytics.appUiViewed(WidgetHome::class.java) }
+        com.discord.widgets.directories.DirectoryStores.install(directories)
         ChatInputStoreBindings.chatEvents = chat::observeEvents
         ChatInputStoreBindings.slowModeCooldown = { channelId ->
             slowMode.observeCooldownSecs(channelId, StoreSlowMode.Type.MessageSend)

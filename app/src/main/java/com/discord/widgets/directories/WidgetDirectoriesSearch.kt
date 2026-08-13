@@ -59,8 +59,12 @@ class WidgetDirectoriesSearch : AppFragment(R.layout.widget_directories_search) 
             viewModel.joinGuild(context, guildId, channelId)
         }
 
+        override fun onEntryPreviewClicked(guildId: Long, channelId: Long) {
+            viewModel.previewGuild(guildId)
+        }
+
         override fun onGoToGuildClicked(guildId: Long) {
-            StoreStream.getGuildSelected().set(guildId)
+            StoreStream.selectGuild(guildId)
             activity?.onBackPressed()
         }
 

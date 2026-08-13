@@ -180,8 +180,10 @@ internal class DirectoryServerOptionsSheet : AppBottomSheet() {
         override fun bind(data: DirectoryServerOptions.Option) {
             itemView.findViewById<TextView>(R.id.select_component_sheet_item_title).setText(data.titleRes)
             itemView.findViewById<TextView>(R.id.select_component_sheet_item_description).visibility = View.GONE
+            // Fresco cannot decode a VectorDrawable through setActualImageResource; the hierarchy
+            // resolves it through Resources instead, which can.
             itemView.findViewById<SimpleDraweeView>(R.id.select_component_sheet_item_icon)
-                .setActualImageResource(data.iconRes)
+                .hierarchy.setPlaceholderImage(data.iconRes)
             itemView.setOnClickListener {
                 onSelected?.invoke(data)
                 dismiss()

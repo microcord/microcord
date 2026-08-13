@@ -23,6 +23,7 @@ import com.discord.utilities.rest.RestAPIAbortMessages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.widgets.channels.WidgetGroupInviteFriends
+import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
 import com.discord.widgets.channels.memberlist.adapter.ChannelMembersListAdapter
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.utilities.views.StickyHeaderItemDecoration
@@ -143,8 +144,17 @@ class WidgetChannelMembersList : AppFragment(R.layout.widget_channel_members_lis
     }
 
     private fun addGroupMember() {
-        val channel = state.channel?.takeIf { it.type == Channel.GROUP_DM } ?: return
-        WidgetGroupInviteFriends.launch(requireContext(), channel.id, "Group DM Member List")
+        val channel = state.channel ?: return
+        if (channel.type == Channel.GROUP_DM) {
+            WidgetGroupInviteFriends.launch(requireContext(), channel.id, "Group DM Member List")
+        } else if (channel.guildId != 0L) {
+            WidgetGuildInviteShare.launch(
+                requireContext(),
+                parentFragmentManager,
+                channel.guildId,
+                source = "Member List",
+            )
+        }
     }
 
     private fun showUser(userId: Long) {

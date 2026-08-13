@@ -6,6 +6,7 @@ import com.discord.api.permission.Permission
 import com.discord.app.AppViewModel
 import com.discord.models.guild.Guild
 import com.discord.restapi.RestAPIParams
+import com.discord.api.guild.GuildFeature
 import com.discord.stores.JoinGuildSources
 import com.discord.stores.StoreGuildSelected
 import com.discord.stores.StoreGuilds
@@ -129,6 +130,16 @@ class WidgetDirectoriesSearchViewModel(
         // The guard in searchForDirectories exists to stop duplicate searches; a retry is deliberate.
         updateViewState(requireViewState().copy(currentSearchTerm = ""))
         searchForDirectories(channelId, term)
+    }
+
+    /** Tapping the row previews rather than joins; only previewable servers can be lurked. */
+    fun previewGuild(guildId: Long) {
+        val previewable = viewState?.directories
+            ?.firstOrNull { it.entityId == guildId }
+            ?.guild?.features
+            ?.contains(GuildFeature.PREVIEW_ENABLED) == true
+        if (!previewable) return
+        StoreStream.getLurking().startLurkingAndNavigate(guildId, null, JoinGuildSources.DIRECTORY_ENTRY)
     }
 
     fun joinGuild(context: Context, guildId: Long, directoryChannelId: Long) {

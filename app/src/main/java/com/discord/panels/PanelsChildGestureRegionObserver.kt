@@ -38,6 +38,7 @@ class PanelsChildGestureRegionObserver : View.OnLayoutChangeListener {
     }
 
     private val gestureRegions = LinkedHashMap<Int, Rect>()
+    private val location = IntArray(2)
     private val scrollChangedListeners = LinkedHashMap<Int, ViewTreeObserver.OnScrollChangedListener>()
     private val gestureRegionsListeners = LinkedHashSet<GestureRegionsListener>()
 
@@ -93,12 +94,18 @@ class PanelsChildGestureRegionObserver : View.OnLayoutChangeListener {
         // A layout change can arrive after unregister() if the view is mid-teardown; the id check
         // is what stops a dead view from resurrecting its region.
         if (view.id !in scrollChangedListeners.keys) return
-        val location = intArrayOf(0, 0)
         view.getLocationInWindow(location)
         val windowX = location[0]
         val windowY = location[1]
         // `right`/`bottom` are measured in the parent's space, so they are offsets from the window
         // position rather than window coordinates of their own.
+        val existing = gestureRegions[view.id]
+        if (existing != null &&
+            existing.left == windowX && existing.top == windowY &&
+            existing.right == right + windowX && existing.bottom == bottom + windowY
+        ) {
+            return
+        }
         gestureRegions[view.id] = Rect(windowX, windowY, right + windowX, bottom + windowY)
         publish()
     }

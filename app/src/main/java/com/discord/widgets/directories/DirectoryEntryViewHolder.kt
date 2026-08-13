@@ -38,6 +38,13 @@ class DirectoryEntryViewHolder(
             }
             discoveryItem.setJoinedButtonOnClickListener(null)
         }
+        discoveryItem.setOnClickListener {
+            if (entryData.hasJoinedGuild) {
+                listener.onGoToGuildClicked(guild.id)
+            } else {
+                listener.onEntryPreviewClicked(guild.id, entry.directoryChannelId)
+            }
+        }
         discoveryItem.setOnLongClickListener {
             listener.onOverflowClicked(entry, entry.directoryChannelId, entryData.hasEditPermissions)
             true

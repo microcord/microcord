@@ -10,6 +10,7 @@ import androidx.fragment.app.commitNow
 import androidx.appcompat.widget.Toolbar
 import com.discord.R
 import com.discord.panels.OverlappingPanelsLayout
+import com.discord.panels.PanelsChildGestureRegionObserver
 import com.discord.panels.PanelState
 import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreNavigation
@@ -92,6 +93,11 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private var dmPresenceSubscription: Subscription? = null
     private var unreadCount = 0
     private var initialChannelShown = false
+    private var gestureRegionsListener: PanelsChildGestureRegionObserver.GestureRegionsListener? = null
+
+    // Provider only holds a WeakReference, so both this screen and the surfaces that register
+    // views have to keep the same instance alive themselves.
+    private val gestureRegionObserver by lazy { PanelsChildGestureRegionObserver.Provider.get() }
     private var onboardingGuildId: Long? = null
     private var onboardingVisitGuildId: Long = Long.MIN_VALUE
     private var startPanelState: PanelState = PanelState.Closed
@@ -109,6 +115,11 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         // Registered here rather than in onViewBound so `panels` is already resolved, and before the
         // child transactions below so this stays behind WidgetTabsHost in the registry.
         setOnBackPressed(::handleBackPressed)
+        gestureRegionObserver.let { observer ->
+            gestureRegionsListener = PanelsChildGestureRegionObserver.GestureRegionsListener(panels::setChildGestureRegions)
+            observer.addGestureRegionsUpdateListener(requireNotNull(gestureRegionsListener))
+            panels.setChildGestureRegions(observer.getCurrentGestureRegions())
+        }
         panels.registerStartPanelStateListeners(
             OverlappingPanelsLayout.PanelStateListener {
                 if (it == PanelState.Opening || it == PanelState.Open) ensureStartPanelFragments()
@@ -169,7 +180,12 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                 val surface = centerSurface(selected)
                 if (surface == CenterSurface.NONE) ensureStartPanelFragments()
                 if (surface == CenterSurface.FORUM) ensureForumFragment()
-                lockCloseRightPanel(surface != CenterSurface.CHAT)
+                if (surface == CenterSurface.DIRECTORY) {
+                    ensureDirectoryFragment()
+                    // Built up front: inflating it on the drag's first frame janks the open.
+                    ensureEndPanelFragment()
+                }
+                lockCloseRightPanel(surface != CenterSurface.CHAT && surface != CenterSurface.DIRECTORY)
                 panels.setStartPanelUseFullPortraitWidth(surface == CenterSurface.NONE)
                 panels.setStartPanelLockState(
                     if (surface == CenterSurface.NONE) OverlappingPanelsLayout.LockState.OPEN
@@ -180,10 +196,12 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                     if (surface == CenterSurface.CHAT) View.VISIBLE else View.GONE
                 view?.findViewById<View>(R.id.widget_forum_channel_list)?.visibility =
                     if (surface == CenterSurface.FORUM) View.VISIBLE else View.GONE
+                view?.findViewById<View>(R.id.widget_home_panel_directory)?.visibility =
+                    if (surface == CenterSurface.DIRECTORY) View.VISIBLE else View.GONE
                 if (channel != null) {
                     if (surface == CenterSurface.FORUM) {
                         (childFragmentManager.findFragmentByTag(FORUM_TAG) as? WidgetForumBrowser)?.bindToolbar()
-                    } else {
+                    } else if (surface != CenterSurface.DIRECTORY) {
                         configureToolbar(channel)
                     }
                     if (!initialChannelShown) {
@@ -267,6 +285,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     }
 
     override fun onDestroyView() {
+        gestureRegionsListener?.let(gestureRegionObserver::removeGestureRegionsUpdateListener)
+        gestureRegionsListener = null
         WidgetChannelSidebarActions.onNotifications = null
         WidgetChannelSidebarActions.onSearch = null
         WidgetUserSheet.onCall = null
@@ -367,6 +387,14 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private fun ensureEndPanelFragment() {
         if (childFragmentManager.findFragmentByTag(MEMBERS_TAG) == null) {
             childFragmentManager.commitNow { replace(R.id.widget_connected_list, WidgetChannelMembersList(), MEMBERS_TAG) }
+        }
+    }
+
+    private fun ensureDirectoryFragment() {
+        if (childFragmentManager.findFragmentByTag(DIRECTORY_TAG) == null) {
+            childFragmentManager.commitNow {
+                replace(R.id.widget_home_panel_directory, WidgetDirectoryChannel(), DIRECTORY_TAG)
+            }
         }
     }
 
@@ -606,9 +634,11 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     }
 
     companion object {
-        internal enum class CenterSurface { NONE, CHAT, FORUM }
+        internal enum class CenterSurface { NONE, CHAT, FORUM, DIRECTORY }
 
         internal fun centerSurface(selected: StoreChannelsSelected.ResolvedSelectedChannel): CenterSurface = when {
+            selected is StoreChannelsSelected.ResolvedSelectedChannel.Channel &&
+                selected.channel.type == Channel.DIRECTORY -> CenterSurface.DIRECTORY
             selected is StoreChannelsSelected.ResolvedSelectedChannel.Channel &&
                 selected.channel.isThreadOnlyChannel() -> CenterSurface.FORUM
             selected.channelOrParent != null -> CenterSurface.CHAT
@@ -618,6 +648,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         private const val GUILDS_TAG = "WidgetGuildsList"
         private const val CHANNELS_TAG = "WidgetChannelsList"
         private const val FORUM_TAG = "WidgetForumBrowser"
+        private const val DIRECTORY_TAG = "WidgetDirectoryChannel"
         private const val MEMBERS_TAG = "WidgetChannelMembersList"
         private const val TOPIC_TAG = "WidgetChannelTopic"
         private const val ACTIONS_TAG = "WidgetChannelSidebarActions"

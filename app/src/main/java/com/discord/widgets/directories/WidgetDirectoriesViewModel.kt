@@ -10,6 +10,7 @@ import com.discord.app.AppViewModel
 import com.discord.models.guild.Guild
 import com.discord.models.hubs.DirectoryEntryCategory
 import com.discord.restapi.RestAPIParams
+import com.discord.api.guild.GuildFeature
 import com.discord.stores.JoinGuildSources
 import com.discord.stores.StoreChannels
 import com.discord.stores.StoreChannelsSelected
@@ -159,6 +160,19 @@ class WidgetDirectoriesViewModel(
             ?.restSubscribeOn()
             ?.ui(this)
             ?.appSubscribe(WidgetDirectoriesViewModel::class.java, context = context) { }
+    }
+
+    /**
+     * Tapping the row itself previews the server rather than joining it. Only servers that allow
+     * previewing can be lurked; for anything else the row's Join button is the only way in.
+     */
+    fun previewGuild(guildId: Long) {
+        val previewable = viewState?.allDirectoryEntryData
+            ?.firstOrNull { it.entry.entityId == guildId }
+            ?.entry?.guild?.features
+            ?.contains(GuildFeature.PREVIEW_ENABLED) == true
+        if (!previewable) return
+        StoreStream.getLurking().startLurkingAndNavigate(guildId, null, JoinGuildSources.DIRECTORY_ENTRY)
     }
 
     /** Removes [guildId] from the directory in [directoryChannelId]. */

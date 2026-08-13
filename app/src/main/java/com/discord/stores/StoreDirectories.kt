@@ -5,6 +5,7 @@ import com.discord.api.directory.DirectoryEntryEvent
 import com.discord.api.directory.DirectoryEntryGuild
 import com.discord.api.directory.DirectoryEntryType
 import com.discord.restapi.RestAPIInterface
+import com.discord.utilities.rest.RestAPI
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.utilities.RestCallState
 import com.discord.stores.utilities.Success
@@ -26,7 +27,9 @@ class StoreDirectories(
     private val observationDeck: ObservationDeck,
     private val guildStore: StoreGuilds,
     private val guildScheduledEventsStore: StoreGuildScheduledEvents,
-    private val restApi: RestAPIInterface,
+    // Resolved per call: the REST client is published by the store graph, so it does not exist yet
+    // while this store is being constructed.
+    private val restApi: () -> RestAPIInterface = { RestAPI.api },
     private val requestScheduler: Scheduler = Schedulers.io(),
 ) : StoreV2(), DirectoriesStore, HubDirectoriesStore {
 
@@ -62,7 +65,7 @@ class StoreDirectories(
         directoriesMapSnapshot[channelId]
 
     override fun fetchDirectoriesForChannel(channelId: Long) {
-        restApi.getDirectoryEntries(channelId)
+        restApi().getDirectoryEntries(channelId)
             .map { entries -> entries.sortedByDescending { it.guild.approximateMemberCount ?: 0 } }
             .executeRequest(requestScheduler) { response ->
                 dispatcher.schedule {
@@ -76,7 +79,7 @@ class StoreDirectories(
         entryCountMapSnapshot[channelId]
 
     override fun fetchEntryCountsForChannel(channelId: Long) {
-        restApi.getEntryCounts(channelId).executeRequest(requestScheduler) { response ->
+        restApi().getEntryCounts(channelId).executeRequest(requestScheduler) { response ->
             dispatcher.schedule {
                 entryCountMap[channelId] = response
                 markChanged()
@@ -101,7 +104,7 @@ class StoreDirectories(
     }
 
     override fun removeServerFromDirectory(channelId: Long, guildId: Long) {
-        restApi.removeServerFromHub(channelId, guildId).executeRequest(requestScheduler) { response ->
+        restApi().removeServerFromHub(channelId, guildId).executeRequest(requestScheduler) { response ->
             if (response !is Success) return@executeRequest
             dispatcher.schedule {
                 val entries = directoriesMap[channelId]?.invoke().orEmpty()
@@ -118,7 +121,7 @@ class StoreDirectories(
         directoryGuildScheduledEventsMapSnapshot[directoryChannelId]
 
     override fun fetchGuildScheduledEventsForChannel(guildId: Long, directoryChannelId: Long) {
-        restApi.getDirectoryGuildScheduledEvents(
+        restApi().getDirectoryGuildScheduledEvents(
             directoryChannelId,
             DirectoryEntryType.GuildScheduledEvent.key,
         ).executeRequest(requestScheduler) { response ->

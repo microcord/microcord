@@ -55,9 +55,14 @@ class WidgetDirectoryCategory : AppFragment(R.layout.widget_directory_category) 
             viewModel.joinGuild(context, guildId, channelId)
         }
 
+        override fun onEntryPreviewClicked(guildId: Long, channelId: Long) {
+            viewModel.previewGuild(guildId)
+        }
+
         override fun onGoToGuildClicked(guildId: Long) {
-            StoreStream.getGuildSelected().set(guildId)
-            activity?.onBackPressed()
+            // set() moves the selected guild but leaves the hub's directory channel selected, so
+            // the centre panel never leaves the directory.
+            StoreStream.selectGuild(guildId)
         }
 
         override fun onOverflowClicked(
