@@ -1,21 +1,44 @@
 package com.discord.widgets.chat.list.model
 
 import com.discord.api.channel.Channel
+import com.discord.api.message.MessageReference
 import com.discord.api.user.User
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.message.Message
 import com.discord.models.user.CoreUser
+import com.discord.stores.StoreMessageReplies
 import com.discord.widgets.chat.list.entries.BlockedMessagesEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
 import com.discord.widgets.chat.list.entries.NewMessagesEntry
+import com.discord.widgets.chat.list.entries.ReactionsEntry
 import com.discord.widgets.chat.list.entries.TimestampEntry
 import com.discord.widgets.chat.list.entries.InviteEmbedResolver
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class WidgetChatListModelMessagesTest {
+    @Test fun missingReplyStateBecomesUnloadedAndCoreIsFoundAfterReordering() {
+        val reply = Message(
+            id = 2L,
+            channelId = 5L,
+            type = 19,
+            messageReference = MessageReference(null, 5L, 9L),
+        )
+        assertSame(
+            StoreMessageReplies.MessageState.Unloaded,
+            WidgetChatListModelMessages.resolveReplyState(reply, emptyMap()),
+        )
+
+        val target = message(9L, 1_000L)
+        val core = MessageEntry(target, null, null, roles = null, nickOrUsernames = emptyMap(),
+            isExpandedBlocked = false, permissionsForChannel = null)
+        val reactions = ReactionsEntry(target, true, true, true)
+        assertSame(core, WidgetChatListModelMessages.findMessageEntry(listOf(reactions, core)))
+    }
+
     @Test fun groupsBlockedRunsAndKeepsExpandedRows() {
         val metadata = metadata((1L..3L).map { message(it, it * 1_000) })
 

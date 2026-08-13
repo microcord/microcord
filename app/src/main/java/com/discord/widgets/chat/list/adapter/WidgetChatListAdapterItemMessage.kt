@@ -697,6 +697,7 @@ class WidgetChatListAdapterItemMessage(
         val replyHolder = replyHolder ?: return
         val replyLinkItem = replyLinkItem ?: return
         replyGuildTag?.bind(null)
+        replyHolder.setOnClickListener(null)
 
         val replyData = entry.replyData
         val isInteraction = entry.message.isInteraction()
@@ -720,12 +721,22 @@ class WidgetChatListAdapterItemMessage(
                 configureReplySystemMessage(R.string.reply_quote_message_ignored)
             replyData.isRepliedUserBlocked ->
                 configureReplySystemMessage(R.string.reply_quote_message_blocked)
-            replyData.messageState is StoreMessageReplies.MessageState.Unloaded ->
-                configureReplySystemMessage(R.string.reply_quote_message_not_loaded)
+            replyData.messageState is StoreMessageReplies.MessageState.Unloaded -> configureUnloadedReply(entry)
             replyData.messageState is StoreMessageReplies.MessageState.Deleted ->
                 configureReplySystemMessage(R.string.reply_quote_message_deleted)
             replyData.messageState is StoreMessageReplies.MessageState.Loaded && repliedEntry != null ->
                 configureLoadedReply(entry, repliedEntry)
+            else -> configureUnloadedReply(entry)
+        }
+    }
+
+    private fun configureUnloadedReply(entry: MessageEntry) {
+        configureReplySystemMessage(R.string.reply_quote_message_not_loaded)
+        val reference = entry.message.messageReference ?: return
+        val messageId = reference.messageId ?: return
+        val channelId = reference.channelId ?: entry.message.channelId
+        replyHolder?.setOnClickListener {
+            StoreStream.getMessagesLoader().jumpToMessage(channelId, messageId)
         }
     }
 

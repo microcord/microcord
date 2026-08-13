@@ -335,7 +335,7 @@ data class WidgetChatListModelMessages(
             if (message.type == 38 && !PermissionUtils.can(Permission.CREATE_INSTANT_INVITE, permissionsForChannel)) return emptyList()
 
             val rows = ArrayList<ChatListEntry>()
-            val replyState = message.messageReference?.messageId?.let(repliedMessages::get)
+            val replyState = resolveReplyState(message, repliedMessages)
             val replyData = replyState?.let { state ->
                 val entry = (state as? StoreMessageReplies.MessageState.Loaded)?.message?.let { replied ->
                     getMessageItems(
@@ -344,7 +344,7 @@ data class WidgetChatListModelMessages(
                         false, null, animateEmojis, autoPlayGifs, renderEmbeds, meUserId, false,
                         emptyMap(), inviteResolver, false,
                         userUpdates,
-                    ).firstOrNull() as? MessageEntry
+                    ).let(::findMessageEntry)
                 }
                 val repliedAuthorId =
                     (state as? StoreMessageReplies.MessageState.Loaded)?.message?.author?.id
@@ -463,6 +463,16 @@ data class WidgetChatListModelMessages(
             }
             return if (customize) MessageCustomization.apply(rows) else rows
         }
+
+        internal fun resolveReplyState(
+            message: Message,
+            repliedMessages: Map<Long, StoreMessageReplies.MessageState>,
+        ): StoreMessageReplies.MessageState? = message.messageReference?.messageId?.let { messageId ->
+            repliedMessages[messageId] ?: StoreMessageReplies.MessageState.Unloaded
+        }
+
+        internal fun findMessageEntry(rows: List<ChatListEntry>): MessageEntry? =
+            rows.filterIsInstance<MessageEntry>().firstOrNull()
 
         internal fun shouldConcatMessage(
             channel: Channel?,
