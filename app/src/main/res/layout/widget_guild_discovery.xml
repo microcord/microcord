@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" style="@style/UiKit.ViewGroup.Page">
+    <androidx.recyclerview.widget.RecyclerView android:id="@+id/discovery_list" android:background="?attr/colorBackgroundPrimary" android:layout_width="match_parent" android:layout_height="match_parent" android:clipToPadding="false" android:paddingBottom="16dp" app:layout_behavior="@string/appbar_scrolling_view_behavior" app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"/>
+    <com.google.android.material.appbar.AppBarLayout android:background="?attr/toolbarColor" android:fitsSystemWindows="true" style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar android:id="@+id/action_bar_toolbar" app:navigationContentDescription="@string/back" style="@style/AppTheme.Toolbar"/>
+        <HorizontalScrollView android:id="@+id/discovery_pill_scroll" android:layout_width="match_parent" android:layout_height="wrap_content" android:clipToPadding="false" android:paddingBottom="8dp" android:paddingStart="12dp" android:paddingEnd="12dp" android:scrollbars="none">
+            <LinearLayout android:id="@+id/discovery_pills" android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/UiKit.ViewGroup.LinearLayout.Horizontal"/>
+        </HorizontalScrollView>
+    </com.google.android.material.appbar.AppBarLayout>
+    <ProgressBar android:layout_gravity="center" android:id="@+id/discovery_loading" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" style="@style/UiKit.ViewGroup.Page.LinearLayout">
+    <com.google.android.material.appbar.AppBarLayout android:fitsSystemWindows="true" style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar android:id="@+id/action_bar_toolbar" style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <com.discord.views.SearchInputView android:id="@+id/discovery_search_input" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:layout_marginBottom="8dp" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" app:siv_hint="@string/guild_discovery_mobile_search_placeholder" app:siv_search_content_description="@string/search"/>
+    <HorizontalScrollView android:layout_width="match_parent" android:layout_height="wrap_content" android:clipToPadding="false" android:paddingBottom="8dp" android:paddingStart="12dp" android:paddingEnd="12dp" android:scrollbars="none">
+        <LinearLayout android:id="@+id/discovery_search_pills" android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/UiKit.ViewGroup.LinearLayout.Horizontal"/>
+    </HorizontalScrollView>
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <androidx.recyclerview.widget.RecyclerView android:id="@+id/discovery_search_list" android:layout_width="match_parent" android:layout_height="match_parent" app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"/>
+        <ProgressBar android:layout_gravity="center" android:id="@+id/discovery_search_loading" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+    </FrameLayout>
+</LinearLayout>

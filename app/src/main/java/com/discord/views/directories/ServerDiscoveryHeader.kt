@@ -27,6 +27,10 @@ class ServerDiscoveryHeader(context: Context, attrs: AttributeSet?) :
         searchLayout.setOnClickListener(listener)
     }
 
+    fun setButtonVisible(visible: Boolean) {
+        searchLayout.visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
     fun setDescription(description: CharSequence?) {
         this.description.text = description
     }

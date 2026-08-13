@@ -145,9 +145,13 @@ class GuildProfileViewModelsTest {
         me = me(),
         computedMe = member(),
         restrictedGuildIds = emptyList(),
+        messageRequestRestrictedGuildIds = emptyList(),
+        mutedGuildIds = emptyList(),
+        guildPermissions = null,
         isDeveloper = false,
         isLurking = lurking,
         isUnread = true,
+        emojis = emptyList(),
     )
 
     private fun info() = GuildChannelsInfo(

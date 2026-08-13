@@ -25,7 +25,7 @@ class GuildListItemBuilderTest {
                 GuildListItem.DividerItem::class,
                 GuildListItem.GuildItem::class,
                 GuildListItem.CreateItem::class,
-                GuildListItem.HubItem::class,
+                GuildListItem.DiscoveryItem::class,
                 GuildListItem.SpaceItem::class,
             ),
             items.map { it::class },
@@ -51,10 +51,10 @@ class GuildListItemBuilderTest {
         assertEquals(GuildListItem.SpaceItem, items.last())
     }
 
-    @Test fun putsTheHubRowAfterCreate() {
+    @Test fun putsTheDiscoveryRowAfterCreate() {
         val items = GuildListItemBuilder.buildItems(storeState())
 
-        assertEquals(items.indexOf(GuildListItem.CreateItem) + 1, items.indexOf(GuildListItem.HubItem))
+        assertEquals(items.indexOf(GuildListItem.CreateItem) + 1, items.indexOf(GuildListItem.DiscoveryItem))
     }
 
     @Test fun pinsLurkedGuildsAboveTheDivider() {

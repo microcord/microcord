@@ -51,7 +51,7 @@ class StoreLurking(
     private data class LurkContext(val guildId: Long, val shouldNavigate: Boolean)
 
     /** A lurk asked for before the gateway session existed; replayed on the next READY. */
-    private data class LurkRequest(val guildId: Long, val channelId: Long? = null)
+    private data class LurkRequest(val guildId: Long, val channelId: Long? = null, val source: String? = null)
 
     private val lurkedGuilds = LinkedHashMap<Long, LurkContext>()
     private val lurkedGuildsSubject = BehaviorSubject.create<Map<Long, LurkContext>>(lurkedGuilds)
@@ -103,7 +103,7 @@ class StoreLurking(
         val queued = lurkRequest
         if (queued != null) {
             AppLog.i("Processing lurk request from app link")
-            startLurkingAndNavigate(queued.guildId, queued.channelId)
+            startLurkingAndNavigate(queued.guildId, queued.channelId, queued.source)
         }
         lurkRequest = null
     }
@@ -176,7 +176,7 @@ class StoreLurking(
         onGuildLurked: (ApiGuild?, Long?, Boolean) -> Unit = { _, _, _ -> },
         onErrorLurking: () -> Unit = {},
     ) = dispatcher.schedule {
-        startLurkingInternal(guildId, channelId, navigateToGuild, onGuildLurked, onErrorLurking)
+        startLurkingInternal(guildId, channelId, null, navigateToGuild, onGuildLurked, onErrorLurking)
     }
 
     /**
@@ -184,10 +184,10 @@ class StoreLurking(
      * queued and replayed from [handleConnectionOpen], which is what makes a cold-start deep
      * link into a lurk work.
      */
-    fun startLurkingAndNavigate(guildId: Long, channelId: Long?) = dispatcher.schedule {
+    fun startLurkingAndNavigate(guildId: Long, channelId: Long?, source: String? = null) = dispatcher.schedule {
         if (sessionId == null) {
             AppLog.i("Queue lurk request: $guildId:$channelId")
-            lurkRequest = LurkRequest(guildId, channelId)
+            lurkRequest = LurkRequest(guildId, channelId, source)
             return@schedule
         }
         if (isLurking(guildId)) {
@@ -197,6 +197,7 @@ class StoreLurking(
         startLurkingInternal(
             guildId = guildId,
             channelId = channelId,
+            source = source,
             navigateToGuild = false,
             onGuildLurked = { guild, resolvedChannelId, alreadyJoined ->
                 navigate(guildId, resolvedChannelId)
@@ -239,6 +240,7 @@ class StoreLurking(
     private fun startLurkingInternal(
         guildId: Long,
         channelId: Long?,
+        source: String? = null,
         navigateToGuild: Boolean = false,
         onGuildLurked: (ApiGuild?, Long?, Boolean) -> Unit = { _, _, _ -> },
         onErrorLurking: () -> Unit = {},
@@ -264,7 +266,7 @@ class StoreLurking(
         lurkedGuildsSubject.onNext(lurkedGuilds)
 
         val api = api ?: return onErrorLurking()
-        api.joinGuild(guildId, true, sessionId, null, RestAPIParams.InviteCode(), contextPropertiesOf())
+        api.joinGuild(guildId, true, sessionId, null, RestAPIParams.InviteCode(), contextPropertiesOf("source" to source))
             .restSubscribeOn()
             .ui()
             .appSubscribe(

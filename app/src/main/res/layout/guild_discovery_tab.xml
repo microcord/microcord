@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextView xmlns:android="http://schemas.android.com/apk/res/android" android:textColor="@color/channel_item_hub_selector" android:gravity="center" android:id="@+id/tab_view" android:background="@drawable/bg_discovery_category_pill" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_marginEnd="4dp" android:paddingStart="14dp" android:paddingEnd="14dp" android:paddingTop="6dp" android:paddingBottom="6dp" android:maxLines="1" style="@style/UiKit.TextView.Medium"/>

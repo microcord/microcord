@@ -95,8 +95,8 @@ sealed class GuildListItem(val itemId: Long) {
     /** Bottom padding sized to the tab bar so the last guild is never hidden behind it. */
     object SpaceItem : GuildListItem(ID_BOTTOM_NAV_SPACE)
 
-    /** Student-hub discovery entry point. */
-    object HubItem : GuildListItem(ID_HUB)
+    /** Server discovery entry point. */
+    object DiscoveryItem : GuildListItem(ID_DISCOVERY)
 
     companion object {
         const val TYPE_FRIENDS = 0
@@ -108,7 +108,7 @@ sealed class GuildListItem(val itemId: Long) {
         const val TYPE_FOLDER = 6
         const val TYPE_HELP = 7
         const val TYPE_BOTTOM_NAV_SPACE = 8
-        const val TYPE_HUB = 9
+        const val TYPE_DISCOVERY = 9
         const val TYPE_GEO_RESTRICTED = 10
 
         private const val ID_UNIDENTIFIED = -1L
@@ -118,6 +118,6 @@ sealed class GuildListItem(val itemId: Long) {
         private const val ID_HELP = -5L
         private const val ID_BOTTOM_NAV_SPACE = -6L
         const val ID_PENDING_GUILDS_FOLDER = -7L
-        private const val ID_HUB = -8L
+        private const val ID_DISCOVERY = -8L
     }
 }

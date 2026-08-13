@@ -14,6 +14,7 @@ import com.discord.models.user.MeUser
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreGuildProfiles
+import com.discord.stores.JoinGuildSources
 import com.discord.stores.StoreStream
 import com.discord.stores.UserSettings
 import com.discord.utilities.channel.GuildChannelsInfo
@@ -74,7 +75,7 @@ class WidgetGuildProfileSheetViewModel(
             isMuted = guild.id in state.mutedGuildIds,
             isCommunity = GuildFeature.COMMUNITY in guild.features,
             showAllChannels = !state.guildChannelsInfo.notificationSettings.isOptInChannelsEnabled,
-            canReportRaid = canReportRaid(guild),
+            canReportRaid = canReportRaid(guild, state.guildPermissions),
         )
         return ViewState.Loaded(
             guildId = guild.id,
@@ -137,7 +138,7 @@ class WidgetGuildProfileSheetViewModel(
 
     fun onClickViewServer(guildId: Long, channelId: Long?) {
         if (StoreStream.getGuilds().getGuild(guildId) == null) {
-            StoreStream.getLurking().startLurkingAndNavigate(guildId, channelId)
+            StoreStream.getLurking().startLurkingAndNavigate(guildId, channelId, JoinGuildSources.GUILD_PROFILE_LURKER)
         } else if (channelId == null) {
             StoreStream.selectGuild(guildId)
         } else {
@@ -175,9 +176,8 @@ class WidgetGuildProfileSheetViewModel(
     }
 
     /** Matches the reference: any moderation-shaped permission may raise a raid report. */
-    private fun canReportRaid(guild: Guild): Boolean {
+    private fun canReportRaid(guild: Guild, permissions: Long?): Boolean {
         if (hasDetectedActivity(guild.incidentsData)) return false
-        val permissions = StoreStream.getPermissions().getGuildPermissions()[guild.id]
         return PermissionUtils.can(Permission.BAN_MEMBERS, permissions) ||
             PermissionUtils.can(Permission.KICK_MEMBERS, permissions) ||
             PermissionUtils.can(Permission.MODERATE_MEMBERS, permissions) ||
@@ -233,6 +233,7 @@ class WidgetGuildProfileSheetViewModel(
         val restrictedGuildIds: List<Long>,
         val messageRequestRestrictedGuildIds: List<Long>,
         val mutedGuildIds: List<Long>,
+        val guildPermissions: Long?,
         val isDeveloper: Boolean,
         val isLurking: Boolean,
         val isUnread: Boolean,
@@ -285,6 +286,7 @@ class WidgetGuildProfileSheetViewModel(
                 StoreStream.getLurking().isLurkingObs(guildId),
                 GuildChannelsInfo.get(guildId),
                 StoreStream.getEmojis().observeGuildEmoji(guildId),
+                StoreStream.getPermissions().observePermissionsForGuild(guildId),
             ),
         ) { args ->
             @Suppress("UNCHECKED_CAST")
@@ -301,6 +303,7 @@ class WidgetGuildProfileSheetViewModel(
                 isLurking = args[8] as Boolean,
                 isUnread = args[2] as Boolean,
                 emojis = args[10] as List<ModelEmojiCustom>,
+                guildPermissions = args[11] as Long?,
             )
         }
     }

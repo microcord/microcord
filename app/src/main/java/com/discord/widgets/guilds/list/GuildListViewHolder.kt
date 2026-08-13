@@ -85,7 +85,7 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
         }
     }
 
-    class DiscordHubViewHolder(view: View) : GuildListViewHolder(view)
+    class DiscoveryViewHolder(view: View) : GuildListViewHolder(view)
 
     class FriendsViewHolder(
         view: View,

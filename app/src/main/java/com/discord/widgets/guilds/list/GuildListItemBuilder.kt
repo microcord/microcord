@@ -40,14 +40,6 @@ internal object GuildListItemBuilder {
         )
 
         items.add(GuildListItem.FriendsItem(isSelected = storeState.selectedGuildId <= 0))
-        items.addAll(
-            createDirectMessageItems(
-                storeState.privateChannels,
-                storeState.mentionCounts,
-                storeState.guildSettings[PRIVATE_CHANNELS_SETTINGS_ID],
-            ),
-        )
-
         // Guild mention counts are the sum over the guild's channels, so they are computed once
         // here and shared by the folder aggregation and the guild rows.
         val mentionCountsByGuild = HashMap<Long, Int>()
@@ -98,6 +90,14 @@ internal object GuildListItemBuilder {
         }
 
         items.addAll(lurkerGuildItems)
+        items.addAll(
+            createDirectMessageItems(
+                storeState.privateChannels,
+                storeState.mentionCounts,
+                storeState.guildSettings[PRIVATE_CHANNELS_SETTINGS_ID],
+            ),
+        )
+
         items.add(GuildListItem.DividerItem)
         items.addAll(guildItems)
 
@@ -106,7 +106,7 @@ internal object GuildListItemBuilder {
             items.add(GuildListItem.UnavailableItem(storeState.unavailableGuilds.size))
         }
         items.add(GuildListItem.CreateItem)
-        items.add(GuildListItem.HubItem)
+        items.add(GuildListItem.DiscoveryItem)
         if (storeState.isNewUser) {
             items.add(GuildListItem.DividerItem)
             items.add(GuildListItem.HelpItem)

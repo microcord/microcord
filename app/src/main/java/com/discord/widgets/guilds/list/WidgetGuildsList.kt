@@ -122,8 +122,8 @@ class WidgetGuildsList : AppFragment(R.layout.widget_guilds_list), WidgetGuildLi
             announceFolderToggle(event.item)
         WidgetGuildsListViewModel.Event.ShowCreateGuild ->
             GuildsListNavigation.showCreateGuild(requireContext())
-        WidgetGuildsListViewModel.Event.ShowHubVerification ->
-            GuildsListNavigation.showHubVerification(requireContext())
+        WidgetGuildsListViewModel.Event.ShowDiscovery ->
+            GuildsListNavigation.showDiscovery(requireContext())
         WidgetGuildsListViewModel.Event.ShowHelp ->
             GuildsListNavigation.showNavigationHelp(parentFragmentManager)
         WidgetGuildsListViewModel.Event.FocusFirstElement -> focusFirstElement()
@@ -275,7 +275,6 @@ object GuildsListNavigation {
     @Volatile
     var showChannelActions: (FragmentManager, Long) -> Unit = { _, _ -> }
 
-    /** `WidgetHubEmailFlow` — the screen exists; only its launch contract is still open. */
     @Volatile
-    var showHubVerification: (Context) -> Unit = {}
+    var showDiscovery: (Context) -> Unit = {}
 }

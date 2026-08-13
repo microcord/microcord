@@ -1220,6 +1220,9 @@ class StoreStream private constructor(
         ChatInputStoreBindings.isLurking = lurking::isLurkingObs
         ChatInputStoreBindings.threadDraftState = threadDraft::observeDraftState
         com.discord.widgets.search.SearchStoreProvider.install(search.asWidgetStore())
+        ChatInputGuardActions.showFollowSheet = { fragmentManager, channelId, guildId ->
+            com.discord.widgets.announcements.WidgetChannelFollowSheet.show(fragmentManager, channelId, guildId)
+        }
         ChatInputGuardActions.joinGuildAsMember = { guildId, onSuccess, onFailure ->
             lurking.postJoinGuildAsMember(
                 guildId,

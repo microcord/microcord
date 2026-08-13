@@ -96,6 +96,7 @@ object GuildsListStoreHooks {
      * sidebar has no pending-applications folder at all, because every default above is inert.
      */
     fun install() {
+        lurkingGuildIds = { StoreStream.getLurking().getLurkingGuildIds() }
         guildJoinRequests = { StoreStream.getGuildJoinRequests().observeGuildJoinRequests() }
         pendingGuilds = {
             StoreStream.getGuildJoinRequests().observePendingGuilds()

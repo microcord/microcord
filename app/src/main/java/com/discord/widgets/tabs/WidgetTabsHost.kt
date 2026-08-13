@@ -35,6 +35,7 @@ import com.discord.widgets.media.WidgetQRScanner
 import com.discord.widgets.applicationdirectory.WidgetApplicationDirectory
 import com.discord.widgets.applicationdirectory.WidgetApplicationDirectoryDetail
 import com.discord.widgets.directories.WidgetDirectoriesSearch
+import com.discord.widgets.discovery.WidgetGuildDiscovery
 import com.discord.widgets.friends.WidgetFriendsAdd
 import com.discord.widgets.friends.WidgetFriendsAddById
 import com.discord.widgets.friends.WidgetFriendsList
@@ -388,11 +389,7 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
                 WidgetApplicationDirectoryDetail.launch(requireContext(), it)
             } ?: WidgetApplicationDirectory.launch(requireContext())
             // `/discovery` opens directory search against the Discord-owned HQ directory channel.
-            is DeepLinkRoute.Discovery -> AppScreenRouter.launch(
-                requireContext(),
-                WidgetDirectoriesSearch::class.java,
-                WidgetDirectoriesSearch.discoveryIntent(),
-            )
+            is DeepLinkRoute.Discovery -> WidgetGuildDiscovery.launch(requireContext())
             // A `/ra/<fingerprint>` link is a login waiting on another device; it opens the
             // remote-auth confirmation screen. Without a fingerprint there is nothing to confirm,
             // so the scanner opens instead and says to rescan the code.

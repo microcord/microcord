@@ -22,6 +22,8 @@ import com.discord.widgets.channels.memberlist.WidgetChannelMembersList
 import com.discord.widgets.channels.WidgetChannelOnboarding
 import com.discord.widgets.channels.WidgetChannelTopic
 import com.discord.widgets.channels.WidgetChannelSidebarActions
+import com.discord.widgets.directories.WidgetDirectoryChannel
+import com.discord.widgets.discovery.WidgetGuildDiscovery
 import com.discord.widgets.guilds.list.GuildsListNavigation
 import com.discord.widgets.guilds.list.WidgetGuildsList
 import com.discord.widgets.hubs.HubEmailArgs
@@ -125,9 +127,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         // and `hubs`.
         GuildsListNavigation.showChannelActions = WidgetChannelsListItemChannelActions::show
         GuildsListNavigation.showNavigationHelp = WidgetNavigationHelp::show
-        GuildsListNavigation.showHubVerification = { context ->
-            AppScreenRouter.launch(context, WidgetHubEmailFlow::class.java, HubEmailArgs().toArgsIntent())
-        }
+        GuildsListNavigation.showDiscovery = { context -> WidgetGuildDiscovery.launch(context) }
         val initialSurface = centerSurface(StoreStream.getChannelsSelected().getResolvedSelectedChannel())
         if (savedInstanceState != null || initialSurface == CenterSurface.NONE) ensureStartPanelFragments()
         if (savedInstanceState != null) ensureEndPanelFragment()

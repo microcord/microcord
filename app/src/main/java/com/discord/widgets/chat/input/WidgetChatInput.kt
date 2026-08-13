@@ -1308,6 +1308,15 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                         viewState.channel.guildId,
                     )
                 }
+                if (viewState.isLurking) {
+                    bindGuardAction(
+                        guardActionSecondary,
+                        R.string.join,
+                        ChatInputGuardActions.joinGuildAsMember != null,
+                    ) {
+                        ChatInputGuardActions.joinGuildAsMember?.invoke(viewState.channel.guildId, {}, {})
+                    }
+                }
             }
 
             viewState.isLurking -> {

@@ -52,7 +52,7 @@ class WidgetGuildListAdapter(
         is GuildListItem.FolderItem -> GuildListItem.TYPE_FOLDER
         GuildListItem.HelpItem -> GuildListItem.TYPE_HELP
         GuildListItem.SpaceItem -> GuildListItem.TYPE_BOTTOM_NAV_SPACE
-        GuildListItem.HubItem -> GuildListItem.TYPE_HUB
+        GuildListItem.DiscoveryItem -> GuildListItem.TYPE_DISCOVERY
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): GuildListViewHolder {
@@ -106,8 +106,8 @@ class WidgetGuildListAdapter(
                 GuildListViewHolder.SimpleViewHolder(inflate(R.layout.widget_guilds_list_item_guild_nux))
             GuildListItem.TYPE_BOTTOM_NAV_SPACE ->
                 GuildListViewHolder.SpaceViewHolder(inflate(R.layout.recycler_item_bottom_nav_space))
-            GuildListItem.TYPE_HUB ->
-                GuildListViewHolder.DiscordHubViewHolder(inflate(R.layout.widget_guilds_list_item_hub_verification))
+            GuildListItem.TYPE_DISCOVERY ->
+                GuildListViewHolder.DiscoveryViewHolder(inflate(R.layout.widget_guilds_list_item_discovery))
             else -> error("invalid view type: $viewType")
         }
     }
@@ -125,7 +125,7 @@ class WidgetGuildListAdapter(
                 holder.itemView.setOnClickListener { interactionListener.onItemClicked(holder.itemView, item) }
             }
             is GuildListItem.UnavailableItem, GuildListItem.CreateItem, GuildListItem.HelpItem,
-            GuildListItem.HubItem,
+            GuildListItem.DiscoveryItem,
             ->
                 holder.itemView.setOnClickListener { interactionListener.onItemClicked(holder.itemView, item) }
             GuildListItem.SpaceItem -> (holder as GuildListViewHolder.SpaceViewHolder).configure(bottomNavHeight)

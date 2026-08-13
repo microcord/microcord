@@ -118,7 +118,7 @@ class WidgetGuildsListViewModel(
                 StoreStream.selectGuild(0L)
             }
             GuildListItem.CreateItem -> eventSubject.onNext(Event.ShowCreateGuild)
-            GuildListItem.HubItem -> eventSubject.onNext(Event.ShowHubVerification)
+            GuildListItem.DiscoveryItem -> eventSubject.onNext(Event.ShowDiscovery)
             GuildListItem.HelpItem -> eventSubject.onNext(Event.ShowHelp)
             is GuildListItem.FolderItem -> {
                 val folders = StoreStream.getExpandedGuildFolders()
@@ -340,7 +340,7 @@ class WidgetGuildsListViewModel(
         data class ShowGeoRestrictedGuild(val guild: GeoRestrictedGuild) : Event()
         data class AnnounceFolderToggleForAccessibility(val item: GuildListItem.FolderItem) : Event()
         object ShowCreateGuild : Event()
-        object ShowHubVerification : Event()
+        object ShowDiscovery : Event()
         object ShowHelp : Event()
         object FocusFirstElement : Event()
 

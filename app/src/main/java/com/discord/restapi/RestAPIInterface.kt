@@ -33,6 +33,8 @@ import com.discord.api.creatormonetization.CreatorMonetizationEligibilityRequire
 import com.discord.api.creatormonetization.CreatorMonetizationEnableRequest
 import com.discord.api.directory.DirectoryEntryEvent
 import com.discord.api.directory.DirectoryEntryGuild
+import com.discord.api.discovery.DiscoverableGuildsResponse
+import com.discord.api.discovery.DiscoveryCategory
 import com.discord.api.fingerprint.FingerprintResponse
 import com.discord.api.forum.ForumPostFirstMessages
 import com.discord.api.friendsuggestions.BulkAddFriendsResponse
@@ -1516,6 +1518,30 @@ interface RestAPIInterface {
     ): Observable<ModelAuditLog>
 
     // -- Guild discovery, welcome screen, membership screening ---------------------------------------------------
+
+    @GET("discoverable-guilds")
+    fun getDiscoverableGuilds(
+        @Query("offset") offset: Int,
+        @Query("limit") limit: Int,
+        @Query("categories") categoryId: Int? = null,
+    ): Observable<DiscoverableGuildsResponse>
+
+    /** `with_counts` adds the per-category result tallies the filter strip is built from. */
+    @GET("discoverable-guilds/search")
+    fun searchDiscoverableGuilds(
+        @Query("query") query: String,
+        @Query("offset") offset: Int,
+        @Query("limit") limit: Int,
+        @Query("category_id") categoryId: Int? = null,
+        @Query("with_counts") withCounts: Boolean = true,
+    ): Observable<DiscoverableGuildsResponse>
+
+    /** `primary_only=false` so the browsing buckets come back alongside the claimable categories. */
+    @GET("discovery/categories")
+    fun getDiscoveryCategories(
+        @Query("locale") locale: String,
+        @Query("primary_only") primaryOnly: Boolean = false,
+    ): Observable<List<DiscoveryCategory>>
 
     @GET("guilds/{guildId}/preview")
     fun getGuildPreview(@Path("guildId") guildId: Long): Observable<GuildPreview>

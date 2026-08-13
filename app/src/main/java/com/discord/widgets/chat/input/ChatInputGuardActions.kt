@@ -14,7 +14,6 @@ import com.discord.api.guild.GuildVerificationLevel
  * | Action | Reference destination | Status here |
  * | --- | --- | --- |
  * | [joinGuildAsMember] | `StoreLurking.postJoinGuildAsMember` | the store exists but `StoreStream` never constructs it |
- * | [showFollowSheet] | `WidgetChannelFollowSheet` | not reconstructed |
  * | [launchAccountVerification] | `WidgetUserEmailVerify` / `WidgetUserPhoneManage` | not reconstructed |
  * | [showMemberVerificationGate] | `MemberVerificationUtils.maybeShowVerificationGate` | reconstructed; `WidgetChatInput` routes the guard itself |
  *
