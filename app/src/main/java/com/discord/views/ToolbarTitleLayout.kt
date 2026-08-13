@@ -1,6 +1,7 @@
 package com.discord.views
 
 import android.content.Context
+import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
 import androidx.annotation.ColorInt
@@ -18,7 +19,10 @@ import com.discord.utilities.view.extensions.setTextAndVisibilityBy
  * Hosts the title, an optional leading icon, an optional trailing icon, a subtitle line and the
  * presence indicator used by DM/channel headers.
  */
-class ToolbarTitleLayout(context: Context) : ConstraintLayout(context) {
+class ToolbarTitleLayout @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null,
+) : ConstraintLayout(context, attrs) {
 
     private val binding = ViewToolbarTitleBinding.inflate(LayoutInflater.from(context), this)
     private var hasIcon = false

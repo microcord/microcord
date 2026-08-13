@@ -180,6 +180,9 @@
         <attr name="sv_border_width" />
         <attr name="sv_corner_radius" />
         <attr name="sv_show_mobile" />
+        <attr name="sv_mobile_background" />
+        <attr name="sv_mobile_width" />
+        <attr name="sv_mobile_height" />
     </declare-styleable>
 
     <declare-styleable name="UsernameView">
