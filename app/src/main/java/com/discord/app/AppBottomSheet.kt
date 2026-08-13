@@ -18,6 +18,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentTransaction
 import com.discord.R
+import com.discord.utilities.view.recycler.BounceEdgeEffectFactory
 import com.google.android.material.R as MaterialR
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -96,6 +97,8 @@ abstract class AppBottomSheet(
         drawUnderSystemBars(view)
         bottomSheetBehavior?.addBottomSheetCallback(bottomSheetCallback)
         appLogger.logImpression()
+        // Posted: a sheet's own setup runs after this, and may still be inflating scrollers.
+        view.post { BounceEdgeEffectFactory.installAll(view) }
     }
 
     override fun onResume() {

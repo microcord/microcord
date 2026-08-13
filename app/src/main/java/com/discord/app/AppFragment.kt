@@ -15,6 +15,7 @@ import androidx.annotation.StringRes
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
 import com.discord.R
+import com.discord.utilities.view.recycler.BounceEdgeEffectFactory
 import com.discord.i18n.i18nFormat
 import com.discord.utilities.view.ToastManager
 import com.discord.utilities.view.text.TextWatcher
@@ -77,6 +78,7 @@ abstract class AppFragment : Fragment, AppComponent, AppPermissionsRequests, App
         onViewBound(view)
         onViewBoundOrOnResume()
         onViewBoundOrOnResumeInvoked = true
+        BounceEdgeEffectFactory.installAll(view)
     }
 
     /** Called once per created view, before the first [onViewBoundOrOnResume]. */

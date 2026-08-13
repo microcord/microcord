@@ -21,7 +21,7 @@ import com.discord.utilities.uri.UriHandler
 class WidgetGuildReportRaid : AppFragment(R.layout.widget_guild_report_raid) {
     private var _binding: WidgetGuildReportRaidBinding? = null
     private val binding get() = requireNotNull(_binding)
-    private val guildId get() = requireArguments().getLong(ARG_GUILD_ID)
+    private val guildId get() = mostRecentIntent.getLongExtra(ARG_GUILD_ID, 0L)
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)

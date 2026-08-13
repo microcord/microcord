@@ -17,6 +17,6 @@
         <TextView android:id="@+id/appeal_footer" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/safety_hub_appeal_confirm_submission_footer" android:textSize="@dimen/uikit_textsize_small" android:textColor="?attr/colorTextMuted" style="@style/UiKit.TextView"/>
         <TextView android:id="@+id/appeal_disclaimer" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textSize="@dimen/uikit_textsize_small" android:textColor="?attr/colorTextMuted" style="@style/UiKit.TextView"/>
 
-        <com.google.android.material.button.MaterialButton android:id="@+id/appeal_submit" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:enabled="false" android:text="@string/safety_hub_appeal_modal_header"/>
+        <com.google.android.material.button.MaterialButton android:id="@+id/appeal_submit" style="@style/UiKit.Material.Button" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:enabled="false" android:text="@string/safety_hub_appeal_modal_header"/>
     </LinearLayout>
 </ScrollView>

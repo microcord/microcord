@@ -10,6 +10,7 @@ import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentTransaction
 import com.discord.R
+import com.discord.utilities.view.recycler.BounceEdgeEffectFactory
 import com.discord.utilities.view.text.TextWatcher
 import rx.subjects.PublishSubject
 import rx.subjects.Subject
@@ -67,6 +68,7 @@ abstract class AppDialog : DialogFragment, AppComponent {
         onViewBound(view)
         onViewBoundOrOnResume()
         onViewBoundOrOnResumeInvoked = true
+        BounceEdgeEffectFactory.installAll(view)
     }
 
     /** Called once per created view, before the first [onViewBoundOrOnResume]. */
