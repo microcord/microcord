@@ -19,7 +19,7 @@ class StatusView(context: Context, attrs: AttributeSet?) : AppCompatImageView(co
 
     init {
         adjustViewBounds = true
-        scaleType = ImageView.ScaleType.FIT_XY
+        scaleType = ImageView.ScaleType.FIT_CENTER
         context.obtainStyledAttributes(attrs, R.styleable.StatusView).run {
             try {
                 setBorderWidth(getDimension(R.styleable.StatusView_sv_border_width, 0f).toInt())
@@ -38,10 +38,13 @@ class StatusView(context: Context, attrs: AttributeSet?) : AppCompatImageView(co
 
     fun setPresence(presence: Presence?) {
         val statuses = presence?.clientStatuses
-        val mobile = showMobile && statuses?.mobileStatus() == ClientStatus.ONLINE &&
-            statuses.webStatus() != ClientStatus.ONLINE && statuses.desktopStatus() != ClientStatus.ONLINE
+        val mobileStatus = statuses?.mobileStatus()
+        val mobile = showMobile && mobileStatus.isActive() &&
+            !statuses?.webStatus().isActive() && !statuses?.desktopStatus().isActive()
         setImageResource(
             when {
+                mobile && mobileStatus == ClientStatus.IDLE -> R.drawable.ic_mobile_idle
+                mobile && mobileStatus == ClientStatus.DND -> R.drawable.ic_mobile_dnd
                 mobile -> R.drawable.ic_mobile
                 presence?.activities?.any { it.type == ActivityType.STREAMING } == true ->
                     R.drawable.ic_status_streaming_16dp
@@ -53,6 +56,8 @@ class StatusView(context: Context, attrs: AttributeSet?) : AppCompatImageView(co
         )
         drawCircle = !mobile
     }
+
+    private fun ClientStatus?.isActive() = this != null && this != ClientStatus.OFFLINE && this != ClientStatus.INVISIBLE
 
     fun setBorderWidth(borderWidthPx: Int) {
         setPadding(borderWidthPx, borderWidthPx, borderWidthPx, borderWidthPx)
