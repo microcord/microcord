@@ -3,6 +3,7 @@ package com.discord.widgets.chat.input.gifpicker
 import com.discord.models.gifpicker.domain.ModelGifCategory
 import com.discord.models.gifpicker.dto.ModelGif
 import com.discord.stores.StoreStream
+import com.discord.utilities.feature.GifProvider
 import java.util.Collections
 import rx.Observable
 
@@ -51,6 +52,7 @@ interface GifPickerStore {
     fun onGifUsed(gif: ModelGif)
 
     fun setFavoriteGif(gif: ModelGif, favorite: Boolean)
+    fun setProvider(provider: GifProvider, activeQuery: String?) = Unit
 
     /** Idempotent: a fetch already in flight is not reissued. */
     fun fetchGifCategories()

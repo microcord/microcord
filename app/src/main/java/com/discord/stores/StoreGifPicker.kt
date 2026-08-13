@@ -6,13 +6,21 @@ import com.discord.models.gifpicker.dto.TrendingGifCategoriesResponseDto
 import com.discord.restapi.RestAPIInterface
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.media.ExpressionFrecencyTracker
+import com.discord.utilities.feature.FeatureFlags
+import com.discord.utilities.feature.GifProvider
+import com.discord.utilities.feature.GifProviderSettings
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.widgets.chat.input.gifpicker.GifPickerStore
 import java.util.Collections
 import java.util.LinkedHashMap
+import com.google.gson.Gson
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import rx.Observable
+import rx.schedulers.Schedulers
 
 class StoreGifPicker(
     private val dispatcher: Dispatcher,
@@ -42,6 +50,7 @@ class StoreGifPicker(
     private var isFetchingGifCategories = false
     private var isFetchingTrendingCategoryGifs = false
     private var isFetchingTrendingSearchTerms = false
+    private var provider = GifProviderSettings.get()
 
     override fun observeGifCategories(): Observable<List<ModelGifCategory>> {
         dispatcher.schedule {
@@ -111,6 +120,22 @@ class StoreGifPicker(
     override fun setFavoriteGif(gif: ModelGif, favorite: Boolean) =
         mediaFavorites.setFavoriteGif(gif, favorite)
 
+    override fun setProvider(provider: GifProvider, activeQuery: String?) = dispatcher.schedule {
+        GifProviderSettings.set(provider)
+        if (this.provider == provider) return@schedule
+        this.provider = provider
+        gifSearchHistory.clear()
+        trendingCategoryGifs.clear()
+        trendingGifCategoryPreviewUrl = ""
+        isFetchingTrendingCategoryGifs = false
+        activeQuery?.takeIf(String::isNotBlank)?.let { query ->
+            gifSearchHistory[query] = searchResultsLoadingList
+            fetchGifsForSearchQuery(query)
+        }
+        fetchTrendingCategoryGifs()
+        markChanged()
+    }
+
     override fun fetchGifCategories() = dispatcher.schedule {
         if (!isFetchingGifCategories) fetchGifCategoriesInternal()
     }
@@ -132,18 +157,30 @@ class StoreGifPicker(
 
     @StoreThread
     private fun fetchTrendingCategoryGifs() {
-        val api = restAPI() ?: return
+        val selectedProvider = activeProvider()
+        val source = when (selectedProvider) {
+            GifProvider.GIPHY -> fetchGiphyGifs(null)
+            GifProvider.TENOR -> fetchTenorGifs(null)
+            GifProvider.KLIPY -> {
+                val api = restAPI() ?: return
+                api.getTrendingGifCategory(PROVIDER, storeUserSettingsSystem.getLocale(), MEDIA_FORMAT, SEARCH_PAGE_SIZE)
+                    .map { gifs -> gifs.map(ModelGif::createFromGifDto) }
+                    .restSubscribeOn(retry = false)
+            }
+        }
         isFetchingTrendingCategoryGifs = true
-        api.getTrendingGifCategory(PROVIDER, storeUserSettingsSystem.getLocale(), MEDIA_FORMAT, SEARCH_PAGE_SIZE)
-            .restSubscribeOn(retry = false)
-            .subscribe(
+        source.subscribe(
                 { gifs -> dispatcher.schedule {
+                    if (selectedProvider != activeProvider()) return@schedule
                     trendingCategoryGifs.clear()
-                    trendingCategoryGifs += gifs.map(ModelGif::createFromGifDto)
+                    trendingCategoryGifs += gifs
+                    trendingGifCategoryPreviewUrl = gifs.firstOrNull()?.gifImageUrl.orEmpty()
                     isFetchingTrendingCategoryGifs = false
                     markChanged()
                 } },
-                { dispatcher.schedule { isFetchingTrendingCategoryGifs = false } },
+                { dispatcher.schedule {
+                    if (selectedProvider == activeProvider()) isFetchingTrendingCategoryGifs = false
+                } },
             )
     }
 
@@ -166,18 +203,62 @@ class StoreGifPicker(
 
     @StoreThread
     private fun fetchGifsForSearchQuery(query: String) {
-        val api = restAPI()
-        if (api == null) {
-            handleGifSearchResults(query, emptyList())
-            return
+        val selectedProvider = activeProvider()
+        val source = when (selectedProvider) {
+            GifProvider.GIPHY -> fetchGiphyGifs(query)
+            GifProvider.TENOR -> fetchTenorGifs(query)
+            GifProvider.KLIPY -> {
+                val api = restAPI()
+                if (api == null) {
+                    handleGifSearchResults(query, emptyList())
+                    return
+                }
+                api.getGifSearchResults(query, PROVIDER, storeUserSettingsSystem.getLocale(), MEDIA_FORMAT, SEARCH_PAGE_SIZE)
+                    .map { gifs -> gifs.map(ModelGif::createFromGifDto) }
+                    .restSubscribeOn(retry = false)
+            }
         }
-        api.getGifSearchResults(query, PROVIDER, storeUserSettingsSystem.getLocale(), MEDIA_FORMAT, SEARCH_PAGE_SIZE)
-            .restSubscribeOn(retry = false)
-            .subscribe(
-                { gifs -> dispatcher.schedule { handleGifSearchResults(query, gifs.map(ModelGif::createFromGifDto)) } },
-                { dispatcher.schedule { handleGifSearchResults(query, emptyList()) } },
+        source.subscribe(
+                { gifs -> dispatcher.schedule {
+                    if (selectedProvider == activeProvider()) handleGifSearchResults(query, gifs)
+                } },
+                { dispatcher.schedule {
+                    if (selectedProvider == activeProvider()) handleGifSearchResults(query, emptyList())
+                } },
             )
     }
+
+    private fun activeProvider() =
+        if (FeatureFlags.moreGifProvidersEnabled()) provider else GifProvider.KLIPY
+
+    private fun fetchTenorGifs(query: String?): Observable<List<ModelGif>> = Observable.fromCallable {
+        val endpoint = "https://api.tenor.com/v1/${if (query == null) "trending" else "search"}"
+        val url = endpoint.toHttpUrl().newBuilder()
+            .addQueryParameter("key", TENOR_API_KEY)
+            .addQueryParameter("locale", storeUserSettingsSystem.getLocale())
+            .addQueryParameter("limit", SEARCH_PAGE_SIZE.toString())
+            .addQueryParameter("media_filter", "tinygif")
+            .apply { if (query != null) addQueryParameter("q", query) }
+            .build()
+        PROVIDER_HTTP.newCall(Request.Builder().url(url).build()).execute().use { response ->
+            check(response.isSuccessful) { "Tenor request failed: ${response.code}" }
+            parseTenorResponse(requireNotNull(response.body).string())
+        }
+    }.subscribeOn(Schedulers.io())
+
+    private fun fetchGiphyGifs(query: String?): Observable<List<ModelGif>> = Observable.fromCallable {
+        val endpoint = "https://api.giphy.com/v1/gifs/${if (query == null) "trending" else "search"}"
+        val url = endpoint.toHttpUrl().newBuilder()
+            .addQueryParameter("api_key", GIPHY_API_KEY)
+            .addQueryParameter("limit", SEARCH_PAGE_SIZE.toString())
+            .addQueryParameter("rating", "pg-13")
+            .apply { if (query != null) addQueryParameter("q", query) }
+            .build()
+        PROVIDER_HTTP.newCall(Request.Builder().url(url).build()).execute().use { response ->
+            check(response.isSuccessful) { "Giphy request failed: ${response.code}" }
+            parseGiphyResponse(requireNotNull(response.body).string())
+        }
+    }.subscribeOn(Schedulers.io())
 
     @StoreThread
     private fun fetchSuggestedSearchTerms(query: String) {
@@ -250,14 +331,61 @@ class StoreGifPicker(
         @JvmField val searchResultsLoadingList: List<ModelGif> = Collections.unmodifiableList(ArrayList<ModelGif>(0))
         @JvmField val searchTermsLoadingList: List<String> = Collections.unmodifiableList(ArrayList<String>(0))
 
-        private const val PROVIDER = "tenor"
+        private const val PROVIDER = "klipy"
         private const val MEDIA_FORMAT = "tinygif"
         private const val SEARCH_PAGE_SIZE = 50
         private const val SEARCH_TERM_LIMIT = 5
         private const val MAX_CACHE_ENTRIES = 20
         private const val MAX_FREQUENT_GIFS = 32
+        private const val GIPHY_API_KEY = "3o6ZsYH6U6Eri53TXy"
+        private const val TENOR_API_KEY = "3Z0688EVWYKH"
+        private val PROVIDER_HTTP = OkHttpClient()
 
         const val GIF_FRECENCY_CACHE_KEY = "GIF_FRECENTS_V1"
         const val GIF_HISTORY_CACHE_KEY = "GIF_HISTORY_ITEMS_V1"
     }
 }
+
+internal data class GiphyResponse(val data: List<GiphyGif> = emptyList())
+internal data class GiphyGif(
+    val url: String? = null,
+    val images: Map<String, GiphyImage> = emptyMap(),
+)
+internal data class GiphyImage(
+    val url: String? = null,
+    val width: String? = null,
+    val height: String? = null,
+)
+
+internal data class TenorResponse(val results: List<TenorGif> = emptyList())
+internal data class TenorGif(
+    val itemurl: String? = null,
+    val media: List<Map<String, TenorImage>> = emptyList(),
+)
+internal data class TenorImage(
+    val url: String? = null,
+    val dims: List<Int> = emptyList(),
+)
+
+internal fun parseTenorResponse(body: String): List<ModelGif> =
+    Gson().fromJson(body, TenorResponse::class.java).results.mapNotNull { gif ->
+        val media = gif.media.firstOrNull() ?: return@mapNotNull null
+        val image = media["tinygif"] ?: media["gif"] ?: return@mapNotNull null
+        ModelGif(
+            image.url ?: return@mapNotNull null,
+            gif.itemurl ?: return@mapNotNull null,
+            image.dims.getOrNull(0) ?: return@mapNotNull null,
+            image.dims.getOrNull(1) ?: return@mapNotNull null,
+        )
+    }
+
+internal fun parseGiphyResponse(body: String): List<ModelGif> =
+    Gson().fromJson(body, GiphyResponse::class.java).data.mapNotNull { gif ->
+        val image = gif.images["original"] ?: return@mapNotNull null
+        ModelGif(
+            image.url ?: return@mapNotNull null,
+            gif.url ?: return@mapNotNull null,
+            image.width?.toIntOrNull() ?: return@mapNotNull null,
+            image.height?.toIntOrNull() ?: return@mapNotNull null,
+        )
+    }

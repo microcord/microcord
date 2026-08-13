@@ -40,6 +40,10 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.chatHeaderStatusIndicatorsEnabled()
             setOnCheckedListener(FeatureFlags::setChatHeaderStatusIndicatorsEnabled)
         }
+        binding.settingsFeatureMoreGifProviders.apply {
+            isChecked = FeatureFlags.moreGifProvidersEnabled()
+            setOnCheckedListener(FeatureFlags::setMoreGifProvidersEnabled)
+        }
         binding.settingsFeatureMessageLimitCounter.apply {
             isChecked = FeatureFlags.messageLimitCounterEnabled()
             setOnCheckedListener(FeatureFlags::setMessageLimitCounterEnabled)

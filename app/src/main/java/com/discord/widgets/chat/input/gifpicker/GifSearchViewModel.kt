@@ -7,6 +7,7 @@ import com.discord.stores.StoreAnalytics
 import com.discord.stores.StoreMediaFavorites
 import com.discord.utilities.analytics.SearchType
 import com.discord.utilities.analytics.Traits
+import com.discord.utilities.feature.GifProvider
 import com.discord.utilities.rx.leadingEdgeThrottle
 import com.discord.utilities.rx.ui
 import com.discord.widgets.chat.input.gifpicker.GifAdapterItem.GifItem
@@ -101,6 +102,9 @@ class GifSearchViewModel(
         }
         searchSubject.onNext(searchText)
     }
+
+    fun setProvider(provider: GifProvider) =
+        storeGifPicker.setProvider(provider, searchSubject.value?.takeIf(String::isNotBlank))
 
     companion object {
         private const val SEARCH_THROTTLE_MS = 1000L

@@ -8,10 +8,14 @@ import com.discord.app.AppFragment
 import com.discord.app.AppViewFlipper
 import com.discord.app.appViewModels
 import com.discord.utilities.dimen.dpToPixels
+import com.discord.utilities.feature.FeatureFlags
+import com.discord.utilities.feature.GifProvider
+import com.discord.utilities.feature.GifProviderSettings
 import com.discord.utilities.recycler.GridColumnSpaceItemDecoration
 import com.discord.utilities.rx.ui
 import com.discord.views.SearchInputView
 import com.discord.widgets.chat.input.gifpicker.GifAdapterItem.GifItem
+import com.google.android.material.tabs.TabLayout
 
 /**
  * Tenor search: a search field over a staggered result grid.
@@ -46,6 +50,7 @@ class WidgetGifPickerSearch : AppFragment(R.layout.widget_gif_picker_search) {
         val columns = GifAdapter.calculateColumnCount(gifRecycler)
         setUpGifRecycler(columns)
         setUpSearchBar()
+        setUpProviderTabs(view.findViewById(R.id.gif_provider_tabs))
         loadingView.updateView(columns)
     }
 
@@ -95,7 +100,33 @@ class WidgetGifPickerSearch : AppFragment(R.layout.widget_gif_picker_search) {
         searchInput.bindTextWatcher(this) { searchQuery -> gifPickerViewModel.setSearchText(searchQuery) }
     }
 
+    private fun setUpProviderTabs(tabs: TabLayout) {
+        if (!FeatureFlags.moreGifProvidersEnabled()) return
+        tabs.visibility = View.VISIBLE
+        val selected = GifProviderSettings.get()
+        GifProvider.entries.forEach { provider ->
+            tabs.addTab(
+                tabs.newTab().setText(provider.displayName),
+                provider == selected,
+            )
+        }
+        searchInput.setHint(getString(R.string.search_gif_provider, selected.displayName))
+        tabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) {
+                val provider = GifProvider.entries[tab.position]
+                searchInput.setHint(getString(R.string.search_gif_provider, provider.displayName))
+                gifPickerViewModel.setProvider(provider)
+            }
+
+            override fun onTabUnselected(tab: TabLayout.Tab) = Unit
+            override fun onTabReselected(tab: TabLayout.Tab) = Unit
+        })
+    }
+
     fun clearSearchBar() = gifPickerViewModel.setSearchText("")
+
+    private val GifProvider.displayName: String
+        get() = name.lowercase().replaceFirstChar(Char::titlecase)
 
 
     private companion object {

@@ -218,7 +218,7 @@ class WidgetExpressionTray : AppFragment(R.layout.widget_expression_tray), Widge
         val searchHint = getString(
             when (tab) {
                 ExpressionTrayTab.EMOJI -> R.string.search_for_emoji
-                ExpressionTrayTab.GIF -> R.string.search_tenor
+                ExpressionTrayTab.GIF -> R.string.search_klipy
                 ExpressionTrayTab.STICKER -> R.string.search_for_stickers
             },
         )
