@@ -50,6 +50,30 @@ if [ "$#" -eq 0 ]; then
   exit 2
 fi
 
+# Gradle picks the daemon JVM by scanning for any Java 21, and a JRE satisfies that scan. It then
+# fails in JdkImageTransform, which needs jlink and so needs a full JDK:
+#
+#   jlink executable ...\redhat.java-1.55.0\jre\21.0.11\bin\jlink.exe does not exist
+#
+# Whichever Java the editor happens to have installed can win that scan, so pin JAVA_HOME to the
+# first candidate that actually ships jlink rather than leaving it to discovery order.
+has_jlink() { [ -n "$1" ] && { [ -x "$1/bin/jlink" ] || [ -x "$1/bin/jlink.exe" ]; }; }
+
+if ! has_jlink "${JAVA_HOME:-}"; then
+  for candidate in \
+    "$HOME"/.gradle/jdks/*/ \
+    "/c/Program Files/Android/Android Studio/jbr" \
+    "/c/Program Files/Eclipse Adoptium"/*/ \
+    "/c/Program Files/Java"/*/
+  do
+    candidate=${candidate%/}
+    if has_jlink "$candidate"; then
+      export JAVA_HOME=$candidate
+      break
+    fi
+  done
+fi
+
 mkdir -p "$STATE/pending" "$STATE/results" "$STATE/logs"
 
 # One line per argument, so arguments containing spaces survive the round trip.
