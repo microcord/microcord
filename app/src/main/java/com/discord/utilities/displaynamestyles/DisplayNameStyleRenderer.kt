@@ -48,7 +48,10 @@ object DisplayNameStyleRenderer {
      * Paints [styles] onto [view], or restores it to the theme's own styling when [styles] is null.
      *
      * @param defaultColor the colour the view would use unstyled; a name whose style carries no
-     *   colours keeps it.
+     *   colours keeps it. It defaults to the colour the view is already wearing, which is right for
+     *   a row that has just been told its member's role colour, and wrong for a preview that is
+     *   restyled in place — those pass their own, because by the second call the view is wearing
+     *   the last style's colour rather than the theme's.
      */
     @JvmStatic
     @JvmOverloads
@@ -56,7 +59,7 @@ object DisplayNameStyleRenderer {
         view: TextView,
         styles: DisplayNameStyles?,
         mode: Mode = Mode.FULL,
-        @ColorInt defaultColor: Int = originalTextColor(view),
+        @ColorInt defaultColor: Int = view.currentTextColor,
     ) {
         reset(view, defaultColor)
         if (styles == null) return
@@ -139,21 +142,6 @@ object DisplayNameStyleRenderer {
         (view.text as? Spannable)?.let { text ->
             text.getSpans(0, text.length, ForegroundColorSpan::class.java).forEach(text::removeSpan)
         }
-    }
-
-    /**
-     * The colour the view had before any style touched it.
-     *
-     * Read back from the view after a style has been applied, `currentTextColor` is the *styled*
-     * colour — black behind a gradient, white behind Neon — so a name that then asks for no colour
-     * of its own would keep the last effect's instead of the theme's.
-     */
-    @ColorInt
-    private fun originalTextColor(view: TextView): Int {
-        val stored = view.getTag(R.id.display_name_style_default_color) as? Int
-        if (stored != null) return stored
-        view.setTag(R.id.display_name_style_default_color, view.currentTextColor)
-        return view.currentTextColor
     }
 
     /**

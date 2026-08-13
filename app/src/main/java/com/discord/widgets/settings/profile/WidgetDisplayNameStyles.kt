@@ -156,8 +156,21 @@ class WidgetDisplayNameStyles : AppFragment(R.layout.widget_display_name_styles)
         pending = style
         previewName.text = displayName
         chatName.text = displayName
-        DisplayNameStyleRenderer.apply(previewName, pending)
-        DisplayNameStyleRenderer.apply(chatName, pending, DisplayNameStyleRenderer.Mode.FONT)
+        // Restyled in place on every pick, so the unstyled colour has to come from the theme:
+        // by now the view is wearing whatever the previous effect left on it.
+        val unstyled = ColorCompat.getThemedColor(requireContext(), R.attr.colorHeaderPrimary)
+        DisplayNameStyleRenderer.apply(
+            previewName,
+            pending,
+            DisplayNameStyleRenderer.Mode.FULL,
+            unstyled,
+        )
+        DisplayNameStyleRenderer.apply(
+            chatName,
+            pending,
+            DisplayNameStyleRenderer.Mode.FONT,
+            unstyled,
+        )
 
         fontValue.setText(DisplayNameStylePresets.fontName(pending.fontId))
         effectValue.setText(DisplayNameStylePresets.effectName(pending.effectId))

@@ -500,7 +500,12 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         val member = loaded.guild?.id?.let { StoreStream.getGuilds().getMember(it, loaded.user.id) }
         val styles = DisplayNameStyleUtils.resolve(loaded.user, member)
         displayNameStylesRowPreview.text = loaded.user.getDisplayName(member?.nick)
-        DisplayNameStyleRenderer.apply(displayNameStylesRowPreview, styles)
+        DisplayNameStyleRenderer.apply(
+            displayNameStylesRowPreview,
+            styles,
+            DisplayNameStyleRenderer.Mode.FULL,
+            ColorCompat.getThemedColor(requireContext(), R.attr.colorHeaderPrimary),
+        )
         displayNameStylesCard.setOnClickListener {
             if (!canEdit) return@setOnClickListener showPremiumRequired()
             WidgetDisplayNameStyles.launch(requireContext(), loaded.guild?.id)
