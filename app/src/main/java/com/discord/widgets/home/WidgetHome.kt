@@ -481,6 +481,9 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                 channelStatusVisible = channel.isDMStatusVisible(presence),
             ),
         )
+        toolbar.visibility = if (
+            !customHeader || HeaderCustomization.identityVisible(headerSurface, Identity.HEADER)
+        ) View.VISIBLE else View.GONE
         updateUnreadCount()
     }
 

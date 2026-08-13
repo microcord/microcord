@@ -6,7 +6,7 @@
     <LinearLayout android:orientation="vertical" app:layout_behavior="@string/appbar_scrolling_view_behavior" style="@style/UiKit.ViewGroup.LinearLayout">
         <com.google.android.material.tabs.TabLayout android:id="@+id/header_customization_tabs" android:layout_width="match_parent" android:layout_height="wrap_content" app:tabGravity="fill" app:tabMode="fixed" app:tabTextAppearance="@style/App.TabLayout.Text" app:tabTextColor="?attr/colorTextMuted" app:tabSelectedTextColor="?attr/colorHeaderPrimary" app:tabIndicatorColor="?attr/colorHeaderPrimary"/>
         <TextView android:padding="16dp" android:text="@string/header_customization_description" android:textColor="?attr/colorTextMuted" style="@style/UiKit.TextView"/>
-        <LinearLayout android:gravity="center_vertical" android:paddingLeft="16dp" android:paddingRight="8dp" android:paddingBottom="16dp" style="@style/UiKit.ViewGroup.LinearLayout.Horizontal">
+        <LinearLayout android:id="@+id/header_customization_preview" android:gravity="center_vertical" android:paddingLeft="16dp" android:paddingRight="8dp" android:paddingBottom="16dp" style="@style/UiKit.ViewGroup.LinearLayout.Horizontal">
             <FrameLayout android:clipChildren="false" android:clipToPadding="false" android:layout_width="24dp" android:layout_height="24dp" android:layout_marginEnd="8dp">
                 <ImageView android:id="@+id/header_customization_channel_icon" android:visibility="gone" android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/ic_channel_text_grey_a60_24dp"/>
                 <com.facebook.drawee.view.SimpleDraweeView android:id="@+id/header_customization_avatar" android:layout_width="match_parent" android:layout_height="match_parent"/>
@@ -17,6 +17,7 @@
         </LinearLayout>
         <androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
             <LinearLayout android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout">
+                <com.discord.views.CheckedSetting android:id="@+id/header_customization_show_header" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
                 <com.discord.views.CheckedSetting android:id="@+id/header_customization_show_avatar" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
                 <com.discord.views.CheckedSetting android:id="@+id/header_customization_show_title" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
                 <com.discord.views.CheckedSetting android:id="@+id/header_customization_show_status" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>

@@ -53,6 +53,7 @@ class WidgetSettingsHeaderCustomization : AppFragment(R.layout.widget_settings_h
             Action.PINS to binding.headerCustomizationPins,
         )
         val identityToggles = mapOf(
+            Identity.HEADER to binding.headerCustomizationShowHeader,
             Identity.AVATAR to binding.headerCustomizationShowAvatar,
             Identity.TITLE to binding.headerCustomizationShowTitle,
             Identity.STATUS to binding.headerCustomizationShowStatus,
@@ -61,32 +62,39 @@ class WidgetSettingsHeaderCustomization : AppFragment(R.layout.widget_settings_h
         lateinit var bindToggles: () -> Unit
         lateinit var updateIdentity: (Identity, Boolean) -> Unit
         bindToggles = {
+            val headerVisible = HeaderCustomization.identityVisible(surface, Identity.HEADER)
             toggles.forEach { (action, toggle) ->
                 toggle.visibility = if (action in HeaderCustomization.actions(surface)) View.VISIBLE else View.GONE
                 if (action !in HeaderCustomization.actions(surface)) return@forEach
                 val entry = entries.first { it.action == action }
                 toggle.apply {
+                    isEnabled = headerVisible
                     setText(context.getString(action.label))
                     setOnCheckedListener { enabled ->
                         entries[entries.indexOfFirst { it.action == action }] = entry.copy(visible = enabled)
                         changed()
                     }
                     setChecked(entry.visible, false)
-                    setContainerClickListener {
+                    setContainerClickListener(if (headerVisible) View.OnClickListener {
                         entries[entries.indexOfFirst { it.action == action }] = entry.copy(visible = !entry.visible)
                         changed()
-                    }
+                    } else null)
                 }
             }
             identityToggles.forEach { (identity, toggle) ->
-                val available = identity != Identity.STATUS ||
-                    surface == Surface.DM && HeaderCustomization.identityVisible(surface, Identity.AVATAR)
+                val available = when (identity) {
+                    Identity.HEADER -> true
+                    Identity.STATUS -> headerVisible && surface == Surface.DM &&
+                        HeaderCustomization.identityVisible(surface, Identity.AVATAR)
+                    Identity.AVATAR, Identity.TITLE -> headerVisible
+                }
                 toggle.visibility = if (identity == Identity.STATUS && surface != Surface.DM) View.GONE else View.VISIBLE
                 toggle.isEnabled = available
                 toggle.apply {
                     setText(
                         context.getString(
                             when (identity) {
+                                Identity.HEADER -> R.string.header_customization_show_header
                                 Identity.AVATAR -> if (surface == Surface.DM) {
                                     R.string.header_customization_avatar
                                 } else {
@@ -160,6 +168,9 @@ class WidgetSettingsHeaderCustomization : AppFragment(R.layout.widget_settings_h
     }
 
     private fun renderPreview(binding: WidgetSettingsHeaderCustomizationBinding) {
+        binding.headerCustomizationPreview.visibility = if (
+            HeaderCustomization.identityVisible(surface, Identity.HEADER)
+        ) View.VISIBLE else View.GONE
         if (surface == Surface.DM) {
             val channel = StoreStream.getChannelsSelected().getSelectedChannel()?.takeIf { it.isPrivate() }
             binding.headerCustomizationChannelIcon.visibility = View.GONE

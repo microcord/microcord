@@ -106,6 +106,7 @@ object WidgetHomeHeaderManager {
 
         val surface = if (channel?.isPrivate() == true) Surface.DM else Surface.CHANNEL
         val custom = FeatureFlags.headerCustomizationsEnabled()
+        val headerVisible = !custom || HeaderCustomization.identityVisible(surface, Identity.HEADER)
         val profileVisible = !custom || HeaderCustomization.identityVisible(surface, Identity.AVATAR)
         widgetHome.actionBarTitleLayout?.setPresence(
             model.dmPresence,
@@ -125,6 +126,7 @@ object WidgetHomeHeaderManager {
             showIcon = !custom || HeaderCustomization.identityVisible(surface, Identity.AVATAR),
             showTitle = !custom || HeaderCustomization.identityVisible(surface, Identity.TITLE),
         )
+        toolbar?.visibility = if (headerVisible) View.VISIBLE else View.GONE
     }
 
     private fun WidgetHomeModel.getHeaderData(context: Context): HeaderData = when (val selected = selectedChannel) {

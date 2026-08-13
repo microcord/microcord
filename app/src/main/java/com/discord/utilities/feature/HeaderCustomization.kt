@@ -19,6 +19,7 @@ object HeaderCustomization {
     }
 
     enum class Identity {
+        HEADER,
         AVATAR,
         TITLE,
         STATUS,
