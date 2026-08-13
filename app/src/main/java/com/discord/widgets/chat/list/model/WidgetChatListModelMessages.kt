@@ -18,6 +18,7 @@ import com.discord.stores.StoreStream
 import com.discord.stores.UserSettings
 import com.discord.stores.StoreThreadMessages
 import com.discord.utilities.feature.FeatureFlags
+import com.discord.utilities.feature.MessageCustomization
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.message.MessageUtils
 import com.discord.utilities.permissions.PermissionUtils
@@ -400,7 +401,9 @@ data class WidgetChatListModelMessages(
                 } else {
                     emptyList()
                 }
-            val inRow = embedRows.filter { it is AttachmentEntry || it is EmbedEntry } + componentRows
+            val hostedAccessories = embedRows.filter { it is AttachmentEntry || it is EmbedEntry } + componentRows
+            val customize = MessageCustomization.enabled
+            val inRow = if (customize) emptyList() else hostedAccessories
             rows += MessageEntry(
                 message, messageState, author, firstMention, roles, names, shouldConcat,
                 blockedChunkExpanded, animateEmojis, autoPlayGifs, inRow, replyData, interactionAuthor,
@@ -408,6 +411,7 @@ data class WidgetChatListModelMessages(
                 parseCtaData(message, meUserId, guildMembers, channel, permissionsForChannel),
                 permissionsForChannel,
             )
+            if (customize) rows += hostedAccessories
             if (message.hasSnapshot()) {
                 rows += ChatListRows.forwardedRows(
                     ChatListRows.State(
@@ -435,7 +439,7 @@ data class WidgetChatListModelMessages(
             rows += ChatListEntry.createGiftEntries(message)
             if (isThreadStarterMessage) {
                 rows += ThreadStarterDividerEntry(channel.id, message.id)
-                return rows
+                return if (customize) MessageCustomization.apply(rows) else rows
             }
             if (UserSettings.renderReactions.get() && message.getReactionsMap().isNotEmpty()) {
                 val canAdd = channel.threadMetadata?.archived != true
@@ -457,7 +461,7 @@ data class WidgetChatListModelMessages(
             if (message.isEphemeralMessage() || (message.isInteraction() && message.isFailed())) {
                 rows += EphemeralMessageEntry(message)
             }
-            return rows
+            return if (customize) MessageCustomization.apply(rows) else rows
         }
 
         internal fun shouldConcatMessage(

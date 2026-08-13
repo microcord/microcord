@@ -76,6 +76,18 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
         binding.settingsFeatureCustomizeHeader.setOnClickListener {
             WidgetSettingsHeaderCustomization.launch(requireContext())
         }
+        binding.settingsFeatureMessageCustomizations.apply {
+            isChecked = FeatureFlags.messageCustomizationsEnabled()
+            setOnCheckedListener { enabled ->
+                FeatureFlags.setMessageCustomizationsEnabled(enabled)
+                Snackbar.make(binding.root, R.string.user_settings_restart_app_mobile, Snackbar.LENGTH_INDEFINITE)
+                    .setAction(R.string.bundle_ready_restart) { restartApp(requireContext()) }
+                    .show()
+            }
+        }
+        binding.settingsFeatureCustomizeMessages.setOnClickListener {
+            WidgetSettingsMessageCustomization.launch(requireContext())
+        }
     }
 
 }

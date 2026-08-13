@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <LinearLayout android:orientation="vertical" app:layout_behavior="@string/appbar_scrolling_view_behavior" style="@style/UiKit.ViewGroup.LinearLayout">
+        <TextView android:padding="16dp" android:text="@string/message_customization_description" android:textColor="?attr/colorTextMuted" style="@style/UiKit.TextView"/>
+        <LinearLayout android:id="@+id/message_customization_preview" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="12dp" android:paddingEnd="12dp" android:paddingBottom="12dp"/>
+        <TextView android:text="@string/message_customization_section_order" style="@style/UiKit.Settings.Item.Header"/>
+        <HorizontalScrollView android:layout_width="match_parent" android:layout_height="64dp" android:clipToPadding="false" android:paddingStart="12dp" android:paddingEnd="12dp">
+            <LinearLayout android:id="@+id/message_customization_order" android:orientation="horizontal" android:gravity="center_vertical" android:layout_width="wrap_content" android:layout_height="match_parent"/>
+        </HorizontalScrollView>
+        <androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+            <LinearLayout android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:text="@string/message_customization_sections" style="@style/UiKit.Settings.Item.Header"/>
+                <com.discord.views.CheckedSetting android:id="@+id/message_customization_core" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/message_customization_media" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/message_customization_embeds" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/message_customization_stickers" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/message_customization_components" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/message_customization_cards" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/message_customization_reactions" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/message_customization_thread" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <TextView android:text="@string/message_customization_core_elements" style="@style/UiKit.Settings.Item.Header"/>
+                <com.discord.views.CheckedSetting android:id="@+id/message_customization_avatar" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/message_customization_decoration_status" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/message_customization_author" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/message_customization_tags" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/message_customization_guild_tag" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/message_customization_timestamp" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/message_customization_reply" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/message_customization_content" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+    </LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

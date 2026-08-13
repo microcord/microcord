@@ -19,6 +19,7 @@ import com.discord.stores.StoreMessagesLoader
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.feature.MessageCustomization
 import com.discord.widgets.chat.list.entries.AttachmentEntry
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.EmbedEntry
@@ -207,7 +208,7 @@ object ChatListRows {
         if (message.isEphemeralMessage() || (message.isInteraction() && message.isFailed())) {
             rows += EphemeralMessageEntry(message)
         }
-        return rows
+        return if (MessageCustomization.enabled) MessageCustomization.apply(rows) else rows
     }
 
     internal fun forwardedRows(

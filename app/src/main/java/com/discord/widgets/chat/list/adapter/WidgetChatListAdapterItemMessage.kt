@@ -20,6 +20,9 @@ import androidx.core.text.BidiFormatter
 import androidx.core.view.AccessibilityDelegateCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.constraintlayout.widget.ConstraintSet
+import androidx.constraintlayout.widget.Guideline
 import com.discord.R
 import com.discord.api.permission.Permission
 import com.discord.i18n.Hook
@@ -36,6 +39,8 @@ import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.displaynamestyles.DisplayNameStyleRenderer
 import com.discord.utilities.displaynamestyles.DisplayNameStyleUtils
 import com.discord.utilities.feature.FeatureFlags
+import com.discord.utilities.feature.MessageCustomization
+import com.discord.utilities.feature.MessageCustomization.CoreElement
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.message.MessageUtils
 import com.discord.utilities.permissions.PermissionUtils
@@ -140,6 +145,7 @@ class WidgetChatListAdapterItemMessage(
         itemView.findViewById(R.id.thread_starter_message_header)
     private val communicationDisabledIcon: ImageView? =
         itemView.findViewById(R.id.chat_list_adapter_item_communication_disabled_icon)
+    private val chatGuideline: Guideline? = itemView.findViewById(R.id.uikit_chat_guideline)
 
     override fun onConfigure(position: Int, data: ChatListEntry) {
         super.onConfigure(position, data)
@@ -199,6 +205,61 @@ class WidgetChatListAdapterItemMessage(
         configureAlertText(message)
         configureThreadSpine(message, isThreadStarterMessage)
         configureCommunicationDisabled(entry.author, entry.permissionsForChannel)
+        applyMessageCustomization()
+    }
+
+    private fun applyMessageCustomization() {
+        if (!MessageCustomization.enabled) return
+        val core = MessageCustomization.coreVisibility()
+        val avatar = core[CoreElement.AVATAR.ordinal]
+        itemAvatar?.visibility = if (avatar) View.VISIBLE else View.GONE
+        chatGuideline?.layoutParams = (chatGuideline?.layoutParams as? ConstraintLayout.LayoutParams)?.apply {
+            guideBegin = if (avatar) {
+                itemView.resources.getDimensionPixelSize(R.dimen.uikit_guideline_chat)
+            } else {
+                (8 * itemView.resources.displayMetrics.density).toInt()
+            }
+        }
+        if (!core[CoreElement.DECORATION_STATUS.ordinal]) {
+            itemAvatarDecoration?.visibility = View.GONE
+            itemStatus?.visibility = View.GONE
+        }
+        if (!core[CoreElement.AUTHOR.ordinal]) {
+            itemName?.visibility = View.GONE
+            (itemName?.parent as? ConstraintLayout)?.let { header ->
+                ConstraintSet().apply {
+                    clone(header)
+                    clear(R.id.chat_list_adapter_item_text_guild_tag, ConstraintSet.TOP)
+                    clear(R.id.chat_list_adapter_item_text_guild_tag, ConstraintSet.BOTTOM)
+                    clear(R.id.chat_list_adapter_item_text_guild_tag, ConstraintSet.START)
+                    clear(R.id.chat_list_adapter_item_communication_disabled_icon, ConstraintSet.END)
+                    connect(R.id.chat_list_adapter_item_text_guild_tag, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
+                    connect(R.id.chat_list_adapter_item_text_guild_tag, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM)
+                    connect(R.id.chat_list_adapter_item_text_guild_tag, ConstraintSet.START, R.id.chat_list_adapter_item_communication_disabled_icon, ConstraintSet.END)
+                    clear(R.id.chat_list_adapter_item_text_timestamp, ConstraintSet.BASELINE)
+                    clear(R.id.chat_list_adapter_item_text_timestamp, ConstraintSet.END)
+                    connect(R.id.chat_list_adapter_item_text_timestamp, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
+                    connect(R.id.chat_list_adapter_item_text_timestamp, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM)
+                    applyTo(header)
+                }
+            }
+        }
+        if (!core[CoreElement.TAGS.ordinal]) {
+            itemRoleIcon?.visibility = View.GONE
+            itemTag?.visibility = View.GONE
+        }
+        if (!core[CoreElement.GUILD_TAG.ordinal]) itemGuildTag?.visibility = View.GONE
+        if (!core[CoreElement.TIMESTAMP.ordinal]) itemTimestamp?.visibility = View.GONE
+        if (!core[CoreElement.REPLY.ordinal]) {
+            replyHolder?.visibility = View.GONE
+            replyLinkItem?.visibility = View.GONE
+        }
+        if (!core[CoreElement.CONTENT.ordinal]) {
+            itemText.visibility = View.GONE
+            itemLoadingText?.visibility = View.GONE
+            loadingDots?.visibility = View.GONE
+            sendError?.visibility = View.GONE
+        }
     }
 
     // region author block
