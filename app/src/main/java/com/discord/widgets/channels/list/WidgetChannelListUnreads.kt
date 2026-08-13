@@ -1,16 +1,20 @@
 package com.discord.widgets.channels.list
 
+import android.content.res.ColorStateList
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewStub
 import android.widget.FrameLayout
 import android.widget.RelativeLayout
 import androidx.coordinatorlayout.widget.CoordinatorLayout
+import androidx.core.content.ContextCompat
+import androidx.core.widget.TextViewCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.databinding.WidgetChannelsListUnreadsBinding
 import com.discord.stores.StoreStream
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.view.extensions.fadeIn
 import com.discord.utilities.view.extensions.fadeOut
 import com.discord.utilities.view.extensions.setCompoundDrawableWithIntrinsicBounds
@@ -115,14 +119,29 @@ class WidgetChannelListUnreads @JvmOverloads constructor(
     }
 
     private fun onConfigureView(indicator: Model.Indicator, isAbove: Boolean) {
-        binding.channelsListUnreadsBackground.setBackgroundResource(getIcon(indicator))
+        val isMention = indicator.type == Model.TYPE_MENTION
+        // A mention keeps the brand red and its white-on-red foreground; a plain unread is a
+        // raised surface, so both its label and its arrow have to follow the theme.
+        val foreground = if (isMention) {
+            ContextCompat.getColor(binding.root.context, R.color.white)
+        } else {
+            ColorCompat.getThemedColor(binding.root, R.attr.colorHeaderSecondary)
+        }
+        binding.channelsListUnreadsBackground.setBackgroundResource(
+            if (isMention) R.drawable.drawable_button_red else R.drawable.drawable_channels_list_unreads,
+        )
         binding.channelsListUnreads.setText(getText(indicator))
+        binding.channelsListUnreads.setTextColor(foreground)
         binding.channelsListUnreads.setCompoundDrawableWithIntrinsicBounds(
             end = if (isAbove) {
                 R.drawable.ic_arrow_upward_white_16dp
             } else {
                 R.drawable.ic_arrow_downward_white_16dp
             },
+        )
+        TextViewCompat.setCompoundDrawableTintList(
+            binding.channelsListUnreads,
+            ColorStateList.valueOf(foreground),
         )
 
         when (val params = binding.root.layoutParams) {
@@ -146,13 +165,6 @@ class WidgetChannelListUnreads @JvmOverloads constructor(
         // accessibility services rather than announced on every scroll.
         binding.root.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
     }
-
-    private fun getIcon(indicator: Model.Indicator): Int =
-        if (indicator.type == Model.TYPE_MENTION) {
-            R.drawable.drawable_button_red
-        } else {
-            R.drawable.drawable_button_grey
-        }
 
     private fun getText(indicator: Model.Indicator): Int =
         if (indicator.type == Model.TYPE_MENTION) mentionResId else unreadsResId
