@@ -37,6 +37,7 @@ import com.discord.api.channel.Channel
 import com.discord.api.guild.GuildFeature
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.getDMRecipient
+import com.discord.api.channel.isDMStatusVisible
 import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.api.channel.isGuildForumPost
 import com.discord.api.channel.isPrivate
@@ -86,6 +87,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private var voiceChannelSubscription: Subscription? = null
     private var mentionSubscription: Subscription? = null
     private var friendNicknameSubscription: Subscription? = null
+    private var dmPresenceSubscription: Subscription? = null
     private var unreadCount = 0
     private var initialChannelShown = false
     private var onboardingGuildId: Long? = null
@@ -201,6 +203,14 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         friendNicknameSubscription = StoreStream.getUserRelationships().observeNicknames().subscribe {
             activity?.runOnUiThread(::refreshChatToolbar)
         }
+        dmPresenceSubscription = StoreStream.getChannelsSelected().observeResolvedSelectedChannel()
+            .switchMap { selected ->
+                selected.channelOrParent?.getDMRecipient()?.id
+                    ?.let(StoreStream.getPresences()::observePresenceForUser)
+                    ?: Observable.just(null)
+            }
+            .distinctUntilChanged()
+            .subscribe { activity?.runOnUiThread(::refreshChatToolbar) }
         mentionSubscription = StoreStream.getMentions().observeTotalMentions().subscribe { count ->
             activity?.runOnUiThread {
                 unreadCount = count
@@ -251,6 +261,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         mentionSubscription = null
         friendNicknameSubscription?.unsubscribe()
         friendNicknameSubscription = null
+        dmPresenceSubscription?.unsubscribe()
+        dmPresenceSubscription = null
         super.onStop()
     }
 
@@ -456,6 +468,18 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         actionBarTitleLayout?.setIdentityVisibility(
             showIcon = !customHeader || HeaderCustomization.identityVisible(headerSurface, Identity.AVATAR),
             showTitle = !customHeader || HeaderCustomization.identityVisible(headerSurface, Identity.TITLE),
+        )
+        val presence = channel.getDMRecipient()?.id?.let { StoreStream.getPresences().getPresences()[it] }
+        actionBarTitleLayout?.setPresence(
+            presence,
+            WidgetHomeHeaderManager.headerStatusVisible(
+                featureEnabled = FeatureFlags.chatHeaderStatusIndicatorsEnabled(),
+                customizationsEnabled = customHeader,
+                profileVisible = !customHeader ||
+                    HeaderCustomization.identityVisible(headerSurface, Identity.AVATAR),
+                statusVisible = HeaderCustomization.identityVisible(headerSurface, Identity.STATUS),
+                channelStatusVisible = channel.isDMStatusVisible(presence),
+            ),
         )
         updateUnreadCount()
     }

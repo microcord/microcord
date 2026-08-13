@@ -21,6 +21,7 @@ object HeaderCustomization {
     enum class Identity {
         AVATAR,
         TITLE,
+        STATUS,
     }
 
     data class Entry(val action: Action, val visible: Boolean = true)

@@ -35,6 +35,7 @@ import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.displaynamestyles.DisplayNameStyleRenderer
 import com.discord.utilities.displaynamestyles.DisplayNameStyleUtils
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.message.MessageUtils
 import com.discord.utilities.permissions.PermissionUtils
@@ -54,6 +55,7 @@ import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.AvatarDecorationView
 import com.discord.views.FailedUploadList
 import com.discord.views.GuildTagView
+import com.discord.views.StatusView
 import com.discord.views.ThemedColor
 import com.discord.views.typing.TypingDots
 import com.discord.widgets.chat.list.entries.ChatListEntry
@@ -93,6 +95,8 @@ class WidgetChatListAdapterItemMessage(
         itemView.findViewById(R.id.chat_list_adapter_item_text_avatar)
     private val itemAvatarDecoration: AvatarDecorationView? =
         itemView.findViewById(R.id.chat_list_adapter_item_text_avatar_decoration)
+    private val itemStatus: StatusView? =
+        itemView.findViewById(R.id.chat_list_adapter_item_text_status)
     private val itemName: TextView? = itemView.findViewById(R.id.chat_list_adapter_item_text_name)
     private val itemRoleIcon: RoleIconView? =
         itemView.findViewById(R.id.chat_list_adapter_item_text_role_icon)
@@ -255,6 +259,14 @@ class WidgetChatListAdapterItemMessage(
 
     private fun configureAvatar(entry: MessageEntry, message: Message) {
         val itemAvatar = itemAvatar ?: return
+        val statusUser = message.author?.let(::CoreUser)
+        val presence = statusUser?.let { StoreStream.getPresences().getPresences()[it.id] }
+        itemStatus?.apply {
+            val visible = FeatureFlags.chatHeaderStatusIndicatorsEnabled() &&
+                statusUser != null && UserUtils.isStatusVisible(statusUser, presence, true)
+            visibility = if (visible) View.VISIBLE else View.GONE
+            if (visible) setPresence(presence)
+        }
         itemAvatarDecoration?.bind(entry.author?.avatarDecoration ?: message.author?.avatarDecorationData?.value)
         itemAvatar.setOnClickListener {
             adapter.eventHandler.onMessageAuthorAvatarClicked(message, adapter.data.guildId)

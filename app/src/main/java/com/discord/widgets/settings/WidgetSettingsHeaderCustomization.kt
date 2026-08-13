@@ -11,6 +11,8 @@ import androidx.appcompat.widget.AppCompatImageButton
 import androidx.core.widget.ImageViewCompat
 import com.discord.R
 import com.discord.api.channel.getDisplayNameOrDefault
+import com.discord.api.channel.getDMRecipient
+import com.discord.api.channel.isDMStatusVisible
 import com.discord.api.channel.isPrivate
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
@@ -22,6 +24,7 @@ import com.discord.utilities.feature.HeaderCustomization.Action
 import com.discord.utilities.feature.HeaderCustomization.Entry
 import com.discord.utilities.feature.HeaderCustomization.Identity
 import com.discord.utilities.feature.HeaderCustomization.Surface
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.google.android.material.snackbar.Snackbar
@@ -52,9 +55,12 @@ class WidgetSettingsHeaderCustomization : AppFragment(R.layout.widget_settings_h
         val identityToggles = mapOf(
             Identity.AVATAR to binding.headerCustomizationShowAvatar,
             Identity.TITLE to binding.headerCustomizationShowTitle,
+            Identity.STATUS to binding.headerCustomizationShowStatus,
         )
         lateinit var changed: () -> Unit
-        val bindToggles = {
+        lateinit var bindToggles: () -> Unit
+        lateinit var updateIdentity: (Identity, Boolean) -> Unit
+        bindToggles = {
             toggles.forEach { (action, toggle) ->
                 toggle.visibility = if (action in HeaderCustomization.actions(surface)) View.VISIBLE else View.GONE
                 if (action !in HeaderCustomization.actions(surface)) return@forEach
@@ -73,6 +79,10 @@ class WidgetSettingsHeaderCustomization : AppFragment(R.layout.widget_settings_h
                 }
             }
             identityToggles.forEach { (identity, toggle) ->
+                val available = identity != Identity.STATUS ||
+                    surface == Surface.DM && HeaderCustomization.identityVisible(surface, Identity.AVATAR)
+                toggle.visibility = if (identity == Identity.STATUS && surface != Surface.DM) View.GONE else View.VISIBLE
+                toggle.isEnabled = available
                 toggle.apply {
                     setText(
                         context.getString(
@@ -83,28 +93,26 @@ class WidgetSettingsHeaderCustomization : AppFragment(R.layout.widget_settings_h
                                     R.string.header_customization_channel_icon
                                 }
                                 Identity.TITLE -> R.string.header_customization_channel_name
+                                Identity.STATUS -> R.string.header_customization_status_indicator
                             },
                         ),
                     )
-                    setOnCheckedListener { visible ->
-                        HeaderCustomization.setIdentityVisible(surface, identity, visible)
-                        renderPreview(binding)
-                        restartNotice.show()
-                    }
+                    setOnCheckedListener { visible -> updateIdentity(identity, visible) }
                     setChecked(HeaderCustomization.identityVisible(surface, identity), false)
-                    setContainerClickListener {
-                        val visible = !HeaderCustomization.identityVisible(surface, identity)
-                        HeaderCustomization.setIdentityVisible(
-                            surface,
-                            identity,
-                            visible,
-                        )
-                        setChecked(visible, false)
-                        renderPreview(binding)
-                        restartNotice.show()
-                    }
+                    setContainerClickListener(if (available) View.OnClickListener {
+                        updateIdentity(identity, !HeaderCustomization.identityVisible(surface, identity))
+                    } else null)
                 }
             }
+        }
+        updateIdentity = { identity, visible ->
+            HeaderCustomization.setIdentityVisible(surface, identity, visible)
+            if (identity == Identity.AVATAR && !visible) {
+                HeaderCustomization.setIdentityVisible(surface, Identity.STATUS, false)
+            }
+            bindToggles()
+            renderPreview(binding)
+            restartNotice.show()
         }
         changed = {
             HeaderCustomization.save(surface, entries)
@@ -170,12 +178,21 @@ class WidgetSettingsHeaderCustomization : AppFragment(R.layout.widget_settings_h
                 if (HeaderCustomization.identityVisible(surface, Identity.AVATAR)) View.VISIBLE else View.GONE
             binding.headerCustomizationTitle.visibility =
                 if (HeaderCustomization.identityVisible(surface, Identity.TITLE)) View.VISIBLE else View.GONE
+            val presence = channel?.getDMRecipient()?.id
+                ?.let { StoreStream.getPresences().getPresences()[it] }
+            val showStatus = FeatureFlags.chatHeaderStatusIndicatorsEnabled() &&
+                HeaderCustomization.identityVisible(surface, Identity.AVATAR) &&
+                HeaderCustomization.identityVisible(surface, Identity.STATUS) &&
+                channel?.isDMStatusVisible(presence) == true
+            binding.headerCustomizationStatus.visibility = if (showStatus) View.VISIBLE else View.GONE
+            if (showStatus) binding.headerCustomizationStatus.setPresence(presence)
         } else {
             binding.headerCustomizationAvatar.visibility = View.GONE
             binding.headerCustomizationChannelIcon.visibility =
                 if (HeaderCustomization.identityVisible(surface, Identity.AVATAR)) View.VISIBLE else View.GONE
             binding.headerCustomizationTitle.visibility =
                 if (HeaderCustomization.identityVisible(surface, Identity.TITLE)) View.VISIBLE else View.GONE
+            binding.headerCustomizationStatus.visibility = View.GONE
             binding.headerCustomizationTitle.setText(R.string.header_customization_preview_title)
         }
         binding.headerCustomizationActions.removeAllViews()

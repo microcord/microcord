@@ -104,16 +104,23 @@ object WidgetHomeHeaderManager {
             onConfigured = { configureMenu(model, widgetHome.requireContext(), it) },
         )
 
-        widgetHome.actionBarTitleLayout?.presence?.apply {
-            isVisible = channel?.isDMStatusVisible(model.dmPresence) == true
-            setPresence(model.dmPresence)
-        }
+        val surface = if (channel?.isPrivate() == true) Surface.DM else Surface.CHANNEL
+        val custom = FeatureFlags.headerCustomizationsEnabled()
+        val profileVisible = !custom || HeaderCustomization.identityVisible(surface, Identity.AVATAR)
+        widgetHome.actionBarTitleLayout?.setPresence(
+            model.dmPresence,
+            headerStatusVisible(
+                featureEnabled = FeatureFlags.chatHeaderStatusIndicatorsEnabled(),
+                customizationsEnabled = custom,
+                profileVisible = profileVisible,
+                statusVisible = HeaderCustomization.identityVisible(surface, Identity.STATUS),
+                channelStatusVisible = channel?.isDMStatusVisible(model.dmPresence) == true,
+            ),
+        )
         binding.root.findViewById<TextView>(R.id.home_toolbar_unread_count)?.let { unread ->
             unread.setTextAndVisibilityBy(unreadCountText(model.unreadCount))
             toolbar?.positionUnreadCountView(unread)
         }
-        val surface = if (channel?.isPrivate() == true) Surface.DM else Surface.CHANNEL
-        val custom = FeatureFlags.headerCustomizationsEnabled()
         widgetHome.actionBarTitleLayout?.setIdentityVisibility(
             showIcon = !custom || HeaderCustomization.identityVisible(surface, Identity.AVATAR),
             showTitle = !custom || HeaderCustomization.identityVisible(surface, Identity.TITLE),
@@ -359,6 +366,15 @@ object WidgetHomeHeaderManager {
     }
 
     internal fun unreadCountText(unreadCount: Int): String? = unreadCount.takeIf { it > 0 }?.toString()
+
+    internal fun headerStatusVisible(
+        featureEnabled: Boolean,
+        customizationsEnabled: Boolean,
+        profileVisible: Boolean,
+        statusVisible: Boolean,
+        channelStatusVisible: Boolean,
+    ) = featureEnabled && profileVisible && channelStatusVisible &&
+        (!customizationsEnabled || statusVisible)
 
     private val TITLE_OPENS_SIDE_PANEL_TYPES = setOf(
         Channel.DM,

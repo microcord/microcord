@@ -79,4 +79,16 @@ class WidgetHomeHeaderManagerTest {
         assertNull(WidgetHomeHeaderManager.unreadCountText(0))
         assertEquals("12", WidgetHomeHeaderManager.unreadCountText(12))
     }
+
+    @Test
+    fun `header status requires profile visibility`() {
+        fun visible(feature: Boolean = true, profile: Boolean = true, status: Boolean = true) =
+            WidgetHomeHeaderManager.headerStatusVisible(feature, true, profile, status, true)
+
+        assertTrue(visible())
+        assertFalse(visible(feature = false))
+        assertFalse(visible(profile = false))
+        assertFalse(visible(status = false))
+        assertTrue(WidgetHomeHeaderManager.headerStatusVisible(true, false, true, false, true))
+    }
 }

@@ -27,9 +27,6 @@ class ToolbarTitleLayout(context: Context) : ConstraintLayout(context) {
     val title: android.widget.TextView
         get() = binding.toolbarTitle
 
-    val presence: StatusView
-        get() = binding.toolbarPresence
-
     fun setTitle(
         title: CharSequence?,
         @DrawableRes leadingDrawableRes: Int? = null,
@@ -40,7 +37,7 @@ class ToolbarTitleLayout(context: Context) : ConstraintLayout(context) {
         showingAvatar = false
         binding.toolbarAvatar.visibility = View.GONE
         binding.toolbarIcon.setDrawableOrHide(leadingDrawableRes)
-        binding.toolbarIdentity.visibility = if (hasIcon) View.VISIBLE else View.GONE
+        updateIdentityVisibility()
         binding.toolbarTitleTrailingIcon.setDrawableOrHide(trailingDrawableRes)
     }
 
@@ -56,19 +53,24 @@ class ToolbarTitleLayout(context: Context) : ConstraintLayout(context) {
         binding.toolbarAvatar.hierarchy.roundingParams = RoundingParams.asCircle()
         MGImages.setImage(binding.toolbarAvatar, url, width = 24, height = 24, useSmallCache = true)
         binding.toolbarAvatar.visibility = View.VISIBLE
-        binding.toolbarIdentity.visibility = View.VISIBLE
+        updateIdentityVisibility()
     }
 
     fun setIdentityVisibility(showIcon: Boolean, showTitle: Boolean) {
         binding.toolbarIcon.visibility = if (showIcon && hasIcon && !showingAvatar) View.VISIBLE else View.GONE
         binding.toolbarAvatar.visibility = if (showIcon && showingAvatar) View.VISIBLE else View.GONE
-        binding.toolbarIdentity.visibility = if (showIcon && hasIcon) View.VISIBLE else View.GONE
+        updateIdentityVisibility()
         binding.toolbarTitle.visibility = if (showTitle) View.VISIBLE else View.GONE
         if (!showTitle) {
             binding.toolbarTitleSubtext.visibility = View.GONE
-            binding.toolbarPresence.visibility = View.GONE
             binding.toolbarTitleTrailingIcon.visibility = View.GONE
         }
+    }
+
+    fun setPresence(presence: com.discord.models.presence.Presence?, visible: Boolean) {
+        binding.toolbarPresence.visibility = if (visible) View.VISIBLE else View.GONE
+        binding.toolbarPresence.setPresence(presence)
+        updateIdentityVisibility()
     }
 
     fun setTitleColor(@ColorInt color: Int) {
@@ -78,5 +80,13 @@ class ToolbarTitleLayout(context: Context) : ConstraintLayout(context) {
     private fun android.widget.ImageView.setDrawableOrHide(@DrawableRes drawableRes: Int?) {
         visibility = if (drawableRes == null) View.GONE else View.VISIBLE
         if (drawableRes != null) setImageDrawable(ResourcesCompat.getDrawable(resources, drawableRes, context.theme))
+    }
+
+    private fun updateIdentityVisibility() {
+        binding.toolbarIdentity.visibility = if (
+            binding.toolbarIcon.visibility == View.VISIBLE ||
+            binding.toolbarAvatar.visibility == View.VISIBLE ||
+            binding.toolbarPresence.visibility == View.VISIBLE
+        ) View.VISIBLE else View.GONE
     }
 }

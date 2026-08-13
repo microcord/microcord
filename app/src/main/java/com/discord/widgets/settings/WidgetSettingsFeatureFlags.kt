@@ -36,6 +36,10 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.typingUserAvatarsEnabled()
             setOnCheckedListener(FeatureFlags::setTypingUserAvatarsEnabled)
         }
+        binding.settingsFeatureChatHeaderStatusIndicators.apply {
+            isChecked = FeatureFlags.chatHeaderStatusIndicatorsEnabled()
+            setOnCheckedListener(FeatureFlags::setChatHeaderStatusIndicatorsEnabled)
+        }
         binding.settingsFeatureMessageLimitCounter.apply {
             isChecked = FeatureFlags.messageLimitCounterEnabled()
             setOnCheckedListener(FeatureFlags::setMessageLimitCounterEnabled)
