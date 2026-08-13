@@ -5,6 +5,10 @@ import com.discord.utilities.rx.leadingEdgeThrottle
 import com.discord.utilities.search.query.FilterType
 import com.discord.utilities.search.query.node.QueryNode
 import com.discord.utilities.search.query.node.answer.ChannelNode
+import com.discord.utilities.search.query.node.answer.AnswerNode
+import com.discord.utilities.search.query.node.answer.AuthorTypeAnswerOption
+import com.discord.utilities.search.query.node.answer.AuthorTypeNode
+import com.discord.utilities.search.query.node.answer.DateNode
 import com.discord.utilities.search.query.node.answer.HasAnswerOption
 import com.discord.utilities.search.query.node.answer.HasNode
 import com.discord.utilities.search.query.node.answer.UserNode
@@ -30,6 +34,7 @@ class StoreSearchInput : SearchInputStore {
     private val forcedInputSubject = PublishSubject.create<List<QueryNode>>()
     private var inputSubscription: Subscription? = null
 
+    override val currentInput: Observable<String> = inputSubject
     override val isInputValid: Observable<Boolean> = isInputValidSubject
     override val currentParsedInput: Observable<List<QueryNode>> = astSubject
     override val forcedInput: Observable<List<QueryNode>> = forcedInputSubject
@@ -137,6 +142,32 @@ class StoreSearchInput : SearchInputStore {
         query,
     )
 
+    override fun onAuthorTypeClicked(
+        option: AuthorTypeAnswerOption,
+        negated: Boolean,
+        filterString: CharSequence,
+        answerString: CharSequence,
+        query: MutableList<QueryNode>,
+    ) = replaceAndPublish(
+        getAnswerReplacementStart(query),
+        listOf(
+            FilterNode(FilterType.AUTHOR_TYPE, filterString),
+            AuthorTypeNode(option, negated, answerString),
+        ),
+        query,
+    )
+
+    override fun onDateClicked(
+        filterType: FilterType,
+        filterString: CharSequence,
+        dateText: CharSequence,
+        query: MutableList<QueryNode>,
+    ) = replaceAndPublish(
+        getAnswerReplacementStart(query),
+        listOf(FilterNode(filterType, filterString), DateNode(dateText)),
+        query,
+    )
+
     override fun onQueryClicked(query: List<QueryNode>) = forcedInputSubject.onNext(query)
 
     private fun getAnswerReplacementStart(query: List<QueryNode>): Int {
@@ -144,7 +175,7 @@ class StoreSearchInput : SearchInputStore {
         val last = query.lastIndex
         return when {
             query[last] is FilterNode -> last
-            query[last] is ContentNode && query[last - 1] is FilterNode -> last - 1
+            (query[last] is ContentNode || query[last] is AnswerNode) && query[last - 1] is FilterNode -> last - 1
             else -> -1
         }
     }

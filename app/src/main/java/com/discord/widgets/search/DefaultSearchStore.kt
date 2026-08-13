@@ -21,6 +21,10 @@ import com.discord.utilities.search.query.FilterType
 import com.discord.utilities.search.query.node.QueryNode
 import com.discord.utilities.search.query.node.QueryNode.Preprocessor.preprocess
 import com.discord.utilities.search.query.node.answer.ChannelNode
+import com.discord.utilities.search.query.node.answer.AnswerNode
+import com.discord.utilities.search.query.node.answer.AuthorTypeAnswerOption
+import com.discord.utilities.search.query.node.answer.AuthorTypeNode
+import com.discord.utilities.search.query.node.answer.DateNode
 import com.discord.utilities.search.query.node.answer.HasAnswerOption
 import com.discord.utilities.search.query.node.answer.HasNode
 import com.discord.utilities.search.query.node.answer.UserNode
@@ -185,6 +189,7 @@ class DefaultSearchInputStore : SearchInputStore {
 
     private var inputSubscription: Subscription? = null
 
+    override val currentInput: Observable<String> get() = inputSubject
     override val currentParsedInput: Observable<List<QueryNode>> get() = astSubject
     override val forcedInput: Observable<List<QueryNode>> get() = forcedInputSubject
 
@@ -304,6 +309,32 @@ class DefaultSearchInputStore : SearchInputStore {
         query,
     )
 
+    override fun onAuthorTypeClicked(
+        option: AuthorTypeAnswerOption,
+        negated: Boolean,
+        filterString: CharSequence,
+        answerString: CharSequence,
+        query: MutableList<QueryNode>,
+    ) = replaceAndPublish(
+        getAnswerReplacementStart(query),
+        listOf(
+            FilterNode(FilterType.AUTHOR_TYPE, filterString),
+            AuthorTypeNode(option, negated, answerString),
+        ),
+        query,
+    )
+
+    override fun onDateClicked(
+        filterType: FilterType,
+        filterString: CharSequence,
+        dateText: CharSequence,
+        query: MutableList<QueryNode>,
+    ) = replaceAndPublish(
+        getAnswerReplacementStart(query),
+        listOf(FilterNode(filterType, filterString), DateNode(dateText)),
+        query,
+    )
+
     override fun onQueryClicked(query: List<QueryNode>) {
         forcedInputSubject.onNext(query)
     }
@@ -322,7 +353,7 @@ class DefaultSearchInputStore : SearchInputStore {
         val previous = query[lastIndex - 1]
         return when {
             last is FilterNode -> lastIndex
-            last is ContentNode && previous is FilterNode -> lastIndex - 1
+            (last is ContentNode || last is AnswerNode) && previous is FilterNode -> lastIndex - 1
             else -> -1
         }
     }

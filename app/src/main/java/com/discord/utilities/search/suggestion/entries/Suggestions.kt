@@ -6,6 +6,7 @@ import com.discord.models.user.User
 import com.discord.utilities.search.query.FilterType
 import com.discord.utilities.search.query.node.QueryNode
 import com.discord.utilities.search.query.node.answer.HasAnswerOption
+import com.discord.utilities.search.query.node.answer.AuthorTypeAnswerOption
 import com.discord.utilities.search.strings.SearchStringProvider
 import com.discord.utilities.user.UserUtils
 
@@ -58,6 +59,21 @@ data class HasSuggestion(val hasAnswerOption: HasAnswerOption) : SearchSuggestio
             searchStringProvider: SearchStringProvider,
         ): Boolean = hasAnswerOption.getLocalizedInputText(searchStringProvider).contains(currentInput)
     }
+}
+
+data class AuthorTypeSuggestion(
+    val option: AuthorTypeAnswerOption,
+    val negated: Boolean,
+    val text: String,
+) : SearchSuggestion {
+    override val category = SearchSuggestion.Category.AUTHOR_TYPE
+}
+
+data class DateSuggestion(
+    val filterType: FilterType,
+    val initialDateMillis: Long,
+) : SearchSuggestion {
+    override val category = SearchSuggestion.Category.BEFORE_DATE
 }
 
 /** A channel offered while `in:` is open. */

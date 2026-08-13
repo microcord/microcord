@@ -81,5 +81,8 @@ data class DateNode(override val text: CharSequence) : AnswerNode() {
             SimpleDateFormat(DATE_FORMAT, Locale.ROOT)
                 .apply { timeZone = TimeZone.getTimeZone("UTC") }
                 .format(java.util.Date(timestamp))
+
+        fun formatLocalDate(timestamp: Long): String =
+            SimpleDateFormat(DATE_FORMAT, Locale.ROOT).format(java.util.Date(timestamp))
     }
 }

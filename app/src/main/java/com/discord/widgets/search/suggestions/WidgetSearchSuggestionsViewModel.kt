@@ -9,6 +9,8 @@ import com.discord.utilities.search.query.node.QueryNode.Preprocessor.preprocess
 import com.discord.utilities.search.strings.SearchStringProvider
 import com.discord.utilities.search.suggestion.SearchSuggestionEngine
 import com.discord.utilities.search.suggestion.entries.ChannelSuggestion
+import com.discord.utilities.search.suggestion.entries.AuthorTypeSuggestion
+import com.discord.utilities.search.suggestion.entries.DateSuggestion
 import com.discord.utilities.search.suggestion.entries.FilterSuggestion
 import com.discord.utilities.search.suggestion.entries.HasSuggestion
 import com.discord.utilities.search.suggestion.entries.RecentQuerySuggestion
@@ -46,6 +48,8 @@ class WidgetSearchSuggestionsViewModel(
                     is FilterSuggestion -> add(WidgetSearchSuggestionsAdapter.getFilterItem(suggestion))
                     is UserSuggestion -> add(WidgetSearchSuggestionsAdapter.getUserItem(suggestion))
                     is HasSuggestion -> add(WidgetSearchSuggestionsAdapter.getHasItem(suggestion))
+                    is AuthorTypeSuggestion -> add(WidgetSearchSuggestionsAdapter.getAuthorTypeItem(suggestion))
+                    is DateSuggestion -> add(WidgetSearchSuggestionsAdapter.getDateItem(suggestion))
                     is ChannelSuggestion -> add(WidgetSearchSuggestionsAdapter.getInChannelItem(suggestion))
                     is RecentQuerySuggestion ->
                         add(WidgetSearchSuggestionsAdapter.getRecentQueryItem(suggestion))
@@ -60,8 +64,9 @@ class WidgetSearchSuggestionsViewModel(
             .combineLatest(
                 searchStore.storeSearchData.get(),
                 searchStore.storeSearchInput.currentParsedInput,
+                searchStore.storeSearchInput.currentInput,
                 searchStore.getHistory(),
-            ) { searchData, queryNodes, history ->
+            ) { searchData, queryNodes, rawInput, history ->
                 val query = queryNodes.toMutableList()
                 query.preprocess(searchData)
                 ViewState(
@@ -71,6 +76,7 @@ class WidgetSearchSuggestionsViewModel(
                         searchData,
                         searchStringProvider,
                         history,
+                        rawInput.lastOrNull()?.isWhitespace() == true,
                     ),
                 )
             }

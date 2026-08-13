@@ -7,6 +7,7 @@ import com.discord.models.member.GuildMember
 import com.discord.models.user.CoreUser
 import com.discord.models.user.MeUser
 import com.discord.models.user.User
+import java.util.Locale
 
 /**
  * The names a search query is allowed to refer to, and the indexes that turn those names back into
@@ -19,6 +20,7 @@ import com.discord.models.user.User
  */
 data class SearchData(
     private val usernameAndDiscriminatorIndex: Map<String, Long> = emptyMap(),
+    private val usernameIndex: Map<String, Long> = emptyMap(),
     val channelNameIndex: Map<String, Long> = emptyMap(),
     val users: Map<Long, UserGuildMember> = emptyMap(),
     val channels: Map<Long, Channel> = emptyMap(),
@@ -27,6 +29,8 @@ data class SearchData(
 
     fun getUserId(username: String, discriminator: Int): Long? =
         usernameAndDiscriminatorIndex[username + discriminator]
+
+    fun getUserId(username: String): Long? = usernameIndex[username.lowercase(Locale.ROOT)]
 
     class Builder {
 
@@ -40,10 +44,12 @@ data class SearchData(
         ): SearchData {
             val users = HashMap<Long, UserGuildMember>()
             val usernameAndDiscriminatorIndex = HashMap<String, Long>()
+            val usernameIndex = HashMap<String, Long>()
 
             fun index(user: User) {
                 users[user.id] = UserGuildMember(user, guildMembers[user.id])
                 usernameAndDiscriminatorIndex[user.usernameWithDiscrim] = user.id
+                if (user.discriminator == 0) usernameIndex[user.username.lowercase(Locale.ROOT)] = user.id
             }
 
             channel?.recipients?.forEach { index(CoreUser(it)) }
@@ -51,6 +57,7 @@ data class SearchData(
 
             return SearchData(
                 usernameAndDiscriminatorIndex = usernameAndDiscriminatorIndex,
+                usernameIndex = usernameIndex,
                 users = users,
             )
         }
@@ -72,17 +79,20 @@ data class SearchData(
 
             val users = HashMap<Long, UserGuildMember>()
             val usernameAndDiscriminatorIndex = HashMap<String, Long>()
+            val usernameIndex = HashMap<String, Long>()
             allUsers.keys.forEach { userId ->
                 val member = guildMembers[userId]
                 val user = allUsers[userId]
                 if (member != null && user != null) {
                     users[userId] = UserGuildMember(user, member)
                     usernameAndDiscriminatorIndex[user.usernameWithDiscrim] = userId
+                    if (user.discriminator == 0) usernameIndex[user.username.lowercase(Locale.ROOT)] = userId
                 }
             }
 
             return SearchData(
                 usernameAndDiscriminatorIndex = usernameAndDiscriminatorIndex,
+                usernameIndex = usernameIndex,
                 channelNameIndex = channelNameIndex,
                 users = users,
                 channels = guildSearchableChannels,

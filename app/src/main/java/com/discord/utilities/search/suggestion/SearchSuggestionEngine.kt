@@ -10,10 +10,14 @@ import com.discord.utilities.rx.leadingEdgeThrottle
 import com.discord.utilities.search.query.FilterType
 import com.discord.utilities.search.query.node.QueryNode
 import com.discord.utilities.search.query.node.answer.HasAnswerOption
+import com.discord.utilities.search.query.node.answer.AuthorTypeAnswerOption
+import com.discord.utilities.search.query.node.answer.DateNode
 import com.discord.utilities.search.query.node.content.ContentNode
 import com.discord.utilities.search.query.node.filter.FilterNode
 import com.discord.utilities.search.strings.SearchStringProvider
 import com.discord.utilities.search.suggestion.entries.ChannelSuggestion
+import com.discord.utilities.search.suggestion.entries.AuthorTypeSuggestion
+import com.discord.utilities.search.suggestion.entries.DateSuggestion
 import com.discord.utilities.search.suggestion.entries.FilterSuggestion
 import com.discord.utilities.search.suggestion.entries.HasSuggestion
 import com.discord.utilities.search.suggestion.entries.RecentQuerySuggestion
@@ -61,10 +65,11 @@ object SearchSuggestionEngine {
         searchData: SearchData,
         searchStringProvider: SearchStringProvider,
         recentQueries: Collection<List<QueryNode>>,
+        inputEndsWithWhitespace: Boolean = false,
     ): List<SearchSuggestion> {
         val suggestions = ArrayList<SearchSuggestion>()
-        val currentFilter = getCurrentFilterType(input)
-        val rawContent = getRawContent(input)
+        val currentFilter = getCurrentFilterType(input, inputEndsWithWhitespace)
+        val rawContent = if (inputEndsWithWhitespace) "" else getRawContent(input)
 
         if (currentFilter != null) {
             suggestions += getUserSuggestions(rawContent, currentFilter, searchData.users)
@@ -75,6 +80,8 @@ object SearchSuggestionEngine {
                 searchData.channelPermissions,
             )
             suggestions += getHasSuggestions(rawContent, currentFilter, searchStringProvider)
+            suggestions += getAuthorTypeSuggestions(rawContent, currentFilter, searchStringProvider)
+            suggestions += getDateSuggestions(rawContent, currentFilter)
         } else {
             suggestions += getFilterSuggestions(
                 rawContent,
@@ -91,12 +98,16 @@ object SearchSuggestionEngine {
      * The filter the caret is inside: the last node when it is a filter, or the one before it when
      * the user has started typing an answer.
      */
-    private fun getCurrentFilterType(input: List<QueryNode>): FilterType? {
+    private fun getCurrentFilterType(input: List<QueryNode>, inputEndsWithWhitespace: Boolean): FilterType? {
         val last = input.lastOrNull() ?: return null
         if (last is FilterNode) return last.filterType
         if (input.size == 1) return null
         val previous = input[input.lastIndex - 1]
-        return if (last is ContentNode && previous is FilterNode) previous.filterType else null
+        return if (!inputEndsWithWhitespace && last is ContentNode && previous is FilterNode) {
+            previous.filterType
+        } else {
+            null
+        }
     }
 
     /** The trailing free text, which is what narrows the offered suggestions. */
@@ -124,6 +135,34 @@ object SearchSuggestionEngine {
         return HasAnswerOption.OFFERED
             .filter { HasSuggestion.canComplete(rawContent, it, searchStringProvider) }
             .map(::HasSuggestion)
+    }
+
+    private fun getAuthorTypeSuggestions(
+        rawContent: CharSequence,
+        currentFilterType: FilterType,
+        searchStringProvider: SearchStringProvider,
+    ): List<AuthorTypeSuggestion> {
+        if (currentFilterType != FilterType.AUTHOR_TYPE) return emptyList()
+        val raw = rawContent.toString()
+        val negated = raw.startsWith(HasAnswerOption.NEGATION_PREFIX)
+        val typed = raw.removePrefix(HasAnswerOption.NEGATION_PREFIX)
+        return AuthorTypeAnswerOption.entries.mapNotNull { option ->
+            val label = option.getLocalizedInputText(searchStringProvider)
+            if (!label.contains(typed, ignoreCase = true)) return@mapNotNull null
+            val text = if (negated) HasAnswerOption.NEGATION_PREFIX + label else label
+            AuthorTypeSuggestion(option, negated, text)
+        }
+    }
+
+    private fun getDateSuggestions(
+        rawContent: CharSequence,
+        currentFilterType: FilterType,
+        now: Long = System.currentTimeMillis(),
+    ): List<DateSuggestion> {
+        if (currentFilterType !in DATE_FILTERS) return emptyList()
+        val typed = rawContent.toString()
+        val initialDate = DateNode.parseRange(typed)?.first ?: now
+        return listOf(DateSuggestion(currentFilterType, initialDate))
     }
 
     /** Only channels the viewer can actually read are offered, in the guild's own channel order. */
@@ -185,4 +224,6 @@ object SearchSuggestionEngine {
                 }
             }
     }
+
+    private val DATE_FILTERS = setOf(FilterType.DURING, FilterType.BEFORE, FilterType.AFTER)
 }

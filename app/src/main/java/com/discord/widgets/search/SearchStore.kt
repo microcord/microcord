@@ -6,6 +6,7 @@ import com.discord.utilities.search.network.state.SearchState
 import com.discord.utilities.search.query.FilterType
 import com.discord.utilities.search.query.node.QueryNode
 import com.discord.utilities.search.query.node.answer.HasAnswerOption
+import com.discord.utilities.search.query.node.answer.AuthorTypeAnswerOption
 import com.discord.utilities.search.strings.SearchStringProvider
 import com.discord.utilities.search.suggestion.entries.ChannelSuggestion
 import com.discord.utilities.search.suggestion.entries.UserSuggestion
@@ -67,6 +68,7 @@ interface SearchStore {
  * into the box after a suggestion was tapped, which the screen renders and re-selects.
  */
 interface SearchInputStore {
+    val currentInput: Observable<String>
     val currentParsedInput: Observable<List<QueryNode>>
     val forcedInput: Observable<List<QueryNode>>
 
@@ -105,6 +107,21 @@ interface SearchInputStore {
         hasAnswerOption: HasAnswerOption,
         hasFilterString: CharSequence,
         hasAnswerString: CharSequence,
+        query: MutableList<QueryNode>,
+    )
+
+    fun onAuthorTypeClicked(
+        option: AuthorTypeAnswerOption,
+        negated: Boolean,
+        filterString: CharSequence,
+        answerString: CharSequence,
+        query: MutableList<QueryNode>,
+    )
+
+    fun onDateClicked(
+        filterType: FilterType,
+        filterString: CharSequence,
+        dateText: CharSequence,
         query: MutableList<QueryNode>,
     )
 

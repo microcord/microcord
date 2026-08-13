@@ -8,14 +8,21 @@ import com.discord.utilities.search.query.node.answer.ChannelNode
 import com.discord.utilities.search.query.node.answer.HasAnswerOption
 import com.discord.utilities.search.query.node.answer.HasNode
 import com.discord.utilities.search.query.node.answer.UserNode
+import com.discord.utilities.search.query.node.answer.DateNode
 import com.discord.utilities.search.query.node.content.ContentNode
 import com.discord.utilities.search.query.node.filter.FilterNode
 import com.discord.utilities.search.query.parsing.QueryParser
 import com.discord.utilities.search.strings.SearchStringProvider
 import com.discord.utilities.search.validation.SearchData
+import com.discord.utilities.search.suggestion.SearchSuggestionEngine
+import com.discord.utilities.search.suggestion.entries.FilterSuggestion
+import com.discord.utilities.search.suggestion.entries.AuthorTypeSuggestion
+import com.discord.utilities.search.suggestion.entries.DateSuggestion
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Calendar
+import java.util.TimeZone
 
 /** English keywords, so the grammar under test is the one a default-locale client compiles. */
 private object EnglishSearchStrings : SearchStringProvider {
@@ -104,6 +111,69 @@ class QueryParserTest {
         assertEquals(listOf("hello"), query.params[SearchQuery.PARAM_CONTENT])
         assertTrue(query.includeNsfw)
         assertTrue(query.isValid)
+    }
+
+    @Test
+    fun modernUsernameUnderFromBecomesAuthorId() {
+        val searchData = SearchData(usernameIndex = mapOf("manti" to 7L))
+        val nodes = parse("from:MANTI").toMutableList()
+        nodes.preprocess(searchData)
+
+        val query = SearchQuery.Builder().buildFrom(nodes, searchData)
+
+        assertEquals(listOf("7"), query.params[SearchQuery.PARAM_AUTHOR_ID])
+        assertEquals(null, query.params[SearchQuery.PARAM_CONTENT])
+    }
+
+    @Test
+    fun trailingSpaceAfterUserAnswerReturnsTopLevelFilters() {
+        val suggestions = SearchSuggestionEngine.getSuggestions(
+            parse("from:manti"),
+            SearchData(),
+            EnglishSearchStrings,
+            emptyList(),
+            inputEndsWithWhitespace = true,
+        )
+
+        assertTrue(suggestions.isNotEmpty())
+        assertTrue(suggestions.all { it is FilterSuggestion })
+    }
+
+    @Test
+    fun authorTypeAndDateFiltersOfferAnswers() {
+        val authorTypes = SearchSuggestionEngine.getSuggestions(
+            parse("authorType:"), SearchData(), EnglishSearchStrings, emptyList(),
+        )
+        val dates = SearchSuggestionEngine.getSuggestions(
+            parse("before:"), SearchData(), EnglishSearchStrings, emptyList(),
+        )
+
+        assertEquals(3, authorTypes.filterIsInstance<AuthorTypeSuggestion>().size)
+        assertEquals(1, dates.filterIsInstance<DateSuggestion>().size)
+        assertTrue(dates.filterIsInstance<DateSuggestion>().single().initialDateMillis > 0L)
+    }
+
+    @Test
+    fun beforeAndAfterCoexistAndPickerDateUsesLocalDay() {
+        val query = SearchQuery.Builder().buildFrom(
+            parse("before:2026-01-03 after:2026-01-01"),
+            SearchData(),
+        )
+        assertTrue(query.params[SearchQuery.PARAM_MIN_ID]?.isNotEmpty() == true)
+        assertTrue(query.params[SearchQuery.PARAM_MAX_ID]?.isNotEmpty() == true)
+
+        val original = TimeZone.getDefault()
+        try {
+            val zone = TimeZone.getTimeZone("GMT+03:00")
+            TimeZone.setDefault(zone)
+            val selected = Calendar.getInstance(zone).apply {
+                clear()
+                set(2026, Calendar.JANUARY, 2)
+            }.timeInMillis
+            assertEquals("2026-01-02", DateNode.formatLocalDate(selected))
+        } finally {
+            TimeZone.setDefault(original)
+        }
     }
 
     /** An answer under a filter it does not answer degrades to searchable text, not to nothing. */

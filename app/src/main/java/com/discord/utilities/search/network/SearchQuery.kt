@@ -65,10 +65,16 @@ class SearchQuery(val params: Map<String, List<String>>, val includeNsfw: Boolea
                     // terms, since the parser has no memory of which filter preceded them.
                     is ContentNode -> {
                         val textParam = TEXT_FILTER_PARAMS[currentFilter]
-                        if (textParam != null) {
-                            appendParam(textParam, node.text.toString())
-                        } else {
-                            appendContent(node.text)
+                        val userParam = when (currentFilter) {
+                            FilterType.FROM -> PARAM_AUTHOR_ID
+                            FilterType.MENTIONS -> PARAM_MENTIONS
+                            else -> null
+                        }
+                        val userId = userParam?.let { searchData.getUserId(node.text.toString()) }
+                        when {
+                            userParam != null && userId != null -> appendParam(userParam, userId.toString())
+                            textParam != null -> appendParam(textParam, node.text.toString())
+                            else -> appendContent(node.text)
                         }
                         currentFilter = null
                     }

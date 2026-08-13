@@ -21,6 +21,8 @@ import com.discord.utilities.search.query.node.QueryNode
 import com.discord.utilities.search.query.node.answer.HasAnswerOption
 import com.discord.utilities.search.strings.ContextSearchStringProvider
 import com.discord.utilities.search.suggestion.entries.ChannelSuggestion
+import com.discord.utilities.search.suggestion.entries.AuthorTypeSuggestion
+import com.discord.utilities.search.suggestion.entries.DateSuggestion
 import com.discord.utilities.search.suggestion.entries.FilterSuggestion
 import com.discord.utilities.search.suggestion.entries.HasSuggestion
 import com.discord.utilities.search.suggestion.entries.RecentQuerySuggestion
@@ -46,6 +48,8 @@ class WidgetSearchSuggestionsAdapter(
     var onUserClicked: (UserSuggestion) -> Unit = {}
     var onChannelClicked: (ChannelSuggestion) -> Unit = {}
     var onHasClicked: (HasAnswerOption) -> Unit = {}
+    var onAuthorTypeClicked: (AuthorTypeSuggestion) -> Unit = {}
+    var onDateClicked: (DateSuggestion) -> Unit = {}
     var onRecentQueryClicked: (List<QueryNode>) -> Unit = {}
     var onClearHistoryClicked: () -> Unit = {}
 
@@ -92,6 +96,12 @@ class WidgetSearchSuggestionsAdapter(
         fun getHasItem(data: HasSuggestion): MGRecyclerDataPayload =
             SingleTypePayload(data, data.hasAnswerOption.name, TYPE_HAS)
 
+        fun getAuthorTypeItem(data: AuthorTypeSuggestion): MGRecyclerDataPayload =
+            SingleTypePayload(data, "authorType:${data.text}", TYPE_HAS)
+
+        fun getDateItem(data: DateSuggestion): MGRecyclerDataPayload =
+            SingleTypePayload(data, "date:${data.filterType}", TYPE_HAS)
+
         fun getRecentQueryItem(data: RecentQuerySuggestion): MGRecyclerDataPayload =
             SingleTypePayload(data, data.hashCode().toString(), TYPE_RECENT_QUERY)
     }
@@ -118,6 +128,7 @@ class WidgetSearchSuggestionsAdapter(
                     SearchSuggestion.Category.IN_CHANNEL -> R.string.search_group_header_channels
                     SearchSuggestion.Category.RECENT_QUERY ->
                         throw IllegalArgumentException("recent queries use the history header")
+                    SearchSuggestion.Category.AUTHOR_TYPE -> R.string.search_filter_author_type
                 },
             )
         }
@@ -283,10 +294,24 @@ class WidgetSearchSuggestionsAdapter(
 
         override fun onConfigure(position: Int, data: MGRecyclerDataPayload) {
             super.onConfigure(position, data)
-            val option = ((data as SingleTypePayload<*>).data as HasSuggestion).hasAnswerOption
-            label.text = option.getLocalizedInputText(searchStringProvider)
-            icon.setImageResource(iconRes(option))
-            container.setOnClickListener { adapter.onHasClicked(option) }
+            when (val suggestion = (data as SingleTypePayload<*>).data) {
+                is HasSuggestion -> {
+                    val option = suggestion.hasAnswerOption
+                    label.text = option.getLocalizedInputText(searchStringProvider)
+                    icon.setImageResource(iconRes(option))
+                    container.setOnClickListener { adapter.onHasClicked(option) }
+                }
+                is AuthorTypeSuggestion -> {
+                    label.text = suggestion.text
+                    icon.setImageResource(R.drawable.ic_members_24dp)
+                    container.setOnClickListener { adapter.onAuthorTypeClicked(suggestion) }
+                }
+                is DateSuggestion -> {
+                    label.setText(R.string.search_select_date)
+                    icon.setImageResource(R.drawable.ic_calendar_white_24dp)
+                    container.setOnClickListener { adapter.onDateClicked(suggestion) }
+                }
+            }
         }
 
         private fun iconRes(option: HasAnswerOption): Int = when (option) {

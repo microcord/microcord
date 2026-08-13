@@ -20,5 +20,6 @@ interface SearchSuggestion {
         BEFORE_DATE,
         IN_CHANNEL,
         RECENT_QUERY,
+        AUTHOR_TYPE,
     }
 }

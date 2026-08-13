@@ -5,12 +5,15 @@ import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.appViewModels
+import com.discord.dialogs.DatePickerDialog
 import com.discord.stores.StoreStream
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
 import com.discord.utilities.rx.ui
 import com.discord.utilities.search.strings.ContextSearchStringProvider
 import com.discord.utilities.search.strings.SearchStringProvider
+import com.discord.utilities.search.query.FilterType
+import com.discord.utilities.search.query.node.answer.DateNode
 import com.discord.utilities.search.suggestion.entries.UserSuggestion
 import com.discord.widgets.search.SearchStore
 import com.discord.widgets.search.SearchStoreProvider
@@ -55,26 +58,45 @@ class WidgetSearchSuggestions : AppFragment(R.layout.widget_search_suggestions) 
 
         val input = searchStore.storeSearchInput
         val query = viewState.query
+        fun dateFilterString(filterType: FilterType): CharSequence = when (filterType) {
+            FilterType.DURING -> searchStringProvider.duringFilterString
+            FilterType.BEFORE -> searchStringProvider.beforeFilterString
+            FilterType.AFTER -> searchStringProvider.afterFilterString
+            else -> error("invalid date filter: $filterType")
+        }
+        fun showDateSelector(filterType: FilterType, initialDate: Long) {
+            DatePickerDialog.show(
+                parentFragmentManager,
+                getString(R.string.search_select_date),
+                initialDate,
+                System.currentTimeMillis(),
+                true,
+            ) { selectedDate ->
+                input.onDateClicked(
+                    filterType,
+                    dateFilterString(filterType),
+                    DateNode.formatLocalDate(selectedDate),
+                    query,
+                )
+            }
+        }
 
         adapter.onFilterClicked = { filterType ->
-            input.onFilterClicked(filterType, searchStringProvider, query)
+            if (filterType == FilterType.DURING || filterType == FilterType.BEFORE || filterType == FilterType.AFTER) {
+                input.onFilterClicked(filterType, searchStringProvider, query)
+                showDateSelector(filterType, System.currentTimeMillis())
+            } else {
+                input.onFilterClicked(filterType, searchStringProvider, query)
+            }
         }
         adapter.onUserClicked = { userSuggestion ->
             when (userSuggestion.targetType) {
-                // A `from:` row also seeds the mentions filter, matching the reference: the two
-                // filters share one suggestion list and the user is more often after both.
-                UserSuggestion.TargetType.FROM -> {
-                    input.onFromUserClicked(
-                        userSuggestion,
-                        searchStringProvider.fromFilterString,
-                        query,
-                    )
-                    input.onMentionsUserClicked(
-                        userSuggestion,
-                        searchStringProvider.mentionsFilterString,
-                        query,
-                    )
-                }
+                // Both filters share one suggestion list but preserve the filter the user typed.
+                UserSuggestion.TargetType.FROM -> input.onFromUserClicked(
+                    userSuggestion,
+                    searchStringProvider.fromFilterString,
+                    query,
+                )
                 UserSuggestion.TargetType.MENTIONS -> input.onMentionsUserClicked(
                     userSuggestion,
                     searchStringProvider.mentionsFilterString,
@@ -92,6 +114,18 @@ class WidgetSearchSuggestions : AppFragment(R.layout.widget_search_suggestions) 
                 hasAnswerOption.getLocalizedInputText(searchStringProvider),
                 query,
             )
+        }
+        adapter.onAuthorTypeClicked = { suggestion ->
+            input.onAuthorTypeClicked(
+                suggestion.option,
+                suggestion.negated,
+                searchStringProvider.authorTypeFilterString,
+                suggestion.text,
+                query,
+            )
+        }
+        adapter.onDateClicked = { suggestion ->
+            showDateSelector(suggestion.filterType, suggestion.initialDateMillis)
         }
         adapter.onRecentQueryClicked = input::onQueryClicked
         adapter.onClearHistoryClicked = searchStore::clearHistory
