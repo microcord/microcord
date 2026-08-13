@@ -2,6 +2,7 @@ package com.discord.utilities.messagesend
 
 import android.content.ContentResolver
 import com.discord.api.message.MessageReference
+import com.discord.api.premium.PremiumTier
 import com.discord.api.message.Message as ApiMessage
 import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.api.message.allowedmentions.MessageAllowedMentions
@@ -65,6 +66,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
         val captcha: CaptchaSolution? = null,
         val attachments: List<UploadAttachment>? = null,
         val flags: Long? = null,
+        val characterLimit: Int? = null,
         /**
          * Stickers to send with the message.
          *
@@ -203,9 +205,10 @@ class MessageSendCoordinator @JvmOverloads constructor(
         message: Message,
         content: String,
         allowedMentions: RestAPIParams.Message.AllowedMentions? = null,
+        characterLimit: Int = this.characterLimit,
     ): Submission {
         if (message.id <= 0 || message.channelId <= 0) return Submission.Rejected(MessageResult.NoValidContent)
-        validateContent(content)?.let { return Submission.Rejected(it) }
+        validateContent(content, characterLimit)?.let { return Submission.Rejected(it) }
         val requestId = "edit:${message.channelId}:${message.id}:${nonceGenerator.nonce()}"
         val operation = Operation(
             channelId = message.channelId,
@@ -383,15 +386,16 @@ class MessageSendCoordinator @JvmOverloads constructor(
         input.channelId <= 0 || input.systemDm -> MessageResult.NoValidContent
         !input.canSend -> MessageResult.ValidationError("Missing send permission")
         input.communicationDisabled -> MessageResult.ValidationError("Communication disabled")
-        input.content.length > characterLimit -> MessageResult.ValidationError("Message exceeds $characterLimit characters")
+        input.content.length > (input.characterLimit ?: characterLimit) ->
+            MessageResult.ValidationError("Message exceeds ${input.characterLimit ?: characterLimit} characters")
         !input.attachments.isNullOrEmpty() -> null
         !input.stickers.isNullOrEmpty() -> null
-        else -> validateContent(input.content)
+        else -> validateContent(input.content, input.characterLimit ?: characterLimit)
     }
 
-    private fun validateContent(content: String): MessageResult? = when {
+    private fun validateContent(content: String, limit: Int): MessageResult? = when {
         content.isBlank() -> MessageResult.NoValidContent
-        content.length > characterLimit -> MessageResult.ValidationError("Message exceeds $characterLimit characters")
+        content.length > limit -> MessageResult.ValidationError("Message exceeds $limit characters")
         else -> null
     }
 
@@ -409,7 +413,13 @@ class MessageSendCoordinator @JvmOverloads constructor(
 
     companion object {
         const val DEFAULT_CHARACTER_LIMIT = 2_000
+        const val PREMIUM_CHARACTER_LIMIT = 4_000
         const val TEXT_FILE_MIME_TYPE = "text/plain"
+
+        fun characterLimit(premiumTier: PremiumTier) = when (premiumTier) {
+            PremiumTier.NONE, PremiumTier.PREMIUM_GUILD_SUBSCRIPTION_ONLY -> DEFAULT_CHARACTER_LIMIT
+            PremiumTier.TIER_0, PremiumTier.TIER_1, PremiumTier.TIER_2 -> PREMIUM_CHARACTER_LIMIT
+        }
         const val TYPING_INTERVAL_MS = 9_000L
         const val TYPE_SENDING = -1
         const val TYPE_FAILED = -2

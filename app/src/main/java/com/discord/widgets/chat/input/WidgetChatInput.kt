@@ -114,6 +114,8 @@ internal fun FlexInputWidgetBinding.renderSendPermission(ableToSendMessages: Boo
     cannotSendText.visibility = if (ableToSendMessages) View.GONE else View.VISIBLE
 }
 
+internal fun messageLimitText(length: Int, limit: Int) = "$length/$limit"
+
 internal enum class VoiceGestureState { SENDING, CANCELLING, LOCKING, LOCKED }
 
 internal fun resolveVoiceGestureState(
@@ -210,6 +212,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         override fun onTextChanged(value: CharSequence?, start: Int, before: Int, count: Int) = Unit
         override fun afterTextChanged(value: Editable?) {
             updateSendButtonVisibility()
+            updateMessageLimitCounter(value)
             if (restoringText) return
             val loaded = state ?: return
             if (!loaded.isEditing) drafts.setTextChannelInput(loaded.channelId, value)
@@ -897,6 +900,26 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         flexInputBinding?.let(::updateChatboxCustomizationGeometry)
     }
 
+    private fun updateMessageLimitCounter(value: CharSequence? = input?.text) {
+        val counter = flexInputBinding?.messageLimitCounter ?: return
+        val length = value?.length ?: 0
+        val limit = state?.me?.premiumTier?.let(MessageSendCoordinator::characterLimit)
+            ?: MessageSendCoordinator.DEFAULT_CHARACTER_LIMIT
+        counter.visibility = if (FeatureFlags.messageLimitCounterEnabled() && length > 0) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+        counter.text = messageLimitText(length, limit)
+        counter.setTextColor(
+            if (length > limit) {
+                ColorCompat.getColor(requireContext(), R.color.status_red_500)
+            } else {
+                ColorCompat.getThemedColor(requireContext(), R.attr.colorTextMuted)
+            },
+        )
+    }
+
     override fun onEmojiPicked(emoji: Emoji) {
         val editor = input ?: return
         val text = emoji.getChatInputText() + " "
@@ -927,6 +950,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         generatedUpload: UploadAttachment? = null,
     ): Boolean {
         val loaded = state ?: return false
+        val characterLimit = MessageSendCoordinator.characterLimit(loaded.me.premiumTier)
         var content = contentOverride ?: autocomplete?.getInputContent() ?: input?.text?.toString().orEmpty()
         val pendingReply =
             (loaded.pendingReplyState as? ChatInputViewModel.ViewState.PendingReplyState.Replying)?.pendingReply
@@ -993,7 +1017,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         if (
             generatedUpload == null &&
             !loaded.isEditing &&
-            content.length > MessageSendCoordinator.DEFAULT_CHARACTER_LIMIT
+            content.length > characterLimit
         ) {
             offerSendAsFile(content, attachments)
             return false
@@ -1083,6 +1107,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                             communicationDisabled = loaded.isCommunicationDisabled,
                             systemDm = false,
                             attachments = uploads,
+                            characterLimit = characterLimit,
                         ),
                     )
                     if (submission is MessageSendCoordinator.Submission.Accepted) {
@@ -1097,7 +1122,9 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             return true
         }
         val editing = loaded.editingMessage.takeIf { loaded.isEditing }
-        val submission = editing?.let { coordinator.edit(it, content) } ?: coordinator.send(
+        val submission = editing?.let {
+            coordinator.edit(it, content, characterLimit = characterLimit)
+        } ?: coordinator.send(
             MessageSendCoordinator.Send(
                 channelId = loaded.channelId,
                 guildId = loaded.channel.guildId.takeUnless { it == 0L },
@@ -1108,6 +1135,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 systemDm = loaded.isSystemDM,
                 reply = pendingReply,
                 attachments = uploads,
+                characterLimit = characterLimit,
             ),
         )
         if (submission is MessageSendCoordinator.Submission.Accepted) {
@@ -1198,6 +1226,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             drafts.setTextChannelInput(previous.channelId, input?.text)
         }
         state = next
+        updateMessageLimitCounter()
 
         binding.chatInputWrap.visibility =
             if (next.isInputShowing) View.VISIBLE else View.GONE

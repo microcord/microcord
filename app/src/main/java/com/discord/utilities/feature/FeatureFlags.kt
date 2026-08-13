@@ -10,6 +10,7 @@ object FeatureFlags {
     private const val CHATBOX_CUSTOMIZATIONS = "feature_chatbox_customizations"
     private const val HEADER_CUSTOMIZATIONS = "feature_header_customizations"
     private const val TYPING_USER_AVATARS = "feature_typing_user_avatars"
+    private const val MESSAGE_LIMIT_COUNTER = "feature_message_limit_counter"
     private const val AVATAR_DECORATIONS = "feature_avatar_decorations"
     private const val NAMEPLATES = "feature_nameplates"
     private const val PROFILE_EFFECTS = "feature_profile_effects"
@@ -29,6 +30,8 @@ object FeatureFlags {
     fun setHeaderCustomizationsEnabled(enabled: Boolean) = setEnabled(HEADER_CUSTOMIZATIONS, enabled)
     fun typingUserAvatarsEnabled() = enabled(TYPING_USER_AVATARS)
     fun setTypingUserAvatarsEnabled(enabled: Boolean) = setEnabled(TYPING_USER_AVATARS, enabled)
+    fun messageLimitCounterEnabled() = enabled(MESSAGE_LIMIT_COUNTER)
+    fun setMessageLimitCounterEnabled(enabled: Boolean) = setEnabled(MESSAGE_LIMIT_COUNTER, enabled)
     fun avatarDecorationsEnabled() = enabled(AVATAR_DECORATIONS, true)
     fun setAvatarDecorationsEnabled(enabled: Boolean) = setEnabled(AVATAR_DECORATIONS, enabled)
     fun nameplatesEnabled() = enabled(NAMEPLATES, true)
