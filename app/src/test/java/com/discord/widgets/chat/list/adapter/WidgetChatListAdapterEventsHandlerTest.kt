@@ -51,4 +51,13 @@ class WidgetChatListAdapterEventsHandlerTest {
         assertFalse(TapTapBehavior.canHandle(Message(id = 4, type = 0, flags = 128)))
         assertTrue(TapTapBehavior.canHandle(Message(id = 5, type = 0)))
     }
+
+    @Test fun quickActionsOnlyOpenForStableOrdinaryRows() {
+        assertTrue(QuickMessageActionsBehavior.canShow(Message(id = 1, type = 0), false, false))
+        assertFalse(QuickMessageActionsBehavior.canShow(Message(id = 2, type = -1), false, false))
+        assertFalse(QuickMessageActionsBehavior.canShow(Message(id = 3, type = -3), false, false))
+        assertFalse(QuickMessageActionsBehavior.canShow(Message(id = 4, type = 0, flags = 64), false, false))
+        assertFalse(QuickMessageActionsBehavior.canShow(Message(id = 5, type = 0), true, false))
+        assertFalse(QuickMessageActionsBehavior.canShow(Message(id = 6, type = 0), false, true))
+    }
 }

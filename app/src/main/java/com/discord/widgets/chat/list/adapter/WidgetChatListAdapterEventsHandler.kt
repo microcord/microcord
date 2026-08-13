@@ -3,10 +3,20 @@ package com.discord.widgets.chat.list.adapter
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.view.LayoutInflater
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.widget.LinearLayout
+import android.widget.PopupWindow
+import android.widget.TextSwitcher
+import android.widget.TextView
 import android.widget.Toast
 import com.discord.R
 import com.discord.i18n.FormatUtils
@@ -14,12 +24,17 @@ import com.discord.api.activity.Activity
 import com.discord.api.application.Application
 import com.discord.api.botuikit.ComponentType
 import com.discord.api.channel.Channel
+import com.discord.api.channel.isArchivedThread
 import com.discord.api.guildscheduledevent.GuildScheduledEvent
 import com.discord.api.message.activity.MessageActivityType
 import com.discord.api.message.reaction.MessageReaction
+import com.discord.api.message.reaction.MessageReactionEmoji
 import com.discord.api.sticker.BaseSticker
 import com.discord.api.sticker.Sticker
 import com.discord.app.AppFragment
+import com.discord.databinding.ViewQuickMessageActionsBinding
+import com.discord.models.domain.emoji.Emoji
+import com.discord.models.domain.emoji.ModelEmojiCustom
 import com.discord.models.message.Message
 import com.discord.models.user.CoreUser
 import com.discord.restapi.RestAPIParams
@@ -53,6 +68,7 @@ import com.discord.widgets.guild_role_subscriptions.entrypoint.WidgetGuildRoleSu
 import com.discord.widgets.guilds.profile.WidgetGuildProfileSheet
 import com.discord.widgets.stickers.StickerSheets
 import com.discord.widgets.user.usersheet.WidgetUserSheet
+import com.discord.views.ReactionView
 import java.lang.ref.WeakReference
 
 /** Routes every live-chat row event to its 126.21 store or navigation owner. */
@@ -88,6 +104,8 @@ class WidgetChatListAdapterEventsHandler(
     private val fragmentManager get() = host.parentFragmentManager
     private val tapHandler = Handler(Looper.getMainLooper())
     private var pendingTap: PendingTap? = null
+    private var quickActionsPopup: PopupWindow? = null
+    private var quickActionsMessageId = 0L
 
     override fun onBotUiComponentClicked(
         applicationId: Long,
@@ -145,6 +163,7 @@ class WidgetChatListAdapterEventsHandler(
         StoreStream.getChat().setInteractionState(interactionState)
 
     override fun onListClicked() {
+        dismissQuickActions()
         host.hideKeyboard()
         flexInputViewModel.hideExpressionTray()
     }
@@ -177,18 +196,26 @@ class WidgetChatListAdapterEventsHandler(
     override fun onMessageBlockedGroupClicked(message: Message) =
         StoreStream.getChat().toggleBlockedMessageGroup(message.id)
 
-    override fun onMessageClicked(message: Message, isThreadStarterMessage: Boolean) {
-        if (!FeatureFlags.tapTapEnabled() || !TapTapBehavior.canHandle(message)) {
+    override fun onMessageClicked(message: Message, isThreadStarterMessage: Boolean, anchor: View?) {
+        val tapTap = FeatureFlags.tapTapEnabled() && TapTapBehavior.canHandle(message)
+        val quickActions = FeatureFlags.quickMessageActionsEnabled() && anchor != null &&
+            QuickMessageActionsBehavior.canShow(
+                message,
+                isThreadStarterMessage,
+                StoreStream.getChannels().getChannel(message.channelId)?.isArchivedThread() == true,
+            )
+        if (!tapTap && !quickActions) {
             handleSingleTap(message, isThreadStarterMessage)
             return
         }
 
+        val tapWindow = if (quickActions) QUICK_ACTION_DELAY_MS else TapTapBehavior.TIMEOUT_MS
         val now = SystemClock.uptimeMillis()
         val previous = pendingTap
-        if (previous?.messageId == message.id && now - previous.startedAt <= TapTapBehavior.TIMEOUT_MS) {
+        if (previous?.messageId == message.id && now - previous.startedAt <= tapWindow) {
             tapHandler.removeCallbacks(previous.callback)
             pendingTap = null
-            handleDoubleTap(message)
+            if (tapTap) handleDoubleTap(message)
             return
         }
 
@@ -200,11 +227,12 @@ class WidgetChatListAdapterEventsHandler(
         callback = Runnable {
             if (pendingTap?.callback === callback) {
                 pendingTap = null
-                handleSingleTap(message, isThreadStarterMessage)
+                if (quickActions) showQuickMessageActions(requireNotNull(anchor), message)
+                else handleSingleTap(message, isThreadStarterMessage)
             }
         }
         pendingTap = PendingTap(message.id, now, callback)
-        tapHandler.postDelayed(callback, TapTapBehavior.TIMEOUT_MS)
+        tapHandler.postDelayed(callback, tapWindow)
     }
 
     override fun onMessageLongClicked(
@@ -410,23 +438,127 @@ class WidgetChatListAdapterEventsHandler(
     private fun handleDoubleTap(message: Message) {
         val channel = StoreStream.getChannels().getChannel(message.channelId) ?: return
         when (TapTapBehavior.action(message, StoreStream.getUsers().getMe().id)) {
-            TapTapBehavior.Action.EDIT -> {
-                val actionsHost = host as? WidgetChatListActions.Host ?: return
-                WidgetChatListActions.prepareMessageForEdit(
-                    message,
-                    channel,
-                    StoreStream.getGuilds().getGuild(channel.guildId),
-                ).ui(host).appSubscribe(WidgetChatListAdapterEventsHandler::class.java) { editable ->
-                    actionsHost.requestMessageEdit(editable, messageActionCoordinator)
-                }
-            }
-            TapTapBehavior.Action.REPLY -> messageActionCoordinator.reply(
-                channel,
-                message,
-                StoreStream.getUsers().getMe().id,
-            )
+            TapTapBehavior.Action.EDIT -> editMessage(message, channel)
+            TapTapBehavior.Action.REPLY -> replyToMessage(message, channel)
         }
     }
+
+    private fun editMessage(message: Message, channel: Channel) {
+        val actionsHost = host as? WidgetChatListActions.Host ?: return
+        WidgetChatListActions.prepareMessageForEdit(
+            message,
+            channel,
+            StoreStream.getGuilds().getGuild(channel.guildId),
+        ).ui(host).appSubscribe(WidgetChatListAdapterEventsHandler::class.java) { editable ->
+            actionsHost.requestMessageEdit(editable, messageActionCoordinator)
+        }
+    }
+
+    private fun replyToMessage(message: Message, channel: Channel) = messageActionCoordinator.reply(
+        channel,
+        message,
+        StoreStream.getUsers().getMe().id,
+    )
+
+    private fun showQuickMessageActions(anchor: View, message: Message) {
+        if (quickActionsPopup?.isShowing == true && quickActionsMessageId == message.id) {
+            dismissQuickActions()
+            return
+        }
+        dismissQuickActions()
+        val channel = StoreStream.getChannels().getChannel(message.channelId) ?: return
+        val binding = ViewQuickMessageActionsBinding.inflate(LayoutInflater.from(anchor.context))
+        val ownMessage = message.author?.id == StoreStream.getUsers().getMe().id
+        binding.quickMessageReply.setOnClickListener {
+            replyToMessage(message, channel)
+            dismissQuickActions()
+        }
+        binding.quickMessageEdit.visibility = if (ownMessage) View.VISIBLE else View.GONE
+        binding.quickMessageDelete.visibility = if (ownMessage) View.VISIBLE else View.GONE
+        binding.quickMessageEdit.setOnClickListener {
+            editMessage(message, channel)
+            dismissQuickActions()
+        }
+        binding.quickMessageDelete.setOnClickListener {
+            messageActionCoordinator.delete(message)
+            dismissQuickActions()
+        }
+        quickActionsPopup = PopupWindow(
+            binding.root,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            true,
+        ).apply {
+            isOutsideTouchable = true
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            setOnDismissListener {
+                quickActionsPopup = null
+                quickActionsMessageId = 0L
+            }
+            showAsDropDown(
+                anchor.findViewById<View>(R.id.chat_list_adapter_item_text) ?: anchor,
+                dp(anchor, 16),
+                dp(anchor, 4),
+            )
+        }
+        quickActionsMessageId = message.id
+        StoreStream.getEmojis()
+            .getEmojiSet(channel.guildId, channel.id, forReaction = true)
+            .take(1)
+            .ui(host)
+            .appSubscribe(WidgetChatListAdapterEventsHandler::class.java) { emojiSet ->
+                if (quickActionsMessageId != message.id) return@appSubscribe
+                emojiSet.recentEmojis.orEmpty()
+                    .asSequence()
+                    .filter { it.isUsable() && it.isAvailable() }
+                    .take(QUICK_REACTION_COUNT)
+                    .forEach { emoji -> addQuickReaction(binding.quickMessageReactions, message, emoji) }
+            }
+    }
+
+    private fun addQuickReaction(container: LinearLayout, message: Message, emoji: Emoji) {
+        val reactionEmoji = when (emoji) {
+            is ModelEmojiCustom -> MessageReactionEmoji(emoji.idStr, emoji.name, emoji.isAnimated)
+            else -> MessageReactionEmoji(null, emoji.getMessageContentReplacement(), false)
+        }
+        val reaction = message.reactions.orEmpty().firstOrNull { existing ->
+            if (reactionEmoji.id != null) existing.emoji.id == reactionEmoji.id
+            else existing.emoji.id == null && existing.emoji.name == reactionEmoji.name
+        } ?: MessageReaction(0, reactionEmoji, false)
+        container.addView(
+            ReactionView(container.context).apply {
+                configure(reaction, message.id, true)
+                findViewById<TextSwitcher>(R.id.counter_text_switcher).visibility = View.GONE
+                findViewById<TextView>(R.id.emoji_text_view).apply {
+                    gravity = Gravity.CENTER
+                    layoutParams = (layoutParams as LinearLayout.LayoutParams).apply {
+                        marginEnd = 0
+                        gravity = Gravity.CENTER
+                    }
+                }
+                setPadding(dp(this, 6), paddingTop, dp(this, 6), paddingBottom)
+                gravity = Gravity.CENTER
+                minimumWidth = dp(this, 30)
+                setBackgroundResource(R.drawable.drawable_quick_reaction_bg)
+                setOnClickListener {
+                    StoreStream.getEmojis().onEmojiUsed(emoji, isReaction = true)
+                    messageActionCoordinator.toggleReaction(message, reactionEmoji)
+                    dismissQuickActions()
+                }
+            },
+            LinearLayout.LayoutParams(dp(container, 30), dp(container, 26)).apply {
+                marginStart = dp(container, 4)
+            },
+        )
+    }
+
+    private fun dismissQuickActions() {
+        quickActionsPopup?.dismiss()
+        quickActionsPopup = null
+        quickActionsMessageId = 0L
+    }
+
+    private fun dp(view: View, value: Int) = (value * view.resources.displayMetrics.density).toInt()
 
     private fun showMessageActions(message: Message) {
         val channel = StoreStream.getChannels().getChannel(message.channelId) ?: return
@@ -451,6 +583,8 @@ class WidgetChatListAdapterEventsHandler(
     companion object {
         private const val ROLE_SUBSCRIPTION_SOURCE = "Role Subscriptions Tab"
         private const val SDK_ACTION = "com.discord.intent.action.SDK"
+        private const val QUICK_ACTION_DELAY_MS = 300L
+        private const val QUICK_REACTION_COUNT = 3
 
         internal fun componentInteractionData(
             customId: String?,
@@ -490,4 +624,10 @@ internal object TapTapBehavior {
 
     fun action(message: Message, currentUserId: Long) =
         if (message.author?.id == currentUserId) Action.EDIT else Action.REPLY
+}
+
+internal object QuickMessageActionsBehavior {
+    fun canShow(message: Message, isThreadStarterMessage: Boolean, isArchivedThread: Boolean) =
+        !isThreadStarterMessage && !isArchivedThread && !message.isLocal() &&
+            !message.isFailed() && !message.isEphemeralMessage()
 }

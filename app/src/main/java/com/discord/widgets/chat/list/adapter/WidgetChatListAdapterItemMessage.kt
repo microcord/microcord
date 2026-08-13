@@ -178,7 +178,7 @@ class WidgetChatListAdapterItemMessage(
             if (isThreadStarterMessage) View.VISIBLE else View.GONE
 
         itemView.setOnClickListener {
-            adapter.eventHandler.onMessageClicked(message, isThreadStarterMessage)
+            adapter.eventHandler.onMessageClicked(message, isThreadStarterMessage, itemView)
         }
         itemView.setOnLongClickListenerConsumeClick {
             // The rendered text ends in a zero-width space the parser appends; the action sheet

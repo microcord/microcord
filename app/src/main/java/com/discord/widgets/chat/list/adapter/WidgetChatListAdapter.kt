@@ -408,6 +408,9 @@ class WidgetChatListAdapter @JvmOverloads constructor(
 
         fun onMessageClicked(message: Message, isThreadStarterMessage: Boolean) = Unit
 
+        fun onMessageClicked(message: Message, isThreadStarterMessage: Boolean, anchor: View?) =
+            onMessageClicked(message, isThreadStarterMessage)
+
         fun onMessageLongClicked(
             message: Message,
             formattedMessage: CharSequence,

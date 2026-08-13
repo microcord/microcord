@@ -12,6 +12,7 @@ object FeatureFlags {
     private const val TYPING_USER_AVATARS = "feature_typing_user_avatars"
     private const val CHAT_HEADER_STATUS_INDICATORS = "feature_chat_header_status_indicators"
     private const val MORE_GIF_PROVIDERS = "feature_more_gif_providers"
+    private const val QUICK_MESSAGE_ACTIONS = "feature_quick_message_actions"
     private const val MESSAGE_LIMIT_COUNTER = "feature_message_limit_counter"
     private const val AVATAR_DECORATIONS = "feature_avatar_decorations"
     private const val NAMEPLATES = "feature_nameplates"
@@ -36,6 +37,8 @@ object FeatureFlags {
     fun setChatHeaderStatusIndicatorsEnabled(enabled: Boolean) = setEnabled(CHAT_HEADER_STATUS_INDICATORS, enabled)
     fun moreGifProvidersEnabled() = enabled(MORE_GIF_PROVIDERS)
     fun setMoreGifProvidersEnabled(enabled: Boolean) = setEnabled(MORE_GIF_PROVIDERS, enabled)
+    fun quickMessageActionsEnabled() = enabled(QUICK_MESSAGE_ACTIONS)
+    fun setQuickMessageActionsEnabled(enabled: Boolean) = setEnabled(QUICK_MESSAGE_ACTIONS, enabled)
     fun messageLimitCounterEnabled() = enabled(MESSAGE_LIMIT_COUNTER)
     fun setMessageLimitCounterEnabled(enabled: Boolean) = setEnabled(MESSAGE_LIMIT_COUNTER, enabled)
     fun avatarDecorationsEnabled() = enabled(AVATAR_DECORATIONS, true)
