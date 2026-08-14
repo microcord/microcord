@@ -28,6 +28,7 @@ import com.facebook.drawee.view.SimpleDraweeView
 import rx.Observable
 import rx.Subscription
 import com.discord.i18n.i18nRender
+import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 
 /**
  * A "listen along on Spotify" invite.
@@ -89,10 +90,11 @@ class WidgetChatListAdapterItemSpotifyListenTogether(
         if (dead) return
 
         userAdapter.setData(model.users)
-        track.text = listeningActivity?.details
-        artist.text = artist.context.i18nRender(
-            R.string.user_activity_listening_artists,
-            "artists" to listeningActivity?.state.orEmpty(),
+        track.setTextAndVisibilityBy(listeningActivity?.details)
+        artist.setTextAndVisibilityBy(
+            listeningActivity?.state?.takeIf(String::isNotBlank)?.let {
+                artist.context.i18nRender(R.string.user_activity_listening_artists, "artists" to it)
+            },
         )
 
         val assets = listeningActivity?.assets

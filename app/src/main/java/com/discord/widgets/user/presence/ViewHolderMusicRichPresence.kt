@@ -91,12 +91,18 @@ class ViewHolderMusicRichPresence(
         val artists = activity.state?.replace(';', ',')
 
         richPresenceHeader.text = PresenceUtils.getActivityHeader(richPresenceHeader.context, activity)
-        richPresenceTitle.text = activity.details
+        richPresenceTitle.setTextAndVisibilityBy(activity.details)
+        // A missing value leaves its placeholder in the template rather than blanking the line, so
+        // an activity without artist or album has to skip the line entirely.
         richPresenceDetails?.setTextAndVisibilityBy(
-            context.i18nRender(R.string.user_activity_listening_artists, "artists" to artists),
+            artists?.takeIf(String::isNotBlank)?.let {
+                context.i18nRender(R.string.user_activity_listening_artists, "artists" to it)
+            },
         )
         richPresenceTime.setTextAndVisibilityBy(
-            context.i18nRender(R.string.user_activity_listening_album, "album" to activity.assets?.largeText),
+            activity.assets?.largeText?.takeIf(String::isNotBlank)?.let {
+                context.i18nRender(R.string.user_activity_listening_album, "album" to it)
+            },
         )
         richPresenceTextContainer.isSelected = true
         configureAssetUi(activity, streamContext)

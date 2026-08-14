@@ -105,7 +105,7 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
 
     private fun showTyping(model: ChatTypingModel) {
         val typing = model as? ChatTypingModel.Typing
-        if (typing == null || typing.typingUsers.isEmpty() && typing.channelRateLimit <= 0) {
+        if (typing == null || !model.showsBar) {
             binding.chatOverlayTypingDots.stop()
             binding.chatOverlayTyping.visibility = View.GONE
             return

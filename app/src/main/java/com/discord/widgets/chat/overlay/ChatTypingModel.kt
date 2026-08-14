@@ -17,6 +17,10 @@ sealed class ChatTypingModel {
         val cooldownSecs: Int,
     ) : ChatTypingModel()
 
+    /** Whether the bar is on screen. The chat list reserves its height so the last message clears it. */
+    val showsBar: Boolean
+        get() = this is Typing && (typingUsers.isNotEmpty() || channelRateLimit > 0)
+
     companion object {
         fun get(): Observable<ChatTypingModel> = StoreStream.getChannelsSelected()
             .observeResolvedSelectedChannel()
