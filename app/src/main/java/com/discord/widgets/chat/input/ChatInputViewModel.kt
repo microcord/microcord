@@ -243,8 +243,12 @@ class ChatInputViewModel(
 
         // "Pending" is the member-screening flag: the user is in the guild but has not accepted
         // the rules, so the gate is shown even though membership exists.
-        val hasAcceptedGate = meGuildMember != null && !meGuildMember.pending
-        val shouldShowVerificationGate = MemberVerificationUtils.hasVerificationGate(guild) && !hasAcceptedGate
+        //
+        // Read positively, as the reference reads it. A member that has not arrived yet is null,
+        // and taking that for "has not accepted" puts the gate over the composer on every start
+        // until the guild's members load.
+        val isPending = meGuildMember?.pending == true
+        val shouldShowVerificationGate = isPending && MemberVerificationUtils.hasVerificationGate(guild)
         val isCommunicationDisabled = meGuildMember?.isCommunicationDisabled() == true
 
         val isInputShowing = !channel.isSystemDM() &&
