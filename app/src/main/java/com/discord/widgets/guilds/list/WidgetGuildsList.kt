@@ -25,7 +25,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppFragment
-import com.discord.i18n.i18nPlural
+import com.discord.i18n.i18nRenderPlural
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
@@ -166,7 +166,7 @@ class WidgetGuildsList : AppFragment(R.layout.widget_guilds_list), WidgetGuildLi
     }
 
     private fun showUnavailableGuildsToast(unavailableGuildCount: Int) {
-        val message = requireContext().i18nPlural(
+        val message = requireContext().i18nRenderPlural(
             R.plurals.partial_outage_count,
             unavailableGuildCount,
             "count" to unavailableGuildCount,

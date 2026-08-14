@@ -6,7 +6,9 @@ import android.text.Spanned
 import android.text.style.StyleSpan
 import android.text.style.StrikethroughSpan
 import android.text.style.URLSpan
+import android.view.View
 import android.widget.TextView
+import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 
 /**
@@ -132,3 +134,22 @@ fun TextView.setI18nText(@StringRes stringRes: Int, vararg args: Pair<String, An
 /** Formats [stringRes] into a rendered [CharSequence] without touching a view. */
 fun Context.i18nRender(@StringRes stringRes: Int, vararg args: Pair<String, Any?>): CharSequence =
     I18nSpans.render(getString(stringRes), *args)
+
+/**
+ * As [i18nRender], for a plural.
+ *
+ * The counterpart missing here is what breaks plurals that carry markup: `i18nPlural` returns a
+ * `String`, a `String` cannot hold spans, and so `**1** other server` reaches the screen with its
+ * asterisks intact. Anything whose template has markdown has to come through this instead.
+ */
+fun Context.i18nRenderPlural(
+    @PluralsRes pluralRes: Int,
+    quantity: Int,
+    vararg args: Pair<String, Any?>,
+): CharSequence = I18nSpans.render(resources.getQuantityString(pluralRes, quantity), *args)
+
+fun View.i18nRenderPlural(
+    @PluralsRes pluralRes: Int,
+    quantity: Int,
+    vararg args: Pair<String, Any?>,
+): CharSequence = context.i18nRenderPlural(pluralRes, quantity, *args)

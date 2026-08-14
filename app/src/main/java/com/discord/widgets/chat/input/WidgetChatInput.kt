@@ -48,6 +48,7 @@ import com.discord.databinding.WidgetChatInputBinding
 import com.discord.dialogs.SimpleConfirmationDialog
 import com.discord.dialogs.SimpleConfirmationDialogArgs
 import com.discord.i18n.FormatUtils
+import com.discord.i18n.setI18nText
 import com.discord.models.domain.emoji.Emoji
 import com.discord.models.member.GuildMember
 import com.discord.stores.StoreChatInputEditing
@@ -1426,9 +1427,11 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     }
 
     private fun configureTimeoutGuard(viewState: ChatInputViewModel.ViewState.Loaded) {
-        binding.guardCommunicationDisabled.chatInputCommunicationDisabledGuardText.text = FormatUtils.format(
-            getString(R.string.guild_communication_disabled_chat_notice_description),
-            "articleLink" to TIMEOUT_HELP_ARTICLE_URL,
+        // Rendered, not formatted: the string masks a link, and the inflater's own rendering of it
+        // is lost the moment this assigns plain text over the top.
+        binding.guardCommunicationDisabled.chatInputCommunicationDisabledGuardText.setI18nText(
+            R.string.guild_communication_disabled_chat_notice_description,
+            "link" to TIMEOUT_HELP_ARTICLE_URL,
         )
         binding.guardCommunicationDisabled.chatInputCommunicationDisabledGuardTimerText.text =
             humanizeCountdownDuration(requireContext(), viewState.timeoutLeftMs)
@@ -1513,11 +1516,11 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         GuildVerificationLevel.LOW -> context.getString(R.string.guild_verification_text_not_claimed)
         GuildVerificationLevel.MEDIUM -> FormatUtils.format(
             context.getString(R.string.guild_verification_text_account_age),
-            "minutes" to "5",
+            "min" to "5",
         )
         GuildVerificationLevel.HIGH -> FormatUtils.format(
             context.getString(R.string.guild_verification_text_member_age),
-            "minutes" to "10",
+            "min" to "10",
         )
         GuildVerificationLevel.HIGHEST -> context.getString(R.string.guild_verification_text_not_phone_verified)
         GuildVerificationLevel.NONE -> null

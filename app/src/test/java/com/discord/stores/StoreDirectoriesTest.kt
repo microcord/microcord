@@ -142,7 +142,7 @@ class StoreDirectoriesTest {
             deck,
             guilds,
             scheduledEvents,
-            api,
+            { api },
             requestScheduler = Schedulers.immediate(),
         )
 

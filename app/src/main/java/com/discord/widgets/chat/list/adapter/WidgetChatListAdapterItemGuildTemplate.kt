@@ -3,7 +3,7 @@ package com.discord.widgets.chat.list.adapter
 import android.view.View
 import android.widget.TextView
 import com.discord.R
-import com.discord.i18n.i18nPlural
+import com.discord.i18n.i18nRenderPlural
 import com.discord.models.domain.ModelGuildTemplate
 import com.discord.stores.StoreGuildTemplates
 import com.discord.stores.StoreStream
@@ -76,7 +76,7 @@ class WidgetChatListAdapterItemGuildTemplate(
     private fun configureResolvedUI(template: ModelGuildTemplate) {
         name.text = template.name
         subtext.setTextAndVisibilityBy(
-            subtext.i18nPlural(
+            subtext.i18nRenderPlural(
                 R.plurals.guild_template_usages_usageCount,
                 template.usageCount,
                 "usageCount" to template.usageCount,

@@ -55,6 +55,7 @@ class StoreGuildJoinRequest(
     private val pendingGuilds = HashMap<Long, Guild>()
     private var pendingGuildsSnapshot: Map<Long, Guild> = emptyMap()
     private var isFetchingPendingGuilds = false
+    private val announcedApprovals = HashSet<Long>()
 
     fun getGuildJoinRequest(guildId: Long): GuildJoinRequest? = guildJoinRequestsSnapshot[guildId]
 
@@ -165,7 +166,34 @@ class StoreGuildJoinRequest(
                 guildJoinRequests[request.guildId] = request
             }
         }
+        // An approval granted while the user was away arrives here rather than as an event, and
+        // `READY` carries the membership it produced alongside it.
+        payload.guilds?.forEach { handleGuildJoined(it.id) }
         markChanged()
+    }
+
+    /**
+     * The user is a member of [guildId], however that came about.
+     *
+     * Approval and membership are separate arrivals and either may land first, so neither event can
+     * conclude on its own that the user is in. This is the point where it is settled, and both
+     * things that follow from it happen here: the guild stops being pending — it is a real guild
+     * now, held by [StoreGuilds], and leaving it in [pendingGuilds] renders it a second time inside
+     * the applications folder — and an approval the user has not been shown yet is owed its dialog.
+     */
+    @StoreThread
+    fun handleGuildJoined(guildId: Long) {
+        var changed = pendingGuilds.remove(guildId) != null
+        val request = guildJoinRequests[guildId]
+        if (request != null &&
+            request.applicationStatus == ApplicationStatus.APPROVED &&
+            request.lastSeen == null &&
+            announcedApprovals.add(guildId)
+        ) {
+            onJoinRequestApproved(guildId)
+            changed = true
+        }
+        if (changed) markChanged()
     }
 
     /** Logout. */
@@ -173,6 +201,7 @@ class StoreGuildJoinRequest(
     internal fun reset() {
         guildJoinRequests.clear()
         pendingGuilds.clear()
+        announcedApprovals.clear()
         isFetchingPendingGuilds = false
         markChanged()
     }
@@ -187,9 +216,7 @@ class StoreGuildJoinRequest(
             return
         }
         guildJoinRequests[guildId] = request
-        if (request.applicationStatus == ApplicationStatus.APPROVED && request.lastSeen == null) {
-            onJoinRequestApproved(guildId)
-        }
+        if (guildsStore.getGuild(guildId) != null) handleGuildJoined(guildId)
         markChanged()
     }
 
@@ -203,6 +230,7 @@ class StoreGuildJoinRequest(
 
     @StoreThread
     fun handleGuildRemove(guildId: Long) {
+        announcedApprovals.remove(guildId)
         if (guildJoinRequests.remove(guildId) != null) markChanged()
     }
 

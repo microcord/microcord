@@ -46,7 +46,7 @@ class MemberVerificationSuccessDialog : AppDialog(R.layout.widget_member_verific
         guildName.text = SettingsStrings.render(
             requireContext(),
             R.string.lurker_mode_popout_success_header,
-            "guildName" to state.guildName.orEmpty(),
+            "guild" to state.guildName.orEmpty(),
         )
         confirm.setOnClickListener {
             ChannelSelector.getInstance().selectChannel(viewModel.guildId, 0L)

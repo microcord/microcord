@@ -107,7 +107,7 @@ object NoticeBuilders {
     ) = DialogData(
         headerText = context.i18nRender(
             R.string.disconnect_account_title,
-            "platform_title" to notice.metadata?.get(METADATA_PLATFORM_TITLE),
+            "name" to notice.metadata?.get(METADATA_PLATFORM_TITLE),
         ),
         bodyText = context.i18nRender(R.string.disconnect_account_body),
         okText = context.i18nRender(R.string.service_connections_disconnect),

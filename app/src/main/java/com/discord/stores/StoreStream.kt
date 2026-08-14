@@ -243,9 +243,7 @@ class StoreStream private constructor(
         guilds,
         dispatcher,
         observationDeck,
-        onJoinRequestApproved = { guildId ->
-            if (guilds.getGuild(guildId)?.name != null) MemberVerificationSuccessDialog.enqueue(guildId)
-        },
+        onJoinRequestApproved = { guildId -> MemberVerificationSuccessDialog.enqueue(guildId) },
     )
     private val guildTemplates = StoreGuildTemplates(dispatcher, observationDeck)
     private val guildMemberVerificationForm = StoreGuildMemberVerificationForm(
@@ -3553,6 +3551,7 @@ class StoreStream private constructor(
         voiceStates.handleGuildAdd(guild)
         gameParty.handleGuildCreateOrSync(guild)
         lurking.handleGuildAdd(guild)
+        guildJoinRequests.handleGuildJoined(guild.id)
         guildScheduledEvents.handleGuildCreate(guild)
         emojiCustom.handleGuildAdd(guild)
         guildStickers.handleGuildCreateOrUpdate(guild)

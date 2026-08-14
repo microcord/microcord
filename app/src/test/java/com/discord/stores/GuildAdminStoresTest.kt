@@ -118,12 +118,19 @@ class GuildAdminStoresTest {
         f.dispatch { joinRequests.handleGuildJoinRequestCreateOrUpdate(1, joinRequest(userId = 999)) }
         assertNull(f.joinRequests.getGuildJoinRequest(1))
 
+        // Approval and membership are separate arrivals and either may land first. An approval for
+        // a guild the user is not yet in is not something to announce — there is nothing to open.
         f.dispatch {
             joinRequests.handleGuildJoinRequestCreateOrUpdate(
                 1,
                 joinRequest(userId = 7, status = ApplicationStatus.APPROVED, lastSeen = null),
             )
         }
+        assertEquals(emptyList<Long>(), f.approvedGuildIds)
+
+        // It is owed once membership follows, and owed only once however often that is restated.
+        f.dispatch { joinRequests.handleGuildJoined(1) }
+        f.dispatch { joinRequests.handleGuildJoined(1) }
         assertEquals(listOf(1L), f.approvedGuildIds)
 
         // `last_seen` is what makes the dialog once-only.
@@ -134,7 +141,11 @@ class GuildAdminStoresTest {
             )
         }
         assertEquals(listOf(1L), f.approvedGuildIds)
+        // Acking retires the application outright, which is what takes the guild's row out of the
+        // pending folder rather than leaving it there permanently approved.
+        assertNull(f.joinRequests.getGuildJoinRequest(1))
 
+        f.dispatch { joinRequests.handleGuildJoinRequestCreateOrUpdate(1, joinRequest(userId = 7)) }
         f.dispatch { joinRequests.handleGuildJoinRequestDelete(userId = 999, guildId = 1) }
         assertTrue(f.joinRequests.getGuildJoinRequest(1) != null)
         f.dispatch { joinRequests.handleGuildJoinRequestDelete(userId = 7, guildId = 1) }
