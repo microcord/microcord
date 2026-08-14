@@ -381,6 +381,7 @@ class WidgetGuildsListViewModel(
         val unreadChannelIds: Set<Long>,
         val mentionCounts: Map<Long, Int>,
         val lowImportanceMentionChannels: Set<Long>,
+        val joinedThreadIds: Set<Long>,
         val accountNotificationSettings: AccountNotificationSettings,
         val channelIds: Map<Long, List<Long>>,
         val unavailableGuilds: Set<Long>,
@@ -437,6 +438,7 @@ class WidgetGuildsListViewModel(
                 unreadChannelIds = second.unreadChannelIds,
                 mentionCounts = first.mentionCounts,
                 lowImportanceMentionChannels = second.lowImportanceMentionChannels,
+                joinedThreadIds = second.joinedThreadIds,
                 accountNotificationSettings = second.accountNotificationSettings,
                 channelIds = first.channelIds,
                 unavailableGuilds = first.unavailableGuilds,
@@ -502,7 +504,10 @@ class WidgetGuildsListViewModel(
             Observable.combineLatest(
                 StoreStream.getUserGuildSettings().observeAccountNotificationSettings(),
                 StoreStream.getMentions().observeLowImportanceMentionChannels(),
-            ) { accountSettings, lowImportanceChannels -> accountSettings to lowImportanceChannels },
+                StoreStream.getThreadsActiveJoined().observeAllActiveJoinedThreadsById(),
+            ) { accountSettings, lowImportanceChannels, joinedThreads ->
+                Triple(accountSettings, lowImportanceChannels, joinedThreads.keys)
+            },
         ) { guildJoinRequests, pendingGuilds, guildIds, stageEvents, scheduledEvents, channels,
             unreadChannelIds, notifications ->
             SecondChunk(
@@ -515,6 +520,7 @@ class WidgetGuildsListViewModel(
                 unreadChannelIds = unreadChannelIds,
                 accountNotificationSettings = notifications.first,
                 lowImportanceMentionChannels = notifications.second,
+                joinedThreadIds = notifications.third,
             )
         }
 
@@ -541,6 +547,7 @@ class WidgetGuildsListViewModel(
                 val unreadChannelIds: Set<Long>,
             val accountNotificationSettings: AccountNotificationSettings,
             val lowImportanceMentionChannels: Set<Long>,
+            val joinedThreadIds: Set<Long>,
         )
     }
 }

@@ -8,6 +8,8 @@ import com.discord.api.permission.Permission
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.guild.Guild
 import com.discord.stores.StoreGuildsSorted
+import com.discord.api.channel.isGuildVocalChannel
+import com.discord.api.channel.isThread
 import com.discord.utilities.channel.ChannelNotificationSettingsUtils
 import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.permissions.PermissionUtils
@@ -314,21 +316,27 @@ internal object GuildListItemBuilder {
         return guildChannelIds.any { channelId ->
             if (channelId !in storeState.unreadChannelIds) return@any false
             val channel = storeState.channels[channelId] ?: return@any false
-            // Only a real ping overrides the channel's unread setting. A low-importance mention is
-            // ordinary traffic that `MENTION_ON_ALL_MESSAGES` counted, so letting it through here
-            // would keep the dot lit on exactly the channels set to mentions-only.
-            val mentioned = (storeState.mentionCounts[channelId] ?: 0) > 0 &&
-                channelId !in storeState.lowImportanceMentionChannels
-            if (mentioned) return@any true
-            // A mention is the only thing that survives a mute, and the category counts: silencing
-            // one is meant to take its channels off the server's dot with it.
+            val mentions = storeState.mentionCounts[channelId] ?: 0
+            // A voice channel's text only counts when it pings you.
+            if (channel.isGuildVocalChannel() && mentions == 0) return@any false
+            // A resource channel is a pinned link, never unread.
+            if ((channel.flags ?: 0L) and RESOURCE_CHANNEL_FLAG != 0L) return@any false
+            // A thread always resolves to ALL_MESSAGES, so without this every unjoined thread would
+            // light the dot regardless of what its parent's unread setting says.
+            if (channel.isThread() && channelId !in storeState.joinedThreadIds) return@any false
+            // Mute wins over a mention here, unlike the badge: silencing a channel or its category
+            // is meant to take it off the server's dot even when it pings.
             if (ChannelNotificationSettingsUtils.isGuildCategoryOrChannelMuted(channel, settings)) {
                 return@any false
             }
             // Under opt-in a stale channel stops counting: the list is meant to be what the
             // viewer chose, and week-old traffic in everything else would keep the dot lit.
             if (optInEnabled && isDecayed(channel)) return@any false
-            ChannelNotificationSettingsUtils.resolveUnreadSetting(
+            // Only a computed permission can rule a channel out; an absent one means permissions
+            // have not been calculated yet, and a missing dot is worse than a late one.
+            val computed = storeState.allChannelPermissions[channelId]
+            if (computed != null && !PermissionUtils.hasAccess(channel, computed)) return@any false
+            mentions > 0 || ChannelNotificationSettingsUtils.resolveUnreadSetting(
                 channel,
                 settings,
                 guild.defaultMessageNotifications,
@@ -336,6 +344,9 @@ internal object GuildListItemBuilder {
             ) == UnreadSetting.ALL_MESSAGES
         }
     }
+
+    /** `ChannelFlags.IS_GUILD_RESOURCE_CHANNEL`. */
+    private const val RESOURCE_CHANNEL_FLAG = 1L shl 7
 
     /** Matches the reference's seven-day `decayedReadStateCutoff`. */
     private fun isDecayed(channel: Channel?): Boolean {

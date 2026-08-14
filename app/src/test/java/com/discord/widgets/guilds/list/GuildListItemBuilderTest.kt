@@ -240,7 +240,8 @@ class GuildListItemBuilderTest {
         assertFalse(items.filterIsInstance<GuildListItem.GuildItem>().single().isUnread)
     }
 
-    @Test fun lowImportanceMentionsDoNotOverrideAMentionOnlyChannel() {
+    /** The reference counts any mention, low importance or not, toward the guild's dot. */
+    @Test fun aLowImportanceMentionStillLightsAMentionOnlyChannelsGuild() {
         val settings = ModelNotificationSettings(
             guildId = 1L,
             channelOverrides = listOf(
@@ -267,7 +268,7 @@ class GuildListItemBuilderTest {
             ),
         )
 
-        assertFalse(items.filterIsInstance<GuildListItem.GuildItem>().single().isUnread)
+        assertTrue(items.filterIsInstance<GuildListItem.GuildItem>().single().isUnread)
     }
 
     @Test fun unreadInAMutedCategoryDoesNotLightTheGuild() {
@@ -329,6 +330,7 @@ class GuildListItemBuilderTest {
         unreadChannelIds: Set<Long> = emptySet(),
         mentionCounts: Map<Long, Int> = emptyMap(),
         lowImportanceMentionChannels: Set<Long> = emptySet(),
+        joinedThreadIds: Set<Long> = emptySet(),
         channelIds: Map<Long, List<Long>> = emptyMap(),
         unavailableGuilds: Set<Long> = emptySet(),
         lurkingGuildIds: Set<Long> = emptySet(),
@@ -345,6 +347,7 @@ class GuildListItemBuilderTest {
         unreadChannelIds = unreadChannelIds,
         mentionCounts = mentionCounts,
         lowImportanceMentionChannels = lowImportanceMentionChannels,
+        joinedThreadIds = joinedThreadIds,
         accountNotificationSettings = accountNotificationSettings,
         channelIds = channelIds,
         unavailableGuilds = unavailableGuilds,
