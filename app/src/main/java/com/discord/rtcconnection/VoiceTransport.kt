@@ -361,6 +361,10 @@ class VoiceTransport(
      */
     private inner class VoiceConnectionListener : RtcConnection.DefaultListener() {
 
+        override fun onQualityUpdate(quality: RtcConnection.Quality) {
+            dispatcher.schedule { storeRtcConnection.handleQualityUpdate(quality) }
+        }
+
         override fun onStateChange(stateChange: RtcConnection.StateChange) {
             val connected = stateChange.state == RtcConnection.State.RtcConnected
             storeRtcConnection.onConnectedChanged(connected)

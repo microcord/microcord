@@ -19,6 +19,9 @@ import com.discord.overlay.OverlayVoiceBubble
 import com.discord.overlay.OverlayVoiceSelectorBubbleDialog
 import com.discord.overlay.views.OverlayBubbleWrap
 import com.discord.rtcconnection.RtcConnection
+import com.discord.app.AppToast
+import com.discord.utilities.intent.IntentUtils
+import com.discord.models.invite.InviteUtils
 import com.discord.stores.StoreStream
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.extensions.immutablePendingIntentFlag
@@ -26,6 +29,9 @@ import com.discord.utilities.fcm.NotificationClient
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.takeSingleUntilTimeout
 import com.discord.utilities.rx.ui
+import com.discord.rtcconnection.audio.DiscordAudioManager
+import com.discord.views.OverlayMenuView
+import rx.Observable
 import com.discord.views.OverlayMenuBubbleDialog
 import java.lang.ref.WeakReference
 
@@ -34,7 +40,92 @@ class DiscordOverlayService : OverlayService() {
         OverlayMenuBubbleDialog(applicationContext).apply {
             insetMargins.top = resources.getDimensionPixelOffset(R.dimen.vertical_safe_margin)
             onDialogClosed = { overlayManager.removeBubble(it) }
+            overlayMenu.viewStateSource = overlayMenuState()
+            overlayMenu.setOnInviteRequested(::copyInviteLink)
+            overlayMenu.setOnSwitchChannelsRequested {
+                launchForVoiceChannelSelect(applicationContext)
+            }
+            overlayMenu.setOnOpenAppRequested(::openApp)
+            overlayMenu.setOnSourceToggleRequested(::cycleAudioOutput)
+            overlayMenu.setOnMuteToggleRequested { StoreStream.getMediaSettings().toggleSelfMuted() }
+            overlayMenu.setOnDisconnectRequested {
+                StoreStream.getVoiceChannelSelected().selectVoiceChannel(0L).subscribe({}, {})
+            }
         }
+
+    /**
+     * Call state for the menu. The view cannot assemble this itself: it has no fragment lifecycle
+     * and the voice stores only exist once a call is up, so the service feeds it.
+     */
+    private fun overlayMenuState(): Observable<OverlayMenuView.ViewState?> =
+        StoreStream.getVoiceChannelSelected().observeSelectedVoiceChannelId().switchMap { channelId ->
+            if (channelId == 0L) {
+                Observable.just(null)
+            } else {
+                Observable.combineLatest(
+                    StoreStream.getChannels().observeChannel(channelId),
+                    StoreStream.getPermissions().observePermissionsForChannel(channelId),
+                    StoreStream.getAudioManagerV2().observeAudioManagerState(),
+                    StoreStream.getMediaSettings().isSelfMuted(),
+                    StoreStream.getRtcConnection().observeQuality(),
+                ) { channel, permissions, audio, muted, quality ->
+                    channel?.let {
+                        OverlayMenuView.ViewState(
+                            channelId = channelId,
+                            channelPermissions = permissions,
+                            guildName = StoreStream.getGuilds().getGuild(it.guildId)?.name,
+                            channelName = it.name.orEmpty(),
+                            quality = when (quality) {
+                                RtcConnection.Quality.BAD -> OverlayMenuView.Quality.BAD
+                                RtcConnection.Quality.AVERAGE -> OverlayMenuView.Quality.AVERAGE
+                                RtcConnection.Quality.FINE -> OverlayMenuView.Quality.FINE
+                                else -> OverlayMenuView.Quality.UNKNOWN
+                            },
+                            speakerphoneActive =
+                                audio.activeAudioDevice == DiscordAudioManager.DeviceTypes.SPEAKERPHONE,
+                            eligibleAudioDeviceCount = audio.audioDevices.count { device -> device.isAvailable },
+                            mutedByAnySource = muted,
+                        )
+                    }
+                }
+            }
+        }
+
+    /** The overlay has no activity to host the invite sheet, so the link goes to the clipboard. */
+    private fun copyInviteLink(channelId: Long) {
+        StoreStream.getInviteSettings()
+            .generateInvite(channelId)
+            .ui()
+            .appSubscribe(DiscordOverlayService::class.java) { invite ->
+                AppToast.copyToClipboard(
+                    applicationContext,
+                    invite.toLink(resources, InviteUtils.HOST_INVITE),
+                    R.string.invite_link_copied,
+                )
+            }
+    }
+
+    private fun openApp(channelId: Long) {
+        val channel = StoreStream.getChannels().findChannelById(channelId)
+        startActivity(
+            IntentUtils.RouteBuilders.selectChannel(channelId, channel?.guildId ?: 0L)
+                .setPackage(packageName)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+
+    /** Steps to the next available output, which is what the single toggle button offers. */
+    private fun cycleAudioOutput() {
+        val audio = StoreStream.getAudioManagerV2()
+        audio.observeAudioManagerState()
+            .take(1)
+            .appSubscribe(DiscordOverlayService::class.java) { state ->
+                val available = state.audioDevices.filter { it.isAvailable }
+                if (available.size < 2) return@appSubscribe
+                val current = available.indexOfFirst { it.type == state.activeAudioDevice }
+                audio.selectOutputDevice(available[(current + 1) % available.size].type)
+            }
+    }
 
     private fun createVoiceBubble(): OverlayVoiceBubble =
         OverlayVoiceBubble(applicationContext).apply {

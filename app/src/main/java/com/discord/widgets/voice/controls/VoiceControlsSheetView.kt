@@ -33,7 +33,7 @@ class VoiceControlsSheetView @JvmOverloads constructor(
     private val peekContainer: LinearLayout
     private val videoButton: ImageView
     private val screenShareButton: ImageView
-    private val soundboardButton: ImageView
+    private val soundboardSecondaryButton: TextView
     private val moveToAudienceButton: ImageView
     private val raiseHandBadge: NumericBadgingView
     private val raiseHandButton: ImageView
@@ -60,7 +60,7 @@ class VoiceControlsSheetView @JvmOverloads constructor(
         peekContainer = requireNotNull(findViewById(R.id.peek_container))
         videoButton = requireNotNull(findViewById(R.id.video_button))
         screenShareButton = requireNotNull(findViewById(R.id.screen_share_button))
-        soundboardButton = requireNotNull(findViewById(R.id.soundboard_button))
+        soundboardSecondaryButton = requireNotNull(findViewById(R.id.soundboard_secondary_button))
         moveToAudienceButton = requireNotNull(findViewById(R.id.move_to_audience_button))
         raiseHandBadge = requireNotNull(findViewById(R.id.raise_hand_badge))
         raiseHandButton = requireNotNull(findViewById(R.id.raise_hand_button))
@@ -140,9 +140,10 @@ class VoiceControlsSheetView @JvmOverloads constructor(
         configureOutput(outputSelectorState, onAudioOutputClick, !startedAsVideo && !isStage)
         configureVideo(model, onVideoClick, showVideoButton)
         configureScreenShare(model, onScreenshareClick, startedAsVideo, isStage)
-        soundboardButton.show(model.canUseSoundboard() && !isStage)
-        soundboardButton.backgroundTintList = ColorStateList.valueOf(buttonBackground(false))
-        soundboardButton.setOnClickListener { onSoundboardClick() }
+        // A sheet row rather than a circle: it sits with the other secondary actions regardless of
+        // whether the call is showing its primary controls.
+        soundboardSecondaryButton.show(model.canUseSoundboard() && !isStage)
+        soundboardSecondaryButton.setOnClickListener { onSoundboardClick() }
         configureStreamVolume(showStreamVolume, streamVolume, onStreamVolumeChange)
         configureInvites(model, onInviteClick, isStage)
     }

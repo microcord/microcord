@@ -123,6 +123,10 @@ class StoreRtcConnection(
         BehaviorSubject.create(null as RtcConnection.Metadata?)
     private var rtcConnectionMetadata: RtcConnection.Metadata? = null
 
+    /** Voice-call connection health. The stream connection reports its own separately. */
+    private val qualitySubject: BehaviorSubject<RtcConnection.Quality> =
+        BehaviorSubject.create(RtcConnection.Quality.UNKNOWN)
+
     private val connectionStateSubject = SerializedSubject<RtcConnection.StateChange, RtcConnection.StateChange>(
         BehaviorSubject.create(
             RtcConnection.StateChange(RtcConnection.State.Disconnected(false), null),
@@ -278,7 +282,12 @@ class StoreRtcConnection(
 
     fun updateFocusedParticipant(userId: Long?) = rtcConnectionController.setFocusedParticipant(userId)
 
+    fun observeQuality(): Observable<RtcConnection.Quality> = qualitySubject.distinctUntilChanged()
+
+    fun handleQualityUpdate(quality: RtcConnection.Quality) = qualitySubject.onNext(quality)
+
     fun onConnectedChanged(connected: Boolean) {
+        if (!connected) qualitySubject.onNext(RtcConnection.Quality.UNKNOWN)
         onStateChange(
             RtcConnection.StateChange(
                 if (connected) RtcConnection.State.RtcConnected else RtcConnection.State.RtcDisconnected,
