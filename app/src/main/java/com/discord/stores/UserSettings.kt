@@ -244,6 +244,17 @@ object UserSettings {
         privacyBuilder.contactSyncEnabled = it
     }
 
+    /** Who may join a party an application publishes; both default on, as the reference has them. */
+    val allowActivityPartyPrivacyFriends = bool(
+        true,
+        { it.privacy.run { hasAllowActivityPartyPrivacyFriends() to allowActivityPartyPrivacyFriends.value } },
+    ) { privacyBuilder.allowActivityPartyPrivacyFriends = it }
+
+    val allowActivityPartyPrivacyVoiceChannel = bool(
+        true,
+        { it.privacy.run { hasAllowActivityPartyPrivacyVoiceChannel() to allowActivityPartyPrivacyVoiceChannel.value } },
+    ) { privacyBuilder.allowActivityPartyPrivacyVoiceChannel = it }
+
     val friendSourceFlags = setting(
         { proto ->
             val bits = proto.privacy.run { if (hasFriendSourceFlags()) friendSourceFlags.value else FRIEND_SOURCE_ALL }

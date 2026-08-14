@@ -25,6 +25,7 @@ data class Application(
     val maxParticipants: Int? = null,
     val embeddedActivityConfig: EmbeddedActivityConfig? = null,
     val connectionEntrypointUrl: String? = null,
+    val flags: Long? = null,
 ) {
     val launchUri: String
         get() = deeplinkUri?.removeSuffix("/")?.plus("/_discord") ?: "dscd$id://connect/_discord"

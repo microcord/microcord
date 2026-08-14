@@ -1305,4 +1305,6 @@ object RestAPIParams {
     data class ApplicationTicket(val testMode: Boolean = false)
 
     data class ApplicationTicketResponse(val ticket: String)
+
+    data class ExternalAssets(val urls: List<String>)
 }

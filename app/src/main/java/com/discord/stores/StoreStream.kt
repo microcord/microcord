@@ -10,7 +10,9 @@ import android.util.Log
 import com.discord.R
 import com.discord.utilities.messagesend.MessageSendLocation
 import com.discord.utilities.user.NicknameUtils
+import com.discord.api.activity.Activity
 import com.discord.api.activity.ActivityEmoji
+import com.discord.api.activity.ActivityType
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isThread
@@ -3837,6 +3839,21 @@ class StoreStream private constructor(
         @JvmStatic fun getUserGuildSettings() = requireInstance().guildSettings
         @JvmStatic fun getStageInstances() = requireInstance().stageInstances
         @JvmStatic fun getPresences() = requireInstance().presences
+
+        /**
+         * Publishes an activity an application set over RPC, on the store thread.
+         *
+         * [StoreUserPresence.updateActivity] is `@StoreThread` and only *logs* when called from
+         * anywhere else, so a caller off the dispatcher corrupts the presence quietly rather than
+         * failing. RPC commands run on the socket's thread, hence the hop.
+         */
+        @JvmStatic
+        fun setRpcActivity(type: ActivityType, activity: Activity?) {
+            val stream = requireInstance()
+            stream.dispatcher.schedule {
+                stream.presences.updateActivity(type, activity, force = true)
+            }
+        }
         @JvmStatic fun getReadStates() = requireInstance().readStates
         @JvmStatic fun getMessages() = requireInstance().messages
         @JvmStatic fun getMessagesLoader() = requireInstance().messagesLoader
