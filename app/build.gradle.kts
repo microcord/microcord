@@ -103,6 +103,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":plugin-api"))
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.apng)
     implementation(libs.photoeditor)

@@ -43,6 +43,9 @@ import com.discord.widgets.friends.WidgetFriendsAdd
 import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
 import com.discord.widgets.search.WidgetSearch
 import com.discord.widgets.user.calls.PrivateCallLauncher
+import com.discord.plugins.PluginUiRegistry
+import dev.mantikafasi.manticord.plugins.api.pluginChannelContext
+import java.util.WeakHashMap
 
 object WidgetHomeHeaderManager {
     private const val ANALYTICS_SOURCE = "Toolbar"
@@ -202,6 +205,51 @@ object WidgetHomeHeaderManager {
         menu.findItem(R.id.menu_chat_start_video_call).isVisible = state.startVideoCall && visible[Action.VIDEO] != false
         menu.findItem(R.id.menu_chat_stop_call).isVisible = state.stopCall && visible[Action.VOICE] != false
         menu.findItem(R.id.menu_chat_pins).isVisible = state.pins && visible[Action.PINS] != false
+        configurePluginActions(menu, context, channel)
+    }
+
+    internal fun configurePluginActions(menu: Menu, context: Context, channel: Channel?) {
+        val cache = pluginActionViews.getOrPut(menu) { mutableMapOf() }
+        val contributions = PluginUiRegistry.headers()
+        val activeKeys = contributions.mapTo(mutableSetOf()) { it.key }
+        cache.keys.filter { it !in activeKeys }.forEach { key ->
+            menu.removeItem(requireNotNull(cache.remove(key)).id)
+        }
+        if (channel == null) {
+            cache.values.forEach { menu.removeItem(it.id) }
+            return
+        }
+        val pluginContext = pluginChannelContext(
+            channelId = channel.id,
+            guildId = channel.guildId.takeIf { it > 0L },
+            channelType = channel.type,
+            isPrivate = channel.isPrivate(),
+        )
+        contributions.forEachIndexed { index, owned ->
+            val contribution = owned.contribution
+            val surface = if (channel.isPrivate()) Surface.DM else Surface.CHANNEL
+            val visible = HeaderCustomization.pluginVisible(surface, owned.owner, contribution.id) &&
+                runCatching { contribution.isVisible(pluginContext) }.getOrDefault(false)
+            val cached = cache[owned.key]
+            if (!visible) {
+                cached?.let { menu.removeItem(it.id) }
+                return@forEachIndexed
+            }
+            val action = cached ?: runCatching {
+                CachedHeaderAction(View.generateViewId(), contribution.createView(context))
+            }.getOrNull()?.also { cache[owned.key] = it } ?: return@forEachIndexed
+            runCatching { contribution.bind(action.view, pluginContext) }
+            action.view.setOnClickListener { runCatching { contribution.onClick(pluginContext) } }
+            if (menu.findItem(action.id) == null) {
+                menu.add(Menu.NONE, action.id, 1000 + index, owned.owner)
+                    .setActionView(action.view)
+                    .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            }
+        }
+    }
+
+    internal fun clearPluginActions(menu: Menu) {
+        pluginActionViews.remove(menu)?.values?.forEach { menu.removeItem(it.id) }
     }
 
     internal fun customizeMenu(menu: Menu, context: Context, surface: Surface): Map<Action, Boolean> {
@@ -395,5 +443,7 @@ object WidgetHomeHeaderManager {
         R.id.menu_chat_search,
         R.id.menu_chat_side_panel,
     )
+    private data class CachedHeaderAction(val id: Int, val view: View)
+    private val pluginActionViews = WeakHashMap<Menu, MutableMap<String, CachedHeaderAction>>()
 
 }

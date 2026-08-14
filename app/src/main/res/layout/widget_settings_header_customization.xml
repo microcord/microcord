@@ -26,6 +26,8 @@
                 <com.discord.views.CheckedSetting android:id="@+id/header_customization_search" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
                 <com.discord.views.CheckedSetting android:id="@+id/header_customization_members" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
                 <com.discord.views.CheckedSetting android:id="@+id/header_customization_pins" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <TextView android:id="@+id/header_customization_plugins_header" android:text="@string/plugins" android:visibility="gone" style="@style/UiKit.Settings.Item.Header"/>
+                <LinearLayout android:id="@+id/header_customization_plugins" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"/>
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>
     </LinearLayout>

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:orientation="vertical"
+    style="@style/UiKit.ViewGroup.Page">
+
+    <com.discord.views.CheckedSetting
+        android:id="@+id/plugins_master"
+        app:cs_text="@string/plugins_load"
+        app:cs_subtext="@string/plugins_load_description"
+        app:cs_view_type="switchview"
+        style="@style/UiKit.CheckedSetting.Themed" />
+
+    <TextView
+        android:id="@+id/plugins_metrics"
+        android:paddingStart="16dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="8dp"
+        android:textColor="?attr/colorTextMuted"
+        style="@style/UiKit.TextView.Subtext" />
+
+    <TextView
+        android:id="@+id/plugins_empty"
+        android:text="@string/plugins_none"
+        android:gravity="center"
+        android:padding="24dp"
+        android:visibility="gone"
+        style="@style/UiKit.TextView" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/plugins_list"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+</LinearLayout>

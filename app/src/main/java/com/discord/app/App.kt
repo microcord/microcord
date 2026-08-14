@@ -27,6 +27,7 @@ import com.discord.widgets.notice.NoticePopupChannel
 import com.discord.utilities.persister.PersisterConfig
 import com.discord.utilities.time.ClockFactory
 import com.discord.rtcconnection.mediaengine.KrispAssetPack
+import com.discord.plugins.PluginRuntime
 import com.discord.utilities.voice.VoiceEngineServiceController
 import com.google.firebase.FirebaseApp
 import java.util.concurrent.atomic.AtomicBoolean
@@ -72,6 +73,7 @@ class App : Application() {
         BootLog.record(BootLogEvent.PLATFORM_READY)
         BootLog.record(BootLogEvent.NATIVE_READY)
         StoreStream.initialize(this)
+        PluginRuntime.initialize(this)
         // Without this the sidebar has no pending-applications folder and a guild the user has
         // applied to cannot be tapped at all.
         GuildsListStoreHooks.install()

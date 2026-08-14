@@ -7,6 +7,7 @@ import android.content.res.ColorStateList
 import android.view.DragEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.LayoutInflater
 import androidx.appcompat.widget.AppCompatImageButton
 import androidx.core.widget.ImageViewCompat
 import com.discord.R
@@ -27,6 +28,10 @@ import com.discord.utilities.feature.HeaderCustomization.Surface
 import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
+import com.discord.plugins.PluginUiRegistry
+import com.discord.views.CheckedSetting
+import com.discord.api.channel.Channel
+import dev.mantikafasi.manticord.plugins.api.pluginChannelContext
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
 import kotlin.math.abs
@@ -111,6 +116,34 @@ class WidgetSettingsHeaderCustomization : AppFragment(R.layout.widget_settings_h
                         updateIdentity(identity, !HeaderCustomization.identityVisible(surface, identity))
                     } else null)
                 }
+            }
+            val pluginActions = PluginUiRegistry.headers()
+            binding.headerCustomizationPluginsHeader.visibility =
+                if (pluginActions.isEmpty()) View.GONE else View.VISIBLE
+            binding.headerCustomizationPlugins.removeAllViews()
+            pluginActions.forEach { owned ->
+                val contribution = owned.contribution
+                val visible = HeaderCustomization.pluginVisible(surface, owned.owner, contribution.id)
+                val toggle = LayoutInflater.from(requireContext()).inflate(
+                    R.layout.widget_settings_plugin_toggle,
+                    binding.headerCustomizationPlugins,
+                    false,
+                ) as CheckedSetting
+                toggle.apply {
+                    isEnabled = headerVisible
+                    setText(contribution.title)
+                    setSubtext(owned.owner)
+                    setChecked(visible, false)
+                    fun update(next: Boolean) {
+                        HeaderCustomization.setPluginVisible(surface, owned.owner, contribution.id, next)
+                        setChecked(next, false)
+                        renderPreview(binding)
+                        PluginUiRegistry.notifyHeaderChanged()
+                    }
+                    setOnCheckedListener { next -> update(next) }
+                    setContainerClickListener(if (headerVisible) View.OnClickListener { update(!isChecked) } else null)
+                }
+                binding.headerCustomizationPlugins.addView(toggle)
             }
         }
         updateIdentity = { identity, visible ->
@@ -209,6 +242,22 @@ class WidgetSettingsHeaderCustomization : AppFragment(R.layout.widget_settings_h
         binding.headerCustomizationActions.removeAllViews()
         entries.filter(Entry::visible).forEach { entry ->
             binding.headerCustomizationActions.addView(previewButton(binding.root.context, entry.action))
+        }
+        val selectedChannel = StoreStream.getChannelsSelected().getSelectedChannel()
+        val pluginContext = pluginChannelContext(
+            channelId = selectedChannel?.id ?: 0L,
+            guildId = selectedChannel?.guildId?.takeIf { it > 0L },
+            channelType = selectedChannel?.type ?: if (surface == Surface.DM) Channel.DM else Channel.GUILD_TEXT,
+            isPrivate = surface == Surface.DM,
+        )
+        PluginUiRegistry.headers().forEach { owned ->
+            val contribution = owned.contribution
+            if (!HeaderCustomization.pluginVisible(surface, owned.owner, contribution.id)) return@forEach
+            if (!runCatching { contribution.isVisible(pluginContext) }.getOrDefault(false)) return@forEach
+            val pluginView = runCatching { contribution.createView(binding.root.context) }.getOrNull()
+                ?: return@forEach
+            runCatching { contribution.bind(pluginView, pluginContext) }
+            binding.headerCustomizationActions.addView(pluginView)
         }
     }
 

@@ -110,6 +110,11 @@ import rx.Subscription
 import rx.subjects.PublishSubject
 import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.i18n.i18nRender
+import com.discord.plugins.PluginUiRegistry
+import dev.mantikafasi.manticord.plugins.api.pluginChannelContext
+import dev.mantikafasi.manticord.plugins.api.pluginComposerContext
+import dev.mantikafasi.manticord.plugins.api.PluginComposerZone
+import dev.mantikafasi.manticord.plugins.api.PluginRegistration
 
 internal fun FlexInputWidgetBinding.renderSendPermission(ableToSendMessages: Boolean) {
     cannotSendText.visibility = if (ableToSendMessages) View.GONE else View.VISIBLE
@@ -178,11 +183,17 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     private var voiceGestureActive = false
     private var voiceGestureStartX = 0f
     private var voiceGestureStartY = 0f
+    private val pluginComposerViews = mutableMapOf<String, View>()
+    private var pluginComposerRegistration: PluginRegistration? = null
+    private val pluginComposerBinder = Runnable { state?.let(::bindPluginComposerViews) }
     private var pendingVoiceFinish: Boolean? = null
     private val customizationListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == ChatInputCustomization.LAYOUT_KEY) {
             view?.post {
-                flexInputBinding?.let(::configureChatboxCustomizations)
+                flexInputBinding?.let {
+                    configureChatboxCustomizations(it)
+                    installPluginComposerViews(it)
+                }
                 state?.let(::updateChatboxCustomizationAvatar)
                 updateSendButtonVisibility()
             }
@@ -214,6 +225,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         override fun afterTextChanged(value: Editable?) {
             updateSendButtonVisibility()
             updateMessageLimitCounter(value)
+            schedulePluginComposerBind()
             if (restoringText) return
             val loaded = state ?: return
             if (!loaded.isEditing) drafts.setTextChannelInput(loaded.channelId, value)
@@ -226,6 +238,9 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         _binding = WidgetChatInputBinding.bind(view)
+        pluginComposerRegistration = PluginUiRegistry.addComposerListener {
+            view.post { flexInputBinding?.let(::installPluginComposerViews) }
+        }
         SharedPreferencesProvider.get().registerOnSharedPreferenceChangeListener(customizationListener)
         // Stopgap until StoreEmoji exists; see ChatInputAutocompletables.installDefaultEmojiSetSource.
         viewModel = ViewModelProvider(this).get(ChatInputViewModel::class.java)
@@ -359,11 +374,15 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     }
 
     override fun onDestroyView() {
+        view?.removeCallbacks(pluginComposerBinder)
         input?.removeTextChangedListener(watcher)
         autocomplete?.onDestroyView()
         SharedPreferencesProvider.get().unregisterOnSharedPreferenceChangeListener(customizationListener)
         autocomplete = null
         flexInputBinding = null
+        pluginComposerRegistration?.unregister()
+        pluginComposerRegistration = null
+        pluginComposerViews.clear()
         _binding = null
         input = null
         truncatedHint = null
@@ -378,6 +397,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val flexBinding = FlexInputWidgetBinding.bind(flex.view ?: return)
         flexInputBinding = flexBinding
         configureChatboxCustomizations(flexBinding)
+        installPluginComposerViews(flexBinding)
         flex.setKeyboardManager(object : KeyboardManager {
             override fun requestDisplay(editText: EditText) {
                 editText.requestFocus()
@@ -510,6 +530,64 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         }
         updateChatboxCustomizationGeometry(flex)
         state?.let(::updateChatboxCustomizationAvatar)
+    }
+
+    private fun installPluginComposerViews(flex: FlexInputWidgetBinding) {
+        val contributions = PluginUiRegistry.composers()
+        val activeKeys = contributions.mapTo(mutableSetOf()) { it.key }
+        pluginComposerViews.keys.filter { it !in activeKeys }.forEach { key ->
+            val removed = pluginComposerViews.remove(key) ?: return@forEach
+            (removed.parent as? ViewGroup)?.removeView(removed)
+        }
+        pluginComposerViews.values.forEach { view -> (view.parent as? ViewGroup)?.removeView(view) }
+        contributions.forEach { owned ->
+            val key = owned.key
+            val pluginView = pluginComposerViews[key] ?: runCatching {
+                owned.contribution.createView(requireContext())
+            }.getOrNull()?.also { pluginComposerViews[key] = it } ?: return@forEach
+            when (owned.contribution.zone) {
+                PluginComposerZone.LEFT -> flex.leftBtnsContainer.addView(pluginView)
+                PluginComposerZone.INSIDE_START -> flex.mainInputContainer.addView(
+                    pluginView,
+                    flex.mainInputContainer.indexOfChild(flex.textInput).coerceAtLeast(0),
+                )
+                PluginComposerZone.INSIDE_END -> flex.mainInputContainer.addView(pluginView)
+                PluginComposerZone.RIGHT -> flex.rightBtnsContainer.addView(pluginView)
+            }
+        }
+        updateChatboxCustomizationGeometry(flex)
+        state?.let(::bindPluginComposerViews)
+    }
+
+    private fun bindPluginComposerViews(state: ChatInputViewModel.ViewState.Loaded) {
+        val channel = pluginChannelContext(
+            channelId = state.channelId,
+            guildId = state.channel.guildId.takeIf { it > 0L },
+            channelType = state.channel.type,
+            isPrivate = state.channel.isPrivate(),
+        )
+        val context = pluginComposerContext(
+            channel = channel,
+            isEditing = state.isEditing,
+            canSendMessages = state.ableToSendMessage,
+            text = input?.text ?: "",
+        )
+        PluginUiRegistry.composers().forEach { owned ->
+            val pluginView = pluginComposerViews[owned.key] ?: return@forEach
+            pluginView.visibility = if (runCatching { owned.contribution.isVisible(context) }.getOrDefault(false)) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+            runCatching { owned.contribution.bind(pluginView, context) }
+        }
+    }
+
+    private fun schedulePluginComposerBind() {
+        view?.let {
+            it.removeCallbacks(pluginComposerBinder)
+            it.postOnAnimation(pluginComposerBinder)
+        }
     }
 
     private fun updateChatboxCustomizationGeometry(flex: FlexInputWidgetBinding) {
@@ -1252,6 +1330,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         truncatedHint?.setHint(hint) ?: run { input?.hint = hint }
         updateSendButtonVisibility()
         updateChatboxCustomizationAvatar(next)
+        bindPluginComposerViews(next)
     }
 
     /**

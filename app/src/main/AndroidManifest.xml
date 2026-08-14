@@ -86,6 +86,9 @@
     -->
     <queries>
         <intent>
+            <action android:name="dev.mantikafasi.manticord.PLUGIN" />
+        </intent>
+        <intent>
             <action android:name="android.intent.action.CHOOSER" />
         </intent>
         <intent>

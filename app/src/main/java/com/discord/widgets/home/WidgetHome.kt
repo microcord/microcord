@@ -66,6 +66,8 @@ import com.discord.utilities.user.UserUtils.hasUnreadUrgentMessages
 import com.discord.widgets.chat.input.AppFlexInputViewModel
 import com.discord.widgets.settings.WidgetMuteSettingsSheet
 import com.discord.widgets.user.calls.PrivateCallLauncher
+import com.discord.plugins.PluginUiRegistry
+import dev.mantikafasi.manticord.plugins.api.PluginRegistration
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.widgets.forums.WidgetForumBrowser
 import com.discord.widgets.message_requests.WidgetMessageRequests
@@ -102,6 +104,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private var onboardingVisitGuildId: Long = Long.MIN_VALUE
     private var startPanelState: PanelState = PanelState.Closed
     private var endPanelState: PanelState = PanelState.Closed
+    private var pluginHeaderRegistration: PluginRegistration? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         // A restored WidgetChatList needs its container before child restoration advances.
@@ -109,6 +112,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
             view.findViewById<ViewStub>(R.id.widget_home_panel_center_chat_stub)?.inflate()
         }
         super.onViewCreated(view, savedInstanceState)
+        pluginHeaderRegistration = PluginUiRegistry.addHeaderListener { view.post(::refreshChatToolbar) }
         panels = view.findViewById(R.id.overlapping_panels)
         startPanelState = PanelState.Closed
         endPanelState = PanelState.Closed
@@ -285,6 +289,12 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     }
 
     override fun onDestroyView() {
+        view?.findViewById<View>(R.id.widget_home_panel_center_chat)
+            ?.findDescendant(Toolbar::class.java)
+            ?.menu
+            ?.let(WidgetHomeHeaderManager::clearPluginActions)
+        pluginHeaderRegistration?.unregister()
+        pluginHeaderRegistration = null
         gestureRegionsListener?.let(gestureRegionObserver::removeGestureRegionsUpdateListener)
         gestureRegionsListener = null
         WidgetChannelSidebarActions.onNotifications = null
@@ -478,6 +488,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         toolbar.menu.findItem(R.id.menu_chat_search)?.isVisible = visibleActions[Action.SEARCH] != false
         toolbar.menu.findItem(R.id.menu_chat_side_panel)?.isVisible = visibleActions[Action.MEMBERS] != false
         toolbar.menu.findItem(R.id.menu_chat_pins)?.isVisible = visibleActions[Action.PINS] != false
+        WidgetHomeHeaderManager.configurePluginActions(toolbar.menu, requireContext(), channel)
         toolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 R.id.menu_chat_start_call -> true.also { privateCallLauncher().launchVoiceCall(channel.id) }

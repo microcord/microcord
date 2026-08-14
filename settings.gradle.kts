@@ -35,3 +35,5 @@ dependencyResolutionManagement {
 rootProject.name = "Discord"
 include(":app")
 include(":baselineprofile")
+include(":plugin-api")
+include(":plugin-gradle")
