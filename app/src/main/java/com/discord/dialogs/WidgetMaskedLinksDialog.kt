@@ -1,6 +1,7 @@
 package com.discord.dialogs
 
 import android.content.Context
+import android.content.DialogInterface
 import android.os.Bundle
 import android.view.View
 import android.widget.TextView
@@ -40,6 +41,9 @@ import kotlin.reflect.KClass
  */
 class WidgetMaskedLinksDialog : AppDialog(R.layout.widget_masked_links_dialog) {
 
+    var onResult: ((Boolean) -> Unit)? = null
+    private var opened = false
+
     private val url: String
         get() = argumentsOrDefault.getString(ARG_URL).orEmpty()
 
@@ -67,6 +71,11 @@ class WidgetMaskedLinksDialog : AppDialog(R.layout.widget_masked_links_dialog) {
         }
     }
 
+    override fun onDismiss(dialog: DialogInterface) {
+        onResult?.invoke(opened)
+        super.onDismiss(dialog)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         // The notice queue holds the next notice back until this one is marked seen.
@@ -78,6 +87,7 @@ class WidgetMaskedLinksDialog : AppDialog(R.layout.widget_masked_links_dialog) {
      * trust decision has already been made and re-checking it would loop straight back here.
      */
     private fun openAndDismiss(context: Context, url: String) {
+        opened = true
         UriHandler.handle(context, url)
         dismiss()
     }
@@ -100,9 +110,10 @@ class WidgetMaskedLinksDialog : AppDialog(R.layout.widget_masked_links_dialog) {
             WidgetMedia::class,
         )
 
-        fun show(fragmentManager: FragmentManager, url: String) {
+        fun show(fragmentManager: FragmentManager, url: String, onResult: ((Boolean) -> Unit)? = null) {
             WidgetMaskedLinksDialog().apply {
                 arguments = Bundle().apply { putString(ARG_URL, url) }
+                this.onResult = onResult
             }.show(fragmentManager, NOTICE_NAME)
         }
 

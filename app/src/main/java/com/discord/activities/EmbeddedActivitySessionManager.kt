@@ -3,13 +3,16 @@ package com.discord.activities
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.commands.ApplicationCommandData
+import com.discord.api.commands.ApplicationCommandIndex
 import com.discord.api.embeddedactivities.EmbeddedActivityConfig
 import com.discord.api.embeddedactivities.EmbeddedActivityDiscordConfig
 import com.discord.api.embeddedactivities.EmbeddedActivityInstance
 import com.discord.api.embeddedactivities.EmbeddedActivityLaunchBody
 import com.discord.api.embeddedactivities.EmbeddedActivityPlatform
+import com.discord.api.embeddedactivities.EmbeddedActivityProxyTicket
 import com.discord.api.embeddedactivities.EmbeddedActivityProxyTicketRequest
 import com.discord.api.embeddedactivities.EmbeddedActivitySessionBody
+import com.discord.api.embeddedactivities.EmbeddedActivityShelf
 import com.discord.api.embeddedactivities.EmbeddedActivityShelfApplication
 import com.discord.api.permission.Permission
 import com.discord.api.user.NsfwAllowance
@@ -42,7 +45,7 @@ data class EmbeddedActivitySession(
     val discordConfig: EmbeddedActivityDiscordConfig,
     val proxyTicket: String,
     val url: String,
-    /** Identifies this frame to the RPC transport; also the path the wrapper page is served under. */
+    /** Identifies the frame to the RPC transport; also the path the wrapper page is served under. */
     val frameId: String,
 ) {
     override fun toString() =
@@ -52,7 +55,6 @@ data class EmbeddedActivitySession(
 
 sealed class EmbeddedActivityLaunchException(message: String) : IllegalStateException(message) {
     class NoRestClient : EmbeddedActivityLaunchException("Activities are unavailable before login")
-    class NoGatewaySession : EmbeddedActivityLaunchException("Gateway session is not ready")
     class InvalidChannel : EmbeddedActivityLaunchException("Select a text or voice channel first")
     class UnknownApplication : EmbeddedActivityLaunchException("Activity is not available in this channel")
     class UnsupportedPlatform : EmbeddedActivityLaunchException("Activity does not support Android")
@@ -67,6 +69,7 @@ sealed class EmbeddedActivityLaunchException(message: String) : IllegalStateExce
 object EmbeddedActivitySessionManager {
     private const val CLIENT_VERSION = "340.12"
     private const val INSTANCE_TIMEOUT_SECONDS = 20L
+    private const val GATEWAY_SESSION_TIMEOUT_SECONDS = 20L
     internal val rpcConfig = EmbeddedActivityDiscordConfig(
         apiEndpoint = "//discord.com/api",
         environment = "production",
@@ -74,26 +77,26 @@ object EmbeddedActivitySessionManager {
     )
     private val nonceGenerator = NonceGenerator()
 
-    fun prepare(request: EmbeddedActivityLaunchRequest): Observable<EmbeddedActivitySession> {
+    fun prepare(
+        request: EmbeddedActivityLaunchRequest,
+        frameId: String = UUID.randomUUID().toString(),
+    ): Observable<EmbeddedActivitySession> {
         val api = RestAPI.embeddedActivitiesApiOrNull
             ?: return Observable.error(EmbeddedActivityLaunchException.NoRestClient())
         val channel = resolveChannel(request.channelId)
             ?: return Observable.error(EmbeddedActivityLaunchException.InvalidChannel())
-        val sessionId = StoreStream.getInteractions().getSessionId()
-            ?: return Observable.error(EmbeddedActivityLaunchException.NoGatewaySession())
         val store = StoreStream.getEmbeddedActivities()
 
-        return joinVoiceIfNeeded(channel).flatMap {
-            store.fetchShelf(api, channel.guildId.takeIf { it > 0L })
-        }.flatMap { shelf ->
-            val application = shelf.applications.firstOrNull { it.id == request.applicationId }
-                ?: return@flatMap Observable.error(EmbeddedActivityLaunchException.UnknownApplication())
-            val config = shelf.activities.firstOrNull { it.applicationId == request.applicationId }
-                ?: application.embeddedActivityConfig
-                ?: return@flatMap Observable.error(EmbeddedActivityLaunchException.UnknownApplication())
-            validate(channel, config)
-            api.proxyTicket(request.applicationId, EmbeddedActivityProxyTicketRequest(channel.id)).flatMap { ticket ->
-                start(api, request.applicationId, channel, sessionId).flatMap {
+        return awaitGatewaySession().flatMap { sessionId ->
+            joinVoiceIfNeeded(channel).flatMap { prefetch(api, store, channel, request) }.flatMap { prefetched ->
+                val (shelf, ticket, commandIndex) = prefetched
+                val application = shelf.applications.firstOrNull { it.id == request.applicationId }
+                    ?: return@flatMap Observable.error(EmbeddedActivityLaunchException.UnknownApplication())
+                val config = shelf.activities.firstOrNull { it.applicationId == request.applicationId }
+                    ?: application.embeddedActivityConfig
+                    ?: return@flatMap Observable.error(EmbeddedActivityLaunchException.UnknownApplication())
+                validate(channel, config)
+                start(api, request.applicationId, channel, sessionId, commandIndex).flatMap {
                     store.observeInstancesForChannel(channel.id)
                         .map { it[request.applicationId] }
                         .filter { it != null }
@@ -101,7 +104,6 @@ object EmbeddedActivitySessionManager {
                         .take(1)
                         .timeout(INSTANCE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 }.map { activityInstance ->
-                    val frameId = UUID.randomUUID().toString()
                     EmbeddedActivitySession(
                         application,
                         config,
@@ -115,6 +117,38 @@ object EmbeddedActivitySessionManager {
                 }
             }
         }
+    }
+
+    /** Nothing here depends on anything else, and each is a round trip the launch would wait on. */
+    private fun prefetch(
+        api: EmbeddedActivitiesAPI,
+        store: StoreEmbeddedActivities,
+        channel: Channel,
+        request: EmbeddedActivityLaunchRequest,
+    ): Observable<Triple<EmbeddedActivityShelf, EmbeddedActivityProxyTicket, ApplicationCommandIndex?>> =
+        Observable.zip(
+            store.fetchShelf(api, channel.guildId.takeIf { it > 0L }),
+            api.proxyTicket(request.applicationId, EmbeddedActivityProxyTicketRequest(channel.id)),
+            if (channel.isGuildVocalChannel()) {
+                Observable.just<ApplicationCommandIndex?>(null)
+            } else {
+                api.commandIndex(request.applicationId)
+                    .map { it as ApplicationCommandIndex? }
+                    .onErrorReturn { null }
+            },
+        ) { shelf, ticket, index -> Triple(shelf, ticket, index) }
+
+    /** Launching before the socket settles is ordinary; upstream reads the id unguarded. */
+    private fun awaitGatewaySession(): Observable<String> {
+        StoreStream.getInteractions().getSessionId()?.let { return Observable.just(it) }
+        return StoreStream.getConnectionOpen()
+            .observeConnectionOpen()
+            .filter { it }
+            .map { StoreStream.getInteractions().getSessionId() }
+            .filter { it != null }
+            .map { checkNotNull(it) }
+            .take(1)
+            .timeout(GATEWAY_SESSION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
     }
 
     /** Answers `REQUEST_PROXY_TICKET_REFRESH`; the ticket the URL was built with is short-lived. */
@@ -160,6 +194,7 @@ object EmbeddedActivitySessionManager {
         applicationId: Long,
         channel: Channel,
         sessionId: String,
+        commandIndex: ApplicationCommandIndex? = null,
     ): Observable<*> {
         val direct = api.launch(
             channel.id,
@@ -167,12 +202,12 @@ object EmbeddedActivitySessionManager {
             EmbeddedActivityLaunchBody(sessionId, channel.guildId.takeIf { it > 0L }),
         )
         if (channel.isGuildVocalChannel()) return direct
-        return api.commandIndex(applicationId).flatMap { index ->
-            val command = index.applicationCommands.firstOrNull {
+        return Observable.just(commandIndex).flatMap { index ->
+            val command = index?.applicationCommands?.firstOrNull {
                 it.type == EmbeddedActivityLauncher.PRIMARY_ENTRY_POINT_COMMAND_TYPE ||
                     it.handler == EmbeddedActivityLauncher.DISCORD_LAUNCH_ACTIVITY_HANDLER
             }
-                ?: index.applicationCommands.firstOrNull { it.name == "launch" }
+                ?: index?.applicationCommands?.firstOrNull { it.name == "launch" }
                 ?: return@flatMap direct
             api.interaction(
                 RestAPIParams.ApplicationCommand(
@@ -219,7 +254,6 @@ object EmbeddedActivitySessionManager {
         if (!PermissionUtils.can(Permission.USE_EMBEDDED_ACTIVITIES, permissions)) {
             throw EmbeddedActivityLaunchException.MissingPermission()
         }
-        // Launching in a voice channel we are not already in means joining it first.
         val alreadyConnected =
             StoreStream.getVoiceChannelSelected().getSelectedVoiceChannelId() == channel.id
         if (channel.isGuildVocalChannel() && !alreadyConnected &&

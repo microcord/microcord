@@ -1,15 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="embedded_activity_leave">Leave activity</string>
+    <string name="embedded_activity_leave">Leave</string>
     <string name="embedded_activity_picture_in_picture">Picture in picture</string>
     <string name="embedded_activity_participants">Activity participants</string>
     <string name="embedded_activity_retry">Try again</string>
     <string name="embedded_activity_oauth_title">Authorize %1$s?</string>
-    <string name="embedded_activity_oauth_permissions">This application will be able to:</string>
     <string name="embedded_activity_loading">Starting activity</string>
     <string name="embedded_activity_crashed">The activity stopped responding.</string>
     <string name="embedded_activity_thermal">Activity paused because the device is too hot.</string>
-    <string name="embedded_activity_external_blocked">This activity tried to open an untrusted link.</string>
     <string name="activity_message_art">Activity preview</string>
     <string name="activity_message_no_participants">Start playing together</string>
     <string name="activity_message_ended_restart">Activity ended. Start a new one?</string>

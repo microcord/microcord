@@ -39,7 +39,6 @@ class WidgetChatListAdapterItemActivity private constructor(
         super.onConfigure(position, data)
         val entry = data as ActivityMessageEntry
         modelSubscription?.unsubscribe()
-        binding.activityAction.setIsLoading(false)
         configureCellHighlight(
             Message(id = entry.messageId, channelId = entry.channelId),
             binding.chatListAdapterItemHighlightedBg,
@@ -109,14 +108,12 @@ class WidgetChatListAdapterItemActivity private constructor(
         }
         binding.activityStatus.visibility = View.GONE
         binding.activityAction.setText(
-            context.getString(
-                when (state.action) {
-                    ActivityCardState.Action.START -> R.string.start
-                    ActivityCardState.Action.JOIN -> R.string.embedded_activities_join
-                    ActivityCardState.Action.OPEN -> R.string.open
-                    ActivityCardState.Action.UNAVAILABLE -> R.string.game_action_button_unavailable
-                },
-            ),
+            when (state.action) {
+                ActivityCardState.Action.START -> R.string.start
+                ActivityCardState.Action.JOIN -> R.string.embedded_activities_join
+                ActivityCardState.Action.OPEN -> R.string.open
+                ActivityCardState.Action.UNAVAILABLE -> R.string.game_action_button_unavailable
+            },
         )
         binding.activityAction.isEnabled = state.action != ActivityCardState.Action.UNAVAILABLE
         binding.activityAction.setOnClickListener {

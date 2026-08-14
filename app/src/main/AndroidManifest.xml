@@ -166,7 +166,7 @@
             android:exported="false"
             android:resizeableActivity="true"
             android:supportsPictureInPicture="true"
-            android:theme="@style/AppTheme.Dark" />
+            android:theme="@style/AppTheme.Dark.EmbeddedActivity" />
         <activity
             android:name="com.discord.app.AppActivity$Main"
             android:exported="true"

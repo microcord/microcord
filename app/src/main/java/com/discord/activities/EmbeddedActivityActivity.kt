@@ -10,35 +10,42 @@ import android.os.Bundle
 import android.net.Uri
 import android.os.PowerManager
 import android.util.Rational
+import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.View
+import android.view.animation.DecelerateInterpolator
 import android.view.WindowManager
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import android.webkit.PermissionRequest
-import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.discord.R
 import com.discord.api.channel.Channel
 import com.discord.databinding.ActivityEmbeddedActivityBinding
+import com.discord.dialogs.WidgetMaskedLinksDialog
 import com.discord.stores.StoreStream
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.uri.UriHandler
 import com.discord.views.OAuthPermissionViews
 import com.discord.widgets.guilds.invite.WidgetGuildInviteShareSheet
-import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.settings.connections.WidgetSettingsUserConnections
-import com.facebook.drawee.view.SimpleDraweeView
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.UUID
+import java.util.concurrent.TimeUnit
 import rx.Observable
 import rx.Subscription
 import rx.android.schedulers.AndroidSchedulers
 import rx.schedulers.Schedulers
 import com.discord.i18n.i18nRender
+import com.discord.i18n.setI18nText
 
 class EmbeddedActivityActivity : AppCompatActivity() {
     private lateinit var binding: ActivityEmbeddedActivityBinding
@@ -53,6 +60,9 @@ class EmbeddedActivityActivity : AppCompatActivity() {
 
     private var pendingImageUpload: ((String?) -> Unit)? = null
     private var imageUploadSubscription: Subscription? = null
+    private var pendingAuthorization: (() -> Unit)? = null
+    private var trustedLinkSubscription: Subscription? = null
+    private var applicationSubscription: Subscription? = null
 
     private val imagePickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent(),
@@ -89,16 +99,36 @@ class EmbeddedActivityActivity : AppCompatActivity() {
         binding = ActivityEmbeddedActivityBinding.inflate(layoutInflater)
         setContentView(binding.root)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        hideStatusBar()
-        binding.activityClose.setOnClickListener { leaveAndFinish() }
-        binding.activityPip.setOnClickListener { enterPip() }
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        applySystemUi()
+        applyChrome()
+        listOf(binding.activityClose, binding.activityCloseLandscape).forEach { view ->
+            view.setOnClickListener { leaveAndFinish() }
+        }
+        listOf(binding.activityMinimize, binding.activityMinimizeLandscape).forEach { view ->
+            view.setOnClickListener { enterPip() }
+        }
+        listOf(binding.activityInvite, binding.activityInviteLandscape).forEach { view ->
+            view.setOnClickListener { session?.channel?.let(::showInviteSheet) }
+        }
+        binding.activityChromePortrait.setOnTouchListener(MinimizeDragListener())
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+            )
+            val md = dp(CHROME_PADDING_MD_DP)
+            val lg = dp(CHROME_PADDING_LG_DP)
+            binding.activityChromePortrait.setPadding(bars.left, bars.top, bars.right, 0)
+            binding.activityChromeLandscape.setPadding(md, bars.top + lg, bars.right + md, bars.bottom + lg)
+            insets
+        }
         binding.activityRetry.setOnClickListener { startSession() }
         startSession(savedInstanceState?.getString(STATE_INSTANCE_ID))
     }
 
     override fun onResume() {
         super.onResume()
-        hideStatusBar()
+        applySystemUi()
         webView?.onResume()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             thermalListener?.let { getSystemService(PowerManager::class.java).addThermalStatusListener(it) }
@@ -113,10 +143,87 @@ class EmbeddedActivityActivity : AppCompatActivity() {
         super.onPause()
     }
 
-    private fun hideStatusBar() {
+    /** Being stopped while still minimised means the picture in picture window was closed. */
+    override fun onStop() {
+        super.onStop()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode) leaveAndFinish()
+    }
+
+    private fun applySystemUi() {
         WindowInsetsControllerCompat(window, binding.root).apply {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            hide(WindowInsetsCompat.Type.statusBars())
+            isAppearanceLightStatusBars = false
+            hide(WindowInsetsCompat.Type.navigationBars())
+            if (isLandscape()) hide(WindowInsetsCompat.Type.statusBars())
+            else show(WindowInsetsCompat.Type.statusBars())
+        }
+    }
+
+    private fun applyChrome() {
+        val landscape = isLandscape()
+        val minimized = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode
+        binding.activityChromePortrait.visibility = if (!minimized && !landscape) View.VISIBLE else View.GONE
+        binding.activityChromeLandscape.visibility = if (!minimized && landscape) View.VISIBLE else View.GONE
+        webView?.setLandscape(landscape)
+    }
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    private fun isLandscape() = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        applySystemUi()
+        applyChrome()
+    }
+
+    private inner class MinimizeDragListener : View.OnTouchListener {
+        private var startY = 0f
+        private var popped = false
+        private var velocity: VelocityTracker? = null
+
+        override fun onTouch(view: View, event: MotionEvent): Boolean {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    startY = event.rawY
+                    popped = false
+                    velocity = VelocityTracker.obtain().apply { addMovement(event) }
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    velocity?.addMovement(event)
+                    val distance = (event.rawY - startY).coerceAtLeast(0f)
+                    if (distance == 0f) popped = false
+                    if (!popped && distance >= dp(PIP_POP_HEIGHT_DP)) {
+                        popped = true
+                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    }
+                    binding.root.translationY = if (popped) distance else distance * (1f - POP_RESISTANCE)
+                }
+                MotionEvent.ACTION_UP -> {
+                    velocity?.addMovement(event)
+                    val downwards = velocity?.run { computeCurrentVelocity(1000); yVelocity > 0f } ?: false
+                    recycleVelocity()
+                    if (!popped || !downwards || !enterPip()) springBack()
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    recycleVelocity()
+                    springBack()
+                }
+            }
+            return true
+        }
+
+        private fun recycleVelocity() {
+            velocity?.recycle()
+            velocity = null
+        }
+
+        private fun springBack() {
+            binding.root.animate()
+                .translationY(0f)
+                .setDuration(SPRING_BACK_MS)
+                .setInterpolator(DecelerateInterpolator())
+                .start()
         }
     }
 
@@ -127,11 +234,22 @@ class EmbeddedActivityActivity : AppCompatActivity() {
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        binding.activityChrome.visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
+        binding.root.translationY = 0f
+        applyChrome()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        val deny = pendingAuthorization
+        if (deny != null) settleAuthorization(deny) else super.onBackPressed()
     }
 
     override fun onDestroy() {
         launchSubscription?.unsubscribe()
+        applicationSubscription?.unsubscribe()
+        trustedLinkSubscription?.unsubscribe()
+        pendingAuthorization?.invoke()
+        pendingAuthorization = null
         participantSubscription?.unsubscribe()
         storeSubscription?.unsubscribe()
         imageUploadSubscription?.unsubscribe()
@@ -157,32 +275,12 @@ class EmbeddedActivityActivity : AppCompatActivity() {
             showError("Activity is unavailable", retry = false)
             return
         }
-        val request = EmbeddedActivityLaunchRequest(
-            applicationId = applicationId,
-            channelId = intent.getLongExtra(EXTRA_CHANNEL_ID, 0L).takeIf { it > 0L },
-            instanceId = restoredInstanceId ?: intent.getStringExtra(EXTRA_INSTANCE_ID),
-            customId = intent.getStringExtra(EXTRA_CUSTOM_ID),
-            referrerId = intent.getStringExtra(EXTRA_REFERRER_ID),
-        )
-        launchSubscription = EmbeddedActivitySessionManager.prepare(request)
-            .subscribeOn(Schedulers.io())
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribe(::showSession) { failure ->
-                val message = (failure as? EmbeddedActivityLaunchException)?.message
-                    ?: "Unable to start activity"
-                showError(message.orEmpty(), retry = true)
-            }
-    }
-
-    private fun showSession(session: EmbeddedActivitySession) {
-        this.session = session
-        binding.activityTitle.text = session.application.name
-        applyOrientation(session.config.defaultOrientationLockState)
-        binding.activityStatus.visibility = View.GONE
-        binding.activityPip.visibility = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) View.VISIBLE else View.GONE
+        val frameId = UUID.randomUUID().toString()
         val webView = EmbeddedActivityWebView(
             this,
-            session,
+            applicationId,
+            frameId,
+            EmbeddedActivitySessionManager.rpcConfig,
             onExternalUrl = ::openExternalUrl,
             onPermissionRequest = ::requestWebPermissions,
             onAuthorizeRequest = ::requestOAuthAuthorization,
@@ -200,7 +298,40 @@ class EmbeddedActivityActivity : AppCompatActivity() {
             android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
             android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
         )
-        webView.loadActivity()
+        webView.loadShell()
+        applicationSubscription?.unsubscribe()
+        applicationSubscription = StoreStream.getApplication()
+            .also { it.fetchIfNonexisting(applicationId) }
+            .observeApplication(applicationId)
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe { showActivityName(it?.name) }
+        val request = EmbeddedActivityLaunchRequest(
+            applicationId = applicationId,
+            channelId = intent.getLongExtra(EXTRA_CHANNEL_ID, 0L).takeIf { it > 0L },
+            instanceId = restoredInstanceId ?: intent.getStringExtra(EXTRA_INSTANCE_ID),
+            customId = intent.getStringExtra(EXTRA_CUSTOM_ID),
+            referrerId = intent.getStringExtra(EXTRA_REFERRER_ID),
+        )
+        launchSubscription = EmbeddedActivitySessionManager.prepare(request, frameId)
+            .subscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe(::showSession) { failure ->
+                val message = (failure as? EmbeddedActivityLaunchException)?.message
+                    ?: "Unable to start activity"
+                showError(message.orEmpty(), retry = true)
+            }
+    }
+
+    private fun showSession(session: EmbeddedActivitySession) {
+        this.session = session
+        showActivityName(session.application.name)
+        applyOrientation(session.config.defaultOrientationLockState)
+        binding.activityStatus.visibility = View.GONE
+        val canInvite = session.channel.guildId > 0L
+        binding.activityInvite.visibility = if (canInvite) View.VISIBLE else View.GONE
+        binding.activityInviteLandscape.visibility = if (canInvite) View.VISIBLE else View.GONE
+        val webView = this.webView ?: return
+        webView.attachSession(session)
         participantSubscription = StoreStream.getEmbeddedActivities()
             .observeInstancesForChannel(session.channel.id)
             .map { it[session.application.id] }
@@ -209,11 +340,8 @@ class EmbeddedActivityActivity : AppCompatActivity() {
             .observeOn(AndroidSchedulers.mainThread())
             .subscribe { instance ->
                 this.session = this.session?.copy(instance = instance)
-                binding.activityParticipants.text = instance.participants.size.toString()
                 webView.updateInstance(instance)
             }
-        // Nothing pushes store changes into the RPC server, so subscriptions are re-evaluated
-        // whenever the state an activity can observe moves.
         storeSubscription = Observable
             .merge(
                 StoreStream.getUsers().observeMe().map { Unit },
@@ -238,7 +366,6 @@ class EmbeddedActivityActivity : AppCompatActivity() {
         )
     }
 
-    /** Only one upload can be in flight; the picker has a single result slot. */
     private fun pickImageForUpload(onResult: (String?) -> Unit) {
         if (pendingImageUpload != null) {
             onResult(null)
@@ -279,48 +406,38 @@ class EmbeddedActivityActivity : AppCompatActivity() {
         approve: () -> Unit,
         deny: () -> Unit,
     ) {
-        val applicationName = session?.application?.name ?: getString(R.string.apps)
-        var decided = false
-        WidgetNoticeDialog.show(
-            fragmentManager = supportFragmentManager,
-            headerText = getString(R.string.embedded_activity_oauth_title, applicationName),
-            bodyText = getString(R.string.oauth2_scopes_label).replace("!!{application}!!", applicationName),
-            okText = getString(R.string.authorize),
-            cancelText = getString(R.string.cancel),
-            aboveLayoutId = R.layout.dialog_embedded_activity_oauth,
-            cancelable = false,
-            tag = EMBEDDED_OAUTH_DIALOG_TAG,
-            listenerMap = mapOf(
-                WidgetNoticeDialog.ON_SHOW to { view -> bindOAuthDetails(view, request) },
-                R.id.notice_ok to {
-                    decided = true
-                    approve()
-                },
-                R.id.CANCEL_BUTTON to {
-                    decided = true
-                    deny()
-                },
-            ),
-            onDismiss = {
-                if (!decided) deny()
-            },
-        )
+        val currentSession = session
+        if (currentSession == null) {
+            deny()
+            return
+        }
+        bindOAuthDetails(currentSession, request)
+        pendingAuthorization = deny
+        binding.activityOauth.activityOauthAuthorize.setOnClickListener { settleAuthorization(approve) }
+        binding.activityOauth.activityOauthCancel.setOnClickListener { settleAuthorization(deny) }
+        binding.activityOauth.root.visibility = View.VISIBLE
     }
 
-    private fun bindOAuthDetails(view: View, request: EmbeddedActivityAuthorizeRequest) {
-        val currentSession = session ?: return
+    private fun settleAuthorization(outcome: () -> Unit) {
+        pendingAuthorization = null
+        binding.activityOauth.root.visibility = View.GONE
+        outcome()
+    }
+
+    private fun bindOAuthDetails(session: EmbeddedActivitySession, request: EmbeddedActivityAuthorizeRequest) {
+        val consent = binding.activityOauth
         val me = StoreStream.getUsers().getMe()
-        view.findViewById<SimpleDraweeView>(R.id.embedded_oauth_user_icon)
-            .setImageURI(IconUtils.getForUser(me, size = 128))
-        view.findViewById<TextView>(R.id.embedded_oauth_user_name).text =
-            me.globalName?.takeIf(String::isNotBlank) ?: me.username
-        view.findViewById<SimpleDraweeView>(R.id.embedded_oauth_application_icon).setImageURI(
-            currentSession.application.icon?.let {
-                IconUtils.getApplicationIcon(currentSession.application.id, it, 128)
-            },
+        consent.activityOauthTitle.text =
+            getString(R.string.embedded_activity_oauth_title, session.application.name)
+        consent.activityOauthUserIcon.setImageURI(IconUtils.getForUser(me, size = 128))
+        consent.activityOauthUserName.text = me.globalName?.takeIf(String::isNotBlank) ?: me.username
+        consent.activityOauthApplicationIcon.setImageURI(
+            session.application.icon?.let { IconUtils.getApplicationIcon(session.application.id, it, 128) },
         )
-        view.findViewById<TextView>(R.id.embedded_oauth_application_name).text = currentSession.application.name
-        view.findViewById<LinearLayout>(R.id.embedded_oauth_scopes).apply {
+        consent.activityOauthApplicationName.text = session.application.name
+        consent.activityOauthScopesLabel
+            .setI18nText(R.string.oauth2_scopes_label, "application" to session.application.name)
+        consent.activityOauthScopes.apply {
             removeAllViews()
             request.scopes.forEach { scope ->
                 val row = layoutInflater.inflate(R.layout.oauth_token_permission_list_item, this, false) as TextView
@@ -334,8 +451,7 @@ class EmbeddedActivityActivity : AppCompatActivity() {
         } else {
             R.string.oauth2_cannot_read_send_notice
         }
-        view.findViewById<TextView>(R.id.embedded_oauth_security_notice).text =
-            i18nRender(securityNotice)
+        consent.activityOauthSecurityNotice.text = i18nRender(securityNotice)
     }
 
     private fun showLoading() {
@@ -375,39 +491,54 @@ class EmbeddedActivityActivity : AppCompatActivity() {
         )
     }
 
+    /** A failed or slow trust check is not an error; it just means ask. */
     private fun openExternalUrl(url: String, result: (Boolean) -> Unit) {
-        val uri = runCatching { android.net.Uri.parse(url) }.getOrNull()
+        val uri = runCatching { Uri.parse(url) }.getOrNull()
         if (uri?.scheme !in setOf("http", "https") || uri?.host.isNullOrBlank()) {
             result(false)
             return
         }
         val api = RestAPI.embeddedActivitiesApiOrNull
         val applicationId = session?.application?.id
-        if (api == null || applicationId == null) {
-            result(false)
-            return
+        trustedLinkSubscription?.unsubscribe()
+        trustedLinkSubscription = if (api == null || applicationId == null) {
+            Observable.just(false)
+        } else {
+            api.trustedLink(applicationId, url)
+                .map { it.trusted }
+                .timeout(TRUSTED_LINK_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                .onErrorReturn { false }
+                .subscribeOn(Schedulers.io())
         }
-        api.trustedLink(applicationId, url)
-            .subscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread())
-            .subscribe({ trusted ->
-                if (trusted.trusted) UriHandler.handle(this, url)
-                else showError(getString(R.string.embedded_activity_external_blocked), retry = false)
-                result(trusted.trusted)
-            }, { result(false) })
+            .subscribe { trusted ->
+                if (trusted || UriHandler.isTrustedDomain(url)) {
+                    UriHandler.handle(this, url)
+                    result(true)
+                } else {
+                    WidgetMaskedLinksDialog.show(supportFragmentManager, url, onResult = result)
+                }
+            }
     }
 
+    private fun showActivityName(name: String?) {
+        binding.activityTitle.text = name.orEmpty()
+        binding.activityTitle.visibility = if (name.isNullOrBlank()) View.GONE else View.VISIBLE
+    }
+
+    /** A translucent window cannot request an orientation before API 27. */
     private fun applyOrientation(lockState: Int) {
-        requestedOrientation = when (lockState) {
+        val orientation = when (lockState) {
             2 -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             3 -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
+        runCatching { requestedOrientation = orientation }
     }
 
-    private fun enterPip() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || webView == null) return
-        enterPictureInPictureMode(
+    private fun enterPip(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || webView == null) return false
+        return enterPictureInPictureMode(
             PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build(),
         )
     }
@@ -430,6 +561,12 @@ class EmbeddedActivityActivity : AppCompatActivity() {
         const val EXTRA_CUSTOM_ID = "embedded_activity_custom_id"
         const val EXTRA_REFERRER_ID = "embedded_activity_referrer_id"
         private const val STATE_INSTANCE_ID = "embedded_activity_restored_instance_id"
-        private const val EMBEDDED_OAUTH_DIALOG_TAG = "embedded_activity_oauth"
+
+        private const val TRUSTED_LINK_TIMEOUT_MS = 500L
+        private const val PIP_POP_HEIGHT_DP = 140
+        private const val POP_RESISTANCE = 0.55f
+        private const val SPRING_BACK_MS = 200L
+        private const val CHROME_PADDING_MD_DP = 16
+        private const val CHROME_PADDING_LG_DP = 24
     }
 }

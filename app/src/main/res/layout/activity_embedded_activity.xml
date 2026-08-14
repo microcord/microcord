@@ -1,9 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    The activity fills the window and the header floats over it, so the frame keeps the whole
-    viewport and only its own UI moves. The loading and error panel is declared *before* the header
-    so leaving stays reachable while an activity is still booting.
--->
+<!-- Rotation does not recreate the activity, so both chromes are inflated and swapped. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -49,33 +45,34 @@
             app:lb_text="@string/embedded_activity_retry" />
     </LinearLayout>
 
-    <FrameLayout
-        android:id="@+id/activity_chrome"
+    <LinearLayout
+        android:id="@+id/activity_chrome_portrait"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="wrap_content"
         android:layout_gravity="top"
-        android:background="#3D000000">
+        android:background="#3D000000"
+        android:orientation="vertical">
 
         <View
             android:layout_width="32dp"
             android:layout_height="4dp"
-            android:layout_gravity="top|center_horizontal"
+            android:layout_gravity="center_horizontal"
             android:layout_marginTop="4dp"
             android:background="@drawable/drawable_activity_header_grabber" />
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_height="48dp"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingHorizontal="8dp">
 
             <LinearLayout
-                android:id="@+id/activity_pip"
+                android:id="@+id/activity_minimize"
                 android:layout_width="wrap_content"
                 android:layout_height="32dp"
-                android:layout_weight="1"
                 android:background="@drawable/drawable_activity_header_pill"
+                android:contentDescription="@string/embedded_activity_picture_in_picture"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingHorizontal="12dp">
@@ -88,32 +85,63 @@
 
                 <TextView
                     android:id="@+id/activity_title"
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="6dp"
-                    android:layout_weight="1"
-                    android:contentDescription="@string/embedded_activity_picture_in_picture"
                     android:ellipsize="end"
                     android:maxLines="1"
+                    android:maxWidth="140dp"
+                    android:textColor="@android:color/white"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <LinearLayout
+                android:id="@+id/activity_invite"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:background="@drawable/drawable_activity_header_pill"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="12dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_person_add_grey_a60_24dp"
+                    android:tint="@android:color/white" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="@string/embedded_activities_invite_to_activity"
                     android:textColor="@android:color/white"
                     android:textSize="14sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/activity_participants"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:contentDescription="@string/embedded_activity_participants"
-                android:paddingHorizontal="12dp"
-                android:textColor="#B5BAC1"
-                android:textSize="14sp" />
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
 
             <LinearLayout
                 android:id="@+id/activity_close"
                 android:layout_width="wrap_content"
                 android:layout_height="32dp"
                 android:background="@drawable/drawable_activity_leave_pill"
+                android:contentDescription="@string/embedded_activities_leave_activity"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingHorizontal="12dp">
@@ -135,5 +163,57 @@
                     android:textStyle="bold" />
             </LinearLayout>
         </LinearLayout>
-    </FrameLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/activity_chrome_landscape"
+        android:layout_width="64dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="end"
+        android:background="#3D000000"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/activity_close_landscape"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/drawable_activity_leave_pill"
+            android:contentDescription="@string/embedded_activities_leave_activity"
+            android:padding="8dp"
+            android:src="@drawable/ic_exit_24dp"
+            android:tint="@android:color/white" />
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <ImageView
+            android:id="@+id/activity_invite_landscape"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/drawable_activity_header_pill"
+            android:contentDescription="@string/embedded_activities_invite_to_activity"
+            android:padding="8dp"
+            android:src="@drawable/ic_person_add_grey_a60_24dp"
+            android:tint="@android:color/white"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/activity_minimize_landscape"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/drawable_activity_header_pill"
+            android:contentDescription="@string/embedded_activity_picture_in_picture"
+            android:padding="10dp"
+            android:src="@drawable/ic_chevron_down_white_12dp"
+            android:tint="@android:color/white" />
+    </LinearLayout>
+
+    <include
+        android:id="@+id/activity_oauth"
+        layout="@layout/view_embedded_activity_oauth" />
 </FrameLayout>

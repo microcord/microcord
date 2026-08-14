@@ -9,6 +9,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="@dimen/uikit_guideline_chat"
         android:layout_marginEnd="16dp"
+        app:cardBackgroundColor="?attr/colorBackgroundSecondaryAlt"
         app:cardCornerRadius="8dp"
         app:cardElevation="1dp"
         style="@style/UiKit.Chat.Embed.CardView">
@@ -16,7 +17,6 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="?attr/colorBackgroundSecondary"
         android:orientation="vertical">
 
         <com.facebook.drawee.view.SimpleDraweeView
@@ -105,16 +105,11 @@
                     app:roundAsCircle="true" />
             </FrameLayout>
 
-            <com.discord.views.LoadingButton
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/activity_action"
-                android:layout_width="96dp"
-                android:layout_height="44dp"
-                app:lb_padding_top="6dp"
-                app:lb_padding_bottom="6dp"
-                app:lb_text_size="@dimen/uikit_textsize_medium"
-                app:lb_disable_elevation="true"
-                app:lb_progress_color="@color/white"
-                app:lb_text="@string/embedded_activities_join"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/embedded_activities_join"
                 style="@style/UiKit.Material.Button.Green.Fit" />
         </LinearLayout>
     </LinearLayout>
