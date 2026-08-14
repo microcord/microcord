@@ -105,6 +105,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private var startPanelState: PanelState = PanelState.Closed
     private var endPanelState: PanelState = PanelState.Closed
     private var pluginHeaderRegistration: PluginRegistration? = null
+    private var centerBorder: View? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         // A restored WidgetChatList needs its container before child restoration advances.
@@ -114,6 +115,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         super.onViewCreated(view, savedInstanceState)
         pluginHeaderRegistration = PluginUiRegistry.addHeaderListener { view.post(::refreshChatToolbar) }
         panels = view.findViewById(R.id.overlapping_panels)
+        centerBorder = view.findViewById(R.id.widget_home_panel_center_border)
         startPanelState = PanelState.Closed
         endPanelState = PanelState.Closed
         // Registered here rather than in onViewBound so `panels` is already resolved, and before the
@@ -128,6 +130,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
             OverlappingPanelsLayout.PanelStateListener {
                 if (it == PanelState.Opening || it == PanelState.Open) ensureStartPanelFragments()
                 startPanelState = dismissChatInputWhenPanelOpens(startPanelState, it)
+                // Only framed while a panel is behind it to be framed against.
+                centerBorder?.visibility = if (it == PanelState.Closed) View.GONE else View.VISIBLE
                 StoreStream.getNavigation().setLeftPanelState(it)
             },
         )
