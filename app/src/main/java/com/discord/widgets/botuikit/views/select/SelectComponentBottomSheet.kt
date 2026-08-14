@@ -1,6 +1,7 @@
 package com.discord.widgets.botuikit.views.select
 
 import android.os.Bundle
+import android.content.DialogInterface
 import android.view.View
 import android.widget.TextView
 import androidx.core.os.bundleOf
@@ -8,6 +9,7 @@ import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.discord.R
+import com.discord.api.botuikit.ComponentType
 import com.discord.api.botuikit.SelectItem
 import com.discord.app.AppBottomSheet
 import com.discord.i18n.FormatUtils
@@ -77,6 +79,11 @@ class SelectComponentBottomSheet : AppBottomSheet() {
             .subscribe({ handleEvent(it) }, { })
     }
 
+    override fun onDismiss(dialog: DialogInterface) {
+        if (::viewModel.isInitialized) viewModel.onSheetDismissed()
+        super.onDismiss(dialog)
+    }
+
     private fun configureUI(viewState: SelectComponentBottomSheetViewModel.ViewState) {
         val root = requireView()
         root.findViewById<TextView>(R.id.widget_sheet_component_bottom_sheet_placeholder).text = viewState.title
@@ -98,7 +105,13 @@ class SelectComponentBottomSheet : AppBottomSheet() {
         select.setEnabledAlpha(viewState.isValidSelection, DISABLED_ALPHA)
         select.isClickable = viewState.isValidSelection
 
-        adapter.setItems(viewState.items, viewState.maxSelections, viewState.emojiAnimationsEnabled)
+        adapter.setItems(
+            viewState.items,
+            viewState.maxSelections,
+            viewState.emojiAnimationsEnabled,
+            ComponentType.entries.getOrElse(requireArguments().getInt(EXTRA_COMPONENT_TYPE)) { ComponentType.SELECT },
+            viewModel.componentContext.guildId,
+        )
     }
 
     private fun handleEvent(event: SelectComponentBottomSheetViewModel.Event) = when (event) {
@@ -159,6 +172,7 @@ class SelectComponentBottomSheet : AppBottomSheet() {
         const val EXTRA_OPTIONS = "extra_options"
         const val EXTRA_PLACEHOLDER = "extra_placeholder"
         const val EXTRA_SELECTED = "extra_selected"
+        const val EXTRA_COMPONENT_TYPE = "extra_component_type"
 
         /** Fragment-result key the confirmed selection is published under. */
         const val RESULT_KEY = "select_component_bottom_sheet_result"
@@ -180,6 +194,7 @@ class SelectComponentBottomSheet : AppBottomSheet() {
             options: List<SelectItem>,
             selectedItems: List<SelectItem>,
             emojiAnimationsEnabled: Boolean,
+            componentType: ComponentType = ComponentType.SELECT,
         ) {
             SelectComponentBottomSheet().apply {
                 arguments = bundleOf(
@@ -192,6 +207,7 @@ class SelectComponentBottomSheet : AppBottomSheet() {
                     EXTRA_OPTIONS to ArrayList<Serializable>(options),
                     EXTRA_SELECTED to ArrayList<Serializable>(selectedItems),
                     EXTRA_EMOJI_ANIMATIONS_ENABLED to emojiAnimationsEnabled,
+                    EXTRA_COMPONENT_TYPE to componentType.ordinal,
                 )
             }.show(fragmentManager, SelectComponentBottomSheet::class.java.simpleName)
         }

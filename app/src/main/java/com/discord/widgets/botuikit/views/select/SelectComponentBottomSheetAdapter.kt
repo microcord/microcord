@@ -4,6 +4,7 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.api.botuikit.ComponentType
 import com.discord.api.botuikit.SelectItem
 
 /**
@@ -23,6 +24,8 @@ class SelectComponentBottomSheetAdapter(
     private var isMultiSelect: Boolean = false
     private var isMaxSelected: Boolean = false
     private var emojiAnimationsEnabled: Boolean = true
+    private var componentType: ComponentType = ComponentType.SELECT
+    private var guildId: Long? = null
 
     init {
         setHasStableIds(true)
@@ -53,6 +56,8 @@ class SelectComponentBottomSheetAdapter(
             lastItem = position == data.size - 1,
             maxSelected = isMaxSelected,
             emojiAnimationsEnabled = emojiAnimationsEnabled,
+            componentType = componentType,
+            guildId = guildId,
         )
     }
 
@@ -60,13 +65,17 @@ class SelectComponentBottomSheetAdapter(
         items: List<SelectComponentBottomSheetItem>,
         maxSelections: Int,
         emojiAnimationsEnabled: Boolean,
+        componentType: ComponentType,
+        guildId: Long?,
     ) {
         data = items
-        hasIcons = items.any { it.selectItem.emoji != null }
+        hasIcons = items.any { it.selectItem.emoji != null } || componentType == ComponentType.USER_SELECT || componentType == ComponentType.MENTIONABLE_SELECT
         hasDescriptions = items.any { it.selectItem.description != null }
         isMultiSelect = maxSelections > 1
         isMaxSelected = items.count { it.selected } == maxSelections
         this.emojiAnimationsEnabled = emojiAnimationsEnabled
+        this.componentType = componentType
+        this.guildId = guildId
         notifyDataSetChanged()
     }
 }

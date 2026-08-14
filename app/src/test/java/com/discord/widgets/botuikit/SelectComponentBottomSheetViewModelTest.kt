@@ -57,6 +57,21 @@ class SelectComponentBottomSheetViewModelTest {
     }
 
     @Test
+    fun dismissingValidMultiSelectSubmitsWithoutDuplicatingExplicitSubmit() {
+        val submitted = mutableListOf<List<String>>()
+        val dismissed = viewModel(min = 1, max = 3, onSubmit = { submitted += it })
+        dismissed.selectItem(two, true)
+        dismissed.onSheetDismissed()
+        assertEquals(listOf(listOf("2")), submitted)
+
+        val confirmed = viewModel(min = 1, max = 3, onSubmit = { submitted += it })
+        confirmed.selectItem(three, true)
+        confirmed.onClickSelect()
+        confirmed.onSheetDismissed()
+        assertEquals(listOf(listOf("2"), listOf("3")), submitted)
+    }
+
+    @Test
     fun deselectingBelowTheMinimumInvalidatesTheSelectionAgain() {
         val viewModel = viewModel(min = 2, max = 3, selected = listOf(one, two))
         assertTrue(viewModel.requireViewState().isValidSelection)

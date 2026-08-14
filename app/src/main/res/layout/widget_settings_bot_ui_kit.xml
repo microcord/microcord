@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout android:orientation="vertical" android:paddingBottom="32dp" android:focusableInTouchMode="true" style="@style/UiKit.ViewGroup.LinearLayout">
+            <requestFocus/>
+            <TextView android:layout_margin="16dp" android:text="Test screen for embedding native components in RN" android:textColor="?attr/colorTextNormal" style="@style/UiKit.TextView"/>
+            <TextView android:text="Text Display" style="@style/UiKit.Settings.Item.Header"/>
+            <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" app:cardBackgroundColor="?attr/colorBackgroundSecondary" app:cardCornerRadius="8dp" app:cardElevation="0dp" style="@style/Widget.MaterialComponents.CardView">
+                <com.discord.utilities.view.text.LinkifiedTextView android:id="@+id/bot_ui_kit_text_display" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="16dp" android:textColor="?attr/colorTextNormal" style="@style/UiKit.TextView"/>
+            </com.google.android.material.card.MaterialCardView>
+            <TextView android:text="Select Components" style="@style/UiKit.Settings.Item.Header"/>
+            <include android:id="@+id/bot_ui_kit_string_select" layout="@layout/view_bot_ui_kit_select"/>
+            <include android:id="@+id/bot_ui_kit_user_select" layout="@layout/view_bot_ui_kit_select"/>
+            <include android:id="@+id/bot_ui_kit_role_select" layout="@layout/view_bot_ui_kit_select"/>
+            <include android:id="@+id/bot_ui_kit_mentionable_select" layout="@layout/view_bot_ui_kit_select"/>
+            <include android:id="@+id/bot_ui_kit_channel_select" layout="@layout/view_bot_ui_kit_select"/>
+            <com.google.android.material.button.MaterialButton android:id="@+id/bot_ui_kit_reset" android:layout_marginStart="16dp" android:layout_marginTop="16dp" android:layout_marginEnd="16dp" android:text="Reset Modal State" style="@style/UiKit.Material.Button"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

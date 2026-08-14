@@ -51,6 +51,7 @@ class SelectComponentBottomSheetViewModel(
     private val isMultiSelect: Boolean = max > 1
     private val selectedItems: MutableSet<SelectItem> = selectedOptions.toMutableSet()
     private val eventSubject: PublishSubject<Event> = PublishSubject.create()
+    private var submitted = false
 
     init {
         updateViewState()
@@ -71,6 +72,10 @@ class SelectComponentBottomSheetViewModel(
 
     fun onClickSelect() = sendSelectInteraction(selectedItems.toSet())
 
+    fun onSheetDismissed() {
+        if (isMultiSelect && isValidSelection() && !submitted) publishSelection(selectedItems)
+    }
+
     /**
      * Both bounds are checked, not just the minimum: `max` is enforced by the row binder greying
      * out unselected rows once the cap is reached, but a component whose `default` options already
@@ -79,8 +84,14 @@ class SelectComponentBottomSheetViewModel(
     private fun isValidSelection(): Boolean = selectedItems.size in min..max
 
     private fun sendSelectInteraction(selection: Set<SelectItem>) {
-        onSelectionSubmitted(componentContext, componentIndex, customId, selection.map(SelectItem::value))
+        if (submitted) return
+        publishSelection(selection)
         eventSubject.onNext(Event.CloseSheet)
+    }
+
+    private fun publishSelection(selection: Set<SelectItem>) {
+        submitted = true
+        onSelectionSubmitted(componentContext, componentIndex, customId, selection.map(SelectItem::value))
     }
 
     private fun updateViewState() {

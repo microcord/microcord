@@ -26,6 +26,7 @@ import com.discord.utilities.rx.ui
 import com.discord.widgets.hubs.RadioSelectorItem
 import com.discord.widgets.hubs.RadioSelectorItems
 import com.discord.widgets.hubs.WidgetRadioSelectorBottomSheet
+import com.discord.widgets.settings.WidgetSettingsBotUiKit
 import com.discord.widgets.settings.WidgetSettingsThemeComponentGallery
 import com.hammerandchisel.libdiscord.Discord
 import java.text.DateFormat
@@ -78,8 +79,11 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
             text = premiumTierLabel(DeveloperSettings.premiumTierOverride())
             setOnClickListener { showPremiumTierSelector() }
         }
-        binding.settingsDeveloperThemeComponentGallery.setOnClickListener {
+        binding.settingsDeveloperDesignSystems.setOnClickListener {
             AppScreenRouter.launch(requireContext(), WidgetSettingsThemeComponentGallery::class.java)
+        }
+        binding.settingsDeveloperBotUiKit.setOnClickListener {
+            AppScreenRouter.launch(requireContext(), WidgetSettingsBotUiKit::class.java)
         }
         binding.developerSettingsCrashKotlin.setOnClickListener {
             throw RuntimeException("This is a developer triggered crash.")

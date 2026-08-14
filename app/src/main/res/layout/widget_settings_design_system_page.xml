@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout android:orientation="vertical" android:padding="16dp" android:focusableInTouchMode="true" style="@style/UiKit.ViewGroup.LinearLayout">
+            <requestFocus/>
+            <LinearLayout android:id="@+id/design_page_text" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:text="Display Heading" style="@style/UiKit.TextView.H1"/>
+                <TextView android:text="Section Heading" style="@style/UiKit.TextView.H2"/>
+                <TextView android:text="Normal body text" style="@style/UiKit.TextView.Large"/>
+                <TextView android:text="Muted supporting text" style="@style/UiKit.TextView.Subtext"/>
+                <TextView android:text="Interactive link text" style="@style/UiKit.TextView.Link"/>
+                <TextView android:text="Critical text" android:textColor="?attr/colorError" style="@style/UiKit.TextView.Semibold"/>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/design_page_button" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout">
+                <com.google.android.material.button.MaterialButton android:text="Primary" style="@style/UiKit.Material.Button"/>
+                <com.google.android.material.button.MaterialButton android:text="Secondary" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:text="Outline" style="@style/UiKit.Material.Button.Outline"/>
+                <com.google.android.material.button.MaterialButton android:text="Destructive" style="@style/UiKit.Material.Button.Red"/>
+                <com.google.android.material.button.MaterialButton android:enabled="false" android:text="Disabled" style="@style/UiKit.Material.Button.Secondary"/>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/design_page_button_group" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout">
+                <LinearLayout android:orientation="horizontal" style="@style/UiKit.ViewGroup.LinearLayout.Horizontal">
+                    <com.google.android.material.button.MaterialButton android:layout_width="0dp" android:layout_weight="1" android:text="Cancel" style="@style/UiKit.Material.Button.Secondary.Fit"/>
+                    <com.google.android.material.button.MaterialButton android:layout_width="0dp" android:layout_weight="1" android:text="Confirm" style="@style/UiKit.Material.Button.Fit"/>
+                </LinearLayout>
+                <LinearLayout android:orientation="horizontal" style="@style/UiKit.ViewGroup.LinearLayout.Horizontal">
+                    <com.google.android.material.button.MaterialButton android:layout_width="0dp" android:layout_weight="1" android:text="One" style="@style/UiKit.Material.Button.Outline"/>
+                    <com.google.android.material.button.MaterialButton android:layout_width="0dp" android:layout_weight="1" android:text="Two" style="@style/UiKit.Material.Button.Outline"/>
+                    <com.google.android.material.button.MaterialButton android:layout_width="0dp" android:layout_weight="1" android:text="Three" style="@style/UiKit.Material.Button.Outline"/>
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/design_page_row_button" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:text="Default Row Button" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+                <TextView android:text="Danger Row Button" android:textColor="?attr/colorError" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+                <TextView android:enabled="false" android:text="Disabled Row Button" style="@style/UiKit.Settings.Item.Icon"/>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/design_page_table_row" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:text="Table Rows" style="@style/UiKit.Settings.Item.Header"/>
+                <TextView android:text="Label                                      Value" style="@style/UiKit.ListItem"/>
+                <TextView android:text="Secondary Label                         Detail" style="@style/UiKit.ListItem"/>
+                <com.discord.views.CheckedSetting app:cs_text="Switch Table Row" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/design_page_alert_modal" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:text="Alert modals pair a title and body with confirm and cancel actions." style="@style/UiKit.TextView.Large"/>
+                <com.google.android.material.button.MaterialButton android:id="@+id/design_page_alert_modal_button" android:text="Show Alert Modal" style="@style/UiKit.Material.Button"/>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/design_page_shadows" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout">
+                <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="72dp" android:layout_margin="8dp" app:cardBackgroundColor="?attr/colorBackgroundSecondary" app:cardElevation="2dp"><TextView android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:text="Low Shadow" style="@style/UiKit.TextView"/></com.google.android.material.card.MaterialCardView>
+                <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="72dp" android:layout_margin="8dp" app:cardBackgroundColor="?attr/colorBackgroundSecondary" app:cardElevation="8dp"><TextView android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:text="High Shadow" style="@style/UiKit.TextView"/></com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/design_page_segmented_control" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout">
+                <com.google.android.material.chip.ChipGroup android:layout_width="match_parent" android:layout_height="wrap_content" app:singleSelection="true" app:selectionRequired="true">
+                    <com.google.android.material.chip.Chip android:layout_width="wrap_content" android:layout_height="wrap_content" android:checked="true" android:checkable="true" android:text="First"/>
+                    <com.google.android.material.chip.Chip android:layout_width="wrap_content" android:layout_height="wrap_content" android:checkable="true" android:text="Second"/>
+                    <com.google.android.material.chip.Chip android:layout_width="wrap_content" android:layout_height="wrap_content" android:checkable="true" android:text="Third"/>
+                </com.google.android.material.chip.ChipGroup>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/design_page_tabs" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout">
+                <com.google.android.material.tabs.TabLayout android:layout_width="match_parent" android:layout_height="wrap_content" app:tabMode="fixed"><com.google.android.material.tabs.TabItem android:text="First"/><com.google.android.material.tabs.TabItem android:text="Second"/><com.google.android.material.tabs.TabItem android:text="Third"/></com.google.android.material.tabs.TabLayout>
+            </LinearLayout>
+            <FrameLayout android:id="@+id/design_page_backdrop" android:visibility="gone" android:layout_width="match_parent" android:layout_height="240dp" android:background="?attr/colorBackgroundSecondary">
+                <TextView android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:text="Content behind backdrop" style="@style/UiKit.TextView.H2"/>
+                <View android:layout_width="match_parent" android:layout_height="match_parent" android:background="#99000000"/>
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="Backdrop" style="@style/UiKit.TextView.H1"/>
+            </FrameLayout>
+            <LinearLayout android:id="@+id/design_page_tooltip" android:visibility="gone" android:orientation="vertical" android:gravity="center_horizontal" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:padding="12dp" android:background="?attr/colorBackgroundFloating" android:text="Helpful tooltip text" style="@style/UiKit.TextView"/>
+                <com.google.android.material.button.MaterialButton android:text="Tooltip Target" style="@style/UiKit.Material.Button.Secondary"/>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/design_page_coachmark" android:visibility="gone" android:orientation="vertical" android:gravity="center_horizontal" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:padding="16dp" android:background="?attr/color_brand" android:text="Coachmark title&#10;A short explanation for this highlighted control." android:textColor="@color/white" style="@style/UiKit.TextView"/>
+                <com.google.android.material.button.MaterialButton android:text="Highlighted Control" style="@style/UiKit.Material.Button"/>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/design_page_form_primitives" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout">
+                <com.discord.views.CheckedSetting android:id="@+id/design_page_form_switch" app:cs_text="Switch" app:cs_subtext="Supporting text" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/design_page_form_checkbox" app:cs_text="Checkbox" app:cs_view_type="check" style="@style/UiKit.CheckedSetting.Themed"/>
+                <com.discord.views.CheckedSetting android:id="@+id/design_page_form_radio" app:cs_text="Radio" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/design_page_text_input" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout">
+                <com.google.android.material.textfield.TextInputLayout android:hint="Text Input" style="@style/UiKit.TextInputLayout.Primary"><com.google.android.material.textfield.TextInputEditText android:text="Example value" style="@style/UiKit.TextInputLayout.EditText.SingleLine"/></com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputLayout android:layout_marginTop="12dp" android:hint="Password" style="@style/UiKit.TextInputLayout.Primary.Password"><com.google.android.material.textfield.TextInputEditText style="@style/UiKit.TextInputLayout.EditText.SingleLine.Password"/></com.google.android.material.textfield.TextInputLayout>
+                <com.discord.views.SearchInputView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" app:siv_hint="Search" app:siv_search_content_description="Search"/>
+            </LinearLayout>
+            <FrameLayout android:id="@+id/design_page_pile" android:visibility="gone" android:layout_width="match_parent" android:layout_height="96dp">
+                <TextView android:layout_width="64dp" android:layout_height="64dp" android:gravity="center" android:background="@drawable/drawable_circle_black" android:text="A" style="@style/UiKit.TextView.H2"/>
+                <TextView android:layout_width="64dp" android:layout_height="64dp" android:layout_marginStart="44dp" android:gravity="center" android:background="@drawable/drawable_circle_black" android:text="B" style="@style/UiKit.TextView.H2"/>
+                <TextView android:layout_width="64dp" android:layout_height="64dp" android:layout_marginStart="88dp" android:gravity="center" android:background="@drawable/drawable_circle_black" android:text="C" style="@style/UiKit.TextView.H2"/>
+            </FrameLayout>
+            <LinearLayout android:id="@+id/design_page_haptics" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:text="Semantic Types" style="@style/UiKit.TextView.H2"/>
+                <TextView android:text="Existing haptic types with platform-specific remapping for the best feel." style="@style/UiKit.TextView.Subtext"/>
+                <com.google.android.material.button.MaterialButton android:tag="IMPACT_LIGHT" android:text="IMPACT_LIGHT" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="IMPACT_MEDIUM" android:text="IMPACT_MEDIUM" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="IMPACT_HEAVY" android:text="IMPACT_HEAVY" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="NOTIFICATION_ERROR" android:text="NOTIFICATION_ERROR" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="DRAG_AND_DROP_START" android:text="DRAG_AND_DROP_START" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="DRAG_AND_DROP_END" android:text="DRAG_AND_DROP_END" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="DRAG_AND_DROP_MOVE" android:text="DRAG_AND_DROP_MOVE" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="SOFT" android:text="SOFT" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="SELECTION" android:text="SELECTION" style="@style/UiKit.Material.Button.Secondary"/>
+                <TextView android:layout_marginTop="16dp" android:text="Impact / Notification Types" style="@style/UiKit.TextView.H2"/>
+                <TextView android:text="Direct 1:1 mappings for impact and notification feedback." style="@style/UiKit.TextView.Subtext"/>
+                <com.google.android.material.button.MaterialButton android:tag="RIGID" android:text="RIGID" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="NOTIFICATION_SUCCESS" android:text="NOTIFICATION_SUCCESS" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="NOTIFICATION_WARNING" android:text="NOTIFICATION_WARNING" style="@style/UiKit.Material.Button.Secondary"/>
+                <TextView android:layout_marginTop="16dp" android:text="Gesture / UI Types" style="@style/UiKit.TextView.H2"/>
+                <TextView android:text="Feedback for gestures, toggles, and UI confirmations." style="@style/UiKit.TextView.Subtext"/>
+                <com.google.android.material.button.MaterialButton android:tag="CONFIRM" android:text="CONFIRM" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="REJECT" android:text="REJECT" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="GESTURE_START" android:text="GESTURE_START" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="GESTURE_END" android:text="GESTURE_END" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="SEGMENT_TICK" android:text="SEGMENT_TICK" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="SEGMENT_FREQUENT_TICK" android:text="SEGMENT_FREQUENT_TICK" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="TOGGLE_ON" android:text="TOGGLE_ON" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="TOGGLE_OFF" android:text="TOGGLE_OFF" style="@style/UiKit.Material.Button.Secondary"/>
+                <TextView android:layout_marginTop="16dp" android:text="Platform Haptic Types" style="@style/UiKit.TextView.H2"/>
+                <TextView android:text="Native Android haptics with cross-platform approximations." style="@style/UiKit.TextView.Subtext"/>
+                <com.google.android.material.button.MaterialButton android:tag="CLOCK_TICK" android:text="CLOCK_TICK" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="CONTEXT_CLICK" android:text="CONTEXT_CLICK" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="KEYBOARD_PRESS" android:text="KEYBOARD_PRESS" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="KEYBOARD_RELEASE" android:text="KEYBOARD_RELEASE" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="KEYBOARD_TAP" android:text="KEYBOARD_TAP" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="LONG_PRESS" android:text="LONG_PRESS" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="TEXT_HANDLE_MOVE" android:text="TEXT_HANDLE_MOVE" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="VIRTUAL_KEY" android:text="VIRTUAL_KEY" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="VIRTUAL_KEY_RELEASE" android:text="VIRTUAL_KEY_RELEASE" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="EFFECT_CLICK" android:text="EFFECT_CLICK" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="EFFECT_DOUBLE_CLICK" android:text="EFFECT_DOUBLE_CLICK" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="EFFECT_HEAVY_CLICK" android:text="EFFECT_HEAVY_CLICK" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="EFFECT_TICK" android:text="EFFECT_TICK" style="@style/UiKit.Material.Button.Secondary"/>
+                <TextView android:layout_marginTop="16dp" android:text="Pattern Presets" style="@style/UiKit.TextView.H2"/>
+                <TextView android:text="Built-in haptic sequences: o=soft, O=strong, .=short gap, -=medium gap." style="@style/UiKit.TextView.Subtext"/>
+                <com.google.android.material.button.MaterialButton android:tag="pattern:success" android:text="Success (oO.O)" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="pattern:error" android:text="Error (OO.OO)" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="pattern:warning" android:text="Warning (O.O)" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="pattern:heartbeat" android:text="Heartbeat (oO--oO)" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="pattern:triple" android:text="Triple Click (o.o.o)" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.button.MaterialButton android:tag="pattern:notification" android:text="Notification (o-O=o)" style="@style/UiKit.Material.Button.Secondary"/>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/design_page_sheets" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout"><TextView android:text="Sheets present focused choices above the current screen." style="@style/UiKit.TextView.Large"/><com.google.android.material.button.MaterialButton android:id="@+id/design_page_sheet_button" android:text="Show Sheet" style="@style/UiKit.Material.Button"/></LinearLayout>
+            <LinearLayout android:id="@+id/design_page_stack" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout"><TextView android:text="Vertical Stack" style="@style/UiKit.TextView.H2"/><TextView android:padding="12dp" android:background="?attr/colorBackgroundSecondary" android:text="First" style="@style/UiKit.TextView"/><TextView android:padding="12dp" android:background="?attr/colorBackgroundTertiary" android:text="Second" style="@style/UiKit.TextView"/><TextView android:padding="12dp" android:background="?attr/colorBackgroundSecondary" android:text="Third" style="@style/UiKit.TextView"/></LinearLayout>
+            <LinearLayout android:id="@+id/design_page_context_menu" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout"><TextView android:text="Context menus expose related actions at the point of interaction." style="@style/UiKit.TextView.Large"/><com.google.android.material.button.MaterialButton android:id="@+id/design_page_context_button" android:text="Show Context Menu" style="@style/UiKit.Material.Button"/></LinearLayout>
+            <LinearLayout android:id="@+id/design_page_toast" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout"><com.google.android.material.button.MaterialButton android:id="@+id/design_page_toast_button" android:text="Show Toast" style="@style/UiKit.Material.Button"/></LinearLayout>
+            <LinearLayout android:id="@+id/design_page_modal" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout"><TextView android:text="Modals interrupt the current task for a focused decision." style="@style/UiKit.TextView.Large"/><com.google.android.material.button.MaterialButton android:id="@+id/design_page_modal_button" android:text="Show Modal" style="@style/UiKit.Material.Button"/></LinearLayout>
+            <FrameLayout android:id="@+id/design_page_background_blur" android:visibility="gone" android:layout_width="match_parent" android:layout_height="240dp" android:background="?attr/colorBackgroundSecondary"><TextView android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:text="Background content" style="@style/UiKit.TextView.H2"/><View android:layout_width="match_parent" android:layout_height="match_parent" android:background="#B320232A"/><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="Blur View" style="@style/UiKit.TextView.H1"/></FrameLayout>
+            <LinearLayout android:id="@+id/design_page_experimental_buttons" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout"><com.google.android.material.button.MaterialButton android:text="Small" style="@style/UiKit.Material.Button.Fit"/><com.google.android.material.button.MaterialButton android:text="Medium" style="@style/UiKit.Material.Button"/><com.google.android.material.button.MaterialButton android:icon="@drawable/ic_add_24dp" android:text="With Icon" style="@style/UiKit.Material.Button.Secondary"/></LinearLayout>
+            <LinearLayout android:id="@+id/design_page_legacy_button" android:visibility="gone" android:orientation="vertical" style="@style/UiKit.ViewGroup.LinearLayout"><Button android:layout_width="match_parent" android:layout_height="48dp" android:text="Legacy Primary"/><Button android:layout_width="match_parent" android:layout_height="48dp" android:text="Legacy Disabled" android:enabled="false"/></LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

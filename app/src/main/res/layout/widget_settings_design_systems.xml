@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat"><androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/></com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout android:orientation="vertical" android:paddingBottom="32dp" style="@style/UiKit.ViewGroup.LinearLayout">
+            <TextView android:text="Components" style="@style/UiKit.Settings.Item.Header"/>
+            <TextView android:id="@+id/design_system_everything" android:text="Everything" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_text" android:text="Text" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_button" android:text="Button" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_button_group" android:text="Button Group" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_row_button" android:text="Row Button" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_table_row" android:text="Table Row" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_alert_modal" android:text="Alert Modal" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_shadows" android:text="Shadows" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_segmented_control" android:text="Segmented Control" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_tabs" android:text="Tabs" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_backdrop" android:text="Backdrop" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_tooltip" android:text="Tooltip" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_coachmark" android:text="Coachmark" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_form_primitives" android:text="Form Primitives" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_text_input" android:text="Text Input" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_pile" android:text="Pile" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_haptics" android:text="Haptics" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:text="In Progress" style="@style/UiKit.Settings.Item.Header"/>
+            <TextView android:id="@+id/design_system_sheets" android:text="Sheets" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_stack" android:text="Stack" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_context_menu" android:text="Context Menu" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_toast" android:text="Toast" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_modal" android:text="Modal" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:text="Experimental" style="@style/UiKit.Settings.Item.Header"/>
+            <TextView android:id="@+id/design_system_background_blur" android:text="Background Blur View" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/design_system_experimental_buttons" android:text="Experimental Buttons" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:text="Legacy Audit" style="@style/UiKit.Settings.Item.Header"/>
+            <TextView android:id="@+id/design_system_legacy_button" android:text="Legacy Button" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
