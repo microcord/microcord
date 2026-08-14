@@ -80,6 +80,8 @@ import com.discord.utilities.media.AppSoundManager
 import com.discord.utilities.networking.NetworkMonitor
 import com.discord.rtcconnection.VoiceTransport
 import com.discord.utilities.analytics.AnalyticSuperProperties
+import com.discord.utilities.analytics.IdleTracker
+import com.discord.utilities.analytics.SessionHeartbeat
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.billing.BillingUtils
@@ -1619,9 +1621,13 @@ class StoreStream private constructor(
             initGatewaySocketListeners()
         }
         connectivity.init(networkMonitor, messagesLoader.observeChannelMessagesLoading())
+        SessionHeartbeat.onActiveStateChanged = gatewayConnection::qosActiveStateChanged
+        SessionHeartbeat.onSessionIdChanged = gatewayConnection::updateTimeSpentSessionId
         com.discord.utilities.lifecycle.Backgrounded.observe().subscribe(
             { backgrounded ->
                 AnalyticSuperProperties.setBackgrounded(backgrounded)
+                SessionHeartbeat.handleBackgrounded(backgrounded)
+                IdleTracker.handleBackgrounded(backgrounded)
                 frecency.handleBackgrounded(backgrounded)
                 userSettingsProtoWriter.flush()
                 dispatcher.schedule {
@@ -3007,6 +3013,7 @@ class StoreStream private constructor(
         notifications.handleAuthToken(state?.token)
         experiments.handleAuthToken(state?.token)
         analytics.handleAuthToken(state?.token)
+        SessionHeartbeat.handleAuthTokenChanged(state?.token)
         voiceChannelSelected.handleAuthToken(state?.token)
         voiceStates.handleAuthToken(state?.token)
         val token = state?.token
@@ -3331,6 +3338,7 @@ class StoreStream private constructor(
         bans.handleConnectionOpen()
         guildIntegrations.handleConnectionOpen()
         guildJoinRequests.handleConnectionOpen(payload)
+        SessionHeartbeat.handleConnectionOpen()
         guildScheduledEvents.handleConnectionOpen(payload)
         stageChannels.handleConnectionOpen()
         emojiCustom.handleConnectionOpen(payload)

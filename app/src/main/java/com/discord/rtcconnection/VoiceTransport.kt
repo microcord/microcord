@@ -25,6 +25,7 @@ import com.discord.stores.StoreAudioManagerV2
 import com.discord.stores.StoreMediaEngine
 import com.discord.stores.StoreMediaSettings
 import com.discord.stores.StoreRtcConnection
+import com.discord.utilities.analytics.SessionHeartbeat
 import com.discord.stores.StoreRtcRegion
 import com.discord.stores.StoreStreamRtcConnection
 import com.discord.stores.StoreUser
@@ -114,6 +115,10 @@ class VoiceTransport(
         sendVoiceStateUpdate = sendVoiceStateUpdate,
         rtcConnectionController = voiceController,
     )
+
+    init {
+        storeRtcConnection.connectionState.subscribe({ SessionHeartbeat.handleRtcConnected(it) }, {})
+    }
 
     val storeStreamRtcConnection = StoreStreamRtcConnection(
         dispatcher = dispatcher,

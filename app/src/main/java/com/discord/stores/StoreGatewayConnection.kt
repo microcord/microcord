@@ -48,6 +48,7 @@ import com.discord.api.voice.state.VoiceState
 import com.discord.api.voice.state.VoiceStateUpdateBatch
 import com.discord.gateway.GatewayEventHandler
 import com.discord.gateway.GatewaySocket
+import com.discord.gateway.io.HeartbeatQos
 import com.discord.gateway.IdentifyData
 import com.discord.gateway.io.ForumUnreadsRequest
 import com.discord.gateway.io.ForumUnreadsRequestThread
@@ -336,6 +337,14 @@ class StoreGatewayConnection(
         afk: Boolean? = null,
     ): Boolean = requestIfSessionEstablished {
         it.presenceUpdate(status, since, activities.orEmpty(), afk)
+    }
+
+    fun qosActiveStateChanged(qos: HeartbeatQos) {
+        socket?.handleActiveStateChange(qos)
+    }
+
+    fun updateTimeSpentSessionId(initializationTimestamp: Long, sessionId: String, clientLaunchId: String) {
+        socket?.handleUpdateTimeSpentSessionId(initializationTimestamp, sessionId, clientLaunchId)
     }
 
     fun requestSoundboardSounds(guildIds: List<Long>): Boolean = requestIfSessionEstablished {

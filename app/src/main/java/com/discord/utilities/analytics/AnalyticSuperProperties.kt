@@ -35,9 +35,9 @@ object AnalyticSuperProperties {
             "os_version" to Build.VERSION.SDK_INT.toString(),
             "client_build_number" to CLIENT_BUILD_NUMBER,
             "client_event_source" to null,
-            "client_launch_id" to launchId,
+            "client_launch_id" to SessionHeartbeat.clientLaunchId,
             "launch_signature" to launchSignature,
-            "client_heartbeat_session_id" to heartbeatSessionId(),
+            "client_heartbeat_session_id" to SessionHeartbeat.activeSessionUnsafe()?.uuid,
             "client_app_state" to appState,
         )
 
@@ -54,24 +54,7 @@ object AnalyticSuperProperties {
     @Volatile
     private var appState: String = "active"
 
-    private val launchId = UUID.randomUUID().toString()
     private val launchSignature = (System.currentTimeMillis() * 1_000_000L).toString()
-
-    @Volatile
-    private var heartbeatSession = UUID.randomUUID().toString()
-
-    @Volatile
-    private var heartbeatSessionStartedAt = System.currentTimeMillis()
-
-    @Synchronized
-    private fun heartbeatSessionId(): String {
-        val now = System.currentTimeMillis()
-        if (now - heartbeatSessionStartedAt !in 0 until HEARTBEAT_SESSION_MS) {
-            heartbeatSession = UUID.randomUUID().toString()
-            heartbeatSessionStartedAt = now
-        }
-        return heartbeatSession
-    }
 
     private val vendorId: String by lazy {
         val preferences = runCatching { SharedPreferencesProvider.get() }.getOrNull()
@@ -86,7 +69,6 @@ object AnalyticSuperProperties {
 
     private const val RELEASE_CHANNEL = "canaryRelease"
     private const val DESIGN_ID = 2
-    private const val HEARTBEAT_SESSION_MS = 30 * 60 * 1_000L
     private const val VENDOR_ID_KEY = "rn_vendor_id"
 
     private val GSON = GsonBuilder().serializeNulls().create()

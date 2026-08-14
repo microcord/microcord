@@ -26,12 +26,17 @@ class AnalyticsSchemaTypeAdapter : JsonSerializer<Science.Event.SchemaObject> {
         typeOfSrc: Type,
         context: JsonSerializationContext,
     ): JsonElement {
-        val flattened = src.schema.serializeToMap().flatMapProperties().toMap()
+        val flattened = src.schema.serializeToMap().flatMapProperties().toMap() +
+            listOfNotNull(src.clientHeartbeatSessionId?.let { SESSION_ID_KEY to it })
         return gson.toJsonTree(Science.Event.MapObject(src.type, flattened), Science.Event.MapObject::class.java)
     }
 
     private fun AnalyticsSchema.serializeToMap(): Map<String, Any> =
         gson.fromJson(gson.toJson(this), object : TypeToken<Map<String, Any>>() {}.type)
+
+    private companion object {
+        const val SESSION_ID_KEY = "client_heartbeat_session_id"
+    }
 
     private fun Map<String, Any>.flatMapProperties(): List<Pair<String, Any>> =
         entries.flatMap { (key, value) ->

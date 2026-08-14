@@ -103,6 +103,23 @@ sealed class OutgoingPayload private constructor() {
         private val afk: Boolean? = false,
     ) : OutgoingPayload()
 
+    data class HeartbeatQos(
+        val active: Boolean,
+        val ver: Int,
+        val reasons: List<String>,
+    )
+
+    data class Heartbeat(
+        private val seq: Int,
+        private val qos: HeartbeatQos?,
+    ) : OutgoingPayload()
+
+    data class UpdateTimeSpentSessionId(
+        private val initializationTimestamp: Long,
+        private val sessionId: String,
+        private val clientLaunchId: String,
+    ) : OutgoingPayload()
+
     class Resume(
         private val token: String?,
         private val sessionId: String?,
@@ -148,6 +165,8 @@ typealias DeleteStream = OutgoingPayload.DeleteStream
 typealias ForumUnreadsRequest = OutgoingPayload.ForumUnreadsRequest
 typealias ForumUnreadsRequestThread = OutgoingPayload.ForumUnreadsRequestThread
 typealias GuildMembersRequest = OutgoingPayload.GuildMembersRequest
+typealias Heartbeat = OutgoingPayload.Heartbeat
+typealias HeartbeatQos = OutgoingPayload.HeartbeatQos
 typealias GuildSubscriptions = OutgoingPayload.GuildSubscriptions
 typealias GuildSubscriptionsUpdate = OutgoingPayload.GuildSubscriptionsUpdate
 typealias Identify = OutgoingPayload.Identify
@@ -157,6 +176,7 @@ typealias Resume = OutgoingPayload.Resume
 typealias SoundboardSoundsRequest = OutgoingPayload.SoundboardSoundsRequest
 typealias DeletedEntityIdsRequest = OutgoingPayload.DeletedEntityIdsRequest
 typealias StreamPing = OutgoingPayload.StreamPing
+typealias UpdateTimeSpentSessionId = OutgoingPayload.UpdateTimeSpentSessionId
 typealias VoiceStateUpdate = OutgoingPayload.VoiceStateUpdate
 typealias VoiceStateUpdateNoPreferredRegion = OutgoingPayload.VoiceStateUpdateNoPreferredRegion
 typealias WatchStream = OutgoingPayload.WatchStream

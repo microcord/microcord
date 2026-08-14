@@ -21,7 +21,10 @@ enum class Opcode(val apiInt: Int) {
     OPCODE_STREAM_PING(21),
     REQUEST_FORUM_UNREADS(28),
     REQUEST_DELETED_ENTITY_IDS(30),
-    REQUEST_SOUNDBOARD_SOUNDS(31);
+    REQUEST_SOUNDBOARD_SOUNDS(31),
+
+    QOS_HEARTBEAT(40),
+    UPDATE_TIME_SPENT_SESSION_ID(41);
 
     companion object {
         private val byApiInt = entries.associateBy(Opcode::apiInt)

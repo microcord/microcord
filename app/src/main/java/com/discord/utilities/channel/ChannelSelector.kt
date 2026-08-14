@@ -12,6 +12,7 @@ import com.discord.stores.Dispatcher
 import com.discord.stores.SelectedChannelAnalyticsLocation
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
+import com.discord.utilities.analytics.IdleTracker
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.accessibility.AccessibilityUtils
 import com.discord.utilities.analytics.AnalyticsTracker
@@ -235,6 +236,7 @@ class ChannelSelector(
         peekParent: Long? = null,
         analyticsLocation: SelectedChannelAnalyticsLocation? = null,
     ) {
+        IdleTracker.markUsed()
         StoreStream.getNavigation().setNavigationPanelAction(StoreNavigation.PanelAction.CLOSE)
 
         if (guildId == 0L || channelId == 0L) {

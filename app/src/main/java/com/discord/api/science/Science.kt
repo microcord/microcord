@@ -10,6 +10,10 @@ class Science(
         /** The analytics event name. */
         abstract val type: String
 
+        /** Stamped when queued, since a batch can outlive the session it belongs to. */
+        @Transient
+        var clientHeartbeatSessionId: String? = null
+
         /**
          * An event whose properties are already a flat map — used by call sites that build
          * properties by hand rather than from a schema class.

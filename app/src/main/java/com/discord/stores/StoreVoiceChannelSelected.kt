@@ -1,5 +1,6 @@
 package com.discord.stores
 
+import com.discord.utilities.analytics.IdleTracker
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isStageVoiceChannel
 import com.discord.api.channel.shouldPlayJoinLeaveSounds
@@ -94,6 +95,7 @@ class StoreVoiceChannelSelected(
      * thread, against the channels and permissions of that moment.
      */
     fun selectVoiceChannel(channelId: Long): Observable<JoinVoiceChannelResult> {
+        IdleTracker.markUsed()
         val channel = channels.getChannel(channelId)
         setAudioInputEnabled(channel?.isStageVoiceChannel() != true)
         val resultSubject = PublishSubject.create<JoinVoiceChannelResult>()

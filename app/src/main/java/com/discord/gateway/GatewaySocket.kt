@@ -8,11 +8,14 @@ import com.discord.api.presence.ClientStatus
 import com.discord.gateway.io.CreateStream
 import com.discord.gateway.io.DeleteStream
 import com.discord.gateway.io.ForumUnreadsRequest
+import com.discord.gateway.io.Heartbeat
+import com.discord.gateway.io.HeartbeatQos
 import com.discord.gateway.io.GuildMembersRequest
 import com.discord.gateway.io.GuildSubscriptions
 import com.discord.gateway.io.GuildSubscriptionsUpdate
 import com.discord.gateway.io.Hello
 import com.discord.gateway.io.Identify
+import com.discord.gateway.io.UpdateTimeSpentSessionId
 import com.discord.gateway.io.IdentifyClientState
 import com.discord.gateway.io.Incoming
 import com.discord.gateway.io.IncomingParser
@@ -116,6 +119,8 @@ class GatewaySocket(
     private var token: String? = null
     private var heartbeatInterval = Long.MAX_VALUE
     private var heartbeatAcknowledged = true
+    private var currentQos: HeartbeatQos? = null
+    private var upcomingQos: HeartbeatQos? = null
     private var lastHeartbeatAck = 0L
     private var heartbeatTask: GatewayCancellable? = null
     private var helloTimeoutTask: GatewayCancellable? = null
@@ -468,7 +473,41 @@ class GatewaySocket(
 
     private fun heartbeat() {
         heartbeatAcknowledged = false
-        send(Opcode.HEARTBEAT, sequence)
+        send(Opcode.QOS_HEARTBEAT, Heartbeat(sequence, consumeQos()))
+    }
+
+    /** Active is per window, not per moment: it sticks until the window is consumed. */
+    fun handleActiveStateChange(qos: HeartbeatQos) {
+        val wasInactive = currentQos?.active != true
+        val current = currentQos ?: qos.also { currentQos = it }
+        if (qos.active) {
+            currentQos = current.copy(
+                active = true,
+                reasons = (current.reasons + qos.reasons).distinct().sorted(),
+            )
+            if (wasInactive && isSessionEstablished()) heartbeat()
+        }
+        upcomingQos = qos
+    }
+
+    fun handleUpdateTimeSpentSessionId(
+        initializationTimestamp: Long,
+        sessionId: String,
+        clientLaunchId: String,
+    ) {
+        if (!isSessionEstablished()) return
+        send(
+            Opcode.UPDATE_TIME_SPENT_SESSION_ID,
+            UpdateTimeSpentSessionId(initializationTimestamp, sessionId, clientLaunchId),
+        )
+        heartbeat()
+    }
+
+    private fun consumeQos(): HeartbeatQos? {
+        val qos = currentQos
+        currentQos = upcomingQos ?: currentQos
+        upcomingQos = null
+        return qos
     }
 
     private fun handleDispatch(incoming: Incoming) {

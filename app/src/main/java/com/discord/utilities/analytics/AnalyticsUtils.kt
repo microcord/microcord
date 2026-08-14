@@ -100,7 +100,16 @@ object AnalyticsUtils {
         }
 
         fun track(event: Science.Event) {
-            eventsQueue.add(event)
+            // Tracking is use, and use is what defers the session's expiry.
+            val sessionId = SessionHeartbeat.getSession()?.uuid
+            val stamped = when {
+                sessionId == null -> event
+                event is Science.Event.MapObject ->
+                    event.copy(properties = event.properties + (SESSION_ID_KEY to sessionId))
+                else -> event
+            }
+            stamped.clientHeartbeatSessionId = sessionId
+            eventsQueue.add(stamped)
             Observable.timer(BATCH_DELAY_MS, TimeUnit.MILLISECONDS)
                 .appSubscribe(errorTag = "AnalyticsUtils.Tracker") { drainEventsQueue() }
         }
@@ -133,6 +142,8 @@ object AnalyticsUtils {
             clock.currentTimeMillis() < (eventsThrottledUntilMillis[throttleKey] ?: 0L)
 
         companion object {
+            private const val SESSION_ID_KEY = "client_heartbeat_session_id"
+
             /** Events raised within this window of each other are delivered as one batch. */
             private const val BATCH_DELAY_MS = 1_500L
 

@@ -255,6 +255,11 @@ object UserSettings {
         { it.privacy.run { hasAllowActivityPartyPrivacyVoiceChannel() to allowActivityPartyPrivacyVoiceChannel.value } },
     ) { privacyBuilder.allowActivityPartyPrivacyVoiceChannel = it }
 
+
+    val afkTimeout = uint32(60, { it.voiceAndVideo.run { hasAfkTimeout() to afkTimeout.value } }) {
+        voiceAndVideoBuilder.afkTimeout = it
+    }
+
     val friendSourceFlags = setting(
         { proto ->
             val bits = proto.privacy.run { if (hasFriendSourceFlags()) friendSourceFlags.value else FRIEND_SOURCE_ALL }
